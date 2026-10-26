@@ -3,7 +3,7 @@ import type { KlineBar } from "../market-data/marketDataTypes.js";
 
 export type IndicatorParams = Record<string, unknown>;
 export type IndicatorSecurityMode = "safe" | "research" | "unsafe";
-export type IndicatorKind = "builtin" | "script" | "custom" | "pyne";
+export type IndicatorKind = "builtin" | "script" | "custom";
 export type IndicatorSeriesType = "line" | "histogram" | string;
 
 export interface ScriptRuntimeDescriptor {
@@ -525,11 +525,6 @@ export interface CustomIndicatorSaveInput extends Omit<
   schemaVersion?: number;
 }
 
-export interface PyneSecurityPolicy {
-  mode: string;
-  timeoutSeconds: number;
-  [key: string]: unknown;
-}
 
 export interface IndicatorDeleteResponse {
   ok: true;

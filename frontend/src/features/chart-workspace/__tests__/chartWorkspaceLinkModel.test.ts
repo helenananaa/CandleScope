@@ -42,7 +42,7 @@ test("parent events reach peers and descendants while child events never reach t
     strategyDraftId: "draft-12345678",
     strategyRevisionId: null,
     displayName: "Cell-local strategy",
-    language: "pyne",
+    language: "pine",
     parameters: {},
     rangeMode: "ALL_AVAILABLE",
     customRange: null,

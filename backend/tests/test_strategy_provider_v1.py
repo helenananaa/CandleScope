@@ -7,7 +7,7 @@ import pytest
 
 from app.backtest.strategy.host_adapter import StrategyHostAdapter
 from app.backtest.strategy.builtin import BuiltinOrderCommandProvider
-from app.backtest.strategy.pyne_adapter import PyneHostPlanner
+from app.backtest.strategy.host_planner import HostOrderPlanner
 from app.backtest.strategy.protocol import (
     CONTRIBUTION_KIND,
     CrashProvider,
@@ -145,7 +145,7 @@ def test_unified_command_script_emits_open_and_close_order_intents() -> None:
     assert provider.step(_frame(1)) is None
     opened = provider.step(_frame(2))
     closed = provider.step(_frame(4))
-    planner = PyneHostPlanner()
+    planner = HostOrderPlanner()
     assert planner.plan(opened)[0] == {
         "side": "BUY",
         "type": "MARKET",

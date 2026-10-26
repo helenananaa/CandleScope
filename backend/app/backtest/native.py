@@ -22,8 +22,7 @@ from app.plugin_runtime.registry import default_runtime_registry_path, load_runt
 from .errors import BacktestError
 
 PROTOCOL = "candlescope.native-strategy/1"
-MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.native_strategy"),
-           "pyne": ("candlescope.pyne", "candlescope_plugin_pyne.native_strategy")}
+MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.native_strategy")}
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
 MAX_BYTES = 64 * 1024 * 1024
 _CANONICAL_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
@@ -49,6 +48,8 @@ def timeframe(interval):
 
 
 def resolve_plugin(language):
+    if language not in MODULES:
+        raise BacktestError("NATIVE_INPUT_UNSUPPORTED", "unsupported strategy language")
     env = runtime_environment()
     if env.get("CANDLESCOPE_PLUGIN_HOST_ENABLED", "1").lower() in {"0", "false", "off"}:
         raise BacktestError("FLAG_DISABLED", "plugin host is disabled")
@@ -419,7 +420,7 @@ class NativeBacktests:
                 result = self.runner(plugin, wire, cancelled=cancel)
             if result.get("identity") != wire["identity"] or result.get("execution_mode") != ("CANDLESCOPE" if external else "NATIVE"):
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "result identity differs from frozen engine")
-            authority = "candlescope" if external else "pine-compat-runtime" if plugin["plugin_id"] == "candlescope.pine-compat" else "pyne-runtime"
+            authority = "candlescope" if external else "pine-compat-runtime"
             if result.get("account_authority") != authority:
                 raise BacktestError("NATIVE_PROTOCOL_ERROR", "unexpected account authority")
             result["bars"] = wire["bars"]

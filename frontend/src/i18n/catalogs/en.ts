@@ -1,5 +1,7 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
@@ -15,14 +17,15 @@ export const en = {
   "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",
   "indicator.pine.contexts": "Pine requested markets (JSON)",
   "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
+  ...readonlyAccountEnglish,
   ...externalProviderEnglish,
+  "replay.err.futureInput": "The start time plus the forward window includes future bars. Choose an earlier start or shorten the forward window; only closed historical bars are available.",
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",
   "report.notionalReturn": "P&L / entry notional (not account return)",
-  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
-  "indicator.editor.pyneApiHint": "Pyne API:",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles.Match the bundle to your system and Python version.",
   "indicator.editor.pineApiHint": "Pine v5/v6 closed-bar API:",
   "serverError.notFound": "The requested item doesn't exist or was deleted",
   "serverError.conflict": "This was changed elsewhere. Refresh and try again",
@@ -291,7 +294,7 @@ export const en = {
   "native.external.executionData": "Frozen trades / book data (JSON)",
   "native.external.dataHint": "Prints must reproduce chart OHLCV. Without an upload, trade mode uses the local archive. Book mode requires ordered book and trade data; queue position is not assumed.",
 
-  "native.fullStrategies": "Pine / Pyne strategies",
+  "native.fullStrategies": "Pine strategies",
   "native.replay.title": "Native interactive replay",
   "native.inputs.title": "Additional data and Pine libraries",
   "native.inputs.hint": "Select frozen datasets for script requests. Symbol keys must match the source; selected revisions are verified before running.",
@@ -306,7 +309,7 @@ export const en = {
   "native.inputs.magnifierHint": "Declare use_bar_magnifier=true. Select a lower timeframe for the same symbol with complete chart coverage; missing coverage fails explicitly.",
   "native.inputs.libraries": "Pine libraries (import path → source JSON)",
   "native.external.fillRecalculation": "Evaluate strategy after fills",
-  "native.external.fillHint": "Requires calc_on_order_fills: Pine recalculates the current bar; Pyne uses init/on_bar/on_fill(ctx, bar). New orders become eligible on the next market event.",
+  "native.external.fillHint": "Requires calc_on_order_fills: Pine recalculates the current bar;New orders become eligible on the next market event.",
   "native.replay.incremental": "Advance native strategy state within fixed history. Last-bar flags use the full horizon; after a process restart, rebuild from frozen inputs to the checkpoint cursor.",
   "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
   "native.replay.method": "Rebuild the native account from each historical prefix. Checkpoints retain the frozen input and cursor; realtime execution semantics are not substituted.",
@@ -324,7 +327,7 @@ export const en = {
   "native.external.title": "CandleScope matching feedback",
   "native.external.description": "Bar-close decisions with subsequent market execution. Market, limit, stop, stop-limit, partial exits, brackets and cancellation; one net position. Host account and fee settings apply.",
   "native.external.run": "Run host matching backtest",
-  "native.external.authority": "CandleScope matching owns all fills and account state. Pine/Pyne read host feedback and produce no native fills.",
+  "native.external.authority": "CandleScope matching owns all fills and account state. Pine read host feedback and produce no native fills.",
   "native.external.equity": "CandleScope account equity",
   "native.external.price_tick": "Price tick (tick-distance orders)",
   "native.external.allocationHint": "P&L uses the host net position's average cost. Entry IDs allocate quantities; they do not create separate cost accounts.",
@@ -341,7 +344,7 @@ export const en = {
   "native.title": "Native strategy backtest",
   "native.hostMode": "CandleScope matching / teaching templates",
   "native.loading": "Loading native strategies…",
-  "native.description": "Run complete Pine or Pyne strategies on frozen chart history. Capital, costs and order settings belong to the script.",
+  "native.description": "Run complete Pine strategies on frozen chart history. Capital, costs and order settings belong to the script.",
   "native.authority": "Fills, positions and equity come from the native engine. CandleScope does not match them again.",
   "native.language": "Strategy language",
   "native.run": "Run native backtest",
@@ -1184,7 +1187,6 @@ export const en = {
   "indicator.editor.runOk": "Ran successfully and applied to the chart",
   "indicator.editor.communityRuntime": "{language} is executed by {runtime}",
   "indicator.editor.fallbackLanguage": "script runtime",
-  "indicator.editor.hintPyne": "Type",
   "indicator.editor.hintComplete": "to trigger autocomplete ·",
   "indicator.editor.hintPine": "Pine v5/v6 · closed bars only · type",
   "indicator.editor.hintPlugin": "Uses the language mode declared by the plugin descriptor ·",
@@ -2649,7 +2651,6 @@ export const en = {
   "backtest.language": "Restricted language",
   "backtest.builtin": "Built-in RSI24 template",
   "backtest.pine": "Pine safe subset",
-  "backtest.pyne": "Pyne unified order DSL",
   "backtest.external": "Frozen external model artifact ref",
   "backtest.compileSave": "Static-check, compile, and save",
   "backtest.sourceNoExec": "Source (arbitrary code is not executed)",
@@ -3714,7 +3715,7 @@ export const en = {
   "trade.rt.disconnected": "TradeFlow connection interrupted",
 
   "indicator.noLocalBars": "The indicator has no usable explicit-bars local execution description",
-  "indicator.replayUnsafe": "Replay allows only built-in indicators, Pyne safe, and Pine closed-bars scripts; {language} is not declared replay-safe",
+  "indicator.replayUnsafe": "Replay supports built-in, Pine closed-bars, and frontend JavaScript indicators; {language} is not supported",
   "indicator.unknownRuntime": "unknown runtime",
   "indicator.httpFallback": "{message}; switched to HTTP closed-bar backfill.",
 
@@ -4372,7 +4373,6 @@ export const en = {
   "chartTester.retrySave": "Retry",
   "chartTester.run": "Run",
   "chartTester.close": "Close",
-  "chartTester.language.pyne": "Pyne",
   "chartTester.language.pine": "Pine",
   "chartTester.startEyebrow": "START A QUICK CHART TEST",
   "chartTester.startTitle": "Choose how to start",
@@ -4699,7 +4699,6 @@ export const en = {
   "research.results.entry": "Entry",
   "research.results.exit": "Exit",
   "research.strategy.draft": "Draft",
-  "research.strategy.pyne": "Pyne",
   "research.strategy.pine": "Pine",
   "workbench.manualHistory.disabled": "Manual history download is disabled.",
   "workbench.manualHistory.title": "Manual continuous history",
@@ -4748,8 +4747,6 @@ export const en = {
   "workbench.manualHistory.succeeded": "Download succeeded",
   "workbench.manualHistory.jobState": "Job {state}",
   "common.listSeparator": ", ",
-  "editor.pyne.namespaceDetail": "{ns}.* — type \"{ns}.\" to list members",
-  "editor.pyne.namespaceDocumentation": "Type `{ns}.` to trigger completion.",
   "strategyReview.navigation": "Trade review",
   "strategyReview.previous": "Previous trade",
   "strategyReview.select": "Select a trade",
@@ -4789,4 +4786,5 @@ export const en = {
   "aiControl.copyFailed": "Could not copy. Check clipboard permission.",
   "aiControl.desktopOnly": "Local MCP is available in the desktop application.",
   "aiControl.configuration": "Show connection configuration",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;

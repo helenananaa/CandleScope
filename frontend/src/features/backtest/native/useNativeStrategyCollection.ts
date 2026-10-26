@@ -50,7 +50,7 @@ export function useNativeStrategyCollection(
     const drafts = { ...selected?.drafts };
     if (copy && selected) {
       try {
-        for (const language of ["pine", "pyne"]) for (const mode of ["NATIVE", "CANDLESCOPE"]) {
+        for (const language of ["pine"]) for (const mode of ["NATIVE", "CANDLESCOPE"]) {
           const key = `${language}:${mode}`;
           const prefix = `candlescope.native-draft:${strategyInstanceScope(cellScope, selected.id)}:${language}`;
           const saved = drafts[key] ?? localStorage.getItem(`${prefix}:${mode}`) ?? (selected.id === "default" ? localStorage.getItem(prefix) : null);
@@ -82,7 +82,7 @@ export function nativeStrategySwitcherItems(strategies: NativeStrategyController
   return strategies.collection.items.map((item) => ({
     id: item.id,
     name: nativeStrategyName(item),
-    meta: t(item.language === "pyne" ? "chartTester.language.pyne" : "chartTester.language.pine"),
+    meta: t("chartTester.language.pine"),
     running: strategies.isBusy(item.id),
   }));
 }

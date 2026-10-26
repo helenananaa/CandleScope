@@ -2,7 +2,6 @@
 REPLAY_CONTRACT = "candlescope.external-replay/1"
 PINE_LEGACY = frozenset(f"pine-external/{version}" for version in range(1, 9))
 PINE_REPLAY_LEGACY = frozenset(f"pine-external/{version}" for version in range(5, 9))
-PYNE_LEGACY = frozenset(f"pyne-external/{version}" for version in range(1, 6))
 
 
 def negotiated_pine_replay(identity):
@@ -17,7 +16,7 @@ def external_available(language, identity):
     adapter = identity.get("adapter")
     if language == "pine":
         return adapter in PINE_LEGACY or negotiated_pine_replay(identity)
-    return language == "pyne" and adapter in PYNE_LEGACY
+    return False
 
 
 def pine_replay_available(identity):
@@ -25,4 +24,4 @@ def pine_replay_available(identity):
 
 
 def persistent_evaluator(identity):
-    return pine_replay_available(identity) or identity.get("adapter") in {"pyne-external/4", "pyne-external/5"}
+    return pine_replay_available(identity)

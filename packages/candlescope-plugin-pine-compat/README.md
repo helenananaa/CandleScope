@@ -111,5 +111,5 @@ The official 0.3.1 wheel exports `Program.run_external` and
 `Program.historical_session`, resolving the 0.3.0 installation blocker.
 Install the frozen bridge, SDK and engine wheel set through
 `install_native_strategy_plugins.py --runtime pine --activate` after qualification.
-This updates only Pine's native registry entry and preserves Pyne's entry.
+This updates only Pine's native registry entry and preserves unrelated entries.
 Installing the indicator CSPKG does not register native strategy execution.

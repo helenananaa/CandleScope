@@ -473,7 +473,7 @@ async def _build_cache_diagnostics(request: Request) -> dict:
             "watermarks": storage_watermarks,
         },
         "indicator": {
-            "pyne_cache": {
+            "script_cache": {
                 "size": 0,
                 "max_items": 0,
                 "scope": "sidecar",
@@ -529,6 +529,9 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
         save_proxy_settings(mode, custom_proxy)
+        readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
+        if readonly_accounts is not None:
+            await readonly_accounts.reconfigure_network()
         return {
             "status": "warning",
             "message": "IngestionConfig not available (DataManager not initialized). "
@@ -549,6 +552,9 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
 
     # Restart all active runtime transports to apply the new proxy.
     await _restart_runtime_transports(request)
+    readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
+    if readonly_accounts is not None:
+        await readonly_accounts.reconfigure_network()
 
     effective = _resolve_proxy_url(mode, custom_proxy)
     logger.info(

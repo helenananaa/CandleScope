@@ -26,7 +26,7 @@ const request: ChartStrategyRunRequest = {
   draftId: "draft-12345678",
   draftContentRevision: 1,
   displayName: "SMA Cross",
-  language: "pyne",
+  language: "pine",
   source: [
     'strategy("SMA Cross")',
     "fast = sma(close, 3)",
@@ -39,7 +39,7 @@ const request: ChartStrategyRunRequest = {
     strategyDraftId: "draft-12345678",
     strategyRevisionId: null,
     displayName: "SMA Cross",
-    language: "pyne",
+    language: "pine",
     parameters: { fast: 3, slow: 5 },
     rangeMode: "ALL_AVAILABLE",
     customRange: null,
@@ -114,8 +114,8 @@ test("custom conditions are frozen into the actual request with explicit fee pro
 
 const revision: StrategyRevisionRecord = {
   revision_id: "srv2_chart",
-  provider_kind: "PYNE_CHART_V1",
-  language: "PYNE_CHART_V1",
+  provider_kind: "PINE_SUBSET",
+  language: "PINE_SUBSET",
   label: "SMA Cross",
   description: "immutable",
   input_modes: ["BAR_CLOSE"],
@@ -288,7 +288,7 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
   });
   assert.equal(outcome.kind, "TERMINAL");
   assert.deepEqual(calls, [
-    "revision:PYNE_CHART_V1",
+    "revision:PINE_ENGINE",
     "resolve",
     "smoke",
     "validate",
@@ -384,7 +384,7 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
     request,
   });
   assert.equal(first.kind, "NEEDS_DATA");
-  assert.deepEqual(firstCalls, ["revision:PYNE_CHART_V1", "resolve"]);
+  assert.deepEqual(firstCalls, ["revision:PINE_ENGINE", "resolve"]);
 
   const nextCalls: string[] = [];
   const next = await runChartStrategyBacktest({
@@ -395,7 +395,7 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
   });
   assert.equal(next.kind, "TERMINAL");
   assert.deepEqual(nextCalls.slice(0, 3), [
-    "revision:PYNE_CHART_V1",
+    "revision:PINE_ENGINE",
     "materialize:true",
     "resolve",
   ]);
@@ -413,7 +413,7 @@ test("automatic preparation carries frozen strategy intent and observes the serv
   };
   const outcome = await runChartStrategyBacktest({ api, request, pollIntervalMs: 0 });
   assert.equal(outcome.kind, "TERMINAL");
-  assert.deepEqual(calls, ["revision:PYNE_CHART_V1", "resolve", "prepare", "get"]);
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare", "get"]);
 });
 
 test("validate/create drift fails before create", async () => {
@@ -523,7 +523,7 @@ test("imported dataset previews and freezes without materialize or online resolv
   assert.equal(outcome.resolution.cost_preset?.preset_revision, "2");
   assert.equal(outcome.resolution.account_execution_preset?.account_model, "SPOT_CASH_V1");
   assert.deepEqual(calls, [
-    "revision:PYNE_CHART_V1",
+    "revision:PINE_ENGINE",
     "preview",
     "smoke",
     "validate",

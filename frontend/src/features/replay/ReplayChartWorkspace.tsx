@@ -1,3 +1,4 @@
+import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
 import { ReplayIntervalViewportTransfers } from "./replayIntervalViewportTransfers.js";
 import { applyChartLinkGroupPolicyUpdate } from "../chart-workspace/chartWorkspaceLinkModel.js";
 import { useChartAiControl } from "../ai-control/useChartAiControl.js";
@@ -5,7 +6,7 @@ import { replayEffectiveTrainingState, replayOwnsController } from "./replayUiMo
 import { intervalsSemanticallyEquivalent } from "../../utils/intervals.js";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
@@ -41,6 +42,7 @@ import { useReplayCellViewport } from "./useReplayCellViewport.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { replayWorkspaceSelectionCommand } from "./replayWorkspaceSelection.js";
 
 type HostName = "topBar" | "intervalSelector" | "toolbar" | "rightRail" | "featureSurfaces" | "statusBar";
 const HOST_NAMES: HostName[] = ["topBar", "intervalSelector", "toolbar", "rightRail", "featureSurfaces", "statusBar"];
@@ -65,6 +67,9 @@ function sameMarket(cell: ChartCellState, track: ReplayTrainingMarketTrack) {
 }
 
 interface CellProps {
+  pageExportRef: RefObject<HTMLDivElement | null>;
+  pageDrawingExports: PageDrawingExportRegistry;
+  exportVisible: boolean;
   runId: string;
   cell: ChartCellState;
   track: ReplayTrainingMarketTrack;
@@ -82,12 +87,16 @@ interface CellProps {
 }
 
 function ReplayChartCell({ runId, cell, track, workspace, controller, pool, globalSettings,
-  integrity, links, intervalTransfers, hosts, controls, preferences, onOpenTrack }: CellProps) {
+  integrity, links, intervalTransfers, hosts, controls, preferences, onOpenTrack, pageExportRef, pageDrawingExports, exportVisible }: CellProps) {
   const runtime = useSharedReplayChartRuntime(pool, track.adapter_session_id!);
   const projection = useReplayChartProjection(runtime, track.track_id, cell.session.interval);
   const active = workspace.view.activeCellId === cell.id;
   const scope = `replay:${runId}:${workspace.view.activeWorkspaceId}:${cell.id}`;
   const surface = useChartSurfaceRuntime();
+  useEffect(() => exportVisible ? pageDrawingExports.register(cell.id, surface.actions) : undefined,
+    [cell.id, exportVisible, pageDrawingExports, surface.actions]);
+  const preparePageDrawingExport = useCallback<import("../export/pageDrawingExport.js").PreparePageDrawingExport>(
+    (lease, options) => pageDrawingExports.prepare(cell.id, lease, options), [cell.id, pageDrawingExports]);
   const saveViewport = useReplayCellViewport(`${scope}:${track.track_id}:${cell.session.interval}`, surface.actions,
     `${scope}:${track.track_id}`);
   const bound = controller.viewerState?.selected_track_id === track.track_id;
@@ -118,6 +127,11 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
         intervalTransfers.prepare(workspace.view.document, cell.id, interval);
         workspace.actions.updateCellSession(cell.id, { ...cell.session, interval });
         return null;
+      },
+      selectTrack: async (trackId) => {
+        // Keep the active chart aligned when position management selects a market.
+        await onOpenTrack(trackId, "current");
+        return controller.actions.selectTrack(trackId);
       },
       openTrack: onOpenTrack,
       submitTrade: async (type, payload) => {
@@ -162,7 +176,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   const cellOptions = useMemo(() => ({
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
-    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: controller, preferences,
+    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale,
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
@@ -172,7 +186,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, controller, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -184,6 +198,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     </div>}
     <ReplayTrainingPageShell runtime={runtime} viewer={viewer} indicators={indicators}
       chartSurfaceRef={surface.ref} chartSurfaceActions={surface.actions}
+      pageExportRef={pageExportRef} preparePageDrawingExport={preparePageDrawingExport}
       chartSettingsRuntime={settings} cell={cellOptions} />
   </CellFrameContext.Provider>;
 }
@@ -198,6 +213,8 @@ export interface ReplayChartWorkspaceProps {
 }
 
 export default function ReplayChartWorkspace({ runId, initialSession, runtime, viewer, pool, chartSettingsRuntime }: ReplayChartWorkspaceProps) {
+  const pageExportRef = useRef<HTMLDivElement | null>(null);
+  const [pageDrawingExports] = useState(() => new PageDrawingExportRegistry());
   const [repository] = useState(() => createReplayChartWorkspaceRepository(runId, initialSession));
   const workspace = useChartWorkspaceRuntime({ repository, workspaceBus: null });
   const preferences = useReplayWorkspacePreferences(runId);
@@ -245,22 +262,27 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const lastView = useRef(viewer.viewerState);
   if (viewer.marketTracks !== null) lastTracks.current = viewer.marketTracks;
   if (viewer.viewerState !== null) lastView.current = viewer.viewerState;
+  const marketTracks = viewer.marketTracks ?? lastTracks.current;
+  const tracks = useMemo(() => marketTracks?.tracks ?? [], [marketTracks]);
+  const activeTrack = tracks.find((track) => sameMarket(workspace.view.activeCell, track));
+  const selectionCommand = replayWorkspaceSelectionCommand(viewer.viewerState, activeTrack?.track_id,
+    workspace.view.activeCell.session.interval);
+  const adapterPending = viewer.marketTracks?.tracks.find((track) => track.track_id === viewer.viewerState?.selected_track_id)?.adapter_session_id !== runtime.store.sessionId;
   const controller = useMemo(() => ({ ...viewer,
-    marketTracks: viewer.marketTracks ?? lastTracks.current,
+    marketTracks,
     viewerState: viewer.viewerState ?? lastView.current,
     viewerPending: viewer.viewerPending || viewer.viewerState === null
-      || viewer.marketTracks?.tracks.find((track) => track.track_id === viewer.viewerState?.selected_track_id)?.adapter_session_id !== runtime.store.sessionId,
-  }), [viewer, runtime.store.sessionId]);
+      || adapterPending || selectionCommand !== null,
+  }), [viewer, marketTracks, adapterPending, selectionCommand]);
   const integrity = useReplayIntegrityRuntime(runtime, controller, true, true, () => ({
     document: workspace.view.document, windowId: workspace.view.window.id,
     workspaceId: workspace.view.activeWorkspaceId,
   }));
   const drawings = useReplayWorkspaceDrawings(runId, workspace.view.activeWorkspaceId, workspace.view.document, integrity);
   const selectionPending = useRef(false);
+  const [selectionRevision, setSelectionRevision] = useState(0);
   const [selectionAttempt, setSelectionAttempt] = useState(0);
   const failedSelection = useRef<string | null>(null);
-  const tracks = useMemo(() => controller.marketTracks?.tracks ?? [], [controller.marketTracks]);
-  const activeTrack = tracks.find((track) => sameMarket(workspace.view.activeCell, track));
   const controlClock = controller.marketTracks?.global_clock;
   const controlState = replayEffectiveTrainingState(controlClock?.state, runtime.store.state, runtime.store.controllerClientId) ?? "UNAVAILABLE";
   const aiControlBusy = controller.viewerPending || viewer.controlPending !== null || runtime.pendingCommand !== null
@@ -291,17 +313,22 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   useEffect(() => {
     if (integrity.review !== null) return;
     if (runtime.phase !== "ACTIVE" || !runtime.store.hasAuthoritativeSnapshot || runtime.store.sessionId === null || runtime.store.virtualTimeMs === null) return;
-    if (!activeTrack || viewer.viewerState === null || selectionPending.current || controller.viewerPending || viewer.controlPending) return;
-    if (viewer.viewerState.selected_track_id === activeTrack.track_id) return;
-    const requestKey = `${activeTrack.track_id}:${selectionAttempt}`;
+    if (!selectionCommand || selectionPending.current || adapterPending || viewer.viewerPending || viewer.controlPending || runtime.pendingCommand) return;
+    const requestKey = `${selectionCommand.key}:${selectionAttempt}`;
     if (failedSelection.current === requestKey) return;
     selectionPending.current = true;
-    void viewer.actions.selectTrack(activeTrack.track_id).then(() => {
+    const request = selectionCommand.type === "select_track"
+      ? viewer.actions.selectTrack(selectionCommand.value)
+      : viewer.actions.setDisplayInterval(selectionCommand.value);
+    void request.then(() => {
       setError(null);
-      setSelectionAttempt((attempt) => attempt + 1);
     }).catch((reason: unknown) => { failedSelection.current = requestKey; setError(String(reason)); })
-      .finally(() => { selectionPending.current = false; });
-  }, [activeTrack, viewer, controller.viewerPending, integrity.review, selectionAttempt, runtime.phase, runtime.store.hasAuthoritativeSnapshot, runtime.store.sessionId, runtime.store.virtualTimeMs]);
+      .finally(() => {
+        selectionPending.current = false;
+        // Reconcile the latest active chart after releasing the previous request.
+        setSelectionRevision((revision) => revision + 1);
+      });
+  }, [selectionCommand, viewer, adapterPending, integrity.review, selectionAttempt, selectionRevision, runtime.pendingCommand, runtime.phase, runtime.store.hasAuthoritativeSnapshot, runtime.store.sessionId, runtime.store.virtualTimeMs]);
   // A visible chart requires an advancing track. The server independently pins
   // positions/orders FULL, so hiding a chart never suspends financial processing.
   useEffect(() => {
@@ -333,6 +360,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   return <>
     {import.meta.env.DEV && focusTiming && <span hidden data-replay-focus-cell={focusTiming.id} data-replay-focus-ms={focusTiming.durationMs} />}
     <MarketPageFrame
+      rootRef={pageExportRef}
       topBar={<div ref={hostRefs.topBar} className="replay-workspace-host" />}
       intervalSelector={<div ref={hostRefs.intervalSelector} className="replay-workspace-host" />}
       workspace={<MarketChartWorkspace
@@ -372,6 +400,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                   onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells} />
               </header>
               {track?.adapter_session_id ? <ReplayChartCell key={`${id}:${track.track_id}`} runId={runId} cell={cell} track={track}
+                pageExportRef={pageExportRef} pageDrawingExports={pageDrawingExports} exportVisible={!obscured}
                 workspace={workspace} controller={controller} pool={pool} globalSettings={chartSettingsRuntime}
                 integrity={integrity} links={links} intervalTransfers={intervalTransfers} hosts={hosts} controls={controls} preferences={preferences} onOpenTrack={openTrack} />
                 : <div role="status">{cell.session.symbol} — {tracks.length === 0 ? t("replay.opening") : t("replay.watchlist.noCover")}

@@ -42,17 +42,6 @@
           "size": 4687582
         }
       }
-    },
-    "pyne-runtime": {
-      "commit": "2b7db79f26ee23472595f4e0e037d49480d45fe6",
-      "archive": {
-        "filename": "pyne-runtime-2b7db79f26ee23472595f4e0e037d49480d45fe6.tar.gz",
-        "url": "https://codeload.github.com/helenananaa/pyne-runtime/tar.gz/2b7db79f26ee23472595f4e0e037d49480d45fe6",
-        "sha256": "sha256:92d8842ffd8a7c0d48f2564f0c044348023e9ae3831305e38a22aabac1361afc"
-      },
-      "bridge": "candlescope-plugin-pyne",
-      "patch": "packages/candlescope-plugin-pyne/engine-patches/source-close-events-v1.patch",
-      "patchSha256": "sha256:c4dbc7231aa86eafb8a95b6e8f1b68bf235bbc1705e70d513eba90b61af0a7c7"
     }
   },
   "numpy": {

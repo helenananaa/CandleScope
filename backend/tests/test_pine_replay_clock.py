@@ -106,7 +106,6 @@ async def test_forming_chart_replay_uses_captured_clock_across_retry_and_process
     }]})
     host = RuntimeHostService(registry, host_name="CandleScope", host_version="0.3.0")
     runtime = IndicatorRuntimeService(IndicatorRuntimeRoutes((
-        IndicatorRuntimeRoute(language="pyne", mode="legacy"),
         IndicatorRuntimeRoute(language="pine", mode="sidecar", runtime_id="candlescope.pine-compat"),
     )), host=host)
     calls = []

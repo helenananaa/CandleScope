@@ -13,7 +13,8 @@ test("cost selection reaches direct and automatic Pine submissions without enter
   assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", false, null, options).cost_sensitivity_mode, "SKIP");
   assert.equal(automaticHostExecution("CANDLESCOPE", settings, "BAR_APPROX", false, null, options)?.cost_sensitivity_mode, "SKIP");
   assert.deepEqual(executionInputs("NATIVE", settings, "BAR_APPROX", false, null, options), {});
-  assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", false, null, { ...options, language: "pyne" }).cost_sensitivity_mode, undefined);
+  // @ts-expect-error Retired values from persisted input must fail at runtime.
+  assert.throws(() => executionInputs("CANDLESCOPE", settings, "BAR_APPROX", false, null, { ...options, language: "pyne" }), /Unsupported strategy language/);
 });
 
 test("chart and native requests freeze the selected venue and market instead of the primary chart", async () => {
@@ -56,7 +57,8 @@ test("contract rules survive draft restoration and reach requested-symbol metada
   assert.deepEqual(restoreAdvancedInputs(selection, true), selection);
   const result = await freezeAdvancedInputs(selection, "pine", main, mockApi([dataset], []));
   assert.deepEqual(result.contexts[0]?.metadata, { ...rules, pointValue: 50 });
-  await assert.rejects(freezeAdvancedInputs(selection, "pyne", main), /requires Pine/);
+  // @ts-expect-error Retired values from persisted input must fail at runtime.
+  await assert.rejects(freezeAdvancedInputs(selection, "pyne", main), /Unsupported strategy language/);
   assert.throws(() => restoreAdvancedInputs({ ...selection, contexts: [{ ...selection.contexts[0], quantityStep: .25 }] }, true), /malformed/);
 });
 function mockApi(datasets: InputDataset[], calls: unknown[]) {
@@ -82,7 +84,7 @@ test("freeze requested data and magnifier with distinct authoritative ranges", a
 test("stale selected revision and duplicate request keys fail before snapshotting", async () => {
   const calls: unknown[] = [];
   const choice = { dataset, symbol: "BINANCE:ETHUSDT" };
-  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice] }, "pyne", main,
+  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice] }, "pine", main,
     mockApi([{ ...dataset, data_epoch: "changed" }], calls)), /DATA_SNAPSHOT_MISMATCH/);
   assert.equal(calls.length, 1);
   await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice, choice] }, "pine", main,
@@ -94,7 +96,6 @@ test("unsupported libraries and malformed library JSON never reach the run API",
   for (const libraries of ['[]', '{"library":42}', 'broken']) {
     await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), libraries }, "pine", main));
   }
-  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), libraries: '{"lib":"source"}' }, "pyne", main), /require Pine/);
 });
 
 test("shared execution payload preserves fill callback for both chart entry points", () => {
@@ -104,7 +105,8 @@ test("shared execution payload preserves fill callback for both chart entry poin
     host_settings: settings, execution_fidelity: "TRADE_TAPE", fill_recalculation: true, execution_data: tape,
   });
   assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", true, tape).fill_recalculation, true);
-  assert.equal(executionInputs("CANDLESCOPE", settings, "BAR_APPROX", true, tape, { language: "pyne" }).fill_recalculation, false);
+  // @ts-expect-error Retired values from persisted input must fail at runtime.
+  assert.throws(() => executionInputs("CANDLESCOPE", settings, "BAR_APPROX", true, tape, { language: "pyne" }), /Unsupported strategy language/);
   assert.deepEqual(executionInputs("NATIVE", settings, "TRADE_TAPE", true, tape), {});
 });
 

@@ -5,29 +5,13 @@ from tests.test_native_additional_inputs import additional
 from tests.test_external_strategy_v2 import tape
 
 
-SOURCES = {
-    "pine": '''//@version=6
+SOURCES = {"pine": '''//@version=6
 strategy("Requested host")
 remote = request.security("BINANCE:ETHUSDT", "2", close)
 if remote > 100 and strategy.position_size == 0
     strategy.entry("L", strategy.long, qty=1)
 plot(remote)
-''',
-    "pyne": '''def init(ctx):
-    ctx.strategy.configure()
-
-def on_bar(ctx, bar):
-    remote = ctx.request.security("BINANCE:ETHUSDT", "2", "close")
-    if remote is not None and remote > 100 and ctx.strategy.position_size == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=1)
-    ctx.plot("remote", remote)
-''',
-    "pyne_batch": '''strategy("Requested host")
-remote = request.security("BINANCE:ETHUSDT", "2", "close")
-strategy.entry_when((remote > 100) & (strategy.position_size == 0), "L", strategy.long, qty=1)
-plot(remote)
-''',
-}
+'''}
 
 
 @pytest.mark.parametrize("kind", list(SOURCES))
@@ -52,7 +36,7 @@ def test_requested_data_crosses_only_closed_boundary_and_host_owns_fills(runtime
             assert all((bar["time"]+120)*1000 <= boundary for bar in visible)
         return original(plugin, request, **kwargs)
     host.native.runner = observe
-    config = {**payload, "language": "pine" if kind == "pine" else "pyne", "source": SOURCES[kind],
+    config = {**payload, "language": "pine", "source": SOURCES[kind],
               "execution_mode": "CANDLESCOPE", "contexts": [context], "execution_fidelity": fidelity,
               "host_settings": {"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}}
     if fidelity != "BAR_APPROX":
@@ -85,13 +69,13 @@ def test_requested_data_crosses_only_closed_boundary_and_host_owns_fills(runtime
 def test_missing_requested_dataset_never_falls_back(runtime, kind):
     host, payload = runtime
     record = terminal(host.native, host.native.create({**payload,"execution_mode":"CANDLESCOPE",
-        "language":"pine" if kind == "pine" else "pyne", "source":SOURCES[kind],
+        "language":"pine", "source":SOURCES[kind],
         "host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}}, kind)["run_id"])
     assert record["state"] == "FAILED"
     assert record["result"] is None
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_capability_probe_accepts_current_versioned_adapters(runtime, language):
     host, _ = runtime
     engine = next(row for row in host.native.capabilities()["engines"] if row["language"] == language)

@@ -79,7 +79,7 @@ export interface BackendDiagnosticsResult extends Record<string, unknown> {
     watermarks?: StorageWatermarks;
   };
   indicator?: {
-    pyne_cache?: Record<string, unknown> & {
+    script_cache?: Record<string, unknown> & {
       size?: number;
       items?: number;
       max_items?: number;

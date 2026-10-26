@@ -111,14 +111,3 @@ def test_bar_input_native_hash_is_exact_and_rejects_incompatible_values(monkeypa
     for invalid in (1e-7, float("nan"), {"nested":1}, "中", "\x7f", 2**100):
         assert qualified_json.try_bar_input_bytes(1, 123, {"close":invalid}, None, {}) is None
     assert qualified_json.try_bar_input_bytes(1, 123, bar, {}, {}) is None
-
-
-def test_benchmark_sources_are_unchanged_without_test_imports():
-    import ast
-    from pathlib import Path
-    from scripts.strategy_benchmark_sources import SMA, RSI
-    from tests.test_backtest_chart_pyne import SMA as original_sma, RSI as original_rsi
-    assert (SMA, RSI) == (original_sma, original_rsi)
-    source = Path(__file__).resolve().parents[1]/"scripts/benchmark_strategy_bar_audit.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    assert not any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests") for node in ast.walk(tree))

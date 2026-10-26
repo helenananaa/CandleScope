@@ -7,13 +7,13 @@ from pathlib import Path
 from app.backtest.external_orders import ExternalOrders
 from .pine_engine import ORDER_CONTRACT
 from .protocol import StrategyOutput, StrategyProviderError
-from .pyne_adapter import HostPlan, PyneHostPlanner
+from .host_planner import HostPlan, HostOrderPlanner
 
 
 def host_identity():
     from app.backtest.external import host_identity as execution_identity
     digest = hashlib.sha256()
-    for name in ("pine_planner.py", "pine_engine.py", "pine_streaming.py", "pyne_adapter.py", "host_policy.py", "host_adapter.py"):
+    for name in ("pine_planner.py", "pine_engine.py", "pine_streaming.py", "host_planner.py", "host_policy.py", "host_adapter.py"):
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())
     digest.update(Path(__file__).parent.parent.joinpath("pine_callbacks.py").read_bytes())
@@ -26,7 +26,7 @@ def host_identity():
     return {"contract": ORDER_CONTRACT, "execution": execution_identity(), "planner_sha256": digest.hexdigest()}
 
 
-class PineHostPlanner(PyneHostPlanner):
+class PineHostPlanner(HostOrderPlanner):
     def __init__(self, config=None, **kwargs):
         super().__init__(config, **kwargs)
         self.price_tick = (config or {}).get("price_tick")

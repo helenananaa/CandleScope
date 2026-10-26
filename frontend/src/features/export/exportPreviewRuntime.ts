@@ -9,14 +9,15 @@ import type { MutableRefObject } from "react";
 import type { ChartSurfaceActions } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import type {
   DrawingExportRuntimeInstrumentation,
-  DrawingRuntimeExportLease,
   DrawingRuntimeExportPrepareOptions,
 } from "../drawings/useDrawingRuntime.js";
+import type { ExportDrawingLease } from "./pageDrawingExport.js";
 import type { ExportImageResult, ExportMetadata, ExportOptions } from "./exportTypes.js";
 
 export interface DrawingExportTarget {
   readonly scopeKey: string;
   readonly documentRevision: number;
+  readonly pageTargetsKey?: string;
 }
 
 function revokeObjectUrl(url: string | null | undefined): void {
@@ -78,8 +79,8 @@ export interface UseExportPreviewRuntimeOptions {
   pageExportRef: MutableRefObject<HTMLElement | null>;
   drawingsHidden?: boolean | null;
   prepareDrawingExport?: ((
-    options?: DrawingRuntimeExportPrepareOptions,
-  ) => Promise<DrawingRuntimeExportLease | null>) | null;
+    options: DrawingRuntimeExportPrepareOptions & { scope: ExportOptions["scope"] },
+  ) => Promise<ExportDrawingLease | null>) | null;
   drawingExportInstrumentation?: DrawingExportRuntimeInstrumentation | null;
   debounceMs?: number;
 }
@@ -197,7 +198,7 @@ export function useExportPreviewRuntime({
       exportOptions,
       latestDrawingsHiddenRef.current,
     );
-    let drawingLease: DrawingRuntimeExportLease | null = null;
+    let drawingLease: ExportDrawingLease | null = null;
     let drawingTarget: DrawingExportTarget | null = null;
     let exportLifecycleTransaction: ReturnType<
       DrawingExportRuntimeInstrumentation["begin"]
@@ -216,6 +217,7 @@ export function useExportPreviewRuntime({
       if (prepareDrawingExport) {
         drawingLease = await withTimeout(
           prepareDrawingExport({
+            scope: exportOptions.scope,
             hideDrawings: exportOptions.hideDrawings,
             timeoutMs: 5_000,
             signal: runAbortController.signal,
@@ -227,6 +229,7 @@ export function useExportPreviewRuntime({
           ? Object.freeze({
               scopeKey: drawingLease.receipt.scopeKey,
               documentRevision: drawingLease.receipt.documentRevision,
+              ...(drawingLease.pageTargetsKey === undefined ? {} : { pageTargetsKey: drawingLease.pageTargetsKey }),
             })
           : null;
         if (drawingLease && drawingExportInstrumentation) {

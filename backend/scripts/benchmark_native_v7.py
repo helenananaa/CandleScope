@@ -47,8 +47,7 @@ def main():
         'runs':[]}
     registry=json.loads(args.registry.read_text(encoding='utf-8'))
     plugins={language:{'command':[row['launch']['executable'],'-I','-m',module]} for language,module,row in [
-        ('pine','candlescope_plugin_pine_compat.external_strategy',registry['plugins'][0]),
-        ('pyne','candlescope_plugin_pyne.external_strategy',registry['plugins'][1])]}
+        ('pine','candlescope_plugin_pine_compat.external_strategy',next(row for row in registry['plugins'] if row['id']=='candlescope.pine-compat')),]}
     sources={'pine':'''//@version=6
 strategy("Archive qualification")
 if bar_index % 120 == 0
@@ -56,14 +55,6 @@ if bar_index % 120 == 0
 if bar_index % 120 == 119
     strategy.close("L")
 plot(strategy.equity)
-''','pyne':'''def init(ctx):
-    ctx.strategy.configure()
-def on_bar(ctx, bar):
-    if ctx.bar_index % 120 == 0:
-        ctx.strategy.entry("L", qty=0.01)
-    if ctx.bar_index % 120 == 119:
-        ctx.strategy.close("L")
-    ctx.plot("Equity", ctx.strategy.equity)
 '''}
     def save():
         args.output.write_text(json.dumps(report,indent=2),encoding='utf-8')
@@ -80,8 +71,6 @@ def on_bar(ctx, bar):
                 wire['fill_recalculation']=True
                 if language=='pine':
                     wire['source']=sources[language].replace('strategy("Archive qualification")','strategy("Archive qualification", calc_on_order_fills=true)').replace('if bar_index % 120 == 0','if bar_index % 120 == 0 and barstate.isconfirmed').replace('if bar_index % 120 == 119','if strategy.position_size > 0 and not barstate.isconfirmed')
-                else:
-                    wire['source']=sources[language].replace('ctx.strategy.configure()','ctx.strategy.configure(calc_on_order_fills=True)')+'\ndef on_fill(ctx, bar):\n    if ctx.strategy.position_size > 0:\n        ctx.strategy.close("L")\n'
             admission=time.perf_counter()
             if mode=='TRADE_TAPE':
                 section=data[data.trade_time_ms < (selected[-1]['time']+60)*1000]

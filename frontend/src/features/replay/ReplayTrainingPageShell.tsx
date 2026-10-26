@@ -1,9 +1,10 @@
+import { useExportRuntime } from "../export/useExportRuntime.js";
 import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
 import { ReplayReviewHistory } from "./replayReviewHistory.js";
 import type { ReplayCanonicalBinding } from "./replayCanonicalIndicators.js";
 import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
@@ -27,7 +28,7 @@ import {
 } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import { useCustomIntervals } from "../chart-session/customIntervalStore.js";
 import { useIntervalNoticeRuntime } from "../chart-session/intervalNoticeRuntime.js";
-import { loadUserPrefs } from "../chart-session/chartSessionModel.js";
+import { loadUserPrefs, updateUserPref } from "../chart-session/chartSessionModel.js";
 import type { CustomIntervalRecord } from "../chart-session/chartSessionTypes.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import { drawingDocumentSessionRegistry } from "../drawings/core/drawingDocumentStore.js";
@@ -88,6 +89,8 @@ import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 
 
+const ExportPanel = lazy(() => import("../export/ExportPanel.js"));
+
 export interface ReplayTrainingPageShellProps {
   readonly runtime: ReplayRuntime;
   readonly indicators: ReplaySharedIndicatorRuntime;
@@ -95,6 +98,8 @@ export interface ReplayTrainingPageShellProps {
   readonly chartSurfaceActions: ChartSurfaceActions;
   readonly viewer: ReplayViewerRuntime;
   readonly chartSettingsRuntime: ChartSettingsRuntime;
+  readonly pageExportRef?: RefObject<HTMLDivElement | null>;
+  readonly preparePageDrawingExport?: import("../export/pageDrawingExport.js").PreparePageDrawingExport;
   readonly cell?: {
     readonly scope: string;
     readonly drawingScope: string;
@@ -132,6 +137,8 @@ export default function ReplayTrainingPageShell({
   chartSurfaceActions,
   viewer,
   chartSettingsRuntime,
+  pageExportRef,
+  preparePageDrawingExport,
   cell,
 }: ReplayTrainingPageShellProps) {
   const PageFrame = cell?.frame ?? MarketPageFrame;
@@ -651,6 +658,26 @@ export default function ReplayTrainingPageShell({
   const displayedSymbol = review !== null && typeof reviewSelectedTrack?.symbol === "string"
     ? reviewSelectedTrack.symbol
     : activeSelectedTrack?.symbol ?? config?.symbol ?? "--";
+  const ownPageExportRef = useRef<HTMLDivElement | null>(null);
+  const exportMetadata = useMemo(() => ({
+    exchange: activeSelectedTrack?.exchange ?? config?.exchange ?? "",
+    marketType: activeSelectedTrack?.market_type ?? config?.market_type ?? "",
+    symbol: displayedSymbol,
+    interval: displayedInterval,
+  }), [activeSelectedTrack?.exchange, activeSelectedTrack?.market_type, config?.exchange,
+    config?.market_type, displayedSymbol, displayedInterval]);
+  const exportFlow = useExportRuntime({
+    session: null,
+    metadata: exportMetadata,
+    indicators: indicators.view.activeIndicators,
+    resolvedTheme,
+    chartSurfaceActions,
+    pageExportRef: pageExportRef ?? ownPageExportRef,
+    preparePageDrawingExport,
+    drawings,
+    loadUserPrefs,
+    updateUserPref,
+  });
   const baseInterval = (config?.base_interval ?? "1m") as IntervalString;
   const replayIntervalCatalog = useMemo(() => buildReplayIntervalCatalog({
     exchange: config?.exchange ?? "binance",
@@ -1026,6 +1053,9 @@ export default function ReplayTrainingPageShell({
       onPositionSizeChange={drawings.actions.handlePositionSizeChange}
       selectedDrawing={drawings.view.selectedDrawing}
       onSelectedDrawingStyleChange={drawings.actions.handleSelectedDrawingStyleChange}
+      exportPanelOpen={exportFlow.view.isOpen}
+      exportInProgress={exportFlow.status.inProgress}
+      onToggleExportPanel={exportFlow.actions.togglePanel}
       chartType={settings.chartType}
       onChartTypeChange={(chartType) => setSettings((current) => ({ ...current, chartType }))}
     />
@@ -1076,6 +1106,7 @@ export default function ReplayTrainingPageShell({
   );
   return (
     <PageFrame
+      rootRef={ownPageExportRef}
       toolbar={drawingToolbar}
       rightRail={rightRail}
       topBar={(
@@ -1178,6 +1209,15 @@ export default function ReplayTrainingPageShell({
         />
       )}
       featureSurfaces={active ? <>
+        {review === null && exportFlow.view.isOpen && <Suspense fallback={null}><ExportPanel
+          {...exportFlow.view}
+          onOptionsChange={exportFlow.actions.updateOptions}
+          onExport={exportFlow.actions.exportChart}
+          onClose={exportFlow.actions.closePanel}
+          inProgress={exportFlow.status.inProgress}
+          loading={viewer.loading || history.loading}
+          indicatorComputing={indicators.status.computing}
+        /></Suspense>}
         {review === null && history.notice !== null && (
           <div className="replay-history-boundary-notice" role="status">
             <span>{history.notice}</span>
@@ -1188,8 +1228,7 @@ export default function ReplayTrainingPageShell({
         {review === null && indicatorPanelOpen && (
           <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
             <IndicatorPanel
-              allowedScriptLanguages={["pyne", "pine", "frontend-js"]}
-              allowedSecurityModes={["safe"]}
+              allowedScriptLanguages={["pine", "frontend-js"]}
               isOpen
               onClose={() => setIndicatorPanelOpen(false)}
               activeIndicators={indicators.view.activeIndicators}

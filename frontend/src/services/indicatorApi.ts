@@ -25,7 +25,6 @@ import {
   parseIndicatorRangeBatchResponse,
   parseIndicatorRegistryList,
   parseIndicatorRegistrySpec,
-  parsePyneSecurityPolicy,
   parseScriptRuntimeCatalog,
 } from "../features/indicators/indicatorContracts.js";
 import type {
@@ -40,7 +39,6 @@ import type {
   IndicatorRangeBatchResponse,
   IndicatorRangeRequest,
   IndicatorRegistrySpec,
-  PyneSecurityPolicy,
   ScriptRuntimeCatalog,
 } from "../features/indicators/indicatorTypes.js";
 
@@ -133,7 +131,7 @@ export async function fetchScriptRuntimes(
  *
  * Supports two modes:
  *   1. Engine mode: provide `name` (e.g. "MA") + `params` → server-side engine
- *   2. Script mode: provide `script` + `params` → server-side Python exec
+ *   2. Script mode: provide `script` + `params` → isolated runtime execution
  *
  * The `script` field from presets starts with "# __ENGINE__:MA" which tells
  * the backend to route to the engine instead of exec.
@@ -420,12 +418,7 @@ export async function saveCustomIndicator({
   return parseCustomIndicatorRecord(payload);
 }
 
-/** Fetch current Pyne security defaults */
-export async function fetchPyneSecurityPolicy(): Promise<PyneSecurityPolicy> {
-  return parsePyneSecurityPolicy(
-    await request(`${API_BASE}/indicators/pyne/security`),
-  );
-}
+
 
 /** WebSocket URL for backend-managed builtin indicator updates */
 export function getIndicatorStreamUrl(): string {

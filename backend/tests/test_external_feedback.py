@@ -15,15 +15,6 @@ if strategy.position_size > 0 and not barstate.isconfirmed
     strategy.close("L")
 plot(ta.sma(close, 2))
 """
-PYNE = """def init(ctx):
-    ctx.strategy.configure(calc_on_order_fills=True)
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=4)
-def on_fill(ctx, bar):
-    if ctx.strategy.position_size > 0:
-        ctx.strategy.close("L")
-"""
 
 
 def run(host, payload, language, source, mode):
@@ -43,7 +34,7 @@ def run(host, payload, language, source, mode):
     return terminal(host.native, record["run_id"])
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", PYNE)])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 @pytest.mark.parametrize("mode", ["TRADE_TAPE", "BOOK_ASSISTED"])
 def test_fill_callbacks_use_actual_account_visible_prices_and_next_event(runtime, language, source, mode):
     host, payload = runtime
@@ -63,12 +54,6 @@ def test_fill_callbacks_use_actual_account_visible_prices_and_next_event(runtime
     if language == "pine":
         assert report["graphics"][0]["values"][1:] == [10,10,15,20,12.5,5,10,15,11.5]
 
-
-def test_pyne_fill_profile_requires_incremental_callback_and_explicit_opt_in(runtime):
-    host, payload = runtime
-    record = run(host, payload, "pyne", PYNE.replace("def on_fill(ctx, bar):", "def unused(ctx, bar):"), "TRADE_TAPE")
-    assert record["state"] == "FAILED" and record["result"] is None
-    assert "on_fill" in str(record["error"])
 
 
 def test_bar_fill_profile_requires_source_calc_on_order_fills(runtime):
@@ -93,7 +78,7 @@ def test_pine_fill_passes_keep_foreign_symbol_metadata_outside_bar_streams(runti
     assert 100.25 in values and 200.25 in values
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_multiple_entry_fill_callbacks_never_close_other_owner(runtime, language):
     host, payload = runtime
     source = '''//@version=6
@@ -103,17 +88,6 @@ if barstate.isconfirmed and bar_index == 0
     strategy.entry("B", strategy.long, qty=3)
 if not barstate.isconfirmed and strategy.position_size > 0
     strategy.close("A")
-''' if language == "pine" else '''def init(ctx):
-    ctx.strategy.configure(pyramiding=2, calc_on_order_fills=True)
-
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("A", qty=2)
-        ctx.strategy.entry("B", qty=3)
-
-def on_fill(ctx, bar):
-    if ctx.strategy.position_size > 0:
-        ctx.strategy.close("A")
 '''
     record = run(host, payload, language, source, "TRADE_TAPE")
     assert record["state"] == "COMPLETED", record.get("error")
@@ -122,7 +96,7 @@ def on_fill(ctx, bar):
     assert len(lots) == 1 and lots[0]["entry_id"] == "B" and float(lots[0]["qty"]) == 3
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("mode", ["TRADE_TAPE", "BOOK_ASSISTED"])
 def test_requested_data_is_frozen_per_fill_not_retroactively_visible(runtime, language, mode):
     from tests.test_native_additional_inputs import additional
@@ -142,24 +116,6 @@ if not barstate.isconfirmed and strategy.position_size > 0
     else
         strategy.close_all()
 plot(remote)
-""" if language == "pine" else """def init(ctx):
-    ctx.strategy.configure(calc_on_order_fills=True)
-    ctx.request_alias = request
-
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=1)
-    if ctx.bar_index == 1:
-        ctx.strategy.entry("B", ctx.strategy.long, qty=1)
-    ctx.plot("remote", ctx.request.security("BINANCE:ETHUSDT", "2", "close"))
-
-def on_fill(ctx, bar):
-    remote = ctx.request_alias.security("BINANCE:ETHUSDT", "2", "close")
-    if ctx.strategy.position_size > 0:
-        if remote is None or remote != remote:
-            ctx.strategy.exit("X", "L", limit=10.5)
-        else:
-            ctx.strategy.close_all()
 """
     record = run(host, {**payload,"contexts":[context]}, language, source, mode)
     assert record["state"] == "COMPLETED", record.get("error")
@@ -178,7 +134,7 @@ def on_fill(ctx, bar):
     assert not report["raw_output"]["strategy_output"].get("strategy")
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_fill_in_last_millisecond_does_not_see_unconfirmed_requested_close(runtime, language):
     from tests.test_native_additional_inputs import additional
     host, payload = runtime
@@ -194,17 +150,6 @@ if barstate.isconfirmed and bar_index == 0
     strategy.entry("L", strategy.long, qty=1, limit=9)
 if not barstate.isconfirmed and strategy.position_size > 0 and na(remote)
     strategy.exit("X", "L", limit=10.5)
-''' if language == "pine" else '''def init(ctx):
-    ctx.strategy.configure(calc_on_order_fills=True)
-
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("L", qty=1, limit=9)
-
-def on_fill(ctx, bar):
-    remote = ctx.request.security("BINANCE:ETHUSDT", "2", "close")
-    if ctx.strategy.position_size > 0 and (remote is None or remote != remote):
-        ctx.strategy.exit("X", "L", limit=10.5)
 '''
     created = host.native.create({**payload,"language":language,"source":source,
         "execution_mode":"CANDLESCOPE","execution_fidelity":"TRADE_TAPE","execution_data":data,

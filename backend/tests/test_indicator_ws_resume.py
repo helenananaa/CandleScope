@@ -65,8 +65,8 @@ class _ScriptRuntimeService:
         return None
 
     def route_for(self, language: str) -> SimpleNamespace:
-        assert language == "pyne"
-        return SimpleNamespace(mode="sidecar", runtime_id="test.pyne")
+        assert language == "pine"
+        return SimpleNamespace(mode="sidecar", runtime_id="test.pine")
 
 
 @pytest.mark.parametrize(

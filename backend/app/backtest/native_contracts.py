@@ -66,7 +66,7 @@ class RequestedNativeData(FrozenNativeData):
 
 
 class NativeRunRequest(FrozenNativeData):
-    language: Literal["pine", "pyne"]
+    language: Literal["pine"]
     source: str = Field(min_length=1, max_length=500_000)
     parameters: dict[str, Any] = Field(default_factory=dict)
     context: NativeContext

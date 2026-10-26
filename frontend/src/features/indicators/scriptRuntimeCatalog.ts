@@ -8,14 +8,12 @@ export interface ScriptEditorProfile {
   monacoLanguage: string;
   theme: string;
   starterSource: string;
-  pyneEnhancements: boolean;
   pineEnhancements: boolean;
 }
 
 // Older first-party descriptors do not advertise a starter. Never reuse a
 // template from another language; community runtimes own their own template.
 const FIRST_PARTY_STARTERS: Readonly<Record<string, string>> = {
-  pyne: 'indicator("My Indicator", overlay=True)\n\nlength = input.int(20, "Length", minval=1)\nma = ta.sma(close, length)\nplot(ma, "MA", color=color.orange)\n',
   pine: '//@version=6\nindicator("My Indicator", overlay=true)\n\nlength = input.int(20, "Length", minval=1)\nma = ta.sma(close, length)\nplot(ma, "MA", color=color.orange)\n',
 };
 
@@ -68,15 +66,13 @@ export function resolveScriptEditorProfile(
 ): ScriptEditorProfile {
   const runtime = runtimeForScriptLanguage(catalog, language);
   const advertised = descriptorUiProfile(runtime, language.id);
-  const pyneEnhancements = language.id === "pyne";
   const pineEnhancements = language.id === "pine";
   return {
     monacoLanguage:
       optionalString(advertised?.monacoLanguage)
-      ?? (pyneEnhancements ? "python" : pineEnhancements ? "pine" : "plaintext"),
-    theme: pyneEnhancements ? "pyne-dark" : "vs-dark",
+      ?? (pineEnhancements ? "pine" : "plaintext"),
+    theme: "vs-dark",
     starterSource: optionalString(advertised?.starterSource) ?? FIRST_PARTY_STARTERS[language.id] ?? "",
-    pyneEnhancements,
     pineEnhancements,
   };
 }

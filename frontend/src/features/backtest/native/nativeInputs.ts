@@ -3,14 +3,15 @@ import { contractDraftKeys, pineContractMetadata, type PineContractDraft } from 
 import { parsePineCurrencyRates } from "../../indicators/pineCurrencyModel.js";
 import { workbenchAccountInputs, type WorkbenchAccountDraft, type WorkbenchAccountPayload } from "./workbenchAccountInputs.js";
 
-type WorkbenchOptions = { language?: "pine" | "pyne"; account?: WorkbenchAccountDraft; accountData?: unknown; costSensitivityMode?: "AUTO" | "SKIP" };
+type WorkbenchOptions = { language?: "pine"; account?: WorkbenchAccountDraft; accountData?: unknown; costSensitivityMode?: "AUTO" | "SKIP" };
 function hostOptions(fidelity: string, callbacks: boolean, options: WorkbenchOptions = {}) {
-  const fill = callbacks && (options.language !== "pyne" || fidelity !== "BAR_APPROX");
+  if (options.language !== undefined && options.language !== "pine") throw new Error("Unsupported strategy language");
+  const fill = callbacks;
   const account = workbenchAccountInputs(options.account, options.accountData, fidelity);
-  if (Object.keys(account).length && (options.language === "pyne" || (fidelity === "BAR_APPROX" && !fill)))
+  if (Object.keys(account).length && (fidelity === "BAR_APPROX" && !fill))
     throw new Error("V2 account/capacity requires Pine historical BAR fill callbacks");
   return { fill_recalculation: fill, ...account,
-    ...(options.language !== "pyne" && options.costSensitivityMode ? { cost_sensitivity_mode: options.costSensitivityMode } : {}) };
+    ...(options.costSensitivityMode ? { cost_sensitivity_mode: options.costSensitivityMode } : {}) };
 }
 
 export interface InputDataset {
@@ -105,11 +106,10 @@ export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Re
     execution_data: fidelity === "BAR_APPROX" ? null : executionData };
 }
 
-export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine" | "pyne", main: MainRange, api = nativeApi) {
+export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine", main: MainRange, api = nativeApi) {
   const rates = parsePineCurrencyRates(selection.currencyRates ?? "");
   pineContractMetadata(selection);
-  if (language !== "pine" && (contractDraftKeys.some(key => selection[key]) || selection.contexts.some(item => contractDraftKeys.some(key => item[key]))))
-    throw new Error("NATIVE_INPUT_UNSUPPORTED: requested instrument metadata requires Pine");
+  if (language !== "pine") throw new Error("Unsupported strategy language");
   const currencyInputs = rates ? { currency_rates: rates } : {};
   const libraries: unknown = JSON.parse(selection.libraries);
   if (!libraries || typeof libraries !== "object" || Array.isArray(libraries)

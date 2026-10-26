@@ -109,7 +109,7 @@ def main():
     recipe = json.loads(RECIPE.read_text())
     target = f"{platform.system()}-{platform.machine()}"
     python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    if python_version != recipe["pythonVersion"] or target not in recipe["numpy"]:
+    if python_version != recipe["pythonVersion"] or target not in recipe["platforms"]:
         raise ValueError(f"no pinned desktop plugin inputs for {target} CPython {python_version}")
     args.cache.mkdir(parents=True, exist_ok=True)
     downloads = args.cache / "downloads"
@@ -173,8 +173,6 @@ def main():
         packages = ["candlescope-plugin-sdk", *(e["bridge"] for e in recipe["engines"].values())]
         for name in packages:
             run([args.uv, "build", "--wheel", "--python", sys.executable, "--out-dir", built, REPO / "packages" / name])
-        numpy = download(recipe["numpy"][target], downloads)
-        tzdata = download(recipe["tzdata"], downloads)
         entries = []
         for name, engine in recipe["engines"].items():
             bridge = REPO / "packages" / engine["bridge"]
@@ -183,10 +181,6 @@ def main():
             records = {r.package: r for r in (builder.inspect_wheel(p) for p in built.glob("*.whl"))}
             engine_record = builder.inspect_wheel(engine_wheels[name])
             records[name] = engine_record
-            if name == "pyne-runtime":
-                for wheel in (numpy, tzdata):
-                    record = builder.inspect_wheel(wheel)
-                    records[record.package] = record
             lock["releaseStatus"] = "desktop-source-build-unpublished"
             # Published locks remain immutable; source builds get a new lock.
             lock["plugin"]["version"] = records[engine["bridge"]].version

@@ -13,7 +13,7 @@ const createAttachment = (): ChartStrategyAttachmentRecord => ({
   strategyDraftId: "draft-12345678",
   strategyRevisionId: null,
   displayName: "SMA Cross",
-  language: "pyne",
+  language: "pine",
   parameters: { fast: 3, slow: 5 },
   rangeMode: "ALL_AVAILABLE",
   customRange: null,

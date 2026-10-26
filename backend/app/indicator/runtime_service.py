@@ -219,7 +219,7 @@ class IndicatorRuntimeService:
         routes: IndicatorRuntimeRoutes,
         *,
         host: RuntimeHost | None = None,
-        legacy_languages: frozenset[str] = frozenset({"pyne"}),
+        legacy_languages: frozenset[str] = frozenset(),
         max_pending_shadow_tasks: int = DEFAULT_MAX_PENDING_SHADOW_TASKS,
     ) -> None:
         if max_pending_shadow_tasks < 1:
@@ -432,7 +432,7 @@ class IndicatorRuntimeService:
 
         return {
             "schemaVersion": INDICATOR_RUNTIME_CATALOG_SCHEMA_VERSION,
-            "defaultLanguage": "pyne",
+            "defaultLanguage": "pine",
             "languages": languages,
             "runtimes": list(runtimes.values()),
         }
@@ -825,7 +825,7 @@ def build_indicator_runtime_service_from_environment(
 def build_unbound_indicator_runtime_service() -> IndicatorRuntimeService:
     """Return a fail-closed fallback for direct calls outside app startup."""
     return IndicatorRuntimeService(
-        IndicatorRuntimeRoutes.pyne_sidecar_default(),
+        IndicatorRuntimeRoutes.first_party_sidecar_default(),
         host=None,
         legacy_languages=frozenset(),
     )

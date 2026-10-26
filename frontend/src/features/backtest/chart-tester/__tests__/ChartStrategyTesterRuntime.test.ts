@@ -15,7 +15,7 @@ const attachment: ChartStrategyAttachmentRecord = {
   strategyDraftId: "draft-12345678",
   strategyRevisionId: null,
   displayName: "Strategy",
-  language: "pyne",
+  language: "pine",
   parameters: {},
   rangeMode: "VISIBLE",
   customRange: null,

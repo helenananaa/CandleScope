@@ -97,7 +97,7 @@ def test_explicit_schedule_cannot_be_sent_to_an_unnegotiated_worker():
       "prefix_append": "unknown", "external_orders": 2}, False, False, False),
     ({"adapter": "pine-external/99", "external_replay": "candlescope.external-replay/1",
       "prefix_append": "candlescope.pine-prefix/1", "external_orders": True}, False, False, False),
-    ({"adapter": "pyne-external/5"}, False, False, True),
+    ({"adapter": "pyne-external/5"}, False, False, False),
     ({"adapter": "pyne-external/99", "external_replay": "candlescope.external-replay/1",
       "prefix_append": "candlescope.pine-prefix/1", "external_orders": 2}, False, False, False),
 ])

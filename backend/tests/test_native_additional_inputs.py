@@ -16,7 +16,7 @@ def additional(host, name, symbol, interval, duration_ms, prices):
     return {**reference, "snapshot_hash":snapshot["snapshot_hash"]}
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_requested_data_stateful_replay_has_no_early_htf_value(runtime, language):
     host, payload = runtime
     context = {**additional(host,"higher","ETHUSDT","2m",120000,[100,200,300,400,500]),
@@ -27,13 +27,6 @@ remote = request.security("BINANCE:ETHUSDT", "2", close)
 if remote > 100
     strategy.entry("L", strategy.long, qty=1)
 plot(remote)
-""" if language == "pine" else """def init(ctx):
-    ctx.strategy.configure()
-def on_bar(ctx, bar):
-    remote = ctx.request.security("BINANCE:ETHUSDT", "2", "close")
-    if remote is not None and remote > 100:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=1)
-    ctx.plot("remote", remote)
 """
     origin = terminal(host.native, host.native.create({**payload,"language":language,"source":source,"contexts":[context]}, "context")["run_id"])
     assert origin["state"] == "COMPLETED", origin.get("error")

@@ -5,7 +5,7 @@ import time
 
 import pytest
 from tests.test_native_backtests import runtime, terminal, pytestmark
-from tests.test_native_strategy_plugins import PINE, PYNE
+from tests.test_native_strategy_plugins import PINE
 
 
 def settle(service, key):
@@ -22,14 +22,7 @@ def settle(service, key):
     raise AssertionError("replay did not settle")
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", PYNE), ("pyne", '''def init(ctx):
-    ctx.strategy.configure(initial_capital=10000)
-def on_bar(ctx, bar):
-    if bar.close > 12:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=2)
-    if bar.close < 9:
-        ctx.strategy.close("L")
-''')])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 def test_replay_step_checkpoint_seek_and_batch_equivalence(runtime, language, source):
     host, payload = runtime
     origin = host.native.create({**payload, "language": language, "source": source}, "batch")
@@ -106,14 +99,7 @@ def test_replay_clips_future_requested_and_magnifier_data(runtime):
     assert len(wire["bars"]) == 2
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", """def init(ctx):
-    ctx.strategy.configure(initial_capital=10000)
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=2)
-    if ctx.bar_index == 6:
-        ctx.strategy.close("L")
-""")])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 def test_fixed_history_worker_reuse_backward_seek_and_restart(runtime, language, source):
     from app.backtest.native_replay import NativeReplay
     host, payload = runtime

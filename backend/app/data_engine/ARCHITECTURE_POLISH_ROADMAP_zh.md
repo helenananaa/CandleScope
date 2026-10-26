@@ -18,8 +18,8 @@
 
 | 阶段 | 状态 | 已落地结果 |
 |---|---|---|
-| Phase 1：讲清当前事实 | 已完成 | `DATA_FLOW_PATHS_zh.md` 记录实时 K 线、backfill、price、内置指标、Pyne/custom 五条路径。callback 注释也明确了 `MarketEvent` 进入 `BarAggregator`，不会直接改 DataManager cache。 |
-| Phase 2：拆薄 route 层 | 已完成 | `api/v1/stream.py` 已经是薄 route 壳。K 线 streaming 在 `stream_klines.py`；共享 WS helper 在 `stream_utils.py`；indicator WS 编排在 `stream_indicators.py`；payload/range 计算在 `stream_indicator_payloads.py`；Pyne/custom 订阅生命周期在 `stream_pyne_subscriptions.py`。 |
+| Phase 1：讲清当前事实 | 已完成 | `DATA_FLOW_PATHS_zh.md` 记录实时 K 线、backfill、price、内置指标、script/custom 五条路径。callback 注释也明确了 `MarketEvent` 进入 `BarAggregator`，不会直接改 DataManager cache。 |
+| Phase 2：拆薄 route 层 | 已完成 | `api/v1/stream.py` 已经是薄 route 壳。K 线 streaming 在 `stream_klines.py`；共享 WS helper 在 `stream_utils.py`；indicator WS 编排在 `stream_indicators.py`；payload/range 计算在 `stream_indicator_payloads.py`；script/custom 订阅生命周期在 `stream_script_subscriptions.py`。 |
 | Phase 3：退休兼容命名 | 已完成 | `BinanceIngestionFactory` 已删除；`ExchangeIngestionFactory` 是唯一受支持的 runtime ingestion factory export。 |
 | Phase 4：明确交易所 WS capability routing | 已完成 | 测试已经断言 Binance kline 使用 `SessionLayer`，OKX kline 通过 capability routing 使用 `SharedWsSessionAdapter`。 |
 | Phase 5：路径级测试加固 | 已完成本文列出的 guardrails | 测试覆盖 MarketEvent 进 aggregator、price update 不触碰 `BarAggregator`、旧 alias 不再暴露、session routing，以及主要 WS/indicator 路径。 |
@@ -78,7 +78,7 @@ Exchange WS/REST
 | 区域 | 摩擦 | 打磨方向 |
 |---|---|---|
 | 旧命名 | 旧的 `BinanceIngestionFactory` 名字会暗示一个已经不存在的 Binance 专属 owner。 | 已完成：测试和代码使用 `ExchangeIngestionFactory`，旧 alias 已删除。 |
-| route 文件过重 | `api/v1/stream.py` 过去同时处理 K 线 WS、多周期 WS、指标 WS、Pyne/custom、range patch、heartbeat、queue。 | 已完成：route handler 已经变成薄 adapter；长生命周期 stream 逻辑按职责拆分。 |
+| route 文件过重 | `api/v1/stream.py` 过去同时处理 K 线 WS、多周期 WS、指标 WS、script/custom、range patch、heartbeat、queue。 | 已完成：route handler 已经变成薄 adapter；长生命周期 stream 逻辑按职责拆分。 |
 | WS session 模型不直观 | `SharedMultiplexHub` 是通用能力，但只有 capability opt-in 的交易所会使用。 | 已完成：capability routing 已文档化，并由 session-factory 测试保护。 |
 | 价格流不如 K 线主线显眼 | 价格流和 K 线流本来就是平行体系，但文档存在感弱一些。 | 已完成：price flow 已文档化，并用测试保护价格更新不触碰 K 线聚合。 |
 | 子系统文档分散 | 各 README 基本准确，但缺少一份跨模块的打磨 checklist。 | 已完成：子系统 README 链接到这份路线图和具体数据流地图。 |
@@ -94,7 +94,7 @@ Exchange WS/REST
    - 历史修复/backfill
    - 价格快照/subscription
    - 内置指标
-   - Pyne/custom 指标
+   - script/custom 指标
 2. 明确边界事件：
    - `RawMessage`：transport/session 输出
    - `MarketEvent`：ingestion 标准化后的行情事件
@@ -124,14 +124,14 @@ Exchange WS/REST
 |---|---|
 | `_dm_single_stream`、`_dm_multi_stream`、event forwarding helpers | `api/v1/stream_klines.py` 或 `app/streaming/klines.py` |
 | indicator WS command loop | `app/indicator/streaming.py` |
-| Pyne/custom indicator subscription tasks | `app/indicator/pyne_streaming.py` |
+| script/custom indicator subscription tasks | `app/api/v1/stream_script_subscriptions.py` |
 | 共享 WS send/heartbeat/error helpers | 小型 `app/api/ws_utils.py` |
 
 规则：
 
 - FastAPI route 文件保持 adapter 定位。
 - DataManager 仍是行情数据门面。
-- `IndicatorEngine` 和 Pyne runtime 逻辑不要混进 K 线 WS handler。
+- `IndicatorEngine` 和 script runtime 逻辑不要混进 K 线 WS handler。
 - 不引入新的全局 event bus；bar/price 更新继续以 DataManager event bus 为源。
 
 退出标准：

@@ -30,6 +30,7 @@ from app.data_engine.storage.raw_trade_archive import (
 from .canonical import canonical_sha256
 from .history_archive import ReplayHistoryArchiveError, _atomic_write_json, _file_sha256
 from .remote_history import ReplayHistoryOrigin, ReplayHistoryOriginUnavailable
+from .metadata_retention import detach_obsolete_generations, remove_retired_generations
 from .trade_import import (
     BINANCE_PUBLIC_DATA_ORIGIN,
     import_official_date_range,
@@ -404,6 +405,10 @@ class RemoteRawAggTradeArchive:
         self._official_opener = official_opener
         self._next_refresh = 0.0
         self._lock = threading.RLock()
+        # Metadata I/O must not hold the account/catalog snapshot lock. It does
+        # serialize refresh readers and cache publication/retirement, so a
+        # cached index cannot lose files between reading its pointer and body.
+        self._metadata_io_lock = threading.RLock()
         self._partition_locks: dict[str, threading.Lock] = {}
         self._index: RemoteAggTradeIndex | None = None
         self._compatibility: tuple[_CompatibilityRecord, ...] = ()
@@ -428,6 +433,20 @@ class RemoteRawAggTradeArchive:
         self._refresh()
 
     def _refresh(self) -> None:
+        with self._lock:
+            ready = self._index is not None
+            if ready and time.monotonic() < self._next_refresh:
+                return
+        # A reader can continue using the last immutable catalog while another
+        # caller refreshes it. Only first load must wait for a usable snapshot.
+        if not self._metadata_io_lock.acquire(blocking=not ready):
+            return
+        try:
+            self._refresh_metadata()
+        finally:
+            self._metadata_io_lock.release()
+
+    def _refresh_metadata(self) -> None:
         now = time.monotonic()
         with self._lock:
             if self._index is not None and now < self._next_refresh:
@@ -542,6 +561,19 @@ class RemoteRawAggTradeArchive:
         }.items():
             _atomic_write_json(metadata_root / relative, payload)
         _atomic_write_json(metadata_root / "trade-index.json", index.to_dict())
+
+    def prune_metadata_cache(self) -> None:
+        """Background-only cleanup of obsolete metadata, never trade objects."""
+        metadata_root = self.root / "_remote_metadata"
+        with self._metadata_io_lock:
+            try:
+                index = RemoteAggTradeIndex.from_dict(_read_json(metadata_root / "trade-index.json"))
+            except (OSError, ReplayHistoryArchiveError):
+                return
+            paths = [item.path for item in (*index.compatibility_indexes,
+                     *index.verified_receipts, *index.official_availability_indexes)]
+            detach_obsolete_generations(metadata_root, paths)
+        remove_retired_generations(metadata_root)
 
     def _load_cached_metadata(
         self,

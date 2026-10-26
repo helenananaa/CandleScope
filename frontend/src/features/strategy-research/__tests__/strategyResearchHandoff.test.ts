@@ -11,7 +11,7 @@ test("handoff keeps the exact chart, draft, parameters and conditions without gr
   } } });
   try {
     const href = saveResearchHandoff({ session: { exchange: "binance", marketType: "futures", symbol: "ETHUSDT", interval: "15m" }, workspaceId: "workspace-main", cellId: "cell-1", runId: null,
-      attachment: { schemaVersion: 1, strategyDraftId: "draft-12345678", strategyRevisionId: null, displayName: "SMA", language: "pyne", parameters: { fast: 8 }, rangeMode: "CUSTOM", customRange: { startMs: 1000, endMs: 2000 }, fidelityPreference: "PRECISE", quickPresetId: "CRYPTO_PERP_STANDARD_V1", autoRun: false,
+      attachment: { schemaVersion: 1, strategyDraftId: "draft-12345678", strategyRevisionId: null, displayName: "SMA", language: "pine", parameters: { fast: 8 }, rangeMode: "CUSTOM", customRange: { startMs: 1000, endMs: 2000 }, fidelityPreference: "PRECISE", quickPresetId: "CRYPTO_PERP_STANDARD_V1", autoRun: false,
         executionOverrides: { initialBalance: "3500", equityPercent: "10", leverage: "2", feeBps: "5", slippageBps: "1" } } });
     const id = new URL(href, "http://localhost").searchParams.get("handoff")!;
     const restored = readResearchHandoff(id)!;

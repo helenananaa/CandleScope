@@ -371,9 +371,20 @@ export class ReplayStreamController {
             && snapshot.cursor.source_sequence === lastSourceSequence
           )
         );
+      // A new transport may have missed compact ranges, each of which covers
+      // many source events with one sequence. Its complete handoff snapshot is
+      // authoritative after monotonic counters and payload causality checks;
+      // the live-stream one-source-per-frame bound cannot describe that gap.
+      const isForwardHandoff = hasAuthorityFloor
+        && (this.state === "reconnecting" || this.state === "resyncing")
+        && snapshot.sequence > lastSequence
+        && snapshot.revision > lastRevision
+        && snapshot.cursor.virtual_time_ms >= lastVirtualTimeMs
+        && snapshot.cursor.source_sequence >= lastSourceSequence;
       const isIntentionalForwardReset = hasAuthorityFloor
         && (
-          isIntentionalFinalStateReset
+          isForwardHandoff
+          || isIntentionalFinalStateReset
           || (
             (forwardResetRequiresSourceAdvance || isFastForwardComplete)
             && (snapshot.state === "PAUSED" || snapshot.state === "ENDED")

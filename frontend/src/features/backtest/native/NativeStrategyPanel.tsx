@@ -31,7 +31,6 @@ const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScrip
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
-  pyne: 'strategy("Native SMA", overlay=True, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nstrategy.entry_when(ta.crossover(fast, slow), "L", strategy.long, qty=1)\nstrategy.close_when(ta.crossunder(fast, slow), "L")\nplot(fast, "Fast")\nplot(slow, "Slow")\n',
 };
 const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as const;
 const ignoreCursor = () => undefined;
@@ -470,7 +469,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </div>
       <aside className="native-code-side">
         <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
-          {(["pine", "pyne"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
+          {(["pine"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
             onClick={() => props.onInstanceChange(props.instance.id, { language: item })}>{t(`chartTester.language.${item}`)}</button>)}
           {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>{strategyLanguageLabel("python")}</button>}
         </div>

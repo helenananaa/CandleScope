@@ -35,7 +35,7 @@ from app.backtest.strategy.builtin import (
 from app.backtest.strategy.protocol import ObservationFrame
 from app.core.config import CORS_ORIGINS, HOST, RUNTIME_MODE, load_backtest_settings
 from app.core.operator_origin import (
-    effective_pyne_security_mode,
+    effective_script_security_mode,
     effective_python_runtime_mode,
 )
 from app.core.python_wheel_install import host_wheel_install_command, venv_site_packages
@@ -237,9 +237,9 @@ def test_host_authority_modes_require_trusted_origin() -> None:
     assert effective_python_runtime_mode(
         "TRUSTED_LOCAL", True, trusted=True
     ) == ("TRUSTED_LOCAL", True)
-    assert effective_pyne_security_mode("unsafe", trusted=False) == "safe"
-    assert effective_pyne_security_mode("unsafe", trusted=True) == "unsafe"
-    assert effective_pyne_security_mode("research", trusted=False) == "research"
+    assert effective_script_security_mode("unsafe", trusted=False) == "safe"
+    assert effective_script_security_mode("unsafe", trusted=True) == "unsafe"
+    assert effective_script_security_mode("research", trusted=False) == "research"
 
     smoke = StrategySmokeRequest(
         dataset_id="local-0123456789abcdef0123456789abcdef",
@@ -297,20 +297,6 @@ def test_host_authority_modes_require_trusted_origin() -> None:
     assert trusted["python_trusted_confirmed"] is True
 
 
-def test_pyne_bridge_still_honors_mode_after_server_clamp() -> None:
-    runtime = (
-        Path(__file__).resolve().parents[2]
-        / "packages"
-        / "candlescope-plugin-pyne"
-        / "src"
-        / "candlescope_plugin_pyne"
-        / "runtime.py"
-    ).read_text(encoding="utf-8")
-    assert "security_mode=security_mode or settings.security_mode" in runtime
-    source = inspect.getsource(indicator_stream)
-    assert "await websocket.accept()" in source
-    subscribe = Path(stream_indicators.__file__ or "").read_text(encoding="utf-8")
-    assert "trusted_origin" in subscribe
 
 
 def test_cors_does_not_prevent_cross_origin_simple_post() -> None:

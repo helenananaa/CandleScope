@@ -23,7 +23,6 @@ import type {
   IndicatorUnifiedAnnotation,
   IndicatorUnifiedSeries,
   IndicatorValuePoint,
-  PyneSecurityPolicy,
   ScriptLanguageDescriptor,
   ScriptLanguageIdentity,
   ScriptRuntimeCatalog,
@@ -1218,20 +1217,6 @@ export function parseCustomIndicatorList(
   );
 }
 
-export function parsePyneSecurityPolicy(
-  value: unknown,
-  path = "indicator.pyneSecurity",
-): PyneSecurityPolicy {
-  const record = expectIndicatorRecord(value, path);
-  return {
-    ...record,
-    mode: expectIndicatorNonEmptyString(record.mode, `${path}.mode`),
-    timeoutSeconds: expectIndicatorFiniteNumber(
-      record.timeoutSeconds,
-      `${path}.timeoutSeconds`,
-    ),
-  };
-}
 
 export function parseIndicatorRangeBatchResponse(
   value: unknown,

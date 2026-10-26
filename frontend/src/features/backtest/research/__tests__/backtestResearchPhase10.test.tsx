@@ -276,7 +276,7 @@ test("quick tester launch context carries IDs and frozen selection without sourc
       strategyDraftId: "draft-12345678",
       strategyRevisionId: "rev-12345678",
       displayName: "SMA",
-      language: "pyne",
+      language: "pine",
       parameters: { fast: 3 },
       rangeMode: "CUSTOM",
       customRange: { startMs: 10, endMs: 20 },

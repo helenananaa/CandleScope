@@ -329,7 +329,7 @@ test("a pending strategy removal survives a remote strategy addition on another 
   const remote = structuredClone(stored);
   remote.document.revision += 1;
   chartWorkspaceCell(remote.document, "cell-2").nativeStrategies = { activeId: "child", items: [{
-    id: "child", name: "Child", language: "pyne", drafts: {}, runs: { context: "child-run" },
+    id: "child", name: "Child", language: "pine", drafts: {}, runs: { context: "child-run" },
   }] };
   const snapshot = (record: typeof stored) => ({ activeWorkspaceId: record.id, workspaces: [record] });
   const merged = mergeLoadedChartWorkspaceLibrary(snapshot(local), snapshot(remote), snapshot(stored));

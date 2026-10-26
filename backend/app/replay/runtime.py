@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from collections.abc import Awaitable, Mapping
 from typing import Callable, TypeVar
@@ -22,6 +23,7 @@ from .storage import ReplaySQLiteStore
 
 _STARTUP_CLEANUP_STEP_TIMEOUT_SECONDS = 5.0
 _TaskResult = TypeVar("_TaskResult")
+logger = logging.getLogger(__name__)
 
 
 class ReplayStartupError(RuntimeError):
@@ -190,10 +192,14 @@ async def start_replay_runtime(
         raise ReplayStartupError("enabled replay runtime failed to initialize") from exc
     runtime.service = service
     runtime.archive_lease = archive_lease
-    if isinstance(raw_trade_archive, OfficialAggTradeArchive):
+    if isinstance(raw_trade_archive, RemoteRawAggTradeArchive):
         async def refresh_catalog() -> None:
             while True:
-                if raw_trade_archive.needs_catalog_refresh():
+                try:
+                    await asyncio.to_thread(raw_trade_archive.prune_metadata_cache)
+                except OSError:
+                    logger.warning("Could not retire replay catalog metadata; retrying next cycle", exc_info=True)
+                if isinstance(raw_trade_archive, OfficialAggTradeArchive) and raw_trade_archive.needs_catalog_refresh():
                     await asyncio.to_thread(raw_trade_archive.refresh_official_catalog)
                 await asyncio.sleep(60)
         runtime.catalog_refresh_task = asyncio.create_task(refresh_catalog(), name="replay-official-catalog-refresh")

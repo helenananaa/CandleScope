@@ -14,7 +14,7 @@ import {
 const draft = (source: string) => ({
   id: "draft-12345678",
   displayName: "趋势策略",
-  language: "pyne" as const,
+  language: "pine" as const,
   source,
   cursor: { line: 2, column: 4 },
 });
@@ -129,7 +129,7 @@ test("pending draft flush captures unsaved source even before autosave fires", (
     id: "draft-12345678",
     revision: 0,
     displayName: "趋势策略",
-    language: "pyne" as const,
+    language: "pine" as const,
     source: "return close",
     cursor: { line: 1, column: 1 },
     createdAt: 1,

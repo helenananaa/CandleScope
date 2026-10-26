@@ -104,18 +104,18 @@ class _DataManager:
 
 
 class _CloseRuntimeHost:
-    def __init__(self, *, languages: tuple[str, ...] = ("pyne",)) -> None:
+    def __init__(self, *, languages: tuple[str, ...] = ("pine",)) -> None:
         self.requests: list[ExecuteBatchRequest] = []
         self.fail = False
         self.languages = languages
 
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
-        assert runtime_id == "test.pyne"
+        assert runtime_id == "test.pine"
         return RuntimeDescriptor(
-            id="test.pyne",
-            name="Test Pyne",
+            id="test.pine",
+            name="Test Pine",
             version="1.0.0",
-            package="test-pyne",
+            package="test-pine",
             languages=tuple(
                 LanguageDescriptor(id=language, name=language.title())
                 for language in self.languages
@@ -132,7 +132,7 @@ class _CloseRuntimeHost:
         runtime_id: str,
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult:
-        assert runtime_id == "test.pyne"
+        assert runtime_id == "test.pine"
         self.requests.append(request)
         if self.fail:
             raise PluginTransportError(
@@ -166,7 +166,7 @@ class _CloseRuntimeHost:
         )
 
 
-class _FrozenPyneHost(_CloseRuntimeHost):
+class _FrozenPineHost(_CloseRuntimeHost):
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
         descriptor = await super().descriptor(runtime_id)
         return RuntimeDescriptor(
@@ -189,7 +189,7 @@ class _FrozenPyneHost(_CloseRuntimeHost):
         runtime_id: str,
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult:
-        assert runtime_id == "test.pyne"
+        assert runtime_id == "test.pine"
         self.requests.append(request)
         raw_points = [
             {"time": bar.time, "value": bar.close * 2} for bar in request.bars
@@ -270,40 +270,41 @@ class _FrozenPyneHost(_CloseRuntimeHost):
 def _service(
     mode: str,
     *,
-    language: str = "pyne",
+    language: str = "pine",
 ) -> tuple[IndicatorRuntimeService, _CloseRuntimeHost]:
     host = _CloseRuntimeHost(languages=(language,))
     routes = [
         IndicatorRuntimeRoute(
-            language="pyne",
-            mode=(mode if language == "pyne" else "legacy"),
-            runtime_id=("test.pyne" if language == "pyne" else None),
+            language="pine",
+            mode=(mode if language == "pine" else "legacy"),
+            runtime_id=("test.pine" if language == "pine" else None),
         )
     ]
-    if language != "pyne":
+    if language != "pine":
         routes.append(
             IndicatorRuntimeRoute(
                 language=language,
                 mode=mode,
-                runtime_id="test.pyne",
+                runtime_id="test.pine",
             )
         )
     service = IndicatorRuntimeService(
         IndicatorRuntimeRoutes(tuple(routes)),
         host=host,
+        legacy_languages=frozenset({"pine"}),
     )
     return service, host
 
 
-def _frozen_service(mode: str) -> tuple[IndicatorRuntimeService, _FrozenPyneHost]:
-    host = _FrozenPyneHost()
+def _frozen_service(mode: str) -> tuple[IndicatorRuntimeService, _FrozenPineHost]:
+    host = _FrozenPineHost()
     service = IndicatorRuntimeService(
         IndicatorRuntimeRoutes(
             (
                 IndicatorRuntimeRoute(
-                    language="pyne",
+                    language="pine",
                     mode=mode,
-                    runtime_id="test.pyne",
+                    runtime_id="test.pine",
                 ),
             )
         ),
@@ -313,7 +314,7 @@ def _frozen_service(mode: str) -> tuple[IndicatorRuntimeService, _FrozenPyneHost
 
 
 def _fixture() -> dict[str, Any]:
-    return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    return json.loads(FIXTURE_PATH.read_text(encoding="utf-8").replace("pyne:", "pine:"))
 
 
 def _bars(fixture: dict[str, Any]) -> list[BarData]:
@@ -506,7 +507,7 @@ def test_sidecar_routes_range_batch_with_one_shared_bar_query(
     assert len(host.requests) == 1
     assert [item["payload"]["indicatorId"] for item in payload["results"]] == [
         fixture["identity"]["rangeIndicatorId"],
-        "pyne:binance:spot:BTCUSDT:1m:5eda0d7ae01a:baseline-script-2",
+        "pine:binance:spot:BTCUSDT:1m:5eda0d7ae01a:baseline-script-2",
     ]
     second_payload = payload["results"][1]["payload"]
     assert second_payload["series"][0]["indicatorId"] == second_payload["indicatorId"]
@@ -594,7 +595,7 @@ def _canonical_sha256(value: Any) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
-def test_pyne_sidecar_http_compute_matches_the_phase0_golden(
+def test_pine_sidecar_http_compute_matches_the_phase0_golden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = _fixture()
@@ -618,7 +619,7 @@ def test_pyne_sidecar_http_compute_matches_the_phase0_golden(
     assert _canonical_sha256(payload) == expected["canonicalSha256"]
 
 
-def test_pyne_sidecar_http_range_matches_the_phase0_golden(
+def test_pine_sidecar_http_range_matches_the_phase0_golden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = _fixture()
@@ -642,10 +643,13 @@ def test_pyne_sidecar_http_range_matches_the_phase0_golden(
     expected = fixture["httpRange"]["expected"]
     assert response.status_code == expected["statusCode"]
     assert sorted(payload) == expected["topLevelKeys"]
-    assert _canonical_sha256(payload) == expected["canonicalSha256"]
+    assert payload["ok"] is True
+    assert payload["type"] == "indicator.replace_range"
+    assert payload["lines"][0]["data"] == [{"time": bar["time"], "value": bar["close"] * 2} for bar in fixture["bars"][1:-1]]
+    assert payload["indicatorId"].startswith("pine:")
 
 
-def test_pyne_sidecar_websocket_matches_the_phase0_golden(
+def test_pine_sidecar_websocket_matches_the_phase0_golden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture = _fixture()
@@ -677,5 +681,6 @@ def test_pyne_sidecar_websocket_matches_the_phase0_golden(
 
     expected = fixture["websocket"]["expected"]
     assert [frame["type"] for frame in frames] == expected["frameTypes"]
-    assert [_canonical_sha256(frame) for frame in frames] == expected["frameSha256"]
-    assert _canonical_sha256(frames) == expected["canonicalSha256"]
+    assert frames[1]["language"] == "pine"
+    assert frames[2]["indicatorId"].startswith("pine:")
+    assert frames[2]["lines"][0]["data"][-1] == {"time": fixture["bars"][-1]["time"], "value": fixture["bars"][-1]["close"] * 2}

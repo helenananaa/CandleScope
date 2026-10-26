@@ -211,7 +211,7 @@ export function chartContextRequestForFrozen(
 }
 
 function revisionLanguage(language: ChartStrategyFrozenRunRequest["language"]): string {
-  return language === "python" ? "PYTHON_EDITOR" : language === "pine" ? "PINE_ENGINE" : "PYNE_CHART_V1";
+  return language === "python" ? "PYTHON_EDITOR" : "PINE_ENGINE";
 }
 
 function requireString(source: Record<string, string>, name: string): string {

@@ -95,9 +95,6 @@ keys and placeholders, and keeps English-specific checks scoped to English.
   enters the Host message catalogs.
 - Sandboxed plugin UIs receive the current locale through the existing UI
   bridge and own all content rendered inside their frame.
-- The bundled Pyne sandbox and Market Scanner resolve their own registered
-  resources and retain English defaults for unsupported Host languages.
-- The legacy v1 Pyne Monaco intelligence remains a Host compatibility adapter
-  until a bounded editor-intelligence ABI exists. New plugins must not add
-  plugin-domain completion text to the Host catalogs or depend on that adapter.
-  Its legacy Chinese/English documentation uses English for other Host languages.
+- Market Scanner resolves its own registered resources and retains English
+  defaults for unsupported Host languages.
+- Plugins must not add plugin-domain completion text to the Host catalogs.

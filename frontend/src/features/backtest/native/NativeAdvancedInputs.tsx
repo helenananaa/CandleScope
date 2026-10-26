@@ -6,7 +6,7 @@ import { PineCurrencyInputs } from "../../indicators/PineCurrencyInputs.js";
 
 export function NativeAdvancedInputs({ value, onChange, language, disabled, exchange, native = true, contextsOnly = false }: {
   value: AdvancedInputs; onChange: (value: AdvancedInputs) => void;
-  language: "pine" | "pyne"; disabled: boolean; exchange: string; native?: boolean;
+  language: "pine"; disabled: boolean; exchange: string; native?: boolean;
   contextsOnly?: boolean;
 }) {
   const [datasets, setDatasets] = useState<InputDataset[]>([]);

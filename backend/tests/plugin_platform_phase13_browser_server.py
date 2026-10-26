@@ -20,14 +20,14 @@ class BrowserIndicatorCatalog:
     def compatibility_source_catalog(self) -> dict[str, Any]:
         return {
             "schemaVersion": 1,
-            "defaultLanguage": "pyne",
+            "defaultLanguage": "fixture",
             "languages": [
                 {
-                    "id": "pyne",
-                    "name": "Pyne",
-                    "extensions": [".pyne"],
+                    "id": "fixture",
+                    "name": "Fixture",
+                    "extensions": [".fixture"],
                     "aliases": ["python"],
-                    "runtimeId": "candlescope.pyne",
+                    "runtimeId": "candlescope.fixture",
                     "routeMode": "sidecar",
                     "available": True,
                     "features": [
@@ -38,15 +38,15 @@ class BrowserIndicatorCatalog:
             ],
             "runtimes": [
                 {
-                    "id": "candlescope.pyne",
-                    "name": "Pyne Runtime",
+                    "id": "candlescope.fixture",
+                    "name": "Fixture Runtime",
                     "version": "0.2.0",
-                    "package": "candlescope-plugin-pyne",
+                    "package": "candlescope-plugin-fixture",
                     "languages": [
                         {
-                            "id": "pyne",
-                            "name": "Pyne",
-                            "extensions": [".pyne"],
+                            "id": "fixture",
+                            "name": "Fixture",
+                            "extensions": [".fixture"],
                             "aliases": ["python"],
                         }
                     ],
@@ -65,8 +65,8 @@ RUNTIME_HOST = RuntimeHostService(
     RuntimeRegistry(
         (
             RuntimeProcessSpec(
-                runtime_id="candlescope.pyne",
-                expected_package="candlescope-plugin-pyne",
+                runtime_id="candlescope.fixture",
+                expected_package="candlescope-plugin-fixture",
                 expected_version="0.2.0",
                 executable=Path(sys.executable).resolve(),
                 enabled=True,
