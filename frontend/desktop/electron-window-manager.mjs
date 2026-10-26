@@ -85,7 +85,7 @@ export class ElectronWindowManager {
     const window = new this.options.BrowserWindow({
       width: 1280, height: 850, show: false, title: "CandleScope",
       webPreferences: { preload: this.options.preloadPath, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
-        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`] },
+        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`, `--candlescope-window-id=${id}`, ...(this.options.controlEnabled ? ["--candlescope-control-enabled", ...(this.options.controlScopes ? [`--candlescope-control-scopes=${this.options.controlScopes.join(",")}`] : [])] : [])] },
     });
     this.appWindows.set(id, window);
     this.protectWindow(window);
@@ -158,9 +158,8 @@ export class ElectronWindowManager {
         nodeIntegration: false,
         sandbox: true,
         spellcheck: false,
-        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`],
-        // Replay controller heartbeats must continue while another window or
-        // application is in front, otherwise playback loses its lease.
+        additionalArguments: [`--candlescope-backend-port=${this.options.backendPort}`, `--candlescope-window-id=${saved.id}`, ...(this.options.controlEnabled ? ["--candlescope-control-enabled", ...(this.options.controlScopes ? [`--candlescope-control-scopes=${this.options.controlScopes.join(",")}`] : [])] : [])],
+        // Keep replay controller heartbeats alive behind other windows.
         backgroundThrottling: false,
       },
     });

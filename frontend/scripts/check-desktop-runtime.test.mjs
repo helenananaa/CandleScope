@@ -11,6 +11,14 @@ function fixture(t, platform = "darwin", arch = "arm64") {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-package-check-"));
   t.after(() => fs.rmSync(projectDir, { recursive: true, force: true }));
   const root = path.join(projectDir, ".desktop-runtime", "runtime");
+  const controlRoot = path.join(projectDir, ".desktop-runtime", "control");
+  fs.mkdirSync(controlRoot, { recursive: true });
+  const controlBytes = Buffer.from("isolated desktop control adapter fixture");
+  fs.writeFileSync(path.join(controlRoot, "cli.mjs"), controlBytes);
+  fs.writeFileSync(path.join(controlRoot, "manifest.json"), JSON.stringify({
+    schema: "candlescope.control-bundle/1",
+    sha256: createHash("sha256").update(controlBytes).digest("hex"),
+  }));
   const pluginsRoot = path.join(root, "plugins");
   fs.mkdirSync(pluginsRoot, { recursive: true });
   fs.writeFileSync(path.join(root, "manifest.json"), JSON.stringify({ platform, arch }));
@@ -28,7 +36,7 @@ function fixture(t, platform = "darwin", arch = "arm64") {
   writeManifest({ schemaVersion: 2, plugins: [plugin] });
   return {
     context: { packager: { projectDir }, electronPlatformName: platform, arch: Arch[arch] },
-    plugin, pluginsRoot, writeManifest,
+    plugin, pluginsRoot, writeManifest, controlRoot,
   };
 }
 
@@ -58,6 +66,12 @@ test("packaging still enforces bundle size and hash", async (t) => {
   writeManifest({ schemaVersion: 2, plugins: [plugin] });
   fs.writeFileSync(path.join(pluginsRoot, plugin.filename), Buffer.alloc(plugin.size));
   await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch/);
+});
+
+test("packaging rejects a modified desktop control adapter", async (t) => {
+  const { context, controlRoot } = fixture(t);
+  fs.appendFileSync(path.join(controlRoot, "cli.mjs"), "tampered");
+  await assert.rejects(checkDesktopRuntime(context), /Prepare the control adapter/);
 });
 
 test("packaging still rejects a Python runtime for another architecture or platform", async (t) => {

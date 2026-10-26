@@ -325,6 +325,36 @@ async function managementRequest(
   return payload;
 }
 
+/** The separate full-trust package contract reuses the authenticated management session. */
+export async function extensionManagementRequest(path: string, body?: unknown): Promise<unknown> {
+  return managementRequest(`/manage/extensions${path}`, body === undefined ? {} : {
+    method: "POST", body, action: "extension-ui",
+  });
+}
+
+export async function stageTrustedExtension(file: Blob): Promise<unknown> {
+  const session = consumeManagementSession();
+  if (!session) throw new PluginPlatformApiError("A trusted desktop session is required", 403);
+  const response = await fetch(`${session.apiBase}/manage/extensions/stage`, {
+    method: "POST", credentials: "omit", body: file,
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "X-CandleScope-Plugin-Session": session.sessionToken,
+      "X-CandleScope-CSRF": session.csrfToken,
+      "X-CandleScope-User-Action": actionId("extension-stage"),
+    },
+  });
+  return responseJson(response);
+}
+
+export function trustedExtensionAssetBase(path: string): string {
+  const session = consumeManagementSession();
+  if (!session || !/^\/api\/v2\/plugins\/extension-assets\/[A-Za-z0-9_-]{40,64}\/$/.test(path)) {
+    throw new Error("Invalid trusted extension asset identity");
+  }
+  return new URL(path, session.apiBase).href;
+}
+
 async function backgroundManagementRequest(
   path: string,
   body: unknown,

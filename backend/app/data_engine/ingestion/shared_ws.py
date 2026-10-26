@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from app.core import config as app_config
+from app.exchanges.rate_limits import RateLimitDeferred
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
 from app.data_engine.market_data import (
     MarketChannel,
@@ -244,6 +245,9 @@ class SharedMultiplexHub:
                 on_health=on_health,
             )
             try:
+                if self._ctx is not None and getattr(self._ctx, "proxy_ws_lease", None) is not None:
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().update_ws(self._ctx.proxy_ws_lease, self._unique_descriptors())
                 await self._notify_health_single(on_health, self._health, "subscribed")
                 self._ensure_runner()
                 if self._connection_ready():
@@ -254,6 +258,9 @@ class SharedMultiplexHub:
                 return SharedWsSubscriptionHandle(self, token)
             except BaseException:
                 self._subscribers.pop(token, None)
+                if self._ctx is not None and getattr(self._ctx, "proxy_ws_lease", None) is not None:
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().update_ws(self._ctx.proxy_ws_lease, self._unique_descriptors())
                 if not self._subscribers:
                     await self._cleanup_empty_locked()
                 elif self._connection_ready() and not already_requested:
@@ -275,6 +282,10 @@ class SharedMultiplexHub:
             if not self._subscribers:
                 await self._cleanup_empty_locked()
                 return
+
+            if self._ctx is not None and getattr(self._ctx, "proxy_ws_lease", None) is not None:
+                from app.core.proxy_pool import get_proxy_pool
+                get_proxy_pool().update_ws(self._ctx.proxy_ws_lease, self._unique_descriptors())
 
             identity = self._subscription_identity(removed.descriptor)
             still_requested = any(
@@ -321,7 +332,10 @@ class SharedMultiplexHub:
                     else SessionHealth.CONNECTING
                 )
                 await self._set_health(state, "connecting")
-                self._ctx = await self._transport.ws_connect(representative)
+                if self._cfg.proxy_mode == "pool":
+                    self._ctx = await self._transport.ws_connect(representative, shared_descriptors=descriptors)
+                else:
+                    self._ctx = await self._transport.ws_connect(representative)
                 self._conn = self._ctx.connection
                 await self._send_combined_subscribe(descriptors)
                 self._consecutive_failures = 0
@@ -330,7 +344,15 @@ class SharedMultiplexHub:
                 await self._read_loop()
             except asyncio.CancelledError:
                 break
+            except RateLimitDeferred as exc:
+                await self._set_health(SessionHealth.RECONNECTING, "proxy capacity or cooldown")
+                await asyncio.sleep(max(0.05, min(exc.retry_after_seconds,
+                                                max(1, self._cfg.ws_reconnect_delay_max))))
             except Exception as exc:
+                if self._ctx is not None and getattr(self._ctx, "proxy_route", None) is not None:
+                    from app.core.proxy_pool import get_proxy_pool
+                    get_proxy_pool().record(self._ctx.proxy_route, self._exchange, error=exc, kind="ws")
+                    get_proxy_pool().mark_ws_disconnected(self._ctx.proxy_ws_lease)
                 self._consecutive_failures += 1
                 state = (
                     SessionHealth.UNHEALTHY
@@ -454,6 +476,9 @@ class SharedMultiplexHub:
                     continue
 
             await self._dispatch_payload(payload)
+            if self._ctx is not None and getattr(self._ctx, "proxy_route", None) is not None:
+                from app.core.proxy_pool import get_proxy_pool
+                get_proxy_pool().record(self._ctx.proxy_route, self._exchange, kind="ws")
 
     def _decode_payload(self, raw) -> dict | list | None:
         try:
@@ -504,11 +529,16 @@ class SharedMultiplexHub:
     async def _close_connection(self) -> None:
         if self._conn is not None:
             try:
-                await asyncio.wait_for(self._conn.close(), timeout=2)
+                close = getattr(self._transport, "ws_close", None)
+                if self._ctx is not None and callable(close):
+                    await close(self._ctx)
+                else:
+                    await asyncio.wait_for(self._conn.close(), timeout=2)
             except Exception:
                 pass
-        self._conn = None
-        self._ctx = None
+            finally:
+                self._conn = None
+                self._ctx = None
 
     def _connection_ready(self) -> bool:
         return self._conn is not None and self._health == SessionHealth.CONNECTED
@@ -534,7 +564,15 @@ class SharedMultiplexHub:
         )
 
     def can_accept(self, descriptor: StreamDescriptor) -> bool:
-        return self.owns_descriptor(descriptor) or self.descriptor_count < self._max_descriptors
+        if self.owns_descriptor(descriptor):
+            return True
+        if self.descriptor_count >= self._max_descriptors:
+            return False
+        if self._ctx is not None and getattr(self._ctx, "proxy_ws_lease", None) is not None:
+            from app.core.proxy_pool import get_proxy_pool
+            return get_proxy_pool().can_update_ws(self._ctx.proxy_ws_lease,
+                                                  [*self._unique_descriptors(), descriptor])
+        return True
 
     def reserve_descriptor(self, descriptor: StreamDescriptor) -> None:
         identity = self._subscription_identity(descriptor)
@@ -561,6 +599,7 @@ class SharedMultiplexHub:
             "shard_index": self._shard_index,
             "max_descriptors": self._max_descriptors,
             "health": self._health.value,
+            "proxy_route_id": getattr(getattr(self._ctx, "proxy_route", None), "id", None),
             "physical_websocket": int(self._conn is not None),
             "runner_active": self._runner_task is not None
             and not self._runner_task.done(),
@@ -651,6 +690,11 @@ class SharedWsHubRegistry:
                 hub.reserve_descriptor(descriptor)
                 return hub
         shard_index = candidates[-1][0][3] + 1 if candidates else 0
+        capacity = self._max_descriptors_per_shard
+        if self._cfg.proxy_mode == "pool":
+            from app.core.proxy_pool import get_proxy_pool
+            capacity = min(capacity, min(route.max_ws_subscriptions
+                                        for route in get_proxy_pool().routes(self._cfg, descriptor.exchange)))
         key = (*base_key, shard_index)
         hub = SharedMultiplexHub(
             config=self._cfg,
@@ -659,7 +703,7 @@ class SharedWsHubRegistry:
             market_type=descriptor.market_type,
             symbol=scope,
             shard_index=shard_index,
-            max_descriptors=self._max_descriptors_per_shard,
+            max_descriptors=capacity,
         )
         hub.reserve_descriptor(descriptor)
         self._hubs[key] = hub

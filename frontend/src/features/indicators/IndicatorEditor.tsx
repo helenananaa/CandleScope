@@ -4,6 +4,7 @@ import { Icon } from "../../components/icons/Icon.js";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
+import { useExtensionEditorTheme } from "../../editor/extensionTheme.js";
 import type * as Monaco from "monaco-editor";
 import {
   configurePineHostCapabilities,
@@ -79,6 +80,7 @@ export default function IndicatorEditor({
   onToggleVisibility
 }: IndicatorEditorProps) {
   useLocale();
+  const extensionEditorTheme = useExtensionEditorTheme("");
   const [name, setName] = useState(indicator?.name || "My Indicator");
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
@@ -426,7 +428,7 @@ export default function IndicatorEditor({
             height="100%"
             path={`candlescope-indicator-${encodeURIComponent(modelId)}.${selectedLanguage?.id || "txt"}`}
             language={editorProfile?.monacoLanguage || "plaintext"}
-            theme={editorProfile?.theme || "vs-dark"}
+            theme={extensionEditorTheme || editorProfile?.theme || "vs-dark"}
             value={script}
             onChange={(value) => {
               if (!readOnly) setDraft((current) => editScriptEditorSource(current, selectedLanguage?.id || language, value || ""));

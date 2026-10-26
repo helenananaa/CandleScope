@@ -14,6 +14,10 @@ import {
   type LocalAnalysisSnapshot,
 } from "./localAnalysisTypes.js";
 import type { LocalDatasetManifest } from "./localDataTypes.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { choice, empty, nullable, number, object, text } from "../app-control/commandSchema.js";
+import { publishControlFile } from "../app-control/controlFiles.js";
 
 interface EventAnchor {
   time: number;
@@ -117,6 +121,18 @@ export default function LocalAnalysisPanel({
     }
   };
 
+  const eventInput = object({ time: number(0.001), price: nullable(number()), kind: choice(LOCAL_ANALYSIS_EVENT_KINDS), label: text(160, 0), note: text(8000, 0), color: text(7) });
+  useControlCommands(() => ({ id: "local-analysis", title: "Imported dataset analysis events", context: () => ({ datasetId: manifest.dataset_id, dataEpoch: manifest.data_epoch, revision: snapshot.revision }),
+    snapshot: () => ({ datasetId: manifest.dataset_id, dataEpoch: manifest.data_epoch, revision: snapshot.revision, storageError: snapshot.storage_error, count: snapshot.events.length, filter }), commands: [
+      command("events", "Read a bounded event page.", object({ offset: number(0, 5000, true), limit: number(1, 500, true) }), ({ offset, limit }) => snapshot.events.slice(offset, offset + limit), { readOnly: true }),
+      command("create", "Create a manual analysis event through the existing persisted event store.", eventInput, (draft) => eventStore.create(draft), { available: () => !snapshot.storage_error }),
+      command("update", "Update an existing analysis event.", object({ eventId: text(200), event: eventInput }), ({ eventId, event }) => eventStore.update(eventId, event), { available: () => !snapshot.storage_error }),
+      command("delete", "Delete an existing analysis event.", object({ eventId: text(200) }), ({ eventId }) => { if (!eventStore.delete(eventId)) throw new Error("EVENT_UNAVAILABLE"); }, { available: () => !snapshot.storage_error }),
+      command("focus", "Focus a loaded analysis event on the chart.", object({ eventId: text(200) }), ({ eventId }) => { const event = snapshot.events.find((row) => row.id === eventId); if (!event) throw new Error("EVENT_UNAVAILABLE"); onFocus(event); }),
+      command("filter", "Filter the analysis panel.", object({ kind: choice(["all", ...LOCAL_ANALYSIS_EVENT_KINDS]) }), ({ kind }) => setFilter(kind)),
+      command("export", "Export the identity-bound analysis document to a fileRef.", empty, () => publishControlFile(new Blob([JSON.stringify({ schema_version: 1, dataset_id: manifest.dataset_id, data_epoch: manifest.data_epoch, events: snapshot.events })], { type: "application/json" }), "analysis-events.json")),
+      command("resetCorrupt", "Reset a corrupt analysis document with explicit confirmation.", object({ confirmed: choice([true]) }), () => eventStore.resetCorruptDocument(), { available: () => !!snapshot.storage_error }),
+    ] }));
   return (
     <section className="local-analysis-panel" aria-label={t("local.analysisAria")}>
       <header>

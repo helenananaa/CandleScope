@@ -4,7 +4,7 @@ import asyncio
 import time
 import weakref
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -42,6 +42,7 @@ class HistoricalRequest:
     end_ms: int | None = None
     limit: int | None = None
     params: dict[str, Any] = field(default_factory=dict)
+    egress_group: str | None = None
 
 
 @dataclass(slots=True)
@@ -84,6 +85,18 @@ class RateLimitRule:
         }
 
 
+def scope_rate_limit_rule(rule: RateLimitRule, egress_group: str | None) -> RateLimitRule:
+    """Bind a public quota rule to an explicit egress without changing cost."""
+    if not egress_group:
+        return rule
+    base = rule.bucket_key.split(":egress=", 1)[0]
+    if any(part in {"key", "account", "uid", "user"} for part in base.split(":")):
+        # Public data vendors can still bill/limit by API key. Changing IP
+        # must not manufacture additional key/account credits.
+        return replace(rule, bucket_key=base)
+    return replace(rule, bucket_key=f"{base}:egress={egress_group}")
+
+
 @dataclass(slots=True)
 class RateLimitReservation:
     """Exact quota ownership handed from an admitting caller to transport."""
@@ -92,6 +105,7 @@ class RateLimitReservation:
     rule: RateLimitRule
     request: HistoricalRequest
     settled: bool = False
+    proxy_route: Any | None = None
 
     def record_response(self, **kwargs: Any) -> bool:
         if self.settled:
@@ -723,7 +737,8 @@ class RateLimitManager:
     @staticmethod
     def _circuit_key_for_bucket(bucket_key: str) -> str:
         exchange = str(bucket_key or "unknown").split(":", 1)[0]
-        return f"{exchange}:ip"
+        suffix = ":egress=" + bucket_key.split(":egress=", 1)[1] if ":egress=" in bucket_key else ""
+        return f"{exchange}:ip{suffix}"
 
     def _bucket_for(self, rule: RateLimitRule) -> _Bucket:
         bucket = self._buckets.get(rule.bucket_key)

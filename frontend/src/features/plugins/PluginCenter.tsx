@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import PluginAdvanced from "./PluginAdvanced.js";
+import ExtensionManager from "../extensions/ExtensionManager.js";
+import { useExtensionText } from "../extensions/hooks.js";
 import PluginDetail from "./PluginDetail.js";
 import PluginInstallFlow from "./PluginInstallFlow.js";
 import { MarketplacePanel } from "./PluginManagementSections.js";
@@ -11,12 +13,13 @@ import { localizePluginContribution } from "./pluginLocalization.js";
 import { usePluginDetail } from "./usePluginDetail.js";
 import type { PluginMarketplaceStatus, PluginPlatformRuntime } from "./pluginPlatformTypes.js";
 
-export type PluginCenterSection = "installed" | "discover" | "advanced" | "install";
+export type PluginCenterSection = "installed" | "discover" | "advanced" | "install" | "extensions";
 
 export function PluginSettingsPanel({ runtime, onClose, initialSection = "installed" }: {
   runtime: PluginPlatformRuntime; onClose?: () => void; initialSection?: PluginCenterSection;
 }) {
   const locale = useLocale();
+  const extensionText = useExtensionText();
   const [section, setSection] = useState<PluginCenterSection>(initialSection);
   const [installBusy, setInstallBusy] = useState(false);
   const [query, setQuery] = useState("");
@@ -86,7 +89,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
         {onClose && <button type="button" disabled={installBusy} onClick={onClose}>{t("export.closeBtn")}</button>}
       </div>
     </header>
-    <nav className="pc-navigation" aria-label={t("plugin.title")}>{(["installed", "discover", "advanced"] as const).map((item) => <button type="button" disabled={installBusy} key={item} aria-current={section === item ? "page" : undefined} onClick={() => navigate(item)}>{t(`pc.${item}`)}{item === "installed" && <span>{plugins.length}</span>}</button>)}</nav>
+    <nav className="pc-navigation" aria-label={t("plugin.title")}>{(["installed", "discover", "advanced"] as const).map((item) => <button type="button" disabled={installBusy} key={item} aria-current={section === item ? "page" : undefined} onClick={() => navigate(item)}>{t(`pc.${item}`)}{item === "installed" && <span>{plugins.length}</span>}</button>)}<button type="button" disabled={installBusy} aria-current={section === "extensions" ? "page" : undefined} onClick={() => navigate("extensions")}>{extensionText("可信扩展", "Trusted extensions")}</button></nav>
     {!management && <div className="pc-message" role="status">{t("pc.readonly")}</div>}
     {!platformEnabled && runtime.view.catalog && <div className="pc-message">{t("plugin.enableToSave")}</div>}
     {runtime.view.error && <div className="pc-message pc-error" role="alert">{runtime.view.error}</div>}
@@ -122,6 +125,7 @@ export function PluginSettingsPanel({ runtime, onClose, initialSection = "instal
         {marketplaceError && <div className="pc-message pc-error" role="alert">{marketplaceError}<button type="button" onClick={() => void runMarketplace("refresh-status", () => runtime.actions.refresh())}>{t("shell.retry")}</button></div>}
         {platformEnabled ? <MarketplacePanel runtime={runtime} status={management ? marketplaceStatus : null} busy={marketplaceBusy} run={runMarketplace} query={query} /> : <p>{t("plugin.enableToSave")}</p>}
       </>}
+      {section === "extensions" && <ExtensionManager />}
       {section === "advanced" && <PluginAdvanced runtime={runtime} />}
       {section === "install" && platformEnabled && <PluginInstallFlow runtime={runtime} onPendingChange={setInstallBusy} onDone={() => { navigate("installed"); setFilter("all"); }} />}
     </div>

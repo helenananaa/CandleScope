@@ -1237,6 +1237,12 @@ def _create_exchange(
         windows=sys.platform == "win32",
     )
     options: dict[str, Any] = {"defaultType": base_type}
+    if config.proxy_mode == "pool":
+        # Catalog callers do not carry a TransportRequest. Bind their client
+        # explicitly rather than accidentally opening a direct connection.
+        from app.core.proxy_pool import get_proxy_pool
+        route = get_proxy_pool().routes(config, entry.exchange_id)[0]
+        config = route.bind(config)
     if subtype is not None:
         options["defaultSubType"] = subtype
     values: dict[str, Any] = {

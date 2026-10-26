@@ -1,4 +1,7 @@
 import type { ReactNode, Ref } from "react";
+import { useSyncExternalStore } from "react";
+import { ExtensionSlot } from "../features/extensions/ExtensionSlot.js";
+import { getExtensionState, subscribeExtensions } from "../features/extensions/state.js";
 
 export interface MarketPageFrameProps {
   rootRef?: Ref<HTMLDivElement>;
@@ -18,13 +21,14 @@ export default function MarketPageFrame({
   featureSurfaces,
   statusBar,
 }: MarketPageFrameProps) {
+  const extension = useSyncExternalStore(subscribeExtensions, getExtensionState, getExtensionState);
+  const slots: Record<string, ReactNode> = { topBar, intervalSelector, workspace, featureSurfaces, statusBar };
+  const order = extension.layout?.page ?? ["topBar", "intervalSelector", "workspace", "featureSurfaces", "statusBar"];
   return (
     <div className="app-layout" ref={rootRef}>
-      {topBar}
-      {intervalSelector}
-      {workspace}
-      {featureSurfaces}
-      {statusBar}
+      <ExtensionSlot name="shell" slots={slots}>
+        {order.map((name) => <ExtensionSlot key={name} name={name}>{slots[name]}</ExtensionSlot>)}
+      </ExtensionSlot>
     </div>
   );
 }

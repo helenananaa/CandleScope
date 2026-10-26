@@ -116,6 +116,10 @@ app = FastAPI(
     version=APP_VERSION,
 )
 app.include_router(support_router)
+from app.trusted_extensions.api import create_extension_router
+from app.trusted_extensions.runtime import prepare_extensions, activate_extensions, stop_extensions, extension_factory
+
+app.include_router(create_extension_router())
 
 
 @app.exception_handler(ExecutorBusyError)
@@ -180,7 +184,7 @@ async def _init_alert_delivery() -> None:
     """Start durable alert delivery independently from live market data."""
     from app.alerts.facade import AlertFacade
 
-    alert_facade = AlertFacade()
+    alert_facade = extension_factory(app, "alert-delivery", AlertFacade)()
     await alert_facade.start()
     app.state.alert_facade = alert_facade
 
@@ -201,12 +205,12 @@ async def _init_data_manager() -> None:
         from app.indicator.range_result_service import IndicatorRangeResultService
         from app.indicator.series_revision import SeriesRevisionRegistry
 
-        runtime = await start_data_engine()
+        runtime = await extension_factory(app, "data-engine", start_data_engine)()
         runtime.attach_to_app_state(app.state)
 
         try:
             revision_registry = SeriesRevisionRegistry()
-            indicator_range_service = IndicatorRangeResultService.from_config(
+            indicator_range_service = extension_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
                 revision_registry=revision_registry,
             )
             # One authoritative revision registry is shared by WS events,
@@ -302,7 +306,7 @@ async def _init_replay_runtime() -> None:
     async def refresh_instrument_metadata(exchange: str, market_type: str):
         return await refresh_exchange_metadata(exchange, market_type=market_type)
 
-    runtime = await start_replay_runtime(
+    runtime = await extension_factory(app, "replay", start_replay_runtime)(
         instrument_metadata_resolver=get_cached_symbol_metadata,
         instrument_metadata_refresher=refresh_instrument_metadata,
     )
@@ -532,11 +536,21 @@ async def _start_plugin_plane() -> None:
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    try:
+        await _startup_event_impl()
+    except BaseException:
+        await stop_extensions(app)
+        raise
+
+
+async def _startup_event_impl() -> None:
     """Application startup handler."""
     lag_monitor = EventLoopLagMonitor(interval_seconds=EVENT_LOOP_LAG_INTERVAL_SECONDS)
     lag_monitor.start()
     app.state.event_loop_lag_monitor = lag_monitor
     app.state.runtime_mode = RUNTIME_MODE
+    if RUNTIME_MODE != "LOCAL_OFFLINE":
+        await prepare_extensions(app)
 
     if RUNTIME_MODE == "LOCAL_OFFLINE":
         local_runtime = None
@@ -551,6 +565,7 @@ async def startup_event() -> None:
             app.state.local_import_jobs = local_runtime.jobs
             app.state.data_manager = None
             app.state.local_data_runtime = local_runtime.data
+            await prepare_extensions(app)
             if BACKTEST_SETTINGS.enabled:
                 from app.backtest.runtime import BacktestRuntime
 
@@ -566,6 +581,7 @@ async def startup_event() -> None:
                     BACKTEST_SETTINGS.db_path,
                 )
         except BaseException:
+            await stop_extensions(app)
             if backtest_runtime is not None:
                 backtest_runtime.shutdown()
             if local_runtime is not None:
@@ -574,6 +590,7 @@ async def startup_event() -> None:
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
+        await activate_extensions(app)
         freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
 
@@ -761,6 +778,7 @@ async def startup_event() -> None:
     # 5. Refresh exchange symbols in the background. Product search can serve
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
+    await activate_extensions(app)
 
     # Keep the startup heap out of later full GC passes (see gc_policy).
     freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
@@ -818,6 +836,7 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
         await readonly_accounts.close()

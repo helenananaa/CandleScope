@@ -1,6 +1,9 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { replayPreparationActivity, replayPreparationCompleted } from "./preparationActivity.js";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { bool, choice, empty, number, object, text } from "../app-control/commandSchema.js";
 import { t } from "../../i18n/index.js";
 import { preparationRequest, type PreparationJob } from "./api.js";
 import type { NativeRun } from "../backtest/native/nativeBacktestApi.js";
@@ -56,7 +59,6 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
     void refresh();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [summary]);
-  if (!jobs.length && !cache) return null;
   const budgetValue = budgetMiB ?? (cache?.cache_budget_bytes ?? 2048 * 1024**2) / 1024**2;
   const action = async (job: PreparationJob, command: "retry" | "cancel" | "release-cache") => {
     setError(null);
@@ -80,6 +82,26 @@ export default function PreparationJobsPanel({ summary = false, onReady }: {
     finally { setBusy(false); }
   };
   const { pending, failed } = replayPreparationActivity(jobs);
+  const controlId = useId();
+  useControlCommands(() => ({ id: `preparation:${controlId}`, title: "Data preparation jobs and cache", context: () => ({ jobs: jobs.map((row) => [row.id, row.state, row.revision, row.cancel_requested]), cache, busy, budgetMiB }),
+    snapshot: () => ({ jobs: jobs.slice(0, 100).map(({ result, ...job }) => ({ ...job, resultIds: { run: result?.run?.run_id, strategy: result?.strategy_run?.run_id, native: result?.native_run?.run_id } })), cache, budgetMiB, busy, error, summary, visibleCount }), commands: [
+      command("refresh", "Refresh current preparation jobs and cache inventory.", empty, async () => { const result = await preparationRequest<{ items: PreparationJob[] }>(""); setJobs(result.items); if (!summary) setCache(await preparationRequest<CacheInventory>("/cache")); }),
+      command("job", "Retry/cancel/release a loaded preparation job with the same state guards as the UI.", object({ jobId: text(128), action: choice(["retry", "cancel", "release-cache"]) }), ({ jobId, action: selected }) => {
+        const job = jobs.find((row) => row.id === jobId); if (!job) throw new Error("JOB_UNAVAILABLE");
+        if (selected === "retry" && !["FAILED", "BLOCKED_STORAGE"].includes(job.state)) throw new Error("RETRY_UNAVAILABLE");
+        if (selected === "cancel" && (!["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) || job.cancel_requested || job.stage === "STARTING")) throw new Error("CANCEL_UNAVAILABLE");
+        if (selected === "release-cache" && (summary || !["READY", "FAILED", "CANCELLED"].includes(job.state))) throw new Error("RELEASE_UNAVAILABLE");
+        return action(job, selected);
+      }),
+      command("cancelJob", "Cancel a loaded job while an asynchronous control action is pending.", object({ jobId: text(128) }), ({ jobId }) => { const job = jobs.find((row) => row.id === jobId); if (!job || !["QUEUED", "RUNNING", "BLOCKED_STORAGE"].includes(job.state) || job.cancel_requested || job.stage === "STARTING") throw new Error("CANCEL_UNAVAILABLE"); return action(job, "cancel"); }, { interrupt: true }),
+      command("budget", "Edit the preparation cache budget; save in a separate command after inspection.", object({ mib: number(16, 1048576, true) }), ({ mib }) => setBudgetMiB(mib), { available: () => !!cache && !summary && !busy }),
+      command("saveBudget", "Save the inspected preparation cache budget.", empty, () => cacheAction("settings", cache?.prefetch_enabled, true), { available: () => !!cache && !summary && !busy }),
+      command("prefetch", "Set preparation prefetch.", object({ enabled: bool }), ({ enabled }) => cacheAction("settings", enabled), { available: () => !!cache && !summary && !busy }),
+      command("cleanup", "Clean only reclaimable preparation cache using the existing backend action.", object({ confirmed: choice([true]) }), () => cacheAction("cleanup"), { available: () => !!cache && !summary && !busy }),
+      command("openNativeResult", "Open a loaded native preparation result.", object({ jobId: text(128) }), ({ jobId }) => { const result = jobs.find((row) => row.id === jobId)?.result?.native_run; if (!result) throw new Error("RESULT_UNAVAILABLE"); setNativeRun(result); }),
+      command("loadMore", "Expand the visible preparation list.", empty, () => setVisibleCount((value) => value + 20)),
+    ] }));
+  if (!jobs.length && !cache) return null;
   if (summary && pending.length === 0) return null;
   const rows = <div className="preparation-job-list">
     {(summary ? pending : jobs).slice(0, visibleCount).map((job) => <div key={job.id} className="preparation-job-row">
