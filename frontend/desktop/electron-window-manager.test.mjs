@@ -112,12 +112,12 @@ test("cached four-window topology restores four native windows with scoped URLs"
   await manager.restoreCached(state);
   assert.deepEqual(manager.diagnostics().windowIds, ["main-window", "window-2", "window-3", "window-4"]);
   assert.match(manager.windows.get("window-3").url, /windowId=window-3/);
-  for (const window of manager.windows.values()) {
-    assert.deepEqual(window.options.webPreferences.additionalArguments, ["--candlescope-backend-port=28081"]);
+  for (const [id, window] of manager.windows) {
+    assert.deepEqual(window.options.webPreferences.additionalArguments, ["--candlescope-backend-port=28081", `--candlescope-window-id=${id}`]);
   }
-  await manager.openAppPage("http://127.0.0.1:15287/replay.html");
+  const appPage = await manager.openAppPage("http://127.0.0.1:15287/replay.html");
   assert.deepEqual([...manager.appWindows.values()][0].options.webPreferences.additionalArguments,
-    ["--candlescope-backend-port=28081"]);
+    ["--candlescope-backend-port=28081", `--candlescope-window-id=${appPage.windowId}`]);
 });
 
 test("desktop authority rejects unknown windows, subframes and external navigation", async () => {
@@ -147,9 +147,16 @@ test("desktop authority rejects unknown windows, subframes and external navigati
     sender: replay.webContents, senderFrame: {},
   }));
   assert.equal(new URL(manager.appWindows.get(created.windowId).url).searchParams.get("windowId"), created.windowId);
+  assert.ok(manager.appWindows.get(created.windowId).options.webPreferences.additionalArguments.includes(`--candlescope-window-id=${created.windowId}`));
   assert.deepEqual(await manager.openAppPage("/"), { windowId: "main-window" });
   assert.equal(manager.appWindows.size, 1);
   assert.equal(window.focused, true);
+});
+test("explicit control launch propagates to managed renderer preload", async () => {
+  const state = topology(0, ["main-window"]);
+  const manager = createManager(new MemoryStore(state)); manager.options.controlEnabled = true;
+  await manager.restoreCached(state);
+  assert.ok(manager.windows.get("main-window").options.webPreferences.additionalArguments.includes("--candlescope-control-enabled"));
 });
 
 test("flag-off restore opens only main-window without deleting cached secondary state", async () => {

@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command as controlCommand } from "../../app-control/commandRegistry.js";
+import { choice, empty, number, object, text } from "../../app-control/commandSchema.js";
 import { t } from "../../../i18n/index.js";
 import { nativeApi, type NativeResult } from "./nativeBacktestApi.js";
 import { pollNativeReplay } from "./nativeReplayPolling.js";
@@ -50,6 +53,18 @@ export function NativeReplayControls({ runId, replay, onChange, hostAccount = fa
     finally { setBusy(false); }
   };
   const running = replay?.state === "RUNNING";
+  const controlId = useId();
+  useControlCommands(() => ({ id: `native-replay:${controlId}`, title: "Native strategy incremental replay", context: () => ({ runId, replayId: replay?.replay_id, revision: replay?.revision, busy }),
+    snapshot: () => ({ runId, replay: replay ? { ...replay, result: undefined } : null, history: history.map(({ result, ...item }) => { void result; return item; }), busy, error, target }), commands: [
+      controlCommand("create", "Create a native replay through the existing domain service.", empty, () => command("create"), { available: () => !replay && !busy }),
+      controlCommand("advance", "Step or play the revision-bound replay.", object({ action: choice(["step", "play"]) }), ({ action }) => command(action), { available: () => !!replay && !busy && !running && replay.cursor < replay.total }),
+      controlCommand("pause", "Pause the running replay.", empty, () => command("pause"), { available: () => !busy && !!running, interrupt: true }),
+      controlCommand("snapshot", "Create a domain snapshot while paused.", empty, () => command("snapshot"), { available: () => !!replay && !busy && !running }),
+      controlCommand("seek", "Seek within this replay's visible total.", object({ target: number(0, 1e9, true) }), ({ target }) => { if (!replay || target > replay.total) throw new Error("REPLAY_TARGET_INVALID"); setTarget(String(target)); return command("seek", { target }); }, { available: () => !!replay && !busy && !running }),
+      controlCommand("restore", "Restore a listed replay snapshot.", object({ snapshotId: text(128) }), ({ snapshotId }) => { if (!replay?.snapshots.some((item) => item.snapshot_id === snapshotId)) throw new Error("SNAPSHOT_UNAVAILABLE"); return command("restore", { snapshot_id: snapshotId }); }, { available: () => !!replay && !busy && !running }),
+      controlCommand("batch", "Return to the completed batch report.", empty, () => onChange(null), { available: () => !running && !busy }),
+      controlCommand("resume", "Open a listed replay of this run.", object({ replayId: text(128) }), async ({ replayId }) => { if (!history.some((item) => item.replay_id === replayId)) throw new Error("REPLAY_UNAVAILABLE"); onChange(await nativeApi<NativeReplayRecord>(`/native/replays/${replayId}`)); }, { available: () => !replay && !busy }),
+    ] }));
   const title = t(hostAccount || replay?.method === "HOST_ACCOUNT_CHECKPOINT" ? "report.replay" : "native.replay.title");
   return <section className="native-replay-controls" aria-label={title}>
     <strong>{title}</strong>

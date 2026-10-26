@@ -1,5 +1,8 @@
 import { useNativeAvailability, resolveAvailableStrategyMode } from "../native/useNativeAvailability.js";
 import { resolveStrategyTesterMode } from "./chartStrategyMode.js";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { bool, choice, empty, nullable, number, object, optional, record, text } from "../../app-control/commandSchema.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
 import {
@@ -218,6 +221,9 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
   const mode = resolveAvailableStrategyMode(props.strategyTesterMode ?? localMode, availability, modeChosen);
   const [visited, setVisited] = useState(() => new Set([mode]));
   const strategies = useNativeStrategyCollection(props.nativeStrategies, props.onNativeStrategiesChange, props.cellScope);
+  useControlCommands(() => ({ id: `strategy-mode:${props.cellScope}`, title: "Chart strategy engine mode", context: () => ({ session: props.session, mode }), snapshot: () => ({ mode }), commands: [
+    command("mode", "Switch strategy mode and mount its existing panel.", object({ mode: choice(["NATIVE", "CANDLESCOPE"]) }), ({ mode }) => { setMode(mode); props.onStrategyTesterModeChange?.(mode); setVisited((items) => new Set([...items, mode])); }),
+  ] }));
   useLocale();
   const switchMode = (next: typeof mode) => {
     setModeChosen(true);
@@ -564,6 +570,24 @@ export function CandleScopeStrategyTesterPanel({
   const runBusy = ["RESOLVING", "QUEUED", "RUNNING"].includes(runState.status);
   const pendingDataMatchesSource = runState.status === "NEEDS_DATA"
     && pendingDataDraftRevision === strategyDraftContentRevision(source);
+  useControlCommands(() => ({ id: `host-chart-strategy:${cellScope}`, title: "Chart host strategy draft and run", context: () => ({ session, attachment, draftId: activeDraft?.id, source, runState, active }),
+    snapshot: () => ({ session, attachment, draftId: activeDraft?.id, source, saveState, issues, runState, resolution, activeTab, height, focusMode, active, pendingDataMatchesSource, recentDrafts: recentDrafts.map((item) => ({ id: item.id, displayName: item.displayName, language: item.language })) }), commands: [
+      command("view", "Select host editor/tab and focus preference.", object({ tab: optional(choice(["script", "overview", "trades", "settings"])), focused: optional(bool), height: optional(number(0, 4096)) }), (input) => { if (input.tab) setActiveTab(input.tab); if (input.focused !== undefined) setFocusMode(input.focused); if (input.height !== undefined) setHeight(clampPanelHeight(input.height)); }),
+      command("createDraft", "Create a persisted host strategy draft using the UI draft store.", object({ name: text(128), source: text(48000, 0) }), ({ name, source }) => createDraft(name, source, false), { available: () => !runBusy && active }),
+      command("template", "Create a draft from a known host template.", object({ templateId: text(128) }), ({ templateId }) => { const item = CHART_STRATEGY_TEMPLATES.find((item) => item.id === templateId); if (!item) throw new Error("TEMPLATE_UNAVAILABLE"); return createDraft(item.displayName, item.source, false); }, { available: () => !runBusy && active }),
+      command("selectDraft", "Attach a listed recent host draft.", object({ draftId: text(128) }), ({ draftId }) => { const item = recentDrafts.find((item) => item.id === draftId); if (!item) throw new Error("DRAFT_UNAVAILABLE"); attachRecord(item, false); }, { available: () => !runBusy && active }),
+      command("source", "Edit source through autosave and invalidate the previous run input.", object({ source: text(48000, 0) }), ({ source }) => { setSource(source); setRunReady(false); onSourceDirty(); }, { available: () => !!activeDraft && !runBusy && active }),
+      command("save", "Retry saving the current host draft.", empty, retrySave, { available: () => !!activeDraft }),
+      command("configure", "Edit validated host run settings while preserving draft attachment identity.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), autoRun: optional(bool), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!currentAttachment || !validStrategyRunSettings(value)) throw new Error("RUN_SETTINGS_INVALID"); const { executionOverrides: _previous, ...base } = currentAttachment; void _previous; onAttachmentChange({ ...base, ...value }); }, { available: () => !!activeDraft && !runBusy && active }),
+      command("run", "Run the current draft using the UI diagnostics/session ownership path.", empty, run, { available: () => !!activeDraft && !runBusy && active }),
+      command("prepare", "Confirm preparation for the current matching missing-data draft.", empty, onPrepareData, { available: () => pendingDataMatchesSource && active }),
+      command("stopObserving", "Stop observing a server run through the UI lifecycle action.", empty, onStopObserving, { interrupt: true }),
+      command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
+      command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
+      command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
+      command("openWorkspace", "Open the existing strategy workspace.", empty, () => onOpenWorkspace?.(), { available: () => !!onOpenWorkspace && !!currentAttachment }),
+      command("close", "Close the host strategy panel.", empty, onClose),
+    ] }));
   const runLabel = pendingDataMatchesSource
     ? t("chartTester.prepareDataRun")
     : runState.status === "RESOLVING"

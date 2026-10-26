@@ -325,6 +325,7 @@ export async function activateLocalRevision(
 export async function exportLocalProject(
   manifest: LocalDatasetManifest,
   clientState: Record<string, unknown>,
+  sink?: (blob: Blob, name: string) => Promise<void>,
 ): Promise<void> {
   const response = await fetch(
     localUrl(`/projects/${encodeURIComponent(manifest.dataset_id)}/export`),
@@ -335,10 +336,13 @@ export async function exportLocalProject(
     },
   );
   if (!response.ok) { await responseJson(response); return; }
-  const href = URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  const filename = `${manifest.name.replace(/[^\w.-]+/g, "-") || manifest.dataset_id}.csproject`;
+  if (sink) { await sink(blob, filename); return; }
+  const href = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = href;
-  anchor.download = `${manifest.name.replace(/[^\w.-]+/g, "-") || manifest.dataset_id}.csproject`;
+  anchor.download = filename;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();

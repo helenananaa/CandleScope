@@ -6,18 +6,21 @@ import type {
     ProxyMode,
     ProxySaveMessage,
     ProxyTestResult,
+    ProxyRouteConfig,
+    ProxyPoolStatus,
 } from "../../features/settings/proxySettingsRuntime.js";
 
 interface ProxyModeOption {
     value: ProxyMode;
     icon: IconName;
-    labelKey: "settings.proxy.system" | "settings.proxy.custom" | "settings.proxy.none";
+    labelKey: "settings.proxy.system" | "settings.proxy.custom" | "settings.proxy.none" | "settings.proxy.pool";
 }
 
 const PROXY_MODES: ProxyModeOption[] = [
     { value: 'system', icon: 'monitor', labelKey: 'settings.proxy.system' },
     { value: 'custom', icon: 'sliders', labelKey: 'settings.proxy.custom' },
     { value: 'none', icon: 'ban', labelKey: 'settings.proxy.none' },
+    { value: 'pool', icon: 'exchange', labelKey: 'settings.proxy.pool' },
 ];
 
 export interface ProxySettingsPanelProps {
@@ -32,6 +35,12 @@ export interface ProxySettingsPanelProps {
     onCustomProxyChange(value: string): void;
     onProxyTest(): void;
     onProxySave(): void;
+    proxyRoutes?: ProxyRouteConfig[];
+    proxySavedRoutes?: ProxyRouteConfig[];
+    proxyStrategy?: "failover" | "balanced";
+    proxyPoolStatus?: ProxyPoolStatus | null;
+    onProxyRoutesChange?(routes: ProxyRouteConfig[]): void;
+    onProxyStrategyChange?(strategy: "failover" | "balanced"): void;
 }
 
 export default function ProxySettingsPanel({
@@ -46,13 +55,18 @@ export default function ProxySettingsPanel({
     onCustomProxyChange,
     onProxyTest,
     onProxySave,
+    proxyRoutes = [], proxySavedRoutes, proxyStrategy = "failover", proxyPoolStatus,
+    onProxyRoutesChange, onProxyStrategyChange,
 }: ProxySettingsPanelProps) {
     useLocale();
+    const updateRoute = (id: string, patch: Partial<ProxyRouteConfig>) => {
+        onProxyRoutesChange?.(proxyRoutes.map((route) => route.id === id ? { ...route, ...patch } : route));
+    };
     return (
         <div className="st-group">
             <div className="st-group-title">{t("settings.proxy.title")}</div>
             <div className="st-group-desc">{t("settings.proxy.desc")}</div>
-            <div className="st-theme-grid">
+            <div className="st-theme-grid st-proxy-mode-grid">
                 {PROXY_MODES.map((mode) => (
                     <button
                         key={mode.value}
@@ -86,6 +100,99 @@ export default function ProxySettingsPanel({
                         value={customProxy}
                         onChange={(event) => onCustomProxyChange(event.target.value)}
                     />
+                </div>
+            )}
+
+            {proxyMode === 'pool' && (
+                <div className="st-proxy-pool">
+                    <label className="st-proxy-field">
+                        <span>{t("settings.proxy.strategy")}</span>
+                        <select className="st-input" value={proxyStrategy} disabled={proxyLoading}
+                            onChange={(event) => onProxyStrategyChange?.(event.target.value === "balanced" ? "balanced" : "failover")}>
+                            <option value="failover">{t("settings.proxy.failover")}</option>
+                            <option value="balanced">{t("settings.proxy.balanced")}</option>
+                        </select>
+                    </label>
+                    <p className="st-group-desc">{t("settings.proxy.poolHelp")}</p>
+                    {proxyRoutes.map((route, index) => {
+                        const saved = proxySavedRoutes?.find((item) => item.id === route.id);
+                        const matchesSaved = !proxySavedRoutes || (saved && saved.url === route.url
+                            && saved.egress_group === route.egress_group && saved.enabled === route.enabled
+                            && saved.max_concurrency === route.max_concurrency
+                            && (saved.max_ws_subscriptions ?? 64) === (route.max_ws_subscriptions ?? 64)
+                            && saved.exchanges.join(",") === route.exchanges.join(","));
+                        const status = matchesSaved ? proxyPoolStatus?.routes?.find((row) => row.id === route.id) : undefined;
+                        const cooldown = status ? Math.max(0, ...Object.values(status.budgets).map((budget) =>
+                            Math.max(budget.cooldown_remaining_seconds ?? 0, budget.global_circuit?.cooldown_remaining_seconds ?? 0)),
+                            ...status.observations.map((item) => item.cooldown_seconds)) : 0;
+                        return <fieldset className="st-proxy-route" key={route.id} disabled={proxyLoading}>
+                            <legend>{t("settings.proxy.route", { index: index + 1 })}</legend>
+                            <div className="st-proxy-fields">
+                                <label className="st-proxy-field"><span>{t("settings.proxy.name")}</span>
+                                    <input className="st-input" value={route.name} onChange={(event) => updateRoute(route.id, { name: event.target.value })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.address")}</span>
+                                    <input type="password" autoComplete="off" className="st-input" placeholder="http://127.0.0.1:7890" value={route.url}
+                                        onChange={(event) => updateRoute(route.id, { url: event.target.value })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.egressGroup")}</span>
+                                    <input className="st-input" value={route.egress_group} onChange={(event) => updateRoute(route.id, { egress_group: event.target.value })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")}</span>
+                                    <input type="number" min={1} max={32} className="st-input" value={route.max_concurrency}
+                                        onChange={(event) => updateRoute(route.id, { max_concurrency: Number(event.target.value) })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.wsCapacity")}</span>
+                                    <input type="number" min={1} max={4096} className="st-input" value={route.max_ws_subscriptions ?? 64}
+                                        onChange={(event) => updateRoute(route.id, { max_ws_subscriptions: Number(event.target.value) })} /></label>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.exchanges")}</span>
+                                    <input className="st-input" value={route.exchanges.join(", ")}
+                                        onChange={(event) => updateRoute(route.id, { exchanges: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} /></label>
+                            </div>
+                            <div className="st-actions-row">
+                                <label><input type="checkbox" checked={route.enabled}
+                                    onChange={(event) => updateRoute(route.id, { enabled: event.target.checked })} /> {t("settings.proxy.enabled")}</label>
+                                {index > 0 && <button className="st-btn st-btn-secondary" onClick={() => onProxyRoutesChange?.([route, ...proxyRoutes.filter((value) => value.id !== route.id)])}>
+                                    {t("settings.proxy.makePrimary")}</button>}
+                                <button className="st-btn st-btn-secondary" onClick={() => onProxyRoutesChange?.(proxyRoutes.filter((value) => value.id !== route.id))}>
+                                    {t("settings.proxy.remove")}</button>
+                            </div>
+                            <div className="st-result-detail" role="status">
+                                {status && <div>{t("settings.proxy.active", { count: status.active_requests })}</div>}
+                                {status?.ws_subscriptions !== undefined && <div>{t("settings.proxy.wsLoad", {
+                                    count: status.ws_subscriptions, capacity: status.max_ws_subscriptions ?? 64,
+                                })}</div>}
+                                {status?.ws_sessions !== undefined && <div>{t("settings.proxy.wsSessions", { count: status.ws_sessions })}</div>}
+                                {status?.native_websockets !== undefined && status.ccxt_physical_websockets !== undefined && <div>{t("settings.proxy.physicalWs", {
+                                    count: status.native_websockets + status.ccxt_physical_websockets,
+                                })}</div>}
+                                {status?.ws_traffic && <>
+                                    <div>{t("settings.proxy.wsFlow", {
+                                        messages: status.ws_traffic.messages_per_second.toFixed(1),
+                                        kib: (status.ws_traffic.payload_bytes_per_second / 1024).toFixed(1),
+                                        seconds: status.ws_traffic.window_seconds,
+                                    })}</div>
+                                    {status.ws_traffic.queue_capacity > 0 && <div>{t("settings.proxy.wsQueue", {
+                                        count: status.ws_traffic.queue_size, capacity: status.ws_traffic.queue_capacity,
+                                    })}</div>}
+                                    <div>{t("settings.proxy.wsDisconnects", {
+                                        count: status.ws_traffic.disconnects_recent, seconds: status.ws_traffic.window_seconds,
+                                    })}</div>
+                                    {status.ws_traffic.last_message_age_seconds !== null && <div>{t("settings.proxy.wsLastMessage", {
+                                        seconds: Math.floor(status.ws_traffic.last_message_age_seconds),
+                                    })}</div>}
+                                    <div>{t("settings.proxy.wsTrafficHelp")}</div>
+                                </>}
+                                {!status?.observations.length ? t("settings.proxy.unobserved") : <>
+                                    {status.observations.map((item) => <div key={`${item.exchange}:${item.kind}`}>
+                                        {item.exchange} · {item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
+                                    </div>)}
+                                </>}
+                                {cooldown > 0 && <div>{t("settings.proxy.cooldown", { seconds: Math.ceil(cooldown) })}</div>}
+                            </div>
+                        </fieldset>;
+                    })}
+                    <button className="st-btn st-btn-secondary" disabled={proxyLoading || proxyRoutes.length >= 16}
+                        onClick={() => onProxyRoutesChange?.([...proxyRoutes, { id: crypto.randomUUID(), name: "", url: "",
+                            egress_group: "shared", enabled: true, exchanges: [], max_concurrency: 4, max_ws_subscriptions: 64 }])}>
+                        {t("settings.proxy.add")}
+                    </button>
                 </div>
             )}
 
@@ -124,7 +231,7 @@ export default function ProxySettingsPanel({
                     {Array.isArray(proxyTestResult.results) && proxyTestResult.results.length > 0 && (
                         <div className="st-exchange-results">
                             {proxyTestResult.results.map((result) => (
-                                <div key={result.exchange} className={`st-exchange-result-item ${result.success ? 'ok' : 'fail'}`}>
+                                <div key={`${String(result.route_id ?? "")}:${result.exchange}`} className={`st-exchange-result-item ${result.success ? 'ok' : 'fail'}`}>
                                     <span className="st-exchange-result-icon"><Icon name={result.success ? "check" : "error"} size={14} /></span>
                                     <span className="st-exchange-result-label">{result.label}</span>
                                     <span className="st-exchange-result-msg">{result.message}</span>

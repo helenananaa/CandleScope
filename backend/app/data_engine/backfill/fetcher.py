@@ -959,6 +959,7 @@ class HistoricalFetcher:
             manager=self._rate_limit_manager,
             rule=rule,
             request=historical_request,
+            proxy_route=request.proxy_route if request is not None else None,
         )
 
     async def _rate_limit_admission(
@@ -973,6 +974,15 @@ class HistoricalFetcher:
             return
         historical_request = self._historical_request(task, request)
         rule = self._rate_limit_rule(task, historical_request)
+        config = getattr(self._transport, "config", None)
+        if request is not None and getattr(config, "proxy_mode", None) == "pool":
+            from app.core.proxy_pool import get_proxy_pool
+            from app.exchanges.rate_limits import scope_rate_limit_rule
+            request.proxy_route = await get_proxy_pool().select_rest(
+                config, historical_request, rule, self._rate_limit_manager,
+            )
+            historical_request.egress_group = request.proxy_route.egress_group
+            rule = scope_rate_limit_rule(rule, historical_request.egress_group)
         admission = await self._rate_limit_manager.inspect(rule, historical_request)
         if not admission.allowed:
             raise RateLimitDeferred(admission)
@@ -1052,6 +1062,8 @@ class HistoricalFetcher:
             start_ms=request.start_ms if request is not None else task.start_ms,
             end_ms=request.end_ms if request is not None else task.end_ms,
             limit=request.limit if request is not None else self._cfg.fetch_batch_size,
+            egress_group=(request.proxy_route.egress_group
+                          if request is not None and request.proxy_route is not None else None),
         )
 
     def _endpoint_for_task(
@@ -1102,7 +1114,8 @@ class HistoricalFetcher:
         task: BackfillTask,
         request: HistoricalRequest,
     ) -> RateLimitRule:
-        return self._rate_limit_policy(task).rule_for(request)
+        from app.exchanges.rate_limits import scope_rate_limit_rule
+        return scope_rate_limit_rule(self._rate_limit_policy(task).rule_for(request), request.egress_group)
 
     async def _record_rate_limit_cooldown(
         self,

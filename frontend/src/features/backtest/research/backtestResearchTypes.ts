@@ -109,7 +109,7 @@ export interface BacktestResearchRuntime {
     resumeRun(): Promise<void>;
     cloneRun(parameter: string, value: unknown): Promise<void>;
     compareRun(otherRunId: string): Promise<void>;
-    exportRun(): Promise<void>;
+    exportRun(sink?: (blob: Blob, name: string) => Promise<void>): Promise<void>;
     loadSignalTrace(after?: number): Promise<void>;
     createStudy(): Promise<void>;
     startStudy(): Promise<void>;

@@ -65,7 +65,8 @@ def test_invalid_session_port_cannot_fall_back(tmp_path, monkeypatch, port):
 
 
 @pytest.mark.parametrize("restart", [False, True])
-def test_sidecar_serves_on_announced_socket_when_preferred_port_is_occupied(tmp_path, restart):
+@pytest.mark.parametrize("stalled_listener", [False, True])
+def test_sidecar_serves_on_announced_socket_when_preferred_port_is_occupied(tmp_path, restart, stalled_listener):
     endpoint = tmp_path / "endpoint.json"
     session_port = ""
     if restart:
@@ -77,8 +78,14 @@ def test_sidecar_serves_on_announced_socket_when_preferred_port_is_occupied(tmp_
         occupied.listen()
         preferred = occupied.getsockname()[1]
         code = """
-import json, os, uvicorn
+import asyncio, json, os, uvicorn
 from app.desktop_sidecar import serve
+if os.environ.get('TEST_STALLED_LISTENER') == '1':
+    # Reproduce the packaged Windows case: request tasks have drained but
+    # asyncio's listener still waits on stale transport bookkeeping.
+    async def wait_closed(self):
+        await asyncio.Event().wait()
+    asyncio.Server.wait_closed = wait_closed
 async def app(scope, receive, send):
     if scope['type'] == 'lifespan':
         while True:
@@ -86,6 +93,7 @@ async def app(scope, receive, send):
             if event['type'] == 'lifespan.startup':
                 await send({'type': 'lifespan.startup.complete'})
             else:
+                print('LIFESPAN CLEANUP COMPLETE', flush=True)
                 await send({'type': 'lifespan.shutdown.complete'})
                 return
     else:
@@ -101,6 +109,7 @@ serve('127.0.0.1', int(os.environ['TEST_PREFERRED_PORT']))
                                  env={**os.environ, "TEST_PREFERRED_PORT": str(preferred),
                                       "CANDLESCOPE_DESKTOP_BOUND_PORT": session_port,
                                       "CANDLESCOPE_DESKTOP_ENDPOINT_FILE": str(endpoint),
+                                      "TEST_STALLED_LISTENER": "1" if stalled_listener else "0",
                                       "CANDLESCOPE_DESKTOP_INSTANCE_ID": "test-instance"})
         try:
             deadline = time.monotonic() + 10
@@ -122,6 +131,7 @@ serve('127.0.0.1', int(os.environ['TEST_PREFERRED_PORT']))
             assert result == {"desktop_instance_id": "test-instance"}
             output, error = child.communicate(b"shutdown\n", timeout=10)
             assert child.returncode == 0, (output + error).decode(errors="replace")
+            assert b"LIFESPAN CLEANUP COMPLETE" in output
         finally:
             if child.poll() is None:
                 child.kill()

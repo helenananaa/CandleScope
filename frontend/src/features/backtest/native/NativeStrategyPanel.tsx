@@ -7,14 +7,14 @@ import type { ChartStrategyTesterPanelProps } from "../chart-tester/ChartStrateg
 import type { ChartContextResolution } from "../backtestApi.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
-import { nativeApi, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
+import { nativeApi, nativeExportUrl, nativeTerminal, nativeTimeframe, type NativeCapabilities, type NativeRun } from "./nativeBacktestApi.js";
 import { NativeStrategyReport } from "./NativeStrategyReport.js";
 import { pollNativeRun } from "./nativeRunPolling.js";
 import "./nativeStrategy.css";
 import { NativeAdvancedInputs } from "./NativeAdvancedInputs.js";
 import { NativePreparationContexts } from "./NativePreparationContexts.js";
 import { restorePreparationContexts, restorePreparationDate, type NativePreparationContext } from "./nativePreparationInputs.js";
-import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type AdvancedInputs } from "./nativeInputs.js";
+import { automaticHostExecution, emptyAdvancedInputs, executionInputs, freezeAdvancedInputs, restoreAdvancedInputs, type AdvancedInputs, type InputDataset } from "./nativeInputs.js";
 import { PreparationApiError, preparationRequest, waitForPreparation, type PreparationJob, type PreparationCapabilities } from "../../data-preparation/api.js";
 import PreparationWaiting from "../../data-preparation/PreparationWaiting.js";
 import { Icon } from "../../../components/icons/Icon.js";
@@ -28,6 +28,10 @@ import { WorkbenchAccountSettings } from "./WorkbenchAccountSettings.js";
 import { defaultWorkbenchAccount, parseAccountData, workbenchAccountError, type AccountInputState, type FrozenAccountData } from "./workbenchAccountInputs.js";
 
 const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScriptWorkspace.js"));
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command, contextReference } from "../../app-control/commandRegistry.js";
+import { array, bool, choice, empty, nullable, number as controlNumber, object, optional, record, text } from "../../app-control/commandSchema.js";
+import { readControlFile, publishControlFile } from "../../app-control/controlFiles.js";
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
@@ -56,6 +60,20 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   }, [comparing, collection.items.length, onStatusChange]);
   const contextParts = [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval];
   const context = JSON.stringify(contextParts);
+  useControlCommands(() => ({ id: `strategies:${props.cellScope}`, title: "Native strategy collection",
+    context: () => ({ session: props.session, collection }),
+    snapshot: () => ({ collection, storageError: strategies.storageError }), commands: [
+      command("select", "Select a saved strategy instance.", object({ id: text(128) }), ({ id }) => {
+        if (!collection.items.some((item) => item.id === id)) throw new Error("STRATEGY_UNAVAILABLE");
+        strategies.select(id);
+      }),
+      command("add", "Create a strategy instance.", empty, () => strategies.add(false)),
+      command("copy", "Copy the selected strategy and drafts.", empty, () => strategies.add(true), { available: () => !!strategies.selected }),
+      command("rename", "Rename the selected strategy.", object({ name: text(80) }), ({ name }) => strategies.rename(name), { available: () => !!strategies.selected }),
+      command("remove", "Remove an idle strategy instance.", empty, strategies.remove, { available: () => !!strategies.selected && !strategies.isBusy(strategies.selected.id) }),
+      command("comparison", "Show or hide strategy comparison.", object({ visible: bool }), ({ visible }) => strategies.setComparing(visible)),
+    ] }), props.active !== false);
+
   return <>
     {!props.strategies && <div className="native-strategy-collection">
       <StrategySwitcher items={nativeStrategySwitcherItems(strategies)} activeId={collection.activeId} onSelect={strategies.select}
@@ -411,6 +429,66 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
     const list = event.currentTarget.parentElement;
     requestAnimationFrame(() => list?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus());
   };
+  useControlCommands(() => ({ id: `native:${props.cellScope}:${mode}`, title: "Native strategy draft, run and report",
+    context: () => ({ session: props.session, dataset: props.dataset, mode, language, source, parameters, hostSettings, fidelity, fillRecalculation,
+      historyStart, historyEnd, automaticContexts, executionOrigin, advanced: contextReference(advanced), executionData: contextReference(executionData), runId: run?.run_id, historicalRunId: historicalRun?.run_id, allHistory, busy, executionDataState }),
+    snapshot: () => ({ session: props.session, dataset: props.dataset, mode, language, source, parameters, hostSettings, fidelity, fillRecalculation,
+      historyStart, historyEnd, automaticContexts, executionOrigin, advanced, busy, error, capabilities, resolution, preparation, resultStale, tab,
+      run: run ? { runId: run.run_id, state: run.state, runtimeIdentity: run.runtime_identity, error: run.error, reportHash: run.result?.report_hash,
+        trades: run.result?.trades.length, orders: run.result?.orders.length } : null,
+      allHistory, historicalRunId: historicalRun?.run_id ?? null, visibleHistory: visibleHistory.slice(0, 100).map((item) => item.run_id), history: history.slice(0, 100).map((item) => ({ runId: item.run_id, state: item.state, createdAt: item.created_at_ms })) }), commands: [
+      command("draft", "Edit/save the active source and JSON parameters through the existing draft persistence action.",
+        object({ source: optional(text(48000)), parameters: optional(record) }), (input) => save(input.source ?? source, input.parameters === undefined ? parameters : JSON.stringify(input.parameters)), { available: () => !busy }),
+      command("language", "Switch draft language; saved language drafts are restored.", object({ language: choice(["pine"]) }), ({ language }) => props.onInstanceChange(props.instance.id, { language }), { available: () => !busy }),
+      command("mode", "Switch native/external simulation execution mode.", object({ mode: choice(["NATIVE", "CANDLESCOPE"]) }), ({ mode }) => props.onExecutionModeChange(mode), { available: () => !busy }),
+      command("range", "Set an increasing UTC preparation date range.", object({ start: text(10), end: text(10) }), ({ start, end }) => {
+        const valid = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(`${date}T00:00:00Z`)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+        if (!valid(start) || !valid(end) || end <= start) throw new Error("INVALID_RANGE");
+        setHistoryStart(start); setHistoryEnd(end); save(source, parameters, automaticContexts, start, end);
+      }, { available: () => !busy && automatic && mode === "NATIVE" && !props.dataset }),
+      command("hostSettings", "Configure external simulation account and fees.", object({ initial_balance: optional(controlNumber(0)), slippage_bps: optional(controlNumber(0)), taker_fee_bps: optional(controlNumber(0)), price_tick: optional(controlNumber(0)) }),
+        (patch) => { const next = { ...hostSettings, ...patch }; setHostSettings(next); saveExecution({ hostSettings: next }); }, { available: () => !busy && mode === "CANDLESCOPE" }),
+      command("datasets", "Read the current native input dataset catalog.", empty, () => nativeApi<{ datasets: InputDataset[] }>("/datasets"), { readOnly: true }),
+      command("advancedInputs", "Select existing additional datasets by ID/epoch and edit Pine library source mapping. Run retains snapshot revalidation.", object({ contexts: array(object({ datasetId: text(128), dataEpoch: text(128), symbol: text(128) }), 16), magnifier: nullable(object({ datasetId: text(128), dataEpoch: text(128) })), libraries: record }), async ({ contexts, magnifier, libraries }) => {
+        if (Object.values(libraries).some((item) => typeof item !== "string") || (language !== "pine" && (magnifier || Object.keys(libraries).length)) || (mode !== "NATIVE" && (magnifier || Object.keys(libraries).length))) throw new Error("NATIVE_INPUT_UNSUPPORTED");
+        const { datasets } = await nativeApi<{ datasets: InputDataset[] }>("/datasets");
+        const select = ({ datasetId, dataEpoch }: { datasetId: string; dataEpoch: string }) => { const item = datasets.find((row) => row.dataset_id === datasetId && row.data_epoch === dataEpoch); if (!item) throw new Error("DATA_SNAPSHOT_MISMATCH"); return item; };
+        const selected = contexts.map((row) => ({ dataset: select(row), symbol: row.symbol.trim() }));
+        if (new Set(selected.map((row) => `${row.symbol}@${nativeTimeframe(row.dataset.interval)}`)).size !== selected.length) throw new Error("DUPLICATE_CONTEXT");
+        setAdvanced({ contexts: selected, magnifier: magnifier ? select(magnifier) : null, libraries: JSON.stringify(libraries) });
+      }, { available: () => !busy }),
+      command("preparationContexts", "Edit typed automatic data-preparation contexts and save the draft.", object({ contexts: array(object({ exchange: text(96), market_type: text(96), symbol: text(96), interval: text(24), binding_symbol: text(128, 0), warmup_bars: optional(controlNumber(0, 5000, true)) }), 16) }), ({ contexts }) => { setAutomaticContexts(contexts); save(source, parameters, contexts); }, { available: () => !busy && automatic && mode === "NATIVE" && !props.dataset }),
+      command("fidelity", "Set the external simulation execution fidelity and fill recalculation; clears previous run exactly as the UI does.", object({ fidelity: choice(["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"]), fillRecalculation: bool }), ({ fidelity, fillRecalculation }) => { setFidelity(fidelity); setFillRecalculation(fillRecalculation); saveExecution({ fidelity, fillRecalculation }); setRun(null); setPreviousRun(null); }, { available: () => !busy && mode === "CANDLESCOPE" }),
+      command("executionFile", "Load bounded JSON execution data through the same upload state and engine-side validation.", object({ fileRef: nullable(text(96)) }), async ({ fileRef }) => {
+        const upload = ++executionUpload.current; setExecutionData(null); setExecutionDataState(fileRef ? "loading" : "ready"); saveExecution({ uploaded: !!fileRef });
+        if (!fileRef) return;
+        try { const value: unknown = JSON.parse(await (await readControlFile(fileRef)).text()); if (upload === executionUpload.current) { setExecutionData(value); setExecutionDataState("ready"); setError(""); } }
+        catch (reason) { if (upload === executionUpload.current) { setExecutionDataState("invalid"); setError(String(reason)); } throw reason; }
+      }, { available: () => !busy && mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" }),
+      command("executionOrigin", "Choose the execution-data origin through the persisted draft flow.", object({ origin: choice(["", "binance-futures"]) }), ({ origin }) => {
+        setExecutionOrigin(origin); save(source, parameters, automaticContexts, historyStart, historyEnd, origin);
+      }, { available: () => !busy && automatic && !!props.dataset && props.session.exchange === "local" && fidelity === "TRADE_TAPE" && executionData === null }),
+      command("historyScope", "Include all existing strategy run history or only this instance's history.", object({ all: bool }), ({ all }) => setAllHistory(all)),
+      command("selectHistory", "Open an existing visible history run report.", object({ runId: nullable(text(128)) }), async ({ runId }) => {
+        if (!runId) { setHistoricalRun(null); return; } if (!visibleHistory.some((row) => row.run_id === runId)) throw new Error("HISTORY_UNAVAILABLE");
+        const value = await nativeApi<NativeRun>(`${runPath}/${encodeURIComponent(runId)}`); pendingOverview.current = null; setError(""); setHistoricalRun(value); selectTab("overview");
+      }, { available: () => !busy }),
+      command("exportReport", "Export the current native/external report through its existing backend export endpoint to a fileRef.", empty, async () => {
+        if (!reportRun?.result) throw new Error("REPORT_UNAVAILABLE"); const response = await fetch(nativeExportUrl(reportRun.run_id, reportRun.execution_mode));
+        if (!response.ok) throw new Error(`REPORT_EXPORT_FAILED:${response.status}`); return publishControlFile(await response.blob(), "strategy-report.json");
+      }, { available: () => !!reportRun?.result }),
+      command("run", "Start the existing run/preparation flow. Poll inspect for busy, error, resolution and run.state; acknowledgement does not mean completion.", empty,
+        () => { void start(); return { submitted: true }; }, { available: () => !busy && !(mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") && !!(mode === "NATIVE" ? available?.available : available?.external_available) }),
+      command("prepare", "Materialize the inspected missing-data resolution and start the run.", empty, () => { void start(true); return { submitted: true }; }, { available: () => !busy && !!resolution && resolution.status !== "READY" }),
+      command("cancelRun", "Cancel the current strategy run.", empty, async () => receiveRun(await nativeApi<NativeRun>(`${runPath}/${run!.run_id}/cancel`, {})), { available: () => !!run && !nativeTerminal(run.state), interrupt: true }),
+      command("cancelPreparation", "Cancel the current data preparation job.", empty, async () => {
+        const value = await preparationRequest<PreparationJob>(`/${preparation!.id}/cancel`, { method: "POST" }); preparationSubmission.current = null; setPreparation(value);
+      }, { available: () => !!preparation && !["READY", "CANCELLED"].includes(preparation.state) && preparation.stage !== "STARTING" && !preparation.cancel_requested, interrupt: true }),
+      command("tab", "Select the strategy editor/settings/report/history tab.", object({ tab: choice(["script", "settings", "overview", "trades", "history"]) }), ({ tab }) => selectTab(tab)),
+      command("report", "Read a bounded page of the current report; authority, stale status and hashes are retained.", object({ section: choice(["trades", "orders", "equity", "bars", "graphics"]), offset: optional(controlNumber(0, 1e9, true)), limit: optional(controlNumber(1, 500, true)) }),
+        ({ section, offset = 0, limit = 100 }) => ({ runId: reportRun?.run_id, stale: resultStale, authority: reportRun?.result?.account_authority,
+          reportHash: reportRun?.result?.report_hash, total: reportRun?.result?.[section].length ?? 0, items: reportRun?.result?.[section].slice(offset, offset + limit) ?? [] }), { readOnly: true }),
+    ] }), props.active !== false);
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
     {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {props.session.interval}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
     {props.docked && <StrategyDockSlot name="tabs"><div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>

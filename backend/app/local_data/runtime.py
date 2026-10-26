@@ -12,7 +12,7 @@ from .service import LocalDatasetService
 
 
 class LocalOfflineProfileMiddleware:
-    """Reject live/replay/plugin APIs when the process selected local mode."""
+    """Reject online APIs while allowing protected local extension management."""
 
     def __init__(self, app: Any, *, enabled: bool) -> None:
         self.app = app
@@ -27,7 +27,9 @@ class LocalOfflineProfileMiddleware:
             "/docs",
             "/redoc",
             "/openapi.json",
-        } or path.startswith(("/api/v1/local", "/api/v1/backtests"))
+            "/api/v2/plugins/manage/extensions",
+        } or path.startswith(("/api/v1/local", "/api/v1/backtests",
+                              "/api/v2/plugins/manage/extensions/", "/api/v2/plugins/extension-assets/"))
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if not self.enabled or self._allowed(scope.get("path", "")):

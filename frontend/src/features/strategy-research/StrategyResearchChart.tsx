@@ -8,6 +8,10 @@ import { drawingToolWhenInteractionReady } from "../../app/drawingInteractionRea
 import DrawingToolbar from "../../components/DrawingToolbar.js";
 import ExportPanel from "../export/ExportPanel.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { providedChartCommands } from "../app-control/providedChartCommands.js";
+import { drawingCommands } from "../app-control/drawingCommands.js";
+import { exportCommands } from "../app-control/exportCommands.js";
 import {
   loadUserPrefs,
   updateUserPref,
@@ -343,6 +347,9 @@ export function StrategyResearchImportedWorkspace({
     () => createLocalIndicatorCatalog(indicatorPresets),
     [indicatorPresets],
   );
+  useControlCommands(() => providedChartCommands("imported", { datasetId: manifest.dataset_id, dataEpoch: manifest.data_epoch, interval }, indicators, chartSurface.actions, drawings));
+  useControlCommands(() => drawingCommands("imported", chartSurface, drawings, `${manifest.dataset_id}:${manifest.data_epoch}:${interval}`));
+  useControlCommands(() => exportCommands("imported", exportFlow));
   const savedVisibleRange = useMemo(() => getVisibleRangeForInterval(
     manifest.symbol,
     interval,

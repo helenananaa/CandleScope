@@ -86,6 +86,7 @@ import {
 } from "./drawingHoverController.js";
 import {
   restorePrePresentationHiddenDrawingSceneRuntime,
+  isDrawingMutationScopeReady,
   useDrawingPersistenceLifecycle,
 } from "./useDrawingPersistenceLifecycle.js";
 import type {
@@ -93,6 +94,7 @@ import type {
   DrawingCommittedPaintTicket,
   DrawingExportSceneReceipt,
   DrawingLegacyPrimitiveRuntimeEvidence,
+  DrawingMutationScopeState,
 } from "./useDrawingPersistenceLifecycle.js";
 import {
   createDrawingExportBarrier,
@@ -109,6 +111,7 @@ import {
   drawingCommandsForSavedDrawing,
 } from "./core/drawingDocumentRuntime.js";
 import type { DrawingCommand } from "./core/drawingCommands.js";
+import { applyDrawingCommands } from "./core/drawingCommands.js";
 import { serializeDrawingPrimitive } from "./drawingPersistence.js";
 import { useChartPointerPosition, useDrawingPointerEvents } from "./drawingPointerController.js";
 import type { DrawingDomPointerEvent } from "./drawingPointerController.js";
@@ -1405,6 +1408,10 @@ interface DrawingExportPresentationState {
 }
 
 export interface DrawingInteractionRuntime extends DrawingObjectApi {
+  isControlReady(): boolean;
+  prepareControl(): boolean;
+  getControlReadiness(): DrawingMutationScopeState & { documentReady: boolean; editing: boolean; exportLocked: boolean };
+  applyObjectCommands(commands: readonly DrawingCommand[], scopeKey: string, expectedRevision: number): { committed: boolean; surfaceSynchronized: boolean; revision: number };
   saveDrawingProperties(id: string, patch: DrawingStylePatch, coordinates?: readonly DrawingCoordinate[], expectedCoordinates?: readonly DrawingCoordinate[]): boolean;
   canUndo: boolean;
   canRedo: boolean;
@@ -1999,6 +2006,7 @@ export function useDrawing({
     persistDrawings,
     prepareSurfaceDispose: preparePersistenceSurfaceDispose,
     prepareUserMutationScope: preparePersistenceUserMutationScope,
+    readUserMutationScopeState,
     hitTestScene: hitTestPaneScene,
     getSceneScreenBox: getPaneSceneScreenBox,
     getSceneScreenHandles: getPaneSceneScreenHandles,
@@ -5433,6 +5441,36 @@ export function useDrawing({
     return true;
   }, [getSavedDrawing, interactionSurfaceMode, prepareTerminalTextMutation, persistSceneCommands, selectedIdRef, deselectAll]);
 
+  const applyObjectCommands = useCallback((commands: readonly DrawingCommand[], scopeKey: string, expectedRevision: number) => {
+    if (readOnly || interactionSurfaceMode !== "overlay") throw new Error("DRAWING_CONTROL_UNAVAILABLE");
+    const current = getObjectDocument();
+    if (current.scopeKey !== scopeKey || current.documentRevision !== expectedRevision) throw new Error("DRAWING_CONTEXT_CONFLICT");
+    if (editingTextIdRef.current !== null) throw new Error("DRAWING_EDIT_ACTIVE");
+    const preflight = applyDrawingCommands(current, commands);
+    if (!preflight.ok) throw new Error(preflight.error);
+    if (!prepareTerminalTextMutation()) throw new Error("DRAWING_SCOPE_NOT_READY");
+    const revalidated = getObjectDocument();
+    if (revalidated.scopeKey !== scopeKey || revalidated.documentRevision !== expectedRevision) throw new Error("DRAWING_CONTEXT_CONFLICT");
+    const receipt = persistSceneCommands(commands);
+    if (!receipt?.committed) throw new Error("DRAWING_COMMIT_FAILED");
+    deselectAll();
+    return { committed: true, surfaceSynchronized: receipt.surfaceSynchronized, revision: getObjectDocument().documentRevision };
+  }, [readOnly, interactionSurfaceMode, getObjectDocument, editingTextIdRef, prepareTerminalTextMutation, persistSceneCommands, deselectAll]);
+
+  const isControlReady = useCallback(() => !readOnly && interactionSurfaceMode === "overlay"
+    && editingTextIdRef.current === null && !exportVisibilityIntentGate.isLocked()
+    && getActiveDocumentTarget() !== null
+    // The terminal mutation barrier synchronously republishes a replaced series.
+    // Discovery must not wait for a publication that only that barrier can request.
+    && isDrawingMutationScopeReady({ ...readUserMutationScopeState(), ready: true }),
+  [readOnly, interactionSurfaceMode, editingTextIdRef, exportVisibilityIntentGate, getActiveDocumentTarget, readUserMutationScopeState]);
+  const prepareControl = useCallback(() => !readOnly && interactionSurfaceMode === "overlay"
+    && editingTextIdRef.current === null && prepareUserMutationScope(),
+  [readOnly, interactionSurfaceMode, editingTextIdRef, prepareUserMutationScope]);
+  const getControlReadiness = useCallback(() => ({ ...readUserMutationScopeState(), documentReady: getActiveDocumentTarget() !== null,
+    editing: editingTextIdRef.current !== null, exportLocked: exportVisibilityIntentGate.isLocked() }),
+  [readUserMutationScopeState, getActiveDocumentTarget, editingTextIdRef, exportVisibilityIntentGate]);
+
   const updateSelectedDrawingStyle = useCallback((patch: DrawingStylePatch) => {
     const id = selectedIdRef.current;
     if (!id || !patch) return;
@@ -5570,6 +5608,10 @@ export function useDrawing({
     updateObject,
     deleteObject,
     reorderObject,
+    applyObjectCommands,
+    isControlReady,
+    prepareControl,
+    getControlReadiness,
     deleteSelected,
   };
 }

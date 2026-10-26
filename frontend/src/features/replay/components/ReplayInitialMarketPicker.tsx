@@ -1,5 +1,8 @@
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useState } from "react";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { bool, choice, empty, nullable, object, text } from "../../app-control/commandSchema.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayCatalog, ReplayCatalogEntry } from "../replayTypes.js";
@@ -236,6 +239,14 @@ export default function ReplayInitialMarketPicker({
     }
   };
 
+  useControlCommands(() => ({ id: "replay-initial-market", title: "Replay initial market selection", context: () => ({ runId: run.run_id, catalog, selecting, downgrade }),
+    snapshot: () => ({ runId: run.run_id, catalog, selecting, downgrade, error, query, marketType, availableOnly, unavailableOpen }), commands: [
+      command("refresh", "Refresh the public initial-market catalog.", empty, () => loadCatalog(), { available: () => selecting === null }),
+      command("filters", "Set market picker filters.", object({ query: text(128, 0), marketType: nullable(object({ exchange: text(64), marketType: text(32) })), availableOnly: bool, unavailableOpen: bool }), (input) => { setQuery(input.query); setMarketType(input.marketType); setAvailableOnly(input.availableOnly); setUnavailableOpen(input.unavailableOpen); }),
+      command("select", "Prepare and select an available catalog market. Inspect any downgrade confirmation first.", object({ marketKey: text(256) }), ({ marketKey }) => { const entry = catalog?.entries.find((entry) => trainingMarketKey(entry) === marketKey); if (!entry || !isReplayInitialMarketAvailable(entry)) throw new Error("MARKET_UNAVAILABLE"); return selectMarket(entry); }, { available: () => catalog !== null && selecting === null }),
+      command("confirmDowngrade", "Confirm only the currently pending domain-generated downgrade.", object({ confirmed: choice([true]) }), () => { if (!downgrade) throw new Error("DOWNGRADE_UNAVAILABLE"); return selectMarket(downgrade.entry, true); }, { available: () => downgrade !== null && selecting === null }),
+      command("cancelDowngrade", "Cancel the pending downgrade.", empty, () => setDowngrade(null)),
+    ] }));
   return (
     <main
       className="training-hub-page replay-market-picker"

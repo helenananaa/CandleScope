@@ -41,6 +41,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       ready: true,
     },
     actions: {
+      applyControlCommand: () => undefined,
       switchWorkspace: () => undefined,
       createWorkspace: () => undefined,
       duplicateWorkspace: () => undefined,
@@ -77,6 +78,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       updateWindowPlacement: () => undefined,
     },
     status: {
+      controlReceipt: null,
       saveState: "saved",
       persistenceMode: "indexeddb",
       lastSavedAt: 100,

@@ -398,6 +398,16 @@ input[type="color"] {
 }
 
 /* ── Input ──────────────────────────────────────────────── */
+/* Multi-route public market-data proxy settings. */
+.st-proxy-mode-grid { grid-template-columns: repeat(4, 1fr); }
+.st-proxy-pool { margin-top: 16px; display: grid; gap: 12px; }
+.st-proxy-route { border: 1px solid var(--border-color, #334155); border-radius: 8px; padding: 12px; min-width: 0; }
+.st-proxy-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; }
+.st-proxy-field { display: grid; gap: 6px; font-size: 12px; min-width: 0; }
+.st-proxy-field .st-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.st-proxy-route .st-actions-row { flex-wrap: wrap; align-items: center; }
+.st-proxy-route .st-result-detail { overflow-wrap: anywhere; margin-top: 8px; }
+
 .st-input {
   width: 100%;
   padding: 10px 14px;
@@ -1684,6 +1694,10 @@ a.st-btn {
 
   .st-theme-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .st-proxy-mode-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .st-appearance-theme-grid {

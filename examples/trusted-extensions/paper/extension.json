@@ -1,0 +1,21 @@
+{
+  "schema": "candlescope.extension/1",
+  "id": "candlescope.paper",
+  "name": "Paper / 纸白",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "trust": "theme",
+  "description": "A warm, quiet workspace with green accents. No executable code.",
+  "theme": {
+    "base": "light",
+    "tokens": {
+      "bg-primary": "#faf8f2", "bg-secondary": "#f1eee5", "bg-tertiary": "#e7e3d7",
+      "bg-hover": "#e3e8dc", "border-color": "#d5d2c5", "text-primary": "#293831",
+      "text-secondary": "#526459", "text-muted": "#768477", "accent-blue": "#34775c",
+      "accent-purple": "#87694e", "accent-cyan": "#508482", "candle-up": "#25866a",
+      "candle-down": "#c05c50", "radius-sm": "6px", "radius-md": "12px",
+      "font-sans": "Georgia, 'Noto Sans', sans-serif", "font-mono": "'JetBrains Mono', monospace",
+      "control-height": "34px", "panel-gap": "10px", "panel-shadow": "0 4px 16px #d5d2c5"
+    }
+  }
+}

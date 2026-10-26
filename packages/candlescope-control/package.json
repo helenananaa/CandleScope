@@ -1,0 +1,23 @@
+{
+  "name": "@candlescope/control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP and CLI adapters for a running CandleScope desktop instance",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test *.test.mjs",
+    "mcp": "node cli.mjs mcp"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "playwright-core": "1.63.0",
+    "ws": "8.22.0"
+  }
+}

@@ -4,14 +4,14 @@ import vm from "node:vm";
 import test from "node:test";
 
 const source = await readFile(new URL("./preload.cjs", import.meta.url), "utf8");
-function load(argv, endpoint) {
+function load(argv, endpoint, extraIpc = {}) {
   let bridge;
   vm.runInNewContext(source, {
     process: { argv, env: { CANDLESCOPE_DESKTOP_BACKEND_PORT: "18080" } },
     require: () => ({ contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } }, ipcRenderer: { sendSync(channel) {
       assert.equal(channel, "candlescope:desktop:backend-endpoint");
       return endpoint;
-    } } }),
+    }, ...extraIpc } }),
   });
   return bridge;
 }
@@ -27,4 +27,11 @@ test("missing, rejected or invalid host endpoint cannot connect to another servi
     ...[0, 65536, NaN, 1.5, "18080"].map(port => ({ port }))]) {
     assert.throws(() => load(["--candlescope-backend-port=18080"], endpoint), /not configured/);
   }
+});
+
+test("extension diagnostics uses the readonly native IPC channel", async () => {
+  const calls = [];
+  const bridge = load(["--candlescope-backend-port=29123"], { port: 29123 }, { invoke: async (channel) => { calls.push(channel); return { active: [] }; } });
+  assert.deepEqual(await bridge.getExtensionDiagnostics(), { active: [] });
+  assert.deepEqual(calls, ["candlescope:desktop:extension-diagnostics"]);
 });

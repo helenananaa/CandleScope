@@ -18,6 +18,7 @@ if (!backendVersion || packageVersion !== backendVersion) {
   throw new Error(`Desktop package version ${packageVersion} must match backend APP_VERSION ${backendVersion}`);
 }
 run("scripts/prepare-desktop-runtime.mjs");
+run("scripts/prepare-control-adapter.mjs");
 run("node_modules/vite/bin/vite.js", ["build"], { ...process.env, VITE_DESKTOP_BUILD: "1" });
 // npm installations with lifecycle scripts disabled need builder's verified download.
 const localElectron = path.join(frontend, "node_modules", "electron", "dist");

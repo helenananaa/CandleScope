@@ -47,4 +47,16 @@ assert.match(appShell, /PluginPlatformSurfaces/);
 assert.match(appShell, /PluginPlatformStatus/);
 assert.match(appShell, /PluginUiErrorBoundary/);
 
+// Executable host modules have one separate gateway; ordinary v2 views remain opaque.
+const extensionRoot = path.join(root, "src", "features", "extensions");
+for (const entry of fs.readdirSync(extensionRoot, { withFileTypes: true })) {
+  if (!entry.isFile() || !/\.(ts|tsx)$/.test(entry.name) || entry.name === "runtime.ts") continue;
+  assert.doesNotMatch(fs.readFileSync(path.join(extensionRoot, entry.name), "utf8"), /\bimport\s*\(/,
+    "Only the trusted extension runtime may load executable extension modules");
+}
+const extensionRuntime = fs.readFileSync(path.join(extensionRoot, "runtime.ts"), "utf8");
+assert.match(extensionRuntime, /extensionManagementRequest\(`\/plan\?afterRevision=/);
+assert.match(extensionRuntime, /extensionSafeMode/);
+assert.match(extensionRuntime, /owned\.dispose/);
+
 console.log(`Plugin Platform architecture check passed (${files.length} host files, one opaque-origin sandbox gateway).`);

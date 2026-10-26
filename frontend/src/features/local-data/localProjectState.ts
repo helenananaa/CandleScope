@@ -1,6 +1,8 @@
 import { t } from "../../i18n/index.js";
 import { exportDrawingDocument, importSavedDrawings } from "../drawings/core/drawingCodec.js";
 import { drawingDocumentRepository } from "../drawings/persistence/drawingDocumentRepository.js";
+import { drawingPersistenceCoordinator } from "../drawings/persistence/drawingPersistenceCoordinator.js";
+import { drawingDocumentSessionRegistry } from "../drawings/core/drawingDocumentStore.js";
 import { loadActiveIndicators, saveActiveIndicators } from "../indicators/activeIndicatorStore.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { normalizeSettings, type ChartSettings } from "../settings/chartAppearanceSettings.js";
@@ -23,11 +25,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+async function flushPendingDrawings(scopeKey: string): Promise<void> {
+  const store = drawingDocumentSessionRegistry.getStore(scopeKey);
+  if (store.dirty && !drawingPersistenceCoordinator.schedule(store)) throw new Error(t("local.err.drawUnread"));
+  if (drawingPersistenceCoordinator.snapshot(scopeKey) === null) return;
+  if (!(await drawingPersistenceCoordinator.flush(scopeKey)).ok) throw new Error(t("local.err.drawUnread"));
+}
+
 export async function captureLocalProjectState(
   manifest: LocalDatasetManifest,
   settings: ChartSettings,
   events: readonly LocalAnalysisEvent[],
 ): Promise<Record<string, unknown>> {
+  await flushPendingDrawings(drawingScope(manifest));
   const loaded = await drawingDocumentRepository.load(drawingScope(manifest));
   if (loaded.status === "invalid" || loaded.status === "unavailable") {
     throw new Error(t("local.err.drawUnread"));
@@ -74,6 +84,10 @@ export async function restoreLocalProjectState(
   );
   const document = importSavedDrawings(drawingScope(manifest), state.drawings);
   if (document === null) throw new Error(t("local.err.projectDraw"));
+  await flushPendingDrawings(document.scopeKey);
   await drawingDocumentRepository.putDocument(document);
+  const store = drawingDocumentSessionRegistry.getStore(document.scopeKey);
+  if (!store.loadDocument(document).ok) throw new Error(t("local.err.projectDraw"));
+  drawingDocumentSessionRegistry.markLoaded(document.scopeKey, store);
   return state.settings === undefined ? null : normalizeSettings(state.settings);
 }

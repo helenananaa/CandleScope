@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { empty, object, text } from "../app-control/commandSchema.js";
+import { publishControlFile, readControlFile } from "../app-control/controlFiles.js";
 
 import { t } from "../../i18n/index.js";
 import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
@@ -49,6 +53,7 @@ export function ResearchDatasetManagement({
   onChanged,
   onRevisionActivated,
   onSettingsImported,
+  onProjectRestored,
   onError,
 }: {
   manifest: LocalDatasetManifest | null;
@@ -57,6 +62,7 @@ export function ResearchDatasetManagement({
   onChanged(preferredId?: string): Promise<void>;
   onRevisionActivated?(manifest: LocalDatasetManifest): void;
   onSettingsImported(settings: ChartSettings): void;
+  onProjectRestored?(manifest: LocalDatasetManifest): void;
   onError(message: string): void;
 }) {
   const [revisions, setRevisions] = useState<LocalDatasetRevision[]>([]);
@@ -102,6 +108,19 @@ export function ResearchDatasetManagement({
     }
   }, [onError]);
 
+  const controlId = useId();
+  const restoreProject = async (file: File) => {
+    const imported = await importLocalProject(file);
+    const importedSettings = await restoreLocalProjectState(imported.dataset, imported.client_state);
+    if (importedSettings !== null) onSettingsImported(importedSettings);
+    await onChanged(imported.dataset_id);
+    onProjectRestored?.(imported.dataset);
+  };
+  useControlCommands(() => ({ id: `dataset-management:${controlId}`, title: "Dataset metadata and complete project state", context: () => ({ datasetId: manifest?.dataset_id, epoch: manifest?.data_epoch, busy }), snapshot: () => ({ manifest, revisions, details, comparison, trash, archived, draftName, busy }), commands: [
+    command("refresh", "Reload quality, revisions, archived datasets and trash.", empty, reloadMetadata),
+    command("exportProject", "Capture the current settings, drawings and analysis events using the UI project capture routine, then export.", empty, async () => { if (!manifest) throw new Error("DATASET_UNAVAILABLE"); let file: unknown; await run("exporting", async () => { const state = await captureLocalProjectState(manifest, settings, events); await exportLocalProject(manifest, state, async (blob, name) => { file = await publishControlFile(blob, name); }); }); if (!file) throw new Error("EXPORT_UNAVAILABLE"); return file; }, { available: () => !!manifest && busy === null }),
+    command("importProject", "Import and restore settings, drawings and events through the same project restoration workflow as the UI.", object({ fileRef: text(96) }), ({ fileRef }) => run("importing project", async () => restoreProject(await readControlFile(fileRef))), { available: () => busy === null }),
+  ] }));
   return (
     <section className="local-dataset-management" data-testid="research-dataset-management">
       <header>
@@ -167,13 +186,7 @@ export function ResearchDatasetManagement({
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
-            void run("importing project", async () => {
-              const imported = await importLocalProject(file);
-              await onChanged(imported.dataset_id);
-              const importedSettings = await restoreLocalProjectState(imported.dataset, imported.client_state);
-              if (importedSettings !== null) onSettingsImported(importedSettings);
-              await onChanged(imported.dataset_id);
-            }).finally(() => {
+            void run("importing project", () => restoreProject(file)).finally(() => {
               if (packageInputRef.current !== null) packageInputRef.current.value = "";
             });
           }}

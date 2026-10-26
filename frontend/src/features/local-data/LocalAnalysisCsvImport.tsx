@@ -1,5 +1,9 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { useState } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { choice, empty, nullable, object, text } from "../app-control/commandSchema.js";
+import { readControlFile } from "../app-control/controlFiles.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { resolveLocalEventTimes } from "./localDataApi.js";
@@ -149,6 +153,12 @@ export default function LocalAnalysisCsvImport({
     }
   };
 
+  useControlCommands(() => ({ id: "analysis-csv", title: "Analysis event CSV import", context: () => ({ datasetId: manifest.dataset_id, dataEpoch: manifest.data_epoch, fileHash: loaded?.hash, mapping, timestampUnit, resolutionMode, defaultKind, busy }),
+    snapshot: () => ({ file: loaded ? { name: loaded.fileName, hash: loaded.hash, headers: loaded.document.headers, rows: loaded.document.rows.length } : null, mapping, timestampUnit, resolutionMode, defaultKind, busy, report, storageError }), commands: [
+      command("load", "Load a staged CSV using the existing size, encoding and parser checks.", object({ fileRef: text(96) }), async ({ fileRef }) => loadFile(await readControlFile(fileRef)), { available: () => !busy }),
+      command("mapping", "Edit known event column mapping and alignment options.", object({ mapping: object({ time: nullable(text(128)), price: nullable(text(128)), kind: nullable(text(128)), label: nullable(text(128)), note: nullable(text(128)), color: nullable(text(128)) }), timestampUnit: choice(["auto", "s", "ms", "iso"]), resolutionMode: choice(["exact", "containing"]), defaultKind: choice(LOCAL_ANALYSIS_EVENT_KINDS) }), (input) => { setMapping(input.mapping); setTimestampUnit(input.timestampUnit); setResolutionMode(input.resolutionMode); setDefaultKind(input.defaultKind); }, { available: () => !busy && !!loaded }),
+      command("import", "Resolve each event time against the named data epoch and import with the existing hash-based deduplication.", empty, () => importEvents(), { available: () => !busy && !!loaded && !storageError }),
+    ] }));
   return (
     <details className="local-analysis-csv-import">
       <summary>{t("local.csvImport")}</summary>

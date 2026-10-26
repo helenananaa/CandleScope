@@ -86,6 +86,11 @@ def _load_persisted_proxy_mode() -> str:
         return _env_str("INGESTION_PROXY_MODE", "system")
 
 
+def _load_proxy_pool_field(key: str, default):
+    from app.core.config import load_proxy_settings
+    return load_proxy_settings().get(key, default)
+
+
 def _load_persisted_http_proxy() -> str | None:
     """Load http_proxy from persisted settings (disk), fall back to env/OS."""
     try:
@@ -220,6 +225,11 @@ class IngestionConfig:
     #   system — read from environment variables (HTTP_PROXY / HTTPS_PROXY)
     #   custom — use the value in http_proxy
     proxy_mode: str = field(default_factory=_load_persisted_proxy_mode)
+    proxy_routes: list[dict] = field(default_factory=lambda: _load_proxy_pool_field("routes", []))
+    proxy_strategy: str = field(default_factory=lambda: _load_proxy_pool_field("strategy", "failover"))
+    # Internal bound identity, absent on the app-wide configuration.
+    proxy_route_id: str | None = None
+    proxy_egress_group: str | None = None
 
     # ── L2: Session ────────────────────────────────────────────
     # WebSocket open timeout (seconds)
@@ -351,6 +361,10 @@ class IngestionConfig:
         """Return a JSON-serializable snapshot of current configuration."""
         from dataclasses import asdict
         snapshot = asdict(self)
+        from app.core.proxy_pool import redact_proxy_url
+        snapshot["http_proxy"] = redact_proxy_url(snapshot.get("http_proxy")) or None
+        for route in snapshot.get("proxy_routes", []):
+            route["url"] = redact_proxy_url(route["url"])
         if snapshot.get("twelve_data_api_key"):
             snapshot["twelve_data_api_key"] = "***"
         return snapshot

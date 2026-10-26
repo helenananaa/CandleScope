@@ -22,11 +22,20 @@ import type {
     DrawingExportPrepareOptions,
     DrawingStylePatch,
     DrawingSurfaceDisposeBoundaryDescriptor,
+    DrawingInteractionRuntime,
 } from "./drawingInteractionController.js";
 import type { DrawingCommittedPaintTicket } from "./useDrawingPersistenceLifecycle.js";
 import type { SelectedDrawingMeta } from "./drawingSelectionController.js";
+import type { DrawingCommand } from "./core/drawingCommands.js";
 
 export interface DrawingEngineApi {
+    control?: {
+        isReady(): boolean;
+        prepare(): boolean;
+        readiness(): ReturnType<DrawingInteractionRuntime["getControlReadiness"]>;
+        applyCommands(commands: readonly DrawingCommand[], scopeKey: string, expectedRevision: number): { committed: boolean; surfaceSynchronized: boolean; revision: number };
+        history(direction: "undo" | "redo"): boolean;
+    };
     objects?: DrawingObjectApi;
     clearAll(): void;
     deselectAll(): void;
@@ -138,7 +147,7 @@ function DrawingEngineHost({
         ...(onToolChange === undefined ? {} : { onToolChange }),
     });
     const {
-        getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject,
+        getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject, applyObjectCommands, isControlReady, prepareControl, getControlReadiness, replayHistory,
         clearAll,
         deselectAll,
         completeSurfaceDispose,
@@ -183,6 +192,7 @@ function DrawingEngineHost({
             interactionMarkerRef.current.dataset.drawingEngine = "ready";
         }
         onApiChange?.({
+            ...(interactionSurfaceMode === "overlay" ? { control: { isReady: isControlReady, prepare: prepareControl, readiness: getControlReadiness, applyCommands: applyObjectCommands, history: replayHistory } } : {}),
             ...(interactionSurfaceMode === "overlay" ? { objects: { getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject } } : {}),
             clearAll,
             deselectAll,
@@ -198,7 +208,7 @@ function DrawingEngineHost({
             ),
         });
     }, [
-        interactionSurfaceMode, getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject,
+        interactionSurfaceMode, getObjectDocument, subscribeObjectDocument, selectObject, updateObject, deleteObject, reorderObject, applyObjectCommands, isControlReady, prepareControl, getControlReadiness, replayHistory,
         clearAll,
         deselectAll,
         completeSurfaceDispose,

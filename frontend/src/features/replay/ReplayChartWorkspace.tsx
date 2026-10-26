@@ -13,6 +13,9 @@ import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRunti
 import type { MainSeriesCrosshairValue } from "../../chart-adapter/chartAdapterTypes.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import { useChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { workspaceCommands } from "../app-control/workspaceCommands.js";
+import { replayIntegrityCommands } from "../app-control/replayIntegrityCommands.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
 import WorkspaceLayoutTree from "../chart-workspace/WorkspaceLayoutTree.js";
 import WorkspacePanel from "../chart-workspace/WorkspacePanel.js";
@@ -217,6 +220,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const [pageDrawingExports] = useState(() => new PageDrawingExportRegistry());
   const [repository] = useState(() => createReplayChartWorkspaceRepository(runId, initialSession));
   const workspace = useChartWorkspaceRuntime({ repository, workspaceBus: null });
+  useControlCommands(() => workspaceCommands(workspace));
   const preferences = useReplayWorkspacePreferences(runId);
   const [links] = useState(() => new ChartLinkCoordinator(workspace.view.document));
   const [intervalTransfers] = useState(() => new ReplayIntervalViewportTransfers());
@@ -278,6 +282,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
     document: workspace.view.document, windowId: workspace.view.window.id,
     workspaceId: workspace.view.activeWorkspaceId,
   }));
+  useControlCommands(() => replayIntegrityCommands(integrity));
   const drawings = useReplayWorkspaceDrawings(runId, workspace.view.activeWorkspaceId, workspace.view.document, integrity);
   const selectionPending = useRef(false);
   const [selectionRevision, setSelectionRevision] = useState(0);

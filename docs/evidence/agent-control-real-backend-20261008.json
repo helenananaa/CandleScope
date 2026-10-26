@@ -1,0 +1,203 @@
+{
+  "schema": "candlescope.agent-control.real-backend-acceptance/1",
+  "date": "2026-10-08",
+  "result": "pass",
+  "scope": "Production business services with deterministic local rows; isolated profile/databases; no live orders, trust grants or user-data cleanup.",
+  "bootstrap": "scripts.replay_smoke_fixture: seeds market archives, loopback network guard, offline metadata and disabled gap maintenance; business endpoints unmodified.",
+  "report_path": "output/control-real-backend/2026-10-08T00-33-01-312Z/report.json",
+  "report_sha256": "0882bcf44e61d441ae8ae780ff827bc0b450b4628794b063303b3bc9b55b0983",
+  "harness_sha256": "7dece2d088bc86fdb3d760fd1851405bf431d52174f49396bf8f0a4444447213",
+  "frontend_artifact_sha256": "8590d5fb69925ff61f7dba8a4053ed8d9f167b5ffe16ed4fa024e5acb086cd3e",
+  "native_registry_sha256": "50a28b6b77754b284dfdef65c346be1047552f85b5a59191f33329603f04f540",
+  "phases_passed": [
+    "real-backend-bootstrap",
+    "mcp-csv-real-import-byte-and-row-verification",
+    "mcp-imported-chart-real-indicator",
+    "drawing-scope-recovery-request",
+    "mcp-project-real-export-restore",
+    "mcp-real-native-engine-run-and-report",
+    "mcp-real-native-engine-cancellation",
+    "mcp-real-training-create-and-viewer",
+    "mcp-real-training-orders-end-and-report"
+  ],
+  "csv": {
+    "sha256": "2445015e5d3e2310e6116e9dca9085590150c5df07aa3d43e4b3dfe4664e94a8",
+    "all_rows_compared": 800
+  },
+  "project": {
+    "sourceDataset": "local-40e410b8f43d42199f2c3f74ba41e84e",
+    "restoredDataset": "local-c7545cadb8b74249969d1c1e137fd0a1",
+    "projectSha256": "652fb78050998222d828d57d9499a8341f2e39f67fc7e8c2f598ea78da11ccc5",
+    "rowsCompared": 800,
+    "settingsRestored": "light",
+    "indicatorsRestored": [
+      "agent-real-ema"
+    ],
+    "drawingsRestored": [
+      "mcp-project-line"
+    ]
+  },
+  "native": {
+    "runId": "native_451df58224274414be39021ffdbf3ab4",
+    "state": "COMPLETED",
+    "runtimeIdentity": {
+      "adapter": "pyne-native/1",
+      "engine": {
+        "code_sha256": "bdd5e6e98fbe899e16a4e464279a0d842847ae34d8dd3c1b97440478ea0717ab",
+        "package": "pyne-runtime",
+        "version": "0.4.1"
+      },
+      "historical_session": "fixed-history/1",
+      "plugin": {
+        "code_sha256": "5876f217dfba71739ea1f921a839ea9ad7de1eec28cadc3f8fd69a55b8c729c8",
+        "package": "candlescope-plugin-pyne",
+        "version": "0.3.0"
+      },
+      "protocol": "candlescope.native-strategy/1",
+      "transport": {
+        "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+        "package": "candlescope-plugin-sdk",
+        "version": "0.2.0"
+      }
+    },
+    "reportHash": "sha256:fea10204fe29b95d637d28f77ddb6566241d23d129b1fe44d1b24860ca864a68",
+    "trades": 10,
+    "orders": 20,
+    "bars": 800
+  },
+  "native_cancel": {
+    "runId": "native_94445a0caf9c4459b11d7ad6120cd1f7",
+    "state": "CANCELLED",
+    "runtimeIdentity": {
+      "adapter": "pyne-native/1",
+      "engine": {
+        "code_sha256": "bdd5e6e98fbe899e16a4e464279a0d842847ae34d8dd3c1b97440478ea0717ab",
+        "package": "pyne-runtime",
+        "version": "0.4.1"
+      },
+      "historical_session": "fixed-history/1",
+      "plugin": {
+        "code_sha256": "5876f217dfba71739ea1f921a839ea9ad7de1eec28cadc3f8fd69a55b8c729c8",
+        "package": "candlescope-plugin-pyne",
+        "version": "0.3.0"
+      },
+      "protocol": "candlescope.native-strategy/1",
+      "transport": {
+        "code_sha256": "57403e192245ed4325c13932bdf03797e5b15bf97b463219d0e0cab3c627aea6",
+        "package": "candlescope-plugin-sdk",
+        "version": "0.2.0"
+      }
+    },
+    "error": null
+  },
+  "training": {
+    "run_id": "8d5cb68fcc5845a2a0e532f67fbb5c50",
+    "ended": true,
+    "data_fidelity": "EXACT_BAR_COVERAGE",
+    "execution_fidelity": "BAR_CONSERVATIVE",
+    "account_data_mode": "APPROX_PROXY",
+    "order_count": 2,
+    "fill_count": 2,
+    "trade_count": 1,
+    "report_hash": "sha256:dc53dd93507aad33234c350c1215b62597f96cbc0be86399086de9e43727c89c",
+    "report_json_sha256": "30dea5ab28a9e0456b4cfa2af3a0c93483921fc259a39b9c4cc35368fb1d2cbe",
+    "report_matches_backend": true,
+    "modelled_account_matches_backend": true,
+    "ledger_reconciliation_delta": "0",
+    "account_audit_status": "PASS",
+    "account_audit_proof_hash": "sha256:545f47315f1046237ea4dbde7fd342b4643b86a7dca8021c2378ed1e84369a6e",
+    "account_audit_differences": [],
+    "authoritative_projection_verification": "NOT_APPLICABLE",
+    "optional_report_account_audit": null
+  },
+  "cleanup": {
+    "backend_exit_code": 0,
+    "credential_removed": true
+  },
+  "renderer_errors": [],
+  "http_failures": [],
+  "known_warnings": [
+    "Unpackaged Electron CSP warning",
+    "Production build chunk-size warning"
+  ],
+  "regression": {
+    "total_passed": 1600,
+    "by_suite": {
+      "drawing": 769,
+      "control": 17,
+      "research_local": 101,
+      "backtest": 183,
+      "replay": 425,
+      "desktop": 100,
+      "adapter": 5
+    },
+    "typecheck": "pass",
+    "changed_file_eslint": "pass",
+    "architecture": "pass; 0 migration allowlist entries",
+    "production_build": "pass",
+    "synthetic_desktop_phases": 20,
+    "synthetic_desktop_report": "output/control-desktop/2026-10-08T00-33-51-962Z/report.json"
+  },
+  "not_qualified": [
+    "Exchange access and live orders",
+    "Historical-exact/hedge training",
+    "Pending plugin-package upgrades in source",
+    "Packaged installation and client onboarding",
+    "Complete UI/feature-flag/gesture parity"
+  ],
+  "fixes": [
+    "Drawing readiness, bounded diagnostics and existing scope recovery",
+    "Flush pending drawings before project capture/restore; refresh active imported chart state",
+    "Acknowledge training submission before automatic navigation; inspect new page/domain postconditions"
+  ],
+  "validation_logs": [
+    {
+      "path": "output/control-real-drawing-tests.log",
+      "sha256": "4133243d20c4983dac611eebd1a8e5012c13778f92103ee62e71970404d16c2c"
+    },
+    {
+      "path": "output/control-real-registry-tests.log",
+      "sha256": "7a3b307efd0022d3cc913209bb3f32fd846cad37770a796e5047ad6070c6eacc"
+    },
+    {
+      "path": "output/control-real-research-tests.log",
+      "sha256": "f60aa71d0726a246ec1b8296be4370e72efb5e8b7f81bff73e9544c57a057982"
+    },
+    {
+      "path": "output/control-real-backtest-tests.log",
+      "sha256": "d56d118d3455b9f5cf306b816bf95c0c00fb82993309c12303b487dae0f789ca"
+    },
+    {
+      "path": "output/control-real-replay-tests.log",
+      "sha256": "58bde8c9341e83833a9cd12443435b5cb23d3723f0f71510ad5fa8f31369a0ab"
+    },
+    {
+      "path": "output/control-real-desktop-tests.log",
+      "sha256": "c4b53243f35864a4aad71e07209d415bac30d747e5de9ab48828f147d03fd13f"
+    },
+    {
+      "path": "output/control-real-adapter-tests.log",
+      "sha256": "5965ba2fcd7a7981e703f62a651ea1965a34293e6bca46f31f978c84de319f25"
+    },
+    {
+      "path": "output/control-real-typecheck.log",
+      "sha256": "8a3dd7ea1b0efcff7a24a8712ded053b55a77c2ae9a58f25265d81f412a7e625"
+    },
+    {
+      "path": "output/control-real-eslint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "output/control-real-architecture.log",
+      "sha256": "f89d1f9773c098100faf8bed14caa299af5f3bd65838dded1abdbe8847ad8fda"
+    },
+    {
+      "path": "output/control-real-build.log",
+      "sha256": "44c34104af62af29613a55e2152de5f0ba92c5e981ee7b458b8dd37a1fb3ea8f"
+    },
+    {
+      "path": "output/control-real-desktop-smoke.log",
+      "sha256": "0f0bfafa989b055c6f8575bd01d82386abe76b46476588e5c621ab13794f6fb2"
+    }
+  ]
+}

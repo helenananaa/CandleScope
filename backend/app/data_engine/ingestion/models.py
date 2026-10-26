@@ -335,6 +335,8 @@ class TransportRequest:
     # transport clears this before I/O so reusing a request cannot complete an
     # older reservation.
     quota_reservation: RateLimitReservation | None = None
+    # Immutable public routing context, chosen before quota admission.
+    proxy_route: Any | None = None
     # Scheduler-managed and bounded snapshot callers must never sleep while
     # holding their own worker slot.  They opt into an immediate typed defer
     # and return the work to their delayed queue instead.
