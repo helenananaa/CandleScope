@@ -100,6 +100,7 @@ if RUNTIME_MODE == "LIVE":
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
     from app.plugin_core_v2 import create_core_plugin_router
     from app.data_engine.storage import initialize_market_storage
+    from app.readonly_accounts.api import router as readonly_accounts_router
 else:
     from app.api.v1.local_data import router as local_data_router
 
@@ -158,6 +159,7 @@ else:
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(replay_router, prefix="/api/v1")
+    app.include_router(readonly_accounts_router, prefix="/api/v1")
     app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
     if RESEARCH_DATA_LIBRARY_ENABLED:
@@ -671,6 +673,8 @@ async def startup_event() -> None:
         )
         app.state.data_preparation_service = preparation
         await preparation.start()
+        from app.readonly_accounts.service import start_account_service
+        await start_account_service(app, DATA_DIR / "readonly-accounts")
         from app.data_preparation.replay_context import ReplayHistoryContext
         from app.data_preparation.replay_origin import ReplayOriginResolver
         data_manager = getattr(app.state, "data_manager", None)
@@ -721,6 +725,9 @@ async def startup_event() -> None:
             print("[startup] Plugin Platform v2 degraded; core market runtime continues")
     except BaseException:
         alert_facade = getattr(app.state, "alert_facade", None)
+        readonly_accounts = getattr(app.state, "readonly_account_service", None)
+        if readonly_accounts is not None:
+            await readonly_accounts.close()
         preparation = getattr(app.state, "data_preparation_service", None)
         if preparation is not None:
             await preparation.shutdown()
@@ -811,6 +818,9 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    readonly_accounts = getattr(app.state, "readonly_account_service", None)
+    if readonly_accounts is not None:
+        await readonly_accounts.close()
     preparation = getattr(app.state, "data_preparation_service", None)
     if preparation is not None:
         try:

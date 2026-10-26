@@ -1,8 +1,10 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時間加上前向視窗包含未來行情。請選擇更早的起點或縮短前向視窗；只能使用已收盤的歷史 K 線。",
   "plugin.runtimeInstalled": "指標執行環境已安裝並通過驗證。請退出並重新開啟 CandleScope，啟用指標及支援的原生策略。",
   "native.executionErrorHelp": "執行未完成。請檢查程式碼和輸入參數，下方可查看具體原因。",

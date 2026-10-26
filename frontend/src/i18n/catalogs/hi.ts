@@ -1,8 +1,10 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  ...readonlyAccountEnglish,
   "replay.err.futureInput": "शुरुआत के समय और आगे की अवधि में भविष्य की कैंडल शामिल हैं। पहले का समय चुनें या अवधि कम करें; केवल बंद ऐतिहासिक कैंडल उपलब्ध हैं.",
   "replay.hub.catalogSyncing": "आधिकारिक ऐतिहासिक बाज़ार खोजे जा रहे हैं। तैयार होने पर यह अपने आप चालू हो जाएगा।",
   "replay.watchlist.preparing": "ऐतिहासिक डेटा डाउनलोड और सत्यापित किया जा रहा है। पहली बार कुछ मिनट लग सकते हैं।",

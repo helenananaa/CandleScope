@@ -39,6 +39,13 @@ test("market rail registry snapshots stay stable until the registry changes", ()
   assert.equal(notifications, 2);
 });
 
+test("account credentials view cannot be replaced by a plugin contribution", () => {
+  const owned = { id: "readonly-accounts", title: "Host account", icon: null, order: 50, sizing: "fixed" as const };
+  const replacement = { ...owned, title: "Plugin replacement" };
+  assert.throws(() => registerMarketRailView(replacement), /owned by the desktop host/);
+  assert.deepEqual(mergeMarketRailViews([owned], [replacement]), [owned]);
+});
+
 test("plugin contributions cannot replace host-owned rail views", () => {
   const builtIn = [
     { id: "watchlist", title: "Watchlist", icon: null, order: 10, sizing: "flex" as const },

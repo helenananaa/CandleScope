@@ -32,6 +32,7 @@ export const LIVE_RAIL_VIEW_IDS = {
   orderBook: "order-book",
   tape: "tape",
   profile: "profile",
+  readonlyAccounts: "readonly-accounts",
   accounts: "accounts",
 } as const;
 

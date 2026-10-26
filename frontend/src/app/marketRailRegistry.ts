@@ -26,6 +26,7 @@ function emit(): void {
 }
 
 export function registerMarketRailView(view: MarketRailViewDescriptor): () => void {
+  if (view.id === "readonly-accounts") throw new Error("The account view is owned by the desktop host");
   contributedViews.set(view.id, view);
   rebuildSnapshot();
   emit();
@@ -58,7 +59,7 @@ export function mergeMarketRailViews(
   // Contributions may override built-ins with the same id (plugin replace),
   // except host-owned views whose capabilities a plugin must not inherit.
   for (const view of contributed) {
-    if (byId.get(view.id)?.hostOwned) continue;
+    if (view.id === "readonly-accounts" || byId.get(view.id)?.hostOwned) continue;
     byId.set(view.id, view);
   }
   return Array.from(byId.values())

@@ -1,8 +1,10 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  ...readonlyAccountEnglish,
   "replay.err.futureInput": "Początek i okno do przodu obejmują przyszłe świece. Wybierz wcześniejszy początek lub skróć okno; dostępne są tylko zamknięte świece historyczne.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",

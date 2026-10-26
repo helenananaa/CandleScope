@@ -1,3 +1,4 @@
+import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
@@ -7,6 +8,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...readonlyAccountEnglish,
   "replay.err.futureInput": "El inicio y la ventana futura incluyen velas futuras. Elija un inicio anterior o acorte la ventana; solo hay velas históricas cerradas.",
   "plugin.runtimeInstalled": "Motor de scripts instalado y verificado. Cierra y vuelve a abrir CandleScope para activar los indicadores y las estrategias nativas compatibles.",
   "native.executionErrorHelp": "No se pudo completar la ejecución. Revisa el script y los parámetros; los detalles técnicos están abajo.",
