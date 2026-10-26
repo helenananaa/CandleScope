@@ -172,7 +172,7 @@ function RightMarketRail({
   const renderView = useCallback((viewId: string, height: number) => {
     if (viewId === LIVE_RAIL_VIEW_IDS.readonlyAccounts) {
       return <Suspense fallback={<p>{t("account.loading", {}, locale)}</p>}>
-        <ReadOnlyAccountDock height={height} onRequestClose={() => closeView(viewId)} />
+        <ReadOnlyAccountDock trading={trading} height={height} onRequestClose={() => closeView(viewId)} />
       </Suspense>;
     }
     if (viewId === LIVE_RAIL_VIEW_IDS.watchlist) {

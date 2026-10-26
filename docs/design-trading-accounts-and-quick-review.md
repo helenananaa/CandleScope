@@ -231,3 +231,39 @@ MFE/MAE 首版优先展示持仓区间内的最大有利/不利价格变化；�
 - 复盘不启动训练撮合引擎，也不阻止后台只读账户继续同步。
 - 模拟与真实账本、订单、统计隔离；账户切换不跨账户发送草稿；未知执行结果不重复下单。
 - 记录有界窗口内首次打开与单步推进的实测延迟；结果证明的是轻量查看性能，不等于完整训练或实盘执行的资格。
+
+## 2026-10-26 — verified OKX trade review
+
+The read-only account now has a **Trade review** tab. It projects only complete,
+reconciled USDT linear SWAP lifecycles from the existing account facts. Each
+projection carries the account UID, position identity, margin mode, original
+fill/trade/order IDs, contract quantities and funding bills. It does not insert
+exchange fills into the manual/practice ledger or expose trading operations.
+
+The first fill's import order is not an identity: trade IDs use the bound account,
+product, instrument, side, margin mode, position ID and lifecycle creation time.
+Verified financial versions are immutable and content-addressed. Repeated reads
+reuse the same version; later verified changes update the current pointer while
+an open journal/replay continues to request its selected version. Reverting to a
+previously verified version does not create a duplicate trade or move its notes.
+
+The journal implementation is shared through a journal-only service and frontend
+transport. Exchange reviews, notes and snapshot images stay behind the desktop
+session/Origin guard; writes also require CSRF and an explicit user action. Image
+requests carry authority in headers, never query strings. The old fill journal
+remains in its original table and associated note revisions are exposed with
+actual save times; this feature does not migrate or delete the source history.
+
+Statistics describe the retained verified sample in USDT, with gross realized
+P&L, positive-as-cost fill fees, signed funding and net P&L. Coverage, excluded
+cycles, unmatched fills and cached sample counts are visible. Cached historical
+versions remain reviewable after sync stops or a bounded source read fails, but
+are explicitly not represented as currently re-verified. These totals are not
+account-level returns or independent proof of opening cash. New review notes are
+post-trade; they do not manufacture pre-trade risk or R statistics.
+
+Quick replay clips fills, their exchange-reported realized P&L, funding settlements
+and journal content at the same strict `event time < cursor` boundary. Open-position
+P&L and excursions are candle estimates. Historical drawings, historical indicator
+configuration, inverse contracts and incomplete opening histories remain outside
+this version. Pyne remains retired.

@@ -58,6 +58,7 @@ export default function QuickReplayOverlay({
 }) {
   useLocale();
   const { trade } = request;
+  const api = request.api ?? tradingApi;
   const intervalSec = parseIntervalSeconds(request.interval) ?? 900;
   const window_ = useMemo(() => replayWindow(trade, intervalSec, Date.now()), [intervalSec, trade]);
   const [chartBars, setChartBars] = useState<ReplayBar[]>([]);
@@ -90,9 +91,9 @@ export default function QuickReplayOverlay({
       })
       .catch((cause) => { if (!controller.signal.aborted) setError(tradingErrorMessage(cause)); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    tradingApi.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
+    api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
     return () => controller.abort();
-  }, [instrument, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
+  }, [api, instrument, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
   useEffect(() => {
     if (stepSec >= intervalSec) {
@@ -290,7 +291,7 @@ export default function QuickReplayOverlay({
     const text = captureComment.trim();
     if (!text) return;
     try {
-      await tradingApi.createEntry(request.accountId, {
+      await api.createEntry(request.accountId, {
         ...instrument,
         kind: "quick",
         body: text,
@@ -299,7 +300,7 @@ export default function QuickReplayOverlay({
         marketTimeMs: cursor * 1000 - 1,
       });
       setCaptureComment("");
-      setDetail(await tradingApi.trade(request.accountId, trade.id));
+      setDetail(await api.trade(request.accountId, trade.id));
     } catch (cause) {
       setError(tradingErrorMessage(cause));
     }
@@ -350,6 +351,7 @@ export default function QuickReplayOverlay({
         </div>
         <aside className="quick-replay-side" aria-label={t("trading.replay.position")}>
           <h3>{t("trading.replay.position")}</h3>
+          {trade.readonlySource && <p className="trading-help">{t("account.review.source", { instrument: trade.readonlySource.instrument, currency: trade.readonlySource.currency })}</p>}
           <dl className="trading-kv">
             <dt>{t("trading.replay.size")}</dt>
             <dd>{position.qty > 0
@@ -361,8 +363,9 @@ export default function QuickReplayOverlay({
             <dd data-tone={pnlTone(position.unrealized)}>
               {formatSigned(position.unrealized)}{toR(position.unrealized) ? ` · ${toR(position.unrealized)}R` : ""}
             </dd>
+            {trade.readonlySource && <><dt>{t("account.review.funding")}</dt><dd>{formatSigned(position.funding)} USDT</dd></>}
             <dt>{t("trading.replay.realized")}</dt>
-            <dd data-tone={pnlTone(position.realized - position.fees)}>{formatSigned(position.realized - position.fees)}</dd>
+            <dd data-tone={pnlTone(position.realized - position.fees + position.funding)}>{formatSigned(position.realized - position.fees + position.funding)}</dd>
             <dt>{t("trading.replay.mfeMae")}</dt>
             <dd>{formatPrice(position.mfe)} / {formatPrice(position.mae)}</dd>
           </dl>

@@ -12,6 +12,7 @@ import {
   type TemplateSection,
 } from "./journalTemplates.js";
 import { JournalDraftError, JournalEditor } from "./journalEditor.js";
+import type { JournalApi } from "./journalApi.js";
 import { tradingApi } from "./tradingApi.js";
 import {
   formatAmount,
@@ -49,13 +50,15 @@ function stageOf(trade: TradeDetail | null): JournalStage {
 
 export default function TradeJournalDrawer({
   account,
+  api = tradingApi,
   target,
   context,
   onClose,
   onChanged,
   onOpenQuickReplay,
 }: {
-  account: TradingAccount;
+  account: Pick<TradingAccount, "id">;
+  api?: JournalApi;
   target: JournalTarget;
   context: TradingChartContext;
   onClose(): void;
@@ -76,13 +79,13 @@ export default function TradeJournalDrawer({
       : target.kind === "entry" ? `entry:${target.entryId}`
         : `plan:${context.exchange}:${context.marketType}:${context.symbol}`}`,
     storage: () => window.localStorage,
-    create: (fields, clientEntryId) => tradingApi.createEntry(account.id, {
+    create: (fields, clientEntryId) => api.createEntry(account.id, {
       ...sourceRef.current,
       kind: "note", templateId: TRADE_REVIEW_TEMPLATE.id, templateVersion: TRADE_REVIEW_TEMPLATE.version,
       fields, clientEntryId,
     }),
-    save: (id, fields, expectedRevision) => tradingApi.saveEntry(id, { fields, expectedRevision }),
-    quick: (body, clientEntryId) => tradingApi.createEntry(account.id, {
+    save: (id, fields, expectedRevision) => api.saveEntry(id, { fields, expectedRevision }),
+    quick: (body, clientEntryId) => api.createEntry(account.id, {
       ...sourceRef.current,
       kind: "quick", body, clientEntryId,
     }),
@@ -103,14 +106,14 @@ export default function TradeJournalDrawer({
   const template = templateFor(note?.templateId);
 
   const loadTrade = useCallback(async (tradeId: string) => {
-    const detail = await tradingApi.trade(account.id, tradeId);
+    const detail = await api.trade(account.id, tradeId);
     sourceRef.current = { exchange: detail.exchange, marketType: detail.marketType, symbol: detail.symbol, tradeId: detail.id };
     setTrade(detail);
     if (detail.status === "closed") {
-      tradingApi.excursion(account.id, tradeId).then(setExcursion).catch(() => setExcursion(null));
+      api.excursion(account.id, tradeId).then(setExcursion).catch(() => setExcursion(null));
     }
     return detail;
-  }, [account.id]);
+  }, [account.id, api]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +124,7 @@ export default function TradeJournalDrawer({
           const detail = await loadTrade(target.tradeId);
           if (!cancelled) editor.initialize(detail.entries.find((entry) => entry.id === detail.noteId) ?? null);
         } else if (target.kind === "entry") {
-          const entry = await tradingApi.entry(target.entryId);
+          const entry = await api.entry(target.entryId);
           if (cancelled) return;
           sourceRef.current = { exchange: entry.exchange, marketType: entry.marketType, symbol: entry.symbol, tradeId: entry.tradeId };
           editor.initialize(entry);
@@ -149,7 +152,7 @@ export default function TradeJournalDrawer({
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       editor.dispose();
     };
-  }, [context.interval, editor, loadTrade, target]);
+  }, [api, context.interval, editor, loadTrade, target]);
 
   const flush = async () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -194,7 +197,7 @@ export default function TradeJournalDrawer({
         capturedAtMs: Date.now(),
         ...(context.describeChart ? context.describeChart() : {}),
       };
-      const updated = await tradingApi.addSnapshot(entry.id, { ...(image ? { image } : {}), state });
+      const updated = await api.addSnapshot(entry.id, { ...(image ? { image } : {}), state });
       editor.adopt(updated);
     } catch (cause) {
       setError(tradingErrorMessage(cause));
@@ -205,7 +208,7 @@ export default function TradeJournalDrawer({
     if (!trade) return;
     try {
       if (!await flush()) return;
-      const linked = await tradingApi.linkEntry(entryId, trade.id);
+      const linked = await api.linkEntry(entryId, trade.id);
       editor.adopt(linked);
       await loadTrade(trade.id);
       onChanged();
@@ -319,6 +322,13 @@ export default function TradeJournalDrawer({
             </button>
           </div>
         )}
+        {trade?.readonlySource && <details className="trading-help">
+          <summary>{t("account.review.source", { instrument: trade.readonlySource.instrument, currency: trade.readonlySource.currency })}</summary>
+          <p>{t("account.review.identity", { uid: trade.readonlySource.accountUid, margin: trade.readonlySource.marginMode, position: trade.readonlySource.positionId })}</p>
+          <p>{t("account.review.verified", { time: formatDateTime(trade.readonlySource.verifiedAtMs) })}</p>
+          {trade.readonlySource.fills.map((fill) => <p key={fill.fillId}>{t("account.review.fillIdentity", { fill: fill.fillId, trade: fill.tradeId, order: fill.orderId ?? "—", contracts: fill.contracts })}</p>)}
+          <p>{t("account.review.noR")}</p>
+        </details>}
         {plan && (
           <p className="trading-locked" data-edited={riskEdited}>
             {t("trading.journal.locked", {
@@ -383,7 +393,7 @@ export default function TradeJournalDrawer({
             {(note?.snapshots ?? []).map((snapshot) => (
               <figure key={snapshot.id}>
                 {snapshot.hasImage
-                  ? <img src={tradingApi.snapshotImageUrl(snapshot.id)} alt={t("trading.journal.snapshotAlt", { time: formatDateTime(snapshot.createdAtMs) })} />
+                  ? <JournalImage api={api} id={snapshot.id} time={snapshot.createdAtMs} />
                   : <span className="trading-help">{t("trading.journal.snapshotNoImage")}</span>}
                 <figcaption>{formatDateTime(snapshot.createdAtMs)} · {String(snapshot.state.symbol ?? "")} {String(snapshot.state.interval ?? "")}</figcaption>
               </figure>
@@ -403,4 +413,16 @@ export default function TradeJournalDrawer({
     </aside>,
     document.body,
   );
+}
+
+
+function JournalImage({ api, id, time }: { api: JournalApi; id: string; time: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve(api.snapshotImageUrl(id)).then((url) => { if (active) setSrc(url); })
+      .catch(() => { if (active) setSrc(null); });
+    return () => { active = false; };
+  }, [api, id]);
+  return src ? <img src={src} alt={t("trading.journal.snapshotAlt", { time: formatDateTime(time) })} /> : <span>—</span>;
 }

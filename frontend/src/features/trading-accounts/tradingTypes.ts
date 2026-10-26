@@ -1,3 +1,4 @@
+import type { JournalApi } from "./journalApi.js";
 /** Wire contracts for `/api/v1/trading`. Decimals stay strings end to end. */
 
 export type TradingAccountKind = "practice" | "manual";
@@ -57,7 +58,24 @@ export interface TradeMetrics {
   entrySlippage: string | null;
 }
 
+export interface ReadonlyTradeSource {
+  venue: "okx";
+  accountUid: string;
+  product: "SWAP";
+  instrument: string;
+  positionId: string;
+  marginMode: string;
+  currency: "USDT";
+  version: string;
+  verifiedAtMs: number;
+  current?: boolean;
+  funding: string;
+  fills: { fillId: string; tradeId: string; orderId: string | null; contracts: string; contractValue: string; realizedPnl: string; tsMs: number }[];
+  fundingEvents: { billId: string; amount: string; eventTimeMs: number }[];
+}
+
 export interface Trade {
+  readonlySource?: ReadonlyTradeSource;
   id: string;
   accountId: string;
   exchange: string;
@@ -227,6 +245,7 @@ export interface TradingChartContext {
 }
 
 export interface QuickReplayRequest {
+  api?: Pick<JournalApi, "trade" | "createEntry">;
   accountId: string;
   trade: Trade;
   interval: string;
