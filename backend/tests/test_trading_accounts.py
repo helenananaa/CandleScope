@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.trading_accounts import router as trading_router
-from app.trading_accounts.journal import locked_plan, phase_at, plan_direction, should_coalesce
+from app.trading_accounts.journal import locked_plan, phase_at, plan_direction
 from app.trading_accounts.models import TradingAccountError
 from app.trading_accounts.practice import (
     Cursor,
@@ -144,7 +144,7 @@ def test_contiguous_bars_stops_at_unexplained_gap():
 
 # ── journal rules ──────────────────────────────────────────────
 
-def test_plan_locks_at_first_fill_and_phases_do_not_coalesce():
+def test_plan_locks_at_first_fill_and_phases_follow_trade_times():
     trade = build_trades("acc", [fill("f1", "buy", "1", "100", 1_000), fill("f2", "sell", "1", "110", 5_000)])[0]
     revisions = [
         {"saved_at_ms": 500, "fields": {"stopPrice": "95", "riskUsdt": "5"}},
@@ -153,11 +153,7 @@ def test_plan_locks_at_first_fill_and_phases_do_not_coalesce():
     plan = locked_plan(revisions, trade)
     assert plan is not None and plan["stopPrice"] == "95" and plan["riskUsdt"] == "5"
     assert phase_at(500, trade) == "pre" and phase_at(2_000, trade) == "open" and phase_at(6_000, trade) == "post"
-    assert not should_coalesce({"saved_at_ms": 900}, 1_100, trade)
-    assert should_coalesce({"saved_at_ms": 1_100}, 1_200, trade)
-    # An unlinked note may be linked later, so any fill since its last save is a boundary.
-    assert not should_coalesce({"saved_at_ms": 900}, 1_100, None, [1_000])
-    assert should_coalesce({"saved_at_ms": 900}, 1_100, None, [500, 1_100])
+
 
 
 # ── service ────────────────────────────────────────────────────
@@ -201,6 +197,80 @@ def bar(time_s: int, o: str, h: str, l: str, c: str) -> dict[str, Any]:
 
 
 INSTRUMENT = {"exchange": "binance", "marketType": "futures", "symbol": "BTCUSDT"}
+
+
+def test_journal_changed_saves_are_immutable_even_inside_two_minutes(service):
+    account = service.create_account({"kind": "manual", "name": "History"})
+    first_time = service.test_clock.now
+    note = service.create_entry(account["id"], {**INSTRUMENT, "fields": {"entryBasis": "original"}})
+    service.test_clock.now += 1000
+    saved = service.save_entry(note["id"], {"fields": {"entryBasis": "changed"}, "expectedRevision": 1})
+    assert saved["revisionCount"] == 2
+    revisions = service.entry_revisions(note["id"])["revisions"]
+    assert [(r["savedAtMs"], r["fields"]["entryBasis"]) for r in revisions] == [
+        (first_time, "original"), (first_time + 1000, "changed"),
+    ]
+    assert all(r["historyComplete"] for r in revisions)
+    assert service.save_entry(note["id"], {"fields": {"entryBasis": "changed"}, "expectedRevision": 1})["revisionCount"] == 2
+    with pytest.raises(TradingAccountError) as failure:
+        service.save_entry(note["id"], {"fields": {"entryBasis": "stale"}, "expectedRevision": 1})
+    assert failure.value.status == 409
+    assert service.entry_detail(note["id"])["fields"]["entryBasis"] == "changed"
+
+
+def test_journal_creation_retry_is_idempotent_and_account_scoped(service):
+    account = service.create_account({"kind": "manual", "name": "First"})
+    other = service.create_account({"kind": "manual", "name": "Other"})
+    payload = {**INSTRUMENT, "clientEntryId": "je_01234567890123456789", "fields": {"entryBasis": "one"}}
+    created = service.create_entry(account["id"], payload)
+    assert service.create_entry(account["id"], payload)["id"] == created["id"]
+    assert len(service.store.entries(account["id"])) == 1
+    with pytest.raises(TradingAccountError):
+        service.create_entry(other["id"], payload)
+    service.delete_entry(created["id"])
+    with pytest.raises(TradingAccountError):
+        service.create_entry(account["id"], payload)
+
+
+def test_journal_revision_conflict_is_atomic(service):
+    from concurrent.futures import ThreadPoolExecutor
+    account = service.create_account({"kind": "manual", "name": "Concurrent"})
+    note = service.create_entry(account["id"], {**INSTRUMENT, "fields": {"entryBasis": "base"}})
+    def save(value):
+        try:
+            return service.save_entry(note["id"], {"fields": {"entryBasis": value}, "expectedRevision": 1})
+        except TradingAccountError as exc:
+            return exc.status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(save, ["a", "b"]))
+    assert sum(result == 409 for result in results) == 1
+    assert service.entry_detail(note["id"])["revisionCount"] == 2
+
+
+def test_v1_history_migration_preserves_bytes_and_marks_unknown_coverage(tmp_path):
+    import sqlite3
+    path = tmp_path / "history.sqlite3"
+    store = TradingStore(path)
+    service = TradingAccountService(store, snapshot_dir=tmp_path / "snaps", clock=Clock(T0))
+    account = service.create_account({"kind": "manual", "name": "Legacy"})
+    note = service.create_entry(account["id"], {**INSTRUMENT, "fields": {"entryBasis": "surviving version"}})
+    store.close()
+    with sqlite3.connect(path) as conn:
+        conn.execute("ALTER TABLE journal_revisions DROP COLUMN history_complete")
+        conn.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+        before = conn.execute("SELECT entry_id, revision, saved_at_ms, fields_json, body FROM journal_revisions").fetchall()
+    reopened = TradingStore(path)
+    try:
+        restored = TradingAccountService(reopened, snapshot_dir=tmp_path / "snaps", clock=Clock(T0 + 1000))
+        with sqlite3.connect(path) as conn:
+            assert conn.execute("SELECT entry_id, revision, saved_at_ms, fields_json, body FROM journal_revisions").fetchall() == before
+        assert not restored.entry_revisions(note["id"])["revisions"][0]["historyComplete"]
+        restored.save_entry(note["id"], {"fields": {"entryBasis": "new observation"}, "expectedRevision": 1})
+        revisions = restored.entry_revisions(note["id"])["revisions"]
+        assert [r["historyComplete"] for r in revisions] == [False, True]
+        assert revisions[0]["fields"]["entryBasis"] == "surviving version"
+    finally:
+        reopened.close()
 
 
 def test_practice_flow_market_entry_bracket_and_candle_replay(service):
@@ -276,6 +346,8 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     detail = service.trade_detail(account["id"], trade["id"])
     assert detail["plan"]["riskUsdt"] == "50"
     assert detail["metrics"]["netR"] == "1.96"  # (100 - 2) / 50
+    assert [r["fields"]["riskUsdt"] for r in detail["entries"][0]["revisions"]] == ["50", "100"]
+    assert all(r["historyComplete"] for r in detail["entries"][0]["revisions"])
 
 
 def test_unlinked_plan_edited_soon_after_fill_keeps_pre_entry_revision(service):
@@ -285,7 +357,7 @@ def test_unlinked_plan_edited_soon_after_fill_keeps_pre_entry_revision(service):
     note = service.create_entry(account["id"], {**INSTRUMENT, "kind": "note", "fields": plan_fields})
     clock.now += 30_000
     service.add_fill(account["id"], {**INSTRUMENT, "side": "buy", "qty": "10", "price": "100", "fee": "1"})
-    clock.now += 30_000  # inside the coalesce window, but the note is not linked yet
+    clock.now += 30_000  # rapid save while the note is not linked yet
     saved = service.save_entry(note["id"], {"fields": {**plan_fields, "riskUsdt": "80", "timeframe": "15m"}})
     assert saved["revisionCount"] == 2
     clock.now += 60_000
@@ -316,7 +388,7 @@ def test_link_suggestions_carry_plan_fields_so_same_minute_plans_differ(service)
         **INSTRUMENT, "kind": "note", "fields": {"entryBasis": "range", "riskUsdt": "a lot"},
     })
     service.create_entry(account["id"], {**INSTRUMENT, "kind": "quick", "body": "watching"})
-    clock.now += 150_000  # past the coalesce window: the next save is a new revision
+    clock.now += 150_000  # later changed save also appends a new revision
     service.save_entry(long_plan["id"], {"fields": {
         "entryPrice": "82100", "stopPrice": "81000", "targetPrice": "84000", "riskUsdt": "30",
     }})

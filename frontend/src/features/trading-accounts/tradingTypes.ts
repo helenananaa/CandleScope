@@ -123,6 +123,16 @@ export interface JournalEntry {
   fieldTiming: Record<string, FieldTiming>;
   plan: TradePlan | null;
   snapshots: JournalSnapshot[];
+  /** Included by trade detail; absent metadata must never mean latest = historical. */
+  revisions?: JournalRevision[];
+}
+
+export interface JournalRevision {
+  revision: number;
+  savedAtMs: number;
+  fields: Record<string, string>;
+  body: string;
+  historyComplete: boolean;
 }
 
 /** An unlinked plan near a trade, with its latest risk fields to tell plans apart. */

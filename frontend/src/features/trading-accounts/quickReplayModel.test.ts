@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   initialCursor,
+  journalAtCursor,
   nextEventCursor,
   notesBefore,
   positionAt,
@@ -9,9 +10,56 @@ import {
   visibleBars,
   type ReplayBar,
 } from "./quickReplayModel.js";
-import type { Trade, TradeLeg } from "./tradingTypes.js";
+import type { JournalEntry, Trade, TradeLeg } from "./tradingTypes.js";
 
 const HOUR = 3_600;
+const baseNote: JournalEntry = {
+  id: "note", accountId: "account", exchange: "binance", marketType: "futures", symbol: "BTCUSDT",
+  kind: "note", tradeId: "trade", createdAtMs: 0, updatedAtMs: 0, marketTimeMs: null,
+  templateId: null, templateVersion: null, tags: [], fields: {}, body: "", revisionCount: 1,
+  stage: "pre", reviewNote: false, fieldTiming: {}, plan: null, snapshots: [],
+};
+
+test("rewind selects saved content, clips snapshots and separates later review notes", () => {
+  const note: JournalEntry = { ...baseNote,
+    id: "note", createdAtMs: 9 * HOUR * 1000, updatedAtMs: 11 * HOUR * 1000,
+    marketTimeMs: null, fields: { entryBasis: "future" }, body: "future",
+    snapshots: [{ id: "before", createdAtMs: 9 * HOUR * 1000, hasImage: false, state: {} }, { id: "after", createdAtMs: 11 * HOUR * 1000, hasImage: false, state: {} }],
+    plan: { lockedAtMs: 10 * HOUR * 1000, entryPrice: "100", stopPrice: "90", targetPrice: "110", riskUsdt: "10" },
+    revisions: [
+      { revision: 1, savedAtMs: 9 * HOUR * 1000, fields: { entryBasis: "original" }, body: "original", historyComplete: true },
+      { revision: 2, savedAtMs: 11 * HOUR * 1000, fields: { entryBasis: "future" }, body: "future", historyComplete: true },
+    ],
+  };
+  const review = { ...note, id: "review", createdAtMs: 20 * HOUR * 1000, marketTimeMs: 9 * HOUR * 1000 };
+  for (const cursor of [10 * HOUR, 12 * HOUR, 10 * HOUR]) {
+    const cut = journalAtCursor([note, review], cursor);
+    assert.equal(cut.notes.length, 1);
+    assert.equal(cut.notes[0]!.body, cursor === 12 * HOUR ? "future" : "original");
+    assert.equal(cut.notes[0]!.snapshots.length, cursor === 12 * HOUR ? 2 : 1);
+    assert.equal(cut.notes[0]!.plan === null, cursor === 10 * HOUR);
+    assert.equal(cut.reviewNotes[0]!.id, "review");
+  }
+  assert.equal(journalAtCursor([note], 9 * HOUR).notes.length, 0);
+  assert.equal(journalAtCursor([note], 11 * HOUR).notes[0]!.body, "original");
+  assert.equal(note.body, "future"); // projection never mutates source
+});
+
+test("legacy or missing revision coverage never falls back to current text", () => {
+  const note: JournalEntry = { ...baseNote, id: "old", createdAtMs: 1000, marketTimeMs: null, fields: { entryBasis: "future" },
+    body: "future", snapshots: [], plan: null,
+    revisions: [{ revision: 1, savedAtMs: 5000, body: "future", fields: {}, historyComplete: false }],
+  };
+  for (const cursor of [2, 6]) {
+    const result = journalAtCursor([note], cursor).notes[0]!;
+    assert.equal(result.historyUnavailable, true);
+    assert.equal(result.body, "");
+    assert.deepEqual(result.fields, {});
+  }
+  const missing = { ...note };
+  delete missing.revisions;
+  assert.equal(journalAtCursor([missing], 6).notes[0]!.body, "");
+});
 
 function bar(time: number, open: number, high: number, low: number, close: number): ReplayBar {
   return { time, open, high, low, close, volume: 1 };
