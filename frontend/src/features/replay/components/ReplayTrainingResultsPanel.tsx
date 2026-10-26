@@ -1,5 +1,8 @@
 import { describeError } from "../../../i18n/serverErrors.js";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { empty, object, text } from "../../app-control/commandSchema.js";
 
 import { getNumberLocale, t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
@@ -159,6 +162,13 @@ export default function ReplayTrainingResultsPanel({
   };
 
   const summary = results?.summary ?? null;
+  const controlId = useId();
+  useControlCommands(() => ({ id: `replay-results:${controlId}`, title: "Replay training trade results", context: () => ({ runId, trainingState, jumpingId, forkingId, results }), snapshot: () => ({ runId, results, loading, error, jumpingId, forkingId, forkedRunId, canReview }), commands: [
+    command("refresh", "Refresh public training results.", empty, () => { load(); }, { available: () => !loading }),
+    command("jump", "Review a listed trade with a domain review event, while paused/ended.", object({ tradeId: text(128) }), ({ tradeId }) => { const item = results?.items.find((item) => item.trade_id === tradeId); if (!item || item.review_event_id === null) throw new Error("TRADE_REVIEW_UNAVAILABLE"); return jump(item); }, { available: () => canReview && !jumpingId && !forkingId }),
+    command("fork", "Fork from a listed trade's review event using the existing domain workflow.", object({ tradeId: text(128) }), ({ tradeId }) => { const item = results?.items.find((item) => item.trade_id === tradeId); if (!item || item.review_event_id === null) throw new Error("TRADE_REVIEW_UNAVAILABLE"); return fork(item); }, { available: () => canReview && !jumpingId && !forkingId }),
+    command("close", "Close training results.", empty, onClose),
+  ] }));
   const summaryAsset = results?.items[0]?.settlement_asset ?? "";
   return (
     <section className="replay-training-results-panel" data-replay-panel="training-results">

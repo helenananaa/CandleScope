@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { command } from "../app-control/commandRegistry.js";
+import { bool, choice, empty, object, text } from "../app-control/commandSchema.js";
 import { t, tPlural, type LocaleId } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import DataWorkbenchStyles from "./DataWorkbenchStyles.js";
@@ -256,6 +259,17 @@ export default function DataWorkbenchModal({
     });
   }, []);
 
+  const controlId = useId();
+  useControlCommands(() => ({ id: `data-workbench:${controlId}`, title: "Data storage inventory", context: () => ({ appliedFilters, draftFilters, refreshGeneration, loading }),
+    snapshot: () => ({ appliedFilters, draftFilters, payload, loading, error, snapshotOpen, integrityOpen, openSeriesGroups: [...openSeriesGroups], openGapGroups: [...openGapGroups] }), commands: [
+      command("filters", "Set and apply storage inventory filters.", object({ exchange: text(64, 0), marketType: text(32, 0), symbol: text(96, 0), interval: text(32, 0) }), (input) => { setDraftFilters(input); setAppliedFilters(input); setRefreshGeneration((value) => value + 1); }),
+      command("refresh", "Refresh inventory with the applied filters.", empty, () => setRefreshGeneration((value) => value + 1)),
+      command("reset", "Reset inventory filters.", empty, resetFilters),
+      command("focusCurrent", "Filter inventory to the current chart market.", empty, focusCurrentSeries),
+      command("section", "Expand/collapse an inventory section.", object({ section: choice(["snapshot", "integrity"]), open: bool }), ({ section, open }) => { if (section === "snapshot") setSnapshotOpen(open); else { setIntegrityTouched(true); setIntegrityOpen(open); } }),
+      command("group", "Toggle a listed instrument group.", object({ kind: choice(["series", "gaps"]), key: text(256) }), ({ kind, key }) => { if (!(kind === "series" ? seriesGroups : gapGroups).some((group) => group.key === key)) throw new Error("INSTRUMENT_GROUP_UNAVAILABLE"); (kind === "series" ? toggleSeriesGroup : toggleGapGroup)(key); }),
+      command("close", "Close the data workbench.", empty, onClose),
+    ] }), isOpen);
   if (!isOpen) return null;
 
   const integrity = payload?.integrity;

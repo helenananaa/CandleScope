@@ -611,9 +611,10 @@ export function usePluginPlatformRuntime(identity: PluginMarketIdentity): Plugin
     }
   }, []);
 
-  const downloadLiveAudit = useCallback(async () => {
+  const downloadLiveAudit = useCallback(async (sink?: (blob: Blob) => Promise<void>) => {
     try {
       const blob = await fetchLiveAuditExport();
+      if (sink) { await sink(blob); return; }
       const url = URL.createObjectURL(blob);
       try {
         const anchor = document.createElement("a");

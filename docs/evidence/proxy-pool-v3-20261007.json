@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-07",
+  "phase": "proxy-pool-v3-measured-placement",
+  "base_commit": "fdf1e1da50b53514c19c862a7282317cc5d3cec1",
+  "phase2_and_phase3_uncommitted": true,
+  "pushed": false,
+  "unrelated_work_preserved": true,
+  "implementation": {
+    "window_seconds": 30,
+    "window_buckets_max": 30,
+    "retained_endpoints_max": 128,
+    "measurements": ["received_messages", "received_payload_bytes", "unexpected_disconnects", "ccxt_delivery_queue_occupancy", "last_payload_age"],
+    "native_receive_entry": "transport-owned wrapper before subscription handshake and payload fanout",
+    "ccxt_receive_entry": "pinned physical Client.handle_message before JSON decoding and watch result projection",
+    "ccxt_version": "4.5.60",
+    "selection": "capacity occupancy + relative receive pressure * 0.5 + maximum delivery queue pressure + bounded recent disconnect penalty",
+    "affinity": "active descriptors keep their route; inactive history is only a tie preference for balanced placement",
+    "healthy_connection_migration": false,
+    "failover_strategy_unchanged": true
+  },
+  "validation": {
+    "backend": {"passed": 233, "failed": 0, "warnings": 5, "duration_seconds": 41.31},
+    "frontend": {"passed": 3942, "failed": 0, "duration_seconds": 48.2438542},
+    "ruff": "passed",
+    "typecheck": "passed",
+    "i18n": {"status": "passed", "locales": 30, "catalog_keys": 4668},
+    "lint": "passed",
+    "architecture": "passed, 0 migration allowlist entries",
+    "build": {"status": "passed", "duration_seconds": 9.11, "existing_large_chunk_warning": true},
+    "diff_check": "passed",
+    "controlled_scenarios": [
+      "UTF-8 and binary byte counts; idle window expiration and bounded observation memory",
+      "measured placement on quieter route; active duplicate affinity; reattachment overrides inactive history",
+      "hard capacity admission despite traffic pressure; no stale delivery queue after release",
+      "real CCXT physical Client reused without double counting; decoding behavior preserved; lifecycle disconnect deduplication",
+      "native receives before fanout including acknowledgement and malformed payload",
+      "CCXT delivery queue fills, drains and releases without contributing to physical receive count",
+      "CCXT runtime pool reattachment chooses quieter route while the other session retains its runtime",
+      "real loopback HTTP CONNECT proxies and WebSocket server deliver one 26-byte payload on each of two routes"
+    ],
+    "initial_frontend_failure": "Portuguese poolHelp shared identifier rejected by existing copy gate; text localized to default group, gate unchanged; final full suite passed"
+  },
+  "browser": {
+    "kind": "isolated real component and styles with synthetic telemetry; no application API calls",
+    "desktop_viewport": [1280, 900],
+    "narrow_viewport": [420, 900],
+    "narrow_document_width": 420,
+    "narrow_scroll_width": 420,
+    "horizontal_overflow": false,
+    "screenshots": ["output/playwright/proxy-pool/desktop-v3.png", "output/playwright/proxy-pool/narrow-v3.png", "output/playwright/proxy-pool/narrow-v3-metrics.png"],
+    "console_application_errors": 0,
+    "fixture_favicon_404": true,
+    "owned_browser_closed": true,
+    "owned_preview_server_stopped": true
+  },
+  "qualification": {
+    "actual_proxy_settings_changed": false,
+    "tun_changed": false,
+    "real_public_egress_verified": false,
+    "real_exchange_connections_verified": false,
+    "actual_throughput_gain_measured": false,
+    "payload_bytes_are_wire_bandwidth": false,
+    "native_and_ccxt_internal_buffers_observed": false,
+    "ccxt_in_place_runtime_recycle_retains_route": true,
+    "private_trading_supported": false,
+    "live_processes_restarted": false
+  }
+}

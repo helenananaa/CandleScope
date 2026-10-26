@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -55,6 +56,8 @@ async def fetch_catalog_json(
     headers: Mapping[str, str] | None = None,
     timeout_seconds: float,
     proxy: str | None,
+    config: Any | None = None,
+    proxy_route: Any | None = None,
 ) -> Any:
     """Fetch a catalog payload under the exchange's shared REST budget.
 
@@ -77,7 +80,8 @@ async def fetch_catalog_json(
     # operator overrides for the later backfill requests in that same bucket.
     from app.data_engine.ingestion.config import IngestionConfig
 
-    policy = plugin.rate_limit_policy(IngestionConfig())
+    config = config or IngestionConfig()
+    policy = plugin.rate_limit_policy(config)
     request = HistoricalRequest(
         exchange=exchange,
         market_type=market_type,
@@ -87,6 +91,14 @@ async def fetch_catalog_json(
     )
     rule = policy.rule_for(request)
     manager = get_shared_rate_limit_manager()
+    from app.core.proxy_pool import get_proxy_pool
+    from .rate_limits import scope_rate_limit_rule
+    pool = get_proxy_pool()
+    route = proxy_route or await pool.select_rest(config, request, rule, manager)
+    if route is not None:
+        proxy = route.url
+        request.egress_group = route.egress_group
+        rule = scope_rate_limit_rule(rule, route.egress_group)
     semaphore = get_shared_rate_limit_semaphore(
         rule,
         fallback=policy.concurrency_for(market_type),
@@ -103,12 +115,17 @@ async def fetch_catalog_json(
         for base in urls:
             url = f"{base}{path}"
             acquired = False
+            route_entered = False
+            started = time.monotonic()
             response_headers_accounted = False
             response_completed = False
             try:
                 admission = await manager.inspect(rule, request)
                 if not admission.allowed:
                     raise RateLimitDeferred(admission)
+
+                pool.begin(route, exchange)
+                route_entered = True
 
                 await semaphore.acquire()
                 acquired = True
@@ -194,11 +211,13 @@ async def fetch_catalog_json(
                             headers=response_headers,
                             body_code=body_code,
                         )
+                    pool.record(route, exchange, elapsed=time.monotonic() - started)
                     return payload
             except RateLimitDeferred:
                 # Shared quota/circuit state applies to every hostname.
                 raise
             except Exception as exc:
+                pool.record(route, exchange, error=exc)
                 if response_headers_accounted and not response_completed:
                     manager.record_response(rule, response_unknown=True)
                 last_error = exc
@@ -211,6 +230,8 @@ async def fetch_catalog_json(
             finally:
                 if acquired:
                     semaphore.release()
+                if route_entered:
+                    pool.end(route)
 
     raise CatalogHttpError(
         f"Failed to load catalog for {exchange}:{market_type} from all endpoints: "

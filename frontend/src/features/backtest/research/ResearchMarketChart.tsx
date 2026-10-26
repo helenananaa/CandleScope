@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { empty, number, object, text } from "../../app-control/commandSchema.js";
+import { settingsCommands } from "../../app-control/settingsCommands.js";
+import type { IntervalString } from "../../../utils/intervals.js";
 import { useChartSurfaceRuntime } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import IntervalSelector from "../../../components/IntervalSelector.js";
 import MarketPageFrame from "../../../app/MarketPageFrame.js";
@@ -207,6 +212,18 @@ export default function ResearchMarketChart({ runtime }: { runtime: BacktestRese
     : t("research.context.noRange");
   const runModeDisabled = !runIdentityReady;
   const frozenDisabled = !frozenIdentity;
+  useControlCommands(() => settingsCommands(chartSettings, "backtest-chart-settings"));
+  useControlCommands(() => ({ id: "backtest-chart", title: "Advanced research chart navigation", context: () => ({ sourceId: activeSource.sourceId, sourceMode: activeSource.mode, session: liveSession }), snapshot: () => ({ mode: activeSource.mode, session: activeSource.session, range: chartSurface.actions.getVisibleRange(), customIntervals: chartSession.view.customIntervalRecords }), commands: [
+    command("viewport", "Read the displayed chart viewport.", empty, () => chartSurface.actions.getVisibleRange(), { readOnly: true }),
+    command("visibleTimeRange", "Set the displayed chart viewport.", object({ from: number(0), to: number(0) }), ({ from, to }) => { if (to <= from || !chartSurface.actions.setLinkedVisibleTimeRange({ from, to })) throw new Error("VIEWPORT_UNAVAILABLE"); }),
+    command("timeAnchor", "Navigate the displayed chart to a time anchor.", object({ time: number(0) }), ({ time }) => { if (!chartSurface.actions.setLinkedVisibleTimeAnchor(time)) throw new Error("VIEWPORT_UNAVAILABLE"); }),
+    command("interval", "Select a live-reference interval through the chart session policy.", object({ interval: text(24) }), ({ interval }) => chartSession.actions.selectInterval(interval as IntervalString), { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+    command("createInterval", "Create a live-reference custom interval.", object({ interval: text(24) }), ({ interval }) => chartSession.actions.createCustomInterval(interval as IntervalString), { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+    command("removeInterval", "Remove a custom interval.", object({ interval: text(24) }), ({ interval }) => chartSession.actions.removeCustomInterval(interval as IntervalString), { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+    command("pinInterval", "Toggle a custom interval pin.", object({ interval: text(24) }), ({ interval }) => chartSession.actions.togglePinCustomInterval(interval), { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+    command("restoreInterval", "Restore the last removed custom interval.", empty, chartSession.actions.restoreCustomInterval, { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+    command("clearIntervals", "Clear custom intervals.", empty, chartSession.actions.clearCustomIntervals, { available: () => activeSource.mode === "LIVE_REFERENCE" && liveSourceEnabled }),
+  ] }));
 
   return (
     <MarketPageFrame

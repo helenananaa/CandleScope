@@ -26,6 +26,7 @@ export function ResearchDataDrawer(props: {
   onSelectDataset?(datasetId: string): void;
   onRevisionActivated?(manifest: LocalDatasetManifest): void;
   onSettingsImported?(settings: ChartSettings): void;
+  onProjectRestored?(manifest: LocalDatasetManifest): void;
   onImport?(input: ResearchImportSubmitInput): Promise<unknown>;
   onClose(): void;
 }) {
@@ -47,6 +48,7 @@ function ResearchDataDrawerBody({
   onSelectDataset,
   onRevisionActivated,
   onSettingsImported,
+  onProjectRestored,
   onImport,
   onClose,
 }: {
@@ -64,6 +66,7 @@ function ResearchDataDrawerBody({
   onSelectDataset?(datasetId: string): void;
   onRevisionActivated?(manifest: LocalDatasetManifest): void;
   onSettingsImported?(settings: ChartSettings): void;
+  onProjectRestored?(manifest: LocalDatasetManifest): void;
   onImport?(input: ResearchImportSubmitInput): Promise<unknown>;
   onClose(): void;
 }) {
@@ -131,6 +134,7 @@ function ResearchDataDrawerBody({
               onChanged={library.refresh}
               {...(onRevisionActivated === undefined ? {} : { onRevisionActivated })}
               onSettingsImported={onSettingsImported ?? (() => undefined)}
+              {...(onProjectRestored === undefined ? {} : { onProjectRestored })}
               onError={library.setError}
             />
           )}

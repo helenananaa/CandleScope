@@ -1,5 +1,9 @@
 import { strategyTradeFocus, type StrategyTradeFocus } from "../chart-tester/strategyTradeReview.js";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useControlCommands } from "../../app-control/useControlCommands.js";
+import { command } from "../../app-control/commandRegistry.js";
+import { bool, choice, empty, number as numeric, object } from "../../app-control/commandSchema.js";
+import { publishControlFile } from "../../app-control/controlFiles.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { nativeExportUrl, type NativeRun } from "./nativeBacktestApi.js";
@@ -61,6 +65,10 @@ export function NativeCurve({ points, title, markers = [], onLocate }: { points:
 export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all", stale = false }: { stale?: boolean; active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
   const [replay, setReplay] = useState<NativeReplayRecord | null>(null);
   const [replayView, setReplayView] = useState(!run.result);
+  const controlId = useId();
+  useControlCommands(() => ({ id: `native-report-view:${controlId}`, title: "Native report mode", context: () => ({ runId: run.run_id, replayView, active }), snapshot: () => ({ runId: run.run_id, replayView, active, executionMode: run.execution_mode }), commands: [
+    command("replayView", "Switch between analysis and native incremental replay.", object({ enabled: bool }), ({ enabled }) => setReplayView(enabled), { available: () => active && run.execution_mode !== "CANDLESCOPE" }),
+  ] }));
   return <>
     {stale && <div className="strategy-notice" data-tone="warning" role="status"><strong>{t("chartTester.result.stale")}</strong> · {t("chartTester.result.staleGuidanceTitle")}</div>}
     {run.execution_mode !== "CANDLESCOPE" && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t("native.replay.title")}</span>}</div>}
@@ -104,6 +112,15 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
     });
   };
   const result = run.result;
+  const controlId = useId();
+  useControlCommands(() => ({ id: `native-report:${controlId}`, title: "Native report review and export", context: () => ({ runId: run.run_id, section, positions, active, view }),
+    snapshot: () => ({ runId: run.run_id, section, positions, active, view, counts: { trades: result?.trades.length ?? 0, orders: result?.orders.length ?? 0 }, hasResult: !!result }), commands: [
+      command("rows", "Read a bounded report table page.", object({ section: choice(["trades", "orders"]), offset: numeric(0, 1e9, true), limit: numeric(1, 500, true) }), ({ section, offset, limit }) => result?.[section].slice(offset, offset + limit) ?? [], { readOnly: true }),
+      command("section", "Select the report table.", object({ section: choice(["trades", "orders"]) }), ({ section }) => setSection(section), { available: () => active && !!result && view !== "overview" }),
+      command("page", "Select an existing report page.", object({ page: numeric(0, 1e9, true) }), ({ page }) => { if (!result || page >= Math.max(1, Math.ceil((result[section]?.length ?? 0) / 50))) throw new Error("REPORT_PAGE_INVALID"); setPage(page); }, { available: () => active && !!result && view !== "overview" }),
+      command("selectRow", "Select a row and focus it through the existing chart review callback.", object({ index: numeric(0, 1e9, true) }), ({ index }) => { if (!result?.[section]?.[index]) throw new Error("REPORT_ROW_UNAVAILABLE"); selectRow(index); }, { available: () => active && !!result && view !== "overview" }),
+      command("export", "Export the active analysis/replay report to a window-bound file.", empty, async () => { const response = await fetch(exportUrl); if (!response.ok) throw new Error(`REPORT_EXPORT_${response.status}`); return publishControlFile(await response.blob(), `${run.run_id}.report.json`); }, { available: () => !!result }),
+    ] }));
   if (!result) return <section className="native-report" data-view={view}>
     <div className="native-report-toolbar">{controls}</div>
     <p role="status">{t("native.replay.empty")}</p>

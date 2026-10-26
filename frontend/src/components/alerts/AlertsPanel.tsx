@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useControlCommands } from "../../features/app-control/useControlCommands.js";
+import { command } from "../../features/app-control/commandRegistry.js";
+import { bool, choice, empty, object, optional, text } from "../../features/app-control/commandSchema.js";
+import { alertDraftPatchSchema } from "../../features/app-control/alertCommandSchema.js";
 import { getLocale, t, tKey, translateMarketType } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { watchlistDisplayName } from "../../features/watchlist/watchlistDisplayName.js";
@@ -1355,6 +1359,28 @@ export default function AlertsPanel({
     };
   }, [isOpen, loadAlerts]);
 
+  const controlId = useId();
+  useControlCommands(() => ({ id: `alerts:${controlId}`, title: "Alert rules, drafts and notification history", context: () => ({ market: [currentExchange, currentMarketType, currentSymbol], editingRuleId, draft, rules: rules.map((item) => [item.id, item.updatedAt]), saving: alertSaving }),
+    snapshot: () => ({ draft, editingRuleId, products: alertProducts, selectedProductKey, selectedInterval, rules, history, systemStatus, loading: alertLoading, saving: alertSaving, error: alertError, testLoading, testResult, canCreateAlert, tab, searchTerm, statusFilter, historyRange, acknowledgementFilter }), commands: [
+      command("refresh", "Refresh alert rules, history and status.", empty, () => loadAlerts()),
+      command("filters", "Edit alert panel filters.", object({ tab: optional(choice(["add", "all", "history"])), search: optional(text(256, 0)), status: optional(choice(["all", "enabled", "paused", "expired"])), historyRange: optional(choice(["today", "7d", "30d"])), acknowledged: optional(choice(["all", "unread", "ack"])) }), (input) => {
+        if (input.tab) setTab(input.tab); if (input.search !== undefined) setSearchTerm(input.search); if (input.status) setStatusFilter(input.status); if (input.historyRange) setHistoryRange(input.historyRange); if (input.acknowledged) setAcknowledgementFilter(input.acknowledged);
+      }),
+      command("target", "Select a current watchlist alert product and interval.", object({ productKey: text(256), interval: text(24) }), ({ productKey, interval }) => { if (!alertProducts.some((row) => row.key === productKey)) throw new Error("PRODUCT_UNAVAILABLE"); setSelectedProductKey(productKey); setSelectedInterval(interval); }),
+      command("draft", "Patch known alert draft fields, channels and a bounded expression tree.", alertDraftPatchSchema, (patch) => { setDraft((value) => ({ ...value, ...patch })); setTestResult(null); }),
+      command("reset", "Start a new alert draft.", empty, () => resetDraft()),
+      command("edit", "Edit a currently loaded alert rule.", object({ ruleId: text(128) }), ({ ruleId }) => { const rule = ruleById.get(ruleId); if (!rule) throw new Error("RULE_UNAVAILABLE"); editRule(rule); }),
+      command("save", "Create/update the inspected draft through the existing payload validation and save workflow.", empty, () => createCurrentAlert(), { available: () => canCreateAlert && !alertSaving }),
+      command("test", "Evaluate the draft with the current test inputs.", empty, () => runRuleTest(), { available: () => canCreateAlert && !testLoading }),
+      command("testValue", "Edit a known test input.", object({ bucket: choice(["previous", "values"]), field: choice(["close", "last", "rsi", "macdHist", "ma20", "volume"]), value: text(64, 0) }), ({ bucket, field, value }) => updateTestContext(bucket, field, value)),
+      command("enabled", "Set a loaded rule enabled/paused through the existing action.", object({ ruleId: text(128), enabled: bool }), ({ ruleId, enabled }) => { const rule = ruleById.get(ruleId); if (!rule) throw new Error("RULE_UNAVAILABLE"); if (rule.enabled !== enabled) return toggleRule(rule); }, { available: () => !alertSaving }),
+      command("delete", "Delete a loaded alert rule with explicit confirmation.", object({ ruleId: text(128), confirmed: choice([true]) }), ({ ruleId }) => { const rule = ruleById.get(ruleId); if (!rule) throw new Error("RULE_UNAVAILABLE"); return removeRule(rule); }, { available: () => !alertSaving }),
+      command("duplicate", "Copy a loaded rule in the UI's disabled state.", object({ ruleId: text(128) }), ({ ruleId }) => { const rule = ruleById.get(ruleId); if (!rule) throw new Error("RULE_UNAVAILABLE"); return duplicateRule(rule); }, { available: () => !alertSaving }),
+      command("acknowledge", "Set a loaded history event read/unread.", object({ eventId: text(128), acknowledged: bool }), ({ eventId, acknowledged }) => { const event = history.find((row) => row.id === eventId); if (!event) throw new Error("EVENT_UNAVAILABLE"); if ((event.acknowledgedAt !== null) !== acknowledged) return acknowledgeEvent(event); }, { available: () => !alertSaving }),
+      command("browserPermission", "Request browser notification permission using the existing OS/browser permission flow.", empty, () => requestBrowserAlertPermission()),
+      command("primeSound", "Prepare alert sound through the existing browser audio policy.", empty, () => primeAlertSound()),
+      command("close", "Close alert panel.", empty, () => onClose()),
+    ] }), isOpen);
   if (!isOpen) return null;
 
   return (

@@ -7,6 +7,7 @@ import { registerPineLanguageSupport } from "../../../editor/pineLanguage.js";
 import { getScriptEditorOptions, registerScriptTheme } from "../../../editor/scriptTheme.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
+import { useExtensionEditorTheme } from "../../../editor/extensionTheme.js";
 import type { LocaleId } from "../../../i18n/locale.js";
 import type { StrategyDraftCursor, StrategyDraftLanguage } from "./StrategyDraftStore.js";
 import type { ChartStrategyDraftIssue } from "./chartStrategyTesterUiModel.js";
@@ -50,6 +51,7 @@ export default function StrategyScriptWorkspace({
   // Hidden strategies and execution modes remain mounted together. Monaco
   // models must belong to an editor instance, not to a shared language path.
   const modelId = useId();
+  const extensionEditorTheme = useExtensionEditorTheme("");
   const [editorTheme, setEditorTheme] = useState("script-dark");
   useEffect(() => {
     const update = () => setEditorTheme(document.documentElement.dataset.theme === "light" ? "vs" : "script-dark");
@@ -144,7 +146,7 @@ export default function StrategyScriptWorkspace({
         language={language === "pine" ? "pine" : "python"}
         path={`strategy-script-${modelId}.${language === "python" ? "py" : language}`}
         value={source}
-        theme={editorTheme}
+        theme={extensionEditorTheme || editorTheme}
         beforeMount={handleBeforeMount}
         onMount={handleMount}
         onChange={(value) => onSourceChange(value ?? "")}

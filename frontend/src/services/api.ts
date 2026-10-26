@@ -430,24 +430,30 @@ export async function refreshExchangeInfo(exchange = "", marketType = ""): Promi
 interface ProxySettingsInput {
   mode: string;
   custom_proxy?: string | null;
+  routes?: Record<string, unknown>[];
+  strategy?: string;
 }
 
 export async function fetchProxySettings(): Promise<unknown> {
   return request(`${API_BASE}/settings/proxy`);
 }
 
-export async function updateProxySettings({ mode, custom_proxy }: ProxySettingsInput): Promise<unknown> {
+export async function updateProxySettings({ mode, custom_proxy, routes, strategy }: ProxySettingsInput): Promise<unknown> {
   return request(`${API_BASE}/settings/proxy`, {
     method: "PUT",
-    body: { mode, custom_proxy: custom_proxy || null },
+    body: { mode, custom_proxy: custom_proxy || null, routes, strategy },
   });
 }
 
-export async function testProxyConnection({ mode, custom_proxy }: ProxySettingsInput): Promise<unknown> {
+export async function testProxyConnection({ mode, custom_proxy, routes, strategy }: ProxySettingsInput): Promise<unknown> {
   return request(`${API_BASE}/settings/proxy/test`, {
     method: "POST",
-    body: { mode, custom_proxy: custom_proxy || null },
+    body: { mode, custom_proxy: custom_proxy || null, routes, strategy },
   });
+}
+
+export async function fetchProxyPoolStatus(): Promise<unknown> {
+  return request(`${API_BASE}/settings/proxy/status`);
 }
 
 export interface CacheLimitsInput {

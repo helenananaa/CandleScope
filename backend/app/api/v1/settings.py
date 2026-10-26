@@ -18,7 +18,8 @@ from typing import Any
 
 import aiohttp
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.core.proxy_pool import get_proxy_pool, normalize_proxy_pool, redact_proxy_url
 
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
@@ -54,11 +55,20 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 class ProxyConfig(BaseModel):
     """Proxy configuration payload."""
 
-    mode: str = "system"  # "none" | "system" | "custom"
+    mode: str = "system"  # "none" | "system" | "custom" | "pool"
     custom_proxy: str | None = None  # e.g. "http://127.0.0.1:7890"
+    routes: list[dict[str, Any]] = Field(default_factory=list, max_length=16)
+    strategy: str = "failover"
+
+    @model_validator(mode="after")
+    def validate_pool(self):
+        self.routes, self.strategy = normalize_proxy_pool(self.routes, self.strategy)
+        if self.mode == "pool" and not any(route["enabled"] for route in self.routes):
+            raise ValueError("pool mode requires an enabled route")
+        return self
 
 
-class ProxyTestRequest(BaseModel):
+class ProxyTestRequest(ProxyConfig):
     """Request body for testing proxy connectivity."""
 
     mode: str = "system"
@@ -145,6 +155,8 @@ def _resolve_proxy_url(mode: str, custom_proxy: str | None) -> str | None:
         return None
     if mode == "custom":
         return custom_proxy if custom_proxy else None
+    if mode == "pool":
+        return None
     # mode == "system"
     return _get_system_proxy()
 
@@ -492,6 +504,7 @@ async def _build_cache_diagnostics(request: Request) -> dict:
 async def get_proxy_settings(request: Request) -> dict:
     """Return the current proxy configuration."""
     cfg = _get_ingestion_config(request)
+    persisted = load_proxy_settings()
 
     if cfg is not None:
         mode, custom_proxy = normalize_proxy_settings(
@@ -499,7 +512,6 @@ async def get_proxy_settings(request: Request) -> dict:
             getattr(cfg, "http_proxy", None),
         )
     else:
-        persisted = load_proxy_settings()
         mode, custom_proxy = normalize_proxy_settings(
             persisted.get("mode"),
             persisted.get("custom_proxy"),
@@ -513,6 +525,8 @@ async def get_proxy_settings(request: Request) -> dict:
         "custom_proxy": custom_proxy or "",
         "system_proxy": system_proxy or "",
         "effective_proxy": effective or "",
+        "routes": getattr(cfg, "proxy_routes", persisted.get("routes", [])),
+        "strategy": getattr(cfg, "proxy_strategy", persisted.get("strategy", "failover")),
     }
 
 
@@ -528,7 +542,7 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
 
     if cfg is None:
         # Even without IngestionConfig, persist the settings to disk
-        save_proxy_settings(mode, custom_proxy)
+        save_proxy_settings(mode, custom_proxy, routes=body.routes, strategy=body.strategy)
         readonly_accounts = getattr(request.app.state, "readonly_account_service", None)
         if readonly_accounts is not None:
             await readonly_accounts.reconfigure_network()
@@ -538,17 +552,20 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
             "Settings saved to disk for next startup.",
             "mode": mode,
             "custom_proxy": custom_proxy or "",
+            "routes": body.routes, "strategy": body.strategy,
         }
 
     # Persist to disk so settings survive restarts
-    save_proxy_settings(mode, custom_proxy)
+    save_proxy_settings(mode, custom_proxy, routes=body.routes, strategy=body.strategy)
 
     runtime = _get_data_engine_runtime(request)
     update_config = getattr(runtime, "update_ingestion_config", None)
     if callable(update_config):
-        update_config(proxy_mode=mode, http_proxy=custom_proxy)
+        update_config(proxy_mode=mode, http_proxy=custom_proxy,
+                      proxy_routes=body.routes, proxy_strategy=body.strategy)
     else:
-        cfg.update(proxy_mode=mode, http_proxy=custom_proxy)
+        cfg.update(proxy_mode=mode, http_proxy=custom_proxy,
+                   proxy_routes=body.routes, proxy_strategy=body.strategy)
 
     # Restart all active runtime transports to apply the new proxy.
     await _restart_runtime_transports(request)
@@ -560,7 +577,7 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
     logger.info(
         "Proxy settings updated: mode=%s, effective=%s",
         mode,
-        effective or "none",
+        redact_proxy_url(effective) or "none",
     )
 
     return {
@@ -568,7 +585,15 @@ async def update_proxy_settings(request: Request, body: ProxyConfig) -> dict:
         "mode": mode,
         "custom_proxy": custom_proxy or "",
         "effective_proxy": effective or "",
+        "routes": body.routes, "strategy": body.strategy,
     }
+
+
+@router.get("/proxy/status")
+async def get_proxy_status(request: Request) -> dict:
+    from app.data_engine.ingestion.config import IngestionConfig
+    config = _get_ingestion_config(request) or IngestionConfig()
+    return get_proxy_pool().snapshot(config)
 
 
 @router.post("/proxy/test")
@@ -581,6 +606,44 @@ async def test_proxy_connection(body: ProxyTestRequest, request: Request) -> dic
     are reachable.
     """
     proxy_url = _resolve_proxy_url(body.mode, body.custom_proxy)
+    if body.mode == "pool":
+        # Draft routes can be tested before saving. The same shared quotas and
+        # health feedback apply; there is no direct/system fallback.
+        from app.data_engine.ingestion.config import IngestionConfig
+        from app.exchanges.catalog_http import fetch_catalog_json
+        draft = IngestionConfig(proxy_mode="pool", proxy_routes=body.routes,
+                                proxy_strategy=body.strategy)
+        targets = [("binance", "spot", "https://api.binance.com", "/api/v3/ping"),
+                   ("binance", "futures", "https://fapi.binance.com", "/fapi/v1/ping"),
+                   ("okx", "spot", "https://www.okx.com", "/api/v5/public/time")]
+
+        async def probe(route, target):
+            exchange, market, base, path = target
+            try:
+                await fetch_catalog_json(exchange=exchange, market_type=market,
+                    base_urls=[base], path=path, timeout_seconds=10, proxy=route.url,
+                    config=draft, proxy_route=route)
+                return {"route_id": route.id, "exchange": f"{exchange}:{market}",
+                        "label": f"{route.name} · {exchange} {market}", "success": True,
+                        "message": "可达"}
+            except Exception as exc:
+                return {"route_id": route.id, "exchange": f"{exchange}:{market}",
+                        "label": f"{route.name} · {exchange} {market}", "success": False,
+                        "message": type(exc).__name__}
+
+        results = []
+        # Bounded sequential probes avoid a test-button burst on shared egress.
+        for target in targets:
+            if not any(route["enabled"] and (not route["exchanges"] or target[0] in route["exchanges"])
+                       for route in body.routes):
+                continue
+            for route in get_proxy_pool().routes(draft, target[0]):
+                results.append(await probe(route, target))
+        successes = sum(result["success"] for result in results)
+        return {"success": bool(results) and successes == len(results),
+                "partial": 0 < successes < len(results), "results": results,
+                "message": f"{successes}/{len(results)}", "proxy_used": "pool",
+                "data_engine": _data_engine_status(request)}
 
     # Define test targets for each exchange
     test_targets = [

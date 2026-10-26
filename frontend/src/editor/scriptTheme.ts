@@ -6,6 +6,7 @@
  */
 
 import type * as Monaco from "monaco-editor";
+import { bindExtensionEditorTheme } from "./extensionTheme.js";
 
 /**
  * Define and register the Script dark theme on a Monaco instance.
@@ -100,6 +101,7 @@ export function registerScriptTheme(monaco: typeof Monaco): void {
     },
   };
   monaco.editor.defineTheme("script-dark", theme);
+  bindExtensionEditorTheme(monaco);
 }
 
 /**

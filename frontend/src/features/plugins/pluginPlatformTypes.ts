@@ -1346,7 +1346,7 @@ export interface PluginPlatformRuntime {
       accountRef: string,
       shadowRef: string,
     ): Promise<PluginLiveExecutionRecord>;
-    downloadLiveAudit(): Promise<void>;
+    downloadLiveAudit(sink?: (blob: Blob) => Promise<void>): Promise<void>;
   };
 }
 

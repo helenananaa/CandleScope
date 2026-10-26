@@ -149,7 +149,10 @@ def serve(host: str, port: int) -> None:
             if sock is not None:
                 sock.close()
             raise
-    server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port))
+    # Drain transports within the desktop stop budget; the parent-pipe deadline
+    # remains the final bound for a stuck dependency shutdown.
+    server = uvicorn.Server(uvicorn.Config("app.main:app", host=host, port=port,
+                                         timeout_graceful_shutdown=5))
     threading.Thread(target=watch_parent, args=(server,),
                      kwargs={"on_shutdown": _arm_shutdown_deadline},
                      name="desktop-parent-pipe", daemon=True).start()
