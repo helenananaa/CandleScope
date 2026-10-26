@@ -81,7 +81,9 @@ def main() -> None:
                     *map(str, wheels)], check=True)
     subprocess.run([sys.executable, "-m", "pytest", "-o", "pythonpath=", "-q",
                     str(repository / "packages/candlescope-plugin-pine-compat/tests/test_runtime.py"),
-                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_native_sessions.py")], check=True)
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_native_sessions.py"),
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_host_completion.py"),
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_event_strategy.py")], check=True)
     print(f"Qualified {bundle_path.name}: {bundle.sha256}")
 
 

@@ -5,21 +5,29 @@
 桥接到公开的 `candlescope.script-runtime/1` SDK。包内只有适配代码，不包含 Pine
 引擎源码快照，也不导入 CandleScope 后端私有模块。
 
-适配器 `0.3.2` 使用官方 `pine-compat-runtime==0.3.2` 的 Windows、Linux、
-macOS Apple Silicon 和 Intel wheel；各平台发布锁分别固定真实文件和校验值。
+适配器 `0.4.0` 是使用官方 `pine-compat-runtime==0.3.3` wheel 的源码候选；
 `release/release-lock.json` 锁定引擎、SDK 和 bridge 的内容哈希，旧发布锁
-保存在 `release-lock.0.2.0.json` 和 `release-lock.0.3.0.json`。分析/输出/增量协议为 6/9/4。
-渐变填充因 Render IR v1 无法表达而明确拒绝；纯色填充继续支持。资源超限
-以 `E_RESOURCE_BUDGET` 诊断返回。
+保存在 `release-lock.0.2.0.json`、`release-lock.0.3.0.json`、`release-lock.0.3.1.json` 和 `release-lock.0.3.2*.json`。
+当前锁文件对应未发布的 0.4.0 候选包；Linux/macOS 的离线安装验收由 PR CI 执行。
+分析/输出/增量协议为 6/9/4。此次验收不代表公开发布或与 TradingView 完全等价。
+原生线段、标签、框、多段线、线间填充、表格、字符/箭头、蜡烛及渐变通过图表
+primitive 显示，支持坐标投影、缩放和清空。字体、标签外形及表格自动排版仍有
+近似处理，不承诺像素一致。资源超限以明确诊断返回。
 
 支持历史批计算，以及已确认历史末尾的一根 forming bar。WebSocket 订阅通过
 `options.pineSessionId` 保留原生会话，支持替换、收盘确认和追加；传输仍返回完整
 Render IR 快照。HTTP 计算保持独立。分析结果的 `meta.hostRequirements` 暴露
-引擎的宿主需求清单，不代表这些外部能力已经接入。
+引擎的宿主需求清单。宿主依据编译后的 HIR 发现请求上下文，包括库依赖及嵌套
+请求；动态符号/周期要求显式数据，无法可靠推导预热长度时要求 `requestWarmupBars`。
+缺失或有缺口的数据不会静默执行，辅助订阅在依赖改变或取消订阅时释放。
 
-每个 sidecar 最多保留 8 个最近使用的会话。历史窗口变化、源码或参数变化、
-会话淘汰、进程重启会重新播算，并返回 `meta.sessionReset=true`。冷启动按盘中
-接入处理，无法恢复此前的 tick/varip 状态。尚未提供跨进程会话恢复或无限历史保留。
+每个 sidecar 保留 8 个热会话，并在
+`%LOCALAPPDATA%/CandleScope/pine/observations-v1.sqlite3` 保存观察日志。
+可用 `CANDLESCOPE_PINE_JOURNAL` 覆盖路径。淘汰、进程重启和重叠滑动窗口会从
+已记录的观察恢复 `varip`，重连不会把同一观察重复执行。源码、参数、已确认历史、
+时钟或重置标识改变时重启状态，并在界面提示；渲染失败不提交观察。
+上限为 512 个日志、合计 256 MiB、每会话 100000 根根图历史，超限明确失败。
+日志可在插件停止后手动清理；断线期间未观察到的 tick 无法补回。
 
 当前源码候选增加显式执行时钟、分析缓存及实际价格网格。指标使用宿主观察时间；
 原生回测与回放使用冻结的柱收盘时间。`syminfo.mintick/minmove/pricescale` 缺少
@@ -69,17 +77,16 @@ plotchar/plotarrow/plotbar/plotcandle 和垂直渐变填充也已接入同一呈
 本地运行：
 
 ```powershell
-python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.3.2
+python -m pip install --no-index --find-links <候选wheel目录> candlescope-plugin-pine-compat==0.4.0
 python -m candlescope_plugin_pine_compat
 ```
 
-构建器接受三个 wheel：本 bridge、SDK `0.2.0` 和锁定的 Pine 引擎 wheel。
+构建器接受三个 wheel：本 bridge、SDK `0.2.1` 和锁定的 Pine 引擎 wheel。
 构建候选包时传入 `--lock release/release-lock.candidate.json`，以及三次 `--wheel`
 和一个 `--output`。候选包须通过安装器和真实 sidecar 验证后再启用。
 
 ## 回测安装边界
 
-官方 0.3.1 wheel 已补齐 `Program.run_external` 和 `Program.historical_session`，
-解决 0.3.0 的回测升级阻塞。冻结 bridge、SDK 和引擎 wheel 并验收后，通过
+冻结 bridge、SDK 和引擎 wheel 并验收后，通过
 `install_native_strategy_plugins.py --runtime pine --activate` 仅升级 Pine 回测，
 保留其他注册项。安装指标 CSPKG 不会自动注册原生策略回测。

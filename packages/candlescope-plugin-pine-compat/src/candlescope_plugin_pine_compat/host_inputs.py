@@ -179,3 +179,163 @@ def require_quote_currency(analysis, requirements, request, *, external=False):
                 raise ValueError("PINE_HOST_METADATA_REQUIRED: supply requested quote currency for " + context["symbol"])
     if external and declared and declared != quote:
         raise ValueError("EXTERNAL_UNSUPPORTED: the CandleScope ledger does not convert account currencies; use native execution with explicit effective rates")
+
+
+from .strategy_time import engine_bars
+
+SOURCE_FIELDS = frozenset({"open", "high", "low", "close", "volume", "hl2", "hlc3", "ohlc4", "hlcc4"})
+FIELDS = frozenset({"schemaVersion", "libraries", "contexts", "chartMetadata", "symbolMetadata",
+                    "currencyRates", "barCalendars", "executionTimes", "sessionWindows", "requestWarmupBars"})
+
+
+def host_inputs(value=None):
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping) or set(value) - FIELDS:
+        raise ValueError("PINE_HOST_INPUT_INVALID: unknown host input fields")
+    result = dict(value)
+    if result.get("schemaVersion", 1) != 1:
+        raise ValueError("PINE_HOST_INPUT_INVALID: unsupported host input schema")
+    libraries = result.get("libraries", {})
+    if not isinstance(libraries, Mapping) or len(libraries) > 64 or any(
+        not isinstance(k, str) or not isinstance(v, str) for k, v in libraries.items()
+    ) or sum(len(v) for v in libraries.values()) > 2_000_000:
+        raise ValueError("PINE_HOST_INPUT_INVALID: libraries must be a bounded source mapping")
+    for name in ("chartMetadata", "symbolMetadata"):
+        if name in result and not isinstance(result[name], Mapping):
+            raise ValueError(f"PINE_HOST_INPUT_INVALID: {name} must be an object")
+    contexts = result.get("contexts", [])
+    if not isinstance(contexts, list) or len(contexts) > 32 or any(
+        not isinstance(item, Mapping) or set(item) - {"symbol", "timeframe", "bars", "forming"}
+        or not isinstance(item.get("symbol"), str) or not item["symbol"]
+        or not isinstance(item.get("timeframe"), str) or not item["timeframe"]
+        or ("forming" in item and type(item["forming"]) is not bool)
+        or not isinstance(item.get("bars"), list) or len(item["bars"]) > 100000 for item in contexts
+    ):
+        raise ValueError("PINE_HOST_INPUT_INVALID: invalid requested context list")
+    warmups = result.get("requestWarmupBars", {})
+    if not isinstance(warmups, Mapping) or len(warmups) > 32 or any(type(v) is not int or not 0 <= v <= 5000 for v in warmups.values()):
+        raise ValueError("PINE_HOST_INPUT_INVALID: request warmup must be 0-5000 bars")
+    times = result.get("executionTimes")
+    if times is not None and (not isinstance(times, list) or len(times) > 100000 or any(type(t) is not int or t < 0 for t in times)):
+        raise ValueError("PINE_HOST_INPUT_INVALID: executionTimes must contain millisecond timestamps")
+    return result
+
+
+def request_environment(inputs, contexts=()):
+    supplied = {}
+    rows = [*contexts, *inputs.get("contexts", [])]
+    if len(rows) > 32:
+        raise ValueError("PINE_HOST_INPUT_INVALID: at most 32 requested contexts")
+    for item in rows:
+        key = f"{item['symbol']}:{item['timeframe']}"
+        if key.startswith("$") or key in supplied:
+            raise ValueError("PINE_HOST_INPUT_INVALID: duplicate or reserved requested context")
+        supplied[key] = engine_bars(item["bars"][:-1] if item.get("forming") else item["bars"])
+    for name, key in (("chartMetadata", "$chart"), ("symbolMetadata", "$symbolMetadata"),
+                      ("currencyRates", "$currencyRates"), ("barCalendars", "$barCalendars")):
+        if inputs.get(name):
+            supplied[key] = inputs[name]
+    return supplied
+
+
+def native_inputs(request):
+    request = normalize_native_request(request)
+    inputs = host_inputs(request.get("host_inputs"))
+    supplied = native_request_bars(request, {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])})
+    if inputs.get("barCalendars"):
+        supplied["$barCalendars"] = inputs["barCalendars"]
+    options = {"request_bars": supplied or None}
+    clocks = execution_times(request["bars"], request.get("execution_times"))
+    if clocks is not None:
+        options["execution_times"] = clocks
+    if inputs.get("sessionWindows") is not None:
+        options["session_windows"] = inputs["sessionWindows"]
+    return request.get("libraries", {}), options
+
+
+def diagnostic_code(error):
+    message = str(error)
+    prefix = message.partition(":")[0]
+    if prefix.startswith(("E_", "PINE_")) and " " not in prefix:
+        return prefix
+    if "execution timestamp" in message or "execution_times" in message:
+        return "PINE_EXECUTION_CLOCK_REQUIRED"
+    if "request" in message.lower() and any(word in message.lower() for word in ("missing", "unavailable", "not found", "no data")):
+        return "PINE_REQUEST_DATA_MISSING"
+    return "PINE_EXECUTION_INPUT_INVALID"
+
+
+def price_metadata(value):
+    """Normalize the engine grid to the host's exact-decimal metadata contract."""
+    if not value:
+        return None
+    value = dict(value)
+    if "minMove" in value or "priceScale" in value:
+        from decimal import Decimal
+        move, scale = value.pop("minMove", None), value.pop("priceScale", None)
+        if type(move) is not int or type(scale) is not int or move <= 0 or scale <= 0:
+            raise ValueError("PINE_HOST_METADATA_INVALID: minMove and priceScale must be positive integers")
+        tick = format(Decimal(move) / Decimal(scale), "f")
+        if "priceTickSize" in value and Fraction(str(value["priceTickSize"])) != Fraction(move, scale):
+            raise ValueError("PINE_HOST_METADATA_INVALID: conflicting price grids")
+        value["priceTickSize"] = tick
+    chart_metadata(value)
+    return value
+
+
+def merge_explicit(left, right, label):
+    result = dict(left or {})
+    for key, value in (right or {}).items():
+        if key in result and result[key] != value:
+            raise ValueError("PINE_HOST_INPUT_INVALID: conflicting " + label + " " + key)
+        result[key] = value
+    return result
+
+
+def normalize_native_request(request):
+    inputs = host_inputs(request.get("host_inputs"))
+    if not inputs:
+        return request
+    # Prefix transports already own their bar buffers. Copy only envelopes that
+    # we modify, never the growing history on each append.
+    result = dict(request)
+    result["libraries"] = merge_explicit(inputs.get("libraries"), result.get("libraries"), "library")
+    chart = dict(result.get("context", {}))
+    chart["metadata"] = merge_explicit(chart.get("metadata"), price_metadata(inputs.get("chartMetadata")), "chart metadata") or None
+    result["context"] = chart
+    contexts = [dict(item) for item in (*result.get("contexts", []), *inputs.get("contexts", []))]
+    seen = set()
+    for context in contexts:
+        key = (context["symbol"], context["timeframe"])
+        if key in seen:
+            raise ValueError("PINE_HOST_INPUT_INVALID: duplicate requested context")
+        seen.add(key)
+        context["metadata"] = merge_explicit(context.get("metadata"), price_metadata(inputs.get("symbolMetadata", {}).get(context["symbol"])), "symbol metadata") or None
+        if context.pop("forming", False):
+            context["bars"] = context["bars"][:-1]
+    result["contexts"] = contexts
+    for source, target in (("currencyRates", "currency_rates"), ("executionTimes", "execution_times")):
+        if source in inputs:
+            if target in result and result[target] != inputs[source]:
+                raise ValueError("PINE_HOST_INPUT_INVALID: conflicting " + target)
+            result[target] = inputs[source]
+    result["host_inputs"] = {key: value for key, value in inputs.items() if key in {"sessionWindows", "barCalendars"}}
+    return result
+
+
+def normalize_indicator_options(options):
+    options = dict(options)
+    supplied = host_inputs(options.get("pineHost"))
+    options["pineLibrarySources"] = merge_explicit(options.get("pineLibrarySources"), supplied.get("libraries"), "library")
+    options["pineChartMetadata"] = merge_explicit(options.get("pineChartMetadata"), price_metadata(supplied.get("chartMetadata")), "chart metadata") or None
+    symbols = {key: price_metadata(value) for key, value in supplied.get("symbolMetadata", {}).items()}
+    options["pineRequestSymbolMetadata"] = merge_explicit(options.get("pineRequestSymbolMetadata"), symbols, "symbol metadata")
+    environment = request_environment({"contexts": supplied.get("contexts", [])})
+    options["pineRequestBars"] = merge_explicit(options.get("pineRequestBars"), environment, "requested context")
+    for source, target in (("currencyRates", "pineCurrencyRates"), ("executionTimes", "pineExecutionTimeMs")):
+        if source in supplied:
+            if target in options and options[target] != supplied[source]:
+                raise ValueError("PINE_HOST_INPUT_INVALID: conflicting " + target)
+            options[target] = supplied[source]
+    return options

@@ -31,6 +31,10 @@ def freeze_control(native, plugin, wire, payload):
         if identity.get("request_update_contract") != REQUEST_UPDATE_CONTRACT:
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Workbench requested update capability differs")
         wire["request_update_contract"] = REQUEST_UPDATE_CONTRACT
+    if response.get("fixed_history_required"):
+        if identity.get("fixed_history_contract") != "candlescope.pine-fixed-history/1":
+            raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "fixed-history capability differs")
+        wire["fixed_history_contract"] = "candlescope.pine-fixed-history/1"
     execution = response.get("execution")
     if not isinstance(execution, dict):
         raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "Pine execution requirements missing")

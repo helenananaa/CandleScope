@@ -1045,6 +1045,7 @@ export default function IndicatorPanel({
                         {ind.error && (
                           <div className="indicator-error-msg">{ind.error}</div>
                         )}
+                        {ind.runtimeNotice && <div role="status">{t(ind.runtimeNotice)}</div>}
 
                         {/* Line legend */}
                         {ind.lines && ind.lines.length > 0 && (

@@ -29,7 +29,7 @@ OFFICIAL_SHA256 = (
     "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:fb25dcc4a7b21cae415254a10050a36dc4017098887c10ef8647f99be3ef1c4d"
+    "sha256:b70f4e2bcf1dbf65ae3ce57ce3c28114e846d19f45b48898c025f923415d388a"
 )
 
 
@@ -260,19 +260,19 @@ def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     assert len(releases) == 4
     by_runtime = {release.runtime_id: release for release in releases if release.system == "Windows"}
     pine = by_runtime["candlescope.pine-compat"]
-    assert pine.version == "0.3.3"
+    assert pine.version == "0.3.2"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 5_230_066
+    assert pine.size == 4_195_533
     assert pine.url.endswith(
-        "/candlescope-plugin-pine-compat-v0.3.3/"
-        "candlescope-pine-compat-0.3.3-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pine-compat-v0.3.2/"
+        "candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg"
     )
     pine_variants = [release for release in releases if release.runtime_id == pine.runtime_id]
     assert {(item.system, item.machine) for item in pine_variants} == {
         ("Windows", "AMD64"), ("Linux", "x86_64"),
         ("Darwin", "arm64"), ("Darwin", "x86_64"),
     }
-    assert all(item.version == "0.3.3" and item.python_version == "3.12"
+    assert all(item.version == "0.3.2" and item.python_version == "3.12"
                and item.implementation == "CPython" for item in pine_variants)
 
 
@@ -547,6 +547,35 @@ def test_bootstrap_preserves_verified_user_activation_and_disabled_choice(
     assert result.status == ("ready" if enabled else "skipped")
     assert result.version == version and result.bundle_sha256 == digest
     assert not result.changed and not result.downloaded
+
+
+@pytest.mark.parametrize("matches", [True, False])
+def test_explicit_local_pin_is_checked_without_downloading_or_downgrading(tmp_path, matches):
+    release = _release(b"official")
+    lock = _write_lock(tmp_path / "releases.json", release)
+    registry = tmp_path / "runtime-registry.json"
+    pin = {"version": "0.4.0", "bundleSha256": "sha256:" + "ab" * 32}
+    (tmp_path / "first-party-local-overrides.json").write_text(json.dumps(
+        {"schemaVersion": 1, "runtimes": {release.runtime_id: pin}}), encoding="utf-8")
+    class Installer:
+        def __init__(self, **kwargs): pass
+        def list_plugins(self):
+            return [{"runtimeId": release.runtime_id, **pin, "version": "0.4.0" if matches else "0.3.0",
+                     "managed": True, "enabled": True, "autoStart": True, "required": True}]
+        def check(self, runtime_id):
+            assert runtime_id == release.runtime_id
+            return SimpleNamespace(activation_id="local-1")
+        def install(self, *args, **kwargs): pytest.fail("must not replace a pinned local install")
+    kwargs = dict(host_name="CandleScope", host_version="0.3.0",
+                  environ=_single_fixture_environment(tmp_path, CANDLESCOPE_RUNTIME_REGISTRY=str(registry)),
+                  release_lock_path=lock, installer_factory=Installer,
+                  opener=lambda *args, **kwargs: pytest.fail("must not download"))
+    if matches:
+        result = ensure_first_party_plugins_from_environment(**kwargs)
+        assert result.version == "0.4.0" and result.reason == "local-pin-checked:local-1"
+    else:
+        with pytest.raises(FirstPartyPluginBootstrapError, match="local runtime pin does not match"):
+            ensure_first_party_plugins_from_environment(**kwargs)
 
 
 def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(

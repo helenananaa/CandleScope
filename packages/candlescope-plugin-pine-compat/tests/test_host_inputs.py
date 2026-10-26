@@ -6,6 +6,20 @@ from candlescope_plugin_sdk import Bar, ExecuteBatchRequest, MarketContext
 from candlescope_plugin_pine_compat import PineCompatRuntimePlugin
 from candlescope_plugin_pine_compat.host_inputs import chart_metadata
 
+
+def test_native_host_merge_preserves_owned_history_and_input_metadata():
+    from candlescope_plugin_pine_compat.host_inputs import normalize_native_request
+    bars = [{"time": 1, "close": 2}]
+    context = {"symbol": "A", "timeframe": "1", "bars": bars, "forming": True}
+    request = {"bars": bars, "context": {"symbol": "A"},
+               "host_inputs": {"contexts": [context], "chartMetadata": {"minMove": 1, "priceScale": 4}}}
+    merged = normalize_native_request(request)
+    assert merged["bars"] is bars
+    assert merged["contexts"][0]["bars"] == []
+    assert context["forming"] and context["bars"] is bars
+    assert request["context"] == {"symbol": "A"}
+    assert normalize_native_request(merged)["bars"] is bars
+
 CONTEXT = MarketContext("binance", "spot", "BTCUSDT", "1m")
 BARS = (Bar(time=1700000000, open=10, high=11, low=9, close=10, volume=1),)
 
@@ -43,6 +57,7 @@ def test_execution_clock_is_explicit_for_batch_forming_confirmation_and_reseed()
     assert confirmed.ok
     assert [point.value for point in confirmed.output.series[0].points] == [200, 400]
     plugin.shutdown()
+    plugin = PineCompatRuntimePlugin()
     assert plugin.execute_batch(forming).meta["sessionReset"] is True
 
 

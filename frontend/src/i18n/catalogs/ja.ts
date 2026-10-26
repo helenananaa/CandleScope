@@ -1,4 +1,5 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
@@ -30,6 +31,7 @@ export const ja = {
 
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時刻と先読み期間に未来の足が含まれています。開始時刻を早めるか期間を短くしてください。確定した過去の足のみ利用できます。",
+  ...pineEnglish,
   "research.external.copyCommand": "起動コマンドをコピー",
   "research.external.commandCopied": "起動コマンドをコピーしました。",
   "research.external.copyFailed": "自動コピーを使用できません。コマンドのテキストを選択してコピーしてください。",

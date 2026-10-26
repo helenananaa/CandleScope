@@ -1,6 +1,6 @@
 """Qualify current bridge/SDK sources against an unchanged published engine.
 
-This is PR compatibility evidence, not event-engine or release qualification.
+This is PR compatibility evidence, not a published bridge release.
 """
 from __future__ import annotations
 

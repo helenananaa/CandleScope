@@ -3,6 +3,7 @@ import type { IndicatorDrawing } from "../features/indicators/indicatorTypes.js"
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
 import { buildPaneDescriptors, type PaneDescriptor } from "./singleChartIndicatorPanes.js";
@@ -393,6 +394,7 @@ interface LookupMap<TKey, TValue> {
 }
 
 interface IndicatorSeriesEntry {
+  nativePrimitive?: PineScenePrimitive;
   createdAtMs: number;
   drawingIdentity: number;
   key: string;
@@ -4358,6 +4360,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         };
 
         if (existing) {
+          if (line.nativeScene) {
+            if (!existing.nativePrimitive) {
+              existing.nativePrimitive = new PineScenePrimitive(line.nativeScene);
+              existing.series.attachPrimitive(existing.nativePrimitive);
+            } else existing.nativePrimitive.setScene(line.nativeScene);
+          } else if (existing.nativePrimitive) {
+            existing.series.detachPrimitive(existing.nativePrimitive);
+            delete existing.nativePrimitive;
+          }
           existing.series.applyOptions?.(buildIndicatorSeriesOptions(line, {
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           }));
@@ -4398,6 +4409,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           });
           series.setData(validData);
+          const nativePrimitive = line.nativeScene ? new PineScenePrimitive(line.nativeScene) : undefined;
+          if (nativePrimitive) series.attachPrimitive(nativePrimitive);
           recordPerfEvent("chart.indicatorSeries.setData", {
             ...detail,
             path: "single-reconcile",
@@ -4410,6 +4423,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             path: "single-reconcile",
           });
           nextEntries.push({
+            ...(nativePrimitive ? { nativePrimitive } : {}),
             createdAtMs: Date.now(),
             drawingIdentity: nextDrawingPaneAnchorIdentityRef.current++,
             key,

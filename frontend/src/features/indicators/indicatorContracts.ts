@@ -349,6 +349,7 @@ function parseIndicatorLine(value: unknown, path: string): IndicatorLine {
     parseIndicatorValuePoint,
   );
   const line: IndicatorLine = { data };
+  if (record.nativeScene !== undefined) line.nativeScene = expectIndicatorRecord(record.nativeScene, `${path}.nativeScene`);
   const strings = [
     "id",
     "indicatorId",
@@ -440,6 +441,7 @@ function parseIndicatorUnifiedSeries(
       parseIndicatorValuePoint,
     ),
     style: {
+      ...(style.nativeScene !== undefined ? { nativeScene: expectIndicatorRecord(style.nativeScene, `${path}.style.nativeScene`) } : {}),
       title: optionalIndicatorString(style.title, `${path}.style.title`) ?? "",
       color:
         optionalIndicatorString(style.color, `${path}.style.color`) ??
@@ -888,6 +890,7 @@ export function parseIndicatorPayloadEnvelope(
   const range = record.range;
   const revision = record.dataRevision ?? record.data_revision;
   const envelope: IndicatorPayloadEnvelope = {
+    ...(record.meta !== undefined ? { meta: expectIndicatorRecord(record.meta, `${path}.meta`) } : {}),
     ok,
     ...(record.drawings === undefined ? {} : { drawings: parseOptionalArray(record.drawings, `${path}.drawings`, (value, path) => {
       const scene = expectIndicatorRecord(value, path);

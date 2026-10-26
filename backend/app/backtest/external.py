@@ -238,6 +238,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
         request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": wire["bars"][:count], "accounts": accounts}
+        if wire.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
+            request.update(planned_bars=wire["bars"], requested_history=[
+                {"symbol": item["symbol"], "timeframe": item["timeframe"],
+                 "times_ms": [bar["time"] * 1000 for bar in item["bars"]]}
+                for item in wire.get("contexts", [])])
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
         boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)

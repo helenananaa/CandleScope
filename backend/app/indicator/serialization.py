@@ -139,6 +139,7 @@ def _build_series(
                 "type": line.get("type") or "line",
                 "data": line.get("data") or [],
                 "style": {
+                    **({"nativeScene": line["nativeScene"]} if "nativeScene" in line else {}),
                     "title": line.get("title") or line.get("name") or str(local_id),
                     "color": line.get("color") or "#f59e0b",
                     "lineWidth": line.get("lineWidth", 2),
@@ -432,6 +433,8 @@ def _flat_lines_from_render_series(result: ExecuteBatchResult) -> list[dict[str,
         }
         if style.get("colorData"):
             line["colorData"] = style["colorData"]
+        if "nativeScene" in style:
+            line["nativeScene"] = style["nativeScene"]
         if isinstance(style.get("visible"), bool):
             line["visible"] = style["visible"]
         if isinstance(style.get("trackPrice"), bool):

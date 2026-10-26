@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - candlescope-plugin-pine-compat-v0.3.3
+      - candlescope-plugin-pine-compat-v0.4.0
   pull_request:
     paths:
       - packages/candlescope-plugin-pine-compat/**
@@ -49,7 +49,7 @@ jobs:
       - name: Build bridge wheel
         run: python -m build --wheel --no-isolation --outdir dist packages/candlescope-plugin-pine-compat
       - name: Freeze bridge archive metadata
-        run: python packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py dist/candlescope_plugin_pine_compat-0.3.3-py3-none-any.whl
+        run: python packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py dist/candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl
       - name: Build the exact SDK for first-release qualification
         if: github.event_name != 'pull_request'
         run: python -m build --wheel --no-isolation --outdir dist packages/candlescope-plugin-sdk
@@ -131,5 +131,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME" dist/*.cspkg dist/*.whl dist/SHA256SUMS
-          --verify-tag --latest=false --title "CandleScope Pine plugin 0.3.3"
-          --notes-file packages/candlescope-plugin-pine-compat/release/release-0.3.3.md
+          --verify-tag --latest=false --title "CandleScope Pine plugin 0.4.0"
+          --notes-file packages/candlescope-plugin-pine-compat/release/release-0.4.0.md

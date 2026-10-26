@@ -1,5 +1,6 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
@@ -18,6 +19,7 @@ export const en = {
   "indicator.pine.contexts": "Pine requested markets (JSON)",
   "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
   ...readonlyAccountEnglish,
+  ...pineEnglish,
   ...externalProviderEnglish,
   "replay.err.futureInput": "The start time plus the forward window includes future bars. Choose an earlier start or shorten the forward window; only closed historical bars are available.",
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",

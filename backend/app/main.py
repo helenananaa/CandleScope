@@ -503,6 +503,13 @@ async def _start_plugin_plane() -> None:
     app.state.plugin_runtime_host = plugin_runtime_host
     app.state.indicator_runtime_service = indicator_runtime_service
     indicator_runtime_service.pine_data_manager = lambda: getattr(app.state, "data_manager", None)
+    from app.indicator.pine_host import PineHostInputs
+    from app.indicator.pine_alerts import PineAlerts
+    indicator_runtime_service.observe_result = PineAlerts(lambda: getattr(app.state, "alert_facade", None)).observe
+    pine_inputs = PineHostInputs(lambda: getattr(app.state, "data_manager", None))
+    indicator_runtime_service.prepare_inputs = pine_inputs.prepare
+    indicator_runtime_service.release_inputs = pine_inputs.release
+    indicator_runtime_service.stop_inputs = pine_inputs.stop
     app.state.plugin_v1_compatibility = v1_compatibility
     app.state.plugin_platform_v2 = plugin_platform_v2
     app.state.plugin_platform_v2_management_guard = plugin_platform_v2_guard

@@ -7,7 +7,7 @@ from app.data_preparation.models import PreparationError, PreparationRequest, Re
 from app.replay.request_contracts import TrainingRunSetupPayload
 from app.backtest.request_contracts import ChartContextResolveRequest, ResearchExecutionOverrides
 from app.backtest.workbench_identity import preparation_identity
-from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData, WorkbenchBarSettings
+from app.backtest.native_contracts import HostMatchingSettings, ExternalRunRequest, PineChartMetadata, RequestedNativeData, WorkbenchBarSettings, PineHostEnvironment
 from app.api.v1.backtests import _operator_python_payload
 
 router = APIRouter(prefix="/data-preparations", tags=["data-preparation"])
@@ -110,6 +110,7 @@ class NativePreparationPayload(BaseModel):
     contexts: list[NativeDependencyPayload] = Field(default_factory=list, max_length=16)
     libraries: dict[str, str] = Field(default_factory=dict)
     execution: AutomaticHostExecution | None = None
+    host_inputs: PineHostEnvironment = Field(default_factory=PineHostEnvironment)
     chart_metadata: PineChartMetadata | None = None
     currency_rates: dict | None = None
 
@@ -178,8 +179,19 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
             raise HTTPException(422, detail={"code": "DEPENDENCY_INTERVAL_UNSUPPORTED", "message": "Select minute or coarser dependency intervals"})
         dependency["interval"] = dependency_spec.canonical
     source = "\n".join([payload.source, *payload.libraries.values()])
-    discovered = invoke(lambda: requested_contexts(source,
-        symbol=f"{context['exchange'].upper()}:{context['symbol']}", interval=context["interval"], explicit=bool(dependencies)))
+    if payload.language == "pine":
+        from app.indicator.pine_host import compiled_contexts, pine_timeframe
+        from app.backtest.errors import BacktestError
+        try:
+            analysis = await call_storage(request, runtime.native.analyze_source, payload.source, payload.libraries)
+            discovered = compiled_contexts(analysis["requirements"],
+                f"{context['exchange'].upper()}:{context['symbol']}",
+                pine_timeframe(context["interval"]), dependencies)
+        except (BacktestError, ValueError) as exc:
+            raise HTTPException(409, detail={"code": getattr(exc, "code", "PINE_DEPENDENCY_INVALID"), "message": str(exc)}) from exc
+    else:
+        discovered = invoke(lambda: requested_contexts(source,
+            symbol=f"{context['exchange'].upper()}:{context['symbol']}", interval=context["interval"], explicit=bool(dependencies)))
     lookbacks = invoke(lambda: requested_lookbacks(source,
         symbol=f"{context['exchange'].upper()}:{context['symbol']}", interval=context["interval"], explicit=bool(dependencies)))
     required = {}
@@ -217,7 +229,7 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     prepared = PreparationRequest(idempotency_key=payload.idempotency_key, consumer="STRATEGY",
         requirements=requirements, intent={"submission": submission, "native_strategy": {
             "language": payload.language, "source": payload.source, "parameters": payload.parameters,
-            "libraries": payload.libraries, "bindings": bindings, "dependency_requirements": dependencies,
+            "libraries": payload.libraries, "host_inputs": payload.host_inputs.model_dump(exclude_none=True), "bindings": bindings, "dependency_requirements": dependencies,
             **({"chart_metadata": payload.chart_metadata.model_dump(exclude_none=True)} if payload.chart_metadata is not None else {}),
             **({"currency_rates": payload.currency_rates} if payload.currency_rates is not None else {}),
             **({"execution": payload.execution.model_dump(mode="json")} if payload.execution is not None else {})}})

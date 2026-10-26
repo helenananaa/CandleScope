@@ -29,6 +29,7 @@ const SOURCE_FIXED_LABELS: Record<string, string> = {
   rsi: "RSI(14)",
   macdHist: "MACD Histogram",
   ma20: "MA(20)",
+  pineAlert: "Pine alert",
 };
 
 const SOURCE_LABEL_KEYS: Record<string, MessageKey> = {
@@ -50,6 +51,7 @@ export const ALERT_SOURCE_OPTIONS = [
   { value: "rsi" },
   { value: "macdHist" },
   { value: "ma20" },
+  { value: "pineAlert" },
 ] as const;
 
 const COMPARATOR_LABEL_KEYS: Record<string, MessageKey> = {

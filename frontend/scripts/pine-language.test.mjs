@@ -61,6 +61,7 @@ test("Pine completions expose only host-declared chart context fields", () => {
   }, { lineNumber: 1, column: 4 });
   const rootLabels = rootResult.suggestions.map(({ label }) => label);
   assert.equal(rootLabels.includes("plot"), true);
-  assert.equal(rootLabels.includes("plotarrow"), false);
+  // Arrow plots are rendered by the supported Pine native scene primitive.
+  assert.equal(rootLabels.includes("plotarrow"), true);
   assert.equal(rootLabels.includes("strategy"), false);
 });

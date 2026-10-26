@@ -94,6 +94,19 @@ export default function IndicatorEditor({
   const [currencyJson, setCurrencyJson] = useState(() => indicator.params?.__pineCurrencyRates ? JSON.stringify(indicator.params.__pineCurrencyRates, null, 2) : "");
   const librariesValid = useMemo(() => { try { parsePineLibraries(libraryJson); parsePineContexts(contextJson); parsePineCurrencyRates(currencyJson); return true; } catch { return false; } }, [libraryJson, contextJson, currencyJson]);
 
+  const [hostText, setHostText] = useState(() => JSON.stringify(indicator.params?.__pineHost || {}, null, 2));
+  const [sessionEpoch, setSessionEpoch] = useState(() => String(indicator.params?.__pineSessionEpoch || "0"));
+  const [pineAlerts, setPineAlerts] = useState(indicator.params?.__pineAlerts === true);
+  const hostConfig = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(hostText);
+      if (!optionalRecord(value)) throw new Error("Expected a JSON object");
+      return { value, error: "" };
+    } catch (error) { return { value: {}, error: String(error) }; }
+  }, [hostText]);
+  const hostParams = useMemo(() => ({ ...indicator.params,
+    ...(language === "pine" ? { __pineHost: hostConfig.value, __pineSessionEpoch: sessionEpoch, __pineAlerts: pineAlerts } : {}),
+  }), [indicator.params, language, hostConfig, sessionEpoch, pineAlerts]);
   const [runtimeCatalog, setRuntimeCatalog] = useState<ScriptRuntimeCatalog | null>(null);
   const [runtimeCatalogError, setRuntimeCatalogError] = useState<string | null>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -134,9 +147,9 @@ export default function IndicatorEditor({
     [allowedRuntimeCatalog, selectedLanguage],
   );
   const editorParams = useMemo(() => librariesValid && selectedLanguage?.id === "pine"
-    ? pineCurrencyParams(pineContextParams(pineLibraryParams(indicator.params, libraryJson), contextJson), currencyJson)
-    : pineCurrencyParams(pineContextParams(pineLibraryParams(indicator.params, "{}"), "[]"), ""),
-  [indicator.params, selectedLanguage?.id, libraryJson, contextJson, currencyJson, librariesValid]);
+    ? pineCurrencyParams(pineContextParams(pineLibraryParams(hostParams, libraryJson), contextJson), currencyJson)
+    : pineCurrencyParams(pineContextParams(pineLibraryParams(hostParams, "{}"), "[]"), ""),
+  [hostParams, selectedLanguage?.id, libraryJson, contextJson, currencyJson, librariesValid]);
   const languageReady = Boolean(selectedLanguage?.available && editorProfile);
   const script = scriptEditorSource(draft, selectedLanguage?.id || language, editorProfile?.starterSource || "");
   const requestedLanguageId = (language || indicator?.language || "").trim();
@@ -176,7 +189,7 @@ export default function IndicatorEditor({
   }, [editorProfile?.pineEnhancements, pineHostCapabilities]);
 
   const handlePreview = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && !librariesValid)) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && (!librariesValid || Boolean(hostConfig.error)))) return;
     onPreview({
       id: indicator?.id || previewState?.id || null,
       name,
@@ -197,10 +210,11 @@ export default function IndicatorEditor({
     readOnly,
     script,
     selectedLanguage,
+    hostConfig.error,
   ]);
 
   const handleSave = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && !librariesValid)) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && (!librariesValid || Boolean(hostConfig.error)))) return;
     void onSave({
       id: indicator?.id || previewState?.id || null,
       name,
@@ -221,6 +235,7 @@ export default function IndicatorEditor({
     readOnly,
     script,
     selectedLanguage,
+    hostConfig.error,
   ]);
 
   const handleLanguageChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -377,6 +392,17 @@ export default function IndicatorEditor({
           />
         </div>
 
+        {language === "pine" && <details>
+          <summary>{t("pine.host.title")}</summary>
+          <p>{t("pine.host.hint")}</p>
+          <label>{t("pine.host.json")}<textarea value={hostText} readOnly={readOnly} spellCheck={false}
+            style={{ width: "100%", minHeight: 100 }} onChange={(event) => setHostText(event.target.value)} /></label>
+          {hostConfig.error && <p role="alert">{hostConfig.error}</p>}
+          <button type="button" disabled={readOnly} onClick={() => setSessionEpoch(crypto.randomUUID())}>{t("pine.host.reset")}</button>
+          <p>{t("pine.host.resetHint")}</p>
+          <label><input type="checkbox" checked={pineAlerts} disabled={readOnly} onChange={(event) => setPineAlerts(event.target.checked)} />{t("pine.host.alerts")}</label>
+          <p>{t("pine.host.alertHint")}</p>
+        </details>}
         {/* Code editor */}
         {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
           <p className="indicator-editor-frontend-help" style={{ color: "var(--text-muted)", fontSize: "12px" }}>

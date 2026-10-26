@@ -66,6 +66,8 @@ export function NativeAdvancedInputs({ value, onChange, language, disabled, exch
       </select></label>
       <p>{t("native.inputs.magnifierHint")}</p></>}
       <label>{t("native.inputs.libraries")}<textarea disabled={disabled} spellCheck={false} value={value.libraries} onChange={(event) => onChange({ ...value, libraries: event.target.value })} /></label>
+      <label>{t("pine.host.title")}<textarea disabled={disabled} spellCheck={false} value={value.hostInputs || "{}"} onChange={(event) => onChange({ ...value, hostInputs: event.target.value })} /></label>
+      <p>{t("pine.host.hint")}</p>
       <PineCurrencyInputs value={value.currencyRates ?? ""} readOnly={disabled}
         onChange={(currencyRates) => onChange({ ...value, currencyRates })} />
     </>}

@@ -151,7 +151,7 @@ def launch(runtime, intent, inputs, job_id):
     main, *contexts = inputs
     payload = {key: value for key, value in main.items() if key not in {"symbol", "timeframe"}}
     payload.update(language=intent["language"], source=intent["source"], parameters=intent["parameters"],
-        libraries=intent["libraries"], contexts=contexts,
+        libraries=intent["libraries"], contexts=contexts, host_inputs=intent.get("host_inputs", {}),
         context={"symbol": main["symbol"], "timeframe": main["timeframe"],
                  **({"metadata": intent["chart_metadata"]} if intent.get("chart_metadata") else {})})
     if intent.get("currency_rates") is not None:

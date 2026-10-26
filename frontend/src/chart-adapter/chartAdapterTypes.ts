@@ -98,6 +98,7 @@ export type NormalizedIndicatorSeriesEntry =
   | NormalizedIndicatorWhitespaceEntry;
 
 export interface IndicatorLine {
+  nativeScene?: Record<string, unknown>;
   id?: string;
   indicatorId?: string;
   localId?: string;

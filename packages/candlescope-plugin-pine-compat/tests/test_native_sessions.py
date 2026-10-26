@@ -79,17 +79,20 @@ def test_stateless_forming_and_changed_parameters_do_not_reuse_state():
     assert independent.meta["sessionRetained"] is False
 
 
-def test_session_eviction_rebases_and_invalid_bars_fail_without_hidden_advance():
+def test_session_eviction_recovers_and_invalid_bars_fail_without_hidden_advance():
     plugin = PineCompatRuntimePlugin()
     plugin._sessions.capacity = 1
     execute(plugin, [bar(0, 10)])
     execute(plugin, [bar(0, 10)], identity="b")
-    assert execute(plugin, [bar(0, 10)]).meta["sessionReset"] is True
+    recovered = execute(plugin, [bar(0, 10)])
+    assert recovered.meta["sessionRecovered"] and not recovered.meta["sessionReset"]
     bad = ExecuteBatchRequest(source=SOURCE, context=CONTEXT,
                               bars=(bar(0, 10), replace(bar(1, 20), high=1)),
                               options={"pineSessionId": "subscription-a"})
     assert not plugin.execute_batch(bad).ok
-    assert execute(plugin, [bar(0, 10), bar(1, 20)]).meta["sessionReset"] is True
+    after = execute(plugin, [bar(0, 10), bar(1, 20)])
+    assert after.meta["sessionRecovered"] and not after.meta["sessionReset"]
+    assert values(after) == values(execute(PineCompatRuntimePlugin(), [bar(0, 10), bar(1, 20)]))
 
 
 def test_engine_version_drift_is_rejected(monkeypatch):

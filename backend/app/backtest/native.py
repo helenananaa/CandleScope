@@ -189,6 +189,14 @@ class NativeBacktests:
         finally:
             snapshot.close()
 
+    def analyze_source(self, source, libraries=None):
+        plugin = self.resolver("pine")
+        identity = self.runner(plugin, {"operation": "describe"}, timeout=15)["identity"]
+        if identity.get("adapter") != "pine-native/3":
+            raise BacktestError("PINE_RUNTIME_UPGRADE_REQUIRED", "Pine input discovery requires bridge 0.4.0 / engine 0.3.3")
+        return self.runner(plugin, {"protocol": PROTOCOL, "identity": identity,
+            "operation": "analyze", "source": source, "libraries": libraries or {}}, timeout=15)
+
     def create(self, payload, key):
         if not self.runtime.settings.bar_effective:
             raise BacktestError("FLAG_DISABLED", "BAR backtests are disabled")
@@ -287,6 +295,29 @@ class NativeBacktests:
                 wire["context"] = chart
                 clock_interval = parse_interval_spec(payload["interval"])
                 wire["execution_times"] = [clock_interval.next_ms(bar["time"] * 1000) - 1 for bar in bars]
+            if payload["language"] == "pine":
+                from app.indicator.pine_host import symbol_metadata
+                inputs = {key: value for key, value in (payload.get("host_inputs") or {}).items() if value is not None}
+                # Exact metadata is frozen into the run wire and its identity hash.
+                if not inputs.get("chartMetadata"):
+                    metadata = symbol_metadata(payload.get("exchange", "binance"), payload.get("market_type", "usdm"), manifest["symbol"])
+                    if metadata:
+                        inputs["chartMetadata"] = metadata
+                inputs["chartMetadata"] = {k: v for k, v in inputs.get("chartMetadata", {}).items() if v is not None}
+                inputs["symbolMetadata"] = {key: {k: v for k, v in value.items() if v is not None}
+                    for key, value in inputs.get("symbolMetadata", {}).items()}
+                for context in payload.get("contexts", []):
+                    metadata = symbol_metadata(context.get("exchange", payload.get("exchange", "binance")),
+                        context.get("market_type", payload.get("market_type", "usdm")), context["symbol"].split(":", 1)[-1])
+                    if metadata:
+                        inputs["symbolMetadata"].setdefault(context["symbol"], metadata)
+                wire["host_inputs"] = inputs
+                if not external and "executionTimes" not in inputs:
+                    interval_spec = parse_interval_spec(payload["interval"])
+                    inputs["executionTimes"] = [interval_spec.next_ms(bar["time"] * 1000) - 1 for bar in bars]
+                    wire["clock_policy"] = "historical-bar-close"
+                else:
+                    wire["clock_policy"] = "scheduled-observation" if external else "host-supplied"
             if external:
                 from .external import host_identity
                 from .external_market import freeze_execution

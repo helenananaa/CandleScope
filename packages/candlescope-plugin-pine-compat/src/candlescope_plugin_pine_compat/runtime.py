@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import math
 import re
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,7 +33,7 @@ from candlescope_plugin_sdk import (
     RuntimeDescriptor,
 )
 
-from .host_inputs import chart_metadata, execution_times, indicator_request_bars
+from .host_inputs import chart_metadata, execution_times, indicator_request_bars, host_inputs, diagnostic_code, SOURCE_FIELDS, normalize_indicator_options
 from .libraries import LIBRARY_PARAMETER, library_digests, library_sources
 from .currency_inputs import currency_rates
 from .object_scene import object_scenes
@@ -43,7 +42,7 @@ from .sessions import PineSessions
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.3"
+PLUGIN_VERSION = "0.4.0"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
 EXPECTED_ENGINE_VERSION = "0.3.3"
@@ -344,6 +343,8 @@ def _feature_is_host_blocked(
     *,
     chart_symbol: str | None,
     chart_timeframe: str | None,
+    chart_metadata=None,
+    bar_calendars=None,
 ) -> bool:
     normalized = feature.strip().lower()
     if normalized in _HOST_CHART_GRID_FEATURES:
@@ -379,8 +380,10 @@ def _native_analysis(engine, source: str, libraries=()) -> dict[str, Any]:
 
 def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
     engine, _version = _engine_contract()
+    options = normalize_indicator_options(options or {})
+    supplied = host_inputs(options.get("pineHost"))
     try:
-        libraries = library_sources(options or {})
+        libraries = library_sources(options)
     except (TypeError, ValueError) as exc:
         if str(exc).startswith("PINE_HOST_"):
             code, _, message = str(exc).partition(": ")
@@ -428,6 +431,8 @@ def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, 
             str(item.get("feature") or ""),
             chart_symbol=bindings["chartSymbol"],
             chart_timeframe=bindings["chartTimeframe"],
+            chart_metadata=supplied.get("chartMetadata"),
+            bar_calendars=supplied.get("barCalendars"),
         )
     ]
     if blocked:
@@ -571,10 +576,10 @@ def _normalize_overrides(params: Mapping[str, Any], analysis: Mapping[str, Any])
                 "PINE_INVALID_PARAMS",
                 f"Pine parameter {key} color integer must fit in u32",
             )
-        if name == "input.source":
+        if name == "input.source" and (not isinstance(value, str) or value not in SOURCE_FIELDS):
             raise BridgeError(
                 "PINE_INVALID_PARAMS",
-                f"Pine parameter {key} cannot override input.source in this host",
+                f"Pine parameter {key} must select a supported OHLCV source",
             )
         if name in {
             "input.string",
@@ -762,6 +767,8 @@ def _param_schema(analysis: Mapping[str, Any], overrides: Mapping[int, Any]) -> 
         for key in ("default", "min", "max", "step", "options"):
             if raw.get(key) is not None:
                 item[key] = raw[key]
+        if name == "input.source":
+            item["options"] = sorted(SOURCE_FIELDS)
         if call_site_id in overrides:
             item["current"] = overrides[call_site_id]
         elif raw.get("default") is not None:
@@ -799,6 +806,7 @@ def _normalize_output(
     *,
     source: str,
     host_times: list[int],
+    host_bars: list[dict[str, Any]],
     analysis: Mapping[str, Any],
     overrides: Mapping[int, Any],
     render_hints: Mapping[str, Any] | None,
@@ -1299,17 +1307,20 @@ def _normalize_output(
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
     """Expose the independently built Pine engine through protocol v1."""
 
-    def __init__(self) -> None:
-        self._sessions = PineSessions()
+    def __init__(self, *, journal_path=None) -> None:
+        self._sessions = PineSessions(journal_path=journal_path)
 
     def shutdown(self) -> None:
         self._sessions.clear()
+        self._sessions.journal.close()
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()
 
     def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
         try:
+            from dataclasses import replace
+            request = replace(request, options=normalize_indicator_options(request.options))
             analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
         except BridgeError as exc:
             return AnalyzeResult(ok=False, executable=False, diagnostics=(exc.diagnostic(),))
@@ -1359,11 +1370,15 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
 
     def execute_batch(self, request: ExecuteBatchRequest) -> ExecuteBatchResult:
         try:
+            from dataclasses import replace
+            request = replace(request, options=normalize_indicator_options(request.options))
             analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
             error = next((item for item in diagnostics if item.severity == "error"), None)
             if error is not None:
                 return ExecuteBatchResult(ok=False, diagnostics=diagnostics)
             runtime_bars, host_times = _normalize_bars(request)
+            host_bars = runtime_bars
+            host_environment = host_inputs(request.options.get("pineHost"))
             overrides = _normalize_overrides({key: value for key, value in request.params.items() if key not in {LIBRARY_PARAMETER, "__pineContexts", "__pineCurrencyRates"}}, analysis)
             bindings = _host_bindings(request.context)
             engine, _version = _engine_contract()
@@ -1374,7 +1389,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             if request.options.get("pineRequestError"):
                 raise BridgeError("PINE_REQUEST_DATA_REQUIRED", str(request.options["pineRequestError"]))
             supplied = request.options.get("pineRequestBars")
-            if supplied is not None:
+            if supplied:
                 if not isinstance(supplied, Mapping) or any(not isinstance(key, str) or key.startswith("$") for key in supplied):
                     raise BridgeError("PINE_REQUEST_DATA_INVALID", "Requested data must map symbol/timeframe keys to bars.")
                 options["request_bars"] = dict(supplied)
@@ -1392,9 +1407,14 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             rates = currency_rates(request.options.get("pineCurrencyRates"))
             if rates is not None:
                 options["request_bars"] = {**options.get("request_bars", {}), "$currencyRates": rates}
+            if host_environment.get("sessionWindows") is not None:
+                options["session_windows"] = host_environment["sessionWindows"]
+            if host_environment.get("barCalendars"):
+                options["request_bars"] = {**options.get("request_bars", {}), "$barCalendars": host_environment["barCalendars"]}
             needs_clock = (analysis.get("hostRequirements") or {}).get("execution", {}).get("clock") == "explicitTimestampWhenEvaluated"
-            clocks = (execution_times(runtime_bars, request.options.get("pineExecutionTimeMs"),
-                                      default=int(time.time() * 1000)) if needs_clock else None)
+            clocks = execution_times(runtime_bars, request.options.get("pineExecutionTimeMs")) if needs_clock else None
+            if needs_clock and clocks is None:
+                raise BridgeError("PINE_EXECUTION_CLOCK_REQUIRED", "Supply captured observation timestamps for this script.")
             if bindings["chartSymbol"] is not None:
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
@@ -1413,17 +1433,28 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                     session_id=session_id, forming=forming, execution_times=clocks,
                     calculation_bars_count=analysis.get("calculationBarsCount"),
                     request_observation=request.options.get("pineRequestObservation"),
+                    epoch=request.options.get("pineSessionEpoch", "0"),
+                    providers=host_environment.get("contexts", []),
+                    verify_history_clocks=isinstance(request.options.get("pineExecutionTimeMs"), list),
                 )
             else:
                 raw = engine.run_script(request.source, runtime_bars, **options,
                                         **({"execution_times": clocks} if clocks is not None else {}))
+                host_bars = runtime_bars
+            from .window_alignment import calculation_skip
             count = analysis.get("calculationBarsCount")
-            start_index = execution_meta.get("historyStartIndex", max(0, len(host_times) - count) if count else 0)
+            if "hostBars" in execution_meta:
+                host_bars = execution_meta.pop("hostBars")
+                host_times = [row["time"] // 1000 for row in host_bars]
+            start_index = execution_meta.get("historyStartIndex")
+            if start_index is None:
+                start_index = calculation_skip(engine, request.source, runtime_bars, options, clocks, raw, count)
             if not analysis.get("executionWindowAvailable") and "calc_bars_count" in request.source:
                 raise BridgeError("PINE_HOST_DRAWING_WINDOW_REQUIRED", "This script needs an engine with execution-window metadata.")
             if start_index:
                 execution_meta["historyStartIndex"] = start_index
             host_times = host_times[start_index:]
+            host_bars = host_bars[start_index:]
             render_hints = request.options.get("renderHints")
             if not isinstance(render_hints, Mapping):
                 render_hints = None
@@ -1431,6 +1462,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 raw,
                 source=request.source,
                 host_times=host_times,
+                host_bars=host_bars,
                 analysis=analysis,
                 overrides=overrides,
                 render_hints=render_hints,
@@ -1443,7 +1475,11 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 meta.setdefault("executionTimesMs", clocks)
             if grid is not None:
                 meta["chartMetadata"] = grid
+            meta["hostRequirements"] = analysis.get("hostRequirements")
+            meta["pineAlerts"] = raw.get("alerts", [])
+            meta["symbolMetadataSource"] = "host" if grid else "synthetic-defaults"
             meta["closedBarsOnly"] = False
+            self._sessions.commit(session_id)
             return ExecuteBatchResult(
                 ok=True,
                 output=output,
@@ -1470,10 +1506,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 ok=False,
                 diagnostics=(
                     Diagnostic(
-                        code="PINE_BRIDGE_OUTPUT_INVALID",
+                        code=diagnostic_code(exc),
                         severity="error",
                         message=(
-                            "Pine returned output that cannot be represented by Render IR v1."
+                            str(exc)
                         ),
                         hint=str(exc),
                     ),

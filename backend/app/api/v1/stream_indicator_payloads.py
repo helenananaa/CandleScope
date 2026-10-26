@@ -800,8 +800,15 @@ def _script_runtime_request(
     if str(meta.get("language") or "pine") == "pine" and transport.startswith("websocket."):
         # Identity belongs to this subscription, not source text shared by users.
         if not meta.get("pineRuntimeSessionId"):
-            meta["pineRuntimeSessionId"] = uuid.uuid4().hex
+            import hashlib
+            owner = meta.get("pineSessionOwner")
+            meta["pineRuntimeSessionId"] = hashlib.sha256(str((owner, meta.get("exchange"), meta.get("market_type"),
+                meta.get("symbol"), meta.get("interval"))).encode()).hexdigest() if owner else uuid.uuid4().hex
         pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
+        pine_options["pineSessionEpoch"] = (meta.get("params") or {}).get("__pineSessionEpoch", "0")
+        pine_options["pineLiveUpdate"] = bool(meta.get("pineLiveUpdate"))
+        pine_options["pineLiveBarTime"] = int(meta.get("pineLiveBarTime") or 0)
+        pine_options["pineLeaseId"] = meta.get("streamConsumerId")
     return IndicatorRuntimeRequest(
         language=str(meta.get("language") or "pine"),
         source=str(meta.get("script") or ""),
@@ -974,6 +981,8 @@ async def _compute_script_snapshot_message_async(
 ) -> dict:
     """Compute a script-runtime snapshot without blocking the event loop."""
     service = runtime_service or _unbound_indicator_runtime_service
+    meta["pineLiveUpdate"] = bool(bar_time)
+    meta["pineLiveBarTime"] = int(bar_time)
     bars = await run_script_wait(
         _query_script_snapshot_bars,
         dm,

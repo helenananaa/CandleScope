@@ -7,7 +7,7 @@ import pine_compat
 from candlescope_plugin_sdk.native_strategy import identity, serve, serve_evaluator
 
 from .event_requests import run_with_event_requests
-from .host_inputs import chart_metadata, native_request_bars, require_price_grid, require_quote_currency
+from .host_inputs import chart_metadata, native_request_bars, normalize_native_request, require_price_grid, require_quote_currency
 from .libraries import library_sources
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT
 from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
@@ -22,6 +22,7 @@ from .event_stream import capabilities as event_capabilities, required as event_
 _prefix = PrefixInput()
 _session = None
 _session_count = 0
+_fixed_history = None
 
 
 def describe():
@@ -33,6 +34,7 @@ def describe():
         ),
         "workbench_control": "candlescope.pine-workbench-control/1",
         "external_replay": "candlescope.external-replay/1",
+        "fixed_history_contract": "candlescope.pine-fixed-history/1",
         **schedule_capabilities(),
         **stream_capabilities(),
         **request_update_capabilities(),
@@ -81,13 +83,14 @@ def request_environment(request):
     return supplied
 
 def _execute(request):
-    global _session, _session_count
+    global _session, _session_count, _fixed_history
     appending = request.get("operation") == "append_prefix"
-    request = _prefix.decode(request)
+    request = normalize_native_request(_prefix.decode(request))
     standalone_updates = validate_request_updates(request)
     if not appending:
         _session = None
         _session_count = 0
+        _fixed_history = None
     program, analysis = prepare(request["source"], library_sources({"pineLibrarySources": request.get("libraries", {})}))
     if request.get("request_update_contract") is not None and not request_updates_eligible(analysis):
         raise ValueError("PINE_REQUEST_UPDATE_UNSUPPORTED: synthetic event-series requests retain their legacy input contract")
@@ -103,21 +106,6 @@ def _execute(request):
         if len(matches) != 1 or str(matches[0]["callSiteId"]) in parameters:
             raise ValueError("EXTERNAL_PARAMETER_INVALID: " + name)
         parameters[str(matches[0]["callSiteId"])] = value
-    if request.get("operation") == "host_control":
-        environment = request_environment(request)
-        requirements = program.host_requirements()
-        events=event_required(analysis) and any(requirements["execution"].get(name)
-            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
-        if requirements.get("account") is None:
-            raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
-        return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
-            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) or events else {}),
-            **(event_capabilities() if events else {}),
-            **({"default_quantity": requirements["account"]["defaultQuantity"]}
-               if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
-            **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
-                chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
-                request_bars=environment or None)} if risk else {})}
     features = {
         item.get("feature", "") for item in analysis.get("compatibility", {}).get("supported", [])
     }
@@ -127,6 +115,22 @@ def _execute(request):
         or feature.startswith("chart.")
         for feature in features
     ) or bool(re.search(r"\b(last_bar_index|last_bar_time|calc_bars_count)\b", request["source"]))
+    if request.get("operation") == "host_control":
+        environment = request_environment(request)
+        requirements = program.host_requirements()
+        events=event_required(analysis) and any(requirements["execution"].get(name)
+            for name in ("calcOnEveryTick","calcOnEveryHistoryTick"))
+        if requirements.get("account") is None:
+            raise ValueError("EXTERNAL_UNSUPPORTED: Workbench Host execution requires a Pine strategy")
+        return {"contract": "candlescope.pine-workbench-control/1", "execution": requirements["execution"],
+            "fixed_history_required": endpoint_sensitive,
+            **({"request_update_contract": REQUEST_UPDATE_CONTRACT} if request_updates_eligible(analysis) or events else {}),
+            **(event_capabilities() if events else {}),
+            **({"default_quantity": requirements["account"]["defaultQuantity"]}
+               if getattr(pine_compat, "EXTERNAL_SIZING_SCHEMA_VERSION", 0) == 1 else {}),
+            **({"risk_rules": program.strategy_risk_configuration(input_overrides=parameters or None,
+                chart_symbol=request["context"]["symbol"], chart_timeframe=request["context"]["timeframe"],
+                request_bars=environment or None)} if risk else {})}
     # Growing historical prefixes change dataset-end builtins retroactively.
     # Only prefix-stable programs can reuse committed execution state.
     incremental = (
@@ -153,7 +157,16 @@ def _execute(request):
             raise ValueError("EXTERNAL_UNSUPPORTED: unknown order metadata contract")
         annotations = {"order_metadata": True}
     try:
-        if incremental:
+        if endpoint_sensitive and request.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
+            from .fixed_history import FixedHistory
+            if _fixed_history is None:
+                _fixed_history = FixedHistory(program, request, dict(
+                    input_overrides=parameters or None,
+                    chart_symbol=request["context"]["symbol"],
+                    chart_timeframe=request["context"]["timeframe"],
+                    request_bars=supplied, **closing, **annotations, **risk))
+            result = _fixed_history.advance(request, accounts, evaluations)
+        elif incremental:
             if _session is None:
                 _session = program.external_session(
                     input_overrides=parameters or None,

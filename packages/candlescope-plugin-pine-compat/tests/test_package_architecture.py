@@ -69,7 +69,7 @@ def test_release_lock_tracks_the_exact_public_engine_asset() -> None:
     assert engine["size"] == 2_961_677
 
 
-def test_current_release_uses_the_official_stable_engine() -> None:
+def test_current_release_uses_the_pinned_locally_verified_engine() -> None:
     lock = json.loads((ROOT / "release/release-lock.json").read_text(encoding="utf-8"))
     assert lock["plugin"]["version"] == candlescope_plugin_pine_compat.__version__
     engine = lock["wheels"]["pine-compat-runtime"]

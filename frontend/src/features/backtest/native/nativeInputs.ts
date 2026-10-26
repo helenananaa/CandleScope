@@ -20,7 +20,7 @@ export interface InputDataset {
   exchange?: string; market_type?: string;
 }
 export interface ContextChoice extends PineContractDraft { dataset: InputDataset; symbol: string; marketType?: string }
-export interface AdvancedInputs extends PineContractDraft { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string; currencyRates?: string }
+export interface AdvancedInputs extends PineContractDraft { contexts: ContextChoice[]; magnifier: InputDataset | null; libraries: string; currencyRates?: string; hostInputs?: string }
 export const emptyAdvancedInputs = (): AdvancedInputs => ({ contexts: [], magnifier: null, libraries: "{}" });
 
 export function restoreAdvancedInputs(value: unknown, strictContexts = false): AdvancedInputs {
@@ -107,6 +107,8 @@ export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Re
 }
 
 export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine", main: MainRange, api = nativeApi) {
+  const host_inputs: unknown = JSON.parse(selection.hostInputs || "{}");
+  if (!host_inputs || typeof host_inputs !== "object" || Array.isArray(host_inputs)) throw new Error("PINE_HOST_INPUT_INVALID: expected an object");
   const rates = parsePineCurrencyRates(selection.currencyRates ?? "");
   pineContractMetadata(selection);
   if (language !== "pine") throw new Error("Unsupported strategy language");
@@ -123,7 +125,7 @@ export async function freezeAdvancedInputs(selection: AdvancedInputs, language: 
   if (new Set(keys).size !== keys.length || selection.contexts.some(({ symbol }) => !symbol.trim())) {
     throw new Error("NATIVE_INPUT_INVALID: empty or duplicate requested context");
   }
-  if (!selection.contexts.length && !selection.magnifier) return { contexts: [], magnifier: null, libraries, ...currencyInputs };
+  if (!selection.contexts.length && !selection.magnifier) return { contexts: [], magnifier: null, libraries, host_inputs, ...currencyInputs };
   const { datasets } = await api<{ datasets: InputDataset[] }>("/datasets");
   const freeze = async (selected: InputDataset, magnifier = false) => {
     const current = datasets.find((item) => item.dataset_id === selected.dataset_id && item.data_epoch === selected.data_epoch);
@@ -139,5 +141,5 @@ export async function freezeAdvancedInputs(selection: AdvancedInputs, language: 
     freezeContextChoices(selection.contexts, main, datasets, api),
     selection.magnifier ? freeze(selection.magnifier, true) : Promise.resolve(null),
   ]);
-  return { contexts, magnifier, libraries, ...currencyInputs };
+  return { contexts, magnifier, libraries, host_inputs, ...currencyInputs };
 }

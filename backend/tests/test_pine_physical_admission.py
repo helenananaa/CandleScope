@@ -29,7 +29,7 @@ def test_direct_physical_account_profile_accepts_before_any_market_acquisition(m
 @pytest.mark.parametrize("changes,pattern",[
     ({"execution_fidelity":"TRADE_TAPE","bar_path_scenario":"OHLC_NEAREST_EXTREME_PATH_V2","execution_model_revision":"EXECUTION_REALISM_V2","participation_rate":.2},"synthetic BAR"),
     ({"execution_fidelity":"BOOK_DEPTH","execution_model_revision":"EXECUTION_REALISM_V2","participation_rate":.2},"book capacity"),
-    ({"execution_fidelity":"BOOK_ASSISTED","language":"pyne"},"require Pine"),
+    ({"execution_fidelity":"BOOK_ASSISTED","language":"pyne"},"Input should be .pine."),
 ])
 def test_invalid_physical_combination_rejects_at_schema_boundary(changes,pattern):
     with pytest.raises(ValidationError,match=pattern):

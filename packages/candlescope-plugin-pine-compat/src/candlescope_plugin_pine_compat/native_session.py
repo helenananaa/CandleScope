@@ -1,22 +1,20 @@
+from .host_inputs import normalize_native_request, native_inputs
 """Fixed-horizon Pine state with frozen request and magnifier data."""
 from candlescope_plugin_sdk.native_strategy import serve_session
 from .native_strategy import describe, prepare, pack
 from .strategy_time import engine_bars, engine_magnifier
 from .event_requests import run_with_event_requests
-from .host_inputs import native_request_bars, execution_times
 import pine_compat
 
 
 class Session:
     def __init__(self, request):
+        request = normalize_native_request(request)
         self.request = request
         program, overrides, self.requirements, self.uses_magnifier = prepare(request)
         bars = engine_bars(request["bars"])
-        supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
-                    for item in request.get("contexts", [])}
-        native_request_bars(request, supplied)
-        clocks = execution_times(request["bars"], request.get("execution_times"))
-        clock_options = {"execution_times": clocks} if clocks is not None else {}
+        _libraries, clock_options = native_inputs(request)
+        supplied = clock_options.pop("request_bars") or {}
         # Runtime ticker descriptors cannot be inferred from source text. Resolve
         # them against the immutable horizon once; the engine still reveals only
         # the event cohorts confirmed by each market bar as the session advances.
@@ -42,7 +40,7 @@ class Session:
         self.saved[target] = self.engine.fork()
         while len(self.saved) > 8:
             del self.saved[next(n for n in self.saved if n != 0)]
-        return pack(self.request, output, self.requirements, self.uses_magnifier)
+        return pack(self.request, output, self.requirements, self.uses_magnifier, cursor=target)
 
 
 def factory(request):

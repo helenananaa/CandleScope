@@ -24,6 +24,13 @@ import { isFrontendScript } from "./frontendScriptContract.js";
 
 const ENGINE_SCRIPT_MARKER = "# __ENGINE__:";
 
+export function pineRuntimeNotice(meta: Record<string, unknown> | undefined, previous?: IndicatorDefinition["runtimeNotice"]): NonNullable<IndicatorDefinition["runtimeNotice"]> | null {
+  if (meta?.notificationStatus === "failed") return "pine.host.alertFailed";
+  if (meta?.sessionReset === true) return meta.sessionResetReason === "initial" ? null : "pine.host.resetNotice";
+  if (meta?.sessionRecovered === true) return "pine.host.recovered";
+  return previous || null;
+}
+
 interface RuntimeDataMeta {
   version?: unknown;
   status?: unknown;
@@ -183,6 +190,7 @@ function normalizeSeriesToLines(
       pane: item.pane || "main",
       overlay: item.pane !== "separate" && item.pane !== "volume",
       colorData: style.colorData || null,
+      ...(style.nativeScene ? { nativeScene: style.nativeScene } : {}),
       ...(style.visible !== undefined ? { visible: style.visible } : {}),
       ...(style.base !== undefined ? { base: style.base } : {}),
       ...(style.trackPrice !== undefined
@@ -263,6 +271,7 @@ export function clearIndicatorLineData(
   return (lines || []).map((line) => ({
     ...line,
     data: [],
+    ...(line.nativeScene ? { nativeScene: { schemaVersion: 1, times: [], objects: [], plots: {} } } : {}),
     ...(Array.isArray(line?.colorData) ? { colorData: [] } : {}),
   }));
 }

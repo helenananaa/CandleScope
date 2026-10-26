@@ -315,7 +315,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         const inputs = await freezeAdvancedInputs(advanced, language, {
           start_time_ms: startTime, end_time_ms: endTime - 1, exchange: context.exchange, market_type: context.marketType,
         });
-        const submission = { language, source, parameters: params, libraries: inputs.libraries,
+        const submission = { language, source, parameters: params, libraries: inputs.libraries, host_inputs: inputs.host_inputs,
           ...("currency_rates" in inputs ? { currency_rates: inputs.currency_rates } : {}),
           ...(pineMetadata ? { chart_metadata: pineMetadata } : {}),
           ...(automaticExecution === null ? {} : { execution: automaticExecution }),

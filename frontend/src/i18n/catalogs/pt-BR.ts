@@ -1,4 +1,5 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 
@@ -204,6 +205,17 @@ export const ptBR = {
   "account.restoreDraft": "Recarregar versão mais recente",
   "account.draftStorageError": "Não foi possível salvar o rascunho local. Mantenha este painel aberto e salve no diário.",
   "replay.err.futureInput": "O início e a janela adiante incluem velas futuras. Escolha um início anterior ou reduza a janela; apenas velas históricas fechadas estão disponíveis.",
+  ...pineEnglish,
+  "pine.host.alerts": "Enviar alertas Pine confirmados para a central de notificações",
+  "pine.host.alertHint": "Requer uma assinatura de gráfico ativa. O histórico e as prévias nunca enviam notificações. Gerencie os canais e a pausa da regra Pine criada em Alertas.",
+  "pine.host.recovered": "O estado Pine foi restaurado a partir das observações registradas. Não é possível reconstruir as atualizações de preço perdidas durante a desconexão.",
+  "pine.host.resetNotice": "O estado Pine foi reiniciado porque as entradas ou o histórico mudaram; o estado dentro da vela anterior foi apagado.",
+  "pine.host.alertFailed": "Falha ao entregar a notificação Pine. Verifique o serviço de alertas.",
+  "pine.host.title": "Dados de mercado do Pine",
+  "pine.host.json": "Dados do ambiente (JSON)",
+  "pine.host.hint": "Os metadados de preço e quantidade da corretora são preenchidos automaticamente quando disponíveis. Defina chartMetadata, symbolMetadata, currencyRates, barCalendars, sessionWindows ou executionTimes aqui. Indicadores também aceitam bibliotecas e contextos explícitos. Os dados salvos fazem parte da identidade da execução.",
+  "pine.host.reset": "Reiniciar o estado Pine na próxima execução",
+  "pine.host.resetHint": "A reinicialização descarta o estado dentro da vela. A recuperação reproduz as atualizações observadas, mas não reconstrói as atualizações de preço perdidas durante a desconexão.",
   "research.external.copyCommand": "Copiar comando de inicialização",
   "research.external.commandCopied": "Comando de inicialização copiado.",
   "research.external.copyFailed": "Não foi possível copiar automaticamente. Selecione e copie o texto do comando.",

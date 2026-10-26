@@ -96,13 +96,17 @@ async def test_native_api_freezes_multiple_symbols_and_timeframes_before_launch(
                 {**bars()[0], "open_time": timestamp, "close_time": timestamp + 59_999}
                 for timestamp in range(repair.start_ms, repair.end_ms + 1, 60_000))
 
-    identity = {"protocol": "candlescope.native-strategy/1", "engine": {"package": "test-pine", "version": "test"}}
+    identity = {"protocol": "candlescope.native-strategy/1", "adapter": "pine-native/3", "engine": {"package": "test-pine", "version": "test"}}
 
     def runner(plugin, wire, **kwargs):
         # Only the plugin process is controlled; real native freezing, durable
         # run creation, idempotency and account-authority checks remain active.
         if wire.get("operation") == "describe":
             return {"identity": identity}
+        if wire.get("operation") == "analyze":
+            return {"requirements": {"requests": [
+                {"symbol": {"kind": "literal", "value": "BINANCE:ETHUSDT"}, "timeframe": {"kind": "literal", "value": "60"}},
+                {"symbol": {"kind": "currentContextSymbol"}, "timeframe": {"kind": "literal", "value": "60"}}]}}
         launched.append(wire)
         if mode == "CANDLESCOPE":
             return {"identity": identity, "execution_mode": mode, "account_authority": "candlescope",

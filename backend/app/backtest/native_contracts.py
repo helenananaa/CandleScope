@@ -1,7 +1,7 @@
 """Validated inputs for native and host-matched engine services."""
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -65,6 +65,28 @@ class RequestedNativeData(FrozenNativeData):
     metadata: PineChartMetadata | None = None
 
 
+class PineInstrumentMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    minMove: int = Field(gt=0, le=4294967295, strict=True)
+    priceScale: int = Field(gt=0, le=4294967295, strict=True)
+    pointValue: float | None = Field(default=None, gt=0)
+    quantityPrecision: int | None = Field(default=None, ge=0, le=9, strict=True)
+    quantityStep: str | None = Field(default=None, max_length=64)
+    minContract: str | None = Field(default=None, max_length=64)
+    currency: str | None = Field(default=None, pattern="^[A-Z]+$", max_length=16)
+
+
+class PineHostEnvironment(BaseModel):
+    """Frozen metadata and clocks; market bars continue to require dataset refs."""
+    model_config = ConfigDict(extra="forbid")
+    chartMetadata: PineInstrumentMetadata | None = None
+    symbolMetadata: dict[str, PineInstrumentMetadata] = Field(default_factory=dict)
+    executionTimes: list[Annotated[int, Field(ge=0, strict=True)]] | None = Field(default=None, max_length=100_000)
+    currencyRates: dict[str, Any] | None = None
+    barCalendars: dict[str, Any] | None = None
+    sessionWindows: dict[str, Any] | None = None
+
+
 class NativeRunRequest(FrozenNativeData):
     language: Literal["pine"]
     source: str = Field(min_length=1, max_length=500_000)
@@ -74,6 +96,13 @@ class NativeRunRequest(FrozenNativeData):
     libraries: dict[str, str] = Field(default_factory=dict)
     currency_rates: dict[str, Any] | None = None
     magnifier: FrozenNativeData | None = None
+    host_inputs: PineHostEnvironment = Field(default_factory=PineHostEnvironment)
+
+    @model_validator(mode="after")
+    def host_language(self):
+        if self.language != "pine" and any(value is not None and value != {} for value in self.host_inputs.model_dump().values()):
+            raise ValueError("Pine host inputs require the Pine language")
+        return self
 
     @model_validator(mode="after")
     def validate_pine_metadata(self):
@@ -166,6 +195,12 @@ class ExternalRunRequest(NativeRunRequest, WorkbenchBarSettings):
         return self
     execution_data: ExecutionData | None = None
     host_settings: HostMatchingSettings = Field(default_factory=HostMatchingSettings)
+
+    @model_validator(mode="after")
+    def host_clock(self):
+        if self.host_inputs.executionTimes is not None or self.host_inputs.sessionWindows is not None:
+            raise ValueError("host matching owns the observation clock and account windows; omit executionTimes and sessionWindows")
+        return self
 
 
 class ReplayCreate(BaseModel):

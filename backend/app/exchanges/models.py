@@ -445,6 +445,8 @@ class SymbolInfo:
     delisted_at_ms: int | None = None
     expiry_at_ms: int | None = None
     price_tick_size: str = ""
+    quantity_step: str = ""
+    min_quantity: str = ""
     display_name: str = ""
     currency: str = ""
     provider_id: str = ""
@@ -595,6 +597,15 @@ class SymbolInfo:
             data["contractType"] = self.contract_type
         if self.price_tick_size:
             data["priceTickSize"] = self.price_tick_size
+        lot = next((item for item in self.raw.get("filters", []) if item.get("filterType") == "LOT_SIZE"), {})
+        quantity_step = self.quantity_step or lot.get("stepSize")
+        minimum = self.min_quantity or lot.get("minQty")
+        if quantity_step:
+            data["quantityStep"] = str(quantity_step)
+        if minimum:
+            data["minQuantity"] = str(minimum)
+        if self.raw.get("inverse") is True:
+            data["inverseContract"] = True
         return data
 
 

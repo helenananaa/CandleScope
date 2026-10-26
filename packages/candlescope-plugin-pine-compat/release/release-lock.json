@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "releaseStatus": "pinned-official-engine",
+  "releaseStatus": "source-candidate-unpublished",
   "plugin": {
     "id": "candlescope.pine-compat",
     "package": "candlescope-plugin-pine-compat",
-    "version": "0.3.3"
+    "version": "0.4.0"
   },
   "python": {
     "requires": ">=3.11,<3.14",
@@ -12,9 +12,9 @@
   },
   "wheels": {
     "candlescope-plugin-pine-compat": {
-      "version": "0.3.3",
+      "version": "0.4.0",
       "source": "local-release-build",
-      "artifactFilename": "candlescope_plugin_pine_compat-0.3.3-py3-none-any.whl",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl",
       "sha256": "sha256:b40aa790cb5fc1f1394c8b1d316a5082ed98a812a93caa6003209897900a69f4",
       "size": 177809
     },
@@ -70,6 +70,6 @@
     "params": {},
     "options": {},
     "analysisSha256": "sha256:50cb14c7713a4f942f5dd906310ee7aaa785c3090cd2d3886f3c82a6e0ee5b62",
-    "executionSha256": "sha256:2ed443cb6b0d449eeb7d160f1899a176a213eb5b3c2b2c33d3dbe34365b5bea3"
+    "executionSha256": "sha256:b18b584f5bff54a253b0028a03cf267f83eac1fec364d252a2e453f99e35de57"
   }
 }

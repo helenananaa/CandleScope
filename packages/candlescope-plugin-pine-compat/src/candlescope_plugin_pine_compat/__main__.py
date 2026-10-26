@@ -8,7 +8,11 @@ from .runtime import PineCompatRuntimePlugin
 
 
 def main() -> int:
-    return serve_runtime(PineCompatRuntimePlugin())
+    import os
+    from pathlib import Path
+    root = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
+    journal = os.environ.get("CANDLESCOPE_PINE_JOURNAL") or root / "CandleScope" / "pine" / "observations-v1.sqlite3"
+    return serve_runtime(PineCompatRuntimePlugin(journal_path=journal))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 
@@ -204,6 +205,17 @@ export const ko = {
   "account.restoreDraft": "최신 버전 다시 불러오기",
   "account.draftStorageError": "로컬 초안을 저장하지 못했습니다. 이 패널을 열어 두고 일지에 저장하세요.",
   "replay.err.futureInput": "시작 시간과 이후 구간에 미래 봉이 포함됩니다. 더 이른 시작 시간을 선택하거나 구간을 줄이세요. 마감된 과거 봉만 사용할 수 있습니다.",
+  ...pineEnglish,
+  "pine.host.alerts": "확정된 Pine 알림을 알림 센터로 보내기",
+  "pine.host.alertHint": "활성 차트 구독이 필요합니다. 과거 데이터와 미리보기는 알림을 보내지 않습니다. 알림 화면에서 생성된 Pine 규칙의 채널과 일시 중지를 관리하세요.",
+  "pine.host.recovered": "기록된 관측으로 Pine 상태를 복원했습니다. 연결이 끊긴 동안 누락된 틱은 재구성할 수 없습니다.",
+  "pine.host.resetNotice": "입력이나 과거 데이터가 변경되어 Pine 상태를 다시 시작했습니다. 이전 봉 내부 상태가 지워졌습니다.",
+  "pine.host.alertFailed": "Pine 알림을 전달하지 못했습니다. 알림 서비스를 확인하세요.",
+  "pine.host.title": "Pine 시장 입력",
+  "pine.host.json": "실행 환경 입력 (JSON)",
+  "pine.host.hint": "거래소의 가격과 수량 메타데이터가 있으면 자동으로 채웁니다. 여기에서 chartMetadata, symbolMetadata, currencyRates, barCalendars, sessionWindows 또는 executionTimes를 지정하세요. 지표는 라이브러리와 명시적인 요청 컨텍스트도 지원합니다. 저장된 입력은 실행 식별 정보에 포함됩니다.",
+  "pine.host.reset": "다음 실행에서 Pine 상태 다시 시작",
+  "pine.host.resetHint": "다시 시작하면 봉 내부 상태가 삭제됩니다. 복구는 관측된 업데이트를 재생하지만 연결이 끊긴 동안 누락된 틱은 재구성할 수 없습니다.",
   "research.external.copyCommand": "시작 명령 복사",
   "research.external.commandCopied": "시작 명령을 복사했습니다.",
   "research.external.copyFailed": "자동 복사를 사용할 수 없습니다. 명령 텍스트를 선택하여 복사하세요.",
