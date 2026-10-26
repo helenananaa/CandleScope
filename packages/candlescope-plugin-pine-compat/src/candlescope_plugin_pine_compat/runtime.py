@@ -1443,9 +1443,9 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 host_bars = runtime_bars
             from .window_alignment import calculation_skip
             count = analysis.get("calculationBarsCount")
-            if "hostBars" in execution_meta:
-                host_bars = execution_meta.pop("hostBars")
-                host_times = [row["time"] // 1000 for row in host_bars]
+            prefix = execution_meta.pop("hostPrefix", None)
+            if prefix is not None:
+                host_bars, host_times = prefix[0] + host_bars, prefix[1] + host_times
             start_index = execution_meta.get("historyStartIndex")
             if start_index is None:
                 start_index = calculation_skip(engine, request.source, runtime_bars, options, clocks, raw, count)
