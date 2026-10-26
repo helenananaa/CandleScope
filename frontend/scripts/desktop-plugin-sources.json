@@ -70,5 +70,11 @@
     "filename": "tzdata-2026.2-py2.py3-none-any.whl",
     "url": "https://files.pythonhosted.org/packages/ce/e4/dccd7f47c4b64213ac01ef921a1337ee6e30e8c6466046018326977efd95/tzdata-2026.2-py2.py3-none-any.whl",
     "sha256": "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7"
-  }
+  },
+  "platforms": [
+    "Darwin-arm64",
+    "Darwin-x86_64",
+    "Linux-x86_64",
+    "Windows-AMD64"
+  ]
 }
