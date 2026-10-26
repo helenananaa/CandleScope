@@ -19,7 +19,8 @@ jobs:
   package:
     name: package (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    # Intel source builds and bundled regressions need room for the final restart check.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
