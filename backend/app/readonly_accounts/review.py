@@ -161,7 +161,7 @@ class ReadOnlyReview(JournalService):
                                'contracts': f['contracts'], 'contractValue': f['contract']['contractValue'],
                                'realizedPnl': f['exchangeRealizedPnl'], 'tsMs': f['eventTimeMs']})
         return {'id': trade_id, 'accountId': account_id, 'exchange': 'okx', 'marketType': 'futures',
-                'symbol': cycle['instrument'].removesuffix('-SWAP').replace('-', ''),
+                'symbol': cycle['instrument'],
                 'direction': cycle['positionSide'], 'status': 'closed',
                 'openedAtMs': min(leg['tsMs'] for leg in legs), 'closedAtMs': max(leg['tsMs'] for leg in legs),
                 'openQty': '0', 'maxQty': exact(maximum), 'entryQty': exact(entry_qty), 'exitQty': exact(exit_qty),

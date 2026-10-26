@@ -4,7 +4,7 @@ import { parseReviewListing, parseReviewTrade, reviewJournalApi } from "./review
 import { positionAt, replayEvents } from "../trading-accounts/quickReplayModel.js";
 
 const trade = {
-  id: "ro_"+"1".repeat(20), accountId: "acc_"+"2".repeat(20), exchange: "okx", marketType: "futures", symbol: "BTCUSDT",
+  id: "ro_"+"1".repeat(20), accountId: "acc_"+"2".repeat(20), exchange: "okx", marketType: "futures", symbol: "BTC-USDT-SWAP",
   direction: "long", status: "closed", openedAtMs: 1000, closedAtMs: 9000, openQty: "0", maxQty: "0.02",
   entryQty: "0.02", exitQty: "0.02", avgEntryPrice: "10000", avgExitPrice: "20000", realizedPnl: "200", fees: "0.2", netPnl: "199.6",
   markPrice: null, unrealizedPnl: null,

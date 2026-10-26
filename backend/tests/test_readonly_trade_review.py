@@ -25,7 +25,7 @@ def test_verified_trade_identity_facts_journal_and_restart(tmp_path, monkeypatch
     listing = review.refresh()
     trade = listing['trades'][0]
     assert Decimal(trade['netPnl']) == Decimal('199.6')
-    assert trade['symbol'] == 'BTCUSDT'
+    assert trade['symbol'] == 'BTC-USDT-SWAP'
     assert trade['readonlySource']['fills'][0]['contracts'] == '2'
     assert [leg['qty'] for leg in trade['legs']] == ['0.02', '0.02']
     assert listing['stats']['rCount'] == 0 and listing['stats']['averageR'] is None
@@ -34,7 +34,7 @@ def test_verified_trade_identity_facts_journal_and_restart(tmp_path, monkeypatch
     assert listing['stats']['cachedCount'] == 0
     assert review.refresh()['trades'][0] == trade
     assert len(review.store.all('SELECT * FROM review_version')) == 1
-    payload = dict(kind='note', exchange='okx', marketType='futures', symbol='BTCUSDT',
+    payload = dict(kind='note', exchange='okx', marketType='futures', symbol='BTC-USDT-SWAP',
                    tradeId=trade['id'], clientEntryId='je_'+'1'*20, fields={'thesis': 'review'})
     entry = review.create_entry(trade['accountId'], payload)
     assert review.create_entry(trade['accountId'], payload)['id'] == entry['id']
@@ -125,7 +125,7 @@ def test_guarded_http_review_lifecycle_and_legacy_notes(tmp_path, monkeypatch):
             trades = (await client.get(base+'/trades', headers=headers)).json()['trades']
             trade = trades[0]
             create = base+f"/accounts/{trade['accountId']}/journal"
-            payload = dict(exchange='okx', marketType='futures', symbol='BTCUSDT', kind='note',
+            payload = dict(exchange='okx', marketType='futures', symbol='BTC-USDT-SWAP', kind='note',
                            tradeId=trade['id'], clientEntryId='je_'+'2'*20, fields={'entryBasis': 'synthetic review'})
             missing_csrf = {key: value for key, value in headers.items() if key != 'X-CandleScope-CSRF'}
             assert (await client.post(create, headers=missing_csrf, json=payload)).status_code == 403
@@ -135,7 +135,7 @@ def test_guarded_http_review_lifecycle_and_legacy_notes(tmp_path, monkeypatch):
             assert (await client.post(create, headers=headers, json=payload)).json()['id'] == entry['id']
             entry_url = base+'/journal/'+entry['id']
             snapshot = await client.post(entry_url+'/snapshots', headers=headers,
-                json={'image': 'data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nfixture').decode(), 'state': {'symbol': 'BTCUSDT'}})
+                json={'image': 'data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nfixture').decode(), 'state': {'symbol': 'BTC-USDT-SWAP'}})
             image_url = base+'/snapshots/'+snapshot.json()['snapshots'][0]['id']+'/image'
             assert (await client.get(image_url)).status_code == 403
             assert (await client.get(image_url, headers=headers)).json()['image'].startswith('data:image/png;base64,')
