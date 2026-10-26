@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { type PreparationJob, type PreparationCapabilities, type prepareReplay } from "../data-preparation/api.js";
-import { PreparedReplayDeletedError } from "../data-preparation/api.js";
+import { PreparationApiError, PreparedReplayDeletedError } from "../data-preparation/api.js";
 import { t } from "../../i18n/index.js";
 import { ReplayApiError } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -141,7 +141,7 @@ export interface TrainingHubLifecycleOptions {
 type Listener = () => void;
 
 function hubError(error: unknown): TrainingHubError {
-  if (error instanceof ReplayV2ApiError || error instanceof ReplayApiError) {
+  if (error instanceof ReplayV2ApiError || error instanceof ReplayApiError || error instanceof PreparationApiError) {
     return { code: error.code, message: error.message };
   }
   if (error instanceof Error) return { code: "TRAINING_HUB_ERROR", message: error.message };
@@ -203,6 +203,7 @@ export class TrainingHubLifecycle {
   private storageResult: ReplayStorageGcRunResult | null = null;
   private abortController = new AbortController();
   private storageAbortController = new AbortController();
+  private catalogAbortController = new AbortController();
   private requestToken = 0;
   private started = false;
   private disposed = false;
@@ -494,14 +495,18 @@ export class TrainingHubLifecycle {
 
   setDraft(draft: TrainingRunDraft): void {
     if (this.disposed || this.operation === "create") return;
-    const sourceChanged = this.draft !== null
-      && this.draft.sourceKind !== draft.sourceKind;
+    const catalogChanged = this.draft !== null
+      && this.createCatalogKey(this.draft) !== this.createCatalogKey(draft);
     this.draft = draft;
     this.persistDraft();
     this.segmentPlan = null;
-    if (sourceChanged) {
+    if (catalogChanged) {
       this.catalog = null;
-      this.evaluation = null;
+      // Keep the editor mounted while coverage is refreshed. Replacing it with
+      // the loading panel loses focus/scroll after the first typed digit.
+      this.evaluation = this.capabilities === null ? null : {
+        ...evaluateTrainingRunSetupDraft(draft, this.capabilities), canSubmit: false,
+      };
       this.operation = "create-context";
       this.publish();
       void this.loadCreateCatalog(draft, true);
@@ -512,6 +517,9 @@ export class TrainingHubLifecycle {
       : this.capabilities !== null
         ? evaluateTrainingRunSetupDraft(draft, this.capabilities)
       : null;
+    if (this.operation === "create-context" && this.evaluation !== null) {
+      this.evaluation = { ...this.evaluation, canSubmit: false };
+    }
     this.publish();
   }
 
@@ -658,6 +666,7 @@ export class TrainingHubLifecycle {
     if (this.capabilityRefreshTimer !== null) clearTimeout(this.capabilityRefreshTimer);
     this.abortController.abort();
     this.storageAbortController.abort();
+    this.catalogAbortController.abort();
     this.phase = "STOPPED";
     this.operation = null;
     this.publish();
@@ -705,12 +714,12 @@ export class TrainingHubLifecycle {
     const earliest = Math.min(...ranges.map((range) => range.first_start_ms));
     const latest = Math.max(...ranges.map((range) => range.last_start_ms));
     if (draft.startMode === "MANUAL") {
-      return { ...draft, requestedStartMs: latest };
+      return { ...draft, requestedStartMs: draft.requestedStartMs ?? latest };
     }
     return {
       ...draft,
-      randomRangeStartMs: earliest,
-      randomRangeEndMs: latest,
+      randomRangeStartMs: draft.randomRangeStartMs ?? earliest,
+      randomRangeEndMs: draft.randomRangeEndMs ?? latest,
     };
   }
 
@@ -776,6 +785,14 @@ export class TrainingHubLifecycle {
     return this.preparationCapabilities.enabled && this.preparationCapabilities.replay_sources[draft.sourceKind];
   }
 
+  private createCatalogKey(draft: TrainingRunDraft): string {
+    return JSON.stringify([
+      draft.sourceKind, this.canPrepare(draft), draft.accountDataMode,
+      draft.fundingMode, draft.bookMode, draft.positionMode,
+      draft.indicatorWarmupBars, draft.forwardCacheMs,
+    ]);
+  }
+
   private evaluateAutomaticDraft(draft: TrainingRunDraft): TrainingRunDraftEvaluation {
     const capabilities = this.capabilities!;
     // An empty archive can be prepared; an unavailable runtime cannot.
@@ -793,6 +810,9 @@ export class TrainingHubLifecycle {
   ): Promise<boolean> {
     if (this.disposed || this.capabilities === null) return false;
     const token = ++this.requestToken;
+    const catalogKey = this.createCatalogKey(draft);
+    this.catalogAbortController.abort();
+    this.catalogAbortController = new AbortController();
     this.operation = "create-context";
     this.error = null;
     this.publish();
@@ -803,10 +823,10 @@ export class TrainingHubLifecycle {
         qualityMode: "exact",
         blindMode: false,
         sourceKind: this.canPrepare(draft) ? "BAR" : draft.sourceKind,
-      }, this.abortController.signal);
+      }, this.catalogAbortController.signal);
       if (!this.accept(token)) return false;
       const latestDraft = this.draft;
-      if (latestDraft !== null && latestDraft.sourceKind !== draft.sourceKind) {
+      if (latestDraft !== null && this.createCatalogKey(latestDraft) !== catalogKey) {
         return false;
       }
       this.catalog = catalog;

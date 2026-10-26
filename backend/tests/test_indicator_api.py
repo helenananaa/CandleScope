@@ -115,7 +115,7 @@ async def test_compute_mode_builtin_accepts_engine_marker_without_name() -> None
     assert payload["lines"][0]["name"] == "MA(7)"
 
 
-def test_compute_batch_preserves_non_pyne_language_to_runtime(
+def test_compute_batch_preserves_non_pine_language_to_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime_service = object()
@@ -194,21 +194,13 @@ async def test_custom_indicator_crud_roundtrip(tmp_path, monkeypatch) -> None:
     assert exc_info.value.status_code == 404
 
 
-@pytest.mark.anyio
-async def test_pyne_security_policy_endpoint() -> None:
-    policy = await indicators_api.get_pyne_security_policy()
-
-    assert policy["mode"] in {"safe", "research", "unsafe"}
-    assert "numpy" in policy["allowedImports"]
-    assert policy["owner"] == "candlescope.pyne"
-    assert policy["boundary"] == "sidecar"
 
 
 @pytest.mark.anyio
 async def test_runtime_catalog_endpoint_returns_service_projection(monkeypatch) -> None:
     expected = {
         "schemaVersion": 1,
-        "defaultLanguage": "pyne",
+        "defaultLanguage": "pine",
         "languages": [],
         "runtimes": [],
     }
@@ -252,21 +244,11 @@ def test_indicator_diagnostics_snapshot_reports_runtime_state(tmp_path) -> None:
     assert payload["registry"]["count"] >= 1
     assert payload["engine"]["instance_count"] == 1
     assert payload["customIndicators"]["count"] == 1
-    assert payload["pyne"]["runtimeBackend"] == {
-        "package": "candlescope-plugin-pyne",
-        "active": "sidecar",
-        "runtimeId": "candlescope.pyne",
-    }
-    assert payload["pyne"]["security"]["mode"] in {"safe", "research", "unsafe"}
-    assert payload["pyne"]["executor"]["mode"] == "sidecar"
-    assert payload["pyne"]["cache"] == {
-        "scope": "sidecar",
-        "availableToHost": False,
-    }
+    assert "pyne" not in payload
     assert payload["websocket"]["maxSubscriptions"] >= 1
     assert "heartbeat_delay" in payload["websocket"]["metrics"]
     assert payload["executors"]["indicator"]["max_workers"] >= 1
-    assert payload["executors"]["pyne_wait"]["max_workers"] >= 1
+    assert payload["executors"]["script_wait"]["max_workers"] >= 1
     assert payload["executors"]["storage"]["max_workers"] >= 1
 
 
@@ -549,11 +531,11 @@ def test_indicator_range_http_reports_empty_for_forming_only_target_range() -> N
     assert "retryAfterMs" not in payload.get("detail", {})
 
 
-def test_indicator_range_http_enforces_pyne_runtime_bar_limit(
+def test_indicator_range_http_enforces_pine_runtime_bar_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bars = [BarData.from_dict(item) for item in _bars(10)]
-    monkeypatch.setattr(indicators_api.config, "PYNE_MAX_BARS", 5)
+    monkeypatch.setattr(indicators_api.config, "SCRIPT_MAX_BARS", 5)
     client = _indicator_client(_RangeDataManager(bars))
 
     response = client.post(
@@ -573,10 +555,10 @@ def test_indicator_range_http_enforces_pyne_runtime_bar_limit(
     payload = response.json()
     assert payload["ok"] is False
     assert payload["code"] == "INDICATOR_RANGE_LIMIT"
-    assert "Too many Pyne bars" in payload["error"]
+    assert "Too many Pine bars" in payload["error"]
 
 
-def test_indicator_range_http_rejects_oversized_pyne_before_query(
+def test_indicator_range_http_rejects_oversized_pine_before_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class CountingRangeDataManager(_RangeDataManager):
@@ -586,10 +568,10 @@ def test_indicator_range_http_rejects_oversized_pyne_before_query(
 
         def query(self, *args, **kwargs):
             self.query_calls += 1
-            raise AssertionError("oversized Pyne range must not query K-lines")
+            raise AssertionError("oversized Pine range must not query K-lines")
 
     dm = CountingRangeDataManager()
-    monkeypatch.setattr(indicators_api.config, "PYNE_MAX_BARS", 5)
+    monkeypatch.setattr(indicators_api.config, "SCRIPT_MAX_BARS", 5)
     client = _indicator_client(dm)
 
     response = client.post(
@@ -828,7 +810,7 @@ def test_indicator_key_includes_backend_code_hash_in_identity() -> None:
     assert f":MA:{code_hash}:" in key.uid
 
 
-def test_range_meta_includes_pyne_script_hash_in_identity() -> None:
+def test_range_meta_includes_pine_script_hash_in_identity() -> None:
     script_a = 'plot(close, title="Close A")'
     script_b = 'plot(close + 1, title="Close B")'
     req_a = indicators_api.IndicatorRangeRequest(
@@ -890,7 +872,7 @@ def test_range_meta_builtin_indicator_id_matches_ws_key_with_params_hash() -> No
     ],
 )
 @pytest.mark.parametrize("kind", ["builtin", "script"])
-def test_range_meta_canonicalizes_custom_intervals_for_builtin_and_pyne(
+def test_range_meta_canonicalizes_custom_intervals_for_builtin_and_pine(
     requested: str,
     canonical: str,
     kind: str,

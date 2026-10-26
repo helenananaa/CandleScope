@@ -1,4 +1,6 @@
+import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
+  "replay.err.futureInput": "开始时间加上前向窗口包含未来行情。请选择更早的起点或缩短前向窗口；只能使用已闭合的历史 K 线。",
   "research.external.copyCommand": "复制启动命令",
   "research.external.commandCopied": "启动命令已复制。",
   "research.external.copyFailed": "无法自动复制，请选中命令文本手动复制。",
@@ -37,8 +39,7 @@ export const zhCN = {
   "native.jumpToError": "定位到第 {line} 行，第 {column} 列",
   "report.notionalReturn": "盈亏 / 开仓名义金额（非账户收益率）",
 
-  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安装包；Pyne 运行时跨平台，但当前官方插件包仍为 Windows 版。请安装匹配系统和 Python 版本的包。",
-  "indicator.editor.pyneApiHint": "Pyne API：",
+  "native.platformHelp": "Pine 0.3.2 提供 macOS（Apple Silicon / Intel）安装包；请安装匹配系统和 Python 版本的包。",
   "indicator.editor.pineApiHint": "Pine v5/v6 收盘 K 线 API：",
   "serverError.notFound": "请求的内容不存在，可能已被删除",
   "serverError.conflict": "内容已被其他操作更新，请刷新后重试",
@@ -307,7 +308,7 @@ export const zhCN = {
   "native.external.executionData": "固定成交 / 盘口数据（JSON）",
   "native.external.dataHint": "逐笔数据须与主图 OHLCV 完全一致。未上传时逐笔模式读取本地归档；订单簿模式必须上传连续盘口与成交数据。盘口模式不假定排队位置。",
 
-  "native.fullStrategies": "Pine / Pyne 完整策略",
+  "native.fullStrategies": "Pine 完整策略",
   "native.replay.title": "原生交互回放",
   "native.inputs.title": "额外数据与 Pine 库",
   "native.inputs.hint": "选择脚本 request 使用的固定数据集，品种键须与源码一致；运行前会校验所选修订并冻结快照。",
@@ -322,7 +323,7 @@ export const zhCN = {
   "native.inputs.magnifierHint": "脚本需声明 use_bar_magnifier=true。选择同品种且低于主图周期、完整覆盖主图范围的数据；缺失时明确失败。",
   "native.inputs.libraries": "Pine 库源码（导入路径 → 源码 JSON）",
   "native.external.fillRecalculation": "成交后执行策略",
-  "native.external.fillHint": "需启用 calc_on_order_fills：Pine 重算当前柱；Pyne 使用 init/on_bar/on_fill(ctx, bar)。新增订单最早在下一个行情事件成交。",
+  "native.external.fillHint": "需启用 calc_on_order_fills：Pine 重算当前柱；新增订单最早在下一个行情事件成交。",
   "native.replay.incremental": "保留原生策略状态逐步运行固定历史区间。历史末柱标记以完整区间为准；进程重启后按固定输入重建到快照游标。",
   "native.replay.method": "按历史前缀重建原生账户；每一步重新计算，保持历史回测语义。快照保存固定输入和游标，恢复时不会混入其他账户。",
   "native.replay.empty": "回放尚未生成报告。点击“前进一步”或“播放”开始，也可返回整段报告。",
@@ -339,7 +340,7 @@ export const zhCN = {
   "native.external.title": "CandleScope 撮合反馈",
   "native.external.description": "收盘计算，后续行情撮合。支持市价、限价、止损、止损限价、部分平仓、止盈止损组合及撤单。单净持仓，账户与费用来自此处设置。",
   "native.external.run": "运行宿主撮合回测",
-  "native.external.authority": "成交与账户仅由 CandleScope 撮合内核维护；Pine/Pyne 读取宿主反馈，不产生原生成交。",
+  "native.external.authority": "成交与账户仅由 CandleScope 撮合内核维护；Pine 读取宿主反馈，不产生原生成交。",
   "native.external.equity": "CandleScope 账户权益",
   "native.external.price_tick": "最小价格变动（tick 距离订单）",
   "native.external.allocationHint": "盈亏按宿主净持仓均价计算；开仓 ID 只分配数量，不另建逐笔成本账户。",
@@ -356,7 +357,7 @@ export const zhCN = {
   "native.title": "原生策略回测",
   "native.hostMode": "CandleScope 撮合 / 教学模板",
   "native.loading": "正在加载原生策略…",
-  "native.description": "运行完整 Pine 或 Pyne 策略。使用当前图表的固定历史数据；资金、费用和订单设置由脚本声明。",
+  "native.description": "运行完整 Pine 策略。使用当前图表的固定历史数据；资金、费用和订单设置由脚本声明。",
   "native.authority": "成交、持仓与权益均来自原生引擎；不经过 CandleScope 二次撮合。",
   "native.language": "策略语言",
   "native.run": "运行原生回测",
@@ -1195,7 +1196,6 @@ export const zhCN = {
   "indicator.editor.runOk": "运行成功，已应用至图表",
   "indicator.editor.communityRuntime": "{language} 由 {runtime} 执行",
   "indicator.editor.fallbackLanguage": "脚本运行时",
-  "indicator.editor.hintPyne": "输入",
   "indicator.editor.hintComplete": "触发自动补全 ·",
   "indicator.editor.hintPine": "Pine v5/v6 · closed bars only · 输入",
   "indicator.editor.hintPlugin": "使用插件描述符声明的语言模式 ·",
@@ -2468,6 +2468,7 @@ export const zhCN = {
   "replay.liq.liqPrice": "强平价",
   "replay.liq.bankruptcy": "破产价",
   "replay.liq.takeover": "接管价",
+  "replay.liq.estimatedFeeAtTrigger": "触发时估算强平费",
   "replay.liq.fee": "强平费",
   "replay.liq.l2": "L2 {fidelity} · {levels} 档 · 可见 {qty} · queue exact: false",
   "replay.liq.fill": "成交",
@@ -2659,7 +2660,6 @@ export const zhCN = {
   "backtest.language": "受限语言",
   "backtest.builtin": "内置 RSI24 模板",
   "backtest.pine": "Pine 安全子集",
-  "backtest.pyne": "Pyne 统一订单 DSL",
   "backtest.external": "冻结外部模型 artifact 引用",
   "backtest.compileSave": "静态检查、编译并保存",
   "backtest.sourceNoExec": "源码（不会执行任意代码）",
@@ -3724,7 +3724,7 @@ export const zhCN = {
   "trade.rt.disconnected": "TradeFlow 连接中断",
 
   "indicator.noLocalBars": "指标没有可用的显式 bars 本地执行描述",
-  "indicator.replayUnsafe": "回放仅允许内置指标、Pyne safe 与 Pine closed-bars 脚本；{language} 未声明为 replay-safe",
+  "indicator.replayUnsafe": "回放支持内置指标、Pine 已收盘柱脚本和前端 JavaScript 指标；不支持 {language}",
   "indicator.unknownRuntime": "未知运行时",
   "indicator.httpFallback": "{message}；已切换为 HTTP 已收盘值补齐。",
 
@@ -4382,7 +4382,6 @@ export const zhCN = {
   "chartTester.retrySave": "重试",
   "chartTester.run": "运行",
   "chartTester.close": "关闭",
-  "chartTester.language.pyne": "Pyne",
   "chartTester.language.pine": "Pine",
   "chartTester.startEyebrow": "开始一个图表脚本快测",
   "chartTester.startTitle": "选择一种开始方式",
@@ -4709,7 +4708,6 @@ export const zhCN = {
   "research.results.entry": "入场",
   "research.results.exit": "出场",
   "research.strategy.draft": "草稿",
-  "research.strategy.pyne": "Pyne",
   "research.strategy.pine": "Pine",
   "workbench.manualHistory.disabled": "手动连续历史下载已关闭。",
   "workbench.manualHistory.title": "手动连续历史",
@@ -4758,8 +4756,6 @@ export const zhCN = {
   "workbench.manualHistory.succeeded": "下载已成功",
   "workbench.manualHistory.jobState": "任务 {state}",
   "common.listSeparator": "，",
-  "editor.pyne.namespaceDetail": "{ns}.* — 输入 \"{ns}.\" 查看方法",
-  "editor.pyne.namespaceDocumentation": "输入 `{ns}.` 触发自动补全",
   "strategyReview.navigation": "交易复盘",
   "strategyReview.previous": "上一笔",
   "strategyReview.select": "选择一笔交易",
@@ -4799,6 +4795,7 @@ export const zhCN = {
   "aiControl.copyFailed": "复制失败，请检查剪贴板权限。",
   "aiControl.desktopOnly": "本地 MCP 仅在桌面应用中提供。",
   "aiControl.configuration": "显示连接配置",
+  ...tradingAccountsZhCN,
 } as const;
 
 export type MessageKey = keyof typeof zhCN;

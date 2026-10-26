@@ -16,7 +16,7 @@ import type { ReplayDigest, ReplayDisplayBar } from "../src/features/replay/repl
 type Case = { sessionId: string; identity: ReplayHistoryIdentity;
   request: { source_sequence: number; revealed_boundary_ms: number; data_epoch: ReplayDigest; track_id: string;
     history_epoch: ReplayDigest; name: string; params: Record<string, number>; bars: ReplayDisplayBar[] };
-  expected: [string, unknown[]][] };
+  expected: [string, unknown[]][]; displayExpected: [string, unknown[]][] };
 const input = JSON.parse(readFileSync(process.argv[2]!, "utf8")) as { origin: string; cases: Case[] };
 let tapeGets = 0, posts = 0, reviewRows = 0, displayCommits = 0;
 for (const item of input.cases) {
@@ -29,6 +29,7 @@ for (const item of input.cases) {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       assert.equal(body.source_sequence, request.source_sequence);
       assert.equal(body.history_epoch, request.history_epoch);
+      assert.equal(body.display_math, "viewport-v1");
       posts++;
     }
     return fetch(target, init);
@@ -61,7 +62,7 @@ for (const item of input.cases) {
   const check = async (client: ReplayCanonicalIndicators) => {
     const result = await client.compute({ jobs: [job()] });
     assert.equal(result.ok, true, JSON.stringify(result));
-    assert.deepEqual(result.results[0]!.payload.lines?.map(line => [line.name, line.data]), item.expected);
+    assert.deepEqual(result.results[0]!.payload.lines?.map(line => [line.name, line.data]), item.displayExpected);
   };
   await check(source);
   // The training view starts with a live projection and must first migrate its

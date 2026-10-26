@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import time
 from typing import Any
 
@@ -329,6 +330,17 @@ def test_runtime_rejects_ambiguous_depth_update_speeds() -> None:
             assert "ambiguous" in str(exc)
         else:
             raise AssertionError("ambiguous raw depth routing was accepted")
+        await pool.release(runtime)
+
+    asyncio.run(run())
+
+
+def test_runtime_untracks_loaded_market_tables() -> None:
+    async def run() -> None:
+        pool = CcxtRuntimePool()
+        runtime = await pool.acquire(_FakeProfile(), IngestionConfig())
+        # Long-lived websocket clients keep their catalog out of full GC passes.
+        assert gc.is_tracked(runtime.exchange.markets) is False
         await pool.release(runtime)
 
     asyncio.run(run())

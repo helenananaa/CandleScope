@@ -8,7 +8,7 @@ from typing import Any
 from app.core.config import CORS_ORIGINS
 
 _PLUGIN_ORIGINS_ENV = "CANDLESCOPE_PLUGIN_PLATFORM_V2_MANAGEMENT_ORIGINS"
-_SAFE_PYNE_MODES = frozenset({"safe", "research"})
+_SAFE_SCRIPT_MODES = frozenset({"safe", "research"})
 
 
 def trusted_operator_origins() -> frozenset[str]:
@@ -34,7 +34,7 @@ def is_trusted_operator_origin(origin: str | None) -> bool:
     return bool(origin) and origin in trusted_operator_origins()
 
 
-def effective_pyne_security_mode(
+def effective_script_security_mode(
     requested: str | None, *, trusted: bool
 ) -> str | None:
     if requested is None:
@@ -42,7 +42,7 @@ def effective_pyne_security_mode(
     mode = str(requested).strip().lower()
     if not mode:
         return None
-    if mode in _SAFE_PYNE_MODES:
+    if mode in _SAFE_SCRIPT_MODES:
         return mode
     if mode == "unsafe":
         return "unsafe" if trusted else "safe"

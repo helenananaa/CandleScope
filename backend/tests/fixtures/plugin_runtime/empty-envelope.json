@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "error": null,
+  "lines": [],
+  "result": {
+    "meta": {
+      "title": "Empty",
+      "overlay": false
+    }
+  },
+  "outputSchemaVersion": 2,
+  "series": [],
+  "annotations": [],
+  "fills": [],
+  "paneLayout": [
+    {
+      "id": "main",
+      "type": "main",
+      "seriesIds": [],
+      "annotationIds": []
+    }
+  ],
+  "meta": {
+    "title": "Empty",
+    "overlay": false,
+    "securityMode": "safe"
+  }
+}

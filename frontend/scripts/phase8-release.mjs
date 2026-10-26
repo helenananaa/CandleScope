@@ -108,7 +108,7 @@ export function run(argv) {
     ],
     limitations: [
       "Validated capacity scope is Binance Spot USDT 1m with local builtin MA20 and RSI14.",
-      "Hosted, community, and Pyne indicators are not covered by the 64-chart capacity claim.",
+      "Hosted, community, and Pine indicators are not covered by the 64-chart capacity claim.",
       "The current host exposes one logical display; four physical displays remain unvalidated.",
       "The unpacked Windows validation candidate is not an installer or published signed release.",
     ],

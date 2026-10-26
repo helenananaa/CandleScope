@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { KlineStreamControlMessage } from "../klineContracts.js";
 
 import {
   acknowledgeKlineStreamInterval,
@@ -8,6 +9,7 @@ import {
   planKlineRecoveryCountBack,
   reduceKlineStreamControlMessage,
   retainTrackedKlineStreamRejections,
+  WS_KLINE_FRESHNESS_MS,
 } from "../useKlineStreamRuntime.js";
 
 test("stream recovery shares the bounded derived-history policy", () => {
@@ -19,7 +21,7 @@ test("stream recovery shares the bounded derived-history policy", () => {
   assert.equal(planKlineRecoveryCountBack("10001m", nativeIntervals), 0);
 });
 
-test("socket open remains connecting until the current interval is acknowledged", () => {
+test("socket open remains connecting before any interval is acknowledged", () => {
   const state = createKlineStreamAcknowledgementState();
 
   assert.equal(getKlineStreamIntervalStatus(state, "1m"), "connecting");
@@ -40,7 +42,7 @@ test("mixed subscription ACK activates only accepted intervals and rejects failu
 
   assert.deepEqual(state.activeIntervals, ["1m"]);
   assert.deepEqual(state.rejectedIntervals, ["7s"]);
-  assert.equal(getKlineStreamIntervalStatus(state, "1m"), "live");
+  assert.equal(getKlineStreamIntervalStatus(state, "1m"), "loading");
   assert.equal(getKlineStreamIntervalStatus(state, "7s"), "fallback");
 });
 
@@ -65,7 +67,38 @@ test("ACK state treats fixed-duration aliases as the same interval", () => {
     },
   );
 
-  assert.equal(getKlineStreamIntervalStatus(state, "60m"), "live");
+  assert.equal(getKlineStreamIntervalStatus(state, "60m"), "loading");
+  const observed = acknowledgeKlineStreamInterval(state, "60m", 10_000);
+  assert.equal(getKlineStreamIntervalStatus(observed, "1h", 10_001), "live");
+});
+
+test("local ACK and repeated ACK cannot make silent upstream data live", () => {
+  const ack: KlineStreamControlMessage = {
+    type: "subscribed", intervals: ["1m", "1h"], active_intervals: ["1m", "1h"],
+  };
+  let state = reduceKlineStreamControlMessage(createKlineStreamAcknowledgementState(), ack);
+  assert.equal(getKlineStreamIntervalStatus(state, "1h", 10_000), "loading");
+  state = acknowledgeKlineStreamInterval(state, "1m", 10_000);
+  assert.equal(getKlineStreamIntervalStatus(state, "1h", 10_001), "loading");
+  assert.equal(getKlineStreamIntervalStatus(state, "1m", 10_001), "live");
+  state = reduceKlineStreamControlMessage(state, ack);
+  assert.equal(getKlineStreamIntervalStatus(state, "1m", 10_000 + WS_KLINE_FRESHNESS_MS), "loading");
+  state = acknowledgeKlineStreamInterval(state, "1m", 100_000);
+  assert.equal(getKlineStreamIntervalStatus(state, "1m", 100_001), "live");
+});
+
+test("unsubscribe and rejection discard previous freshness before resubscription", () => {
+  const observed = acknowledgeKlineStreamInterval(createKlineStreamAcknowledgementState(), "1h", 10_000);
+  const messages: KlineStreamControlMessage[] = [
+    { type: "unsubscribed", intervals: ["1h"], active_intervals: [] },
+    { type: "subscribed", intervals: [], failed: [{ interval: "1h" }], active_intervals: [] },
+  ];
+  for (const message of messages) {
+    const removed = reduceKlineStreamControlMessage(observed, message);
+    const resubscribed = reduceKlineStreamControlMessage(removed,
+      { type: "subscribed", intervals: ["1h"], active_intervals: ["1h"] });
+    assert.equal(getKlineStreamIntervalStatus(resubscribed, "1h", 10_001), "loading");
+  }
 });
 
 test("unsubscribed current intervals wait for a new ACK and removed failures can retry", () => {

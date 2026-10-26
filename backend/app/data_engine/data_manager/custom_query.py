@@ -13,7 +13,6 @@ from typing import Any
 from app.data_engine.interval_policy import (
     IntervalAlignment,
     aggregate_tail_is_closed,
-    aggregate_rows_by_month,
     compute_bucket_end_ms,
     compute_bucket_start,
     compute_bucket_start_ms,
@@ -919,10 +918,47 @@ class CustomIntervalQueryService:
     def _promote_rebuilt_finality(
         bars: list[BarData],
         base_result: QueryResult,
+        *,
+        interval: str,
+        source_interval: str,
+        calendar: Any | None,
     ) -> list[BarData]:
-        """Mark complete derived buckets trusted only from all-final inputs."""
+        """Trust complete buckets, including a proven pre-listing prefix.
+
+        Missing pre-listing components are not a forming candle. Only an
+        authoritative source-exhaustion exclusion can shorten the first bucket;
+        the remaining source grid must still be complete and final.
+        """
         if base_result.metadata.get("all_rows_final") is not True:
             return bars
+        earliest = base_result.earliest_available_ms
+        if earliest is not None and not base_result.missing_ranges and not base_result.retryable:
+            source_calendar = calendar or AlwaysOpenCalendar()
+            for index, bar in enumerate(bars):
+                if bar.is_closed or not bar.time_ms < earliest:
+                    continue
+                end = expected_bucket_end_ms(source_calendar, bar.time_ms, interval)
+                if earliest >= end or not any(
+                    item.get("disposition") == "terminal"
+                    and item.get("reason") == "source_exhausted"
+                    and int(item["start_ms"]) <= bar.time_ms
+                    and int(item["end_ms"]) >= earliest - 1
+                    for item in base_result.excluded_ranges
+                ):
+                    continue
+                components = [row for row in base_result.bars if earliest <= row.time_ms < end]
+                expected = list(source_calendar.expected_opens(earliest, end - 1, source_interval))
+                if not expected or [row.time_ms for row in components] != expected or not all(
+                    row.trusted_final for row in components
+                ):
+                    continue
+                fields = [row.to_aggregation_dict() for row in components]
+                bars = list(bars)
+                bars[index] = replace(bar, is_closed=True,
+                    quote_volume=_sum_optional_field(fields, "quote_volume"),
+                    trades=_sum_optional_field(fields, "trades", integer=True),
+                    taker_buy_base=_sum_optional_field(fields, "taker_buy_base"),
+                    taker_buy_quote=_sum_optional_field(fields, "taker_buy_quote"))
         return [
             bar.with_source("backfill_aggregated")
             if bar.is_closed and not bar.trusted_final
@@ -1696,7 +1732,8 @@ class CustomIntervalQueryService:
             interval=interval,
             calendar=calendar,
         )
-        derived_bars = self._promote_rebuilt_finality(derived_bars, base_result)
+        derived_bars = self._promote_rebuilt_finality(derived_bars, base_result,
+            interval=interval, source_interval=base_interval, calendar=calendar)
         (
             target_materialized_written,
             target_materialization_role,
@@ -1984,7 +2021,8 @@ class CustomIntervalQueryService:
             interval=interval,
             calendar=calendar,
         )
-        derived_bars = self._promote_rebuilt_finality(derived_bars, base_result)
+        derived_bars = self._promote_rebuilt_finality(derived_bars, base_result,
+            interval=interval, source_interval=base_interval, calendar=calendar)
         aggregation_ms = (time.monotonic() - aggregation_started_at) * 1000
         derived_bars = [bar for bar in derived_bars if bar.time_ms < before_ms]
         (
@@ -2186,20 +2224,15 @@ class CustomIntervalQueryService:
                 custom_seconds,
                 source_interval_seconds=source_interval_seconds,
             )
-        if month_count is not None and calendar is None:
-            aggregated = aggregate_rows_by_month(
-                [bar.to_aggregation_dict() for bar in base_bars],
-                months=month_count,
-                source_interval_seconds=source_interval_seconds,
-            )
-        else:
-            aggregated = _aggregate_rows_to_interval(
-                [bar.to_aggregation_dict() for bar in base_bars],
-                custom_seconds,
-                interval=interval,
-                source_interval=source_interval,
-                source_interval_seconds=source_interval_seconds,
-                calendar=calendar,
-            )
+        # Calendar source components (especially 1M) do not have a fixed
+        # 30-day width. Use their actual opens and target end for completeness.
+        aggregated = _aggregate_rows_to_interval(
+            [bar.to_aggregation_dict() for bar in base_bars],
+            custom_seconds,
+            interval=interval,
+            source_interval=source_interval,
+            source_interval_seconds=source_interval_seconds,
+            calendar=(calendar or AlwaysOpenCalendar()) if month_count is not None else calendar,
+        )
 
         return [BarData.from_dict(row) for row in aggregated]

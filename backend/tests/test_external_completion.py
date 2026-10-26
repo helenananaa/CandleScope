@@ -4,11 +4,8 @@ from tests.test_external_strategy_v2 import source, tape
 
 
 def run(host, payload, language, body, *, pyramiding=2, mode="BAR_APPROX", tick=0.5):
-    script = source(language, body.replace(":", "") if language == "pine" else body)
-    if language == "pyne":
-        script = script.replace('plot(syminfo.mintick)', 'ctx.plot("tick", ctx.syminfo.mintick)')
+    script = source(language, body.replace(":", ""))
     script = script.replace('strategy("Orders")', f'strategy("Orders", pyramiding={pyramiding})')
-    script = script.replace('ctx.strategy.configure()', f'ctx.strategy.configure(pyramiding={pyramiding})')
     settings = {"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}
     if tick is not None:
         settings["price_tick"] = tick
@@ -29,7 +26,7 @@ def run(host, payload, language, body, *, pyramiding=2, mode="BAR_APPROX", tick=
     return terminal(host.native, created["run_id"])
 
 
-@pytest.mark.parametrize("language", ["pine","pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("mode", ["BAR_APPROX","TRADE_TAPE","BOOK_ASSISTED"])
 def test_installed_multiple_entries_named_partial_close(runtime, language, mode):
     host,payload=runtime
@@ -51,7 +48,7 @@ if bar_index == 2:
     assert not report["raw_output"]["strategy_output"].get("strategy")
 
 
-@pytest.mark.parametrize("language", ["pine","pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_installed_tick_bracket_and_symbol_tick_agree(runtime, language):
     host,payload=runtime
     record=run(host,payload,language,'''if bar_index == 0:
@@ -63,11 +60,11 @@ plot(syminfo.mintick)
     report=record["result"]
     assert [float(fill["price"]) for fill in report["trades"]] == [10,9]
     graphic = report["graphics"][0]
-    values = graphic["values"] if language == "pine" else [row["value"] for row in graphic["data"]]
+    values = graphic["values"]
     assert values == [0.5]*10
 
 
-@pytest.mark.parametrize("language", ["pine","pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("mode", ["TRADE_TAPE","BOOK_ASSISTED"])
 def test_installed_trailing_exit_tracks_real_prints(runtime, language, mode):
     host,payload=runtime
@@ -80,11 +77,11 @@ def test_installed_trailing_exit_tracks_real_prints(runtime, language, mode):
     assert float(record["result"]["trades"][-1]["position_after"]) == 0
 
 
-@pytest.mark.parametrize("language", ["pine","pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("arguments,tick,error", [
     ("profit=2",None,"price_tick"),
     ("trail_points=2, trail_offset=1",0.5,"trade events"),
-    ("profit=2, limit=11",0.5,"absolute price"),
+    ("profit=2, limit=11",0.5,"combined trigger families are not supported"),
 ])
 def test_installed_unsupported_price_contract_fails_closed(runtime, language, arguments, tick, error):
     host,payload=runtime
@@ -94,7 +91,4 @@ def test_installed_unsupported_price_contract_fails_closed(runtime, language, ar
 ''',tick=tick)
     assert record["state"] == "FAILED", record
     assert record["result"] is None
-    # Pine rejects the ambiguous pair during semantic analysis, before the
-    # host's equivalent admission check; both must fail without a report.
-    expected = "combined trigger families are not supported" if language == "pine" and "limit=11" in arguments else error
-    assert expected in str(record["error"])
+    assert error in str(record["error"])

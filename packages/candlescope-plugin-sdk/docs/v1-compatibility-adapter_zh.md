@@ -44,7 +44,7 @@ v1 route table 或安装 v2 bundle。
 
 | runtime/release | 安装与 activation 所有者 | 统一发现 | 执行协议 | 支持的迁移 |
 | --- | --- | --- | --- | --- |
-| 现有 pinned Pyne/Pine v1 `.cspkg` | v1 installer/RuntimeHost | Host compatibility contribution | `candlescope.script-runtime/1` | 仅显式 catalog import |
+| 现有 pinned Pine v1 `.cspkg` | v1 installer/RuntimeHost | Host compatibility contribution | `candlescope.script-runtime/1` | 仅显式 catalog import |
 | 社区 v1 runtime | v1 installer/RuntimeHost | descriptor/route 校验后可见 | `candlescope.script-runtime/1` | 仅显式 catalog import |
 | 通用 v2 plugin | v2 installer/Core Host | 原生 v2 catalog | `candlescope.plugin/2` | v2 staged lifecycle |
 | v2 manifest 声明 `script-runtime/1` | 无 | 显示 unsupported | 无 | 拒绝，不猜测转换 |

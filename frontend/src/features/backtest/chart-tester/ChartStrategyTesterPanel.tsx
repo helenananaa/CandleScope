@@ -452,7 +452,7 @@ export function CandleScopeStrategyTesterPanel({
     displayName: string,
     sourceText: string,
     shouldFocus: boolean,
-    language: StrategyDraftRecord["language"] = "pyne",
+    language: StrategyDraftRecord["language"] = "python",
   ) => {
     const id = createChartStrategyDraftId();
     try {

@@ -1,13 +1,4 @@
-/**
- * IndicatorEditor — Pyne code editor for writing custom indicators.
- *
- * Uses Monaco Editor with:
- *   - Python syntax highlighting (base language)
- *   - Pyne autocompletion (ta.*, input.*, color.*, plot, etc.)
- *   - Pyne hover documentation
- *   - Custom dark theme optimized for trading scripts
- *   - Code snippet templates for common indicators
- */
+/** Editor for hosted and frontend indicator scripts. */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -18,8 +9,7 @@ import {
   configurePineHostCapabilities,
   registerPineLanguageSupport,
 } from "../../editor/pineLanguage";
-import { registerPyneLanguageSupport } from "../../editor/pyneLanguage";
-import { registerPyneTheme, getPyneEditorOptions } from "../../editor/pyneTheme";
+import { registerScriptTheme, getScriptEditorOptions } from "../../editor/scriptTheme";
 import { fetchScriptRuntimes } from "../../services/indicatorApi.js";
 import { FRONTEND_SCRIPT_LANGUAGE, withFrontendScriptRuntime } from "./frontendScriptContract.js";
 import {
@@ -27,7 +17,6 @@ import {
   resolveScriptEditorProfile,
   runtimeForScriptLanguage,
 } from "./scriptRuntimeCatalog.js";
-import { usePyneSecurityPolicy } from "./usePyneSecurityPolicy";
 import { createScriptEditorDraft, editScriptEditorSource, scriptEditorSource, switchScriptEditorLanguage } from "./scriptEditorDraft.js";
 import type { ChangeEvent } from "react";
 import type {
@@ -36,9 +25,7 @@ import type {
   ScriptRuntimeCatalog,
 } from "./indicatorTypes.js";
 
-/** Track whether Pyne providers have been registered globally */
 const Editor = lazy(() => import("../../editor/LocalMonacoEditor.js"));
-let pyneRegistered = false;
 /** Track whether Pine providers have been registered globally */
 let pineRegistered = false;
 
@@ -70,7 +57,6 @@ export interface IndicatorEditorPreviewState {
 
 export interface IndicatorEditorProps {
   allowedScriptLanguages?: readonly string[];
-  allowedSecurityModes?: readonly string[];
   indicator: IndicatorEditorSource;
   onSave(value: IndicatorEditorValue): void | Promise<void>;
   onBack(): void;
@@ -83,7 +69,6 @@ export interface IndicatorEditorProps {
 
 export default function IndicatorEditor({
   allowedScriptLanguages,
-  allowedSecurityModes = ["safe", "research", "unsafe"],
   indicator,
   onSave,
   onBack,
@@ -98,15 +83,8 @@ export default function IndicatorEditor({
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
   const [language, setLanguage] = useState(indicator?.language || "");
-  const [securityMode, setSecurityMode] = useState(() => {
-    const requested = indicator?.securityMode || "safe";
-    return allowedSecurityModes.includes(requested)
-      ? requested
-      : allowedSecurityModes[0] || "safe";
-  });
   const [runtimeCatalog, setRuntimeCatalog] = useState<ScriptRuntimeCatalog | null>(null);
   const [runtimeCatalogError, setRuntimeCatalogError] = useState<string | null>(null);
-  const securityPolicy = usePyneSecurityPolicy();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const allowedRuntimeCatalog = useMemo(() => {
     if (!runtimeCatalog || allowedScriptLanguages === undefined) {
@@ -191,7 +169,6 @@ export default function IndicatorEditor({
       params: indicator?.params || {},
       description: indicator?.description || "",
       language: selectedLanguage.id,
-      ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
       isPreset: indicator?.isPreset || false,
     });
   }, [
@@ -202,7 +179,6 @@ export default function IndicatorEditor({
     previewState,
     readOnly,
     script,
-    securityMode,
     selectedLanguage,
   ]);
 
@@ -215,7 +191,6 @@ export default function IndicatorEditor({
       params: indicator?.params || {},
       description: indicator?.description || "",
       language: selectedLanguage.id,
-      ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
       isPreset: indicator?.isPreset || false,
     });
   }, [
@@ -226,7 +201,6 @@ export default function IndicatorEditor({
     previewState,
     readOnly,
     script,
-    securityMode,
     selectedLanguage,
   ]);
 
@@ -248,24 +222,13 @@ export default function IndicatorEditor({
     setLanguage(nextLanguage.id);
   }, [allowedRuntimeCatalog, language, script, selectedLanguage]);
 
-  const handleSecurityModeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    const nextMode = event.target.value;
-    if (!allowedSecurityModes.includes(nextMode)) return;
-    if (
-      nextMode === "unsafe" &&
-      !window.confirm(t("indicator.editor.unsafeConfirm"))
-    ) {
-      return;
-    }
-    setSecurityMode(nextMode);
-  }, [allowedSecurityModes]);
 
   /**
    * Called before Monaco mounts — register theme so it's available
    * for the first render.
    */
   const handleBeforeMount = useCallback((monaco: typeof Monaco) => {
-    registerPyneTheme(monaco);
+    registerScriptTheme(monaco);
     if (!pineRegistered) {
       registerPineLanguageSupport(monaco);
       pineRegistered = true;
@@ -273,8 +236,7 @@ export default function IndicatorEditor({
   }, []);
 
   /**
-   * Called when Monaco editor mounts — register Pyne language
-   * providers (completion, hover) once globally.
+   * Called when Monaco mounts to attach editor actions.
    */
   const handleEditorMount = useCallback((
     editor: Monaco.editor.IStandaloneCodeEditor,
@@ -282,11 +244,6 @@ export default function IndicatorEditor({
   ) => {
     editorRef.current = editor;
 
-    // Register Pyne providers once (they're global to the Monaco instance)
-    if (!pyneRegistered) {
-      registerPyneLanguageSupport(monaco);
-      pyneRegistered = true;
-    }
 
     if (!readOnly) {
       // Add Ctrl+Enter shortcut to run
@@ -346,7 +303,6 @@ export default function IndicatorEditor({
                   script,
                   params: indicator.params || {},
                   language: selectedLanguage.id,
-                  ...(editorProfile.pyneEnhancements ? { securityMode } : {}),
                 });
               }}
               style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
@@ -439,23 +395,8 @@ export default function IndicatorEditor({
                 </select>
               </label>
             )}
-            {!readOnly && editorProfile?.pyneEnhancements && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              {t("indicator.editor.mode")}
-              <select
-                value={securityMode}
-                onChange={handleSecurityModeChange}
-                style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 8px', fontSize: '12px' }}
-              >
-                {allowedSecurityModes.map((mode) => (
-                  <option key={mode} value={mode}>{mode}</option>
-                ))}
-              </select>
-            </label>}
-            {editorProfile?.pyneEnhancements && securityPolicy && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {t("indicator.editor.policy", { mode: securityPolicy.mode, timeout: securityPolicy.timeoutSeconds })}
-              </span>
-            )}
+
+
             {selectedRuntime && (
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 {selectedRuntime.name} {selectedRuntime.version}
@@ -463,9 +404,7 @@ export default function IndicatorEditor({
             )}
           </div>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {editorProfile?.pyneEnhancements
-              ? <>{t("indicator.editor.hintPyne")} <code>ta.</code> <code>input.</code> <code>color.</code> {t("indicator.editor.hintComplete")} </>
-              : editorProfile?.pineEnhancements
+            {editorProfile?.pineEnhancements
                 ? <>{t("indicator.editor.hintPine")} <code>ta.</code> <code>timeframe.</code> {t("indicator.editor.hintComplete")} </>
               : selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE ? null : <>{t("indicator.editor.hintPlugin")} </>}
             <kbd style={{ background: 'var(--bg-tertiary)', padding: '1px 5px', borderRadius: '3px', fontSize: 'var(--font-size-2xs)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> {t("indicator.editor.runKbd")}
@@ -481,11 +420,7 @@ export default function IndicatorEditor({
             {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}
           </div>
         )}
-        {editorProfile?.pyneEnhancements && securityMode === "unsafe" && (
-          <div style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '6px', color: 'var(--text-danger)', background: 'color-mix(in srgb, var(--color-danger) 8%, transparent)', fontSize: '12px' }}>
-            {t("indicator.editor.unsafeHint")}
-          </div>
-        )}
+
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Suspense fallback={null}><Editor
             height="100%"
@@ -498,7 +433,7 @@ export default function IndicatorEditor({
             }}
             beforeMount={handleBeforeMount}
             onMount={handleEditorMount}
-            options={getPyneEditorOptions(readOnly ? {
+            options={getScriptEditorOptions(readOnly ? {
               readOnly: true,
               domReadOnly: true,
               quickSuggestions: false,
@@ -532,9 +467,7 @@ export default function IndicatorEditor({
           <span style={{ color: 'var(--text-success)' }}>{t("indicator.editor.runOk")}</span>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
-            {editorProfile?.pyneEnhancements
-              ? <>{t("indicator.editor.pyneApiHint")} <code>ta.sma()</code> <code>ta.ema()</code> <code>ta.rsi()</code> <code>plot()</code> <code>input.int()</code></>
-              : editorProfile?.pineEnhancements
+            {editorProfile?.pineEnhancements
                 ? <>{t("indicator.editor.pineApiHint")} <code>ta.sma()</code> <code>plot()</code> <code>plotshape()</code> <code>input.int()</code></>
               : t("indicator.editor.communityRuntime", { language: selectedLanguage?.name || t("indicator.editor.fallbackLanguage"), runtime: selectedRuntime?.name || "plugin" })}
           </span>

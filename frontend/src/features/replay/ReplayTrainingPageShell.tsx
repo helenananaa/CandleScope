@@ -1,9 +1,10 @@
+import { useExportRuntime } from "../export/useExportRuntime.js";
 import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
 import { ReplayReviewHistory } from "./replayReviewHistory.js";
 import type { ReplayCanonicalBinding } from "./replayCanonicalIndicators.js";
 import { useReplayReviewIndicators } from "./useReplayReviewIndicators.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TickMarkType } from "../../chart-adapter/chartAdapterTypes.js";
 import MarketChartWorkspace from "../../app/MarketChartWorkspace.js";
 import MarketPageFrame from "../../app/MarketPageFrame.js";
@@ -27,7 +28,7 @@ import {
 } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import { useCustomIntervals } from "../chart-session/customIntervalStore.js";
 import { useIntervalNoticeRuntime } from "../chart-session/intervalNoticeRuntime.js";
-import { loadUserPrefs } from "../chart-session/chartSessionModel.js";
+import { loadUserPrefs, updateUserPref } from "../chart-session/chartSessionModel.js";
 import type { CustomIntervalRecord } from "../chart-session/chartSessionTypes.js";
 import { useDrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import { drawingDocumentSessionRegistry } from "../drawings/core/drawingDocumentStore.js";
@@ -38,6 +39,7 @@ import {
   parseIntervalSeconds,
 } from "../../utils/intervals.js";
 import type { IntervalString } from "../../utils/intervals.js";
+import ReplayStatePanel from "./components/ReplayStatePanel.js";
 import ReplayBottomControlDock from "./components/ReplayBottomControlDock.js";
 import ReplayIntegrityReviewPanel from "./components/ReplayIntegrityReviewPanel.js";
 import ReplayTrainingResultsPanel from "./components/ReplayTrainingResultsPanel.js";
@@ -87,6 +89,8 @@ import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
 
 
+const ExportPanel = lazy(() => import("../export/ExportPanel.js"));
+
 export interface ReplayTrainingPageShellProps {
   readonly runtime: ReplayRuntime;
   readonly indicators: ReplaySharedIndicatorRuntime;
@@ -94,6 +98,8 @@ export interface ReplayTrainingPageShellProps {
   readonly chartSurfaceActions: ChartSurfaceActions;
   readonly viewer: ReplayViewerRuntime;
   readonly chartSettingsRuntime: ChartSettingsRuntime;
+  readonly pageExportRef?: RefObject<HTMLDivElement | null>;
+  readonly preparePageDrawingExport?: import("../export/pageDrawingExport.js").PreparePageDrawingExport;
   readonly cell?: {
     readonly scope: string;
     readonly drawingScope: string;
@@ -123,39 +129,6 @@ interface ReplayIntervalViewportTransfer {
 }
 
 
-function ReplayStatePanel({ runtime }: { readonly runtime: ReplayRuntime }) {
-  useLocale();
-  if (runtime.phase === "ERROR" || runtime.phase === "ENTRY_ERROR") {
-    return (
-      <div className="chart-area" data-replay-state="error" data-replay-error={runtime.error?.code ?? "REPLAY_RUNTIME_ERROR"}>
-        <div className="error-overlay">
-          <div className="error-icon">!</div>
-          <div className="error-message">
-            <strong>{t("replay.shell.unavailable")}</strong><br />
-            {runtime.error?.code ?? "REPLAY_RUNTIME_ERROR"}: {runtime.error?.message ?? "Unknown replay error"}
-            <small>{t("replay.shell.failClosed")}</small>
-          </div>
-          {runtime.phase === "ERROR" && <button className="retry-btn" type="button" onClick={runtime.actions.retry}>{t("replay.shell.retryCaps")}</button>}
-        </div>
-      </div>
-    );
-  }
-  const labels: Readonly<Record<string, string>> = {
-    IDLE: t("replay.shell.idle"),
-    LOADING_CAPABILITIES: t("replay.shell.loadingCaps"),
-    VALIDATING_SESSION: t("replay.shell.validating"),
-    CONNECTING_SESSION: t("replay.shell.connecting"),
-    STOPPED: t("replay.shell.stopped"),
-  };
-  return (
-    <div className="chart-area" data-replay-state="loading">
-      <div className="error-overlay">
-        <div className="replay-loading-spinner" />
-        <div className="error-message"><strong>{t("replay.shell.replay")}</strong><br />{labels[runtime.phase] ?? t("replay.shell.recovering")}<small>{t("replay.shell.noLiveMock")}</small></div>
-      </div>
-    </div>
-  );
-}
 
 export default function ReplayTrainingPageShell({
   runtime,
@@ -164,6 +137,8 @@ export default function ReplayTrainingPageShell({
   chartSurfaceActions,
   viewer,
   chartSettingsRuntime,
+  pageExportRef,
+  preparePageDrawingExport,
   cell,
 }: ReplayTrainingPageShellProps) {
   const PageFrame = cell?.frame ?? MarketPageFrame;
@@ -596,7 +571,13 @@ export default function ReplayTrainingPageShell({
   ]);
 
   const displayedSeriesStore = review === null ? viewer.seriesStore : reviewSeriesStore;
+  const ensureIndicatorViewport = review === null
+    ? indicators.actions.ensureVisibleIndicatorRange
+    : reviewIndicators.actions.ensureVisibleIndicatorRange;
   const handleVisibleRangeChange = useCallback((range: ChartSurfaceVisibleRange) => {
+    // Linked/restore ranges settle on the next draw. Also accept the persisted
+    // range so display math follows programmatic navigation and review views.
+    ensureIndicatorViewport(range);
     if (integrityRuntime.review !== null) return;
     runtime.marketData.actions.onVisibleRangeChange(range);
     cell?.onVisibleRangeChange(range);
@@ -608,7 +589,7 @@ export default function ReplayTrainingPageShell({
     if (range.barSpacing !== undefined) value.bar_spacing_ppm = Math.round(range.barSpacing * 1_000_000);
     if (range.rightOffset !== undefined) value.right_offset_ppm = Math.round(range.rightOffset * 1_000_000);
     integrityRuntime.actions.offerViewAction("VISIBLE_RANGE", "main-chart-range", value);
-  }, [cell, integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
+  }, [cell, ensureIndicatorViewport, integrityRuntime.actions, integrityRuntime.review, runtime.marketData.actions]);
 
   useEffect(() => {
     if (cell?.active === false) return;
@@ -677,6 +658,26 @@ export default function ReplayTrainingPageShell({
   const displayedSymbol = review !== null && typeof reviewSelectedTrack?.symbol === "string"
     ? reviewSelectedTrack.symbol
     : activeSelectedTrack?.symbol ?? config?.symbol ?? "--";
+  const ownPageExportRef = useRef<HTMLDivElement | null>(null);
+  const exportMetadata = useMemo(() => ({
+    exchange: activeSelectedTrack?.exchange ?? config?.exchange ?? "",
+    marketType: activeSelectedTrack?.market_type ?? config?.market_type ?? "",
+    symbol: displayedSymbol,
+    interval: displayedInterval,
+  }), [activeSelectedTrack?.exchange, activeSelectedTrack?.market_type, config?.exchange,
+    config?.market_type, displayedSymbol, displayedInterval]);
+  const exportFlow = useExportRuntime({
+    session: null,
+    metadata: exportMetadata,
+    indicators: indicators.view.activeIndicators,
+    resolvedTheme,
+    chartSurfaceActions,
+    pageExportRef: pageExportRef ?? ownPageExportRef,
+    preparePageDrawingExport,
+    drawings,
+    loadUserPrefs,
+    updateUserPref,
+  });
   const baseInterval = (config?.base_interval ?? "1m") as IntervalString;
   const replayIntervalCatalog = useMemo(() => buildReplayIntervalCatalog({
     exchange: config?.exchange ?? "binance",
@@ -967,6 +968,7 @@ export default function ReplayTrainingPageShell({
       tickMarkFormatter={formatChartTick}
       tickMarkMaxCharacterLength={replayTimeAxisMaxCharacterLength(publicTimePolicy)}
       dataMeta={viewerDataMeta}
+      onViewportRangeChange={ensureIndicatorViewport}
       onVisibleRangeChange={handleVisibleRangeChange}
       onUserViewportRangeChange={review === null ? cell?.onUserViewportRangeChange ?? null : null}
       drawingTool={review === null ? drawings.view.drawingTool : null}
@@ -1050,6 +1052,9 @@ export default function ReplayTrainingPageShell({
       onPositionSizeChange={drawings.actions.handlePositionSizeChange}
       selectedDrawing={drawings.view.selectedDrawing}
       onSelectedDrawingStyleChange={drawings.actions.handleSelectedDrawingStyleChange}
+      exportPanelOpen={exportFlow.view.isOpen}
+      exportInProgress={exportFlow.status.inProgress}
+      onToggleExportPanel={exportFlow.actions.togglePanel}
       chartType={settings.chartType}
       onChartTypeChange={(chartType) => setSettings((current) => ({ ...current, chartType }))}
     />
@@ -1100,6 +1105,7 @@ export default function ReplayTrainingPageShell({
   );
   return (
     <PageFrame
+      rootRef={ownPageExportRef}
       toolbar={drawingToolbar}
       rightRail={rightRail}
       topBar={(
@@ -1202,6 +1208,15 @@ export default function ReplayTrainingPageShell({
         />
       )}
       featureSurfaces={active ? <>
+        {review === null && exportFlow.view.isOpen && <Suspense fallback={null}><ExportPanel
+          {...exportFlow.view}
+          onOptionsChange={exportFlow.actions.updateOptions}
+          onExport={exportFlow.actions.exportChart}
+          onClose={exportFlow.actions.closePanel}
+          inProgress={exportFlow.status.inProgress}
+          loading={viewer.loading || history.loading}
+          indicatorComputing={indicators.status.computing}
+        /></Suspense>}
         {review === null && history.notice !== null && (
           <div className="replay-history-boundary-notice" role="status">
             <span>{history.notice}</span>
@@ -1212,8 +1227,7 @@ export default function ReplayTrainingPageShell({
         {review === null && indicatorPanelOpen && (
           <div id="replay-indicator-panel" className="replay-shared-indicator-panel">
             <IndicatorPanel
-              allowedScriptLanguages={["pyne", "pine", "frontend-js"]}
-              allowedSecurityModes={["safe"]}
+              allowedScriptLanguages={["pine", "frontend-js"]}
               isOpen
               onClose={() => setIndicatorPanelOpen(false)}
               activeIndicators={indicators.view.activeIndicators}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 from typing import Any
 
 import aiohttp
@@ -1174,6 +1175,78 @@ def test_binance_primary_rest_pool_reloads_stale_symbol_catalog_once(
         assert snapshot["market_reload_failures"] == 0
         await plugin.close_history_transport(config)
         assert exchange.closed is True
+
+    asyncio.run(run())
+
+
+def test_binance_primary_rest_pool_untracks_loaded_market_tables(
+    monkeypatch: Any,
+) -> None:
+    class Exchange:
+        def __init__(self) -> None:
+            self.markets: dict[str, dict[str, Any]] = {}
+            self.currencies: dict[str, Any] = {}
+            self.loads: list[bool] = []
+            self.initial_tables_untracked: bool | None = None
+            self.closed = False
+
+        async def load_markets(self, reload: bool = False) -> None:
+            self.loads.append(reload)
+            if reload:
+                self.initial_tables_untracked = not gc.is_tracked(self.currencies)
+            # Like ``Exchange.set_markets``, every load publishes new tables.
+            self.currencies = {"USDT": {"limits": {"withdraw": {"min": None}}}}
+            if reload:
+                self.markets = {
+                    "BTC/USDT:USDT": {
+                        "id": "BTCUSDT",
+                        "symbol": "BTC/USDT:USDT",
+                        "swap": True,
+                        "linear": True,
+                        "info": {"filters": [{"filterType": "PRICE_FILTER"}]},
+                    }
+                }
+
+        def market(self, symbol: str) -> dict[str, Any]:
+            return self.markets[symbol]
+
+        async def fapipublic_get_klines(
+            self,
+            _params: dict[str, Any],
+        ) -> list[list[Any]]:
+            return [[1000, "1", "2", "0.5", "1.5", "3", 1999, "4", 5, "1", "2", "0"]]
+
+        async def close(self, clean_instance_data: bool = False) -> None:
+            self.closed = True
+
+    exchange = Exchange()
+    monkeypatch.setattr(
+        "app.exchanges.ccxt_ext.generic._create_exchange",
+        lambda *_args, **_kwargs: exchange,
+    )
+    plugin = create_binance_ccxt_plugin()
+    config = IngestionConfig(proxy_mode="none")
+    request = TransportRequest(
+        StreamDescriptor(
+            "BTCUSDT",
+            StreamType.KLINE,
+            interval="1m",
+            exchange="binance",
+            market_type="futures",
+        ),
+        limit=5,
+        start_ms=1000,
+        end_ms=2000,
+    )
+
+    async def run() -> None:
+        assert len(await plugin.fetch_history_with_config(request, config)) == 1
+        assert exchange.loads == [False, True]
+        assert exchange.initial_tables_untracked is True
+        market = exchange.markets["BTC/USDT:USDT"]
+        for table in (exchange.markets, market, market["info"], exchange.currencies):
+            assert gc.is_tracked(table) is False
+        await plugin.close_history_transport(config)
 
     asyncio.run(run())
 

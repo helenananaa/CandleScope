@@ -1,22 +1,27 @@
 """BAR acquisition through the existing host scheduler, then immutable publication."""
 from __future__ import annotations
 
-import asyncio
-from contextlib import contextmanager
 import gzip
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import time
 import uuid
+from contextlib import contextmanager
+from pathlib import Path
 
 from app.data_engine.data_manager.backfill_contracts import RepairRequest
 from app.data_engine.kline_quality import source_is_trusted_final
 from app.data_engine.storage.klines_repo import query_klines
 
-from .models import PreparationError, PreparationRequest, Requirement, canonical, fingerprint
+from .models import (
+    PreparationError,
+    PreparationRequest,
+    Requirement,
+    canonical,
+    fingerprint,
+)
 from .storage import storage_call
 
 
@@ -33,6 +38,8 @@ class BarPreparationAdapter:
         self.now_ms = now_ms
         self.backtest_runtime = backtest_runtime
         self.publication_repository = None
+        from .market_inputs import MarketObjectCache
+        self.market_inputs = MarketObjectCache()
         self._repair_requests = {}
         self.host_history_path = None if host_history_path is None else Path(host_history_path)
         from .trade_adapter import TradePreparationAdapter
@@ -82,9 +89,9 @@ class BarPreparationAdapter:
         if request.consumer == "STRATEGY" and self.local_data is None:
             raise PreparationError("STRATEGY_PREPARATION_UNAVAILABLE", "Local dataset service is unavailable")
         if "replay_setup" in request.intent:
+            from app.data_engine.interval_policy import parse_interval_spec
             from app.replay.request_contracts import TrainingRunSetupPayload
             from app.replay.training.models import TrainingRunSetupRequest
-            from app.data_engine.interval_policy import parse_interval_spec
             try:
                 payload = TrainingRunSetupPayload.model_validate(request.intent["replay_setup"])
                 setup = TrainingRunSetupRequest.from_dict(payload.model_dump(mode="json")).to_dict()
@@ -228,24 +235,47 @@ class BarPreparationAdapter:
         return receipt, len(payload)
 
     def read(self, chunk):
+        # Other consumers retain detached, mutable row dictionaries.
+        from .market_inputs import detached_value
+        return [detached_value(row) for row in self.read_shared(chunk)]
+
+    def read_shared(self, chunk):
+        from .market_inputs import MarketRows, frozen_object
+
         digest = chunk["receipt"]["sha256"]
         if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise PreparationError("INPUT_CORRUPT", "Invalid cached input identity")
         try:
-            with gzip.open(self.root / f"{digest}.json.gz", "rb") as stream:
-                raw = stream.read(16 * 1024**2 + 1)
-            if len(raw) > 16 * 1024**2 or hashlib.sha256(raw).hexdigest() != digest:
-                raise ValueError("cached input checksum mismatch")
-            data = json.loads(raw)
+            path = self.root / f"{digest}.json.gz"
+            stat = path.stat()
+            signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+            key = ('market-input.v1', digest, signature)
+
+            def load():
+                with gzip.open(path, "rb") as stream:
+                    raw = stream.read(16 * 1024**2 + 1)
+                if len(raw) > 16 * 1024**2 or hashlib.sha256(raw).hexdigest() != digest:
+                    raise ValueError("cached input checksum mismatch")
+                data = json.loads(raw)
+                requirement = Requirement.model_validate(data["requirement"])
+                if not self._complete(data["rows"], requirement, require_trusted_source=data["origin"] != "replay_archive"):
+                    raise ValueError("cached input coverage mismatch")
+                after = path.stat()
+                if signature != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                    raise ValueError("cached input changed during read")
+                return frozen_object(data)
+
+            data = self.market_inputs.get(key, load)
             if data["requirement"] != chunk.get("source_requirement", chunk["requirement"]):
                 raise ValueError("cached input requirement mismatch")
-            requirement = Requirement.model_validate(data["requirement"])
             if data["origin"] != chunk["receipt"].get("origin"):
                 raise ValueError("cached input provenance mismatch")
-            if not self._complete(data["rows"], requirement, require_trusted_source=data["origin"] != "replay_archive"):
-                raise ValueError("cached input coverage mismatch")
             selected = chunk["requirement"]
-            return [row for row in data["rows"] if selected["start_ms"] <= row["open_time"] < selected["end_ms"]]
+            rows = tuple(row for row in data["rows"] if selected["start_ms"] <= row["open_time"] < selected["end_ms"])
+            source = data['requirement']
+            return MarketRows(rows, ((key, source['start_ms'], source['end_ms']),), self.market_inputs)
+        except PreparationError:
+            raise
         except (OSError, ValueError, KeyError) as exc:
             raise PreparationError("INPUT_CORRUPT", "Prepared input is missing or corrupt") from exc
 
@@ -258,6 +288,7 @@ class BarPreparationAdapter:
         path = self.root / f"{digest}.json.gz"
         existed = path.exists()
         path.unlink(missing_ok=True)
+        self.market_inputs.clear()
         return existed
 
     def reconcile_cache(self, repository):
@@ -375,8 +406,9 @@ class BarPreparationAdapter:
             self.publication_repository.check_physical_budget()
 
     async def begin_progressive(self, request, job_id):
-        from .progressive import plan
         from app.replay.catalog import ReplaySeriesIdentity
+
+        from .progressive import plan
         planned, fragments = plan(request)
         requirement = request.requirements[0]
         feed = await storage_call(self.replay_service.progressive_history.create,
@@ -440,8 +472,9 @@ class BarPreparationAdapter:
 
     async def _launch(self, request, result, job_id):
         if "native_strategy" in request.intent:
-            from .native_plan import launch
             from app.backtest.errors import BacktestError
+
+            from .native_plan import launch
             try:
                 run = await storage_call(launch, self.backtest_runtime, request.intent["native_strategy"], result["native_inputs"], job_id)
             except BacktestError as exc:
@@ -465,7 +498,10 @@ class BarPreparationAdapter:
         if request.consumer != "REPLAY" or "replay_setup" not in request.intent:
             return result
         from app.replay.request_contracts import TrainingRunSetupPayload
-        from app.replay.training.models import TrainingRunSetupRequest, TrainingRunMarketSelectionRequest
+        from app.replay.training.models import (
+            TrainingRunMarketSelectionRequest,
+            TrainingRunSetupRequest,
+        )
         payload = TrainingRunSetupPayload.model_validate(request.intent["replay_setup"])
         setup = TrainingRunSetupRequest.from_dict(payload.model_dump(mode="json"))
         progressive = result.get("progressive")
@@ -474,6 +510,7 @@ class BarPreparationAdapter:
         market_options = ({"_market_identity": (scope.exchange, scope.market_type, scope.symbol)}
                           if request.intent.get("submission", {}).get("random_by_market") else {})
         created = await self.replay_service.training.create_empty_run(setup, preparation_id=job_id,
+            _preparation_market_identity=(scope.exchange, scope.market_type, scope.symbol),
             _progressive_initial_horizon_ms=prefix, **market_options)
         if not created["run"].get("adapter_session_id"):
             requirement = request.requirements[0]
@@ -520,7 +557,10 @@ class BarPreparationAdapter:
         for (exchange, market, symbol, interval), fragments in groups.items():
             if request.consumer == "REPLAY":
                 from app.replay.catalog import ReplaySeriesIdentity
-                from app.replay.history_archive import ReplayHistoryArchiveWriter, ReplayHistoryImportBatch
+                from app.replay.history_archive import (
+                    ReplayHistoryArchiveWriter,
+                    ReplayHistoryImportBatch,
+                )
                 writer = ReplayHistoryArchiveWriter(self.replay_service.settings.replay_history_archive_dir)
                 identity = ReplaySeriesIdentity(exchange, market, symbol)
                 # Publish bounded fragments; already completed immutable objects

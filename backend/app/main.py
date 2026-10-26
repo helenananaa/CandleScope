@@ -5,13 +5,14 @@ Startup sequence:
   1. Initialize SQLite storage (klines_repo).
   2. Restore the local symbol catalog snapshot.
   3. Start the script-runtime plugin plane as a capability. First-party
-     Pyne/Pine or plugin-host failures degrade that plane and never abort
+     Pine or plugin-host failures degrade that plane and never abort
      the process.
   4. Start the DataEngine runtime and attach its public handles to
      ``app.state`` for API/WS endpoints.
   5. Refresh exchange metadata asynchronously on a best-effort basis.
   6. Bridge the IndicatorEngine to DataManager events.
-  7. On shutdown, stop IndicatorEngine, plugin sidecars, and DataEngine.
+  7. Freeze the startup heap out of later full GC passes.
+  8. On shutdown, stop IndicatorEngine, plugin sidecars, and DataEngine.
 
 When DataManager fails to initialize, the application can still expose
 health endpoints, but data APIs report explicit service-unavailable errors.
@@ -53,6 +54,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.core.config import (
     CORS_ORIGINS,
     EVENT_LOOP_LAG_INTERVAL_SECONDS,
+    GC_FREEZE_STARTUP_HEAP,
     KLINES_DB_PATH,
     LIQUIDATION_DB_PATH,
     LIQUIDATION_ROLLUP_BACKEND,
@@ -68,6 +70,7 @@ from app.core.config import (
 )
 from app.core.executors import executors_snapshot
 from app.core.bounded_executor import ExecutorBusyError
+from app.core.gc_policy import freeze_startup_heap, gc_policy_snapshot, unfreeze_startup_heap
 from app.core.version import APP_VERSION
 from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
@@ -92,6 +95,7 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.symbols import router as symbols_router
     from app.api.v1.symbol_discovery import router as symbol_discovery_router
     from app.api.v1.trade_flow import router as trade_flow_router
+    from app.api.v1.trading_accounts import router as trading_accounts_router
     from app.api.v1.local_data import router as local_data_router
     from app.data_engine.data_manager.capacity import build_capacity_snapshot
     from app.plugin_core_v2 import create_core_plugin_router
@@ -154,6 +158,7 @@ else:
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
     app.include_router(replay_router, prefix="/api/v1")
+    app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
     if RESEARCH_DATA_LIBRARY_ENABLED:
         app.include_router(local_data_router, prefix="/api/v1")
@@ -252,14 +257,52 @@ async def _init_data_manager() -> None:
         app.state.data_manager = None
 
 
+async def _init_trading_accounts() -> None:
+    """Open the local trading journal and start the practice matcher.
+
+    Best effort: a failure here never aborts startup; the HTTP adapter then
+    reports the feature as unavailable.
+    """
+    try:
+        from app.core.config import DATA_DIR
+        from app.core.executors import run_storage
+        from app.trading_accounts.practice_runtime import DataManagerMarket, PracticeRuntime
+        from app.trading_accounts.service import TradingAccountService
+        from app.trading_accounts.store import TradingStore
+
+        store = await run_storage(TradingStore, DATA_DIR / "trading-accounts.sqlite3")
+        data_manager = getattr(app.state, "data_manager", None)
+        service = TradingAccountService(
+            store,
+            snapshot_dir=DATA_DIR / "trading-snapshots",
+            market=DataManagerMarket(data_manager) if data_manager is not None else None,
+        )
+        app.state.trading_accounts = service
+        if data_manager is not None:
+            practice_runtime = PracticeRuntime(service, data_manager)
+            await practice_runtime.start()
+            app.state.trading_practice_runtime = practice_runtime
+        print("[startup] Trading accounts ready [ok]")
+    except Exception as exc:
+        logger.warning("Trading accounts unavailable: %s", exc, exc_info=True)
+        print(f"[startup] Trading accounts unavailable: {exc}")
+
+
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
-    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+    from app.exchanges.symbol_catalog import (
+        get_cached_symbol_metadata,
+        refresh_exchange_metadata,
+    )
     from app.replay.runtime import start_replay_runtime
+
+    async def refresh_instrument_metadata(exchange: str, market_type: str):
+        return await refresh_exchange_metadata(exchange, market_type=market_type)
 
     runtime = await start_replay_runtime(
         instrument_metadata_resolver=get_cached_symbol_metadata,
+        instrument_metadata_refresher=refresh_instrument_metadata,
     )
     app.state.replay_runtime = runtime
     app.state.replay_service = runtime.service
@@ -529,6 +572,7 @@ async def startup_event() -> None:
             raise
         logger.info("Started LOCAL_OFFLINE runtime at %s", LOCAL_DATA_DIR)
         print("[startup] LOCAL_OFFLINE runtime [ok]")
+        freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
         return
 
     # Parse the CCXT CA bundle off the loop before feeds open their clients.
@@ -556,7 +600,7 @@ async def startup_event() -> None:
         logger.info("Restored last-known-good symbol catalog snapshot")
 
     # 3. Start script/plugin runtimes as a capability plane. A missing or
-    # unsupported first-party sidecar degrades Pyne/Pine; it does not abort
+    # unsupported first-party sidecar degrades Pine; it does not abort
     # DataEngine, alerts, or builtin indicators.
     try:
         if BACKTEST_SETTINGS.enabled or RESEARCH_DATA_LIBRARY_ENABLED:
@@ -628,9 +672,17 @@ async def startup_event() -> None:
         app.state.data_preparation_service = preparation
         await preparation.start()
         from app.data_preparation.replay_context import ReplayHistoryContext
-        if getattr(app.state, "replay_service", None) is not None:
-            app.state.replay_service.history_context = ReplayHistoryContext(preparation)
+        from app.data_preparation.replay_origin import ReplayOriginResolver
         data_manager = getattr(app.state, "data_manager", None)
+        market_runtime = getattr(app.state, "data_engine_runtime", None)
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.replay_service.history_context = ReplayHistoryContext(
+                preparation,
+                origin_resolver=ReplayOriginResolver(
+                    factory=getattr(market_runtime, "ingestion_factory", None),
+                    policy=getattr(data_manager, "history_policy", None),
+                ),
+            )
         try:
             if data_manager is not None:
                 from app.plugin_market_v2 import DataManagerConsumerPort
@@ -689,6 +741,8 @@ async def startup_event() -> None:
         await lag_monitor.stop()
         raise
 
+    await _init_trading_accounts()
+
     from app.exchanges.symbol_catalog import configure_exchange_metadata_foreground_probe
 
     runtime = getattr(app.state, "data_engine_runtime", None)
@@ -700,6 +754,9 @@ async def startup_event() -> None:
     # 5. Refresh exchange symbols in the background. Product search can serve
     # its last-known-good process cache while this best-effort task is pending.
     _schedule_symbol_catalog_refresh()
+
+    # Keep the startup heap out of later full GC passes (see gc_policy).
+    freeze_startup_heap(enabled=GC_FREEZE_STARTUP_HEAP)
 
 
 def _schedule_symbol_catalog_refresh() -> asyncio.Task[None]:
@@ -778,6 +835,7 @@ async def shutdown_event() -> None:
         if lag_monitor is not None:
             await lag_monitor.stop()
         print("[shutdown] LOCAL_OFFLINE runtime shut down [ok]")
+        unfreeze_startup_heap()
         return
 
     backtest_runtime = getattr(app.state, "backtest_runtime", None)
@@ -836,6 +894,17 @@ async def shutdown_event() -> None:
         indicator_range_service.unbind_all()
         indicator_range_service.clear()
 
+    practice_runtime = getattr(app.state, "trading_practice_runtime", None)
+    if practice_runtime is not None:
+        try:
+            await practice_runtime.stop()
+            print("[shutdown] Practice runtime shut down [ok]")
+        except Exception as exc:
+            print(f"[shutdown] Practice runtime shutdown error: {exc}")
+    trading_accounts = getattr(app.state, "trading_accounts", None)
+    if trading_accounts is not None:
+        trading_accounts.store.close()
+
     alert_runtime = getattr(app.state, "alert_runtime", None)
     if alert_runtime is not None:
         try:
@@ -883,6 +952,7 @@ async def shutdown_event() -> None:
     if replay_runtime is not None:
         await replay_runtime.shutdown(step_timeout=5)
 
+    unfreeze_startup_heap()
     print("[shutdown] All components shut down")
 
 
@@ -1012,6 +1082,7 @@ async def debug_snapshot() -> dict:
             if lag_monitor is not None
             else None,
             "websocket": ws_runtime_metrics.snapshot(),
+            "gc": gc_policy_snapshot(),
             "ccxt_market_tables": get_shared_ccxt_market_tables().snapshot(),
         }
         replay_runtime = getattr(app.state, "replay_runtime", None)

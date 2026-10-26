@@ -1,5 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
-import { prepareReplay, preparationRequest, type PreparationCapabilities } from "../data-preparation/api.js";
+import { prepareReplay, preparationRequest, waitForPreparation, type PreparationCapabilities, type PreparationJob } from "../data-preparation/api.js";
 import { ReplayApiClient } from "./replayApi.js";
 import type { ReplayApiClientOptions, ReplayCatalogQuery } from "./replayApi.js";
 import type { ReplayCapabilities, ReplayCatalog } from "./replayTypes.js";
@@ -592,7 +592,7 @@ export class ReplayV2ApiClient {
     );
   }
 
-  planMarketTrack(
+  async planMarketTrack(
     runId: string,
     identity: {
       readonly exchange: string;
@@ -601,21 +601,46 @@ export class ReplayV2ApiClient {
       readonly subscriptionTier?: "NONE" | "WARM" | "FULL";
     },
     signal?: AbortSignal,
+    onPreparation?: (job: PreparationJob) => void,
   ): Promise<ReplayMarketTrackPlan> {
-    return this.request(
-      `/runs/${safeSegment(runId, "run id")}/tracks/plan`,
-      parseReplayMarketTrackPlan,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          exchange: safeIdentifier(identity.exchange, "exchange"),
-          market_type: safeIdentifier(identity.marketType, "market type"),
-          symbol: safeIdentifier(identity.symbol, "symbol"),
-          subscription_tier: identity.subscriptionTier ?? "NONE",
-        }),
-        ...(signal ? { signal } : {}),
-      },
-    );
+    try {
+      return await this.request(
+        `/runs/${safeSegment(runId, "run id")}/tracks/plan`,
+        parseReplayMarketTrackPlan,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            exchange: safeIdentifier(identity.exchange, "exchange"),
+            market_type: safeIdentifier(identity.marketType, "market type"),
+            symbol: safeIdentifier(identity.symbol, "symbol"),
+            subscription_tier: identity.subscriptionTier ?? "NONE",
+          }),
+          ...(signal ? { signal } : {}),
+        },
+      );
+    } catch (error) {
+      if (!onPreparation || !(error instanceof ReplayV2ApiError) || ![
+        "MARKET_TRACK_UNAVAILABLE", "MARKET_COVERAGE_INSUFFICIENT",
+        "MARKET_NOT_LISTED_AT_START", "INSTRUMENT_METADATA_UNAVAILABLE",
+      ].includes(error.code)) throw error;
+    }
+    const transport = this.preparationTransport();
+    let job = await preparationRequest<PreparationJob>("/replay-market", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: signal ?? null,
+      body: JSON.stringify({ run_id: runId, exchange: identity.exchange,
+        market_type: identity.marketType, symbol: identity.symbol }),
+    }, transport);
+    // A new user selection may resume a stopped durable job. This is one
+    // explicit retry; automatic attempts remain bounded by the preparation service.
+    if (["FAILED", "CANCELLED", "BLOCKED_STORAGE"].includes(job.state)) {
+      job = await preparationRequest<PreparationJob>(`/${job.id}/retry`, {
+        method: "POST", signal: signal ?? null,
+      }, transport);
+    }
+    await waitForPreparation(job, onPreparation, signal, transport);
+    // Published history is not admission. Recheck identity, scope, coverage and
+    // current clock through the unchanged authoritative plan before any command.
+    return this.planMarketTrack(runId, identity, signal);
   }
 
   auditAccount(

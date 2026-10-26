@@ -146,7 +146,7 @@ test("script cache identity is isolated by descriptor language", () => {
   const script = { id: "script-1", script: "plot(close)", params: {} };
 
   assert.notEqual(
-    buildIndicatorResultCacheKey({ ...script, language: "pyne" }, baseContext),
+    buildIndicatorResultCacheKey({ ...script, language: "pine" }, baseContext),
     buildIndicatorResultCacheKey(
       { ...script, language: "community-lang" },
       baseContext,

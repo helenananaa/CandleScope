@@ -19,6 +19,7 @@ import {
   replayBoundClosingCapacity,
   replayOrderSideCapacity,
   replayQuantityForShare,
+  replayQuantityForStep as quantityForStep,
   replayOrderIsolatedAllocation,
 } from "../replayOrderSizing.js";
 import { replayOrderCtaState } from "../replayOrderCtaState.js";
@@ -295,20 +296,6 @@ function formatDecimal(value: unknown, maximumFractionDigits = 8): string {
   return formatter.format(parsed);
 }
 
-function decimalPlaces(step: string): number {
-  const normalized = step.toLowerCase();
-  if (normalized.includes("e-")) return Number(normalized.split("e-")[1] ?? 0);
-  return normalized.includes(".") ? normalized.replace(/0+$/, "").split(".")[1]?.length ?? 0 : 0;
-}
-
-function quantityForStep(value: number, stepText: string): string {
-  const step = finiteNumber(stepText) ?? 0;
-  const digits = Math.min(12, decimalPlaces(stepText));
-  const floored = step > 0 ? Math.floor((value + step * 1e-8) / step) * step : value;
-  const formatted = floored.toFixed(digits);
-  return (digits > 0 ? formatted.replace(/\.?0+$/, "") : formatted) || "0";
-}
-
 function sideLabel(value: string): string {
   return value === "BUY" ? t("replay.paper.buy") : value === "SELL" ? t("replay.paper.sell") : value;
 }
@@ -488,7 +475,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
   const isolatedAllocation = replayOrderIsolatedAllocation({
     marginMode: contract?.margin_mode,
     positionMode,
-    allocations: contract?.isolated_allocations,
+    allocations: positionMode === "HEDGE" ? contract?.isolated_wallets : contract?.isolated_allocations,
     trackId: selectedTrackId,
     positionSide: activePositionSide,
   });
@@ -559,15 +546,15 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     return (rebasedMaxQuantity * referencePrice) / Math.max(1, leverage);
   })();
   const resolvedSizeInput = sizeShareIntent !== null && intendedMaxSizeValue !== null
-    ? quantityForStep(
-      intendedMaxSizeValue * sizeShareIntent,
+    ? replayQuantityForShare(
+      String(intendedMaxSizeValue), sizeShareIntent,
       sizeMode === "QUANTITY" ? quantityStep : quoteStep,
-    )
+    ) ?? "0"
     : sizeInput;
   const quantity = (() => {
     const input = finiteNumber(resolvedSizeInput);
     if (input === null || input <= 0) return "";
-    if (sizeMode === "QUANTITY") return quantityForStep(input, quantityStep);
+    if (sizeMode === "QUANTITY") return quantityForStep(resolvedSizeInput, quantityStep);
     if (referencePrice === null || referencePrice <= 0) return "";
     if (sizeMode === "NOTIONAL") return quantityForStep(input / referencePrice, quantityStep);
     return quantityForStep((input * leverage) / referencePrice, quantityStep);
@@ -919,12 +906,9 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     if (maximum === null) return;
     const normalizedShare = Math.max(0, Math.min(1, share));
     setSizeShareIntent(normalizedShare);
-    const raw = maximum * normalizedShare;
-    if (sizeMode === "QUANTITY") {
-      setSizeInput(quantityForStep(raw, quantityStep));
-      return;
-    }
-    setSizeInput(quantityForStep(raw, quoteStep));
+    setSizeInput(replayQuantityForShare(
+      String(maximum), normalizedShare, sizeMode === "QUANTITY" ? quantityStep : quoteStep,
+    ) ?? "0");
   };
 
   const sizeUnit = sizeMode === "QUANTITY" ? quantityAsset : settlementAsset;
@@ -1032,7 +1016,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
     const sideAllocation = replayOrderIsolatedAllocation({
       marginMode: contract?.margin_mode,
       positionMode,
-      allocations: contract?.isolated_allocations,
+      allocations: positionMode === "HEDGE" ? contract?.isolated_wallets : contract?.isolated_allocations,
       trackId: selectedTrackId,
       positionSide: targetPositionSide,
     });

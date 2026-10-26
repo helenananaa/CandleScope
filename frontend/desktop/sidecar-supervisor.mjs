@@ -59,7 +59,7 @@ export class SidecarSupervisor {
   diagnostics() {
     return {
       pid: this.child?.pid ?? null,
-      running: this.child !== null && this.child.exitCode === null,
+      running: this.child !== null && this.child.exitCode === null && this.child.signalCode === null,
       startedAt: this.startedAt,
       readyMs: this.readyMs,
       command: this.options.command,
@@ -141,7 +141,7 @@ export class SidecarSupervisor {
   async stop() {
     const child = this.child;
     this.child = null;
-    if (child && child.exitCode === null) {
+    if (child && child.exitCode === null && child.signalCode === null) {
       let shutdownTimer;
       let onExit;
       try {
@@ -160,7 +160,7 @@ export class SidecarSupervisor {
         clearTimeout(shutdownTimer);
         child.off("exit", onExit);
       }
-      if (child.exitCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     }
     if (this.logHandle) await this.logHandle.close();
     this.logHandle = null;

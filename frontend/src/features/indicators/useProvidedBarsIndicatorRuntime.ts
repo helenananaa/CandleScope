@@ -4,6 +4,7 @@ import {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import type { MutableRefObject } from "react";
 import { t } from "../../i18n/index.js";
@@ -27,12 +28,14 @@ import { buildIndicatorPaneData } from "./indicatorPaneProjection.js";
 import type { IndicatorRuntime } from "./indicatorRuntimeContract.js";
 import type {
   IndicatorDefinition,
+  IndicatorVisibleRange,
 } from "./indicatorTypes.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import type { KlineBar } from "../market-data/marketDataTypes.js";
 import { MAX_SERIES_BARS } from "../market-data/phase1WindowPolicy.js";
 
 import { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.js";
+import { providedBarsViewport } from "./providedBarsViewport.js";
 export { clampProvidedBarsIndicatorOutput } from "./providedBarsIndicatorOutput.js";
 
 const EMPTY_RANGE_REQUEST = () => false;
@@ -60,6 +63,7 @@ export interface UseProvidedBarsIndicatorRuntimeOptions {
   sourceScopeKey: string;
   symbol: string;
   visibleThroughSeconds?: number | null;
+  visibleRangePriority?: boolean;
 }
 
 function useLatestRef<T>(value: T): MutableRefObject<T> {
@@ -71,7 +75,7 @@ function useLatestRef<T>(value: T): MutableRefObject<T> {
 }
 
 function normalizedScriptLanguage(indicator: IndicatorDefinition): string {
-  return String(indicator.language || "pyne").trim().toLowerCase();
+  return String(indicator.language || "pine").trim().toLowerCase();
 }
 
 export function providedBarsIndicatorSupport(
@@ -94,7 +98,7 @@ export function providedBarsIndicatorSupport(
     return { supported: true, reason: null };
   }
   const language = normalizedScriptLanguage(local);
-  if (language !== "pyne" && language !== "pine" && language !== "frontend-js") {
+  if (language !== "pine" && language !== "frontend-js") {
     return {
       supported: false,
       reason: t("indicator.replayUnsafe", { language: language || t("indicator.unknownRuntime") }),
@@ -127,13 +131,7 @@ export function prepareProvidedBarsIndicator(
     securityMode: _discardedSecurityMode,
     ...withoutSecurityMode
   } = local;
-  return language === "pyne"
-    ? {
-        ...withoutSecurityMode,
-        language,
-        securityMode: "safe",
-      }
-    : {
+  return {
         ...withoutSecurityMode,
         language,
       };
@@ -175,6 +173,7 @@ export function useProvidedBarsIndicatorRuntime({
   sourceScopeKey,
   symbol,
   visibleThroughSeconds = null,
+  visibleRangePriority = false,
 }: UseProvidedBarsIndicatorRuntimeOptions): IndicatorRuntime {
   const pendingForceComputeRef = useRef(false);
   const requireIndicatorCompute = useCallback(() => {
@@ -200,7 +199,24 @@ export function useProvidedBarsIndicatorRuntime({
     createIndicatorOutputState,
   );
   const activeIndicatorsRef = useLatestRef(activeIndicators);
+  const [requestedViewport, setRequestedViewport] = useState<{
+    scope: string; range: IndicatorVisibleRange; key: string;
+  } | null>(null);
+  const viewportRequestRef = useRef<{ scope: string; key: string } | null>(null);
+  const computationBars = useMemo(() => visibleRangePriority
+    ? providedBarsViewport(bars, requestedViewport?.scope === sourceScopeKey ? requestedViewport.range : null).bars
+    : bars, [bars, requestedViewport, sourceScopeKey, visibleRangePriority]);
   const barsRef = useLatestRef(bars);
+  const ensureVisibleIndicatorRange = useCallback((value: unknown) => {
+    if (!visibleRangePriority || !value || typeof value !== "object" || Array.isArray(value)) return false;
+    const range = value as IndicatorVisibleRange;
+    const plan = providedBarsViewport(bars, range);
+    const previous = viewportRequestRef.current;
+    if (previous?.scope === sourceScopeKey && previous.key === plan.key) return false;
+    viewportRequestRef.current = { scope: sourceScopeKey, key: plan.key };
+    setRequestedViewport({ scope: sourceScopeKey, range, key: plan.key });
+    return true;
+  }, [bars, sourceScopeKey, visibleRangePriority]);
   const chartDataMetaRef = useLatestRef(chartDataMeta);
   const candleUpColorRef = useLatestRef(candleUpColor);
   const candleDownColorRef = useLatestRef(candleDownColor);
@@ -247,6 +263,7 @@ export function useProvidedBarsIndicatorRuntime({
     candleUpColor,
     candleUpColorRef,
     chartData: bars,
+    ...(visibleRangePriority ? { builtinChartData: computationBars } : {}),
     chartDataMeta,
     chartDataMetaRef,
     chartDataRef: barsRef,
@@ -312,7 +329,7 @@ export function useProvidedBarsIndicatorRuntime({
   const actions = useMemo(() => ({
     addIndicator,
     computeAll,
-    ensureVisibleIndicatorRange: EMPTY_RANGE_REQUEST,
+    ensureVisibleIndicatorRange,
     recompute,
     removeIndicator,
     requestIndicatorRange: EMPTY_RANGE_REQUEST,
@@ -322,6 +339,7 @@ export function useProvidedBarsIndicatorRuntime({
   }), [
     addIndicator,
     computeAll,
+    ensureVisibleIndicatorRange,
     recompute,
     removeIndicator,
     toggleVisibility,

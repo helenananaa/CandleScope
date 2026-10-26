@@ -8,7 +8,7 @@ import { nativeSeries } from "./nativeSeriesModel.js";
 import { drawingColor } from "./nativeDrawingModel.js";
 import type { NativeResult } from "./nativeBacktestApi.js";
 const fixture=(language:string)=>JSON.parse(readFileSync(new URL(`../../../../tests/fixtures/native/${language}-series.json`,import.meta.url),"utf8")) as NativeResult;
-for(const language of ["pine","pyne"]) test(`${language} actual installed output renders candles, markers, colors and fills`,()=>{
+for(const language of ["pine"]) test(`${language} actual installed output renders candles, markers, colors and fills`,()=>{
   const result=fixture(language), series=nativeSeries(result);
   for(const kind of ["line","candle","marker","background","barcolor","hline","fill"]) assert.ok(series.some(s=>s.kind===kind),kind);
   const markup=renderToStaticMarkup(<NativeSeriesScene result={result}/>);
@@ -34,9 +34,9 @@ test("hidden plots, missing values, offsets and show_last do not expose future s
   assert.equal(series.length,2);assert.deepEqual(series[0]!.samples.map(p=>p.index),[4]);
   assert.deepEqual(series[1]!.samples.map(p=>p.index),[3]);
 });
-test("Pyne timestamps use actual chart bars and script text stays escaped",()=>{
-  const result=fixture('pyne');
-  result.raw_output={markers:[{data:[{time:result.bars[0]!.time,shape:'char',text:'<script>alert(1)</script>'},{time:1,shape:'char',text:'future'}]}]};
+test("Pine marker text stays escaped",()=>{
+  const result=fixture('pine');
+  result.raw_output={plots:[],plotChars:[{values:[true],chars:['<script>alert(1)</script>']}]};
   assert.equal(nativeSeries(result)[0]!.samples.length,1);
   const html=renderToStaticMarkup(<NativeSeriesScene result={result}/>);
   assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);

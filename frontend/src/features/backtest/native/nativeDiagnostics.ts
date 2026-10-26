@@ -1,3 +1,29 @@
+import type { NativeRun } from "./nativeBacktestApi.js";
+
+export type NativeFeedbackStatus = ReturnType<typeof nativeRunFeedback>["status"];
+
+/** Feedback belongs to the selected history entry, while commands keep their current-run state. */
+export function nativeRunFeedback(input: {
+  current: NativeRun | null;
+  historical: NativeRun | null;
+  error: string;
+  busy: boolean;
+  preparationState?: string | undefined;
+  needsData: boolean;
+}) {
+  const selected = input.historical ?? input.current;
+  const operationError = input.historical ? "" : input.error;
+  const errorDetails = operationError || (selected?.error
+    ? `${selected.error.message}\n${JSON.stringify(selected.error.details ?? {}, null, 2)}` : "");
+  const status = selected?.state === "CANCELLED" || (!input.historical && input.preparationState === "CANCELLED") ? "cancelled"
+    : operationError || selected?.state === "FAILED" || selected?.state === "INTERRUPTED" ? "failed"
+      : input.historical ? selected?.state === "COMPLETED" ? "completed" : "running"
+        : input.busy ? (input.current ? "running" : "preparing")
+          : selected?.state === "COMPLETED" ? "completed"
+            : input.needsData ? "needsData" : "idle";
+  return { status, errorDetails } as const;
+}
+
 /** Engine locations are 1-based; only expose a jump for a valid source line. */
 export function diagnosticLocation(text: string, source: string): { line: number; column: number; offset: number } | null {
   const match = /(?:Error|Warning):(\d+):(\d+):|\(line (\d+):(\d+)\)/.exec(text);

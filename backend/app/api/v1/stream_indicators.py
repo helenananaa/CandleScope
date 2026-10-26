@@ -1,4 +1,4 @@
-"""Indicator and Pyne WebSocket handlers backed by DataManager events."""
+"""Indicator and Script WebSocket handlers backed by DataManager events."""
 from __future__ import annotations
 
 from app.indicator.series_reference import identity_for_meta
@@ -13,11 +13,10 @@ from fastapi import WebSocket, WebSocketDisconnect
 from app.api.v1.stream_indicator_payloads import (
     _indicator_event_to_ws_message,
     _patch_from_snapshot,
-    _release_pyne_incremental_meta,
     confirmed_indicator_seed_bars,
     store_indicator_seed_cache,
 )
-from app.api.v1.stream_pyne_subscriptions import handle_pyne_indicator_subscribe
+from app.api.v1.stream_script_subscriptions import handle_script_indicator_subscribe
 from app.api.v1.stream_utils import (
     close_for_resync,
     normalize_exchange as _normalize_exchange,
@@ -136,7 +135,7 @@ async def stream_indicators(
     custom_handles: dict[str, Any] = {}
     custom_tasks: dict[str, asyncio.Task] = {}
     client_meta: dict[str, dict] = {}
-    pyne_correction_state: dict[str, Any] = {
+    script_correction_state: dict[str, Any] = {
         "handle": None,
         "callbacks": {},
     }
@@ -266,7 +265,7 @@ async def stream_indicators(
                     queue=queue,
                     client_meta=client_meta,
                     seed_query_cache=seed_query_cache,
-                    pyne_correction_state=pyne_correction_state,
+                    script_correction_state=script_correction_state,
                     send_json=_safe_send_json,
                     msg=msg,
                     runtime_service=runtime_service,
@@ -338,7 +337,7 @@ async def _handle_indicator_subscribe(
     send_json,
     msg: dict,
     runtime_service=None,
-    pyne_correction_state: dict[str, Any] | None = None,
+    script_correction_state: dict[str, Any] | None = None,
 ) -> None:
     client_id = str(msg.get("clientId") or "").strip()
     symbol = str(msg.get("symbol") or "BTCUSDT").upper().strip()
@@ -369,7 +368,7 @@ async def _handle_indicator_subscribe(
     indicator_name = str(msg.get("name") or msg.get("indicator") or "").upper().strip()
     params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
     history_limit = int(msg.get("historyLimit") or 500)
-    history_limit = min(max(history_limit, 1), max(int(config.PYNE_MAX_BARS), 1))
+    history_limit = min(max(history_limit, 1), max(int(config.SCRIPT_MAX_BARS), 1))
     kind = str(msg.get("kind") or "").strip().lower()
     language = (
         str(msg.get("language")).strip().lower()
@@ -382,7 +381,7 @@ async def _handle_indicator_subscribe(
         or msg.get("customIndicatorId")
         or ""
     ).strip()
-    is_script = kind in {"script", "custom", "pyne"} or bool(custom_id) or (script and not indicator_name)
+    is_script = kind in {"script", "custom"} or bool(custom_id) or (script and not indicator_name)
 
     if not client_id:
         await send_json(build_ws_error_payload(
@@ -444,7 +443,7 @@ async def _handle_indicator_subscribe(
             f"{client_id}:{id(websocket)}"
         )
         try:
-            await handle_pyne_indicator_subscribe(
+            await handle_script_indicator_subscribe(
                 dm=dm,
                 custom_handles=custom_handles,
                 custom_tasks=custom_tasks,
@@ -494,7 +493,7 @@ async def _handle_indicator_subscribe(
                     else msg.get("correction_revision")
                 ),
                 runtime_service=runtime_service,
-                pyne_correction_state=pyne_correction_state,
+                script_correction_state=script_correction_state,
                 seed_query_cache=seed_query_cache,
             )
         except Exception as exc:
@@ -906,7 +905,7 @@ async def _unsubscribe_indicator_client(
 
     meta = client_meta.pop(client_id, None)
     if meta is not None:
-        correction_state = meta.pop("_pyneCorrectionState", None)
+        correction_state = meta.pop("_scriptCorrectionState", None)
         if isinstance(correction_state, dict):
             callbacks = correction_state.get("callbacks")
             if isinstance(callbacks, dict):
@@ -957,7 +956,6 @@ async def _unsubscribe_indicator_client(
             except (asyncio.CancelledError, Exception):
                 pass
         await _release_indicator_stream(dm, meta)
-        _release_pyne_incremental_meta(meta)
 
 
 async def _release_indicator_stream(dm, meta: dict) -> None:

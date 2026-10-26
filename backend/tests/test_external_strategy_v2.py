@@ -4,9 +4,8 @@ from tests.test_native_backtests import runtime, terminal, pytestmark
 
 
 def source(language, operation):
-    if language == "pine":
-        return '//@version=6' + '\nstrategy("Orders")\n' + operation
-    return 'def init(ctx):\n    ctx.strategy.configure()\ndef on_bar(ctx, bar):\n' + '\n'.join('    '+line for line in operation.replace('bar_index', 'ctx.bar_index').replace('strategy.', 'ctx.strategy.').replace('true', 'True').splitlines())
+    assert language == "pine"
+    return '//@version=6\nstrategy("Orders")\n' + operation
 
 
 def execute(host, payload, language, operation, **extra):
@@ -18,17 +17,17 @@ def execute(host, payload, language, operation, **extra):
     return result["result"]
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("kind,arguments", [("LIMIT", "limit=11"), ("STOP", "stop=11"), ("STOP_LIMIT", "limit=21, stop=11")])
 def test_price_orders_reach_real_host_kernel(runtime, language, kind, arguments):
     host, payload = runtime
-    report = execute(host, payload, language, f'if bar_index == 0:\n    strategy.entry("L", strategy.long, qty=4, {arguments})'.replace('0:', '0' if language == 'pine' else '0:'))
+    report = execute(host, payload, language, f'if bar_index == 0:\n    strategy.entry("L", strategy.long, qty=4, {arguments})'.replace('0:', '0'))
     assert report["orders"][0]["type"] == kind
     assert report["trades"]
     assert report["account_authority"] == "candlescope"
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 def test_partial_exit_bracket_cancel_and_replacement(runtime, language):
     host, payload = runtime
     operation = '''if bar_index == 0:
@@ -58,7 +57,7 @@ def tape():
     return {"symbol":"BTCUSDT", "events":events}
 
 
-@pytest.mark.parametrize("language", ["pine", "pyne"])
+@pytest.mark.parametrize("language", ["pine"])
 @pytest.mark.parametrize("mode", ["TRADE_TAPE", "BOOK_ASSISTED"])
 def test_real_print_clock_and_book_feedback(runtime, language, mode):
     host,payload=runtime

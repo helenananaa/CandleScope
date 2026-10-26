@@ -7,6 +7,9 @@ import { spawn } from "node:child_process";
 import { build, preview } from "vite";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const replay = process.argv.includes("--replay-visible");
+const trainingInput = process.argv.includes("--replay-training-input");
+const fixture = trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -52,12 +55,12 @@ class CDP {
 }
 
 let server, child, browser, page;
-const receipt = { scope: "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", output };
+const receipt = { scope: replay ? "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification" : "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", output };
 try {
   const destination = path.join(output, "dist");
-  await build({ root, build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts/frontend-script-browser.html") } } });
+  await build({ root, ...(replay ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
   server = await preview({ root, build: { outDir: destination }, preview: { host: "127.0.0.1", port: 0, strictPort: false } });
-  const url = server.resolvedUrls.local[0] + "scripts/frontend-script-browser.html";
+  const url = server.resolvedUrls.local[0] + "scripts/" + fixture;
   const log = fs.openSync(path.join(output, "chrome.log"), "a");
   child = spawn(chrome, ["--headless=new", "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", `--user-data-dir=${profile}`, url], { stdio: ["ignore", log, log] });
   fs.closeSync(log);

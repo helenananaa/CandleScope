@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Replay visible indicator regression</title></head><body>
+<script type="module">
+import { checkProvidedBarsViewport, checkProvidedBarsChartViewport } from "/src/chart-adapter/__tests__/providedBarsViewport.browser.tsx";
+import { checkCanonicalReplayIndicators, checkCanonicalCorrectionViewport, checkReviewHistoryViewport,
+  checkTapeReviewHistoryViewport, checkTapePlaybackBoundaries, checkColdTapePlayback,
+  checkColdTapePlaybackRewind, checkControlledCanonicalRestoration } from "/src/chart-adapter/__tests__/replayCanonicalIndicators.browser.tsx";
+window.__frontendScriptCheck = async () => {
+  const results = [];
+  for (const run of [checkProvidedBarsViewport, checkProvidedBarsChartViewport, checkCanonicalReplayIndicators, checkCanonicalCorrectionViewport,
+    checkReviewHistoryViewport, checkTapeReviewHistoryViewport, checkTapePlaybackBoundaries,
+    checkColdTapePlayback, checkColdTapePlaybackRewind, checkControlledCanonicalRestoration]) results.push(await run());
+  return results;
+};
+window.__frontendScriptEditorCheck = () => ({ status: "PASS", scope: "replay regression suite" });
+</script></body></html>

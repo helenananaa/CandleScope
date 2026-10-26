@@ -29,6 +29,7 @@ from ..phase_projection import load_track_rules
 from . import account_marks as account_marks_ops
 from . import account_math as account_math_ops
 from . import ledger as ledger_ops
+from . import isolated_wallets as isolated_wallet_ops
 
 
 def append_insurance_posting(
@@ -1011,6 +1012,8 @@ def detect_contract_liquidations(
     isolated = json.loads(str(account["isolated_margin_json"]))
     if not isinstance(isolated, dict):
         raise TypeError("isolated margin allocation is invalid")
+    if account["position_mode"] == "HEDGE" and account["margin_mode"] == "ISOLATED":
+        isolated = isolated_wallet_ops.read(connection, run_id, initialize=True)
     tracks = tuple(
         connection.execute(
             """

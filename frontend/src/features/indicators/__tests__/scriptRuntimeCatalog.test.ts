@@ -9,14 +9,14 @@ import {
 
 const payload = {
   schemaVersion: 1,
-  defaultLanguage: "pyne",
+  defaultLanguage: "fixture",
   languages: [
     {
-      id: "pyne",
-      name: "Pyne",
-      extensions: [".pyne"],
-      aliases: ["pyne"],
-      runtimeId: "candlescope.pyne",
+      id: "fixture",
+      name: "Fixture",
+      extensions: [".fixture"],
+      aliases: ["fixture"],
+      runtimeId: "candlescope.fixture",
       routeMode: "sidecar",
       available: true,
       features: ["batch-execution/1"],
@@ -44,12 +44,12 @@ const payload = {
   ],
   runtimes: [
     {
-      id: "candlescope.pyne",
-      name: "Pyne Runtime",
+      id: "candlescope.fixture",
+      name: "Fixture Runtime",
       version: "0.2.0",
-      package: "candlescope-plugin-pyne",
+      package: "candlescope-plugin-fixture",
       languages: [
-        { id: "pyne", name: "Pyne", extensions: [".pyne"], aliases: ["pyne"] },
+        { id: "fixture", name: "Fixture", extensions: [".fixture"], aliases: ["fixture"] },
       ],
       features: ["batch-execution/1"],
       requiredHostFeatures: ["batch-execution/1"],
@@ -128,7 +128,6 @@ test("runtime catalog accepts arbitrary descriptor-declared language ids", () =>
     monacoLanguage: "javascript",
     theme: "vs-dark",
     starterSource: "plot(close)",
-    pyneEnhancements: false,
     pineEnhancements: false,
   });
 });
@@ -141,7 +140,6 @@ test("runtime catalog enables the safe Pine editor from its descriptor", () => {
     monacoLanguage: "pine",
     theme: "vs-dark",
     starterSource: "//@version=6\nindicator(\"My Indicator\")",
-    pyneEnhancements: false,
     pineEnhancements: true,
   });
 });
@@ -150,13 +148,13 @@ test("runtime catalog defaults only when no language was requested", () => {
   const catalog = parseScriptRuntimeCatalog(payload);
   const language = resolveAvailableScriptLanguage(catalog, "");
 
-  assert.equal(language?.id, "pyne");
-  assert.equal(resolveScriptEditorProfile(catalog, language!).monacoLanguage, "python");
-  assert.match(resolveScriptEditorProfile(catalog, language!).starterSource, /overlay=True/);
+  assert.equal(language?.id, "fixture");
+  assert.equal(resolveScriptEditorProfile(catalog, language!).monacoLanguage, "plaintext");
+  assert.equal(resolveScriptEditorProfile(catalog, language!).starterSource, "");
   assert.doesNotMatch(resolveScriptEditorProfile(catalog, language!).starterSource, /\/\/@version/);
 });
 
-test("unavailable Pyne falls back to the available Pine language and its own template", () => {
+test("unavailable Fixture falls back to the available Pine language and its own template", () => {
   const onlyPine = structuredClone(payload);
   onlyPine.languages[0]!.available = false;
   const catalog = parseScriptRuntimeCatalog(onlyPine);
@@ -207,6 +205,6 @@ test("uninstalled runtime routes remain unavailable without invalidating the cat
   for (const language of missing.languages) language.available = false;
   const catalog = parseScriptRuntimeCatalog(missing);
   assert.equal(catalog.languages.length, missing.languages.length);
-  assert.equal(resolveAvailableScriptLanguage(catalog, "pyne"), null);
+  assert.equal(resolveAvailableScriptLanguage(catalog, "fixture"), null);
   assert.equal(resolveAvailableScriptLanguage(catalog, ""), null);
 });

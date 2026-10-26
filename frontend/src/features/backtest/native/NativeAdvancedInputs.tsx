@@ -5,7 +5,7 @@ import type { AdvancedInputs, InputDataset } from "./nativeInputs.js";
 
 export function NativeAdvancedInputs({ value, onChange, language, disabled, exchange, native = true }: {
   value: AdvancedInputs; onChange: (value: AdvancedInputs) => void;
-  language: "pine" | "pyne"; disabled: boolean; exchange: string; native?: boolean;
+  language: "pine"; disabled: boolean; exchange: string; native?: boolean;
 }) {
   const [datasets, setDatasets] = useState<InputDataset[]>([]);
   const [error, setError] = useState("");

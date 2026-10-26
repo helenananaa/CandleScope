@@ -12,44 +12,12 @@
       "bridge": "candlescope-plugin-pine-compat",
       "patch": "packages/candlescope-plugin-pine-compat/engine-patches/renko-event-rows-v1.patch",
       "patchSha256": "sha256:a8f7fee79a35ee6dcd14fd5e66c220c4e65323d3c4bce77b254482eaf0bc62cf"
-    },
-    "pyne-runtime": {
-      "commit": "2b7db79f26ee23472595f4e0e037d49480d45fe6",
-      "archive": {
-        "filename": "pyne-runtime-2b7db79f26ee23472595f4e0e037d49480d45fe6.tar.gz",
-        "url": "https://codeload.github.com/helenananaa/pyne-runtime/tar.gz/2b7db79f26ee23472595f4e0e037d49480d45fe6",
-        "sha256": "sha256:92d8842ffd8a7c0d48f2564f0c044348023e9ae3831305e38a22aabac1361afc"
-      },
-      "bridge": "candlescope-plugin-pyne",
-      "patch": "packages/candlescope-plugin-pyne/engine-patches/source-close-events-v1.patch",
-      "patchSha256": "sha256:c4dbc7231aa86eafb8a95b6e8f1b68bf235bbc1705e70d513eba90b61af0a7c7"
     }
   },
-  "numpy": {
-    "Darwin-arm64": {
-      "filename": "numpy-2.3.3-cp312-cp312-macosx_11_0_arm64.whl",
-      "url": "https://files.pythonhosted.org/packages/6b/0e/c6211bb92af26517acd52125a237a92afe9c3124c6a68d3b9f81b62a0568/numpy-2.3.3-cp312-cp312-macosx_11_0_arm64.whl",
-      "sha256": "sha256:cb32e3cf0f762aee47ad1ddc6672988f7f27045b0783c887190545baba73aa25"
-    },
-    "Darwin-x86_64": {
-      "filename": "numpy-2.3.3-cp312-cp312-macosx_10_13_x86_64.whl",
-      "url": "https://files.pythonhosted.org/packages/51/5d/bb7fc075b762c96329147799e1bcc9176ab07ca6375ea976c475482ad5b3/numpy-2.3.3-cp312-cp312-macosx_10_13_x86_64.whl",
-      "sha256": "sha256:cfdd09f9c84a1a934cde1eec2267f0a43a7cd44b2cca4ff95b7c0d14d144b0bf"
-    },
-    "Linux-x86_64": {
-      "filename": "numpy-2.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-      "url": "https://files.pythonhosted.org/packages/51/64/7de3c91e821a2debf77c92962ea3fe6ac2bc45d0778c1cbe15d4fce2fd94/numpy-2.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
-      "sha256": "sha256:d9192da52b9745f7f0766531dcfa978b7763916f158bb63bdb8a1eca0068ab20"
-    },
-    "Windows-AMD64": {
-      "filename": "numpy-2.3.3-cp312-cp312-win_amd64.whl",
-      "url": "https://files.pythonhosted.org/packages/32/ee/de999f2625b80d043d6d2d628c07d0d5555a677a3cf78fdf868d409b8766/numpy-2.3.3-cp312-cp312-win_amd64.whl",
-      "sha256": "sha256:497d7cad08e7092dba36e3d296fe4c97708c93daf26643a1ae4b03f6294d30eb"
-    }
-  },
-  "tzdata": {
-    "filename": "tzdata-2026.2-py2.py3-none-any.whl",
-    "url": "https://files.pythonhosted.org/packages/ce/e4/dccd7f47c4b64213ac01ef921a1337ee6e30e8c6466046018326977efd95/tzdata-2026.2-py2.py3-none-any.whl",
-    "sha256": "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7"
-  }
+  "platforms": [
+    "Darwin-arm64",
+    "Darwin-x86_64",
+    "Linux-x86_64",
+    "Windows-AMD64"
+  ]
 }

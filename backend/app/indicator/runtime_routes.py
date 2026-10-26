@@ -76,6 +76,8 @@ class IndicatorRuntimeRoute:
 
     def __post_init__(self) -> None:
         language = _identifier(self.language, "route.language")
+        if language == "pyne":
+            raise IndicatorRuntimeRoutesError("unsupported script language: pyne")
         if not isinstance(self.mode, str) or self.mode not in ROUTE_MODES:
             raise IndicatorRuntimeRoutesError(
                 "route.mode must be legacy, shadow, or sidecar"
@@ -121,10 +123,6 @@ class IndicatorRuntimeRoutes:
             raise IndicatorRuntimeRoutesError(
                 "routes must not contain duplicate languages"
             )
-        if "pyne" not in languages:
-            raise IndicatorRuntimeRoutesError(
-                "routes must explicitly include the current pyne language"
-            )
         object.__setattr__(self, "routes", routes)
         if self.source is not None:
             object.__setattr__(
@@ -135,18 +133,13 @@ class IndicatorRuntimeRoutes:
 
     @classmethod
     def legacy_default(cls) -> "IndicatorRuntimeRoutes":
-        return cls((IndicatorRuntimeRoute("pyne", ROUTE_MODE_LEGACY),))
+        return cls((IndicatorRuntimeRoute("pine", ROUTE_MODE_LEGACY),))
 
     @classmethod
     def first_party_sidecar_default(cls) -> "IndicatorRuntimeRoutes":
-        """Phase 8 default: both first-party languages are managed plugins."""
+        """Phase 8 default: first-party languages are managed plugins."""
         return cls(
             (
-                IndicatorRuntimeRoute(
-                    "pyne",
-                    ROUTE_MODE_SIDECAR,
-                    "candlescope.pyne",
-                ),
                 IndicatorRuntimeRoute(
                     "pine",
                     ROUTE_MODE_SIDECAR,
@@ -155,10 +148,6 @@ class IndicatorRuntimeRoutes:
             )
         )
 
-    @classmethod
-    def pyne_sidecar_default(cls) -> "IndicatorRuntimeRoutes":
-        """Backward-compatible name for the Phase 8 first-party default."""
-        return cls.first_party_sidecar_default()
 
     def for_language(self, language: str) -> IndicatorRuntimeRoute:
         normalized = _identifier(language, "language")

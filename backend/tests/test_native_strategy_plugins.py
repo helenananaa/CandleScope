@@ -21,18 +21,14 @@ if close < 9
     strategy.close("L")
 plot(close)
 '''
-PYNE = '''strategy("Native threshold", initial_capital=10000)
-strategy.entry_when(close > 12, "L", strategy.long, qty=2)
-strategy.close_when(close < 9, "L")
-plot(close, "Close")
-'''
 
 
 def plugin(language):
-    package = "pine_compat" if language == "pine" else "pyne"
+    assert language == "pine"
+    package = "pine_compat"
     python = os.environ.get(f"NATIVE_TEST_{language.upper()}_PYTHON", PYTHON)
     return {"command": [python, "-I", "-m", f"candlescope_plugin_{package}.native_strategy"],
-            "plugin_id": "candlescope.pine-compat" if language == "pine" else "candlescope.pyne"}
+            "plugin_id": "candlescope.pine-compat"}
 
 
 def run(language, source, **kwargs):
@@ -43,7 +39,7 @@ def run(language, source, **kwargs):
                           "context": {"symbol": "BINANCE:BTCUSDT", "timeframe": "1"}, **kwargs})
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", PYNE)])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 def test_real_native_orders_equity_graphics_and_determinism(language, source):
     first = run(language, source)
     second = run(language, source)
@@ -57,22 +53,9 @@ def test_real_native_orders_equity_graphics_and_determinism(language, source):
     assert changed["orders"] != first["orders"]
 
 
-def test_pyne_incremental_strategy_keeps_native_state():
-    output = run("pyne", '''def init(ctx):
-    ctx.strategy.configure(initial_capital=10000)
-
-def on_bar(ctx, bar):
-    if bar.close > 12 and ctx.strategy.position_size == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=2)
-    if bar.close < 9:
-        ctx.strategy.close("L")
-''')
-    assert output["orders"]
-    assert len(output["equity"]) == len(BARS)
 
 
-@pytest.mark.parametrize("language,source", [("pine", "//@version=6\nstrategy('bad')\nunknown()"),
-                                            ("pyne", "strategy('bad')\nunknown()")])
+@pytest.mark.parametrize("language,source", [("pine", "//@version=6\nstrategy('bad')\nunknown()")])
 def test_runtime_errors_are_failures(language, source):
     with pytest.raises(ValueError, match="rejected"):
         run(language, source)
@@ -100,12 +83,6 @@ def test_pine_request_uses_only_supplied_frozen_context():
     assert output["trades"]
 
 
-def test_pyne_request_uses_only_supplied_frozen_context():
-    source = PYNE.replace('strategy.entry_when(close > 12', 'remote = request.security("BINANCE:ETHUSDT", "1", close)\nstrategy.entry_when(remote > 12')
-    with pytest.raises(ValueError, match="rejected"):
-        run("pyne", source)
-    output = run("pyne", source, contexts=[{"symbol": "BINANCE:ETHUSDT", "timeframe": "1", "bars": BARS}])
-    assert output["trades"]
 
 
 def test_pine_magnifier_never_silently_falls_back():
@@ -124,30 +101,6 @@ def test_native_margin_rejection_remains_an_engine_result():
     assert result["diagnostics"]
 
 
-@pytest.mark.parametrize("source", [PYNE, '''indicator("Incremental", mode="incremental")
-def init(ctx):
-    ctx.strategy.configure(initial_capital=10000)
-def on_bar(ctx, bar):
-    ctx.strategy.entry("L", ctx.strategy.long, qty=1, when=ctx.bar_index == 1)
-    ctx.strategy.close("L", when=ctx.bar_index == 6)
-'''])
-def test_pyne_observer_does_not_change_native_report(source):
-    result = run("pyne", source)
-    code = '''import json,sys
-from dataclasses import replace
-import pyne_runtime as pn
-from pyne_runtime.metadata import SymbolInfo,TimeframeInfo
-from candlescope_plugin_pyne.host_policy import host_settings
-r=json.load(sys.stdin)
-settings=replace(host_settings(security_mode="safe"), timeout_seconds=None,
- syminfo=SymbolInfo.from_value("BINANCE:BTCUSDT"), timeframe=TimeframeInfo.from_value("1"))
-result=pn.run(r["source"],r["bars"],settings=settings)
-assert result.ok, result.error
-print(json.dumps(result.output))
-'''
-    direct = subprocess.run([plugin("pyne")["command"][0], "-I", "-c", code], input=json.dumps({"source": source, "bars": BARS}),
-                            text=True, encoding="utf-8", capture_output=True, check=True)
-    assert result["raw_output"] == json.loads(direct.stdout)
 
 
 def test_pine_time_units_are_milliseconds_in_engine_and_seconds_in_chart_records():

@@ -161,6 +161,19 @@ def is_requested_horizon_dataset(persisted: Mapping[str, object]) -> bool:
     )
 
 
+def _is_paged_bar_dataset(persisted: Mapping[str, object]) -> bool:
+    from app.replay.sources.bar_source import PAGED_BAR_MANIFEST_SCHEMA_VERSION
+
+    blob = persisted.get("snapshot_blob")
+    if not isinstance(blob, (bytes, bytearray)):
+        return False
+    manifest = _decode_bar_snapshot_blob(bytes(blob)).paging_manifest
+    return (
+        manifest is not None
+        and manifest.get("schema_version") == PAGED_BAR_MANIFEST_SCHEMA_VERSION
+    )
+
+
 def _progressive_repository(persisted, repository, factory):
     if not is_progressive_dataset(persisted):
         return repository, False
@@ -2401,6 +2414,7 @@ def build_history_page(
         ) from exc
     snapshot = _decode_bar_snapshot(persisted, config=config)
     repository, progressive = _progressive_repository(persisted, repository, progressive_history_factory)
+    paged_archive = _is_paged_bar_dataset(persisted)
     requested_display_interval = (
         config.display_interval if display_interval is None else display_interval
     )
@@ -2517,7 +2531,7 @@ def build_history_page(
     display_interval_ms = parse_interval_ms(history_config.display_interval)
     source_bucket_mapper: SourceBucketTimeMapper | None = None
     if (
-        history_mode == "ALL_AVAILABLE"
+        (history_mode == "ALL_AVAILABLE" or paged_archive)
         and repository is not None
         and snapshot.provenance.source_revision is not None
         and display_interval_ms is not None
@@ -2679,7 +2693,18 @@ def build_history_page(
             "training history epoch does not match",
         )
 
-    if history_mode == "ALL_AVAILABLE" or progressive:
+    # DURATION limits pre-start lookback, not already revealed replay history.
+    # A paged archive's persisted snapshot contains only its initial forward
+    # cache. Read later consumed rows from the same pinned source, retaining
+    # the frozen history origin and durable revealed boundary below.
+    # Base-interval pages still wholly inside that cache need no repository
+    # read. Coarse pages use the pinned source grid consistently across pages.
+    read_paged_archive = paged_archive and (
+        history_config.display_interval != history_config.base_interval
+        or min(before_ms, revealed_boundary_ms + 1)
+        > snapshot.replay_rows[-1].close_time_ms + 1
+    )
+    if history_mode == "ALL_AVAILABLE" or progressive or read_paged_archive:
         if repository is None:
             raise _fail(
                 "HISTORY_SOURCE_UNAVAILABLE",
@@ -2990,6 +3015,14 @@ def build_display_projection(
         0
         if revealed_boundary_ms == snapshot.replay_start_ms
         else revealed_boundary_ms + 1 - snapshot.replay_start_ms
+    )
+    # Funding and other account events may stop the durable clock between
+    # base-bar closes. Preserve that cursor, but read only completed base bars
+    # when constructing the chart, including its forming display bucket.
+    actual_end_ms = compute_bucket_start_ms(
+        actual_end_ms,
+        base_interval_ms,
+        interval=config.base_interval,
     )
     if (
         actual_end_ms < actual_replay_start_ms

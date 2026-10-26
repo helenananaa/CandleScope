@@ -192,9 +192,14 @@ class PreparationService:
                     del self._tasks[key]
                     if not task.cancelled() and task.exception() is not None:
                         logger.error("Preparation worker failed: %s", key, exc_info=task.exception())
+            def background(job):
+                request = job['request']
+                return (request['consumer'] == 'PREFETCH'
+                        and request.get('intent') != {'purpose': 'replay_display_history'})
+
             jobs = sorted(await self._storage(self.repository.list, active=True),
-                          key=lambda job: (job["request"]["consumer"] == "PREFETCH", job["created_ms"]))
-            prefetch_ids = {job["id"] for job in jobs if job["request"]["consumer"] == "PREFETCH"}
+                          key=lambda job: (job["request"]["consumer"] == "PREFETCH", background(job), job["created_ms"]))
+            prefetch_ids = {job["id"] for job in jobs if background(job)}
             for job in jobs:
                 if self._closing or len(self._tasks) >= self.workers:
                     break
@@ -202,7 +207,7 @@ class PreparationService:
                     continue
                 if job["next_attempt_ms"] > self.repository.now() and not job["cancel_requested"]:
                     continue
-                if job["request"]["consumer"] == "PREFETCH":
+                if background(job):
                     prefetch_running = len(prefetch_ids.intersection(self._tasks))
                     if prefetch_running >= max(1, self.workers - 1):
                         continue

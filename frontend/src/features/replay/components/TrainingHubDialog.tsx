@@ -1,11 +1,8 @@
 import { useEffect, useState } from "react";
 import { t, getDateTimeLocale, type MessageKey } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
+import UtcReplayStartInput from "./UtcReplayStartInput.js";
 import type { TrainingRunDraft } from "../trainingHubModel.js";
-import {
-  formatUtcReplayStartInput,
-  parseUtcReplayStartInput,
-} from "../trainingHubModel.js";
 import {
   REPLAY_POLICY_MUTATIONS,
   type ReplayPolicyMutation,
@@ -141,9 +138,14 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
     );
   }
   const busy = runtime.operation === "create"
-    || runtime.operation === "plan"
-    || runtime.operation === "create-context";
+    || runtime.operation === "plan";
+  const validatingCatalog = runtime.operation === "create-context";
   const canLeavePreparation = runtime.automaticPreparationAvailable && runtime.operation === "create";
+  const preparationActive = runtime.preparationJob?.state === "RUNNING"
+    || runtime.preparationJob?.state === "QUEUED";
+  const preparationStatus = runtime.preparationJob?.state === "READY" ? "preparation.ready"
+    : runtime.preparationJob?.state === "CANCELLED" ? "preparation.cancelled"
+    : preparationActive ? "preparation.title" : "preparation.needsAttention";
   const busyLabel = runtime.operation === "create"
     ? t("replay.hub.creating")
     : runtime.operation === "create-context"
@@ -231,7 +233,7 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     </select></label>
                   <label className="training-hub-field"><span>{t("replay.hub.symbol")}</span>
                     <input disabled={busy} value={draft.symbol} onChange={(event) => patchDraft(runtime, { symbol: event.target.value.trim().toUpperCase() })} /></label>
-                  <p>{t("preparation.background")}</p>
+                  {(!runtime.preparationJob || preparationActive) && <p>{t("preparation.background")}</p>}
                 </div>}
                 <label className="training-hub-field training-hub-field-wide">
                   <span>{t("replay.hub.archiveName")}</span>
@@ -250,9 +252,6 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                       disabled={busy}
                       onClick={() => patchDraft(runtime, {
                         sourceKind: "BAR",
-                        ...(runtime.automaticPreparationAvailable ? {} : {
-                          requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null,
-                        }),
                       })}
                     >
                       <small>BAR</small><strong>{t("replay.source.bar")}</strong><span>{t("replay.hub.barHint")}</span>
@@ -263,9 +262,6 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                       disabled={busy || (!runtime.capabilities?.sources.agg_trade.enabled && !runtime.automaticTradePreparationAvailable)}
                       onClick={() => patchDraft(runtime, {
                         sourceKind: "AGG_TRADE",
-                        ...(runtime.automaticTradePreparationAvailable ? {} : {
-                          requestedStartMs: null, randomRangeStartMs: null, randomRangeEndMs: null,
-                        }),
                       })}
                     >
                       <small>AGG_TRADE</small><strong>{t("replay.source.agg")}</strong><span>{t(
@@ -318,13 +314,12 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     <>
                       <label className="training-hub-field">
                         <span>{t("replay.hub.startUtc")}</span>
-                        <input
+                        <UtcReplayStartInput
                           data-training-field="requested-start-utc"
-                          type="datetime-local"
-                          step={60}
-                          value={formatUtcReplayStartInput(draft.requestedStartMs)}
-                          onChange={(event) => patchDraft(runtime, {
-                            requestedStartMs: parseUtcReplayStartInput(event.target.value),
+                          disabled={busy}
+                          value={draft.requestedStartMs}
+                          onChange={(value) => patchDraft(runtime, {
+                            requestedStartMs: value,
                           })}
                         />
                       </label>
@@ -338,23 +333,21 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
                     <>
                       <label className="training-hub-field">
                         <span>{t("replay.hub.randomStart")}</span>
-                        <input
-                          type="datetime-local"
-                          step={60}
-                          value={formatUtcReplayStartInput(draft.randomRangeStartMs)}
-                          onChange={(event) => patchDraft(runtime, {
-                            randomRangeStartMs: parseUtcReplayStartInput(event.target.value),
+                        <UtcReplayStartInput
+                          disabled={busy}
+                          value={draft.randomRangeStartMs}
+                          onChange={(value) => patchDraft(runtime, {
+                            randomRangeStartMs: value,
                           })}
                         />
                       </label>
                       <label className="training-hub-field">
                         <span>{t("replay.hub.randomEnd")}</span>
-                        <input
-                          type="datetime-local"
-                          step={60}
-                          value={formatUtcReplayStartInput(draft.randomRangeEndMs)}
-                          onChange={(event) => patchDraft(runtime, {
-                            randomRangeEndMs: parseUtcReplayStartInput(event.target.value),
+                        <UtcReplayStartInput
+                          disabled={busy}
+                          value={draft.randomRangeEndMs}
+                          onChange={(value) => patchDraft(runtime, {
+                            randomRangeEndMs: value,
                           })}
                         />
                       </label>
@@ -679,19 +672,19 @@ function TrainingRunCreatePanel({ runtime, onPrepareData, launchLabel }: Trainin
             </div>
             <div className="training-hub-create-actions">
               {runtime.preparationJob && <div role="status" aria-live="polite">
-                <p>{t("preparation.title")} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
+                <p>{t(preparationStatus)} · {runtime.preparationJob.completed}/{runtime.preparationJob.total}</p>
                 <PreparationWaiting job={runtime.preparationJob} />
-                <p>{t("preparation.background")}</p>
-                {busy && <button type="button" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
+                {preparationActive && <p>{t("preparation.background")}</p>}
+                {busy && preparationActive && <button type="button" disabled={runtime.preparationJob.cancel_requested || runtime.preparationJob.stage === "STARTING"}
                   onClick={() => void preparationRequest(`/${runtime.preparationJob!.id}/cancel`, { method: "POST" }).catch(() => undefined)}>{t("preparation.cancel")}</button>}
               </div>}
               <button
                 className="replay-primary-action"
                 type="button"
-                disabled={!evaluation.canSubmit || busy}
+                disabled={!evaluation.canSubmit || busy || validatingCatalog}
                 onClick={() => void runtime.actions.createRun(draft)}
               >
-                {busy ? busyLabel : t("replay.hub.submit")}
+                {busy || validatingCatalog ? busyLabel : t("replay.hub.submit")}
               </button>
               <button type="button" onClick={runtime.actions.closeCreate} disabled={busy && !canLeavePreparation}>{canLeavePreparation ? t("replay.hub.close") : t("replay.hub.cancel")}</button>
               <p>{t(runtime.automaticPreparationAvailable ? "preparation.replayIntro" : "replay.hub.submitNote")}</p>

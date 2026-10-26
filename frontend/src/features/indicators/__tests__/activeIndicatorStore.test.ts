@@ -11,18 +11,18 @@ import { buildIndicatorComputeJobKey, createIndicatorComputeJobCoordinator } fro
 
 test("a changed program cannot retain removed plots when its first range patch arrives", () => {
   const old = {
-    id: "custom", script: "plot(close, 'Old')", language: "pyne", error: "old error",
+    id: "custom", script: "plot(close, 'Old')", language: "pine", error: "old error",
     paramSchema: [{ key: "old", type: "int", default: 20 }],
     lines: [{ id: "old", name: "Old", data: [{ time: 1, value: 10 }] }],
   };
-  const updated = applyIndicatorScriptUpdate(old, "plot(close, 'New')", "pyne");
+  const updated = applyIndicatorScriptUpdate(old, "plot(close, 'New')", "pine");
   const incoming = [{ id: "new", name: "New", data: [{ time: 2, value: 11 }] }];
   assert.deepEqual(mergeIndicatorLines(updated.lines, incoming), incoming);
   assert.equal(updated.error, undefined);
   assert.equal(updated.paramSchema, undefined);
   assert.equal(old.lines.length, 1);
   assert.equal(applyIndicatorScriptUpdate(old, old.script, old.language).lines, old.lines);
-  assert.deepEqual(applyIndicatorScriptUpdate(old, old.script, "pine").lines, []);
+  assert.deepEqual(applyIndicatorScriptUpdate(old, old.script, "community-lang").lines, []);
   assert.equal(applyIndicatorScriptUpdate(old, "bad", "pine", undefined, () => null), old);
 });
 

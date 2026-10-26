@@ -25,7 +25,7 @@ const attachment: ChartStrategyAttachmentRecord = {
   strategyDraftId: "draft-12345678",
   strategyRevisionId: "revision-1",
   displayName: "Strategy",
-  language: "pyne",
+  language: "pine",
   parameters: { fast: 7, slow: 21 },
   rangeMode: "ALL_AVAILABLE",
   customRange: null,
@@ -69,7 +69,7 @@ test("every chart and strategy identity transition has a typed stale reason", ()
     [inputs({ session: { ...session, interval: "5m" } }), "INTERVAL_CHANGED"],
     [inputs({ attachment: { ...attachment, strategyDraftId: "draft-87654321" } }), "DRAFT_CHANGED"],
     [inputs({ draftContentRevision: 2 }), "DRAFT_CONTENT_CHANGED"],
-    [inputs({ attachment: { ...attachment, language: "pine" } }), "LANGUAGE_CHANGED"],
+    [inputs({ attachment: { ...attachment, language: "python" } }), "LANGUAGE_CHANGED"],
     [inputs({ attachment: { ...attachment, strategyRevisionId: "revision-2" } }), "STRATEGY_REVISION_CHANGED"],
     [inputs({ attachment: { ...attachment, parameters: { fast: 8, slow: 21 } } }), "PARAMETERS_CHANGED"],
     [inputs({ attachment: {

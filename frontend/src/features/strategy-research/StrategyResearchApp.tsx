@@ -54,6 +54,7 @@ import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
 import { readResearchHandoff } from "./strategyResearchHandoff.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
+import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
 import { useStrategyResearchRun } from "./useStrategyResearchRun.js";
 import { loadStrategyResearchHostHealth } from "./strategyResearchHostHealth.js";
 import type { StrategyResearchNetworkDiagnostics } from "./strategyResearchHostHealth.js";
@@ -130,6 +131,7 @@ export default function StrategyResearchApp({
   const [selectedNativeMode, setNativeMode] = useState<boolean | null>(["advanced", "deep-link", "handoff"].includes(intent.kind) ? false : null);
   const nativeMode = selectedNativeMode ?? availability === "available";
   const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
+  const [nativeStatus, setNativeStatus] = useState<NativeFeedbackStatus>("idle");
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const { settings, setSettings, resolvedTheme } = useChartSettingsRuntime();
   const library = useResearchDataLibrary();
@@ -428,7 +430,7 @@ export default function StrategyResearchApp({
               setNativeMode(false);
             });
           }}
-          key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun}
+          key={`${chartUiScope}:${researchRun.session.exchange}:${researchRun.session.marketType}:${researchRun.session.symbol}:${researchRun.session.interval}`} externalReport onRunChange={setNativeRun} onStatusChange={setNativeStatus}
           dataset={importedManifest ? { datasetId: importedManifest.dataset_id, dataEpoch: importedManifest.data_epoch } : undefined}
           onLocateTrade={(timeMs) => setFocusedAnalysis((current) => ({ scope: chartUiScope, value: {
             requestId: (current.scope === chartUiScope ? current.value?.requestId ?? 0 : 0) + 1, time: Math.floor(timeMs / 1000),
@@ -550,6 +552,7 @@ export default function StrategyResearchApp({
 
   const shellShared = {
     visualState,
+    nativeStatus: nativeMode ? nativeStatus : undefined,
     source,
     ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
       : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),

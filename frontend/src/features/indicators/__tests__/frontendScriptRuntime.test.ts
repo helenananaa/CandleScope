@@ -54,13 +54,13 @@ test("untrusted output cannot choose timestamps, auxiliary actions or nonfinite 
 });
 
 test("mixed batch never sends browser source to backend and retains per-item identity", async () => {
-  const jobs = [{ clientId: "js", jobKey: "js1", request }, { clientId: "native", jobKey: "pyne1", request: { ...request, language: "pyne" } }];
+  const jobs = [{ clientId: "js", jobKey: "js1", request }, { clientId: "native", jobKey: "pine1", request: { ...request, language: "pine" } }];
   const calls: string[] = [], publications: string[] = [];
   const result = await routeIndicatorComputeBatch({ jobs, onResults: rows => publications.push(...rows.map(row => row.clientId)) }, async options => {
     calls.push(...options.jobs.map(job => job.request.language!));
     return { ok: true, results: options.jobs.map(job => ({ clientId: job.clientId, jobKey: job.jobKey, payload: frontendScriptPayload() })) };
   }, async () => frontendScriptPayload([], "syntax error"));
-  assert.deepEqual(calls, ["pyne"]);
+  assert.deepEqual(calls, ["pine"]);
   assert.deepEqual(result.results.map(row => row.clientId), ["js", "native"]);
   assert.equal(result.results[0]!.payload.error, "syntax error");
   assert.equal(result.results[1]!.payload.ok, true);

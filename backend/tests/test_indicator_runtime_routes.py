@@ -21,7 +21,7 @@ def _write(path: Path, value: object) -> Path:
     return path
 
 
-def test_missing_default_routes_cut_both_first_party_languages_to_sidecars(
+def test_default_routes_offer_only_pine(
     tmp_path: Path,
 ) -> None:
     routes = load_indicator_runtime_routes_from_environment(
@@ -29,18 +29,13 @@ def test_missing_default_routes_cut_both_first_party_languages_to_sidecars(
     )
 
     assert routes.source is None
-    assert routes.for_language("pyne").mode == "sidecar"
-    assert routes.for_language("pyne").runtime_id == "candlescope.pyne"
+    assert routes.for_language("pine").mode == "sidecar"
+    assert routes.for_language("pine").runtime_id == "candlescope.pine-compat"
     assert routes.for_language("pine").mode == "sidecar"
     assert routes.for_language("pine").runtime_id == "candlescope.pine-compat"
     assert routes.to_wire() == {
         "schemaVersion": 1,
         "routes": [
-            {
-                "language": "pyne",
-                "mode": "sidecar",
-                "runtimeId": "candlescope.pyne",
-            },
             {
                 "language": "pine",
                 "mode": "sidecar",
@@ -62,7 +57,7 @@ def test_explicit_routes_support_independent_language_rollouts(
         {
             "schemaVersion": 1,
             "routes": [
-                {"language": "pyne", "mode": "shadow", "runtimeId": "pyne.runtime"},
+                {"language": "fixture", "mode": "shadow", "runtimeId": "fixture.runtime"},
                 {"language": "pine", "mode": "sidecar", "runtimeId": "pine.compat"},
             ],
         },
@@ -73,7 +68,7 @@ def test_explicit_routes_support_independent_language_rollouts(
     )
 
     assert routes.source == path.resolve()
-    assert routes.for_language("pyne").runtime_id == "pyne.runtime"
+    assert routes.for_language("fixture").runtime_id == "fixture.runtime"
     assert routes.for_language("pine").mode == "sidecar"
 
 
@@ -87,7 +82,7 @@ def test_explicit_routes_support_independent_language_rollouts(
         (
             {
                 "schemaVersion": 1,
-                "routes": [{"language": "pyne", "mode": "legacy", "runtimeId": "bad"}],
+                "routes": [{"language": "pine", "mode": "legacy", "runtimeId": "bad"}],
             },
             "legacy routes must not declare runtimeId",
         ),
@@ -95,8 +90,8 @@ def test_explicit_routes_support_independent_language_rollouts(
             {
                 "schemaVersion": 1,
                 "routes": [
-                    {"language": "pyne", "mode": "legacy"},
-                    {"language": "pyne", "mode": "legacy"},
+                    {"language": "pine", "mode": "legacy"},
+                    {"language": "pine", "mode": "legacy"},
                 ],
             },
             "duplicate languages",
@@ -104,14 +99,14 @@ def test_explicit_routes_support_independent_language_rollouts(
         (
             {
                 "schemaVersion": 1,
-                "routes": [{"language": "pine", "mode": "legacy"}],
+                "routes": [{"language": "pyne", "mode": "legacy"}],
             },
-            "current pyne language",
+            "unsupported script language",
         ),
         (
             {
                 "schemaVersion": 1,
-                "routes": [{"language": "pyne", "mode": "automatic"}],
+                "routes": [{"language": "pine", "mode": "automatic"}],
             },
             "legacy, shadow, or sidecar",
         ),
@@ -153,7 +148,7 @@ def test_duplicate_json_keys_and_unknown_fields_are_rejected(
         tmp_path / "unknown.json",
         {
             "schemaVersion": 1,
-            "routes": [{"language": "pyne", "mode": "legacy", "command": "x"}],
+            "routes": [{"language": "pine", "mode": "legacy", "command": "x"}],
         },
     )
     with pytest.raises(IndicatorRuntimeRoutesError, match="unsupported fields"):
@@ -194,10 +189,10 @@ def test_script_range_cache_identity_is_isolated_by_language() -> None:
         "params": {"length": 10},
     }
 
-    pyne_identity = IndicatorRangeResultService.identity_from_meta(
+    pine_identity = IndicatorRangeResultService.identity_from_meta(
         {
             **meta,
-            "language": "pyne",
+            "language": "pine",
         }
     )
     community_identity = IndicatorRangeResultService.identity_from_meta(
@@ -207,5 +202,5 @@ def test_script_range_cache_identity_is_isolated_by_language() -> None:
         }
     )
 
-    assert pyne_identity != community_identity
-    assert pyne_identity == IndicatorRangeResultService.identity_from_meta(meta)
+    assert pine_identity != community_identity
+    assert pine_identity == IndicatorRangeResultService.identity_from_meta(meta)

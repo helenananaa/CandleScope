@@ -393,13 +393,13 @@ test("batch cancellation waits for sibling script cleanup before clearing progre
   assert.equal(progress.at(-1)!.active, 0);
 });
 
-test("canonical indicator retries only declared temporary archive errors with unchanged input", async () => {
-  for (const retryable of [true, false]) {
+test("canonical indicator retries only declared temporary archive or cache errors with unchanged input", async () => {
+  for (const code of ["HISTORY_SOURCE_UNAVAILABLE", "HISTORY_CACHE_BUSY"]) for (const retryable of [true, false]) {
     const store = storeWith(), requests: string[] = [];
     const source = new ReplayCanonicalIndicators(store, () => binding, () => {}, async (_url, options) => {
       requests.push(String(options?.body));
       return requests.length === 1 ? reply({ protocol: "replay.v3", error: {
-        code: "HISTORY_SOURCE_UNAVAILABLE", message: "archive unavailable", details: { retryable },
+        code, message: "archive unavailable", details: { retryable },
       } }, 503) : reply(ready());
     }, noProjection);
     const result = await source.compute({ jobs: [job(store)] });
@@ -408,6 +408,27 @@ test("canonical indicator retries only declared temporary archive errors with un
     if (retryable) assert.equal(result.results[0]!.payload.error, null);
     else assert.match(result.results[0]!.payload.error!, /archive unavailable/);
   }
+});
+
+test("cancelling cache-pressure retry drains indicator ownership without publishing a result", async () => {
+  const store = storeWith(), controller = new AbortController();
+  const published: unknown[] = [];
+  const progress: ReplayIndicatorPreparation[] = [];
+  let attempts = 0;
+  const source = new ReplayCanonicalIndicators(store, () => binding, value => {
+    progress.push(value);
+    if (value.phase === "history") controller.abort();
+  }, async () => {
+    attempts++;
+    return reply({ protocol: "replay.v3", error: {
+      code: "HISTORY_CACHE_BUSY", message: "busy", details: { retryable: true },
+    } }, 503);
+  }, noProjection);
+  await assert.rejects(source.compute({ jobs: [job(store)], signal: controller.signal,
+    onResults: value => { published.push(...value); } }), { name: "AbortError" });
+  assert.equal(attempts, 1);
+  assert.equal(published.length, 0);
+  assert.equal(progress.at(-1)!.active, 0);
 });
 
 test("ready canonical results pass through the builtin cache before a slow sibling finishes", async () => {

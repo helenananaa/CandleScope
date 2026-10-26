@@ -61,6 +61,46 @@ jobs:
           # Only the explicit ad-hoc identity is used; no certificate secrets.
           CSC_FOR_PULL_REQUEST: "true"
         run: npm run desktop:package:mac -- --${{ matrix.arch }}
+      - name: Regress replay inputs, indicators and financial boundaries with bundled Python
+        working-directory: backend
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: |
+          export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
+          ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q \
+            tests/test_desktop_sidecar.py \
+            tests/test_shared_market_inputs.py \
+            tests/test_data_preparation.py \
+            tests/test_replay_context_origin.py \
+            tests/test_replay_history_archive.py \
+            tests/test_replay_v2_training_history.py \
+            tests/test_replay_history_source_grid.py \
+            tests/test_replay_projection_native_seam.py \
+            tests/test_replay_progressive_history.py \
+            tests/test_replay_indicator_context_columns.py \
+            tests/test_replay_command_display_tail.py \
+            tests/test_replay_shared_market_display.py \
+            tests/test_replay_frontend_history_integration.py \
+            tests/test_replay_prepared_context.py \
+            tests/test_replay_indicator_context_ranges.py \
+            tests/test_replay_indicator_prepared_context.py \
+            tests/test_replay_indicator_viewport.py \
+            tests/test_replay_indicator_prefix.py \
+            tests/test_replay_indicator_prefix_native.py \
+            tests/test_replay_indicator_prefix_service.py \
+            tests/test_replay_indicator_jobs.py \
+            tests/test_replay_tape_indicator_history.py \
+            tests/test_replay_hedge_fixed_funding.py \
+            tests/test_replay_v2_training_hedge_phase5.py \
+            tests/test_replay_v2_training_hedge_phase6.py \
+            tests/test_replay_v2_training_hedge_phase8.py \
+            tests/test_replay_v2_training_hedge_phase9.py \
+            tests/test_replay_isolated_liquidation_loss.py \
+            tests/test_replay_isolated_wallet.py \
+            tests/test_replay_hedge_multitrack_liquidation_fork.py \
+            tests/test_replay_risk.py \
+            --junitxml=../output/replay-range-regression.xml
       - name: Verify relocated ZIP and native runtime
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
@@ -105,6 +145,7 @@ jobs:
           name: macOS-evidence-${{ matrix.arch }}-${{ github.run_attempt }}
           path: |
             output/macos-package-smoke/**
+            output/replay-range-regression.xml
             frontend/desktop-dist/builder-debug.yml
           if-no-files-found: ignore
           retention-days: 14

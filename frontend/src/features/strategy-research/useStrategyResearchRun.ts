@@ -102,7 +102,7 @@ export function useStrategyResearchRun(input: {
         strategyDraftId: input.draftId ?? "draft-placeholder",
         strategyRevisionId: null,
         displayName: "",
-        language: "pyne",
+        language: "python",
         parameters: {},
         fidelityPreference: "FAST",
         quickPresetId: session.marketType === "spot" ? "CRYPTO_SPOT_STANDARD_V1" : "CRYPTO_PERP_STANDARD_V1",

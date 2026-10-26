@@ -44,19 +44,19 @@ class _Response(io.BytesIO):
 def _release(
     payload: bytes,
     *,
-    runtime_id: str = "candlescope.pyne",
+    runtime_id: str = "candlescope.pine-compat",
 ) -> OfficialPluginRelease:
     pine = runtime_id == "candlescope.pine-compat"
     return OfficialPluginRelease(
         runtime_id=runtime_id,
         package=(
-            "candlescope-plugin-pine-compat" if pine else "candlescope-plugin-pyne"
+            "candlescope-plugin-pine-compat" if pine else "candlescope-plugin-fixture"
         ),
         version="0.2.0",
         filename=(
             "candlescope-pine-compat-test.cspkg"
             if pine
-            else "candlescope-pyne-test.cspkg"
+            else "candlescope-fixture-test.cspkg"
         ),
         url="https://github.com/helenananaa/CandleScope/releases/download/test/test.cspkg",
         sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
@@ -135,10 +135,10 @@ def _write_bundled_lock(path: Path, *releases: OfficialPluginRelease) -> Path:
 @pytest.mark.parametrize("corrupt_second", [False, True])
 def test_bundled_defaults_are_offline_and_verify_all_before_activation(tmp_path, corrupt_second):
     pine = _release(b"packaged pine", runtime_id="candlescope.pine-compat")
-    pyne = _release(b"packaged pyne")
-    manifest = _write_bundled_lock(tmp_path / "bundled.json", pine, pyne)
+    fixture = _release(b"packaged fixture", runtime_id="candlescope.fixture")
+    manifest = _write_bundled_lock(tmp_path / "bundled.json", pine, fixture)
     (tmp_path / pine.filename).write_bytes(b"packaged pine")
-    (tmp_path / pyne.filename).write_bytes(b"tampered" if corrupt_second else b"packaged pyne")
+    (tmp_path / fixture.filename).write_bytes(b"tampered" if corrupt_second else b"packaged fixture")
     calls = []
 
     class Installer:
@@ -151,7 +151,7 @@ def test_bundled_defaults_are_offline_and_verify_all_before_activation(tmp_path,
         def install_many(self, bundles, **kwargs):
             calls.append(bundles)
             return tuple(SimpleNamespace(changed=True, installation_path=tmp_path / r.runtime_id)
-                         for r in (pine, pyne))
+                         for r in (fixture, pine))
 
     def execute():
         return ensure_first_party_plugins_from_environment(
@@ -169,7 +169,7 @@ def test_bundled_defaults_are_offline_and_verify_all_before_activation(tmp_path,
     else:
         result = execute()
         assert result.status == "installed" and result.downloaded is False
-        assert calls == [tuple((tmp_path / r.filename, r.sha256) for r in (pine, pyne))]
+        assert calls == [tuple((tmp_path / r.filename, r.sha256) for r in (fixture, pine))]
 
 
 @pytest.mark.parametrize("changed", [
@@ -190,7 +190,12 @@ def test_bundled_symlink_cannot_escape_package(tmp_path):
     assets.mkdir()
     release = _release(b"bundle")
     path = _write_bundled_lock(assets / "manifest.json", release)
-    (assets / release.filename).symlink_to(tmp_path / "outside.cspkg")
+    try:
+        (assets / release.filename).symlink_to(tmp_path / "outside.cspkg")
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is unavailable")
+        raise
     with pytest.raises(FirstPartyPluginBootstrapError, match="escapes"):
         load_bundled_plugin_releases(path)
 
@@ -201,7 +206,8 @@ def test_bundled_manifest_must_cover_routes_on_this_platform(tmp_path):
     options = dict(host_name="CandleScope", host_version="0.3.0",
                    environ={"CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST": str(path)},
                    installer_factory=lambda **kwargs: pytest.fail("invalid package must not install"))
-    with pytest.raises(FirstPartyPluginBootstrapError, match="missing runtimes"):
+    _write_bundled_lock(path)
+    with pytest.raises(FirstPartyPluginBootstrapError, match="non-empty array"):
         ensure_first_party_plugins_from_environment(**options)
     _write_bundled_lock(path, replace(release, system="OtherSystem"))
     with pytest.raises(FirstPartyPluginBootstrapError, match="does not support this host"):
@@ -228,7 +234,7 @@ def test_bundled_default_preserves_verified_manual_disabled_activation(tmp_path)
 
     result = ensure_first_party_plugins_from_environment(
         host_name="CandleScope", host_version="0.3.0",
-        environ=_single_pyne_environment(tmp_path, CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST=str(path)),
+        environ=_single_fixture_environment(tmp_path, CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST=str(path)),
         installer_factory=Installer,
         opener=lambda *args, **kwargs: pytest.fail("must preserve installed selection"),
     )
@@ -236,10 +242,10 @@ def test_bundled_default_preserves_verified_manual_disabled_activation(tmp_path)
     assert result.version == "9.0.0" and checks == [release.runtime_id]
 
 
-def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
+def _single_fixture_environment(tmp_path: Path, **values: str) -> dict[str, str]:
     routes = _write_routes(
         tmp_path / "routes.json",
-        ("pyne", "candlescope.pyne"),
+        ("pine", "candlescope.pine-compat"),
     )
     return {
         "LOCALAPPDATA": str(tmp_path / "local-app-data"),
@@ -251,16 +257,8 @@ def _single_pyne_environment(tmp_path: Path, **values: str) -> dict[str, str]:
 def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     releases = load_official_plugin_releases(DEFAULT_RELEASE_LOCK_PATH)
 
-    assert len(releases) == 5
+    assert len(releases) == 4
     by_runtime = {release.runtime_id: release for release in releases if release.system == "Windows"}
-    pyne = by_runtime["candlescope.pyne"]
-    assert pyne.version == "0.3.0"
-    assert pyne.sha256 == OFFICIAL_SHA256
-    assert pyne.size == 13_588_457
-    assert pyne.url.endswith(
-        "/candlescope-plugin-pyne-v0.3.0/"
-        "candlescope-pyne-0.3.0-cp312-win_amd64.cspkg"
-    )
     pine = by_runtime["candlescope.pine-compat"]
     assert pine.version == "0.3.2"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
@@ -320,10 +318,8 @@ def test_bootstrap_selects_matching_mac_variant(tmp_path: Path, monkeypatch, mac
         replace(base, system="Darwin", machine=machine, python_version="3.13",
                 filename="pine-other-python.cspkg"),
     ]
-    pyne = replace(_release(b"windows pyne"), system="Windows", machine="AMD64")
-    lock = _write_lock(tmp_path / "releases.json", pyne, *variants)
-    routes = _write_routes(tmp_path / "routes.json", ("pyne", "candlescope.pyne"),
-                           ("pine", "candlescope.pine-compat"))
+    lock = _write_lock(tmp_path / "releases.json", *variants)
+    routes = _write_routes(tmp_path / "routes.json", ("pine", "candlescope.pine-compat"))
     monkeypatch.setattr("app.first_party_plugin_bootstrap._host_platform", lambda: {
         "system": "Darwin", "machine": machine,
         "implementation": "CPython", "pythonVersion": "3.12",
@@ -408,7 +404,7 @@ def test_ensure_installs_exact_local_override_as_required_runtime(
     result = ensure_first_party_plugins_from_environment(
         host_name="CandleScope",
         host_version="0.3.0",
-        environ=_single_pyne_environment(
+        environ=_single_fixture_environment(
             tmp_path,
             CANDLESCOPE_OFFICIAL_PLUGIN_BUNDLE=str(bundle),
         ),
@@ -463,7 +459,7 @@ def test_ensure_checks_matching_activation_without_downloading(tmp_path: Path) -
     result = ensure_first_party_plugins_from_environment(
         host_name="CandleScope",
         host_version="0.3.0",
-        environ=_single_pyne_environment(tmp_path),
+        environ=_single_fixture_environment(tmp_path),
         release_lock_path=lock,
         opener=lambda *_args, **_kwargs: pytest.fail(
             "matching activation must not download"
@@ -497,13 +493,13 @@ def test_ensure_never_replaces_an_unmanaged_community_activation(
         ensure_first_party_plugins_from_environment(
             host_name="CandleScope",
             host_version="0.3.0",
-            environ=_single_pyne_environment(tmp_path),
+            environ=_single_fixture_environment(tmp_path),
             release_lock_path=lock,
             installer_factory=Installer,
         )
 
 
-@pytest.mark.parametrize("runtime_id", ["candlescope.pine-compat", "candlescope.pyne"])
+@pytest.mark.parametrize("runtime_id", ["candlescope.pine-compat", "candlescope.fixture"])
 @pytest.mark.parametrize("enabled,version,digest", [
     (True,"0.2.0","sha256:"+"ab"*32),
     (True,"0.3.3","sha256:"+"cd"*32),
@@ -533,12 +529,12 @@ def test_bootstrap_preserves_verified_user_activation_and_disabled_choice(
             pytest.fail("bootstrap must not replace a verified user activation")
 
     routes = _write_routes(tmp_path / "routes.json",
-        ("pine" if runtime_id == "candlescope.pine-compat" else "pyne", runtime_id))
+        ("pine" if runtime_id == "candlescope.pine-compat" else "fixture", runtime_id))
     if runtime_id == "candlescope.pine-compat":
-        # The route contract always names Pyne, even when this test selects
+        # The route contract always names Fixture, even when this test selects
         # only Pine for first-party bootstrap.
         value = json.loads(routes.read_text())
-        value["routes"].append({"language": "pyne", "mode": "legacy"})
+        value["routes"].append({"language": "fixture", "mode": "legacy"})
         routes.write_text(json.dumps(value))
     result = ensure_first_party_plugins_from_environment(
         host_name="CandleScope",host_version="0.3.2",
@@ -556,14 +552,14 @@ def test_bootstrap_preserves_verified_user_activation_and_disabled_choice(
 def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(
     tmp_path: Path,
 ) -> None:
-    pyne_payload = b"pyne bundle"
+    fixture_payload = b"fixture bundle"
     pine_payload = b"pine bundle"
-    pyne = _release(pyne_payload)
+    fixture = _release(fixture_payload, runtime_id="candlescope.fixture")
     pine = _release(pine_payload, runtime_id="candlescope.pine-compat")
-    lock = _write_lock(tmp_path / "releases.json", pyne, pine)
+    lock = _write_lock(tmp_path / "releases.json", fixture, pine)
     bundles = tmp_path / "bundles"
     bundles.mkdir()
-    (bundles / pyne.filename).write_bytes(pyne_payload)
+    (bundles / fixture.filename).write_bytes(fixture_payload)
     (bundles / pine.filename).write_bytes(pine_payload)
     installs: list[str] = []
 
@@ -599,13 +595,13 @@ def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(
         installer_factory=Installer,
     )
 
-    assert installs == [pine.filename, pyne.filename]
+    assert installs == [fixture.filename, pine.filename]
     assert result.status == "installed"
     assert result.changed is True
     assert result.downloaded is False
     assert [item.runtime_id for item in result.plugins] == [
+        "candlescope.fixture",
         "candlescope.pine-compat",
-        "candlescope.pyne",
     ]
     wire = result.to_wire()
     assert wire["count"] == 2
@@ -618,13 +614,13 @@ def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(
 def test_multi_runtime_bootstrap_verifies_every_bundle_before_install(
     tmp_path: Path,
 ) -> None:
-    pyne = _release(b"expected pyne")
+    fixture = _release(b"expected fixture", runtime_id="candlescope.fixture")
     pine = _release(b"expected pine", runtime_id="candlescope.pine-compat")
-    lock = _write_lock(tmp_path / "releases.json", pyne, pine)
+    lock = _write_lock(tmp_path / "releases.json", fixture, pine)
     bundles = tmp_path / "bundles"
     bundles.mkdir()
     (bundles / pine.filename).write_bytes(b"expected pine")
-    (bundles / pyne.filename).write_bytes(b"tampered")
+    (bundles / fixture.filename).write_bytes(b"tampered")
     installs: list[str] = []
 
     class Installer:
@@ -662,14 +658,14 @@ def test_multi_runtime_internal_bundle_failure_never_partially_activates(
         runtime_id="candlescope.pine-compat",
     )
     pine_payload = pine_fixture.bundle.path.read_bytes()
-    pyne_payload = b"outer-digest-valid but not a plugin bundle"
+    fixture_payload = b"outer-digest-valid but not a plugin bundle"
     pine = _release(pine_payload, runtime_id="candlescope.pine-compat")
-    pyne = _release(pyne_payload)
-    lock = _write_lock(tmp_path / "releases.json", pine, pyne)
+    fixture = _release(fixture_payload, runtime_id="candlescope.fixture")
+    lock = _write_lock(tmp_path / "releases.json", pine, fixture)
     bundles = tmp_path / "bundles"
     bundles.mkdir()
     (bundles / pine.filename).write_bytes(pine_payload)
-    (bundles / pyne.filename).write_bytes(pyne_payload)
+    (bundles / fixture.filename).write_bytes(fixture_payload)
     registry = tmp_path / "plugins" / "runtime-registry.json"
 
     with pytest.raises(PluginBundleError):
@@ -690,8 +686,8 @@ def test_multi_runtime_internal_bundle_failure_never_partially_activates(
 def test_default_routes_fail_closed_when_a_first_party_release_is_missing(
     tmp_path: Path,
 ) -> None:
-    pyne = _release(b"pyne")
-    lock = _write_lock(tmp_path / "releases.json", pyne)
+    fixture = _release(b"fixture", runtime_id="candlescope.fixture")
+    lock = _write_lock(tmp_path / "releases.json", fixture)
 
     with pytest.raises(
         FirstPartyPluginBootstrapError,
@@ -710,10 +706,10 @@ def test_ensure_skips_when_no_official_bundle_matches_the_host(
 ) -> None:
     payload = b"windows-only bundle"
     release = OfficialPluginRelease(
-        runtime_id="candlescope.pyne",
-        package="candlescope-plugin-pyne",
+        runtime_id="candlescope.pine-compat",
+        package="candlescope-plugin-pine-compat",
         version="0.2.0",
-        filename="candlescope-pyne-test.cspkg",
+        filename="candlescope-fixture-test.cspkg",
         url="https://github.com/helenananaa/CandleScope/releases/download/test/test.cspkg",
         sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
         size=len(payload),
@@ -727,7 +723,7 @@ def test_ensure_skips_when_no_official_bundle_matches_the_host(
     result = ensure_first_party_plugins_from_environment(
         host_name="CandleScope",
         host_version="0.3.0",
-        environ=_single_pyne_environment(tmp_path),
+        environ=_single_fixture_environment(tmp_path),
         release_lock_path=lock,
         opener=lambda *_args, **_kwargs: pytest.fail(
             "unsupported host must not download"
@@ -739,7 +735,7 @@ def test_ensure_skips_when_no_official_bundle_matches_the_host(
 
     assert result.status == "skipped"
     assert result.reason == "unsupported-host-platform"
-    assert [item.runtime_id for item in result.plugins] == ["candlescope.pyne"]
+    assert [item.runtime_id for item in result.plugins] == ["candlescope.pine-compat"]
     assert result.to_wire()["reason"] == "unsupported-host-platform"
 
 
@@ -762,3 +758,17 @@ def test_bootstrap_can_be_disabled_without_reading_release_state(
         "downloaded": False,
         "reason": "official-bootstrap-disabled",
     }
+
+
+@pytest.fixture(autouse=True)
+def synthetic_multiruntime_routes(request, monkeypatch):
+    """Exercise atomic generic installs without keeping a retired engine package."""
+    if not (request.node.name.startswith("test_multi_runtime_") or request.node.name.startswith("test_bundled_defaults_are_offline")):
+        return
+    import app.first_party_plugin_bootstrap as bootstrap
+    from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
+    monkeypatch.setattr(bootstrap, "FIRST_PARTY_RUNTIME_IDS", frozenset({"candlescope.pine-compat", "candlescope.fixture"}))
+    monkeypatch.setattr(bootstrap, "load_indicator_runtime_routes_from_environment", lambda env: IndicatorRuntimeRoutes((
+        IndicatorRuntimeRoute("pine", "sidecar", "candlescope.pine-compat"),
+        IndicatorRuntimeRoute("fixture", "sidecar", "candlescope.fixture"),
+    )))

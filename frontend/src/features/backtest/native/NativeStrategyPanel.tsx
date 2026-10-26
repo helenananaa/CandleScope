@@ -1,4 +1,4 @@
-import { diagnosticLocation } from "./nativeDiagnostics.js";
+import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -27,7 +27,6 @@ const StrategyScriptWorkspace = lazy(() => import("../chart-tester/StrategyScrip
 
 const NATIVE_TEMPLATES = {
   pine: '//@version=6\nstrategy("Native SMA", overlay=true, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nif ta.crossover(fast, slow)\n    strategy.entry("L", strategy.long)\nif ta.crossunder(fast, slow)\n    strategy.close("L")\nplot(fast)\nplot(slow)\n',
-  pyne: 'strategy("Native SMA", overlay=True, initial_capital=10000)\nfast = ta.sma(close, 3)\nslow = ta.sma(close, 5)\nstrategy.entry_when(ta.crossover(fast, slow), "L", strategy.long, qty=1)\nstrategy.close_when(ta.crossunder(fast, slow), "L")\nplot(fast, "Fast")\nplot(slow, "Slow")\n',
 };
 const SESSION_TABS = ["overview", "trades", "script", "settings", "history"] as const;
 const ignoreCursor = () => undefined;
@@ -35,6 +34,7 @@ const ignoreCursor = () => undefined;
 type NativeStrategyPanelProps = Pick<ChartStrategyTesterPanelProps, "session" | "cellScope" | "onClose" | "onLocateTrade" | "onReviewTrade" | "active" | "nativeStrategies" | "onNativeStrategiesChange"> & {
   dataset?: { datasetId: string; dataEpoch: string } | undefined;
   onRunChange?: (run: NativeRun | null) => void;
+  onStatusChange?: (status: NativeFeedbackStatus) => void;
   externalReport?: boolean;
   docked?: boolean;
   onSelectPython?(): void;
@@ -46,6 +46,10 @@ export default function NativeStrategyPanel(props: NativeStrategyPanelProps) {
   const own = useNativeStrategyCollection(props.nativeStrategies, props.onNativeStrategiesChange, props.cellScope);
   const strategies = props.strategies ?? own;
   const { collection, comparing } = strategies;
+  const onStatusChange = props.onStatusChange;
+  useEffect(() => {
+    if (comparing || !collection.items.length) onStatusChange?.("idle");
+  }, [comparing, collection.items.length, onStatusChange]);
   const contextParts = [props.session.exchange, props.session.marketType, props.session.symbol, props.session.interval];
   const context = JSON.stringify(contextParts);
   return <>
@@ -131,8 +135,6 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errorFocus, setErrorFocus] = useState<{ line: number; column: number } | null>(null);
-  const errorDetails = error || (run?.error ? `${run.error.message}\n${JSON.stringify(run.error.details ?? {}, null, 2)}` : "");
-  const errorLocation = diagnosticLocation(errorDetails, source);
   const [resolution, setResolution] = useState<ChartContextResolution | null>(null);
   const [automatic, setAutomatic] = useState(false);
   const [automaticContexts, setAutomaticContexts] = useState<NativePreparationContext[]>([]);
@@ -345,18 +347,21 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
   const available = capabilities?.engines.find((item) => item.language === language);
   const engineReady = mode === "NATIVE" ? available?.available : available?.external_available;
   const runDisabled = busy || (mode === "CANDLESCOPE" && fidelity !== "BAR_APPROX" && executionDataState !== "ready") || !engineReady;
-  const status = preparation?.state === "CANCELLED" || run?.state === "CANCELLED" ? "cancelled"
-    : error || run?.state === "FAILED" || run?.state === "INTERRUPTED" ? "failed"
-      : busy ? (run ? "running" : "preparing")
-        : run?.state === "COMPLETED" ? "completed"
-          : resolution && resolution.status !== "READY" ? "needsData" : "idle";
+  const feedbackRun = historicalRun ?? run;
+  const { status, errorDetails } = nativeRunFeedback({ current: run, historical: historicalRun,
+    error, busy, preparationState: preparation?.state, needsData: !!resolution && resolution.status !== "READY" });
+  const onStatusChange = props.onStatusChange;
+  useEffect(() => {
+    if (props.active !== false) onStatusChange?.(status);
+  }, [onStatusChange, props.active, status]);
+  const errorLocation = !historicalRun || (historicalRun.config?.source === source && historicalRun.config?.language === language)
+    ? diagnosticLocation(errorDetails, source) : null;
   const summary = useMemo(() => reportRun?.result ? reportAnalytics(reportRun.result, reportRun.execution_mode === "CANDLESCOPE") : null, [reportRun]);
   const [codeVisited, setCodeVisited] = useState(!props.docked || tab === "script");
   useEffect(() => { if (tab === "script") setCodeVisited(true); }, [tab]);
   const number = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   const percent = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? "—" : `${number.format(value)}%`;
   const returnPercent = summary?.series.at(-1)?.returnPercent ?? null;
-  const errorText = error || run?.error?.message || "";
   const runNow = () => { if (!runDisabled) void start(); };
   const tabKey = (event: KeyboardEvent<HTMLButtonElement>, item: typeof tab) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -396,7 +401,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
         <strong>{t("strategyReview.status.needsData")}</strong><span>{resolution.status}</span>
         <button type="button" disabled={runDisabled} onClick={() => void start(true)}>{t("native.prepare")}</button>
       </div>}
-      {errorText && <div className="strategy-notice" data-tone="error" role="alert">
+      {errorDetails && <div className="strategy-notice" data-tone="error" role="alert">
         <strong>{t("strategyReview.status.failed")}</strong><span>{errorDetails.includes(t("native.parametersInvalid")) ? t("native.parametersInvalid")
           : errorDetails.includes(t("native.external.originRequired")) ? t("native.external.originRequired") : t("native.executionErrorHelp")}</span>
         {errorLocation && <button type="button" onClick={() => {
@@ -424,7 +429,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
       </div>
       <aside className="native-code-side">
         <div className="strategy-segmented" role="radiogroup" aria-label={t("native.language")}>
-          {(["pine", "pyne"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
+          {(["pine"] as const).map((item) => <button key={item} type="button" role="radio" aria-checked={language === item} disabled={busy}
             onClick={() => props.onInstanceChange(props.instance.id, { language: item })}>{t(`chartTester.language.${item}`)}</button>)}
           {props.onSelectPython && <button type="button" role="radio" aria-checked={false} disabled={busy} onClick={props.onSelectPython}>{strategyLanguageLabel("python")}</button>}
         </div>
@@ -525,7 +530,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           <span className="strategy-run-status" data-status={item.state === "COMPLETED" ? "completed" : item.state === "FAILED" || item.state === "INTERRUPTED" ? "failed" : item.state === "CANCELLED" ? "cancelled" : "running"}><i aria-hidden="true" />{item.state}</span>
         </button></li>)}
       </ul>}
-      {run?.config?.source && <details><summary>{t("native.source")}</summary><pre>{run.config.source}</pre></details>}
+      {feedbackRun?.config?.source && <details><summary>{t("native.source")}</summary><pre>{feedbackRun.config.source}</pre></details>}
     </div>
     </div>
   </section>;

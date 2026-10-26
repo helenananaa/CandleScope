@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,6 +14,54 @@ from app.replay.canonical import canonical_json
 from ..account import (
     ledger_chain_hash,
 )
+from ..errors import TrainingRunError
+
+
+def contract_posting_order(
+    posting: sqlite3.Row, *, require_lifecycle: bool = True
+) -> tuple[int, ...]:
+    """Economic order across a fork's reconstructed and newly appended receipts."""
+    metadata = json.loads(posting["metadata_json"])
+    inherited = metadata.get("fork_ledger_order")
+    incomplete = metadata.get("fork_ledger_order_incomplete") or (
+        inherited is None and metadata.get("fork_parent_run_id") is not None
+    )
+    if incomplete and require_lifecycle:
+        raise TrainingRunError(
+            "ISOLATED_LOSS_PROOF_UNAVAILABLE",
+            "legacy fork lacks allocation lifecycle order; fork from the original run",
+            status_code=409,
+        )
+    if inherited is None:
+        return (1, int(posting["ledger_sequence"]))
+    if (
+        not isinstance(inherited, list)
+        or not inherited
+        or any(type(value) is not int or value < 0 for value in inherited)
+    ):
+        raise TypeError("fork ledger order is invalid")
+    return tuple(inherited)
+
+
+def fork_posting_metadata(
+    posting: sqlite3.Row, parent_run_id: str
+) -> dict[str, object]:
+    # Prefixing keeps every inherited receipt before child activity, and
+    # preserves order through repeated forks without consulting an ancestor.
+    metadata = json.loads(posting["metadata_json"])
+    incomplete = metadata.get("fork_ledger_order_incomplete") or (
+        metadata.get("fork_parent_run_id") is not None
+        and "fork_ledger_order" not in metadata
+    )
+    return {
+        **({"fork_ledger_order_incomplete": True} if incomplete else {}),
+        "fork_parent_run_id": parent_run_id,
+        "fork_parent_ledger_sequence": int(posting["ledger_sequence"]),
+        "fork_ledger_order": [
+            0,
+            *contract_posting_order(posting, require_lifecycle=False),
+        ],
+    }
 
 
 @dataclass(slots=True)
@@ -154,6 +203,11 @@ def append_contract_ledger(
     state.next_sequence += 1
     state.tail_hash = entry_hash
     state.dirty = True
+    from . import isolated_wallets
+    isolated_wallets.append(
+        connection, run_id=run_id, track_id=track_id, kind=kind,
+        cash_delta=cash_delta, metadata=metadata,
+    )
     if owns_append_state:
         flush_contract_ledger_append_state(
             connection,

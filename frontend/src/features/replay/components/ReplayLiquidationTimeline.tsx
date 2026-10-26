@@ -50,7 +50,7 @@ export default function ReplayLiquidationTimeline({
                     <div><dt>{t("replay.liq.liqPrice")}</dt><dd>{amount(leg.liquidation_price, locale)}</dd></div>
                     <div><dt>{t("replay.liq.bankruptcy")}</dt><dd>{amount(leg.bankruptcy_price, locale)}</dd></div>
                     <div><dt>{t("replay.liq.takeover")}</dt><dd>{amount(leg.takeover_price, locale)}</dd></div>
-                    <div className="wide"><dt>{t("replay.liq.fee")}</dt><dd>{amount(leg.liquidation_fee, locale)}</dd></div>
+                    <div className="wide"><dt>{t("replay.liq.estimatedFeeAtTrigger")}</dt><dd>{amount(leg.liquidation_fee, locale)}</dd></div>
                   </dl>
                 </article>
               ))}

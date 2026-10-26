@@ -49,9 +49,8 @@
 
 ### 指标与脚本
 
-使用内置指标，或者通过 Pyne 编写本地指标。其他运行时可以通过插件系统接入。
+使用内置指标，或使用 Pine 和前端 JavaScript 编写指标。其他运行时可以通过插件系统接入。
 
-<!-- 产品图片：docs/assets/readme/pyne-indicator.png -->
 
 ### 策略研究
 
@@ -60,7 +59,7 @@
 
 策略研究现在默认开启；显式把前后端两个研究资料库旗标设为 `0`，可回滚到兼容路径。
 规范地址是 `/strategy.html`；`/local.html` 与 `/backtest.html` 仍是兼容入口。
-文档不宣称 Pine/Pyne 自定义脚本已在
+文档不宣称 Pine 自定义脚本已在
 LOCAL_OFFLINE 配置下可用。LOCAL_OFFLINE 仍是启动 profile，不是页面开关。
 
 <!-- 产品图片：docs/assets/readme/backtest-research.png -->
@@ -107,7 +106,7 @@ npm run dev
 - 行情回放只使用模拟委托，不会向真实交易所发送订单。
 - 高级市场视图取决于当前交易所和市场是否提供所需数据。
 - 标准工作区最多支持四张图；更高容量的布局需要手动开启。
-- 当前首方 Pyne 与 Pine 插件包面向 Windows 和 CPython 3.12；Pine 兼容只覆盖
+- 当前首方 Pine 插件包面向 Windows 和 CPython 3.12；Pine 兼容只覆盖
   明确支持的子集。
 - 浏览器版本支持 Windows、Linux 和 macOS；可选桌面壳提供 Windows 与原生 macOS
   测试包。Apple Silicon / Intel 下载及签名限制见 [macOS 打包指南](docs/MACOS_DESKTOP.md)。

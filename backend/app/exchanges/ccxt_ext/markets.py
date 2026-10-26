@@ -13,7 +13,8 @@ tables after ``set_markets()`` builds them, and every load or reload builds new
 objects, so sharing is safe; a reload re-points every live sharer.  The tables
 are held by a detached ``_MarketTables`` snapshot rather than by the client
 that loaded them, because ``close(clean_instance_data=True)`` resets that
-client's attributes.
+client's attributes.  Each published table is excluded from cyclic garbage
+collection once (see ``app.core.gc_policy``).
 """
 
 from __future__ import annotations
@@ -25,6 +26,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import ccxt.async_support as ccxt_async
+
+from app.core.config import GC_UNTRACK_MARKET_TABLES
+from app.core.gc_policy import untrack_acyclic_tree
 
 # The tables ``Exchange.set_markets()`` builds and
 # ``Exchange.set_markets_from_exchange()`` copies (ccxt 4.5.60).
@@ -54,6 +58,20 @@ _MARKET_OPTION_KEYS = (
     "fetchMargins",
     "fetchCurrencies",
 )
+
+
+async def untrack_ccxt_market_tables(holder: Any) -> int:
+    """Keep a loaded, long-lived catalog out of full GC passes.
+
+    ``holder`` is a client or a ``_MarketTables`` snapshot.  The tables are
+    acyclic dict/list trees, so reference counting still frees them.
+    """
+
+    if not GC_UNTRACK_MARKET_TABLES:
+        return 0
+    return await untrack_acyclic_tree(
+        *(getattr(holder, name, None) for name in MARKET_TABLE_ATTRIBUTES)
+    )
 
 
 def market_rail_key(exchange: Any) -> tuple[Any, ...] | None:
@@ -210,8 +228,11 @@ class CcxtMarketTables:
         key = market_rail_key(exchange)
         if key is None:
             if reload:
-                return await exchange.load_markets(reload=True)
-            return await exchange.load_markets()
+                markets = await exchange.load_markets(reload=True)
+            else:
+                markets = await exchange.load_markets()
+            await untrack_ccxt_market_tables(exchange)
+            return markets
         rail = self._attach(key, exchange)
         if (
             reload
@@ -288,7 +309,9 @@ class CcxtMarketTables:
             else:
                 await exchange.load_markets()
                 rail.loads += 1
-            self._publish(rail, exchange)
+            tables = self._publish(rail, exchange)
+            # Waiters join this task, so they see the table already untracked.
+            await untrack_ccxt_market_tables(tables)
         except asyncio.CancelledError:
             raise
         except BaseException:
@@ -300,11 +323,12 @@ class CcxtMarketTables:
                 rail.task = None
                 rail.loader = None
 
-    def _publish(self, rail: _Rail, loader: Any) -> None:
-        rail.tables = _MarketTables(loader)
+    def _publish(self, rail: _Rail, loader: Any) -> _MarketTables:
+        tables = rail.tables = _MarketTables(loader)
         for sharer in tuple(rail.sharers):
             if sharer is not loader:
                 self._adopt(rail, sharer)
+        return tables
 
     @staticmethod
     def _adopt(rail: _Rail, exchange: Any) -> None:

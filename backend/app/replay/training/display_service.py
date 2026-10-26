@@ -131,6 +131,7 @@ class TrainingDisplayService:
         bars: list[dict],
         history_epoch: str | None = None,
         source_sequence: int | None = None,
+        display_math: str = "canonical",
     ) -> dict[str, object]:
         """Prepare a fixed history prefix without holding the account writer."""
         from app.replay.bars.builder import ReplayDisplayBar
@@ -154,13 +155,22 @@ class TrainingDisplayService:
             raise TrainingRunError(
                 "INDICATOR_PREFIX_INVALID", str(exc), status_code=422
             ) from exc
+        if display_math not in {"canonical", "viewport-v1"}:
+            raise TrainingRunError("INDICATOR_PREFIX_INVALID", "invalid display math policy", status_code=422)
+        from .indicator_viewport import (
+            MAX_PREFIX_CHUNK_BARS,
+            ViewportReplayIndicators,
+            math_parameters,
+        )
+        work_params = math_parameters(name, params) if display_math == "viewport-v1" else params
         work_key = (
+            display_math,
             normalized_session,
             normalized_track,
             display_interval,
             data_epoch,
             name,
-            json.dumps(params, sort_keys=True, allow_nan=False),
+            json.dumps(work_params, sort_keys=True, allow_nan=False),
         )
         binding = await self.store.history_binding(
             session_id=normalized_session, track_id=normalized_track
@@ -210,6 +220,10 @@ class TrainingDisplayService:
                     progressive_history_factory=lambda: (
                         self.replay_service.progressive_history
                     ),
+                    max_chunk_bars=(
+                        MAX_PREFIX_CHUNK_BARS
+                        if display_math == "viewport-v1" and not tape else None
+                    ),
                 )
                 origin = None
                 if extend_context:
@@ -232,7 +246,8 @@ class TrainingDisplayService:
                 cache = IndicatorCheckpointStore(
                     path.with_name(path.name + ".indicator-cache.sqlite3")
                 )
-                result = CanonicalReplayIndicators(cache).compute(
+                calculator = ViewportReplayIndicators if display_math == "viewport-v1" else CanonicalReplayIndicators
+                result = calculator(cache).compute(
                     history=history,
                     name=name,
                     params=params,

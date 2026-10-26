@@ -16,8 +16,10 @@ test("all price series start with enough precision for sub-cent markets", () => 
     createMainSeries(structuralMock<AdapterChart>({ addSeries: add, addCustomSeries: add }), {
       chartType, data: [{ time: 1, open: 0.08532, high: 0.08534, low: 0.08531, close: 0.08533 }],
     });
-    assert.deepEqual((options[0] as { priceFormat: unknown }).priceFormat,
-      { type: "price", precision: 5, minMove: 0.00001 });
+    const format = (options[0] as { priceFormat: { type: string; precision: number; minMove: number } }).priceFormat;
+    assert.equal(format.type, "price");
+    assert.equal(format.precision, 5);
+    assert.ok(Math.abs(format.minMove - 0.00001) <= 0.00001 * Number.EPSILON);
   }
 });
 

@@ -27,21 +27,12 @@ SDK_CONSTANTS = (
     / "platform_v2"
     / "constants.py"
 )
-WORKBENCH_MANIFEST = (
-    REPO
-    / "packages"
-    / "candlescope-plugin-pyne-workbench"
-    / "src"
-    / "candlescope_plugin_pyne_workbench"
-    / "manifest.json"
-)
 PINE_MATRIX = REPO / "docs" / "BACKTEST_PINE_STRATEGY_MATRIX_zh.md"
 
 
 def test_frozen_activation_events_exclude_on_backtest_run() -> None:
     assert ACTIVATION_EVENTS == LEGAL_ACTIVATION_EVENTS
     assert "onBacktestRun" not in SDK_CONSTANTS.read_text(encoding="utf-8")
-    assert "onBacktestRun" not in WORKBENCH_MANIFEST.read_text(encoding="utf-8")
 
 
 def test_plugin_platform_hello_wheel_excludes_python_strategy_author_types() -> None:

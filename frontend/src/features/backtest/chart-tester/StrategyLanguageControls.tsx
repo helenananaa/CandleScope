@@ -11,7 +11,7 @@ export function StrategyLanguageControls({ language, onLanguage, confirmed, onCo
   return <div className="strategy-language-controls">
     <label>{t("research.strategy.language")}
       <select data-testid="strategy-language" value={language} onChange={(event) => onLanguage(event.target.value as StrategyDraftLanguage)}>
-        <option value="pyne">{strategyLanguageLabel("pyne")}</option><option value="pine">{strategyLanguageLabel("pine")}</option><option value="python">{strategyLanguageLabel("python")}</option>
+        <option value="pine">{strategyLanguageLabel("pine")}</option><option value="python">{strategyLanguageLabel("python")}</option>
       </select>
     </label>
     {language === "python" && <div data-testid="strategy-python-permissions">

@@ -187,6 +187,26 @@ async def test_tape_indicator_http_prefix_window_restart_and_source_progress(
                                 reference("RSI", {"period": 5}, segment)
                             )
                         ],
+                        # The display client explicitly uses the live bounded
+                        # warmup contract. Keep the full-history HTTP oracle
+                        # above independently checking legacy canonical math.
+                        "displayExpected": [
+                            (
+                                name,
+                                [
+                                    point
+                                    for point in points
+                                    if point["time"] >= selected[0].open_time_ms // 1000
+                                ],
+                            )
+                            for name, points in lines(
+                                reference(
+                                    "RSI",
+                                    {"period": 5},
+                                    segment[-(15 + len(selected)) :],
+                                )
+                            )
+                        ],
                     }
                 )
             for name in ("RSI", "EMA", "ATR", "MACD", "MA", "BOLL", "VOL"):

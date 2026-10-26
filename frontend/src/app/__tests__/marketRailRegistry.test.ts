@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   listContributedMarketRailViews,
+  mergeMarketRailViews,
   registerMarketRailView,
   subscribeMarketRailRegistry,
 } from "../marketRailRegistry.js";
@@ -36,4 +37,16 @@ test("market rail registry snapshots stay stable until the registry changes", ()
 
   assert.strictEqual(listContributedMarketRailViews(), initial);
   assert.equal(notifications, 2);
+});
+
+test("plugin contributions cannot replace host-owned rail views", () => {
+  const builtIn = [
+    { id: "watchlist", title: "Watchlist", icon: null, order: 10, sizing: "flex" as const },
+    { id: "accounts", title: "Accounts", icon: null, order: 50, sizing: "flex" as const, hostOwned: true },
+  ];
+  const merged = mergeMarketRailViews(builtIn, [
+    { id: "watchlist", title: "Plugin watchlist", icon: null, order: 10, sizing: "flex" },
+    { id: "accounts", title: "Plugin accounts", icon: null, order: 50, sizing: "flex" },
+  ]);
+  assert.deepEqual(merged.map((view) => view.title), ["Plugin watchlist", "Accounts"]);
 });

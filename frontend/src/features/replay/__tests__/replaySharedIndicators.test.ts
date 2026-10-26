@@ -208,12 +208,12 @@ test("provided-bars policy forces local safe execution and rejects unknown runti
     id: "custom-pyne",
     name: "Custom",
     kind: "script",
-    language: "pyne",
+    language: "pine",
     script: "plot(close)",
     securityMode: "unsafe",
   });
   assert.equal(pyne?.executionTarget, "local");
-  assert.equal(pyne?.securityMode, "safe");
+  assert.equal(pyne?.securityMode, undefined);
 
   const pine = prepareProvidedBarsIndicator({
     id: "custom-pine",
@@ -243,8 +243,7 @@ test("provided-bars policy forces local safe execution and rejects unknown runti
     "unsafe",
     prepareProvidedBarsIndicator,
   );
-  assert.equal(switchedToPyne.language, "pyne");
-  assert.equal(switchedToPyne.securityMode, "safe");
+  assert.equal(switchedToPyne, pine); // Retired languages cannot replace a valid Pine indicator.
   const rejectedUpdate = applyIndicatorScriptUpdate(
     switchedToPyne,
     "external_runtime(close)",
@@ -476,7 +475,8 @@ test("playing replay coalesces indicator boundaries and paused replay stays exac
   assert.match(adapter, /const usePlaybackSample = playing && wasPlayingRef\.current/);
   assert.match(adapter, /const indicatorRevision = usePlaybackSample[\s\S]*: seriesRevision/);
   assert.match(adapter, /const indicatorCursorMs = usePlaybackSample[\s\S]*: cursorMs/);
-  assert.match(adapter, /selectRevealedIndicatorBars\(excludeIncompleteReplayHistory\(seriesStore\.snapshot\(\), indicatorCursorMs\), indicatorCursorMs\)/);
+  assert.match(adapter, /selectRevealedIndicatorBars\(excludeIncompleteReplayHistory\(seriesStore\.snapshot\(\), cursorMs\), cursorMs\)/);
+  assert.match(adapter, /const indicatorBars = usePlaybackSample \? sampledIndicatorBoundary\.bars : currentIndicatorBars/);
   assert.match(adapter, /visibleThroughSeconds: indicatorCursorMs === null/);
 });
 
@@ -493,7 +493,10 @@ test("v2 composition reuses the shared indicator product without hosted/cache re
   assert.match(cells, /useReplaySharedIndicatorRuntime\(runtime, viewer, scope, persistence\)/);
   assert.match(cells, /controlled: true/);
   assert.match(workspace, /<IndicatorPanel/);
-  assert.match(workspace, /allowedScriptLanguages=\{\["pyne", "pine", "frontend-js"\]\}/);
+  assert.match(workspace, /const ensureIndicatorViewport = review === null[\s\S]*indicators\.actions\.ensureVisibleIndicatorRange[\s\S]*reviewIndicators\.actions\.ensureVisibleIndicatorRange/);
+  assert.match(workspace, /onViewportRangeChange=\{ensureIndicatorViewport\}/);
+  assert.match(workspace, /ensureIndicatorViewport\(range\);[\s\S]*if \(integrityRuntime\.review !== null\) return/);
+  assert.match(workspace, /allowedScriptLanguages=\{\["pine", "frontend-js"\]\}/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
   for (const prop of [
     "indicatorMarkers",

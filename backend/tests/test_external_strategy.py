@@ -15,23 +15,9 @@ if close < 9 and strategy.position_size > 0
 plot(strategy.position_size)
 plot(strategy.equity)
 '''
-PYNE = '''strategy("Feedback")
-strategy.entry_when((close > 12) & (strategy.position_size == 0), "L", strategy.long, qty=2)
-strategy.close_when((close < 9) & (strategy.position_size > 0), "L")
-plot(strategy.position_size)
-plot(strategy.equity)
-'''
-INCREMENTAL = '''def init(ctx):
-    ctx.strategy.configure()
-def on_bar(ctx, bar):
-    if bar.close > 12 and ctx.strategy.position_size == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=2)
-    if bar.close < 9 and ctx.strategy.position_size > 0:
-        ctx.strategy.close("L")
-'''
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE), ("pyne", PYNE), ("pyne", INCREMENTAL)])
+@pytest.mark.parametrize("language,source", [("pine", PINE)])
 def test_host_matching_feedback_controls_complete_script_and_owns_report(runtime, language, source):
     host, payload = runtime
     app = FastAPI()
@@ -63,8 +49,7 @@ def test_host_matching_feedback_controls_complete_script_and_owns_report(runtime
             host.native.replay.create(result["run_id"])
 
 
-@pytest.mark.parametrize("language,source", [("pine", PINE.replace('qty=2)', 'qty=2, comment="unsupported")')),
-                                           ("pyne", PYNE.replace('qty=2)', 'qty=2, comment="unsupported")'))])
+@pytest.mark.parametrize("language,source", [("pine", PINE.replace('qty=2)', 'qty=2, comment="unsupported")'))])
 def test_host_mode_rejects_unsupported_orders_without_native_fallback(runtime, language, source):
     host, payload = runtime
     payload.update(language=language, source=source, execution_mode="CANDLESCOPE",

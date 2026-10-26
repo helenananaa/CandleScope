@@ -489,9 +489,10 @@ class TrainingRunService:
         *,
         preparation_id: str | None = None,
         _market_identity: tuple[str, str, str] | None = None,
+        _preparation_market_identity: tuple[str, str, str] | None = None,
         _progressive_initial_horizon_ms: int | None = None,
     ) -> dict[str, object]:
-        return await self._admission_service.create_empty_run(request, preparation_id=preparation_id, _market_identity=_market_identity, _progressive_initial_horizon_ms=_progressive_initial_horizon_ms)
+        return await self._admission_service.create_empty_run(request, preparation_id=preparation_id, _market_identity=_market_identity, _preparation_market_identity=_preparation_market_identity, _progressive_initial_horizon_ms=_progressive_initial_horizon_ms)
 
     async def select_initial_market(
         self,
@@ -580,6 +581,13 @@ class TrainingRunService:
         ] | None = None,
     ) -> dict[str, object]:
         return await self._admission_service.market_catalog(run_id, _catalog_cache=_catalog_cache, _admission_cache=_admission_cache)
+
+    async def market_track_history(
+        self, run_id: str, *, exchange: str, market_type: str, symbol: str,
+    ) -> dict[str, object]:
+        return await self._admission_service.market_track_history(
+            run_id, exchange=exchange, market_type=market_type, symbol=symbol,
+        )
 
     async def market_track_plan(
         self,
@@ -3877,7 +3885,7 @@ class TrainingRunService:
                 )
             if portfolio.get("margin_mode") == "ISOLATED":
                 positions = portfolio.get("positions")
-                allocations = portfolio.get("isolated_allocations")
+                allocations = portfolio.get("isolated_wallets")
                 orders = portfolio.get("orders")
                 if (
                     not isinstance(positions, list)

@@ -19,7 +19,7 @@ if __name__ == "__main__":
     args.output.mkdir(parents=True, exist_ok=True)
     workloads = [("PYTHON", "SMA")] if args.ablation or args.dense else [
         ("PYTHON", name) for name in ("EMPTY", "SMA", "STATE", "FEEDBACK", "ORDERS")
-    ] + [("SMA", "SMA"), ("RSI", "SMA")]
+    ]
     modes = {"off": dict.fromkeys(FLAGS, "0"), "on": dict.fromkeys(FLAGS, "1")}
     if args.ablation:
         for index, name in enumerate(("entry", "fields", "loop", "checkpoint")):

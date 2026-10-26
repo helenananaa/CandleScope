@@ -108,14 +108,14 @@ async def _exercise(root: Path) -> dict[str, Any]:
             self.version = version
 
         async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
-            if runtime_id != "candlescope.pyne":
+            if runtime_id != "candlescope.fixture":
                 raise RuntimeError("unexpected Phase 13 runtime id")
             return RuntimeDescriptor(
                 id=runtime_id,
-                name="Pyne Runtime",
+                name="Fixture Runtime",
                 version=self.version,
-                package="candlescope-plugin-pyne",
-                languages=(LanguageDescriptor(id="pyne", name="Pyne"),),
+                package="candlescope-plugin-fixture",
+                languages=(LanguageDescriptor(id="fixture", name="Fixture"),),
                 features=(
                     FEATURE_BATCH_EXECUTION_V1,
                     FEATURE_RENDER_LINE_SERIES_V1,
@@ -131,8 +131,8 @@ async def _exercise(root: Path) -> dict[str, Any]:
             RuntimeRegistry(
                 (
                     RuntimeProcessSpec(
-                        runtime_id="candlescope.pyne",
-                        expected_package="candlescope-plugin-pyne",
+                        runtime_id="candlescope.fixture",
+                        expected_package="candlescope-plugin-fixture",
                         expected_version=version,
                         executable=Path(sys.executable).resolve(),
                         enabled=True,
@@ -160,9 +160,9 @@ async def _exercise(root: Path) -> dict[str, Any]:
             IndicatorRuntimeRoutes(
                 (
                     IndicatorRuntimeRoute(
-                        language="pyne",
+                        language="fixture",
                         mode="sidecar",
-                        runtime_id="candlescope.pyne",
+                        runtime_id="candlescope.fixture",
                     ),
                 )
             ),
@@ -190,7 +190,7 @@ async def _exercise(root: Path) -> dict[str, Any]:
     v1_wire_two = indicator_two.compatibility_source_catalog()
     preview_two = release_two.import_preview()
     if preview_two["changes"] != [
-        {"id": "compat.v1.candlescope.pyne", "action": "update"}
+        {"id": "compat.v1.candlescope.fixture", "action": "update"}
     ]:
         raise RuntimeError("release-two compatibility diff is not an exact update")
     import_two = release_two.apply_import(preview_two["previewSha256"])
