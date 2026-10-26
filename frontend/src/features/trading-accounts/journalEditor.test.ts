@@ -195,3 +195,15 @@ test("a revert during an uncertain save survives restart and follows the pending
   assert.equal(restarted.getSnapshot().fields.entryBasis, "original");
   assert.equal(f.values.size, 0);
 });
+
+test("an explicit screenshot can create an empty note while an untouched close does not", async () => {
+  const f = fixture();
+  let created = 0;
+  const editor = new JournalEditor({ ...f.options, create: async (fields) => { created++; return entry(fields); } });
+  editor.initialize(null);
+  assert.equal(await editor.flush(), true);
+  assert.equal(created, 0);
+  assert.equal(await editor.ensureNote(), true);
+  assert.equal(created, 1);
+  assert.ok(editor.getSnapshot().note);
+});

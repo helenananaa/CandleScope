@@ -159,7 +159,8 @@ export default function TradeJournalDrawer({
     return saved;
   };
   const ensureNote = async (): Promise<JournalEntry> => {
-    if (!await flush()) throw new Error(t("trading.journal.saveFailed"));
+    if (!await editor.ensureNote()) throw new Error(t("trading.journal.saveFailed"));
+    onChanged();
     const saved = editor.getSnapshot().note;
     if (!saved) throw new Error(t("trading.journal.plan"));
     return saved;

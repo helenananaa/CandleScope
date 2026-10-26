@@ -143,6 +143,11 @@ export class JournalEditor {
     this.saving = this.saveLoop().finally(() => { this.saving = null; });
     return this.saving;
   };
+  ensureNote = (): Promise<boolean> => {
+    // Capturing a screenshot is an explicit request to create even an empty note.
+    if (this.state.ready && !this.state.note) this.dirty = true;
+    return this.flush();
+  };
   private async saveLoop(): Promise<boolean> {
     if (!this.persist()) return false;
     try {
