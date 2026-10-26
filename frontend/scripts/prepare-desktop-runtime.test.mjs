@@ -56,7 +56,10 @@ async function prepareFixture(t, failure = "") {
       } else if (args[0].endsWith("prepare-desktop-plugins.py")) {
         phase = "plugins";
         assert.equal(fs.readFileSync(path.join(cache, "runtime", "marker"), "utf8"), "runtime");
-        assert.equal(args[args.indexOf("--cache") + 1], path.join(cache, "plugin-build"));
+        // Node resolves the entry point through macOS /var -> /private/var.
+        // Compare the actual directory identity while still rejecting another cache.
+        assert.equal(fs.realpathSync(args[args.indexOf("--cache") + 1]),
+          fs.realpathSync(path.join(cache, "plugin-build")));
         const output = args[args.indexOf("--output") + 1];
         fs.mkdirSync(output, { recursive: true });
         fs.writeFileSync(path.join(output, "bundle.cspkg"), "built plugin");
