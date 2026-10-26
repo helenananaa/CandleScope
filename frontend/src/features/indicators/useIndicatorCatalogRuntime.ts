@@ -47,11 +47,7 @@ function normalizeCustomIndicator(
     is_builtin: false,
     isPreset: false,
     paneTarget: renderPaneTarget(item.renderHints) || item.paneTarget || "sub",
-    ...((item.language === undefined || item.language === "pyne")
-      ? { securityMode: securityMode || "safe" }
-      : securityMode
-        ? { securityMode }
-        : {}),
+    ...(securityMode ? { securityMode } : {}),
   };
 }
 

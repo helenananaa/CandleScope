@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.core.config import runtime_environment
 
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from .errors import PluginRegistryError
@@ -64,6 +65,11 @@ def build_runtime_host_from_environment(
         registry_path,
         allow_missing=override is None,
     )
+    # Retired first-party engines must not auto-start from an older installation.
+    registry = replace(registry, plugins=tuple(
+        plugin for plugin in registry.plugins
+        if plugin.runtime_id != "candlescope.pyne"
+    ))
     return RuntimeHostService(
         registry,
         host_name=host_name,

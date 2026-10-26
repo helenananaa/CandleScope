@@ -466,7 +466,7 @@ Subsequent `PRICE_UPDATED` events send the same `prices` shape with only changed
 
 ### `WS /stream/indicators`
 
-Realtime indicator stream. It supports built-in indicators and saved/ad-hoc Pyne scripts over one WebSocket.
+Realtime indicator stream. It supports built-in indicators and saved/ad-hoc Pine scripts over one WebSocket.
 
 Subscribe to a built-in indicator:
 
@@ -484,7 +484,7 @@ Subscribe to a built-in indicator:
 }
 ```
 
-Subscribe to a Pyne script:
+Subscribe to a Pine script:
 
 ```json
 {
@@ -493,8 +493,8 @@ Subscribe to a Pyne script:
   "kind": "script",
   "symbol": "BTCUSDT",
   "interval": "1m",
-  "script": "plot(close, title='Close')",
-  "securityMode": "safe",
+  "script": "//@version=6\nindicator('Close')\nplot(close, title='Close')",
+  "language": "pine",
   "historyLimit": 500
 }
 ```
@@ -542,10 +542,10 @@ Custom indicator payload:
   "schemaVersion": 1,
   "id": "my-script",
   "kind": "script",
-  "language": "pyne",
+  "language": "pine",
   "name": "My Script",
   "description": "",
-  "script": "plot(close)",
+  "script": "//@version=6\nindicator('My Script')\nplot(close)",
   "params": {},
   "paramSchema": [],
   "renderHints": {},
@@ -560,13 +560,9 @@ and the referenced public SDK runtime descriptors. The response is derived from
 startup-validated routes and descriptors; it does not expose process commands,
 paths, PIDs, stderr, or host failure details.
 
-### `GET /indicators/pyne/security`
-
-Returns current Pyne security policy: mode, allowed imports, timeout, bar/output limits, executor mode, and cache limit.
-
 ### `GET /indicators/diagnostics`
 
-Returns registry, running engine, custom store, Pyne security/executor/cache, and indicator WebSocket tuning diagnostics.
+Returns registry, running engine, custom store, script runtime routing, and indicator WebSocket tuning diagnostics.
 
 ### `POST /indicators/compute`
 
@@ -577,7 +573,7 @@ Request body:
 ```json
 {
   "mode": "script",
-  "language": "pyne",
+  "language": "pine",
   "name": "MA",
   "params": { "period": 20 },
   "exchange": "binance",
@@ -587,7 +583,7 @@ Request body:
   "ohlcv": [
     { "time": 1700000000, "open": 42000, "high": 42100, "low": 41900, "close": 42050, "volume": 12.5 }
   ],
-  "script": "plot(close, title='Close')",
+  "script": "//@version=6\nindicator('Close')\nplot(close, title='Close')",
   "securityMode": "safe"
 }
 ```
@@ -595,9 +591,9 @@ Request body:
 Modes:
 
 - Built-in mode: `mode="builtin"` with `name`, or a preset script marker such as `# __ENGINE__:MA`.
-- Script mode: `mode="script"` with `script`; runs through Pyne.
+- Script mode: `mode="script"` with `script`; runs through Pine.
 
-Pyne execution uses process mode by default and is governed by `PYNE_*` configuration. Safe mode blocks imports; research mode allows only configured imports; unsafe mode is for trusted local scripts.
+Pine executes in its isolated plugin process. Shared host limits use `SCRIPT_MAX_BARS`, `SCRIPT_TICK_RECOMPUTE_MAX_BARS`, and `SCRIPT_HTTP_THREAD_*`.
 
 Response includes backward-compatible `lines` plus normalized output fields such as `series`, `annotations`, `fills`, `paneLayout`, and structured `errorDetail` on failure.
 

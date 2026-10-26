@@ -16,7 +16,7 @@ test("copy carries independent inputs without claiming the original execution re
   assert.deepEqual(copy.runs, {});
 });
 test("workspace restore rejects duplicate IDs and selects an existing strategy", () => {
-  const restored = normalizeNativeStrategies({ activeId: "missing", items: [{ id: "a", drafts: { good: "saved", invalid: 3 } }, { id: "a" }, null] });
+  const restored = normalizeNativeStrategies({ activeId: "missing", items: [{ id: "a", language: "pine", drafts: { good: "saved", invalid: 3 } }, { id: "a", language: "pine" }, null] });
   assert.equal(restored.activeId, "a");
   assert.equal(restored.items.length, 1);
   assert.deepEqual(restored.items[0]?.drafts, { good: "saved" });

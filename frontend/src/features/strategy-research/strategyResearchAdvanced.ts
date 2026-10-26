@@ -29,7 +29,7 @@ export async function createStrategyResearchAdvancedHref(input: {
       strategyDraftId: input.draftId,
       strategyRevisionId: null,
       displayName: "Strategy",
-      language: "pyne",
+      language: "python",
       parameters: {},
       rangeMode: "ALL_AVAILABLE",
       customRange: null,

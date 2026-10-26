@@ -135,23 +135,23 @@ WS /stream/indicators subscribe builtin
 - 内置指标 runtime 消费 DataManager bars/events，不拥有交易所 session。
 - range request 从 DataManager 查询 bars，再计算有界 patch。
 
-## Pyne / Custom 指标路径
+## Script / Custom 指标路径
 
 ```text
-WS /stream/indicators subscribe custom/Pyne
+WS /stream/indicators subscribe custom/script
   -> 从 request 或 CustomIndicatorStore 解析 custom script
   -> dm.ensure_stream(symbol, interval)
   -> 从 DataManager 查询 bounded history
-  -> Pyne executor 计算初始 snapshot
+  -> Script runtime sidecar 计算初始 snapshot
   -> DataManager subscription 监听 bar updates
   -> incremental session 或 bounded recompute 生成 patch
-  -> indicator WS 向客户端发送 Pyne payload
+  -> indicator WS 向客户端发送 Script runtime payload
 ```
 
 规则：
 
-- Pyne 执行在后端托管，并受配置的安全和运行时限制约束。
-- Pyne 不接收直接交易所 payload。
+- Script runtime 执行在后端托管，并受配置的安全和运行时限制约束。
+- Script runtime 不接收直接交易所 payload。
 - 已保存 custom indicator 是 metadata/script 定义；实时 bars 仍来自 DataManager。
 
 ## 交易所 WS Session Routing

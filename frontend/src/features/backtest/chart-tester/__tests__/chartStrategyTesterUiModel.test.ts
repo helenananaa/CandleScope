@@ -14,9 +14,6 @@ import {
 test("ordinary mode exposes Python and existing editable templates without internal object fields", () => {
   assert.deepEqual(CHART_STRATEGY_TEMPLATES.map((template) => template.id), [
     "PYTHON_SMA",
-    "SMA_CROSS",
-    "RSI_REVERSAL",
-    "DONCHIAN_BREAKOUT",
   ]);
   const visibleTemplateCopy = JSON.stringify(CHART_STRATEGY_TEMPLATES);
   assert.doesNotMatch(visibleTemplateCopy, /dataset_id|snapshot_hash|run_id|revision_id/i);

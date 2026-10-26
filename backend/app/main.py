@@ -5,7 +5,7 @@ Startup sequence:
   1. Initialize SQLite storage (klines_repo).
   2. Restore the local symbol catalog snapshot.
   3. Start the script-runtime plugin plane as a capability. First-party
-     Pyne/Pine or plugin-host failures degrade that plane and never abort
+     Pine or plugin-host failures degrade that plane and never abort
      the process.
   4. Start the DataEngine runtime and attach its public handles to
      ``app.state`` for API/WS endpoints.
@@ -563,7 +563,7 @@ async def startup_event() -> None:
         logger.info("Restored last-known-good symbol catalog snapshot")
 
     # 3. Start script/plugin runtimes as a capability plane. A missing or
-    # unsupported first-party sidecar degrades Pyne/Pine; it does not abort
+    # unsupported first-party sidecar degrades Pine; it does not abort
     # DataEngine, alerts, or builtin indicators.
     try:
         if BACKTEST_SETTINGS.enabled or RESEARCH_DATA_LIBRARY_ENABLED:

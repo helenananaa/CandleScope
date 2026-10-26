@@ -14,5 +14,5 @@ def test_pine_session_identity_is_subscription_local_and_excludes_http_ranges():
         first, [], transport="http.range"
     ).options
     assert "pineSessionId" not in _script_runtime_request(
-        {**first, "language": "pyne"}, [], transport="websocket.snapshot"
+        {**first, "language": "community-lang"}, [], transport="websocket.snapshot"
     ).options

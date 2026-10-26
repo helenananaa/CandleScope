@@ -882,38 +882,19 @@ SYMBOL_CATALOG_SNAPSHOT_PATH = Path(
     )
 )
 
-# Pyne runtime safety. This is a local-first application, so advanced users can
-# opt into broader Python capability, but the default stays conservative.
-PYNE_SECURITY_MODE = os.getenv("PYNE_SECURITY_MODE", "safe").strip().lower()
-if PYNE_SECURITY_MODE not in {"safe", "research", "unsafe"}:
-    PYNE_SECURITY_MODE = "safe"
-PYNE_EXEC_TIMEOUT_SECONDS = float(os.getenv("PYNE_EXEC_TIMEOUT_SECONDS", "5"))
-PYNE_EXECUTOR_MODE = os.getenv("PYNE_EXECUTOR_MODE", "process").strip().lower()
-if PYNE_EXECUTOR_MODE not in {"inline", "process"}:
-    PYNE_EXECUTOR_MODE = "process"
-PYNE_PROCESS_GRACE_SECONDS = float(os.getenv("PYNE_PROCESS_GRACE_SECONDS", "0.5"))
-PYNE_MAX_BARS = int(os.getenv("PYNE_MAX_BARS", "50000"))
-PYNE_TICK_RECOMPUTE_MAX_BARS = int(os.getenv("PYNE_TICK_RECOMPUTE_MAX_BARS", "5000"))
-PYNE_MAX_OUTPUT_SERIES = int(os.getenv("PYNE_MAX_OUTPUT_SERIES", "20"))
-PYNE_MAX_OUTPUT_POINTS = int(os.getenv("PYNE_MAX_OUTPUT_POINTS", "1000000"))
-PYNE_CACHE_MAX_ITEMS = int(os.getenv("PYNE_CACHE_MAX_ITEMS", "32"))
-PYNE_ALLOWED_IMPORTS = [
-    item.strip()
-    for item in os.getenv(
-        "PYNE_ALLOWED_IMPORTS", "numpy,pandas,scipy,sklearn,torch"
-    ).split(",")
-    if item.strip()
-]
+# Shared host limits for script indicator requests.
+SCRIPT_MAX_BARS = int(os.getenv("SCRIPT_MAX_BARS", "50000"))
+SCRIPT_TICK_RECOMPUTE_MAX_BARS = int(os.getenv("SCRIPT_TICK_RECOMPUTE_MAX_BARS", "5000"))
 
 # Indicator HTTP compute tuning. The API endpoint should only orchestrate work;
-# heavy builtin/Pyne computation is offloaded so it cannot block the event loop.
+# heavy builtin/script computation is offloaded so it cannot block the event loop.
 INDICATOR_HTTP_TIMEOUT_SECONDS = float(os.getenv("INDICATOR_HTTP_TIMEOUT_SECONDS", "8"))
 INDICATOR_THREAD_WORKERS = int(os.getenv("INDICATOR_THREAD_WORKERS", "2"))
-PYNE_HTTP_THREAD_WORKERS = int(os.getenv("PYNE_HTTP_THREAD_WORKERS", "2"))
+SCRIPT_HTTP_THREAD_WORKERS = int(os.getenv("SCRIPT_HTTP_THREAD_WORKERS", "2"))
 STORAGE_THREAD_WORKERS = int(os.getenv("STORAGE_THREAD_WORKERS", "4"))
 # Admission is immediate: running + queued calls may not exceed workers + pending.
 INDICATOR_THREAD_PENDING = int(os.getenv("INDICATOR_THREAD_PENDING", "64"))
-PYNE_HTTP_THREAD_PENDING = int(os.getenv("PYNE_HTTP_THREAD_PENDING", "64"))
+SCRIPT_HTTP_THREAD_PENDING = int(os.getenv("SCRIPT_HTTP_THREAD_PENDING", "64"))
 STORAGE_THREAD_PENDING = int(os.getenv("STORAGE_THREAD_PENDING", "128"))
 PREPARATION_THREAD_WORKERS = int(os.getenv("PREPARATION_THREAD_WORKERS", "2"))
 PREPARATION_THREAD_PENDING = int(os.getenv("PREPARATION_THREAD_PENDING", "64"))

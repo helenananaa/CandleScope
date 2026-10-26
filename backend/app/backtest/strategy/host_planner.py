@@ -1,4 +1,4 @@
-"""Host planner that turns Pyne strategy output into kernel order intents."""
+"""Host planner that turns strategy output into kernel order intents."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class HostPlan(list[dict[str, Any]]):
         self.decision = None if decision is None else dict(decision)
 
 
-class PyneHostPlanner:
+class HostOrderPlanner:
     """Maps TARGET_POSITION / SIGNAL to Host order intents. Provider never fills."""
 
     def __init__(

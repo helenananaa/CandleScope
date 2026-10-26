@@ -40,7 +40,7 @@ export function strategyDraftContentRevision(source: string): number {
   return hash >>> 0;
 }
 
-/** Preserve an existing Python program when entering from the Pine/Pyne language menu. */
+/** Preserve an existing Python program when entering from the strategy language menu. */
 export async function openPythonStrategyDraft(store: StrategyDraftStore, draftId: string | null) {
   const existing = draftId ? (await store.load(draftId)).record : null;
   if (existing?.language === "python") return existing;

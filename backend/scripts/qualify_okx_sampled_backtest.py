@@ -1,4 +1,4 @@
-"""Exercise the actual installed Pine/Pyne plugins through the host HTTP contract."""
+"""Exercise the actual installed Pine plugins through the host HTTP contract."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -34,7 +34,7 @@ def qualify(directory):
             begin,end=manifest['start_time_ms'],manifest['end_time_ms_exclusive']-1
             snapshot=host.preview_snapshot(dataset_id=data['dataset_id'],data_epoch=data['data_epoch'],start_time_ms=begin,end_time_ms=end,interval='1m')
             with TestClient(app) as client:
-                for language in ('pine','pyne'):
+                for language in ('pine',):
                     for callbacks in (False,True):
                         pine = f'''//@version=6
 strategy("OKX sampled", calc_on_order_fills={str(callbacks).lower()})
@@ -44,17 +44,7 @@ if bar_index == 5 and barstate.isconfirmed
     strategy.close("L")
 plot(close)
 '''
-                        pyne = f'''def init(ctx):
-    ctx.strategy.configure(calc_on_order_fills={callbacks})
-def on_bar(ctx, bar):
-    if ctx.bar_index == 0:
-        ctx.strategy.entry("L", ctx.strategy.long, qty=0.001)
-    if ctx.bar_index == 5:
-        ctx.strategy.close("L")
-def on_fill(ctx, bar):
-    pass
-'''
-                        payload=dict(language=language,source=pine if language=='pine' else pyne,
+                        payload=dict(language=language,source=pine,
                             dataset_id=data['dataset_id'],data_epoch=data['data_epoch'],snapshot_hash=snapshot['snapshot_hash'],
                             start_time_ms=begin,end_time_ms=end,interval='1m',exchange='okx',market_type='spot',
                             context={'symbol':'OKX:BTCUSDT','timeframe':'1'}, execution_fidelity='BOOK_SAMPLED',

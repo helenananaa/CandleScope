@@ -175,7 +175,7 @@ class IndicatorRangeResultService:
             "securityMode": meta.get("securityMode") or "",
         }
         if meta.get("kind") == "script":
-            identity["language"] = str(meta.get("language") or "pyne").lower().strip()
+            identity["language"] = str(meta.get("language") or "pine").lower().strip()
         raw = json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str)
         return f"range:{hashlib.sha256(raw.encode()).hexdigest()}"
 

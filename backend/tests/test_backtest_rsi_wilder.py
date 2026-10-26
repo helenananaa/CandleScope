@@ -13,7 +13,7 @@ from app.backtest.strategy.builtin import (
     BuiltinRsiWilderLongShortProvider,
 )
 from app.backtest.strategy.protocol import ObservationFrame
-from app.backtest.strategy.pyne_adapter import PyneHostPlanner
+from app.backtest.strategy.host_planner import HostOrderPlanner
 from app.backtest.strategy.registry import build_default_strategy_registry
 from app.backtest.strategy.isolated import IsolatedStrategyProvider
 from app.core.config import load_backtest_settings
@@ -224,7 +224,7 @@ def test_missing_or_non_positive_close_and_cross_mode_fail_closed() -> None:
 def test_level_targets_reverse_and_authoritative_position_retries_after_rejection() -> None:
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     _, outputs, _ = _provider_outputs(fixture["closes"])
-    planner = PyneHostPlanner()
+    planner = HostOrderPlanner()
     long_output = outputs[24]
     short_output = outputs[53]
     assert planner.plan(long_output, current_position="0") == [

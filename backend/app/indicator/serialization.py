@@ -9,7 +9,7 @@ from candlescope_plugin_sdk import ExecuteBatchResult
 from app.indicator.errors import error_detail
 
 
-PYNE_EXTENDED_OUTPUT_KEYS = (
+SCRIPT_EXTENDED_OUTPUT_KEYS = (
     "markers",
     "fills",
     "hlines",
@@ -337,53 +337,6 @@ def _build_pane_layout(
     return list(panes.values())
 
 
-def serialize_pyne_result(
-    result: Any, *, lines_on_error: bool = True
-) -> dict[str, Any]:
-    """Serialize a PyneResult into the frontend-facing compute shape."""
-    output = result.output or {}
-    payload: dict[str, Any] = {
-        "schemaVersion": INDICATOR_PAYLOAD_SCHEMA_VERSION,
-        "ok": result.ok,
-        "error": result.error,
-        "lines": result.lines if (result.ok or lines_on_error) else [],
-        "result": output if output else None,
-    }
-    payload.update(
-        build_unified_output(
-            lines=payload["lines"],
-            markers=output.get("markers") or [],
-            hlines=output.get("hlines") or [],
-            bgcolors=output.get("bgcolors") or [],
-            fills=output.get("fills") or [],
-            barcolors=output.get("barcolors") or [],
-            signals=output.get("signals") or [],
-        )
-    )
-    if not result.ok:
-        code = result.code or "PYNE_EXECUTION_FAILED"
-        payload["code"] = code
-        payload["errorDetail"] = error_detail(
-            code,
-            result.error or "Pyne execution failed",
-            line=result.line,
-            column=result.column,
-            hint=_pyne_hint(code, result.hint),
-        )
-
-    for key in PYNE_EXTENDED_OUTPUT_KEYS:
-        if output.get(key):
-            if key == "fills":
-                payload["legacyFills"] = output[key]
-                continue
-            payload[key] = output[key]
-
-    if result.param_schema:
-        payload["param_schema"] = result.param_schema
-    if result.meta:
-        payload["meta"] = result.meta
-
-    return payload
 
 
 def _legacy_line_style(value: Any) -> int:
@@ -586,7 +539,7 @@ def serialize_plugin_runtime_result(result: ExecuteBatchResult) -> dict[str, Any
         )
     )
     if structured is not None:
-        for key in PYNE_EXTENDED_OUTPUT_KEYS:
+        for key in SCRIPT_EXTENDED_OUTPUT_KEYS:
             if collections.get(key):
                 if key == "fills":
                     payload["legacyFills"] = collections[key]
@@ -679,15 +632,6 @@ def rebind_indicator_payload_identity(
     return payload
 
 
-def _pyne_hint(code: str, fallback: str | None) -> str | None:
-    """Keep CandleScope-facing Pyne errors localized across runtime backends."""
-    if code == "PYNE_SYNTAX_ERROR":
-        return (
-            "这是 Python/Pyne 语法错误，请检查报错行附近的括号、缩进、逗号或赋值写法。"
-        )
-    if code == "PYNE_IMPORT_BLOCKED":
-        return "当前安全模式不允许该 import。可切换 research/unsafe，或配置 PYNE_ALLOWED_IMPORTS。"
-    return fallback
 
 
 def serialize_indicator_result(result: Any) -> dict[str, Any]:
@@ -748,51 +692,6 @@ def build_indicator_snapshot_payload(
         "market_type": market_type,
         "name": name,
         "params": params,
-        "barTime": bar_time,
-        **payload,
-    }
-
-
-def build_pyne_snapshot_payload(
-    *,
-    client_id: str,
-    indicator_id: str,
-    exchange: str,
-    symbol: str,
-    interval: str,
-    market_type: str,
-    name: str,
-    params: dict[str, Any],
-    result: Any,
-    bar_time: int = 0,
-    script_hash: str | None = None,
-) -> dict[str, Any]:
-    """Build a WebSocket snapshot payload for a backend-hosted Pyne script."""
-    payload = serialize_pyne_result(result, lines_on_error=False)
-    payload.update(
-        build_unified_output(
-            indicator_id=indicator_id,
-            lines=payload.get("lines") or [],
-            markers=payload.get("markers") or [],
-            hlines=payload.get("hlines") or [],
-            bgcolors=payload.get("bgcolors") or [],
-            fills=payload.get("legacyFills") or payload.get("fills") or [],
-            barcolors=payload.get("barcolors") or [],
-            signals=payload.get("signals") or [],
-        )
-    )
-    return {
-        "type": "indicator.snapshot",
-        "kind": "script",
-        "clientId": client_id,
-        "indicatorId": indicator_id,
-        "exchange": exchange,
-        "symbol": symbol,
-        "interval": interval,
-        "market_type": market_type,
-        "name": name,
-        "params": params,
-        **({"scriptHash": script_hash} if script_hash else {}),
         "barTime": bar_time,
         **payload,
     }

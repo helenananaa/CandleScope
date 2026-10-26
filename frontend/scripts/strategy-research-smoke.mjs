@@ -60,8 +60,8 @@ export function runStrategyResearchSmoke(root = repoRoot) {
     throw new Error("legacy URLs must parse");
   }
   const readme = readFileSync(path.join(root, "README.md"), "utf8");
-  if (/Pine\/Pyne custom scripts are available in the LOCAL_OFFLINE/.test(readme)) {
-    throw new Error("README must not claim unverified Pine/Pyne offline capability");
+  if (/Pine custom scripts are available in the LOCAL_OFFLINE/.test(readme)) {
+    throw new Error("README must not claim unverified Pine offline capability");
   }
   return {
     ok: true,

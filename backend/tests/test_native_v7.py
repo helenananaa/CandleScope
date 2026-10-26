@@ -10,11 +10,11 @@ def config(payload, language):
 if bar_index == 1:
     strategy.close("L")
 '''
-    return {**payload,"language":language,"source":source(language,body.replace(':','') if language=='pine' else body),
+    return {**payload,"language":language,"source":source(language,body.replace(':','')),
         "execution_mode":"CANDLESCOPE","host_settings":{"initial_balance":10000,"slippage_bps":0,"taker_fee_bps":0}}
 
 
-@pytest.mark.parametrize('language',['pine','pyne'])
+@pytest.mark.parametrize('language',['pine'])
 def test_worker_and_single_shot_preserve_complete_financial_reports_and_disclose_contract(runtime,language):
     host,payload=runtime
     request=config(payload,language)
@@ -22,7 +22,7 @@ def test_worker_and_single_shot_preserve_complete_financial_reports_and_disclose
     host.native.runner=lambda *args,**kwargs: invoke(*args,**kwargs)
     second=terminal(host.native,host.native.create(request,'single')['run_id'])
     assert first['state']==second['state']=='COMPLETED', (first.get('error'),second.get('error'))
-    expected = 'pyne.host-fixed-history/1' if first['runtime_identity'].get('adapter') == 'pyne-external/5' else 'historical-prefix/1'
+    expected = 'historical-prefix/1'
     assert first['result']['evaluation_contract'] == expected
     assert second['result']['evaluation_contract'] == 'historical-prefix/1'
     for record in (first, second):
@@ -35,7 +35,7 @@ def test_worker_and_single_shot_preserve_complete_financial_reports_and_disclose
     assert fields(first['result']) == fields(second['result'])
 
 
-@pytest.mark.parametrize('language',['pine','pyne'])
+@pytest.mark.parametrize('language',['pine'])
 @pytest.mark.parametrize('callbacks',[False,True])
 def test_installed_engines_walk_full_depth_with_one_account(runtime,language,callbacks):
     host,payload=runtime
@@ -49,8 +49,8 @@ def test_installed_engines_walk_full_depth_with_one_account(runtime,language,cal
     data['events']=events
     request={**config(payload,language),'execution_fidelity':'BOOK_DEPTH','execution_data':data}
     if callbacks:
-        from tests.test_external_feedback import PINE, PYNE
-        request.update(source=PINE if language=='pine' else PYNE,fill_recalculation=True)
+        from tests.test_external_feedback import PINE
+        request.update(source=PINE,fill_recalculation=True)
     result=terminal(host.native,host.native.create(request,'depth')['run_id'])
     assert result['state']=='COMPLETED',result.get('error')
     report=result['result']

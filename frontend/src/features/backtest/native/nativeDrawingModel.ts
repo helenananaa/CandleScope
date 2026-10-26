@@ -20,36 +20,33 @@ function normalize(row: DrawingRow): DrawingRow {
   return Object.fromEntries(Object.entries(row).map(([key,value]) => [key.replaceAll("_", "").toLowerCase(), value]));
 }
 
-export function nativeDrawings(result: NativeResult): { objects: NativeDrawing[]; pine: boolean } {
+export function nativeDrawings(result: NativeResult): { objects: NativeDrawing[] } {
   const raw = (result.raw_output.strategy_output ?? result.raw_output) as DrawingRow;
-  const pine = !raw.objects && (Array.isArray(raw.plots) || result.account_authority === "pine-compat-runtime");
-  const source = normalize((raw.objects ?? raw) as DrawingRow);
+  const source = normalize(raw);
   const objects: NativeDrawing[] = [];
   for (const kind of ["lines","labels","boxes","polylines","linefills","tables"] as const) {
     for (const item of drawingRows(source[kind])) {
       let row = normalize(item);
-      if (pine) {
-        const snapshots = drawingRows(row.snapshots).map(normalize).filter((snapshot) =>
-          (drawingNumber(snapshot.barindex) ?? Infinity) < result.bars.length);
-        const last = snapshots.at(-1);
-        if (!last || last.exists === false) continue;
-        row = { ...row, ...last };
-      } else if (kind === "lines" && Array.isArray(row.data)) continue;
+      const snapshots = drawingRows(row.snapshots).map(normalize).filter((snapshot) =>
+        (drawingNumber(snapshot.barindex) ?? Infinity) < result.bars.length);
+      const last = snapshots.at(-1);
+      if (!last || last.exists === false) continue;
+      row = { ...row, ...last };
       row.cells = drawingRows(row.cells).map(normalize);
       row.merges = drawingRows(row.merges ?? row.mergedcells).map(normalize);
       row.points = drawingRows(row.points).map(normalize);
       objects.push({ kind, row });
     }
   }
-  return { objects, pine };
+  return { objects };
 }
 
 /** Interpolate timestamps against the actual, possibly gapped, chart timeline. */
-export function drawingIndex(value: unknown, xloc: unknown, bars: NativeResult["bars"], pine: boolean): number | undefined {
+export function drawingIndex(value: unknown, xloc: unknown, bars: NativeResult["bars"]): number | undefined {
   const x = drawingNumber(value);
   if (x === undefined || !bars.length) return undefined;
   if (!drawingText(xloc).endsWith("bar_time")) return x;
-  const time = pine ? x / 1000 : x;
+  const time = x / 1000;
   let low = 0, high = bars.length;
   while (low < high) { const mid = (low + high) >>> 1; if (bars[mid]!.time < time) low = mid + 1; else high = mid; }
   if (bars[low]?.time === time) return low;
@@ -58,8 +55,8 @@ export function drawingIndex(value: unknown, xloc: unknown, bars: NativeResult["
   return left + (time - bars[left]!.time) / duration;
 }
 
-export function drawingPoint(row: DrawingRow, bars: NativeResult["bars"], pine: boolean): { x: number; y: number } | null {
-  const x = drawingIndex(row.x, row.xloc, bars, pine);
+export function drawingPoint(row: DrawingRow, bars: NativeResult["bars"]): { x: number; y: number } | null {
+  const x = drawingIndex(row.x, row.xloc, bars);
   let y = drawingNumber(row.y);
   const anchor = bars[Math.max(0, Math.min(bars.length - 1, Math.round(x ?? 0)))];
   if (anchor && drawingText(row.yloc).endsWith("abovebar")) y = anchor.high + Math.max(anchor.high-anchor.low, Math.abs(anchor.high)*.005)*.2;

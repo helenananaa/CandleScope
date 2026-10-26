@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-> CandleScope 的增量式、事件驱动指标计算模块。该模块支持内置 Python 指标类和后端托管的 Pyne 脚本，并在应用启动时桥接到 DataManager bar events。
+> CandleScope 的增量式、事件驱动指标计算模块。该模块支持内置 Python 指标类和后端托管的 Pine 脚本，并在应用启动时桥接到 DataManager bar events。
 
 ## 架构
 
@@ -38,13 +38,12 @@ HTTP / WS APIs
 | [events.py](events.py) | `IndicatorEvent` 和事件类型 |
 | [data_manager_bridge.py](data_manager_bridge.py) | 将 DataManager bar events 接入 IndicatorEngine |
 | [custom_store.py](custom_store.py) | 用户脚本本地 JSON 存储 |
-| [serialization.py](serialization.py) | 内置和 Pyne 结果的前端标准 payload |
+| [serialization.py](serialization.py) | 内置和 Pine 结果的前端标准 payload |
 | [runtime_routes.py](runtime_routes.py) | 严格的逐语言 `legacy/shadow/sidecar` 路由表 |
 | [runtime_service.py](runtime_service.py) | 统一脚本执行、shadow 对比与 sidecar 分发 |
 | [RUNTIME_ROUTING_zh.md](RUNTIME_ROUTING_zh.md) | 运维与社区插件上线契约 |
 | [errors.py](errors.py) | 结构化错误 payload 辅助 |
 | [indicators](indicators/) | 内置指标实现 |
-| [pyne](pyne/) | 当前 legacy Pyne facade，在插件切换门禁前保留 |
 
 ## 内置指标
 
@@ -184,7 +183,6 @@ Router：`backend/app/api/v1/indicators.py`，挂载在 `/api/v1/indicators`。
 | `GET /custom` | 列出保存的自定义指标 |
 | `POST /custom` | 创建/更新自定义指标 |
 | `DELETE /custom/{indicator_id}` | 删除自定义指标 |
-| `GET /pyne/security` | 当前 Pyne security policy |
 | `GET /diagnostics` | 指标诊断 |
 | `POST /compute` | 内置或 routed script 一次性计算 |
 
@@ -199,8 +197,7 @@ Router：`backend/app/api/v1/indicators.py`，挂载在 `/api/v1/indicators`。
 `POST /compute` 支持两条路径：
 
 - 内置 engine mode：提供 `name` 和 `params`，或使用 `# __ENGINE__:MA` 这类 preset marker。
-- Script mode：提供 `script`、可选的 descriptor-declared `language`，以及只对 Pyne
-  生效的 `securityMode`；执行由已配置的 runtime route 负责。
+- Script mode：提供 `script` 和可选的 descriptor-declared `language`（默认 `pine`）；执行由已配置的 runtime route 负责。
 
 测试断言：script mode 即使带有内置名称也会执行脚本；built-in mode 会忽略脚本 body，走优化后的 engine 路径。
 
@@ -213,14 +210,13 @@ payload 字段：
 - `schemaVersion`
 - `id`
 - `kind`：`script` 或 `custom`
-- `language`：routed language ID；旧记录省略时默认 `pyne`
+- `language`：routed language ID；新脚本默认 `pine`；不支持已移除语言的旧脚本
 - `name`
 - `description`
 - `script`
 - `params`
 - `paramSchema`
 - `renderHints`
-- `securityMode`：只对 Pyne 生效的 `safe`、`research`、`unsafe` 或省略
 
 写入通过临时文件原子替换。非法 ID、缺 name/script、非法 kind、非法 security mode 会被拒绝。
 
@@ -239,7 +235,7 @@ schema 常量：
 - `INDICATOR_PAYLOAD_SCHEMA_VERSION = 1`
 - `INDICATOR_OUTPUT_SCHEMA_VERSION = 2`
 
-Pyne 扩展输出包括 markers、fills、hlines、background colors、bar colors 和 signals。
+Pine 扩展输出包括 markers、fills、hlines、background colors、bar colors 和 signals。
 
 ## 添加内置指标
 

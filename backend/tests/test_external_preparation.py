@@ -74,7 +74,7 @@ def environment(tmp_path, *, mismatch=False):
 
 
 @async_test
-@pytest.mark.parametrize("frozen,language", [(False, "fixture"), (True, "fixture"), (True, "pine"), (True, "pyne")])
+@pytest.mark.parametrize("frozen,language", [(False, "fixture"), (True, "fixture"), (True, "pine")])
 async def test_host_preparation_freezes_signals_and_matches_verified_prints(tmp_path, frozen, language):
     if language != "fixture" and not os.environ.get("NATIVE_TEST_PYTHON"):
         pytest.skip("requires installed native strategy plugins")
@@ -94,13 +94,6 @@ if bar_index == 1 and brick > previous
     strategy.entry("L", strategy.long, qty=0.25)
 if bar_index == 2 and brick > previous
     strategy.close("L")
-''' if language == "pine" else '''strategy("Prepared Renko")
-r = ticker.renko(syminfo.tickerid, "Traditional", 0.05)
-brick = request.security(r, timeframe.period, "close")
-previous = request.security(r, timeframe.period, "close[1]")
-plot(brick, "Brick")
-strategy.entry_when((bar_index == 1) & (brick > previous), "L", strategy.long, qty=0.25)
-strategy.close_when((bar_index == 2) & (brick > previous), "L")
 '''
     await service.start()
     try:

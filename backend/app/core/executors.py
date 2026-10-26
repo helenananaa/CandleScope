@@ -18,7 +18,7 @@ def _pool(name: str, workers: int, pending: int) -> BoundedExecutor:
 
 
 _indicator_executor = _pool("indicator", config.INDICATOR_THREAD_WORKERS, config.INDICATOR_THREAD_PENDING)
-_pyne_wait_executor = _pool("pyne_wait", config.PYNE_HTTP_THREAD_WORKERS, config.PYNE_HTTP_THREAD_PENDING)
+_script_wait_executor = _pool("script_wait", config.SCRIPT_HTTP_THREAD_WORKERS, config.SCRIPT_HTTP_THREAD_PENDING)
 _storage_executor = _pool("storage", config.STORAGE_THREAD_WORKERS, config.STORAGE_THREAD_PENDING)
 _preparation_executor = _pool("preparation", config.PREPARATION_THREAD_WORKERS, config.PREPARATION_THREAD_PENDING)
 
@@ -65,8 +65,8 @@ async def run_indicator(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return await _run(_indicator_executor, func, *args, **kwargs)
 
 
-async def run_pyne_wait(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    return await _run(_pyne_wait_executor, func, *args, **kwargs)
+async def run_script_wait(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    return await _run(_script_wait_executor, func, *args, **kwargs)
 
 
 async def run_storage(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
@@ -79,4 +79,4 @@ async def run_preparation(func: Callable[..., T], *args: Any, **kwargs: Any) -> 
 
 def executors_snapshot() -> dict[str, Any]:
     return {pool.name: pool.snapshot() for pool in
-            (_indicator_executor, _preparation_executor, _pyne_wait_executor, _storage_executor)}
+            (_indicator_executor, _preparation_executor, _script_wait_executor, _storage_executor)}

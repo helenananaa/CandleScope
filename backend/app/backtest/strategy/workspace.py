@@ -8,16 +8,10 @@ import uuid
 from typing import Any, Mapping
 
 from app.backtest.strategy.builtin import (
-    BUILTIN_ORDER_COMMAND_REVISION,
     BUILTIN_RSI_WILDER_LONG_SHORT_REVISION,
     build_builtin_provider,
 )
 from app.backtest.strategy.pine_adapter import MATRIX_VERSION, analyze_pine_strategy
-from app.backtest.strategy.chart_pyne import (
-    CHART_PYNE_REVISION,
-    ChartPyneStrategyProvider,
-    compile_chart_pyne,
-)
 from app.backtest.strategy.protocol import StrategyProviderError, canonical_hash
 from app.backtest.external_provider.contracts import EXTERNAL_REVISION, parse_manifest
 
@@ -28,8 +22,6 @@ LANGUAGES = frozenset(
     {
         "BUILTIN_TEMPLATE",
         "PINE_SUBSET",
-        "PYNE_ORDER_DSL",
-        "PYNE_CHART_V1",
         "EXTERNAL_ARTIFACT_REF",
         "EXTERNAL_PROVIDER",
         "PYTHON_SOURCE",
@@ -94,22 +86,6 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
             )
         # The current safe Pine subset has one frozen interpreter identity.
         base = "pine-long-flat-v1"
-    elif language == "PYNE_CHART_V1":
-        compile_chart_pyne(source)
-        base = CHART_PYNE_REVISION
-    elif language == "PYNE_ORDER_DSL":
-        base = BUILTIN_ORDER_COMMAND_REVISION
-        try:
-            probe = build_builtin_provider(base)
-            probe.prepare(
-                {"source": source, "parameters": {}, "outputMode": "ORDER_INTENT"}
-            )
-            probe.close()
-        except StrategyProviderError as exc:
-            diagnostics.append(_diagnostic(source, "", str(exc)))
-            raise StrategyProviderError(
-                exc.code, json.dumps(diagnostics, ensure_ascii=False)
-            ) from exc
     elif language == "PYTHON_SOURCE":
         try:
             artifact = json.loads(source)
@@ -210,9 +186,7 @@ def compile_revision(payload: Mapping[str, object], *, now_ms: int) -> dict[str,
     compiled_hash = canonical_hash(compiled)
     revision_id = "srv2_" + uuid.uuid4().hex
     provider = (
-        ChartPyneStrategyProvider()
-        if base == CHART_PYNE_REVISION
-        else None
+        None
         if base in {"pine-long-flat-v1", "python-source-v1", EXTERNAL_REVISION}
         else build_builtin_provider(base)
     )

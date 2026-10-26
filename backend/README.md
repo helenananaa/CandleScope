@@ -2,7 +2,7 @@
 
 [中文](README_zh.md)
 
-> FastAPI backend for CandleScope. It provides K-line data, realtime WebSocket streams, exchange metadata, indicator computation, custom Pyne scripts, proxy/settings management, subscriptions, and storage repair tools.
+> FastAPI backend for CandleScope. It provides K-line data, realtime WebSocket streams, exchange metadata, indicator computation, custom scripts, proxy/settings management, subscriptions, and storage repair tools.
 
 ## Runtime Stack
 
@@ -10,13 +10,13 @@
 - Core async infrastructure: `app/core/executors.py`, `app/core/runtime_metrics.py`
 - Market data runtime: `app/data_engine/runtime.py`
 - Exchange registry/plugins: `app/exchanges`
-- Indicator engine and Pyne runtime: `app/indicator`
+- Indicator engine and script runtime: `app/indicator`
 - Generic script-runtime Host/Supervisor/Installer: `app/plugin_runtime`
 - SQLite K-line storage: `app/data_engine/storage`
 
 ## Quick Start
 
-The web backend starts on CPython 3.11+. First-party Pyne/Pine bundles remain
+The web backend starts on CPython 3.11+. First-party Pine bundles remain
 Windows CPython 3.12 only; other hosts degrade that capability and still serve
 K-lines and built-in indicators.
 
@@ -76,7 +76,7 @@ curl http://127.0.0.1:18080/debug/snapshot
 1. Start the event-loop lag monitor.
 2. Initialize SQLite K-line storage.
 3. Start the script-runtime plugin plane as a capability. Missing first-party
-   sidecars degrade Pyne/Pine and do not abort DataEngine.
+   sidecars degrade Pine and do not abort DataEngine.
 4. Refresh exchange symbol metadata on a best-effort basis.
 5. Start Data Engine through `start_data_engine()`.
 6. Attach stable runtime handles to `app.state`.
@@ -87,7 +87,7 @@ and then shuts down the Data Engine runtime. See
 [`app/plugin_runtime/README.md`](app/plugin_runtime/README.md) and the
 [`installer guide`](app/plugin_runtime/INSTALLER.md) for host configuration,
 `.cspkg` installation, rollback, and security boundaries. Phase 3 does not
-route the existing Indicator/Pyne path to sidecars.
+route the existing Indicator/script path to sidecars.
 
 ## API Overview
 
@@ -98,7 +98,7 @@ All application APIs are mounted under `/api/v1`.
 | K-lines | `GET /klines/`, `/latest`, `/history`, `/range`, `/history/before`, `/resolve`, `/storage/meta`, `/continuity`, `DELETE /klines/storage` |
 | Advanced market data | `GET /market/snapshot`, `GET /market/history` |
 | Streams | `WS /stream/klines`, `WS /stream/klines_multi`, `WS /stream/indicators`, `WS /stream/prices`, `WS /stream/market` |
-| Indicators | `GET /indicators/registry`, runtime discovery, presets, custom CRUD, Pyne security, diagnostics, `POST /indicators/compute` |
+| Indicators | `GET /indicators/registry`, runtime discovery, presets, custom CRUD, diagnostics, `POST /indicators/compute` |
 | Exchanges | `GET /exchanges/`, `GET /exchanges/diagnostics`, `GET /exchanges/{exchange}/capabilities` |
 | Symbols | `GET /symbols/exchange-info`, `POST /symbols/exchange-info/refresh` |
 | Settings | proxy get/update/test, storage repair, gap scan, storage health, cache limits |
@@ -371,11 +371,11 @@ FastAPI event loop
   -> request / WebSocket orchestration
   -> no blocking storage query
   -> no heavy indicator compute
-  -> no Pyne process wait
+  -> no script process wait
 
 Core executors
   -> indicator executor: builtin indicator HTTP/range compute
-  -> pyne-wait executor: Pyne process wait and Pyne snapshot work
+  -> script-wait executor: script process wait and script snapshot work
   -> storage executor: SQLite/DataManager synchronous storage paths
 
 DataEventBus
@@ -425,52 +425,10 @@ Long-lived plugin boundaries:
 - Optional out-of-tree plugins can be loaded with `CANDLESCOPE_EXCHANGE_PLUGINS=module.path,module.path:factory`. This path is explicit and diagnostics-backed; built-in plugins still load first.
 - The frontend consumes `/api/v1/exchanges/` for interval lists, market availability, WS mode, and user-visible limitations. Keep new exchange UI behavior in capabilities rather than hard-coded frontend branches.
 
-## Indicators And Pyne
+## Indicators and script runtimes
 
-Indicator docs:
+Built-in indicators run in the host. Pine scripts use the isolated `candlescope.pine-compat` plugin; frontend JavaScript indicators run in the frontend. See [runtime routing](app/indicator/RUNTIME_ROUTING.md) and the [Pine bridge](../packages/candlescope-plugin-pine-compat/README.md). Runtime discovery and diagnostics expose the selected language routes. Standard Python strategies use the separate backtest SDK.
 
-- [app/indicator](app/indicator/)
-- [Runtime plugin host](app/plugin_runtime/README.md)
-- [Pyne sidecar bridge](../packages/candlescope-plugin-pyne/README.md)
-- [Pyne workbench v2](../packages/candlescope-plugin-pyne-workbench/README.md)
-
-Built-ins include `MA`, `EMA`, `MACD`, `RSI`, `BOLL`, `ATR`, and `VOL`.
-
-Pyne scripts run only through the isolated `candlescope.pyne` sidecar. Security
-modes are `safe`, `research`, and `unsafe`; the sidecar inherits the selected
-policy without importing Pyne into the backend process.
-
-CandleScope contains neither a Pyne Runtime source snapshot nor an in-process
-Pyne facade. On the first supported Windows CPython 3.12 startup, the product
-bootstrap verifies and installs the exact prerelease `.cspkg` pinned in
-`app/official-plugin-releases.json`. Later startups rerun the managed
-environment probe without downloading again:
-
-```powershell
-cd backend
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 18080
-```
-
-Diagnostics expose the selected sidecar route under
-`/api/v1/indicators/diagnostics -> pyne.runtimeBackend`.
-
-For an offline first run, provide the same digest-pinned bundle explicitly:
-
-```powershell
-$env:CANDLESCOPE_OFFICIAL_PLUGIN_BUNDLE = "C:\release\candlescope-pyne-0.2.0-cp312-win_amd64.cspkg"
-```
-
-Set `CANDLESCOPE_OFFICIAL_PLUGIN_BOOTSTRAP=0` only when a compatible runtime is
-already activated manually. Community runtimes continue to use the generic
-local-artifact installer and are never downloaded or overwritten by the
-first-party bootstrap.
-
-HTTP indicator compute is offloaded through dedicated executors:
-
-- Builtin indicator HTTP compute uses one-shot engine instances so it does not mutate the app-wide realtime `IndicatorEngine`.
-- Script HTTP, range, batch, and WebSocket paths send typed requests to the selected sidecar.
-- Both paths are guarded by `INDICATOR_HTTP_TIMEOUT_SECONDS`.
 
 ## Observability And Benchmarks
 
@@ -503,7 +461,7 @@ cd backend
 python scripts/bench_concurrency.py --base-url http://127.0.0.1:18080
 ```
 
-The benchmark exercises K-line latest queries, builtin indicator compute, Pyne compute, visible range repair, and the main WebSocket streams, then prints latency percentiles plus diagnostics before/after the run.
+The benchmark exercises K-line latest queries, builtin indicator compute, script compute, visible range repair, and the main WebSocket streams, then prints latency percentiles plus diagnostics before/after the run.
 
 ## Configuration
 
@@ -524,10 +482,10 @@ Common variables:
 | `HISTORY_ARCHIVE_CACHE_MAX_BYTES` | persistent archive LRU cap, default 10 GiB |
 | `OKX_HISTORY_ARCHIVE_ENABLED` | guarded OKX website archive support, default `0` |
 | `BAR_AGG_*` | aggregation source mode, alignment, finalization, event throttling |
-| `PYNE_*` | Pyne security, executor mode, timeouts, output limits |
+| `SCRIPT_MAX_BARS` / `SCRIPT_TICK_RECOMPUTE_MAX_BARS` | executor mode, timeouts, output limits |
 | `INDICATOR_HTTP_TIMEOUT_SECONDS` | HTTP indicator compute wait cap |
 | `INDICATOR_THREAD_WORKERS` | builtin indicator executor size |
-| `PYNE_HTTP_THREAD_WORKERS` | Pyne wait executor size |
+| `SCRIPT_HTTP_THREAD_WORKERS` | script wait executor size |
 | `STORAGE_THREAD_WORKERS` | storage executor size |
 | `WS_SEND_TIMEOUT_SECONDS` | WebSocket send timeout |
 | `EVENT_LOOP_LAG_INTERVAL_SECONDS` | event-loop lag sampling interval |

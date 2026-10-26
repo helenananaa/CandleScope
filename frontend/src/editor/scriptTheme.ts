@@ -1,18 +1,18 @@
 /**
- * Pyne Editor Theme — custom dark theme for the CandleScope indicator editor.
+ * Script Editor Theme — custom dark theme for the CandleScope indicator editor.
  *
- * Highlights Pyne-specific keywords (ta, input, color, plot, etc.)
+ * Highlights Script keywords (ta, input, color, plot, etc.)
  * with distinctive colors to make scripts more readable.
  */
 
 import type * as Monaco from "monaco-editor";
 
 /**
- * Define and register the Pyne dark theme on a Monaco instance.
+ * Define and register the Script dark theme on a Monaco instance.
  *
  * @param {import('monaco-editor')} monaco
  */
-export function registerPyneTheme(monaco: typeof Monaco): void {
+export function registerScriptTheme(monaco: typeof Monaco): void {
   const theme: Monaco.editor.IStandaloneThemeData = {
     base: "vs-dark",
     inherit: true,
@@ -99,17 +99,17 @@ export function registerPyneTheme(monaco: typeof Monaco): void {
       "minimap.background": "#0d1117",
     },
   };
-  monaco.editor.defineTheme("pyne-dark", theme);
+  monaco.editor.defineTheme("script-dark", theme);
 }
 
 /**
- * Get the Monaco editor options optimized for Pyne scripts.
+ * Get the Monaco editor options optimized for scripts.
  * Merges with any user-provided options.
  *
  * @param {object} [overrides] — Additional Monaco editor options
  * @returns {object} Monaco IStandaloneEditorConstructionOptions
  */
-export function getPyneEditorOptions(
+export function getScriptEditorOptions(
   overrides: Partial<Monaco.editor.IStandaloneEditorConstructionOptions> = {},
 ): Monaco.editor.IStandaloneEditorConstructionOptions {
   return {
@@ -175,4 +175,4 @@ export function getPyneEditorOptions(
   };
 }
 
-export default registerPyneTheme;
+export default registerScriptTheme;

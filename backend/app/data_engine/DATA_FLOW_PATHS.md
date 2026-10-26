@@ -133,23 +133,23 @@ Rules:
 - Builtin indicator runtime consumes DataManager bars/events; it does not own exchange sessions.
 - Range requests query DataManager for bars and compute bounded patches.
 
-## Pyne / Custom Indicator Path
+## Script / Custom Indicator Path
 
 ```text
-WS /stream/indicators subscribe custom/Pyne
+WS /stream/indicators subscribe custom/script
   -> custom script resolved from request or CustomIndicatorStore
   -> dm.ensure_stream(symbol, interval)
   -> bounded history queried from DataManager
-  -> Pyne executor computes initial snapshot
+  -> Script runtime sidecar computes initial snapshot
   -> DataManager subscription listens for bar updates
   -> incremental session or bounded recompute creates patch
-  -> indicator WS sends Pyne payload to the client
+  -> indicator WS sends Script runtime payload to the client
 ```
 
 Rules:
 
-- Pyne execution is backend-hosted and bounded by configured security/runtime limits.
-- Pyne does not receive direct exchange payloads.
+- Script runtime execution is backend-hosted and bounded by configured security/runtime limits.
+- Script runtime does not receive direct exchange payloads.
 - Stored custom indicators are metadata/script definitions; live bars still come through DataManager.
 
 ## Exchange WS Session Routing

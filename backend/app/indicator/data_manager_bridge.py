@@ -156,7 +156,7 @@ def bridge_indicator_engine(
 ) -> Any:
     """Create an IndicatorEngine and subscribe it to DataManager events."""
     indicator_engine = create_engine()
-    # The WebSocket Pyne path observes the same completion events as this
+    # The WebSocket Script path observes the same completion events as this
     # bridge.  Expose the authoritative parent-request future so it can wait
     # for every written range before rebuilding an incremental snapshot.
     indicator_engine.backfill_coordinator = backfill_coordinator

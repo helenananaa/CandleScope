@@ -9,6 +9,7 @@ from app.api.v1.backtests import _error
 from app.backtest.errors import BacktestError
 from app.backtest.models import RunState
 from app.backtest.service import BacktestService
+from app.backtest.strategy.pine_adapter import PINE_LONG_FLAT_SOURCE
 from app.core.config import load_backtest_settings
 
 
@@ -84,17 +85,9 @@ def test_registered_revision_reuses_matching_smoke_after_other_chart_contexts(
     )
     revision = service.create_strategy_revision(
         {
-            "name": "SMA cross",
-            "language": "PYNE_CHART_V1",
-            "source_text": (
-                'strategy("SMA Cross")\n'
-                "fast = sma(close, 3)\n"
-                "slow = sma(close, 5)\n\n"
-                "if crossover(fast, slow)\n"
-                "  target_position(1)\n"
-                "else if crossunder(fast, slow)\n"
-                "  target_position(0)"
-            ),
+            "name": "Pine long flat",
+            "language": "PINE_SUBSET",
+            "source_text": PINE_LONG_FLAT_SOURCE,
         },
         now_ms=2,
     )
