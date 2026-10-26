@@ -1,3 +1,4 @@
+import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
@@ -4730,4 +4731,5 @@ export const ko = {
   "aiControl.copyFailed": "복사할 수 없습니다. 클립보드 권한을 확인하세요.",
   "aiControl.desktopOnly": "로컬 MCP는 데스크톱 앱에서 사용할 수 있습니다.",
   "aiControl.configuration": "연결 설정 표시",
+  ...tradingAccountsKo,
 } as const satisfies MessageCatalog;

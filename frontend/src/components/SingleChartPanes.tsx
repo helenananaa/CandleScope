@@ -66,6 +66,8 @@ import { renderFillSeries, renderHlines } from "../chart-adapter/overlaySeriesRe
 import { renderMarkers } from "../chart-adapter/markerRenderer";
 import { attachExternalMarkerSource } from "../chart-adapter/externalMarkerSource";
 import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
+import { attachExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
+import type { ExternalPriceLineSource } from "../chart-adapter/externalPriceLineSource.js";
 import { attachPluginChartLayerSource } from "../chart-adapter/pluginChartLayerRenderer.js";
 import type { PluginChartLayerSource } from "../features/plugins/pluginChartLayerSource.js";
 import { renderBgcolors } from "../chart-adapter/bgcolorPrimitiveRenderer";
@@ -344,6 +346,7 @@ export interface SingleChartPanesProps {
   subPanes?: IndicatorSubPane[];
   indicatorMarkers?: IndicatorMarker[];
   externalMarkerSource?: ExternalMarkerSource | null;
+  externalPriceLineSource?: ExternalPriceLineSource | null;
   pluginChartLayerSource?: PluginChartLayerSource | null;
   indicatorFills?: IndicatorFill[];
   indicatorHlines?: IndicatorHLine[];
@@ -859,6 +862,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   subPanes = resolveStableOptionalChartCollection<IndicatorSubPane>(),
   indicatorMarkers = resolveStableOptionalChartCollection<IndicatorMarker>(),
   externalMarkerSource = null,
+  externalPriceLineSource = null,
   pluginChartLayerSource = null,
   indicatorFills = resolveStableOptionalChartCollection<IndicatorFill>(),
   indicatorHlines = resolveStableOptionalChartCollection<IndicatorHLine>(),
@@ -1287,6 +1291,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       return undefined;
     }
   }, [datasetKey, drawingSeriesGeneration, externalMarkerSource, usesDerivedAxis]);
+  useEffect(() => {
+    const series = mainSeriesRef.current;
+    if (!externalPriceLineSource || !series) return undefined;
+    try {
+      return attachExternalPriceLineSource({
+        source: externalPriceLineSource,
+        targetSeries: series,
+        recordPerfEvent,
+      });
+    } catch (error) {
+      console.warn("SingleChartPanes: failed to attach external price line source:", error);
+      return undefined;
+    }
+  }, [datasetKey, drawingSeriesGeneration, externalPriceLineSource]);
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !externalMarkerSource?.activate || usesDerivedAxis) return undefined;

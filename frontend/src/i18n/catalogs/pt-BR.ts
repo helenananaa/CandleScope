@@ -1,3 +1,4 @@
+import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
@@ -4799,4 +4800,5 @@ export const ptBR = {
   "aiControl.copyFailed": "Não foi possível copiar. Verifique a permissão da área de transferência.",
   "aiControl.desktopOnly": "O MCP local está disponível no aplicativo para computador.",
   "aiControl.configuration": "Mostrar configuração de conexão",
+  ...tradingAccountsPtBR,
 } as const satisfies MessageCatalog;

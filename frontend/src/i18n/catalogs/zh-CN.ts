@@ -1,3 +1,4 @@
+import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
   "replay.err.futureInput": "开始时间加上前向窗口包含未来行情。请选择更早的起点或缩短前向窗口；只能使用已闭合的历史 K 线。",
   "research.external.copyCommand": "复制启动命令",
@@ -4794,6 +4795,7 @@ export const zhCN = {
   "aiControl.copyFailed": "复制失败，请检查剪贴板权限。",
   "aiControl.desktopOnly": "本地 MCP 仅在桌面应用中提供。",
   "aiControl.configuration": "显示连接配置",
+  ...tradingAccountsZhCN,
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
