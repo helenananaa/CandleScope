@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from itertools import count
 
 import httpx
 import pytest
+from fastapi import FastAPI
+
 from app.api.v1.data_preparation import router
 from app.data_preparation.bar_adapter import BarPreparationAdapter
 from app.data_preparation.replay_context import ReplayHistoryContext, project_context
@@ -17,10 +19,8 @@ from app.replay.display_time import SourceBucketTimeMapper
 from app.replay.history_archive import ReplayHistoryRepository
 from app.replay.service import ReplayService
 from app.replay.storage import ReplaySQLiteStore
+from app.replay.training import indicator_prefix
 from app.replay.training.errors import TrainingRunError
-from app.replay.training.indicator_prefix import CanonicalReplayIndicators
-from fastapi import FastAPI
-
 from tests.fixtures.replay.service_fakes import replay_settings
 from tests.test_data_preparation import START, bars, terminal
 from tests.test_replay_indicator_prefix import lines, reference
@@ -32,34 +32,36 @@ MINUTE = 60_000
 REPLAY_START = START + 1207 * MINUTE
 
 
-@pytest.fixture(autouse=True)
-def one_page_indicator_budget(monkeypatch):
-    # Exercise continuation deterministically, including on fast machines.
-    original = CanonicalReplayIndicators.__init__
+@pytest.fixture(params=[False, True], ids=["normal-clock", "elapsed-budget"])
+def elapsed_prefix_budget(request, monkeypatch):
+    if request.param:
+        # Force the production elapsed-time yield after each complete page,
+        # independent of runner speed. Do not relax the worker's 0.5s budget.
+        clock = count()
+        monkeypatch.setattr(indicator_prefix, "monotonic", lambda: float(next(clock)))
+    return request.param
 
-    def initialize(self, checkpoints, **options):
-        original(self, checkpoints, **{**options, "max_prefix_pages": 1})
 
-    monkeypatch.setattr(CanonicalReplayIndicators, "__init__", initialize)
-
-
-async def ready_indicator(compute):
-    pending = []
-    async with asyncio.timeout(30):
-        while True:
-            result = await compute()
-            assert result["status"] in {"ready", "preparing"}, result
-            if pending:
-                assert result["seed"] == pending[-1]["seed"]
-            if result["status"] == "ready":
-                return result, pending
-            assert "payload" not in result
-            assert result["prepared_before_ms"] <= result["target_before_ms"]
-            if pending:
-                assert result["target_before_ms"] == pending[-1]["target_before_ms"]
-                assert result["prepared_before_ms"] >= pending[-1]["prepared_before_ms"]
-            pending.append(result)
-            await asyncio.sleep(0.01)
+async def indicator_ready(compute, *, preparing):
+    previous = None
+    for _ in range(16):
+        result = await compute()
+        if previous is not None:
+            assert result["seed"] == previous["seed"]
+        if result["status"] == "ready":
+            return result
+        assert result["status"] == "preparing", result
+        assert (
+            result["seed"]["origin_ms"]
+            <= result["prepared_before_ms"]
+            < result["target_before_ms"]
+        )
+        if previous is not None:
+            assert result["target_before_ms"] == previous["target_before_ms"]
+            assert result["prepared_before_ms"] >= previous["prepared_before_ms"]
+        preparing.append(result)
+        previous = result
+    pytest.fail(f"indicator did not finish within 16 continuations: {previous}")
 
 
 def market_row(timestamp):
@@ -145,7 +147,9 @@ async def prepared_run(tmp_path, progressive, disclosure, *, prepare_timeout=5):
                 },
             )
         assert response.status_code == 202, response.text
-        job = await terminal(preparation, response.json()["id"], timeout=prepare_timeout)
+        job = await terminal(
+            preparation, response.json()["id"], timeout=prepare_timeout
+        )
         assert job["state"] == "READY", job
         session = job["result"]["run"]["adapter_session_id"]
         yield (
@@ -168,7 +172,7 @@ async def prepared_run(tmp_path, progressive, disclosure, *, prepare_timeout=5):
     [(False, "NONE"), (False, "HIDE_ALL"), (True, "NONE"), (True, "HIDE_ALL")],
 )
 async def test_automatic_context_has_one_origin_across_windows_intervals_and_restart(
-    tmp_path, progressive, disclosure
+    tmp_path, progressive, disclosure, elapsed_prefix_budget
 ):
     async with prepared_run(tmp_path, progressive, disclosure) as fixture:
         (
@@ -222,7 +226,8 @@ async def test_automatic_context_has_one_origin_across_windows_intervals_and_res
                 payload.update(
                     bars=fresh["bars"][-3:], history_epoch=fresh["history_epoch"]
                 )
-            async def request_indicator():
+
+            async def compute_http(payload=payload):
                 response = await _request(
                     _app(replay),
                     "POST",
@@ -232,9 +237,10 @@ async def test_automatic_context_has_one_origin_across_windows_intervals_and_res
                 assert response.status_code == 200, response.text
                 return response.json()
 
-            result, pending = await ready_indicator(request_indicator)
-            if interval == "1m":
-                assert pending, "The test must cover a partial prefix and its continuation"
+            preparing = []
+            result = await indicator_ready(compute_http, preparing=preparing)
+            if elapsed_prefix_budget and interval == "1m":
+                assert preparing, "the elapsed budget must exercise HTTP continuation"
             mapper = SourceBucketTimeMapper.create(
                 interval=interval,
                 actual_replay_start_ms=REPLAY_START,
@@ -304,7 +310,9 @@ async def test_automatic_context_has_one_origin_across_windows_intervals_and_res
             await reopened.shutdown()
 
 
-async def test_release_context_cache_invalidates_saved_math_and_origin(tmp_path):
+async def test_release_context_cache_invalidates_saved_math_and_origin(
+    tmp_path, elapsed_prefix_budget
+):
     async with prepared_run(tmp_path, False, "NONE") as fixture:
         replay, preparation, session, _, _, origin_calls, _, values = fixture
         state = await replay.get_session_state(session)
@@ -329,10 +337,13 @@ async def test_release_context_cache_invalidates_saved_math_and_origin(tmp_path)
         assert unversioned.value.code == "HISTORY_EPOCH_MISMATCH"
         page = await replay.training.history_page(session, before_ms=boundary, **query)
         payload.update(bars=page["bars"], history_epoch=page["history_epoch"])
-        first, pending = await ready_indicator(
-            lambda: replay.training.canonical_indicator_compute(session, **payload)
+        preparing = []
+        first = await indicator_ready(
+            lambda: replay.training.canonical_indicator_compute(session, **payload),
+            preparing=preparing,
         )
-        assert pending
+        if elapsed_prefix_budget:
+            assert preparing, "the elapsed budget must exercise service continuation"
         for job in preparation.repository.list():
             if job["request"]["intent"].get("purpose") == "replay_display_history":
                 preparation.repository.release_finished(job["id"])
@@ -349,10 +360,13 @@ async def test_release_context_cache_invalidates_saved_math_and_origin(tmp_path)
         assert stale.value.code == "HISTORY_EPOCH_MISMATCH"
         page = await replay.training.history_page(session, before_ms=boundary, **query)
         payload.update(bars=page["bars"], history_epoch=page["history_epoch"])
-        second, pending = await ready_indicator(
-            lambda: replay.training.canonical_indicator_compute(session, **payload)
+        preparing = []
+        second = await indicator_ready(
+            lambda: replay.training.canonical_indicator_compute(session, **payload),
+            preparing=preparing,
         )
-        assert pending
+        if elapsed_prefix_budget:
+            assert preparing, "the elapsed budget must exercise service continuation"
         assert second["seed"]["history_epoch"] != first["seed"]["history_epoch"]
         assert second["prefix_rows_read"] > 0
         assert lines(second["payload"]) != lines(first["payload"])

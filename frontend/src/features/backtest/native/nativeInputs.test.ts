@@ -29,7 +29,7 @@ test("freeze requested data and magnifier with distinct authoritative ranges", a
 test("stale selected revision and duplicate request keys fail before snapshotting", async () => {
   const calls: unknown[] = [];
   const choice = { dataset, symbol: "BINANCE:ETHUSDT" };
-  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice] }, "pyne", main,
+  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice] }, "pine", main,
     mockApi([{ ...dataset, data_epoch: "changed" }], calls)), /DATA_SNAPSHOT_MISMATCH/);
   assert.equal(calls.length, 1);
   await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), contexts: [choice, choice] }, "pine", main,
@@ -41,7 +41,6 @@ test("unsupported libraries and malformed library JSON never reach the run API",
   for (const libraries of ['[]', '{"library":42}', 'broken']) {
     await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), libraries }, "pine", main));
   }
-  await assert.rejects(freezeAdvancedInputs({ ...emptyAdvancedInputs(), libraries: '{"lib":"source"}' }, "pyne", main), /require Pine/);
 });
 
 test("shared execution payload preserves fill callback for both chart entry points", () => {

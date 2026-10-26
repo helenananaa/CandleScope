@@ -18,7 +18,7 @@ const attachment = {
   strategyDraftId: "draft-1",
   strategyRevisionId: null,
   displayName: "SMA Cross",
-  language: "pyne" as const,
+  language: "pine" as const,
   parameters: {},
   rangeMode: "ALL_AVAILABLE" as const,
   customRange: null,

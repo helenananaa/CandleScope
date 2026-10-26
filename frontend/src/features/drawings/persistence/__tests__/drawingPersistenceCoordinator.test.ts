@@ -36,8 +36,15 @@ interface DeferredWrite {
 class ControlledBackend implements DrawingDocumentRepositoryBackend {
   readonly records = new Map<string, unknown>();
   readonly writes: DeferredWrite[] = [];
+  private readonly writeWaiters: Array<() => void> = [];
   active = 0;
   maxActive = 0;
+
+  async waitForWrites(count: number): Promise<void> {
+    while (this.writes.length < count) {
+      await new Promise<void>((resolve) => { this.writeWaiters.push(resolve); });
+    }
+  }
 
   async get(scopeKey: string): Promise<unknown | undefined> {
     return this.records.get(scopeKey);
@@ -57,6 +64,7 @@ class ControlledBackend implements DrawingDocumentRepositoryBackend {
       resolve: resolveWrite,
       reject: rejectWrite,
     });
+    for (const resolve of this.writeWaiters.splice(0)) resolve();
     try {
       await settled;
       this.records.set(record.scopeKey, structuredClone(record));
@@ -138,9 +146,11 @@ async function settle(): Promise<void> {
 }
 
 function fixture(options: Readonly<{
+  encodeMaxEntitiesPerChunk?: number;
   monotonicNow?: () => number;
   onPersistenceAttempt?: (attempt: DrawingPersistenceAttemptMetric) => void;
 }> = {}) {
+  const { encodeMaxEntitiesPerChunk, ...coordinatorOptions } = options;
   const backend = new ControlledBackend();
   const scheduler = new ManualScheduler();
   const legacyValues = new Map<string, string>();
@@ -149,6 +159,7 @@ function fixture(options: Readonly<{
     backend,
     legacyImporter: importer,
     manifestStorage: memoryStorage(new Map()),
+    ...(encodeMaxEntitiesPerChunk === undefined ? {} : { encodeMaxEntitiesPerChunk }),
   });
   const coordinator = createDrawingPersistenceCoordinator({
     repository,
@@ -158,7 +169,7 @@ function fixture(options: Readonly<{
     scheduleIdle: scheduler.scheduleIdle,
     cancelIdle: scheduler.cancelIdle,
     now: () => 1000,
-    ...options,
+    ...coordinatorOptions,
   });
   return { backend, coordinator, importer, legacyValues, repository, scheduler };
 }
@@ -205,48 +216,52 @@ test("every background transaction records one success or failure duration", asy
   assert.match(failure.error.message, /quota/);
 });
 
-test("coordinator debounces 400ms and keeps one in-flight plus one pending latest", async () => {
-  const { backend, coordinator, scheduler } = fixture();
-  const store = createDrawingDocumentStore("latest");
-  add(store, "one");
-  assert.equal(coordinator.schedule(store), true);
-  assert.equal(scheduler.delays.at(-1)?.delayMs, DRAWING_PERSISTENCE_DEBOUNCE_MS);
-  scheduler.runLatestDelay();
-  await settle();
-  assert.equal(backend.writes.length, 1);
-  assert.equal(backend.writes[0]?.record.documentRevision, 1);
+for (const encodeMaxEntitiesPerChunk of [8, 1]) {
+  test(`coordinator debounces 400ms and keeps one in-flight plus one pending latest (encode chunk ${encodeMaxEntitiesPerChunk})`, { timeout: 5_000 }, async () => {
+    const { backend, coordinator, scheduler } = fixture({ encodeMaxEntitiesPerChunk });
+    const store = createDrawingDocumentStore("latest");
+    add(store, "one");
+    assert.equal(coordinator.schedule(store), true);
+    assert.equal(scheduler.delays.at(-1)?.delayMs, DRAWING_PERSISTENCE_DEBOUNCE_MS);
+    scheduler.runLatestDelay();
+    await settle();
+    assert.equal(backend.writes.length, 1);
+    assert.equal(backend.writes[0]?.record.documentRevision, 1);
 
-  add(store, "two", 10);
-  coordinator.schedule(store);
-  scheduler.runLatestDelay();
-  await settle();
-  assert.deepEqual(coordinator.snapshot("latest"), {
-    scopeKey: "latest",
-    phase: "debounced",
-    queueDepth: 2,
-    inFlightRevision: 1,
-    pendingRevision: 2,
-    dirtyRevision: 2,
-    lastPersistedRevision: null,
-    lastError: null,
-    lastErrorName: null,
-    legacySnapshotRevision: null,
-    legacySnapshotError: null,
+    add(store, "two", 10);
+    coordinator.schedule(store);
+    scheduler.runLatestDelay();
+    await settle();
+    assert.deepEqual(coordinator.snapshot("latest"), {
+      scopeKey: "latest",
+      phase: "debounced",
+      queueDepth: 2,
+      inFlightRevision: 1,
+      pendingRevision: 2,
+      dirtyRevision: 2,
+      lastPersistedRevision: null,
+      lastError: null,
+      lastErrorName: null,
+      legacySnapshotRevision: null,
+      legacySnapshotError: null,
+    });
+
+    backend.writes[0]?.resolve();
+    // Encoding the pending revision may yield after the first write settles.
+    // Wait for its actual transaction, not a single event-loop turn.
+    await backend.waitForWrites(2);
+    assert.equal(store.dirtyRevision, 2, "rev1 completion must not acknowledge rev2");
+    assert.equal(backend.writes.length, 2);
+    assert.equal(backend.writes[1]?.record.documentRevision, 2);
+    assert.equal(backend.maxActive, 1);
+
+    backend.writes[1]?.resolve();
+    await settle();
+    assert.equal(store.dirty, false);
+    assert.equal(coordinator.snapshot("latest")?.lastPersistedRevision, 2);
+    assert.ok((coordinator.snapshot("latest")?.queueDepth ?? 1) <= 2);
   });
-
-  backend.writes[0]?.resolve();
-  await settle();
-  assert.equal(store.dirtyRevision, 2, "rev1 completion must not acknowledge rev2");
-  assert.equal(backend.writes.length, 2);
-  assert.equal(backend.writes[1]?.record.documentRevision, 2);
-  assert.equal(backend.maxActive, 1);
-
-  backend.writes[1]?.resolve();
-  await settle();
-  assert.equal(store.dirty, false);
-  assert.equal(coordinator.snapshot("latest")?.lastPersistedRevision, 2);
-  assert.ok((coordinator.snapshot("latest")?.queueDepth ?? 1) <= 2);
-});
+}
 
 test("failed explicit flush retains its pending revision and a later retry commits it", async () => {
   const { backend, coordinator } = fixture();

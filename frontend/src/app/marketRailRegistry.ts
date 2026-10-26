@@ -56,9 +56,11 @@ export function mergeMarketRailViews(
 ): MarketRailViewDescriptor[] {
   const byId = new Map<string, MarketRailViewDescriptor>();
   for (const view of builtIn) byId.set(view.id, view);
-  // Contributions may override built-ins with the same id (plugin replace).
+  // Contributions may override built-ins with the same id (plugin replace),
+  // except host-owned views whose capabilities a plugin must not inherit.
   for (const view of contributed) {
-    if (view.id !== "readonly-accounts") byId.set(view.id, view);
+    if (view.id === "readonly-accounts" || byId.get(view.id)?.hostOwned) continue;
+    byId.set(view.id, view);
   }
   return Array.from(byId.values())
     .slice()

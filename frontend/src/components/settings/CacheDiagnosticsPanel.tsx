@@ -242,7 +242,7 @@ export default function CacheDiagnosticsPanel({
   const storageFiles = backendDiagnostics?.storage?.files || {};
   const storageSeries = backendDiagnostics?.storage?.series || {};
   const storageWatermarks = storageGcPlan?.watermarks || backendDiagnostics?.storage?.watermarks || {};
-  const pyneCache = backendDiagnostics?.indicator?.pyne_cache || {};
+  const scriptCache = backendDiagnostics?.indicator?.script_cache || {};
   const canRunFrontendGc = Boolean(frontendGcPlan?.victims?.length) && !frontendGcResult;
   const canRunBackendMemoryGc = Boolean(backendMemoryGcPlan?.victims?.length) && !backendMemoryGcResult;
   const canRunStorageGc = Boolean(storageGcPlan?.series?.length) && !storageGcResult;
@@ -343,7 +343,7 @@ export default function CacheDiagnosticsPanel({
           <StatCard label="DataManager series" value={formatNumber(backendCache.total_series)} detail={t("settings.diag.cap", { count: formatNumber(backendCache.max_series) })} />
           <StatCard label="DataManager bars" value={formatNumber(backendCache.total_bars)} detail={t("settings.diag.perSeries", { count: formatNumber(backendCache.max_bars_per_series) })} />
           <StatCard label={t("settings.diag.cacheHits")} value={formatNumber(backendCache.hits)} detail={t("settings.diag.misses", { count: formatNumber(backendCache.misses) })} />
-          <StatCard label="Pyne cache" value={formatNumber(pyneCache.size ?? pyneCache.items ?? 0)} detail={t("settings.diag.cap", { count: formatNumber(pyneCache.max_items ?? pyneCache.maxItems ?? 0) })} />
+          <StatCard label="Script cache" value={formatNumber(scriptCache.size ?? scriptCache.items ?? 0)} detail={t("settings.diag.cap", { count: formatNumber(scriptCache.max_items ?? scriptCache.maxItems ?? 0) })} />
         </div>
         <div className="st-actions-row">
           <button className="st-btn st-btn-secondary" onClick={() => onPlanBackendMemoryGc?.()} disabled={loading}>

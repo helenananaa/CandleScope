@@ -468,7 +468,7 @@ backfill 完成消息：
 
 ### `WS /stream/indicators`
 
-实时指标流。一个 WebSocket 连接内支持内置指标和保存/临时 Pyne 脚本。
+实时指标流。一个 WebSocket 连接内支持内置指标和保存/临时 Pine 脚本。
 
 订阅内置指标：
 
@@ -486,7 +486,7 @@ backfill 完成消息：
 }
 ```
 
-订阅 Pyne 脚本：
+订阅 Pine 脚本：
 
 ```json
 {
@@ -495,8 +495,8 @@ backfill 完成消息：
   "kind": "script",
   "symbol": "BTCUSDT",
   "interval": "1m",
-  "script": "plot(close, title='Close')",
-  "securityMode": "safe",
+  "script": "//@version=6\nindicator('Close')\nplot(close, title='Close')",
+  "language": "pine",
   "historyLimit": 500
 }
 ```
@@ -544,10 +544,10 @@ backfill 完成消息：
   "schemaVersion": 1,
   "id": "my-script",
   "kind": "script",
-  "language": "pyne",
+  "language": "pine",
   "name": "My Script",
   "description": "",
-  "script": "plot(close)",
+  "script": "//@version=6\nindicator('My Script')\nplot(close)",
   "params": {},
   "paramSchema": [],
   "renderHints": {},
@@ -561,13 +561,9 @@ backfill 完成消息：
 SDK 公开 runtime descriptors。响应来自启动时已验证的 routes 与 descriptors，不暴露进程
 命令、路径、PID、stderr 或宿主失败细节。
 
-### `GET /indicators/pyne/security`
-
-返回当前 Pyne security policy：mode、allowed imports、timeout、bar/output limits、executor mode、cache limit。
-
 ### `GET /indicators/diagnostics`
 
-返回 registry、运行中 engine、custom store、Pyne security/executor/cache 和 indicator WebSocket 配置诊断。
+返回 registry、运行中 engine、custom store、script runtime routing 和 indicator WebSocket 配置诊断。
 
 ### `POST /indicators/compute`
 
@@ -578,7 +574,7 @@ SDK 公开 runtime descriptors。响应来自启动时已验证的 routes 与 de
 ```json
 {
   "mode": "script",
-  "language": "pyne",
+  "language": "pine",
   "name": "MA",
   "params": { "period": 20 },
   "exchange": "binance",
@@ -588,7 +584,7 @@ SDK 公开 runtime descriptors。响应来自启动时已验证的 routes 与 de
   "ohlcv": [
     { "time": 1700000000, "open": 42000, "high": 42100, "low": 41900, "close": 42050, "volume": 12.5 }
   ],
-  "script": "plot(close, title='Close')",
+  "script": "//@version=6\nindicator('Close')\nplot(close, title='Close')",
   "securityMode": "safe"
 }
 ```
@@ -596,9 +592,9 @@ SDK 公开 runtime descriptors。响应来自启动时已验证的 routes 与 de
 模式：
 
 - 内置模式：`mode="builtin"` 并提供 `name`，或使用 `# __ENGINE__:MA` 这类 preset marker。
-- 脚本模式：`mode="script"` 并提供 `script`；通过 Pyne 运行。
+- 脚本模式：`mode="script"` 并提供 `script`；通过 Pine 运行。
 
-Pyne 默认使用 process executor，并受 `PYNE_*` 配置控制。safe mode 禁止 imports；research mode 只允许配置的 imports；unsafe mode 仅适合本地可信脚本。
+Pine 在独立插件进程中执行。宿主共享限制使用 `SCRIPT_MAX_BARS`、`SCRIPT_TICK_RECOMPUTE_MAX_BARS` 和 `SCRIPT_HTTP_THREAD_*`。
 
 响应保留兼容旧前端的 `lines`，同时包含标准化输出字段，例如 `series`、`annotations`、`fills`、`paneLayout`；失败时返回结构化 `errorDetail`。
 

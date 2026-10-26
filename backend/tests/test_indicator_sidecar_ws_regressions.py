@@ -19,7 +19,7 @@ from candlescope_plugin_sdk import (
 )
 
 from app.api.v1 import stream_indicators as stream_api
-from app.api.v1 import stream_pyne_subscriptions as pyne_stream_api
+from app.api.v1 import stream_script_subscriptions as pine_stream_api
 from app.data_engine.data_manager.models import BarData, DataEventType
 from app.indicator.runtime_routes import (
     IndicatorRuntimeRoute,
@@ -53,13 +53,13 @@ class _RecordingSidecarHost:
         }
 
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
-        assert runtime_id == "test.pyne"
+        assert runtime_id == "test.pine"
         return RuntimeDescriptor(
-            id="test.pyne",
-            name="Test Pyne",
+            id="test.pine",
+            name="Test Pine",
             version="1.0.0",
-            package="test-pyne",
-            languages=(LanguageDescriptor(id="pyne", name="Pyne"),),
+            package="test-pine",
+            languages=(LanguageDescriptor(id="pine", name="Pine"),),
             features=(
                 FEATURE_BATCH_EXECUTION_V1,
                 FEATURE_RENDER_LINE_SERIES_V1,
@@ -72,7 +72,7 @@ class _RecordingSidecarHost:
         runtime_id: str,
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult:
-        assert runtime_id == "test.pyne"
+        assert runtime_id == "test.pine"
         call_index = len(self.requests)
         self.requests.append(request)
         if call_index in self.blocked_calls:
@@ -105,9 +105,9 @@ def _sidecar_service(
         IndicatorRuntimeRoutes(
             (
                 IndicatorRuntimeRoute(
-                    language="pyne",
+                    language="pine",
                     mode="sidecar",
-                    runtime_id="test.pyne",
+                    runtime_id="test.pine",
                 ),
             )
         ),
@@ -273,7 +273,7 @@ class _SidecarConnection:
             if self.range_service is not None
             else None
         )
-        await pyne_stream_api.handle_pyne_indicator_subscribe(
+        await pine_stream_api.handle_script_indicator_subscribe(
             dm=self.dm,
             custom_handles=self.custom_handles,
             custom_tasks=self.custom_tasks,
@@ -299,7 +299,7 @@ class _SidecarConnection:
             backfill_coordinator=self.coordinator,
             data_revision=data_revision,
             runtime_service=self.service,
-            pyne_correction_state=self.correction_state,
+            script_correction_state=self.correction_state,
             seed_query_cache=self.seed_query_cache,
         )
 

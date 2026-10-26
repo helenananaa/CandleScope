@@ -4,7 +4,7 @@
 
 `app.plugin_runtime` is CandleScope's generic script-runtime sidecar host. It
 depends only on the public `candlescope-plugin-sdk` protocol models. It imports
-neither Pyne nor Pine Compatibility. The generic Indicator routing layer uses
+no Pine Compatibility implementation. The generic Indicator routing layer uses
 this Host without giving plugins access to CandleScope internals.
 
 Phases 2 through 4 own:
@@ -26,9 +26,8 @@ Phases 2 through 4 own:
 
 HTTP compute, range/batch, and Indicator WebSocket script traffic now share the
 generic `legacy/shadow/sidecar` router. Since Phase 8, a missing route file
-selects both `pyne=sidecar,candlescope.pyne` and
-`pine=sidecar,candlescope.pine-compat`; startup fails closed until both managed
-runtimes are installed and active. See
+selects `pine=sidecar,candlescope.pine-compat`; startup fails closed until the managed
+runtime is installed and active. See
 [Indicator Runtime Routing](../indicator/RUNTIME_ROUTING.md).
 
 Phase 7 adds `GET /api/v1/indicators/runtimes`, a frontend-safe projection of

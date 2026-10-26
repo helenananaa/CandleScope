@@ -9,7 +9,7 @@ import { t } from "../../../i18n/index.js";
 
 test("sampled book reports disclose bounded taker-only policy separately from full depth", () => {
   const run: NativeRun = { run_id: "sampled", execution_mode: "CANDLESCOPE", state: "COMPLETED", created_at_ms: 1,
-    runtime_identity: { engine: { package: "pyne-runtime", version: "0.4.0", code_sha256: "hash" } },
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "0.4.0", code_sha256: "hash" } },
     result: { account_authority: "candlescope", fill_model: "SAMPLED_L2_VISIBLE_TAKER_ONLY_V1", fidelity: "BOOK_SAMPLED", report_hash: "hash",
       equity: [], trades: [], orders: [], bars: [], graphics: [], raw_output: {}, diagnostics: [] } };
   const html = renderToStaticMarkup(<NativeStrategyReport run={run} />);
@@ -20,12 +20,12 @@ test("sampled book reports disclose bounded taker-only policy separately from fu
 
 test("external reports label host authority and cannot open native replay", () => {
   const run: NativeRun = { run_id: "host_test", execution_mode: "CANDLESCOPE", state: "COMPLETED", created_at_ms: 1,
-    runtime_identity: { engine: { package: "pyne-runtime", version: "0.4.0", code_sha256: "hash" } },
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "0.4.0", code_sha256: "hash" } },
     result: { account_authority: "candlescope", fill_model: "BAR_NEXT_BAR_WORST_CASE_V1", report_hash: "hash",
       equity: [{ time: 1, value: 999 }], trades: [], orders: [], bars: [], graphics: [], raw_output: {}, diagnostics: [] } };
   const html = renderToStaticMarkup(<NativeStrategyReport run={run} />);
   assert.match(html, /external\/runs\/host_test\/export/);
-  assert.match(html, /pyne-runtime/);
+  assert.match(html, /pine-compat-runtime/);
   assert.doesNotMatch(html, /native-replay-controls/);
 });
 
@@ -86,7 +86,7 @@ test("native report shows authority, native trades and export independently of h
 
 test("host reports show cash constraints only for an explicitly frozen spot account", () => {
   const run: NativeRun = { run_id: "spot", state: "COMPLETED", execution_mode: "CANDLESCOPE", created_at_ms: 1,
-    runtime_identity: { engine: { package: "pyne-runtime", version: "test", code_sha256: "hash" } },
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "test", code_sha256: "hash" } },
     result: { account_authority: "candlescope", account_model: "SPOT_CASH_V1", fill_model: "BAR_NEXT_BAR_WORST_CASE_V1",
       report_hash: "hash", equity: [], trades: [], closed_trades: [], orders: [], bars: [], graphics: [], raw_output: {}, diagnostics: [] } };
   assert.ok(renderToStaticMarkup(<NativeStrategyReport run={run} />).includes(t("ux.spotCashHint")));

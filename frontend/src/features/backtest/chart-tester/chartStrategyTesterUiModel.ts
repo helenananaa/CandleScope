@@ -3,7 +3,7 @@ import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartW
 import type { StrategyDraftLanguage } from "./StrategyDraftStore.js";
 
 export interface ChartStrategyTemplate {
-  id: "SMA_CROSS" | "RSI_REVERSAL" | "DONCHIAN_BREAKOUT" | "PYTHON_SMA";
+  id: "PYTHON_SMA";
   nameKey:
     | "chartTester.template.sma"
     | "chartTester.template.rsi"
@@ -28,56 +28,7 @@ export const CHART_STRATEGY_TEMPLATES: readonly ChartStrategyTemplate[] = Object
     language: "python",
     source: PYTHON_SMA_SOURCE,
   }),
-  Object.freeze({
-    id: "SMA_CROSS",
-    nameKey: "chartTester.template.sma",
-    descriptionKey: "chartTester.template.smaDescription",
-    displayName: "SMA Cross",
-    language: "pyne",
-    source: [
-      'strategy("SMA Cross")',
-      "fast = sma(close, 3)",
-      "slow = sma(close, 5)",
-      "",
-      "if crossover(fast, slow)",
-      "  target_position(1)",
-      "else if crossunder(fast, slow)",
-      "  target_position(0)",
-    ].join("\n"),
-  }),
-  Object.freeze({
-    id: "RSI_REVERSAL",
-    nameKey: "chartTester.template.rsi",
-    descriptionKey: "chartTester.template.rsiDescription",
-    displayName: "RSI Reversal",
-    language: "pyne",
-    source: [
-      'strategy("RSI Reversal")',
-      "value = rsi(close, 14)",
-      "",
-      "if value < 30",
-      "  target_position(1)",
-      "else if value > 70",
-      "  target_position(0)",
-    ].join("\n"),
-  }),
-  Object.freeze({
-    id: "DONCHIAN_BREAKOUT",
-    nameKey: "chartTester.template.donchian",
-    descriptionKey: "chartTester.template.donchianDescription",
-    displayName: "Donchian Breakout",
-    language: "pyne",
-    source: [
-      'strategy("Donchian Breakout")',
-      "upper = highest(high, 20)",
-      "lower = lowest(low, 20)",
-      "",
-      "if close > upper[1]",
-      "  target_position(1)",
-      "else if close < lower[1]",
-      "  target_position(0)",
-    ].join("\n"),
-  }),
+
 ]);
 
 export interface ChartStrategyDraftIssue {

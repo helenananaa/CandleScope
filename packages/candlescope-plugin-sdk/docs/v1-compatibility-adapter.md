@@ -54,7 +54,7 @@ v2 bundle.
 
 | Runtime/release | Install and activation owner | Unified discovery | Execution protocol | Supported migration |
 | --- | --- | --- | --- | --- |
-| Existing pinned Pyne/Pine v1 `.cspkg` | v1 installer and RuntimeHost | Host compatibility contribution | `candlescope.script-runtime/1` | Explicit catalog import only |
+| Existing pinned Pine v1 `.cspkg` | v1 installer and RuntimeHost | Host compatibility contribution | `candlescope.script-runtime/1` | Explicit catalog import only |
 | Community v1 runtime | v1 installer and RuntimeHost | After v1 descriptor/route validation | `candlescope.script-runtime/1` | Explicit catalog import only |
 | General v2 plugin | v2 installer and Core Host | Native v2 catalog | `candlescope.plugin/2` | Normal staged v2 lifecycle |
 | v2 manifest declaring `script-runtime/1` | none | Shown unsupported | none | Rejected; no guessed conversion |

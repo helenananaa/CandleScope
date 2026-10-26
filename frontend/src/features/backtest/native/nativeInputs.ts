@@ -22,7 +22,7 @@ export function executionInputs(mode: "NATIVE" | "CANDLESCOPE", hostSettings: Re
     execution_data: fidelity === "BAR_APPROX" ? null : executionData };
 }
 
-export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine" | "pyne", main: MainRange, api = nativeApi) {
+export async function freezeAdvancedInputs(selection: AdvancedInputs, language: "pine", main: MainRange, api = nativeApi) {
   const libraries: unknown = JSON.parse(selection.libraries);
   if (!libraries || typeof libraries !== "object" || Array.isArray(libraries)
       || Object.values(libraries).some((source) => typeof source !== "string")) {

@@ -45,3 +45,15 @@ test("account credentials view cannot be replaced by a plugin contribution", () 
   assert.throws(() => registerMarketRailView(replacement), /owned by the desktop host/);
   assert.deepEqual(mergeMarketRailViews([owned], [replacement]), [owned]);
 });
+
+test("plugin contributions cannot replace host-owned rail views", () => {
+  const builtIn = [
+    { id: "watchlist", title: "Watchlist", icon: null, order: 10, sizing: "flex" as const },
+    { id: "accounts", title: "Accounts", icon: null, order: 50, sizing: "flex" as const, hostOwned: true },
+  ];
+  const merged = mergeMarketRailViews(builtIn, [
+    { id: "watchlist", title: "Plugin watchlist", icon: null, order: 10, sizing: "flex" },
+    { id: "accounts", title: "Plugin accounts", icon: null, order: 50, sizing: "flex" },
+  ]);
+  assert.deepEqual(merged.map((view) => view.title), ["Plugin watchlist", "Accounts"]);
+});

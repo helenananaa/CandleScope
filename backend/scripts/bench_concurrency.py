@@ -228,17 +228,18 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             ),
             _run_http_scenario(
                 client,
-                "pyne_compute",
+                "script_compute",
                 method="POST",
                 path="/api/v1/indicators/compute",
-                concurrency=args.pyne_concurrency,
-                requests=args.pyne_requests,
+                concurrency=args.script_concurrency,
+                requests=args.script_requests,
                 json_body={
                     "mode": "script",
                     "symbol": args.symbol,
                     "interval": args.interval,
                     "securityMode": "safe",
-                    "script": "plot(close, title='Close')",
+                    "language": "pine",
+                    "script": "//@version=6\nindicator('Close')\nplot(close, title='Close')",
                     "ohlcv": bars,
                 },
             ),
@@ -292,8 +293,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--klines-requests", type=int, default=50)
     parser.add_argument("--indicator-concurrency", type=int, default=10)
     parser.add_argument("--indicator-requests", type=int, default=30)
-    parser.add_argument("--pyne-concurrency", type=int, default=3)
-    parser.add_argument("--pyne-requests", type=int, default=9)
+    parser.add_argument("--script-concurrency", type=int, default=3)
+    parser.add_argument("--script-requests", type=int, default=9)
     parser.add_argument("--range-concurrency", type=int, default=2)
     parser.add_argument("--range-requests", type=int, default=4)
     return parser.parse_args()

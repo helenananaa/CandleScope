@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 from typing import Any
 
 import ccxt
@@ -255,6 +256,46 @@ def test_symbol_miss_reload_refreshes_every_sharer_once(monkeypatch: Any) -> Non
 
         await first.close()
         await second.close()
+        await runtime_pool.release(runtime)
+
+    asyncio.run(run())
+
+
+def test_shared_market_tables_are_untracked_once_loaded(monkeypatch: Any) -> None:
+    catalog = _Catalog(monkeypatch, _spot("BTC"), _spot("ETH"))
+    entry = get_ccxt_catalog_entry("binance")
+    tables = get_shared_ccxt_market_tables()
+
+    def assert_untracked(exchange: Any, symbol: str) -> None:
+        market = exchange.markets[symbol]
+        for table in (
+            exchange.markets,
+            exchange.markets_by_id,
+            exchange.markets_by_id[market["id"]],
+            exchange.symbols,
+            market,
+            market["limits"],
+        ):
+            assert gc.is_tracked(table) is False
+
+    async def run() -> None:
+        pool = _RestExchangePool(entry, IngestionConfig(proxy_mode="none"))
+        runtime_pool = CcxtRuntimePool()
+        runtime = await runtime_pool.acquire(
+            BinanceSpotCcxtProfile(),
+            IngestionConfig(proxy_mode="none"),
+        )
+        rest = await _borrow(pool)
+        assert rest.markets is runtime.exchange.markets
+        # Full GC passes skip the shared catalog (see app.core.gc_policy).
+        assert_untracked(rest, "BTC/USDT")
+
+        catalog.markets.append(_spot("SOL"))
+        await tables.reload(rest, stale_markets=rest.markets)
+        assert catalog.calls == 2
+        assert_untracked(runtime.exchange, "SOL/USDT")
+
+        await pool.close()
         await runtime_pool.release(runtime)
 
     asyncio.run(run())

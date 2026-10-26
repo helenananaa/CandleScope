@@ -19,6 +19,7 @@ import {
   SOURCE_EVENT_MAX_MANUAL_COUNT,
 } from "../replayAdvanceLimits.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
+import { replayDisplayIntervalOptions } from "../replayWorkspaceSelection.js";
 
 const PLAYBACK_RATES = [1, 2, 5, 10, 30, 60, 120, 600, 1_000, 10_000] as const;
 
@@ -335,8 +336,7 @@ export default function ReplayControlBar({ runtime, viewer, publicTimeLabel, ind
             disabled={disabled || effectiveState !== "PAUSED"}
             onChange={(event) => { void viewer.actions.setDisplayInterval(event.target.value)
               .catch((cause: unknown) => setControlError(String(cause))); }}>
-            {Array.from(new Set([config?.base_interval ?? "1m", "1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]))
-              .filter((interval) => (parseIntervalSeconds(interval) ?? 0) >= (parseIntervalSeconds(config?.base_interval ?? "1m") ?? 60))
+            {replayDisplayIntervalOptions(config?.base_interval ?? "1m", viewer.viewerState?.display_interval ?? "1m")
               .map((interval) => <option key={interval} value={interval}>{interval}</option>)}
           </select>
         </label>}

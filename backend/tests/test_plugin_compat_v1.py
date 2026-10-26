@@ -35,9 +35,9 @@ class _DescriptorHost:
         self,
         version: str = "1.0.0",
         *,
-        runtime_id: str = "pyne.runtime",
-        language_id: str = "pyne",
-        runtime_name: str = "Pyne Runtime",
+        runtime_id: str = "fixture.runtime",
+        language_id: str = "fixture",
+        runtime_name: str = "Fixture Runtime",
     ) -> None:
         self.version = version
         self.runtime_id = runtime_id
@@ -47,17 +47,17 @@ class _DescriptorHost:
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
         assert runtime_id == self.runtime_id
         language_ids = (
-            ("pyne",) if self.language_id == "pyne" else ("pyne", self.language_id)
+            ("fixture",) if self.language_id == "fixture" else ("fixture", self.language_id)
         )
         return RuntimeDescriptor(
             id=runtime_id,
             name=self.runtime_name,
             version=self.version,
-            package="candlescope-plugin-pyne",
+            package="candlescope-plugin-fixture",
             languages=tuple(
                 LanguageDescriptor(
                     id=item,
-                    name="Pyne" if item == "pyne" else f"Language {item}",
+                    name="Fixture" if item == "fixture" else f"Language {item}",
                 )
                 for item in language_ids
             ),
@@ -75,11 +75,11 @@ class _DescriptorHost:
 def _runtime_host(
     *,
     version: str = "1.0.0",
-    runtime_id: str = "pyne.runtime",
+    runtime_id: str = "fixture.runtime",
 ) -> RuntimeHostService:
     spec = RuntimeProcessSpec(
         runtime_id=runtime_id,
-        expected_package="candlescope-plugin-pyne",
+        expected_package="candlescope-plugin-fixture",
         expected_version=version,
         executable=Path(sys.executable).resolve(),
         enabled=True,
@@ -101,7 +101,7 @@ async def _bridge(
     root: Path,
     *,
     runtime_version: str = "1.0.0",
-    runtime_name: str = "Pyne Runtime",
+    runtime_name: str = "Fixture Runtime",
 ) -> tuple[
     V1ScriptRuntimeCompatibilityBridge,
     IndicatorRuntimeService,
@@ -112,9 +112,9 @@ async def _bridge(
         IndicatorRuntimeRoutes(
             (
                 IndicatorRuntimeRoute(
-                    language="pyne",
+                    language="fixture",
                     mode="sidecar",
-                    runtime_id="pyne.runtime",
+                    runtime_id="fixture.runtime",
                 ),
             )
         ),
@@ -148,19 +148,19 @@ async def test_v1_catalog_round_trips_through_unified_compatibility_catalog(
     assert public["import"]["status"] == "not-imported"
     assert public["contributions"] == [
         {
-            "id": "compat.v1.pyne.runtime",
+            "id": "compat.v1.fixture.runtime",
             "kind": "script-runtime/1",
-            "runtimeId": "pyne.runtime",
-            "title": "Pyne Runtime",
+            "runtimeId": "fixture.runtime",
+            "title": "Fixture Runtime",
             "version": "1.0.0",
-            "package": "candlescope-plugin-pyne",
+            "package": "candlescope-plugin-fixture",
             "available": True,
             "protocol": "candlescope.script-runtime/1",
             "renderProtocol": "candlescope.render/1",
             "languages": [
                 {
-                    "id": "pyne",
-                    "name": "Pyne",
+                    "id": "fixture",
+                    "name": "Fixture",
                     "extensions": [],
                     "aliases": [],
                     "routeMode": "sidecar",
@@ -190,7 +190,7 @@ async def test_v1_catalog_round_trips_through_unified_compatibility_catalog(
     assert v1_only_catalog["platform"]["status"] == "disabled"
     assert v1_only_catalog["plugins"] == []
     assert v1_only_catalog["compatibility"]["contributions"][0]["runtimeId"] == (
-        "pyne.runtime"
+        "fixture.runtime"
     )
     assert await indicator.public_catalog() == native
     assert not compatibility.state_path.exists()
@@ -201,13 +201,13 @@ async def test_v1_sdk_identifiers_are_not_narrowed_by_the_compatibility_catalog(
     tmp_path: Path,
 ) -> None:
     runtime_id = "1_py.runtime"
-    language_id = "1_pyne"
+    language_id = "1_fixture"
     runtime_host = _runtime_host(runtime_id=runtime_id)
     indicator = IndicatorRuntimeService(
         IndicatorRuntimeRoutes(
             (
                 IndicatorRuntimeRoute(
-                    language="pyne",
+                    language="fixture",
                     mode="sidecar",
                     runtime_id=runtime_id,
                 ),
@@ -234,7 +234,7 @@ async def test_v1_sdk_identifiers_are_not_narrowed_by_the_compatibility_catalog(
     assert contribution["id"] == "compat.v1.1_py.runtime"
     assert contribution["runtimeId"] == runtime_id
     assert {item["id"] for item in contribution["languages"]} == {
-        "pyne",
+        "fixture",
         language_id,
     }
 
@@ -279,7 +279,7 @@ async def test_v1_registry_import_is_previewed_idempotent_and_reversible(
 
     preview = compatibility.import_preview()
     assert preview["action"] == "import"
-    assert preview["changes"] == [{"id": "compat.v1.pyne.runtime", "action": "add"}]
+    assert preview["changes"] == [{"id": "compat.v1.fixture.runtime", "action": "add"}]
     imported = compatibility.apply_import(preview["previewSha256"])
     assert imported["changed"] is True
     assert imported["compatibility"]["import"]["status"] == "current"

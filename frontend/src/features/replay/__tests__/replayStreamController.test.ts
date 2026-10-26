@@ -1323,3 +1323,79 @@ test("tape cohort resets reject skipped transport and non-forward authority", ()
     controller.stop();
   }
 });
+
+for (const recovery of ["reconnect", "resync"] as const) {
+  for (const statusReason of ["controller_acquired", "fast_forward_final_state_complete"]) {
+    test(`${recovery} accepts a current atomic snapshot after missed compact ranges: ${statusReason}`, () => {
+      const timers = new FakeTimers();
+      const sockets: FakeSocket[] = [];
+      const observed: number[] = [];
+      const controller = new ReplayStreamController({
+        sessionId: "session-0001", initialDataEpoch: replayDigest("c"),
+        baseUrl: "ws://example.test", timers,
+        socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
+        onSnapshot: (snapshot) => observed.push(snapshot.cursor.source_sequence),
+      });
+      controller.start(); sockets[0]!.open();
+      sockets[0]!.message(replaySnapshotEvent({ sequence: 10, revision: 4,
+        sourceSequence: 84, virtualTimeMs: BASE_TIME_MS + 5_039_999 }));
+      if (recovery === "resync") controller.requestResync("recover compact prefix");
+      else sockets[0]!.close();
+      timers.runAll(); sockets[1]!.open();
+      sockets[1]!.message(replaySummaryJumpResetEvent({ sequence: 14, revision: 8,
+        sourceSequence: 209, virtualTimeMs: BASE_TIME_MS + 12_599_999, statusReason }));
+      assert.deepEqual(observed, [84, 209]);
+      assert.equal(controller.diagnostics().state, "connected");
+      assert.equal(controller.diagnostics().lastSequence, 14);
+      controller.stop();
+    });
+  }
+}
+
+test("unsolicited live snapshots still cannot conceal an unannounced source jump", () => {
+  const timers = new FakeTimers(); const socket = new FakeSocket();
+  const observed: number[] = [];
+  const controller = new ReplayStreamController({ sessionId: "session-0001",
+    initialDataEpoch: replayDigest("c"), baseUrl: "ws://example.test", timers,
+    socketFactory: () => socket, onSnapshot: (snapshot) => observed.push(snapshot.cursor.source_sequence) });
+  controller.start(); socket.open();
+  socket.message(replaySnapshotEvent({ sequence: 10, revision: 4,
+    sourceSequence: 84, virtualTimeMs: BASE_TIME_MS + 5_039_999 }));
+  socket.message(replaySnapshotEvent({ sequence: 14, revision: 8,
+    sourceSequence: 209, virtualTimeMs: BASE_TIME_MS + 12_599_999 }));
+  assert.deepEqual(observed, [84]);
+  assert.equal(controller.diagnostics().state, "resyncing");
+  controller.stop();
+});
+
+test("reconnect handoffs retain transport, revision, time and source authority floors", () => {
+  const variants = [
+    { name: "same transport", sequence: 10 },
+    { name: "older transport", sequence: 9 },
+    { name: "same revision", revision: 4 },
+    { name: "older revision", revision: 3 },
+    { name: "older source", sourceSequence: 83 },
+    { name: "older clock", virtualTimeMs: BASE_TIME_MS + 5_039_998 },
+  ];
+  for (const { name, ...change } of variants) {
+    const timers = new FakeTimers();
+    const sockets: FakeSocket[] = [];
+    const observed: number[] = [];
+    const controller = new ReplayStreamController({
+      sessionId: "session-0001", initialDataEpoch: replayDigest("c"),
+      baseUrl: "ws://example.test", timers,
+      socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
+      onSnapshot: (snapshot) => observed.push(snapshot.cursor.source_sequence),
+    });
+    controller.start(); sockets[0]!.open();
+    sockets[0]!.message(replaySnapshotEvent({ sequence: 10, revision: 4,
+      sourceSequence: 84, virtualTimeMs: BASE_TIME_MS + 5_039_999 }));
+    sockets[0]!.close(); timers.runAll(); sockets[1]!.open();
+    sockets[1]!.message(replaySummaryJumpResetEvent({ sequence: 14, revision: 8,
+      sourceSequence: 209, virtualTimeMs: BASE_TIME_MS + 12_599_999,
+      statusReason: "controller_acquired", ...change }));
+    assert.deepEqual(observed, [84], name);
+    assert.equal(controller.diagnostics().state, "resyncing", name);
+    controller.stop();
+  }
+});

@@ -49,10 +49,9 @@ resumable sessions, review, and fork.
 
 ### Indicators and scripts
 
-Use built-in studies or create local indicators with Pyne. Other runtimes can
+Use built-in studies or create indicators with Pine or frontend JavaScript. Other runtimes can
 connect through the plugin system.
 
-<!-- Product image: docs/assets/readme/pyne-indicator.png -->
 
 ### Strategy research
 
@@ -64,7 +63,7 @@ product.
 Strategy research is enabled by default. Set both research-data library flags to
 `0` for an explicit rollback to the compatibility paths.
 `/strategy.html` is the canonical URL; `/local.html` and `/backtest.html` remain
-compatibility entries. Pine/Pyne custom scripts are not claimed as available in
+compatibility entries. Pine custom scripts are not claimed as available in
 the LOCAL_OFFLINE profile.
 
 <!-- Product image: docs/assets/readme/backtest-research.png -->
@@ -113,7 +112,7 @@ Open [http://127.0.0.1:15173/](http://127.0.0.1:15173/). The API runs at
   market.
 - The standard workspace supports up to four charts. Higher-capacity layouts
   are opt-in.
-- The current first-party Pyne and Pine plugin bundles target Windows with
+- The current first-party Pine plugin bundles target Windows with
   CPython 3.12. Pine compatibility covers a supported subset.
 - The browser app runs on Windows, Linux, and macOS. The optional desktop shell
   supports Windows and native macOS test packages. See the

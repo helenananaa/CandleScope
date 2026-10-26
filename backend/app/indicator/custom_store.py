@@ -49,7 +49,7 @@ class CustomIndicatorStore:
                     "Custom indicator language must be a lowercase identifier"
                 )
             language = str(
-                item.get("language") or existing.get("language") or "pyne"
+                item.get("language") or existing.get("language") or "pine"
             ).strip().lower()
 
             record = {
@@ -66,8 +66,7 @@ class CustomIndicatorStore:
                 "created_at": int(existing.get("created_at") or item.get("created_at") or now),
                 "updated_at": now,
             }
-            if language != "pyne":
-                record["language"] = language
+            record["language"] = language
 
             self._validate(record)
             items[indicator_id] = record
@@ -134,5 +133,7 @@ class CustomIndicatorStore:
         if item.get("securityMode") not in {None, "safe", "research", "unsafe"}:
             raise ValueError("Custom indicator securityMode must be 'safe', 'research', or 'unsafe'")
         language = item.get("language")
+        if language == "pyne":
+            raise ValueError("Unsupported custom indicator language: pyne")
         if language is not None and not _SCRIPT_LANGUAGE.fullmatch(str(language)):
             raise ValueError("Custom indicator language must be a lowercase identifier")

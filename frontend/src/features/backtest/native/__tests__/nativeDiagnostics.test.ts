@@ -17,7 +17,7 @@ test("small nonzero drawdown is not displayed as zero", () => {
 
 function run(state: string, error?: NativeRun["error"]): NativeRun {
   return { run_id: state, state, ...(error === undefined ? {} : { error }), created_at_ms: 0,
-    runtime_identity: { engine: { package: "pyne-runtime", version: "0.4.1", code_sha256: "test" } } };
+    runtime_identity: { engine: { package: "pine-compat-runtime", version: "0.4.1", code_sha256: "test" } } };
 }
 const failed = run("FAILED", { message: "native engine rejected the run",
   details: { diagnostics: [{ message: "PYNE_SYNTAX_ERROR: invalid syntax" }] } });

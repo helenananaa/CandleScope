@@ -33,6 +33,7 @@ export const LIVE_RAIL_VIEW_IDS = {
   tape: "tape",
   profile: "profile",
   readonlyAccounts: "readonly-accounts",
+  accounts: "accounts",
 } as const;
 
 export type LiveRailViewId = (typeof LIVE_RAIL_VIEW_IDS)[keyof typeof LIVE_RAIL_VIEW_IDS];

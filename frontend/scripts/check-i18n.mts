@@ -44,7 +44,7 @@ const TECHNICAL_TEXT = new Set([
   "OOS", "OFF", "RANDOM", "SANDBOX_FIXED", "SHARPE", "SHORT", "Scope",
   "Sortino", "Vol", "WARM", "market-data", "null",
   "React + Lightweight Charts", "FastAPI + SQLite (WAL)",
-  "Binance REST + WebSocket", "💡 Pyne API:", "💡 Pine v5/v6 closed-bar API:",
+  "Binance REST + WebSocket", "💡 Pine v5/v6 closed-bar API:",
 ]);
 
 export interface I18nProblem {

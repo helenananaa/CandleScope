@@ -275,7 +275,7 @@ function normalizeAttachment(
   const displayName = typeof value.displayName === "string"
     ? value.displayName.trim().slice(0, 120)
     : "";
-  const language = value.language === "pyne" || value.language === "pine" || value.language === "python"
+  const language = value.language === "pine" || value.language === "python"
     ? value.language
     : null;
   const parameters = cloneJsonValue(value.parameters);

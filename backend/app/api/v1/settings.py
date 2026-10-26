@@ -473,7 +473,7 @@ async def _build_cache_diagnostics(request: Request) -> dict:
             "watermarks": storage_watermarks,
         },
         "indicator": {
-            "pyne_cache": {
+            "script_cache": {
                 "size": 0,
                 "max_items": 0,
                 "scope": "sidecar",

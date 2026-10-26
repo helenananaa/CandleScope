@@ -6,7 +6,7 @@ from decimal import Decimal
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent
 from app.simulation.kernel import SimulationKernel
 from app.simulation.trade_kernel import TradeSimulationKernel
-from app.backtest.strategy.pyne_adapter import PyneHostPlanner
+from app.backtest.strategy.host_planner import HostOrderPlanner
 
 
 def _bars(*rows: tuple[int, str, str, str, str]) -> tuple[MarketEvent, ...]:
@@ -126,7 +126,7 @@ def test_invalid_intents_are_rejected_not_filled() -> None:
 
 
 def test_rejected_target_position_retries_against_host_account() -> None:
-    planner = PyneHostPlanner()
+    planner = HostOrderPlanner()
     output = {"kind": "TARGET_POSITION", "payload": {"targetExposure": "1"}}
     first = planner.plan(output, current_position=Decimal("0"))
     kernel = SimulationKernel(min_notional=Decimal("1000"))

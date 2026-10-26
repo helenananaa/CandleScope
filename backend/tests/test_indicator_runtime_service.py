@@ -35,17 +35,17 @@ from app.plugin_runtime.errors import PluginRequestError, PluginTransportError
 
 def _descriptor(
     *,
-    languages: tuple[str, ...] = ("pyne",),
+    languages: tuple[str, ...] = ("fixture",),
     features: tuple[str, ...] = (
         FEATURE_BATCH_EXECUTION_V1,
         FEATURE_RENDER_LINE_SERIES_V1,
     ),
 ) -> RuntimeDescriptor:
     return RuntimeDescriptor(
-        id="pyne.runtime",
-        name="Pyne Test Runtime",
+        id="fixture.runtime",
+        name="Fixture Test Runtime",
         version="1.0.0",
-        package="pyne-test-runtime",
+        package="fixture-test-runtime",
         languages=tuple(
             LanguageDescriptor(id=item, name=item.title()) for item in languages
         ),
@@ -80,7 +80,7 @@ class _Host:
     cancelled: int = 0
 
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor:
-        assert runtime_id == "pyne.runtime"
+        assert runtime_id == "fixture.runtime"
         if self.descriptor_error is not None:
             raise self.descriptor_error
         return self.runtime_descriptor
@@ -106,9 +106,9 @@ def _routes(mode: str) -> IndicatorRuntimeRoutes:
     return IndicatorRuntimeRoutes(
         (
             IndicatorRuntimeRoute(
-                language="pyne",
+                language="fixture",
                 mode=mode,
-                runtime_id=("pyne.runtime" if mode != "legacy" else None),
+                runtime_id=("fixture.runtime" if mode != "legacy" else None),
             ),
         )
     )
@@ -116,7 +116,7 @@ def _routes(mode: str) -> IndicatorRuntimeRoutes:
 
 def _request(*, transport: str = "http.compute") -> IndicatorRuntimeRequest:
     return IndicatorRuntimeRequest(
-        language="pyne",
+        language="fixture",
         source="plot(close)",
         exchange="binance",
         market_type="spot",
@@ -141,11 +141,11 @@ def _request(*, transport: str = "http.compute") -> IndicatorRuntimeRequest:
 
 def test_diagnostics_do_not_expose_the_route_file_path(tmp_path: Path) -> None:
     routes = IndicatorRuntimeRoutes(
-        (IndicatorRuntimeRoute(language="pyne", mode="legacy"),),
+        (IndicatorRuntimeRoute(language="fixture", mode="legacy"),),
         source=tmp_path / "private" / "routes.json",
     )
 
-    snapshot = IndicatorRuntimeService(routes).snapshot()
+    snapshot = _test_service(routes).snapshot()
 
     assert snapshot["source"] == "configured-file"
     assert str(tmp_path) not in str(snapshot)
@@ -154,7 +154,7 @@ def test_diagnostics_do_not_expose_the_route_file_path(tmp_path: Path) -> None:
 @pytest.mark.anyio
 async def test_legacy_route_never_touches_plugin_host() -> None:
     host = _Host()
-    service = IndicatorRuntimeService(_routes("legacy"), host=host)
+    service = _test_service(_routes("legacy"), host=host)
     payload = {"ok": True, "lines": [{"id": "legacy"}]}
 
     async def legacy() -> dict[str, Any]:
@@ -174,7 +174,7 @@ async def test_legacy_route_never_touches_plugin_host() -> None:
 @pytest.mark.anyio
 async def test_sidecar_route_uses_typed_request_and_never_calls_legacy() -> None:
     host = _Host()
-    service = IndicatorRuntimeService(_routes("sidecar"), host=host)
+    service = _test_service(_routes("sidecar"), host=host)
     legacy_called = False
 
     async def legacy() -> dict[str, Any]:
@@ -194,7 +194,7 @@ async def test_sidecar_route_uses_typed_request_and_never_calls_legacy() -> None
     assert actual == {"ok": True, "backend": "sidecar"}
     assert legacy_called is False
     runtime_id, request = host.requests[0]
-    assert runtime_id == "pyne.runtime"
+    assert runtime_id == "fixture.runtime"
     assert request.context.to_wire() == {
         "exchange": "binance",
         "marketType": "spot",
@@ -210,7 +210,7 @@ async def test_sidecar_route_uses_typed_request_and_never_calls_legacy() -> None
 async def test_shadow_returns_legacy_without_waiting_and_records_match() -> None:
     gate = asyncio.Event()
     host = _Host(gate=gate)
-    service = IndicatorRuntimeService(_routes("shadow"), host=host)
+    service = _test_service(_routes("shadow"), host=host)
     legacy_payload = {"ok": True, "lines": [{"value": 2.0}]}
 
     async def legacy() -> dict[str, Any]:
@@ -245,7 +245,7 @@ async def test_shadow_returns_legacy_without_waiting_and_records_match() -> None
 async def test_shadow_capacity_is_bounded_and_skips_extra_sidecar_work() -> None:
     gate = asyncio.Event()
     host = _Host(gate=gate)
-    service = IndicatorRuntimeService(
+    service = _test_service(
         _routes("shadow"),
         host=host,
         max_pending_shadow_tasks=1,
@@ -285,7 +285,7 @@ async def test_shadow_capacity_is_bounded_and_skips_extra_sidecar_work() -> None
 async def test_stop_cancels_pending_shadow_and_releases_capacity() -> None:
     gate = asyncio.Event()
     host = _Host(gate=gate)
-    service = IndicatorRuntimeService(
+    service = _test_service(
         _routes("shadow"),
         host=host,
         max_pending_shadow_tasks=1,
@@ -311,7 +311,7 @@ async def test_stop_cancels_pending_shadow_and_releases_capacity() -> None:
 async def test_shadow_legacy_failure_cancels_sidecar_and_releases_capacity() -> None:
     gate = asyncio.Event()
     host = _Host(gate=gate)
-    service = IndicatorRuntimeService(
+    service = _test_service(
         _routes("shadow"),
         host=host,
         max_pending_shadow_tasks=1,
@@ -333,7 +333,7 @@ async def test_shadow_legacy_failure_cancels_sidecar_and_releases_capacity() -> 
 
 @pytest.mark.anyio
 async def test_shadow_mismatch_and_host_error_never_change_legacy_payload() -> None:
-    mismatch = IndicatorRuntimeService(_routes("shadow"), host=_Host())
+    mismatch = _test_service(_routes("shadow"), host=_Host())
     legacy_payload = {"ok": True, "value": "legacy"}
 
     async def legacy() -> dict[str, Any]:
@@ -356,10 +356,10 @@ async def test_shadow_mismatch_and_host_error_never_change_legacy_payload() -> N
         error=PluginTransportError(
             code="PLUGIN_PROCESS_EXITED",
             message="private stderr and path",
-            runtime_id="pyne.runtime",
+            runtime_id="fixture.runtime",
         )
     )
-    failing = IndicatorRuntimeService(_routes("shadow"), host=failing_host)
+    failing = _test_service(_routes("shadow"), host=failing_host)
     assert (
         await failing.execute(
             _request(),
@@ -381,10 +381,10 @@ async def test_sidecar_failure_is_public_and_does_not_fallback() -> None:
         error=PluginTransportError(
             code="PLUGIN_REQUEST_TIMEOUT",
             message="secret process detail",
-            runtime_id="pyne.runtime",
+            runtime_id="fixture.runtime",
         )
     )
-    service = IndicatorRuntimeService(_routes("sidecar"), host=host)
+    service = _test_service(_routes("sidecar"), host=host)
 
     async def legacy() -> dict[str, Any]:
         raise AssertionError("sidecar must not invoke legacy")
@@ -418,14 +418,14 @@ async def test_route_descriptor_mismatch_is_unavailable_before_execution(
     cause_code: str,
 ) -> None:
     host = _Host(runtime_descriptor=descriptor)
-    service = IndicatorRuntimeService(_routes("sidecar"), host=host)
+    service = _test_service(_routes("sidecar"), host=host)
     await service.start()
     snapshot = service.snapshot()
     assert snapshot["started"] is True
     assert snapshot["unavailable"] == [
         {
-            "language": "pyne",
-            "runtimeId": "pyne.runtime",
+            "language": "fixture",
+            "runtimeId": "fixture.runtime",
             "causeCode": cause_code,
         }
     ]
@@ -449,16 +449,16 @@ async def test_route_descriptor_mismatch_is_unavailable_before_execution(
 @pytest.mark.anyio
 async def test_public_catalog_is_descriptor_and_route_driven() -> None:
     descriptor = RuntimeDescriptor(
-        id="pyne.runtime",
+        id="fixture.runtime",
         name="Community Multi Runtime",
         version="1.2.3",
         package="community-multi-runtime",
         languages=(
             LanguageDescriptor(
-                id="pyne",
-                name="Pyne",
-                extensions=(".pyne",),
-                aliases=("pyne",),
+                id="fixture",
+                name="Fixture",
+                extensions=(".fixture",),
+                aliases=("fixture",),
             ),
             LanguageDescriptor(
                 id="community-lang",
@@ -477,31 +477,31 @@ async def test_public_catalog_is_descriptor_and_route_driven() -> None:
     routes = IndicatorRuntimeRoutes(
         (
             IndicatorRuntimeRoute(
-                language="pyne",
+                language="fixture",
                 mode="sidecar",
-                runtime_id="pyne.runtime",
+                runtime_id="fixture.runtime",
             ),
             IndicatorRuntimeRoute(
                 language="community-lang",
                 mode="sidecar",
-                runtime_id="pyne.runtime",
+                runtime_id="fixture.runtime",
             ),
         )
     )
-    service = IndicatorRuntimeService(routes, host=_Host(runtime_descriptor=descriptor))
+    service = _test_service(routes, host=_Host(runtime_descriptor=descriptor))
 
     catalog = await service.public_catalog()
 
     assert catalog == {
         "schemaVersion": 1,
-        "defaultLanguage": "pyne",
+        "defaultLanguage": "pine",
         "languages": [
             {
-                "id": "pyne",
-                "name": "Pyne",
-                "extensions": [".pyne"],
-                "aliases": ["pyne"],
-                "runtimeId": "pyne.runtime",
+                "id": "fixture",
+                "name": "Fixture",
+                "extensions": [".fixture"],
+                "aliases": ["fixture"],
+                "runtimeId": "fixture.runtime",
                 "routeMode": "sidecar",
                 "available": True,
                 "features": [
@@ -514,7 +514,7 @@ async def test_public_catalog_is_descriptor_and_route_driven() -> None:
                 "name": "Community Lang",
                 "extensions": [".community"],
                 "aliases": ["community"],
-                "runtimeId": "pyne.runtime",
+                "runtimeId": "fixture.runtime",
                 "routeMode": "sidecar",
                 "available": True,
                 "features": [
@@ -534,10 +534,10 @@ async def test_public_catalog_is_descriptor_and_route_driven() -> None:
 async def test_unregistered_sidecar_does_not_block_startup() -> None:
     missing = PluginRequestError(
         code="PLUGIN_NOT_FOUND",
-        message="runtime 'pyne.runtime' is not registered",
-        runtime_id="pyne.runtime",
+        message="runtime 'fixture.runtime' is not registered",
+        runtime_id="fixture.runtime",
     )
-    service = IndicatorRuntimeService(
+    service = _test_service(
         _routes("sidecar"),
         host=_Host(descriptor_error=missing, error=missing),
     )
@@ -547,11 +547,11 @@ async def test_unregistered_sidecar_does_not_block_startup() -> None:
 
     assert catalog["languages"] == [
         {
-            "id": "pyne",
-            "name": "pyne",
+            "id": "fixture",
+            "name": "fixture",
             "extensions": [],
             "aliases": [],
-            "runtimeId": "pyne.runtime",
+            "runtimeId": "fixture.runtime",
             "routeMode": "sidecar",
             "available": False,
             "features": [],
@@ -573,13 +573,13 @@ async def test_unregistered_sidecar_does_not_block_startup() -> None:
 
 @pytest.mark.anyio
 async def test_public_catalog_sanitizes_plugin_host_start_failure() -> None:
-    service = IndicatorRuntimeService(
+    service = _test_service(
         _routes("sidecar"),
         host=_Host(
             descriptor_error=PluginTransportError(
                 code="PLUGIN_PROCESS_EXITED",
                 message="private stderr and executable path",
-                runtime_id="pyne.runtime",
+                runtime_id="fixture.runtime",
             )
         ),
     )
@@ -588,11 +588,11 @@ async def test_public_catalog_sanitizes_plugin_host_start_failure() -> None:
 
     assert catalog["languages"] == [
         {
-            "id": "pyne",
-            "name": "pyne",
+            "id": "fixture",
+            "name": "fixture",
             "extensions": [],
             "aliases": [],
-            "runtimeId": "pyne.runtime",
+            "runtimeId": "fixture.runtime",
             "routeMode": "sidecar",
             "available": False,
             "features": [],
@@ -607,15 +607,15 @@ async def test_public_catalog_sanitizes_plugin_host_start_failure() -> None:
 async def test_language_without_legacy_adapter_must_use_sidecar() -> None:
     routes = IndicatorRuntimeRoutes(
         (
-            IndicatorRuntimeRoute(language="pyne", mode="legacy"),
+            IndicatorRuntimeRoute(language="fixture", mode="legacy"),
             IndicatorRuntimeRoute(
                 language="pine",
                 mode="shadow",
-                runtime_id="pyne.runtime",
+                runtime_id="fixture.runtime",
             ),
         )
     )
-    service = IndicatorRuntimeService(
+    service = _test_service(
         routes,
         host=_Host(runtime_descriptor=_descriptor(languages=("pine",))),
     )
@@ -633,12 +633,12 @@ def test_product_runtime_service_exposes_no_in_process_language_adapter(
     )
 
     assert service.legacy_languages == frozenset()
-    assert service.route_for("pyne").mode == "sidecar"
+    assert service.route_for("pine").mode == "sidecar"
 
 
 @pytest.mark.anyio
 async def test_missing_plugin_host_starts_degraded_and_keeps_sidecar_fail_closed() -> None:
-    service = IndicatorRuntimeService(_routes("sidecar"), host=None)
+    service = _test_service(_routes("sidecar"), host=None)
     await service.start()
     catalog = await service.public_catalog()
     assert catalog["languages"][0]["available"] is False
@@ -654,3 +654,8 @@ async def test_missing_plugin_host_starts_degraded_and_keeps_sidecar_fail_closed
     )
     assert payload["ok"] is False
     assert payload["code"] == "INDICATOR_RUNTIME_UNAVAILABLE"
+
+
+def _test_service(*args, **kwargs):
+    kwargs.setdefault("legacy_languages", frozenset({"fixture"}))
+    return IndicatorRuntimeService(*args, **kwargs)

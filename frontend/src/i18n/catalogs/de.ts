@@ -1,15 +1,16 @@
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const de = {
   ...readonlyAccountEnglish,
+  "replay.err.futureInput": "Startzeit und Vorwärtsfenster umfassen zukünftige Kerzen. Wählen Sie einen früheren Start oder ein kürzeres Fenster; nur abgeschlossene historische Kerzen sind verfügbar.",
   "plugin.runtimeInstalled": "Skript-Laufzeit installiert und geprüft. Beenden und öffnen Sie CandleScope erneut, um Indikatoren und unterstützte native Strategien zu aktivieren.",
   "native.executionErrorHelp": "Die Ausführung konnte nicht abgeschlossen werden. Prüfen Sie Skript und Parameter; technische Details stehen unten.",
   "native.jumpToError": "Zu Zeile {line}, Spalte {column}",
   "report.notionalReturn": "Gewinn/Verlust / Einstiegsnominalwert (keine Kontorendite)",
-  "native.platformHelp": "Pine 0.3.2 bietet Pakete für macOS Apple Silicon und Intel. Pyne ist plattformübergreifend, sein offizielles Plugin-Paket ist derzeit jedoch für Windows. Wählen Sie das Paket passend zu System und Python-Version.",
-  "indicator.editor.pyneApiHint": "Pyne API:",
+  "native.platformHelp": "Pine 0.3.2 bietet Pakete für macOS Apple Silicon und Intel.Wählen Sie das Paket passend zu System und Python-Version.",
   "indicator.editor.pineApiHint": "Pine-v5/v6-API für abgeschlossene Kerzen:",
   "serverError.notFound": "Das angeforderte Element existiert nicht oder wurde gelöscht",
   "serverError.conflict": "Wurde an anderer Stelle geändert. Aktualisieren und erneut versuchen",
@@ -883,7 +884,6 @@ export const de = {
   "indicator.editor.runOk": "Erfolgreich ausgeführt und auf den Chart angewendet",
   "indicator.editor.communityRuntime": "{language} wird von {runtime} ausgeführt",
   "indicator.editor.fallbackLanguage": "Skriptlaufzeit",
-  "indicator.editor.hintPyne": "Tippen",
   "indicator.editor.hintComplete": "für Autovervollständigung ·",
   "indicator.editor.hintPine": "Pine v5/v6 · nur geschlossene Kerzen · tippen",
   "indicator.editor.hintPlugin": "Nutzt den vom Plugin-Deskriptor deklarierten Sprachmodus ·",
@@ -2335,7 +2335,6 @@ export const de = {
   "backtest.language": "Eingeschränkte Sprache",
   "backtest.builtin": "Integrierte RSI24-Vorlage",
   "backtest.pine": "Pine Safe-Subset",
-  "backtest.pyne": "Pyne Unified-Order-DSL",
   "backtest.external": "Eingefrorene externe Modell-Artefakt-Ref",
   "backtest.compileSave": "Statisch prüfen, kompilieren und speichern",
   "backtest.sourceNoExec": "Quelle (beliebiger Code wird nicht ausgeführt)",
@@ -3368,7 +3367,7 @@ export const de = {
   "trade.rt.retryLimit": "{error} (automatische Wiederholungen haben das Limit von {count} erreicht)",
   "trade.rt.disconnected": "TradeFlow-Verbindung unterbrochen",
   "indicator.noLocalBars": "Der Indikator hat keine nutzbare lokale Ausführungsbeschreibung mit expliziten Kerzen",
-  "indicator.replayUnsafe": "Replay erlaubt nur integrierte Indikatoren, Pyne Safe und Pine Closed-Bars-Skripte; {language} ist nicht als replay-sicher deklariert",
+  "indicator.replayUnsafe": "{language} ist nicht als replay-sicher deklariert",
   "indicator.unknownRuntime": "unbekannte Laufzeit",
   "indicator.httpFallback": "{message}; auf HTTP-Nachfüllen geschlossener Kerzen gewechselt.",
   "plugin.eyebrow": "Erweiterungen",
@@ -4021,7 +4020,6 @@ export const de = {
   "chartTester.retrySave": "Erneut versuchen",
   "chartTester.run": "Ausführen",
   "chartTester.close": "Schließen",
-  "chartTester.language.pyne": "Pyne",
   "chartTester.language.pine": "Pine",
   "chartTester.startEyebrow": "SCHNELLEN CHART-TEST STARTEN",
   "chartTester.startTitle": "Startweise wählen",
@@ -4280,7 +4278,7 @@ export const de = {
   "research.strategy.smoke": "Rauchtest",
   "research.strategy.copy": "Kopieren",
   "research.strategy.archive": "Archivieren",
-  "research.strategy.create": "Pyne/Pine-Revision erstellen",
+  "research.strategy.create": "/Pine-Revision erstellen",
   "research.strategy.name": "Name",
   "research.strategy.language": "Sprache",
   "research.strategy.source": "Quelle",
@@ -4348,7 +4346,6 @@ export const de = {
   "research.results.entry": "Einstieg",
   "research.results.exit": "Ausstieg",
   "research.strategy.draft": "Entwurf",
-  "research.strategy.pyne": "Pyne",
   "research.strategy.pine": "Pine",
   "workbench.manualHistory.disabled": "Manueller Verlaufsdownload ist deaktiviert.",
   "workbench.manualHistory.title": "Manueller fortlaufender Verlauf",
@@ -4397,8 +4394,6 @@ export const de = {
   "workbench.manualHistory.succeeded": "Download erfolgreich",
   "workbench.manualHistory.jobState": "Auftrag {state}",
   "common.listSeparator": ", ",
-  "editor.pyne.namespaceDetail": "{ns}.* — „{ns}.“ eingeben, um Mitglieder aufzulisten",
-  "editor.pyne.namespaceDocumentation": "`{ns}.` eingeben, um die Vervollständigung auszulösen.",
   "settings.category.ai": "AI MCP",
   "aiControl.description": "Connect a local AI client to the charts currently open in CandleScope.",
   "aiControl.lifecycle": "Access is off after restart. Enabling a mode rotates the token and revokes previous sessions.",
@@ -4421,5 +4416,6 @@ export const de = {
   "aiControl.copyFailed": "Could not copy. Check clipboard permission.",
   "aiControl.desktopOnly": "Local MCP is available in the desktop application.",
   "aiControl.configuration": "Show connection configuration",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 

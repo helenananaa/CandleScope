@@ -19,13 +19,13 @@ export function NativeDrawingScene({ result }: { result: NativeResult }) {
     <p>{t("native.graphics.hint")}</p>
     {panes.map((pane) => {
       const objects = scene.objects.filter(({row}) => text(row.pane,"main") === pane);
-      const point = (row: DrawingRow, x: unknown, y: unknown) => drawingPoint({ ...row,x,y },result.bars,scene.pine);
+      const point = (row: DrawingRow, x: unknown, y: unknown) => drawingPoint({ ...row,x,y },result.bars);
       const line = (row: DrawingRow) => [point(row,row.x1,row.y1),point(row,row.x2,row.y2)];
       const polygon = (row: DrawingRow) => drawingRows(row.points).map((p) => point(row,
         p.x ?? (text(row.xloc).endsWith("bar_time") ? p.time : p.index),p.y ?? p.price)).filter((p): p is Point => p !== null);
       const values = objects.flatMap(({kind,row}) => kind === "lines" ? line(row) : kind === "boxes" ?
         [point(row,row.left,row.top),point(row,row.right,row.bottom)] : kind === "polylines" ? polygon(row) :
-        kind === "labels" ? [drawingPoint(row,result.bars,scene.pine)] : []).filter((p): p is Point => p !== null);
+        kind === "labels" ? [drawingPoint(row,result.bars)] : []).filter((p): p is Point => p !== null);
       if (pane === "main") result.bars.forEach((bar,i) => { values.push({x:i,y:bar.high},{x:i,y:bar.low}); });
       let minimum = Infinity, maximum = -Infinity;
       values.forEach((p) => { minimum=Math.min(minimum,p.y); maximum=Math.max(maximum,p.y); });
@@ -83,7 +83,7 @@ export function NativeDrawingScene({ result }: { result: NativeResult }) {
                   <text x={(left+right)/2} y={(y(a.y)+y(b.y))/2} fill={color(row.textcolor,"#e2e8f0")} textAnchor="middle" fontSize={size(row.textsize)}>{text(row.text)}</text></g>;
               }
               if (kind==="labels") {
-                const p=drawingPoint(row,result.bars,scene.pine); if (!p) return null;
+                const p=drawingPoint(row,result.bars); if (!p) return null;
                 return <g key={key}><title>{text(row.tooltip,row.text as string)}</title>
                   <circle cx={x(p.x)} cy={y(p.y)} r="3" fill={color(row.color)} />
                   <text x={x(p.x)} y={y(p.y)-5} textAnchor="middle" fill={color(row.textcolor,"#e2e8f0")} fontSize={size(row.size)}>{text(row.text)}</text></g>;

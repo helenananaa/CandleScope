@@ -13,7 +13,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from .canonical import canonical_sha256
-from .history_archive import _atomic_write_json
+from .history_archive import ReplayHistoryArchiveError, _atomic_write_json
+from .metadata_retention import detach_obsolete_generations, remove_retired_generations
 from .remote_trade_archive import (
     RemoteAggTradeIndex,
     RemoteAggTradeMetadataObject,
@@ -32,6 +33,8 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
         self.symbols = tuple(symbols)
         self.catalog_timeout = kwargs.get("download_timeout_seconds", 60)
         self._catalog_guard = threading.Lock()
+        self._catalog_io_lock = threading.RLock()
+        self._catalog_stage = None
         self.catalog_refreshing = False
         self.catalog_discovered = 0
         self.catalog_completed = 0
@@ -62,11 +65,12 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             return True
 
     def _load_origin_metadata(self):
-        payload = self.origin.read_json("trade-index.json", max_bytes=1024 * 1024)
-        empty = self._empty_index()
-        if payload == empty.to_dict():
-            return empty, {}, {}, {}
-        return super()._load_origin_metadata()
+        with self._catalog_io_lock:
+            payload = self.origin.read_json("trade-index.json", max_bytes=1024 * 1024)
+            empty = self._empty_index()
+            if payload == empty.to_dict():
+                return empty, {}, {}, {}
+            return super()._load_origin_metadata()
 
     def _publish(self, stage):
         index = publish_remote_agg_trade_index(stage)
@@ -80,10 +84,34 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             ),
         )
         index = replace(index, index_epoch=canonical_sha256(index.hash_payload()))
-        _atomic_write_json(self.catalog_root / "trade-index.json", index.to_dict())
+        with self._catalog_io_lock:
+            _atomic_write_json(self.catalog_root / "trade-index.json", index.to_dict())
         if hasattr(self, "_lock"):
             with self._lock:
                 self._next_refresh = 0.0
+
+    def prune_metadata_cache(self):
+        # The catalog guard protects a writer's read/copy of the prior index;
+        # the I/O lock protects readers loading all referenced JSON bodies.
+        if not self._catalog_guard.acquire(blocking=False):
+            return
+        try:
+            self._prune_catalog()
+            super().prune_metadata_cache()
+        finally:
+            self._catalog_guard.release()
+
+    def _prune_catalog(self):
+        with self._catalog_io_lock:
+            try:
+                index = RemoteAggTradeIndex.from_dict(json.loads((self.catalog_root / "trade-index.json").read_text()))
+            except (OSError, ValueError, ReplayHistoryArchiveError):
+                return
+            paths = [item.path for item in (*index.compatibility_indexes,
+                     *index.verified_receipts, *index.official_availability_indexes)]
+            detach_obsolete_generations(self.catalog_root, paths,
+                active=() if self._catalog_stage is None else (self._catalog_stage.name,))
+        remove_retired_generations(self.catalog_root)
 
     def refresh_official_catalog(self):
         if not self._catalog_guard.acquire(blocking=False):
@@ -92,6 +120,7 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
         retrying = self.catalog_failed > 0
         self.catalog_completed = self.catalog_failed = 0
         stage = self.catalog_root / "generations" / uuid.uuid4().hex
+        self._catalog_stage = stage
         try:
             symbols = self.symbols or list_official_agg_trade_symbols(
                 timeout_seconds=self.catalog_timeout
@@ -148,9 +177,11 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
                         snapshot = self.catalog_root / "generations" / uuid.uuid4().hex
                         shutil.copytree(stage, snapshot)
                         self._publish(snapshot)
+                        self._prune_catalog()
                         last_publish = time.monotonic()
             if successes:
                 self._publish(stage)
+                self._prune_catalog()
             if not self.catalog_failed:
                 _atomic_write_json(self.catalog_root / "discovery.json", {
                     "symbols": list(self.symbols), "completed_at": int(time.time()),
@@ -159,6 +190,11 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
         except Exception:
             logger.warning("Could not refresh official replay history catalog; retaining cached availability", exc_info=True)
         finally:
+            self._catalog_stage = None
+            try:
+                self._prune_catalog()
+            except OSError:
+                logger.warning("Could not retire obsolete catalog metadata", exc_info=True)
             self.catalog_refreshing = False
             self._catalog_guard.release()
 

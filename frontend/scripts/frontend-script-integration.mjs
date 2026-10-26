@@ -8,7 +8,8 @@ import { build, preview } from "vite";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const replay = process.argv.includes("--replay-visible");
-const fixture = replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const trainingInput = process.argv.includes("--replay-training-input");
+const fixture = trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });

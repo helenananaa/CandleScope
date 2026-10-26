@@ -2,7 +2,7 @@
 
 [中文](README_zh.md)
 
-> Incremental, event-driven indicator computation for CandleScope. The module supports built-in Python indicator classes and backend-hosted Pyne scripts, and is bridged to DataManager bar events at application startup.
+> Incremental, event-driven indicator computation for CandleScope. The module supports built-in Python indicator classes and backend-hosted Pine scripts, and is bridged to DataManager bar events at application startup.
 
 ## Architecture
 
@@ -38,13 +38,12 @@ Script requests → IndicatorRuntimeService → legacy / shadow / sidecar
 | [events.py](events.py) | `IndicatorEvent` and event types |
 | [data_manager_bridge.py](data_manager_bridge.py) | Connects DataManager bar events to IndicatorEngine |
 | [custom_store.py](custom_store.py) | Local JSON store for user scripts |
-| [serialization.py](serialization.py) | Normalized frontend payloads for built-in and Pyne results |
+| [serialization.py](serialization.py) | Normalized frontend payloads for built-in and Pine results |
 | [runtime_routes.py](runtime_routes.py) | Strict per-language `legacy/shadow/sidecar` route table |
 | [runtime_service.py](runtime_service.py) | Shared script execution, shadow comparison, and sidecar dispatch |
 | [RUNTIME_ROUTING.md](RUNTIME_ROUTING.md) | Operator and community-plugin rollout contract |
 | [errors.py](errors.py) | Structured error payload helpers |
 | [indicators](indicators/) | Built-in indicator implementations |
-| [pyne](pyne/) | Current legacy Pyne facade, retained until the plugin cutover gate |
 
 ## Built-In Indicators
 
@@ -184,7 +183,6 @@ Important endpoints:
 | `GET /custom` | List saved custom indicators |
 | `POST /custom` | Create/update a saved custom indicator |
 | `DELETE /custom/{indicator_id}` | Delete a saved custom indicator |
-| `GET /pyne/security` | Current Pyne security policy |
 | `GET /diagnostics` | Indicator diagnostics |
 | `POST /compute` | Built-in or routed script one-shot compute |
 
@@ -199,8 +197,7 @@ Realtime endpoint:
 `POST /compute` supports two paths:
 
 - Built-in engine mode: provide `name` and `params`, or a preset marker such as `# __ENGINE__:MA`.
-- Script mode: provide `script`, an optional descriptor-declared `language`, and
-  Pyne-only `securityMode`; execution goes through the configured runtime route.
+- Script mode: provide `script` and an optional descriptor-declared `language` (default `pine`); execution goes through the configured runtime route.
 
 Tests assert that script mode executes the script even if a built-in name is present, while built-in mode ignores the script body and uses the optimized engine path.
 
@@ -213,14 +210,13 @@ Payload fields:
 - `schemaVersion`
 - `id`
 - `kind`: `script` or `custom`
-- `language`: routed language ID; omitted legacy records default to `pyne`
+- `language`: routed language ID; new scripts default to `pine`; retired scripts are unsupported
 - `name`
 - `description`
 - `script`
 - `params`
 - `paramSchema`
 - `renderHints`
-- `securityMode`: Pyne-only `safe`, `research`, `unsafe`, or omitted
 
 Writes are atomic through a temporary file. Invalid IDs, missing names/scripts, invalid kinds, and invalid security modes are rejected.
 
@@ -239,7 +235,7 @@ Schema constants:
 - `INDICATOR_PAYLOAD_SCHEMA_VERSION = 1`
 - `INDICATOR_OUTPUT_SCHEMA_VERSION = 2`
 
-Pyne extended outputs include markers, fills, hlines, background colors, bar colors, and signals.
+Pine extended outputs include markers, fills, hlines, background colors, bar colors, and signals.
 
 ## Adding A Built-In Indicator
 

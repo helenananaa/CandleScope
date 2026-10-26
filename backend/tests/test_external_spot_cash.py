@@ -1,4 +1,4 @@
-"""Real Pine/Pyne engines on host spot cash, with real-bar/print execution."""
+"""Real Pine engines on host spot cash, with real-bar/print execution."""
 import json
 from decimal import Decimal as D
 
@@ -13,7 +13,7 @@ def spot_payload(host, payload):
     return {**payload, 'market_type': 'spot', 'snapshot_hash': snapshot['snapshot_hash']}
 
 
-@pytest.mark.parametrize('language', ['pine', 'pyne'])
+@pytest.mark.parametrize('language', ['pine'])
 @pytest.mark.parametrize('fidelity', ['BAR_APPROX', 'TRADE_TAPE', 'BOOK_ASSISTED'])
 def test_spot_host_rejects_borrowing_and_shorting_and_keeps_realized_feedback(runtime, language, fidelity):
     host, payload = runtime
@@ -60,11 +60,11 @@ if bar_index == 4:
     assert host.native.create(config, 'spot-host')['run_id'] == run['run_id']
 
 
-@pytest.mark.parametrize('language', ['pine', 'pyne'])
+@pytest.mark.parametrize('language', ['pine'])
 def test_spot_fill_callback_does_not_report_asset_purchase_as_realized_loss(runtime, language):
-    from tests.test_external_feedback import run, PINE, PYNE
+    from tests.test_external_feedback import run, PINE
     host, payload = runtime
-    record = run(host, spot_payload(host, payload), language, PINE if language == 'pine' else PYNE, 'TRADE_TAPE')
+    record = run(host, spot_payload(host, payload), language, PINE, 'TRADE_TAPE')
     assert record['state'] == 'COMPLETED', record.get('error')
     result = record['result']
     passes = result['raw_output']['execution_passes'][1]

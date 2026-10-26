@@ -162,7 +162,7 @@ test("unified app owns one library store and drawer does not create another", ()
   assert.match(chartSource, /realtimeMode="historical-only"/);
 });
 
-test("first open shows three templates and import without hiding the script slot", () => {
+test("first open shows the Python template and import without hiding the script slot", () => {
   const first = renderToStaticMarkup(
     React.createElement(StrategyResearchApp, {
       intent: parseStrategyResearchLaunch({ pathname: "/strategy.html", search: "" }),
@@ -172,9 +172,7 @@ test("first open shows three templates and import without hiding the script slot
   assert.match(first, /data-visual-state="first"/);
   assert.match(first, /strategy-research-first-open/);
   assert.match(first, /strategy-research-templates/);
-  assert.match(first, /strategy-research-template-SMA_CROSS/);
-  assert.match(first, /strategy-research-template-RSI_REVERSAL/);
-  assert.match(first, /strategy-research-template-DONCHIAN_BREAKOUT/);
+  assert.match(first, /strategy-research-template-PYTHON_SMA/);
   assert.match(first, /strategy-research-import-own-data/);
   assert.match(first, /research-data-source-bar/);
   assert.doesNotMatch(first, /monaco/i);

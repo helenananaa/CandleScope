@@ -134,7 +134,7 @@ test("ordinary research persists edited source for remount and advanced draft lo
   const initial = await mountedStore.save({
     id: "draft-research1",
     displayName: "Strategy",
-    language: "pyne",
+    language: "pine",
     source: "template()",
     cursor: { line: 1, column: 1 },
   });

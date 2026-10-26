@@ -48,7 +48,7 @@ def _job_target_bars(job: IndicatorRangeBatchJob) -> int:
 def _job_warmup(job: IndicatorRangeBatchJob) -> int:
     params = job.meta.get("params") if isinstance(job.meta.get("params"), dict) else {}
     name = (
-        str(job.meta.get("language") or "pyne").upper()
+        str(job.meta.get("language") or "pine").upper()
         if job.meta.get("kind") == "script"
         else str(job.meta.get("name") or "")
     )
@@ -69,11 +69,11 @@ def _validate_jobs(jobs: list[IndicatorRangeBatchJob]) -> None:
         target_bars = _job_target_bars(job)
         if job.meta.get("kind") == "script":
             estimated = target_bars + _job_warmup(job)
-            if estimated > max(int(config.PYNE_MAX_BARS), 1):
-                language = str(job.meta.get("language") or "pyne")
-                label = "Pyne" if language == "pyne" else f"{language} runtime"
+            if estimated > max(int(config.SCRIPT_MAX_BARS), 1):
+                language = str(job.meta.get("language") or "pine")
+                label = "Pine" if language == "pine" else f"{language} runtime"
                 raise ValueError(
-                    f"Too many {label} bars: {estimated} > {config.PYNE_MAX_BARS}"
+                    f"Too many {label} bars: {estimated} > {config.SCRIPT_MAX_BARS}"
                 )
         else:
             params = (
@@ -104,17 +104,17 @@ def _validate_jobs(jobs: list[IndicatorRangeBatchJob]) -> None:
     script_jobs = [job for job in jobs if job.meta.get("kind") == "script"]
     if script_jobs:
         estimated = union_target_bars + max_shared_warmup
-        if estimated > max(int(config.PYNE_MAX_BARS), 1):
+        if estimated > max(int(config.SCRIPT_MAX_BARS), 1):
             languages = {
-                str(job.meta.get("language") or "pyne") for job in script_jobs
+                str(job.meta.get("language") or "pine") for job in script_jobs
             }
             label = (
-                "Pyne"
-                if languages == {"pyne"}
+                "Script"
+                if languages == {"pine"}
                 else f"{', '.join(sorted(languages))} runtime"
             )
             raise ValueError(
-                f"Too many {label} bars: {estimated} > {config.PYNE_MAX_BARS}"
+                f"Too many {label} bars: {estimated} > {config.SCRIPT_MAX_BARS}"
             )
 
 

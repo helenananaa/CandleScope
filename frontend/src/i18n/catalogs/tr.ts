@@ -1,15 +1,16 @@
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
   ...readonlyAccountEnglish,
+  "replay.err.futureInput": "Başlangıç ve ileri pencere gelecekteki mumları içeriyor. Daha erken bir başlangıç seçin veya pencereyi kısaltın; yalnızca kapanmış geçmiş mumlar kullanılabilir.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",
   "report.notionalReturn": "P&L / entry notional (not account return)",
-  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
-  "indicator.editor.pyneApiHint": "Pyne API:",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles.Match the bundle to your system and Python version.",
   "indicator.editor.pineApiHint": "Kapanmış mumlar için Pine v5/v6 API:",
   "serverError.notFound": "İstenen öğe yok veya silinmiş",
   "serverError.conflict": "Başka bir yerde değiştirildi. Yenileyip tekrar deneyin",
@@ -883,7 +884,6 @@ export const tr = {
   "indicator.editor.runOk": "Başarıyla çalıştı ve grafiğe uygulandı",
   "indicator.editor.communityRuntime": "{language} {runtime} tarafından yürütülür",
   "indicator.editor.fallbackLanguage": "betik çalışma zamanı",
-  "indicator.editor.hintPyne": "Yazın",
   "indicator.editor.hintComplete": "otomatik tamamlamayı tetiklemek için ·",
   "indicator.editor.hintPine": "Pine v5/v6 · yalnızca kapanmış çubuklar · yazın",
   "indicator.editor.hintPlugin": "Eklenti tanımlayıcısının bildirdiği dil modunu kullanır ·",
@@ -2335,7 +2335,6 @@ export const tr = {
   "backtest.language": "Kısıtlı dil",
   "backtest.builtin": "Yerleşik RSI24 şablonu",
   "backtest.pine": "Pine güvenli alt küme",
-  "backtest.pyne": "Pyne birleşik emir DSL",
   "backtest.external": "Dondurulmuş dış model artifakt ref",
   "backtest.compileSave": "Statik denetle, derle ve kaydet",
   "backtest.sourceNoExec": "Kaynak (rastgele kod yürütülmez)",
@@ -3368,7 +3367,7 @@ export const tr = {
   "trade.rt.retryLimit": "{error} (otomatik yeniden denemeler {count} sınırına ulaştı)",
   "trade.rt.disconnected": "TradeFlow bağlantısı kesildi",
   "indicator.noLocalBars": "Göstergenin kullanılabilir açık mumlu yerel yürütme açıklaması yok",
-  "indicator.replayUnsafe": "Yeniden oynatma yalnızca yerleşik göstergelere, Pyne güvenli ve Pine kapalı mum betiklerine izin verir; {language} yeniden oynatmaya uygun ilan edilmemiş",
+  "indicator.replayUnsafe": "{language} yeniden oynatmaya uygun ilan edilmemiş",
   "indicator.unknownRuntime": "bilinmeyen çalışma zamanı",
   "indicator.httpFallback": "{message}; HTTP kapalı mum geri doldurmasına geçildi.",
   "plugin.eyebrow": "Uzantılar",
@@ -4021,7 +4020,6 @@ export const tr = {
   "chartTester.retrySave": "Yeniden dene",
   "chartTester.run": "Çalıştır",
   "chartTester.close": "Kapat",
-  "chartTester.language.pyne": "Pyne",
   "chartTester.language.pine": "Pine",
   "chartTester.startEyebrow": "HIZLI GRAFİK TESTİ BAŞLAT",
   "chartTester.startTitle": "Nasıl başlayacağınızı seçin",
@@ -4280,7 +4278,7 @@ export const tr = {
   "research.strategy.smoke": "Duman testi",
   "research.strategy.copy": "Kopyala",
   "research.strategy.archive": "Arşivle",
-  "research.strategy.create": "Pyne/Pine revizyonu oluştur",
+  "research.strategy.create": "/Pine revizyonu oluştur",
   "research.strategy.name": "Ad",
   "research.strategy.language": "Dil",
   "research.strategy.source": "Kaynak",
@@ -4348,7 +4346,6 @@ export const tr = {
   "research.results.entry": "Giriş",
   "research.results.exit": "Çıkış",
   "research.strategy.draft": "Taslak",
-  "research.strategy.pyne": "Pyne",
   "research.strategy.pine": "Pine",
   "workbench.manualHistory.disabled": "Elle geçmiş indirme devre dışı.",
   "workbench.manualHistory.title": "Elle sürekli geçmiş",
@@ -4397,8 +4394,6 @@ export const tr = {
   "workbench.manualHistory.succeeded": "İndirme başarılı",
   "workbench.manualHistory.jobState": "İş {state}",
   "common.listSeparator": ", ",
-  "editor.pyne.namespaceDetail": "{ns}.* — üyeleri listelemek için \"{ns}.\" yazın",
-  "editor.pyne.namespaceDocumentation": "Tamamlamayı tetiklemek için `{ns}.` yazın.",
   "settings.category.ai": "AI MCP",
   "aiControl.description": "Connect a local AI client to the charts currently open in CandleScope.",
   "aiControl.lifecycle": "Access is off after restart. Enabling a mode rotates the token and revokes previous sessions.",
@@ -4421,5 +4416,6 @@ export const tr = {
   "aiControl.copyFailed": "Could not copy. Check clipboard permission.",
   "aiControl.desktopOnly": "Local MCP is available in the desktop application.",
   "aiControl.configuration": "Show connection configuration",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 

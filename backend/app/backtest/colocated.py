@@ -74,7 +74,6 @@ class _GuardedProvider:
 
 def _worker(connection, settings, run_id, spec, events, options, call_deadline, log_fd=None):
     from .service import BacktestService
-    from .strategy.chart_pyne import CHART_PYNE_REVISION, ChartPyneStrategyProvider
     from .strategy.pine_adapter import PineStrategyProvider
     from .strategy.registry import build_default_strategy_registry
     from .strategy.local_python import LocalPythonRunner
@@ -110,8 +109,7 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
                 provider.runner = LocalPythonRunner(bound_transcript=spec["bound_transcript"])
         else:
             revision = spec["revision"]
-            provider = (ChartPyneStrategyProvider() if revision == CHART_PYNE_REVISION
-                        else PineStrategyProvider() if revision == "pine-long-flat-v1"
+            provider = (PineStrategyProvider() if revision == "pine-long-flat-v1"
                         else build_default_strategy_registry().build(revision))
         guarded = _GuardedProvider(provider, call_deadline, settings.provider_step_timeout_ms / 1000,
                                    spec["call_timeout"])

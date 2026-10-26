@@ -17,7 +17,7 @@ from app.backtest.strategy.protocol import (
     StrategyProviderSession,
     canonical_hash,
 )
-from app.backtest.strategy.pyne_adapter import PyneHostPlanner
+from app.backtest.strategy.host_planner import HostOrderPlanner
 from candlescope_plugin_sdk.constants import PROTOCOL_V1
 
 
@@ -64,7 +64,7 @@ def test_supported_subset_is_deterministic_and_not_tv_equivalent() -> None:
     assert wire.payload["targetExposure"] == "1"
     assert wire.payload["matrixVersion"] == MATRIX_VERSION
     assert output.provider.identity()["tradingViewEquivalent"] is False
-    assert PyneHostPlanner().plan(wire)[0]["side"] == "BUY"
+    assert HostOrderPlanner().plan(wire)[0]["side"] == "BUY"
 
 
 def test_pine_indicator_runtime_contract_is_unchanged() -> None:

@@ -1,15 +1,16 @@
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
+import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
   ...readonlyAccountEnglish,
+  "replay.err.futureInput": "Początek i okno do przodu obejmują przyszłe świece. Wybierz wcześniejszy początek lub skróć okno; dostępne są tylko zamknięte świece historyczne.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
   "native.executionErrorHelp": "The run could not complete. Check the script and inputs; technical details are below.",
   "native.jumpToError": "Go to line {line}, column {column}",
   "report.notionalReturn": "P&L / entry notional (not account return)",
-  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles. Pyne is cross-platform, but its current official plugin bundle is Windows-only. Match the bundle to your system and Python version.",
-  "indicator.editor.pyneApiHint": "Pyne API:",
+  "native.platformHelp": "Pine 0.3.2 provides macOS Apple Silicon and Intel bundles.Match the bundle to your system and Python version.",
   "indicator.editor.pineApiHint": "API Pine v5/v6 dla zamkniętych świec:",
   "serverError.notFound": "Żądany element nie istnieje lub został usunięty",
   "serverError.conflict": "Zmieniono w innym miejscu. Odśwież i spróbuj ponownie",
@@ -883,7 +884,6 @@ export const pl = {
   "indicator.editor.runOk": "Uruchomiono pomyślnie i zastosowano na wykresie",
   "indicator.editor.communityRuntime": "{language} jest wykonywany przez {runtime}",
   "indicator.editor.fallbackLanguage": "środowisko skryptów",
-  "indicator.editor.hintPyne": "Wpisz",
   "indicator.editor.hintComplete": "aby wywołać autouzupełnianie ·",
   "indicator.editor.hintPine": "Pine v5/v6 · tylko zamknięte świece · wpisz",
   "indicator.editor.hintPlugin": "Używa trybu języka zadeklarowanego przez deskryptor wtyczki ·",
@@ -2335,7 +2335,6 @@ export const pl = {
   "backtest.language": "Ograniczony język",
   "backtest.builtin": "Wbudowany szablon RSI24",
   "backtest.pine": "Bezpieczny podzbiór Pine",
-  "backtest.pyne": "Ujednolicony DSL zleceń Pyne",
   "backtest.external": "Zamrożone odwołanie do artefaktu modelu zewnętrznego",
   "backtest.compileSave": "Kontrola statyczna, kompilacja i zapis",
   "backtest.sourceNoExec": "Źródło (dowolny kod nie jest wykonywany)",
@@ -3368,7 +3367,7 @@ export const pl = {
   "trade.rt.retryLimit": "{error} (automatyczne ponowienia osiągnęły limit {count})",
   "trade.rt.disconnected": "Połączenie TradeFlow zostało przerwane",
   "indicator.noLocalBars": "Wskaźnik nie ma użytecznego lokalnego opisu wykonania na jawnych świecach",
-  "indicator.replayUnsafe": "Replay dopuszcza wyłącznie wbudowane wskaźniki, bezpieczny Pyne oraz skrypty Pine na zamkniętych świecach; język {language} nie jest zadeklarowany jako bezpieczny dla replay",
+  "indicator.replayUnsafe": "język {language} nie jest zadeklarowany jako bezpieczny dla replay",
   "indicator.unknownRuntime": "nieznane środowisko wykonawcze",
   "indicator.httpFallback": "{message}; przełączono na uzupełnianie zamkniętych świec przez HTTP.",
   "plugin.eyebrow": "Rozszerzenia",
@@ -4021,7 +4020,6 @@ export const pl = {
   "chartTester.retrySave": "Ponów",
   "chartTester.run": "Uruchom",
   "chartTester.close": "Zamknij",
-  "chartTester.language.pyne": "Pyne",
   "chartTester.language.pine": "Pine",
   "chartTester.startEyebrow": "ROZPOCZNIJ SZYBKI TEST WYKRESU",
   "chartTester.startTitle": "Wybierz sposób rozpoczęcia",
@@ -4280,7 +4278,7 @@ export const pl = {
   "research.strategy.smoke": "Test dymny",
   "research.strategy.copy": "Kopiuj",
   "research.strategy.archive": "Archiwizuj",
-  "research.strategy.create": "Utwórz rewizję Pyne/Pine",
+  "research.strategy.create": "Utwórz rewizję /Pine",
   "research.strategy.name": "Nazwa",
   "research.strategy.language": "Język",
   "research.strategy.source": "Źródło",
@@ -4348,7 +4346,6 @@ export const pl = {
   "research.results.entry": "Wejście",
   "research.results.exit": "Wyjście",
   "research.strategy.draft": "Szkic",
-  "research.strategy.pyne": "Pyne",
   "research.strategy.pine": "Pine",
   "workbench.manualHistory.disabled": "Ręczne pobieranie historii jest wyłączone.",
   "workbench.manualHistory.title": "Ręczna ciągła historia",
@@ -4397,8 +4394,6 @@ export const pl = {
   "workbench.manualHistory.succeeded": "Pobieranie powiodło się",
   "workbench.manualHistory.jobState": "Zadanie {state}",
   "common.listSeparator": ", ",
-  "editor.pyne.namespaceDetail": "{ns}.* — wpisz \"{ns}.\", aby wyświetlić składowe",
-  "editor.pyne.namespaceDocumentation": "Wpisz `{ns}.`, aby wywołać uzupełnianie.",
   "pane.flow.gaps.few": "{count} luki czasowe",
   "pane.flow.gaps.many": "{count} luk czasowych",
   "pane.flow.missing.few": "{count} niedostępne świece",
@@ -4431,5 +4426,6 @@ export const pl = {
   "aiControl.copyFailed": "Could not copy. Check clipboard permission.",
   "aiControl.desktopOnly": "Local MCP is available in the desktop application.",
   "aiControl.configuration": "Show connection configuration",
+  ...tradingAccountsEn,
 } as const satisfies MessageCatalog;
 
