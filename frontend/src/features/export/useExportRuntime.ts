@@ -14,6 +14,8 @@ import type { ChartSurfaceActions } from "../../chart-adapter/useChartSurfaceRun
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
 import type { DrawingRuntime } from "../drawings/useDrawingRuntime.js";
 import type { ExportMetadata, ExportOptions } from "./exportTypes.js";
+import type { PreparePageDrawingExport } from "./pageDrawingExport.js";
+import type { UseExportPreviewRuntimeOptions } from "./exportPreviewRuntime.js";
 import type {
   DrawingExportTarget,
   ExportPreviewRuntime,
@@ -27,6 +29,7 @@ export interface UseExportRuntimeOptions {
   chartSurfaceActions: ChartSurfaceActions | null | undefined;
   pageExportRef: MutableRefObject<HTMLElement | null>;
   drawings: DrawingRuntime | null | undefined;
+  preparePageDrawingExport?: PreparePageDrawingExport | undefined;
   loadUserPrefs?: (() => unknown) | null;
   updateUserPref?: ((key: string, value: unknown) => void) | null;
 }
@@ -62,7 +65,8 @@ export function sameDrawingExportTarget(
   return left === null || right === null
     ? left === right
     : left.scopeKey === right.scopeKey
-      && left.documentRevision === right.documentRevision;
+      && left.documentRevision === right.documentRevision
+      && left.pageTargetsKey === right.pageTargetsKey;
 }
 
 export function useExportRuntime({
@@ -73,6 +77,7 @@ export function useExportRuntime({
   chartSurfaceActions,
   pageExportRef,
   drawings,
+  preparePageDrawingExport,
   loadUserPrefs,
   updateUserPref,
 }: UseExportRuntimeOptions): ExportRuntime {
@@ -101,6 +106,16 @@ export function useExportRuntime({
     sessionView?.symbol,
   ]);
 
+  const prepareDrawingExport = useCallback<NonNullable<UseExportPreviewRuntimeOptions["prepareDrawingExport"]>>(async (prepareOptions) => {
+    const startedAt = Date.now();
+    const active = await drawings?.actions.prepareExport(prepareOptions) ?? null;
+    if (!active || prepareOptions.scope !== "page" || !preparePageDrawingExport) return active;
+    return preparePageDrawingExport(active, {
+      ...prepareOptions,
+      timeoutMs: Math.max(1, (prepareOptions.timeoutMs ?? 5_000) - (Date.now() - startedAt)),
+    });
+  }, [drawings?.actions, preparePageDrawingExport]);
+
   const preview = useExportPreviewRuntime({
     isOpen,
     options,
@@ -108,9 +123,7 @@ export function useExportRuntime({
     chartSurfaceActions,
     pageExportRef,
     drawingsHidden: drawings?.view?.drawingsHidden === true,
-    ...(drawings?.actions?.prepareExport === undefined
-      ? {}
-      : { prepareDrawingExport: drawings.actions.prepareExport }),
+    prepareDrawingExport,
     ...(drawings?.actions?.exportInstrumentation === undefined
       ? {}
       : { drawingExportInstrumentation: drawings.actions.exportInstrumentation }),
@@ -161,7 +174,8 @@ export function useExportRuntime({
       }
       let blob = previewBlob;
       let filename = preview.filename;
-      const drawingLease = await drawings?.actions?.prepareExport?.({
+      const drawingLease = await prepareDrawingExport({
+        scope: finalOptions.scope,
         hideDrawings: finalOptions.hideDrawings,
         timeoutMs: 5_000,
       }) ?? null;
@@ -169,6 +183,7 @@ export function useExportRuntime({
         ? Object.freeze({
             scopeKey: drawingLease.receipt.scopeKey,
             documentRevision: drawingLease.receipt.documentRevision,
+            ...(drawingLease.pageTargetsKey === undefined ? {} : { pageTargetsKey: drawingLease.pageTargetsKey }),
           })
         : null;
       if (drawingLease) await drawingLease.restore();
@@ -192,7 +207,7 @@ export function useExportRuntime({
     inProgress,
     metadata,
     options,
-    drawings?.actions,
+    prepareDrawingExport,
     drawings?.view?.drawingsHidden,
     preview,
   ]);
