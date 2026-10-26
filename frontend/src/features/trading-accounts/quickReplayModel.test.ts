@@ -61,6 +61,17 @@ test("legacy or missing revision coverage never falls back to current text", () 
   assert.equal(journalAtCursor([missing], 6).notes[0]!.body, "");
 });
 
+test("review save time is not moved by later trade-link metadata changes", () => {
+  const review: JournalEntry = { ...baseNote, id: "review", kind: "quick",
+    createdAtMs: 5000, updatedAtMs: 9000, marketTimeMs: 1000, body: "review text",
+    revisions: [{ revision: 1, savedAtMs: 5000, fields: {}, body: "review text", historyComplete: true }],
+  };
+  const projected = journalAtCursor([review], 2).reviewNotes[0]!;
+  assert.equal(projected.updatedAtMs, 5000);
+  assert.equal(projected.body, "review text");
+  assert.equal(review.updatedAtMs, 9000);
+});
+
 function bar(time: number, open: number, high: number, low: number, close: number): ReplayBar {
   return { time, open, high, low, close, volume: 1 };
 }

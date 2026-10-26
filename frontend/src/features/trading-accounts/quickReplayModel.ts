@@ -199,7 +199,10 @@ export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: num
   const reviewNotes: JournalEntry[] = [];
   for (const entry of entries) {
     if (entry.marketTimeMs !== null) {
-      if (entry.marketTimeMs < cut) reviewNotes.push(entry);
+      if (entry.marketTimeMs < cut) reviewNotes.push({ ...entry,
+        // Linking a note also updates entry metadata; it is not a text save.
+        updatedAtMs: entry.revisions?.at(-1)?.savedAtMs ?? entry.updatedAtMs,
+      });
       continue;
     }
     if (entry.createdAtMs >= cut) continue;
