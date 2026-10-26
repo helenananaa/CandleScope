@@ -1039,7 +1039,7 @@ test("create errors stay visible and reopening refreshes setup context without l
   await lifecycle.createRun(preservedDraft);
   assert.equal(lifecycle.getSnapshot().error?.code, "CATALOG_EPOCH_MISMATCH");
   await lifecycle.openCreate();
-  assert.equal(catalogCalls, 3);
+  assert.equal(catalogCalls, 4);
   assert.equal(lifecycle.getSnapshot().error, null);
   assert.equal(lifecycle.getSnapshot().draft?.name, "保留这份训练");
   assert.equal(lifecycle.getSnapshot().draft?.indicatorWarmupBars, 300);
@@ -1080,7 +1080,7 @@ test("create validates the source-aware catalog before posting market-independen
   };
   lifecycle.setDraft(edited);
   await lifecycle.createRun(edited);
-  assert.equal(catalogQueries.length, 2);
+  assert.equal(catalogQueries.length, 3);
   assert.deepEqual(catalogQueries[0], {
     warmupBars: 200,
     horizonMs: 86_400_000,
@@ -1728,4 +1728,131 @@ test("practice preset is submittable and challenge resets the mutation whitelist
   assert.equal(challenge.integrityMode, "CHALLENGE");
   assert.deepEqual(challenge.allowedMutations, []);
   assert.equal(evaluateTrainingRunSetupDraft(challenge, capabilities).canSubmit, true);
+});
+
+test("editing a coverage field keeps the form alive and ignores late validation responses", async (context) => {
+  const pending: Array<(value: ReturnType<typeof hedgeCatalog>) => void> = [];
+  let calls = 0;
+  const lifecycle = new TrainingHubLifecycle({ api: {
+    async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+    async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+    async createRun() { throw new Error("must not submit during validation"); },
+    async catalog() {
+      if (++calls === 1) return hedgeCatalog();
+      return new Promise((resolve) => pending.push(resolve));
+    },
+  } });
+  context.after(() => lifecycle.dispose());
+  lifecycle.start();
+  await settle();
+  await lifecycle.openCreate();
+  for (const digits of ["3", "36", "360", "3600", "36000", "360000", "3600000"]) {
+    lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, forwardCacheMs: Number(digits) });
+    const snapshot = lifecycle.getSnapshot();
+    assert.equal(snapshot.draft?.forwardCacheMs, Number(digits));
+    assert.equal(snapshot.operation, "create-context");
+    assert.ok(snapshot.evaluation, "null evaluation would unmount the focused form");
+    assert.equal(snapshot.evaluation.canSubmit, false);
+  }
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, name: "still editable" });
+  assert.equal(lifecycle.getSnapshot().evaluation?.canSubmit, false);
+  pending.at(-1)!(hedgeCatalog());
+  await settle();
+  const current = lifecycle.getSnapshot();
+  assert.equal(current.operation, null);
+  assert.equal(current.draft?.forwardCacheMs, 3_600_000);
+  assert.equal(current.draft?.name, "still editable");
+  for (const resolve of pending.slice(0, -1)) resolve({ ...hedgeCatalog(), entries: [] });
+  await settle();
+  assert.deepEqual(lifecycle.getSnapshot(), current);
+});
+
+test("automatic BAR creation rejects a forward window containing future minutes without changing its start", () => {
+  const capabilities = parseReplayCapabilities(enabledCapabilities());
+  const now = Date.UTC(2026, 9, 12, 14, 30, 45);
+  const closedEnd = Math.floor(now / 60_000) * 60_000;
+  const draft = { ...createTrainingRunDraft(hedgeCatalog()), sourceKind: "BAR" as const,
+    startMode: "MANUAL" as const, requestedStartMs: closedEnd - 86_400_000, forwardCacheMs: 86_400_000 };
+  assert.equal(evaluateTrainingRunSetupDraft(draft, capabilities, now).canSubmit, true);
+  const future = { ...draft, requestedStartMs: draft.requestedStartMs + 60_000 };
+  assert.equal(evaluateTrainingRunSetupDraft(future, capabilities, now).canSubmit, false);
+  assert.equal(future.requestedStartMs, closedEnd - 86_400_000 + 60_000);
+  assert.equal(evaluateTrainingRunSetupDraft({ ...future, forwardCacheMs: 86_340_000 }, capabilities, now).canSubmit, true);
+  const random = { ...draft, startMode: "RANDOM" as const, randomScope: "RANGE" as const,
+    requestedStartMs: null, randomRangeStartMs: draft.requestedStartMs, randomRangeEndMs: future.requestedStartMs };
+  assert.equal(evaluateTrainingRunSetupDraft(random, capabilities, now).canSubmit, false);
+});
+
+test("coverage refresh preserves manual and random time choices across account/source changes", async (context) => {
+  let createCalls = 0;
+  const lifecycle = new TrainingHubLifecycle({ api: {
+    async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+    async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+    async catalog(query) { return query?.sourceKind === "AGG_TRADE" ? tradeCatalog() : hedgeCatalog(); },
+    async createRun() {
+      createCalls += 1;
+      return parseTrainingRunMutationResponse(mutationResponse());
+    },
+  } });
+  context.after(() => lifecycle.dispose());
+  lifecycle.start();
+  await settle();
+  await lifecycle.openCreate();
+  const explicitStart = hedgeCatalog().entries[0]!.eligible_ranges[0]!.first_start_ms;
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, requestedStartMs: explicitStart,
+    positionMode: "HEDGE", accountDataMode: "DETERMINISTIC_SIMULATION" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().draft?.requestedStartMs, explicitStart);
+  assert.equal(lifecycle.getSnapshot().evaluation?.canSubmit, true);
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, sourceKind: "AGG_TRADE" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().draft?.requestedStartMs, explicitStart);
+  assert.ok(lifecycle.getSnapshot().evaluation?.errors.includes("开始时间不在当前历史源的可用覆盖范围"));
+  await lifecycle.createRun(lifecycle.getSnapshot().draft!);
+  assert.equal(createCalls, 0);
+
+  const rangeStart = 1_700_000_000_000;
+  const rangeEnd = rangeStart + 60_000;
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, startMode: "RANDOM", requestedStartMs: null,
+    randomRangeStartMs: rangeStart, randomRangeEndMs: rangeEnd, forwardCacheMs: 3_600_000 });
+  await settle();
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, sourceKind: "BAR" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().draft?.randomRangeStartMs, rangeStart);
+  assert.equal(lifecycle.getSnapshot().draft?.randomRangeEndMs, rangeEnd);
+  assert.ok(lifecycle.getSnapshot().evaluation?.errors.includes("随机区间与当前历史源的可用覆盖范围不相交"));
+});
+
+test("account-mode changes replace the automatic catalog and abort stale responses", async (context) => {
+  const requests: Array<{ source: string | undefined; signal: AbortSignal | undefined; resolve(value: ReturnType<typeof tradeCatalog>): void }> = [];
+  const lifecycle = new TrainingHubLifecycle({ draftStorage: null, api: {
+    async listRuns() { return parseTrainingRunListResponse(listResponse([])); },
+    async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+    async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: true } }; },
+    async catalog(query, signal) {
+      if (!requests.length && query?.sourceKind === "BAR") {
+        return hedgeCatalog();
+      }
+      return new Promise((resolve) => requests.push({ source: query?.sourceKind, signal, resolve }));
+    },
+    async prepareReplay() { throw new Error("not used"); },
+    async createRun() { throw new Error("not used"); },
+  } });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, sourceKind: "AGG_TRADE", positionMode: "HEDGE" });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().automaticPreparationAvailable, true, "retain current HEDGE preparation support");
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, accountDataMode: "DETERMINISTIC_SIMULATION" });
+  assert.equal(requests[0]?.source, "AGG_TRADE");
+  lifecycle.setDraft({ ...lifecycle.getSnapshot().draft!, bookMode: "BOOK_ASSISTED_REQUIRED" });
+  assert.equal(requests[0]?.signal?.aborted, true);
+  requests[1]!.resolve(tradeCatalog());
+  await settle();
+  const accepted = lifecycle.getSnapshot().catalog;
+  requests[0]!.resolve({ ...tradeCatalog(), entries: [] });
+  await settle();
+  assert.equal(lifecycle.getSnapshot().catalog, accepted);
+  assert.ok(accepted?.entries.length);
+  assert.equal(lifecycle.getSnapshot().automaticPreparationAvailable, false);
 });

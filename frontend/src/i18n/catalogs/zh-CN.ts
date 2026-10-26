@@ -1,4 +1,5 @@
 export const zhCN = {
+  "replay.err.futureInput": "开始时间加上前向窗口包含未来行情。请选择更早的起点或缩短前向窗口；只能使用已闭合的历史 K 线。",
   "research.external.copyCommand": "复制启动命令",
   "research.external.commandCopied": "启动命令已复制。",
   "research.external.copyFailed": "无法自动复制，请选中命令文本手动复制。",

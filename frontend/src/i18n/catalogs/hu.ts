@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  "replay.err.futureInput": "A kezdés és az előretekintő ablak jövőbeli gyertyákat tartalmaz. Válasszon korábbi kezdést vagy rövidebb ablakot; csak lezárt múltbeli gyertyák érhetők el.",
   "replay.hub.catalogSyncing": "Hivatalos történeti piacok keresése folyamatban. Az opció automatikusan elérhetővé válik, amint elkészül.",
   "replay.watchlist.preparing": "Történeti adatok letöltése és ellenőrzése. Az első használat néhány percig tarthat.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

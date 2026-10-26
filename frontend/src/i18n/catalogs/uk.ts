@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  "replay.err.futureInput": "Початок і вікно вперед охоплюють майбутні свічки. Виберіть раніший початок або скоротіть вікно; доступні лише закриті історичні свічки.",
   "replay.hub.catalogSyncing": "Пошук історичних ринків в офіційному джерелі. Функцію буде ввімкнено автоматично після завершення.",
   "replay.watchlist.preparing": "Завантаження та перевірка історичних даних. Перше використання може тривати кілька хвилин.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

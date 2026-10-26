@@ -2,6 +2,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  "replay.err.futureInput": "Masa mula dan tetingkap ke hadapan merangkumi lilin masa hadapan. Pilih permulaan lebih awal atau pendekkan tetingkap; hanya lilin sejarah yang ditutup tersedia.",
   "replay.hub.catalogSyncing": "Sedang mencari pasaran sejarah daripada sumber rasmi. Pilihan ini akan diaktifkan secara automatik apabila siap.",
   "replay.watchlist.preparing": "Sedang memuat turun dan mengesahkan data sejarah. Penggunaan pertama mungkin mengambil masa beberapa minit.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
