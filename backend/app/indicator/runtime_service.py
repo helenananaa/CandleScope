@@ -8,9 +8,12 @@ import json
 import logging
 import threading
 import time
+from bisect import bisect_left
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
+from itertools import compress, count
+from operator import attrgetter, itemgetter, ne
 from typing import Any, Protocol
 
 from candlescope_plugin_sdk import (
@@ -39,6 +42,8 @@ from .runtime_routes import (
 )
 
 MAX_RECENT_ROUTE_RESULTS = 64
+# Live bar streams whose converted SDK bars are reused for unchanged rows.
+MAX_STREAM_BARS = 8
 DEFAULT_MAX_PENDING_SHADOW_TASKS = 64
 INDICATOR_RUNTIME_CATALOG_SCHEMA_VERSION = 1
 UNREGISTERED_SIDECAR_CODES = frozenset({"PLUGIN_NOT_FOUND"})
@@ -94,9 +99,12 @@ class IndicatorRuntimeRequest:
 
     def to_sdk_request(self) -> ExecuteBatchRequest:
         options = dict(self.options)
-        # A live subscription's session is also its output stream, so a
-        # runtime that negotiated render.output-patch/1 may send patches.
+        # A live subscription's session is also its output and bars stream, so
+        # a runtime that negotiated render.output-patch/1 may send patches and
+        # one that negotiated batch-execution.bars-patch/1 may receive them.
         output_stream = options.get("pineSessionId") if self.language == "pine" else None
+        if not isinstance(output_stream, str) or not output_stream:
+            output_stream = None
         if self.language == "pine":
             if "__pineLibraries" in self.params:
                 options["pineLibrarySources"] = self.params["__pineLibraries"]
@@ -114,10 +122,11 @@ class IndicatorRuntimeRequest:
                 symbol=self.symbol,
                 interval=self.interval,
             ),
-            bars=tuple(_to_sdk_bar(item) for item in self.bars),
+            bars=_sdk_bars(output_stream, self.bars),
             params=dict(self.params),
             options=options,
-            output_stream=output_stream if isinstance(output_stream, str) and output_stream else None,
+            output_stream=output_stream,
+            bars_stream=output_stream,
         )
 
 
@@ -185,6 +194,68 @@ def _to_sdk_bar(item: Any) -> Bar:
         volume=float(_value(item, "volume")),
         is_closed=bool(_value(item, "is_closed", "isClosed", default=True)),
     )
+
+
+_BAR_FIELDS = ("time", "open", "high", "low", "close", "volume", "is_closed")
+# stream -> (raw values of each row, the Bars converted from them)
+_stream_bars: OrderedDict[str, tuple[list[tuple[Any, ...]], tuple[Bar, ...]]] = OrderedDict()
+_stream_bars_lock = threading.Lock()
+
+
+def _row_values(items: tuple[Any, ...]) -> Callable[[Any], tuple[Any, ...]] | None:
+    """Return a C getter of the raw values ``_to_sdk_bar`` reads from a row.
+
+    Only uniform rows qualify: plain dicts, or objects that are not mappings
+    and carry the fields as attributes.
+    """
+    kinds = set(map(type, items))
+    if len(kinds) != 1:
+        return None
+    kind = kinds.pop()
+    if kind is dict:
+        return itemgetter(*_BAR_FIELDS)
+    if not issubclass(kind, Mapping):
+        return attrgetter(*_BAR_FIELDS)
+    return None
+
+
+def _sdk_bars(stream: str | None, items: tuple[Any, ...]) -> tuple[Bar, ...]:
+    """Convert host rows, reusing a live stream's Bars for an unchanged prefix.
+
+    A Bar is reused only where the row's raw values equal those its Bar was
+    converted from, so the result always equals converting every row. The
+    reused Bars are the same objects, which lets the supervisor send only the
+    bars after them.
+    """
+    values = _row_values(items) if stream is not None and items else None
+    if values is None:
+        return tuple(_to_sdk_bar(item) for item in items)
+    with _stream_bars_lock:
+        held = _stream_bars.get(stream)
+    keep, kept, reused = 0, [], ()
+    try:
+        if held is not None:
+            old_values, old_bars = held
+            try:
+                start = bisect_left(old_values, values(items[0])[0], key=itemgetter(0))
+            except TypeError:
+                start = len(old_values)
+            limit = min(len(items), len(old_values) - start)
+            # The first row whose values differ, compared in C. Equal rows keep
+            # the stored values, so a tick only allocates the tail's.
+            keep = next(compress(count(), map(ne, map(values, items[:limit]), old_values[start:start + limit])), limit)
+            kept, reused = old_values[start:start + keep], old_bars[start:start + keep]
+        kept.extend(map(values, items[keep:]))
+    except (AttributeError, KeyError):
+        # A row lacks a field the getter reads: convert every row as before.
+        return tuple(_to_sdk_bar(item) for item in items)
+    bars = reused + tuple(_to_sdk_bar(item) for item in items[keep:])
+    with _stream_bars_lock:
+        _stream_bars[stream] = (kept, bars)
+        _stream_bars.move_to_end(stream)
+        while len(_stream_bars) > MAX_STREAM_BARS:
+            _stream_bars.popitem(last=False)
+    return bars
 
 
 def _default_failure_payload(
