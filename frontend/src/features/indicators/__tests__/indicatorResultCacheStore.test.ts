@@ -27,6 +27,7 @@ import {
   resetCacheRegistry,
   unregisterCacheResource,
 } from "../../cache-gc/cacheRegistry.js";
+import { normalizeIndicatorPayload } from "../indicatorPayloadRuntime.js";
 import type { NormalizedIndicatorPayload } from "../indicatorTypes.js";
 import { mustBeDefined, structuralMock } from "../../../test/testHelpers.js";
 
@@ -361,6 +362,54 @@ test("replaceCachedIndicatorRange replaces only the requested time window", () =
       { time: 20, value: 200 },
     ],
   );
+});
+
+function bgcolorPayload(times: number[]): NormalizedIndicatorPayload {
+  return normalizeIndicatorPayload({
+    ok: true,
+    annotations: [{
+      id: "bg",
+      pane: "main",
+      type: "bgcolor",
+      data: times.map((time) => ({ time })),
+      style: { color: "rgba(34,197,94,0.2)" },
+    }],
+  }, maIndicator.id);
+}
+
+function cachedBgcolorRegionTimes() {
+  const cached = mustBeDefined(getCachedIndicatorResult(maIndicator, baseContext));
+  const bgcolor = mustBeDefined(cached.normalized.bgcolors[0]);
+  return (bgcolor.regions || []).map((region) => region.time);
+}
+
+test("patchCachedIndicatorResult merges bgcolor regions by time", () => {
+  resetIndicatorResultCache();
+  resetCacheRegistry();
+  registerBaseKline();
+
+  cacheIndicatorSnapshot(maIndicator, baseContext, bgcolorPayload([10, 20, 30]));
+  patchCachedIndicatorResult(maIndicator, baseContext, bgcolorPayload([30, 40]));
+  assert.deepEqual(cachedBgcolorRegionTimes(), [10, 20, 30, 40]);
+
+  patchCachedIndicatorResult(maIndicator, baseContext, bgcolorPayload([]));
+  assert.deepEqual(cachedBgcolorRegionTimes(), [10, 20, 30, 40]);
+});
+
+test("replaceCachedIndicatorRange only rewrites bgcolor regions inside the range", () => {
+  resetIndicatorResultCache();
+  resetCacheRegistry();
+  registerBaseKline();
+
+  cacheIndicatorSnapshot(maIndicator, baseContext, bgcolorPayload([10, 20, 30, 40]));
+  replaceCachedIndicatorRange(
+    maIndicator,
+    baseContext,
+    bgcolorPayload([30]),
+    { start: 20, end: 30 },
+  );
+
+  assert.deepEqual(cachedBgcolorRegionTimes(), [10, 30, 40]);
 });
 
 test("successful range records computed coverage even when warmup produces no output points", () => {
