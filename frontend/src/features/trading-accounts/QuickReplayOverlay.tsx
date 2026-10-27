@@ -10,7 +10,7 @@ import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
-import { loadReplayBars } from "./quickReplayData.js";
+import { loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
 import {
   STANDARD_STEPS,
   initialCursor,
@@ -66,6 +66,8 @@ export default function QuickReplayOverlay({
   const [detail, setDetail] = useState<TradeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const [step, setStep] = useState(request.interval);
   const [cursor, setCursor] = useState(() => initialCursor(trade, intervalSec));
@@ -83,17 +85,26 @@ export default function QuickReplayOverlay({
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    setPlaying(0);
+    setChartBars([]);
+    setLoadFailed(false);
     setError(null);
     loadReplayBars({ ...instrument, interval: request.interval }, window_.startSec, window_.endSec, controller.signal)
       .then((result) => {
+        if (controller.signal.aborted) return;
         setChartBars(result.bars);
         setTruncated(result.truncated);
       })
-      .catch((cause) => { if (!controller.signal.aborted) setError(tradingErrorMessage(cause)); })
+      .catch((cause) => {
+        if (!controller.signal.aborted) {
+          setLoadFailed(true);
+          setError(cause instanceof ReplayHistoryPendingError ? t("trading.replay.pending") : tradingErrorMessage(cause));
+        }
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
     return () => controller.abort();
-  }, [api, instrument, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
+  }, [api, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
   useEffect(() => {
     if (stepSec >= intervalSec) {
@@ -104,7 +115,7 @@ export default function QuickReplayOverlay({
     // Finer candles only for the holding period, where partial candles matter.
     const start = Math.floor(trade.openedAtMs / 1000) - intervalSec * 4;
     loadReplayBars({ ...instrument, interval: step }, start, window_.endSec, controller.signal)
-      .then((result) => setFineBars(result.bars))
+      .then((result) => { if (!controller.signal.aborted) setFineBars(result.bars); })
       .catch(() => { if (!controller.signal.aborted) setFineBars(null); });
     return () => controller.abort();
   }, [instrument, intervalSec, step, stepSec, trade.openedAtMs, window_.endSec]);
@@ -238,17 +249,22 @@ export default function QuickReplayOverlay({
   const hlines = useMemo(() => [...indicators.view.hlines, ...planLines], [indicators.view.hlines, planLines]);
 
   // ── controls ─────────────────────────────────────────────────
-  const move = useCallback((delta: number) => setCursor((value) => clamp(value + delta)), [clamp]);
+  const canNavigate = !loading && !loadFailed && chartBars.length > 0;
+  const move = useCallback((delta: number) => {
+    if (canNavigate) setCursor((value) => clamp(value + delta));
+  }, [canNavigate, clamp]);
   const jumpNext = useCallback(() => {
+    if (!canNavigate) return;
     const next = nextEventCursor(events, cursor, stepSec);
     if (next !== null) setCursor(clamp(next));
-  }, [clamp, cursor, events, stepSec]);
+  }, [canNavigate, clamp, cursor, events, stepSec]);
   const jumpPrevious = useCallback(() => {
+    if (!canNavigate) return;
     const previous = previousEventCursor(events, cursor, stepSec);
     setCursor(clamp(previous ?? initialCursor(trade, intervalSec)));
-  }, [clamp, cursor, events, intervalSec, stepSec, trade]);
+  }, [canNavigate, clamp, cursor, events, intervalSec, stepSec, trade]);
   useEffect(() => {
-    if (playing === 0) return undefined;
+    if (playing === 0 || !canNavigate) return undefined;
     const timer = window.setInterval(() => {
       setCursor((value) => {
         const next = clamp(value + stepSec);
@@ -257,7 +273,7 @@ export default function QuickReplayOverlay({
       });
     }, PLAY_DELAY_MS[playing - 1]);
     return () => window.clearInterval(timer);
-  }, [clamp, playing, stepSec]);
+  }, [canNavigate, clamp, playing, stepSec]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -268,14 +284,14 @@ export default function QuickReplayOverlay({
       else if (event.key === "ArrowLeft" && event.shiftKey) { event.preventDefault(); jumpPrevious(); }
       else if (event.key === "ArrowRight") { event.preventDefault(); move(stepSec); }
       else if (event.key === "ArrowLeft") { event.preventDefault(); move(-stepSec); }
-      else if (event.key === " ") { event.preventDefault(); setPlaying((value) => (value === 0 ? 1 : 0)); }
+      else if (canNavigate && event.key === " ") { event.preventDefault(); setPlaying((value) => (value === 0 ? 1 : 0)); }
       else return;
       // The chart canvas handles arrow keys itself; replay owns them while open.
       event.stopPropagation();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [jumpNext, jumpPrevious, move, onExit, stepSec]);
+  }, [canNavigate, jumpNext, jumpPrevious, move, onExit, stepSec]);
 
   const stepOptions = useMemo(() => {
     const span = window_.endSec - Math.floor(trade.openedAtMs / 1000);
@@ -320,6 +336,7 @@ export default function QuickReplayOverlay({
       <div className="quick-replay-body">
         <div className="quick-replay-chart">
           {error && <p className="trading-error" role="alert">{error}</p>}
+          {loadFailed && <button type="button" className="trading-button" onClick={() => setReload((value) => value + 1)}>{t("trading.replay.retry")}</button>}
           {!loading && chartBars.length === 0 && !error && <p className="trading-empty">{t("trading.replay.noData")}</p>}
           <ChartErrorBoundary>
             <SingleChartPanes
@@ -420,14 +437,15 @@ export default function QuickReplayOverlay({
         </aside>
       </div>
       <footer className="quick-replay-controls" role="toolbar" aria-label={t("trading.replay.controls")}>
-        <button type="button" className="trading-button" onClick={() => move(-SETUP_BARS * intervalSec)} title={t("trading.replay.setupHint")}>
+        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(-SETUP_BARS * intervalSec)} title={t("trading.replay.setupHint")}>
           {t("trading.replay.setup")}
         </button>
-        <button type="button" className="trading-button" onClick={jumpPrevious} title={t("trading.replay.prevEventHint")}>
+        <button disabled={!canNavigate} type="button" className="trading-button" onClick={jumpPrevious} title={t("trading.replay.prevEventHint")}>
           {t("trading.replay.prevEvent")}
         </button>
-        <button type="button" className="trading-button" onClick={() => move(-stepSec)} aria-label={t("trading.replay.back")}>◀</button>
+        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(-stepSec)} aria-label={t("trading.replay.back")}>◀</button>
         <button
+          disabled={!canNavigate}
           type="button"
           className="trading-button"
           data-variant="primary"
@@ -437,6 +455,7 @@ export default function QuickReplayOverlay({
           {playing ? "❚❚" : "▶"}
         </button>
         <button
+          disabled={!canNavigate}
           type="button"
           className="trading-button"
           data-active={playing === 2}
@@ -445,8 +464,8 @@ export default function QuickReplayOverlay({
         >
           4×
         </button>
-        <button type="button" className="trading-button" onClick={() => move(stepSec)} aria-label={t("trading.replay.forward")}>▶|</button>
-        <button type="button" className="trading-button" onClick={jumpNext} title={t("trading.replay.nextEventHint")}>
+        <button disabled={!canNavigate} type="button" className="trading-button" onClick={() => move(stepSec)} aria-label={t("trading.replay.forward")}>▶|</button>
+        <button disabled={!canNavigate} type="button" className="trading-button" onClick={jumpNext} title={t("trading.replay.nextEventHint")}>
           {t("trading.replay.nextEvent")}
         </button>
         <label className="quick-replay-step">
