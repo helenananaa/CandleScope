@@ -91,7 +91,8 @@ def test_account_delta_transport_keeps_changed_equity_positions_nulls_and_full_r
                 equity=1000+i,initial_capital=1000,netprofit=i,openprofit=0))
             request={**wire,"bars":bars,"accounts":accounts}
             assert worker.request(request,cancel)==invoke(runtime,request)
-        accounts[0]["equity"]=1000.5;accounts[0]["netprofit"]=.5
+        # Sent frames are not copied; a corrected frame replaces the old one.
+        accounts[0]={**accounts[0],"equity":1000.5,"netprofit":.5}
         assert worker.request(request,cancel)==invoke(runtime,request)
         # Python bool equality with integer zero must never hide bad feedback.
         bars.append(dict(time=480,open=10,high=10,low=10,close=10,volume=1))

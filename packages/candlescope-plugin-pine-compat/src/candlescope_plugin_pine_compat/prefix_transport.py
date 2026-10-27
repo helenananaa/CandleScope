@@ -4,6 +4,22 @@ from copy import deepcopy
 CONTRACT = "candlescope.pine-prefix/2"
 PASSES_CONTRACT = "candlescope.pine-prefix-passes/1"
 CLOCKS_CONTRACT = "candlescope.pine-prefix-clocks/1"
+REPLY_CONTRACT = "candlescope.pine-prefix-reply/1"
+
+
+def reply_base(value):
+    """Return how many intents the Host already holds, for a compact reply.
+
+    A compact reply omits the chart output and the intents before that count.
+    It belongs to one request and is never part of the retained prefix.
+    """
+    if value is None:
+        return None
+    if (not isinstance(value, dict) or set(value) != {"contract", "intent_base"}
+            or value["contract"] != REPLY_CONTRACT
+            or type(value["intent_base"]) is not int or value["intent_base"] < 0):
+        raise ValueError("PINE_PREFIX_INVALID: unsupported compact reply request")
+    return value["intent_base"]
 
 
 class PrefixInput:

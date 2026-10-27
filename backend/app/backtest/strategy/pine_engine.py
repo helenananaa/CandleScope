@@ -250,6 +250,11 @@ class PineEngineProvider:
             self.request_feed = RequestedObservationFeed(self.requested_streams)
             self.wire["request_update_contract"] = REQUEST_UPDATE_CONTRACT
         self.worker = None if self.streaming else SessionWorker(runtime, self.wire, self.cancelled, evaluator=True)
+        # This provider reads only intents and account contracts, never chart
+        # output, so a negotiated evaluator returns just each frame's new intents.
+        from app.backtest.native_session import PREFIX_REPLY_CONTRACT
+        self.compact = (PREFIX_REPLY_CONTRACT if not self.streaming and current.get("prefix_reply") == PREFIX_REPLY_CONTRACT
+                        else None)
         self.bars, self.accounts, self.history, self.entry_id = [], [], [], None
         self.execution_times = []
         self.execution_passes = []
@@ -369,6 +374,8 @@ class PineEngineProvider:
                     **({"execution_times": self.execution_times} if self.needs_clock else {}),
                     **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
                        else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
+                    **({"prefix_reply": {"contract": self.compact, "intent_base": len(self.history)}}
+                       if self.compact else {}),
                     "context": {
                         "symbol": chart_symbol,
                         "timeframe": timeframe,
@@ -403,8 +410,16 @@ class PineEngineProvider:
         def ordinal(item):
             return (item["bar_index"], item.get("pass_index", -1)) if self.pass_mode else (item["bar_index"], -1)
         cursor = (index, pass_index) if self.pass_mode else (index, -1)
+        base = 0
+        if self.compact:
+            # The evaluator vouches for the intents before ``base``; it
+            # returns base 0 with every intent when it cannot.
+            base = result.get("intent_base")
+            if (result.get("prefix_reply") != self.compact or type(base) is not int
+                    or not 0 <= base <= len(self.history)):
+                raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "invalid compact Pine reply")
         previous = self.history if self.streaming else [item for item in result["intents"] if ordinal(item) < cursor]
-        if previous != self.history:
+        if previous != (self.history[base:] if base else self.history):
             raise StrategyProviderError(
                 "LOOKAHEAD_VIOLATION", "Pine changed an earlier decision"
             )
