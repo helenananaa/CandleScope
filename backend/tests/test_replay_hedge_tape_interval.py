@@ -30,6 +30,7 @@ async def make_run(
     initial_equity="10000",
     later_mark="105",
     time_policy="NONE",
+    track_marks=None,
 ):
     root.mkdir()
     symbols = ("BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT",
@@ -72,6 +73,7 @@ async def make_run(
             root=root,
             prefix="second",
             symbol=symbol,
+            mark_prices=track_marks,
             include_book=False,
         )
     created = await service.training.create_run(request)
@@ -298,6 +300,160 @@ async def test_hedge_tape_intervals_match_scalar_across_mark_and_funding(
         "excursions",
         "source_chain",
         "broker",
+    ):
+        assert outcomes[0][field] == outcomes[1][field]
+    assert outcomes[0]["writes"] < outcomes[1]["writes"] / 2
+
+
+async def test_hedge_tape_intervals_continue_past_an_earlier_track_input_bound(
+    tmp_path, monkeypatch
+):
+    # An added FULL track is bound through the dataset end (the final bar's
+    # open), the primary through that bar's close. Past the earlier bound the
+    # exact path keeps the leg's committed mark; intervals must do the same.
+    source = fixtures._multi_trade_sources
+    monkeypatch.setattr(
+        fixtures,
+        "_multi_trade_sources",
+        lambda *a, **kw: source(*a, trades_per_minute=60, **kw),
+    )
+    outcomes = []
+    for enabled in (True, False):
+        service, run, sid, request, send = await make_run(
+            tmp_path / str(enabled),
+            enabled=enabled,
+            sides=("LONG",),
+            track_count=2,
+            track_marks=["200", "200", "200", "210", "220"],
+        )
+        try:
+            bounds = await service.store.run_extension_read(
+                lambda c: dict(
+                    c.execute(
+                        "SELECT track_id,bound_range_end_ms FROM replay_hedge_track_public_binding WHERE run_id=?",
+                        (run,),
+                    ).fetchall()
+                )
+            )
+            earlier, final = bounds["track-2"], bounds["track-1"]
+            assert earlier == request.requested_start_ms + 3 * 60000 < final
+            await send(
+                "before-bound",
+                C.ADVANCE_TO,
+                {"virtual_time_ms": earlier - 1, "stop_on_event": False},
+            )
+            counted = dict(getattr(service.training.store, "_tape_interval_outcomes", {}))
+            start_writes = service.store._metrics["transactions"]
+            result = await send(
+                "past-bound",
+                C.ADVANCE_TO,
+                {"virtual_time_ms": final - 1, "stop_on_event": False},
+            )
+            writes = service.store._metrics["transactions"] - start_writes
+            assert result["cursor"]["virtual_time_ms"] == final - 1
+            assert (await service.training.audit_account(run))["status"] == "PASS"
+            await _assert_complete_global_prefix(service, run)
+            recorded = service.training.store._tape_interval_outcomes
+            if enabled:
+                assert recorded["accepted"] > counted.get("accepted", 0)
+            else:
+                assert set(recorded) == {"disabled"}
+            heads = await service.training.store.get_market_track_heads(run)
+            # The mark committed at the earlier bound holds until the archive's
+            # next mark, which lies beyond this target.
+            assert {
+                t["track_id"]: Decimal(t["position"]["long"]["mark_price"]) for t in heads
+            } == {"track-1": Decimal("105"), "track-2": Decimal("210")}
+            rows = await service.store.run_extension_read(
+                lambda c: c.execute(
+                    "SELECT basis_json,summary_json FROM replay_multi_bar_interval WHERE run_id=? AND start_time_ms>=?",
+                    (run, earlier),
+                ).fetchall()
+            )
+            past = [
+                tuple(map(json.loads, r))
+                for r in rows
+                if json.loads(r[0])["schema"] == "multi-tape-interval.v2"
+            ]
+            assert bool(past) == enabled
+            for basis, summary in past:
+                restored = reconstruct_portfolio_interval(
+                    basis, input_root=tmp_path, bucket_ms=0
+                )
+                for key in ("last", "peak", "trough", "max_drawdown"):
+                    assert Decimal(restored[key]) == Decimal(summary[key])
+            portfolio = (await service.training.get_market_tracks(run))["portfolio"]
+            for resolution in ("EVENT", "1M"):
+                await service.training.equity(run, resolution=resolution, limit=1000)
+            outcomes.append(
+                {
+                    "finance": [(t["position"], t["account"]) for t in heads],
+                    "portfolio": [
+                        portfolio[k]
+                        for k in (
+                            "equity",
+                            "cash_balance",
+                            "positions",
+                            "orders",
+                            "fills",
+                            "fees_paid",
+                            "funding_cashflow",
+                        )
+                    ],
+                    "ledger": await service.store.run_extension_read(
+                        lambda c: [
+                            tuple(r)
+                            for r in c.execute(
+                                "SELECT ledger_sequence,track_id,kind,cash_delta,virtual_time_ms,source_sequence,entry_hash "
+                                "FROM replay_training_contract_ledger WHERE run_id=? ORDER BY ledger_sequence",
+                                (run,),
+                            )
+                        ]
+                    ),
+                    "inputs": await service.store.run_extension_read(
+                        lambda c: [
+                            tuple(r)
+                            for r in c.execute(
+                                "SELECT track_id,last_event_sequence,state_json,input_chain_hash "
+                                "FROM replay_hedge_track_public_projection WHERE run_id=? ORDER BY track_id",
+                                (run,),
+                            )
+                        ]
+                    ),
+                    "curve": await service.store.run_extension_read(
+                        lambda c: [
+                            tuple(r)
+                            for r in c.execute(
+                                "SELECT resolution,bucket_id,source_sequence,public_time_json,equity,cash_balance,unrealized_pnl "
+                                "FROM replay_equity_sample ORDER BY resolution,bucket_id"
+                            )
+                        ]
+                    ),
+                    "events": [
+                        (
+                            e["actual_event_time_ms"],
+                            e["event_phase"],
+                            e["track_id"],
+                            e["source_sequence"],
+                        )
+                        for e in await service.training.store.global_events(run)
+                    ],
+                    "report": await service.training.report(run),
+                    "source_chain": service._sessions[sid].actor._event_chain_hash,
+                    "writes": writes,
+                }
+            )
+        finally:
+            await service.shutdown(step_timeout=5)
+    for field in (
+        "finance",
+        "portfolio",
+        "ledger",
+        "inputs",
+        "curve",
+        "events",
+        "report",
+        "source_chain",
     ):
         assert outcomes[0][field] == outcomes[1][field]
     assert outcomes[0]["writes"] < outcomes[1]["writes"] / 2

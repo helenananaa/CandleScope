@@ -6,7 +6,7 @@ import { createDefaultChartWorkspaceRecord } from "../chart-workspace/chartWorks
 import { applyControlWorkspaceCommand } from "../chart-workspace/chartWorkspaceControl.js";
 import { visibleCellIds } from "../chart-workspace/chartWorkspaceLayout.js";
 
-function fixture() {
+function fixture(waitMs = 80) {
   const record = createDefaultChartWorkspaceRecord(1);
   const document = record.document;
   const window = document.windows["main-window"]!;
@@ -24,7 +24,7 @@ function fixture() {
     state.view.layoutCellIds = visibleCellIds(result.document.windows["main-window"]!.layoutTree);
     state.status.controlReceipt = { requestId: command.requestId, ok: true, revision: result.document.revision,
       cellIds: state.view.layoutCellIds };
-  } }, "main-window", 80);
+  } }, "main-window", waitMs);
   const request = { id: "edit", method: "workspace.configure", params: { requestId: "edit", workspaceId: record.id,
     windowId: "main-window", expectedRevision: document.revision, layout: "single", charts: [{
       session: { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "5m" }, indicators: [{ name: "EMA", period: 20 }],
@@ -38,14 +38,23 @@ function fixture() {
   return { state, controller, request, observe };
 }
 
-test("ready requires observations for the applied session and indicators plus completed persistence", async () => {
+test("ready requires observations for the applied session and indicators plus completed persistence", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const f = fixture();
   f.observe(); // Old 1h session and empty indicator signature must not count.
-  const result = await f.controller.execute(f.request, () => {});
+  const staleOperation = f.controller.execute(f.request, () => {});
+  t.mock.timers.tick(100);
+  const result = await staleOperation;
   assert.equal(result.state, "applied"); assert.equal(result.code, "READINESS_TIMEOUT");
-  const saved = fixture(); saved.state.status.saveState = "saving";
+  const saved = fixture(200); saved.state.status.saveState = "saving";
   const operation = saved.controller.execute(saved.request, () => saved.observe());
-  setTimeout(() => { saved.state.status.saveState = "saved"; }, 10);
+  let settled = false;
+  void operation.then(() => { settled = true; });
+  t.mock.timers.tick(50);
+  await Promise.resolve();
+  assert.equal(settled, false, "ready must wait for persistence even when indicators are ready");
+  saved.state.status.saveState = "saved";
+  t.mock.timers.tick(50);
   assert.equal((await operation).state, "ready");
 });
 
@@ -65,11 +74,14 @@ test("viewport revisions do not supersede configuration, but an altered target d
   assert.equal(rejected.code, "TARGET_CHANGED"); assert.equal(rejected.state, "applied");
 });
 
-test("persistence failure, indicator failure and disposal cannot report ready", async () => {
+test("persistence failure, indicator failure and disposal cannot report ready", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const f = fixture(); f.state.status.saveState = "error"; f.state.status.error = "disk";
   assert.equal((await f.controller.execute(f.request, () => f.observe())).code, "PERSISTENCE_FAILED");
   const indicator = fixture();
-  assert.equal((await indicator.controller.execute(indicator.request, () => indicator.observe({ indicatorsReady: false }))).code, "READINESS_TIMEOUT");
+  const indicatorOperation = indicator.controller.execute(indicator.request, () => indicator.observe({ indicatorsReady: false }));
+  t.mock.timers.tick(100);
+  assert.equal((await indicatorOperation).code, "READINESS_TIMEOUT");
   const disposed = fixture(); disposed.controller.dispose();
   assert.equal((await disposed.controller.execute(disposed.request, () => {})).code, "WINDOW_UNAVAILABLE");
 });
