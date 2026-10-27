@@ -8,13 +8,16 @@ import math
 import re
 import uuid
 from bisect import bisect_left
+from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache, partial
 from importlib import metadata as importlib_metadata
+from operator import attrgetter, is_not
 from typing import Any
 
 from candlescope_plugin_sdk import (
+    FEATURE_BATCH_BARS_PATCH_V1,
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_HISTOGRAM_SERIES_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
@@ -215,6 +218,7 @@ def _descriptor() -> RuntimeDescriptor:
             FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
             FEATURE_RENDER_NATIVE_SCENE_V1,
             FEATURE_RENDER_OUTPUT_PATCH_V1,
+            FEATURE_BATCH_BARS_PATCH_V1,
         ),
         required_host_features=(
             FEATURE_BATCH_EXECUTION_V1,
@@ -474,16 +478,41 @@ def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, 
     return analysis, tuple(diagnostics)
 
 
-def _normalize_bars(request: ExecuteBatchRequest) -> tuple[list[dict[str, float | int]], list[int]]:
+def _reused_prefix(bars: tuple[Any, ...], previous: tuple[Any, ...] | None) -> tuple[int, int]:
+    """Return (start, count): ``bars`` begins with ``previous[start:start + count]``.
+
+    Only the very Bar objects of the previous window count: Bars are
+    immutable, so a corrected bar is always normalized again.
+    """
+    if not previous or not bars:
+        return 0, 0
+    start = bisect_left(previous, bars[0].time, key=attrgetter("time"))
+    if start >= len(previous) or previous[start] is not bars[0]:
+        return 0, 0
+    count = min(len(bars), len(previous) - start)
+    changed = next(itertools.compress(itertools.count(), map(is_not, bars, previous[start:start + count])), count)
+    # A formerly final forming bar is validated again where it is no longer last.
+    if changed == len(previous) - start and changed < len(bars) and not bars[changed - 1].is_closed:
+        changed -= 1
+    return start, changed
+
+
+def _normalize_bars(
+    request: ExecuteBatchRequest,
+    previous: tuple[tuple[Any, ...], list[dict[str, float | int]], list[int]] | None = None,
+) -> tuple[list[dict[str, float | int]], list[int]]:
+    """Validate and convert bars; ``previous`` is an earlier (bars, result) to reuse."""
     if len(request.bars) > MAX_BARS:
         raise BridgeError(
             "PINE_INPUT_LIMIT_EXCEEDED",
             f"Too many Pine bars: {len(request.bars)} > {MAX_BARS}",
         )
-    runtime_bars: list[dict[str, float | int]] = []
-    host_times: list[int] = []
-    previous_runtime_time: int | None = None
-    for index, bar in enumerate(request.bars):
+    start, keep = _reused_prefix(request.bars, previous[0] if previous is not None else None)
+    # Reused rows passed every check below at the same window position.
+    runtime_bars: list[dict[str, float | int]] = previous[1][start:start + keep] if keep else []
+    host_times: list[int] = previous[2][start:start + keep] if keep else []
+    previous_runtime_time: int | None = runtime_bars[-1]["time"] if runtime_bars else None
+    for index, bar in enumerate(request.bars[keep:], keep):
         if not bar.is_closed and index != len(request.bars) - 1:
             raise BridgeError(
                 "PINE_CLOSED_BARS_REQUIRED",
@@ -1567,9 +1596,14 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
 
     def __init__(self, *, journal_path=None) -> None:
         self._sessions = PineSessions(journal_path=journal_path)
+        # pineSessionId -> its last request's bars and their normalized rows.
+        # A host that sends bar patches gets the same Bar objects back from the
+        # SDK dispatcher, so an unchanged prefix is never normalized again.
+        self._windows: OrderedDict[str, tuple[tuple[Any, ...], list[dict[str, float | int]], list[int]]] = OrderedDict()
 
     def shutdown(self) -> None:
         self._sessions.clear()
+        self._windows.clear()
         self._sessions.journal.close()
 
     def describe(self) -> RuntimeDescriptor:
@@ -1634,7 +1668,14 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             error = next((item for item in diagnostics if item.severity == "error"), None)
             if error is not None:
                 return ExecuteBatchResult(ok=False, diagnostics=diagnostics)
-            runtime_bars, host_times = _normalize_bars(request)
+            window_key = request.options.get("pineSessionId")
+            window_key = window_key if isinstance(window_key, str) and window_key else None
+            runtime_bars, host_times = _normalize_bars(
+                request, self._windows.pop(window_key, None) if window_key else None)
+            if window_key:
+                self._windows[window_key] = (request.bars, runtime_bars, host_times)
+                while len(self._windows) > self._sessions.capacity:
+                    self._windows.popitem(last=False)
             host_bars = runtime_bars
             host_environment = host_inputs(request.options.get("pineHost"))
             overrides = _normalize_overrides({key: value for key, value in request.params.items() if key not in {LIBRARY_PARAMETER, "__pineContexts", "__pineCurrencyRates"}}, analysis)

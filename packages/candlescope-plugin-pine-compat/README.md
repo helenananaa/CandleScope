@@ -28,8 +28,11 @@ subscriptions supply `options.pineSessionId` to retain native sessions across
 forming replacements, confirmation and appends. A host that negotiated
 `render.output-patch/1` and names the stream receives only the changed tail as an
 `outputPatch` (see the SDK protocol); resets, recovery and an unknown base answer
-with complete Render IR snapshots, as do all other hosts. HTTP computations are
-independent. Analysis exposes native
+with complete Render IR snapshots, as do all other hosts. With
+`batch-execution.bars-patch/1` the host sends only the bars after those the runtime
+already holds; the SDK rebuilds the full window, and bars kept from the previous
+request are not normalized again. HTTP computations are independent. Analysis
+exposes native
 `meta.hostRequirements`. Requested contexts are discovered from compiled HIR,
 including imported libraries and conservative nested-context expansion. Dynamic
 symbols/timeframes require explicit context data; ambiguous warmup requires an
