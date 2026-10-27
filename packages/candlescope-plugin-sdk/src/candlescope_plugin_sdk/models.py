@@ -609,13 +609,30 @@ class AnalyzeResult:
 
 @dataclass(frozen=True, slots=True)
 class ExecuteBatchRequest:
+    """One batch execution.
+
+    ``output_stream`` is only sent after ``render.output-patch/1`` was
+    negotiated. It names a live output stream and lets the runtime answer with
+    an ``outputPatch`` against ``output_base``, the ``outputRevision`` of the
+    last output the host holds for that stream; without a base the runtime
+    returns a full output.
+    """
+
     source: str
     context: MarketContext
     bars: tuple[Bar, ...]
     params: dict[str, Any] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
+    output_stream: str | None = None
+    output_base: str | None = None
 
     def __post_init__(self) -> None:
+        if self.output_stream is not None:
+            _string(self.output_stream, "executeBatch.outputPatch.stream")
+        if self.output_base is not None:
+            _string(self.output_base, "executeBatch.outputPatch.base")
+            if self.output_stream is None:
+                raise invalid_params("executeBatch.outputPatch.base requires a stream")
         object.__setattr__(
             self,
             "source",
@@ -651,6 +668,11 @@ class ExecuteBatchRequest:
             "bars": [bar.to_wire() for bar in self.bars],
             "params": dict(self.params),
             "options": dict(self.options),
+            **(
+                {"outputPatch": {"stream": self.output_stream, "base": self.output_base}}
+                if self.output_stream is not None
+                else {}
+            ),
         }
 
     @classmethod
@@ -661,7 +683,12 @@ class ExecuteBatchRequest:
             raise invalid_params(
                 "executeBatch.bars must be an array", field_name="executeBatch.bars"
             )
+        patch = data.get("outputPatch")
+        if patch is not None:
+            patch = _mapping(patch, "executeBatch.outputPatch")
         return cls(
+            output_stream=patch.get("stream") if patch is not None else None,
+            output_base=patch.get("base") if patch is not None else None,
             source=_string(
                 data.get("source"),
                 "executeBatch.source",
@@ -888,23 +915,307 @@ class RenderOutput:
         )
 
 
+_SERIES_PATCH_FIELDS = frozenset({"id", "type", "title", "pane", "scale", "style"})
+_SERIES_SPLICE_PATHS = frozenset({("data",), ("style", "colorData")})
+_VALUE_COLLECTION_FIELDS = frozenset({"strategy", "objects"})
+
+
+def _sequence(value: Any, field_name: str) -> Sequence[Any]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise invalid_params(f"{field_name} must be an array", field_name=field_name)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class ListSplice:
+    """Keep the first ``keep`` items of the base list at ``path``, then append."""
+
+    path: tuple[str, ...]
+    keep: int
+    append: tuple[Any, ...] = ()
+
+    def __post_init__(self) -> None:
+        path = tuple(_sequence(self.path, "outputPatch.splice.path"))
+        if not path or not all(isinstance(key, str) and key for key in path):
+            raise invalid_params("outputPatch.splice.path must name object keys")
+        object.__setattr__(self, "path", path)
+        if _integer(self.keep, "outputPatch.splice.keep") < 0:
+            raise invalid_params("outputPatch.splice.keep must not be negative")
+        object.__setattr__(
+            self,
+            "append",
+            tuple(
+                _json_value(item, "outputPatch.splice.append[]")
+                for item in _sequence(self.append, "outputPatch.splice.append")
+            ),
+        )
+
+    def to_wire(self) -> dict[str, Any]:
+        return {"path": list(self.path), "keep": self.keep, "append": list(self.append)}
+
+    @classmethod
+    def from_wire(cls, value: Any) -> "ListSplice":
+        data = _mapping(value, "outputPatch.splice")
+        return cls(path=data.get("path"), keep=data.get("keep"), append=data.get("append", ()))
+
+
+@dataclass(frozen=True, slots=True)
+class RecordPatch:
+    """One record of a patched list.
+
+    The record starts as the base record at index ``base`` (or empty),
+    ``values`` (wire ``set``) replaces top-level keys, and each splice
+    rebuilds one list from the base record's list at the same path.
+    """
+
+    base: int | None = None
+    values: dict[str, Any] = field(default_factory=dict)
+    splices: tuple[ListSplice, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.base is not None and _integer(self.base, "outputPatch.record.base") < 0:
+            raise invalid_params("outputPatch.record.base must not be negative")
+        values = _json_value(self.values, "outputPatch.record.set")
+        if not isinstance(values, dict):
+            raise invalid_params("outputPatch.record.set must be an object")
+        object.__setattr__(self, "values", values)
+        splices = tuple(self.splices)
+        if not all(isinstance(item, ListSplice) for item in splices):
+            raise invalid_params("outputPatch.record.splice is invalid")
+        paths = [item.path for item in splices]
+        if len(set(paths)) != len(paths) or any(
+            len(path) == 1 and path[0] in values for path in paths
+        ):
+            raise invalid_params("outputPatch.record.splice paths must be unique")
+        object.__setattr__(self, "splices", splices)
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            **({"base": self.base} if self.base is not None else {}),
+            **({"set": dict(self.values)} if self.values else {}),
+            **({"splice": [item.to_wire() for item in self.splices]} if self.splices else {}),
+        }
+
+    @classmethod
+    def from_wire(cls, value: Any) -> "RecordPatch":
+        data = _mapping(value, "outputPatch.record")
+        return cls(
+            base=data.get("base"),
+            values=_plain_dict(data.get("set", {}), "outputPatch.record.set"),
+            splices=tuple(
+                ListSplice.from_wire(item)
+                for item in _sequence(data.get("splice", ()), "outputPatch.record.splice")
+            ),
+        )
+
+
+def _base_item(items: Sequence[Any], index: int | None) -> Any:
+    if index is None:
+        return None
+    if index >= len(items):
+        raise invalid_params("outputPatch record base is outside the base output")
+    return items[index]
+
+
+def _spliced(base: Any, splice: ListSplice) -> list[Any]:
+    items = [] if base is None else base
+    if not isinstance(items, (list, tuple)) or splice.keep > len(items):
+        raise invalid_params("outputPatch splice exceeds its base list")
+    return [*items[: splice.keep], *splice.append]
+
+
+def _patched_record(base: Any, patch: RecordPatch) -> dict[str, Any]:
+    # Unchanged values stay shared with the base output; outputs are immutable.
+    if base is not None and not isinstance(base, Mapping):
+        raise invalid_params("outputPatch record base must be an object")
+    record = {**(base or {}), **patch.values}
+    for splice in patch.splices:
+        parent, source = record, base
+        for key in splice.path[:-1]:
+            child = parent.get(key)
+            if not isinstance(child, Mapping):
+                raise invalid_params("outputPatch splice parent must be an object")
+            parent[key] = child = dict(child)
+            parent = child
+            source = source.get(key) if isinstance(source, Mapping) else None
+        key = splice.path[-1]
+        parent[key] = _spliced(source.get(key) if isinstance(source, Mapping) else None, splice)
+    return record
+
+
+def _patched_series(base: LineSeries | None, patch: RecordPatch) -> LineSeries:
+    if set(patch.values) - _SERIES_PATCH_FIELDS or any(
+        item.path not in _SERIES_SPLICE_PATHS for item in patch.splices
+    ):
+        raise invalid_params("outputPatch series record is invalid")
+
+    def pick(key: str, attribute: str, default: Any) -> Any:
+        if key in patch.values:
+            return patch.values[key]
+        return getattr(base, attribute) if base is not None else default
+
+    style = dict(_mapping(pick("style", "style", {}), "series.style"))
+    points = base.points if base is not None else ()
+    for splice in patch.splices:
+        if splice.path == ("data",):
+            if splice.keep > len(points):
+                raise invalid_params("outputPatch splice exceeds its base list")
+            points = points[: splice.keep] + tuple(
+                LinePoint.from_wire(item) for item in splice.append
+            )
+        else:
+            style["colorData"] = _spliced(
+                base.style.get("colorData") if base is not None else None, splice
+            )
+    series = LineSeries(
+        id=pick("id", "id", None),
+        title=pick("title", "title", None),
+        points=(),
+        pane=pick("pane", "pane", "main"),
+        scale=pick("scale", "scale", "right"),
+        style=style,
+        series_type=pick("type", "series_type", None),
+    )
+    # Base points were validated when the base was accepted.
+    object.__setattr__(series, "points", points)
+    return series
+
+
+@dataclass(frozen=True, slots=True)
+class RenderPatch:
+    """Changes from the base output a host holds to the next output.
+
+    ``series`` is the complete ordered series list. ``collections`` names only
+    changed fields: list fields carry their complete ordered record list,
+    ``strategy`` and ``objects`` carry their full new value (or ``None``).
+    ``meta`` replaces the output meta.
+    """
+
+    base: str
+    series: tuple[RecordPatch, ...] = ()
+    collections: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "base", _string(self.base, "outputPatch.base"))
+        series = tuple(self.series)
+        if not all(isinstance(item, RecordPatch) for item in series):
+            raise invalid_params("outputPatch.series must contain record patches")
+        object.__setattr__(self, "series", series)
+        collections: dict[str, Any] = {}
+        for name, value in _mapping(self.collections, "outputPatch.collections").items():
+            if name not in _RENDER_COLLECTION_FIELDS:
+                raise invalid_params(f"outputPatch.collections contains unsupported field: {name}")
+            if name in _VALUE_COLLECTION_FIELDS:
+                value = None if value is None else _json_value(value, f"collections.{name}")
+                if value is not None and not isinstance(value, dict):
+                    raise invalid_params(f"collections.{name} must be an object")
+            else:
+                value = tuple(value)
+                if not all(isinstance(item, RecordPatch) for item in value):
+                    raise invalid_params(f"outputPatch.collections.{name} must contain record patches")
+            collections[name] = value
+        object.__setattr__(self, "collections", collections)
+        object.__setattr__(self, "meta", _plain_dict(self.meta, "outputPatch.meta"))
+
+    def apply(self, output: RenderOutput) -> RenderOutput:
+        """Return the output this patch produces from ``output``."""
+        series = tuple(
+            _patched_series(_base_item(output.series, item.base), item) for item in self.series
+        )
+        collections = output.collections
+        if self.collections:
+            # Build from an empty, validated instance: base records were
+            # validated when the base was accepted, patch records on decode.
+            patched = RenderCollections()
+            for name in _RENDER_COLLECTION_FIELDS:
+                value = getattr(collections, name) if collections is not None else getattr(patched, name)
+                change = self.collections.get(name, value)
+                if name in self.collections and name not in _VALUE_COLLECTION_FIELDS:
+                    change = tuple(_patched_record(_base_item(value, item.base), item) for item in change)
+                object.__setattr__(patched, name, change)
+            collections = patched
+        return RenderOutput(series=series, collections=collections, meta=self.meta)
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            "base": self.base,
+            "series": [item.to_wire() for item in self.series],
+            "collections": {
+                ("objectEvents" if name == "object_events" else name): (
+                    value
+                    if name in _VALUE_COLLECTION_FIELDS
+                    else [item.to_wire() for item in value]
+                )
+                for name, value in self.collections.items()
+            },
+            "meta": dict(self.meta),
+        }
+
+    @classmethod
+    def from_wire(cls, value: Any) -> "RenderPatch":
+        data = _mapping(value, "outputPatch")
+        collections = dict(_mapping(data.get("collections", {}), "outputPatch.collections"))
+        if "objectEvents" in collections:
+            if "object_events" in collections:
+                raise invalid_params("outputPatch.collections contains duplicate object events")
+            collections["object_events"] = collections.pop("objectEvents")
+        return cls(
+            base=data.get("base"),
+            series=tuple(
+                RecordPatch.from_wire(item)
+                for item in _sequence(data.get("series", ()), "outputPatch.series")
+            ),
+            collections={
+                name: (
+                    item
+                    if name in _VALUE_COLLECTION_FIELDS
+                    else tuple(
+                        RecordPatch.from_wire(record)
+                        for record in _sequence(item, f"outputPatch.collections.{name}")
+                    )
+                )
+                for name, item in collections.items()
+            },
+            meta=_plain_dict(data.get("meta", {}), "outputPatch.meta"),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ExecuteBatchResult:
+    """Batch result; ``output_patch`` replaces ``output`` only on request.
+
+    A runtime that negotiated ``render.output-patch/1`` and was asked for a
+    patch returns ``output_revision`` with every successful result, and may
+    return ``output_patch`` instead of ``output`` when the request's base is
+    the last revision it returned for that stream.
+    """
+
     ok: bool
     output: RenderOutput | None = None
     diagnostics: tuple[Diagnostic, ...] = ()
     inputs: tuple[dict[str, Any], ...] = ()
     meta: dict[str, Any] = field(default_factory=dict)
+    output_patch: RenderPatch | None = None
+    output_revision: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.ok, bool):
             raise invalid_params("executeBatch result ok must be boolean")
-        if self.ok and self.output is None:
-            raise invalid_params("successful executeBatch result requires output")
+        if self.ok and (self.output is None) == (self.output_patch is None):
+            raise invalid_params("successful executeBatch result requires output or outputPatch")
         if self.output is not None and not isinstance(self.output, RenderOutput):
             raise invalid_params("executeBatch result output is invalid")
-        if not self.ok and self.output is not None:
+        if self.output_patch is not None and not isinstance(self.output_patch, RenderPatch):
+            raise invalid_params("executeBatch result outputPatch is invalid")
+        if not self.ok and (
+            self.output is not None or self.output_patch is not None or self.output_revision is not None
+        ):
             raise invalid_params("failed executeBatch result must not contain output")
+        if self.output_revision is not None:
+            _string(self.output_revision, "executeBatchResult.outputRevision")
+        elif self.output_patch is not None:
+            raise invalid_params("executeBatch result outputPatch requires outputRevision")
         diagnostics = tuple(self.diagnostics)
         if not all(isinstance(item, Diagnostic) for item in diagnostics):
             raise invalid_params("executeBatch result diagnostics are invalid")
@@ -927,6 +1238,8 @@ class ExecuteBatchResult:
             "diagnostics": [item.to_wire() for item in self.diagnostics],
             **({"inputs": [dict(item) for item in self.inputs]} if self.inputs else {}),
             "meta": dict(self.meta),
+            **({"outputPatch": self.output_patch.to_wire()} if self.output_patch is not None else {}),
+            **({"outputRevision": self.output_revision} if self.output_revision is not None else {}),
         }
 
     @classmethod
@@ -935,10 +1248,26 @@ class ExecuteBatchResult:
         if not isinstance(data.get("ok"), bool):
             raise invalid_params("executeBatchResult.ok must be boolean")
         output = data.get("output")
+        patch = data.get("outputPatch")
         return cls(
             ok=data["ok"],
             output=RenderOutput.from_wire(output) if output is not None else None,
             diagnostics=_diagnostics(data.get("diagnostics", [])),
             inputs=tuple(_json_records(data.get("inputs", []), "executeBatchResult.inputs")),
             meta=_plain_dict(data.get("meta", {}), "executeBatchResult.meta"),
+            output_patch=RenderPatch.from_wire(patch) if patch is not None else None,
+            output_revision=data.get("outputRevision"),
+        )
+
+    def patched(self, base: RenderOutput) -> "ExecuteBatchResult":
+        """Return this result with its patch applied to ``base`` as a full output."""
+        if self.output_patch is None:
+            raise invalid_params("executeBatch result has no outputPatch")
+        return ExecuteBatchResult(
+            ok=self.ok,
+            output=self.output_patch.apply(base),
+            diagnostics=self.diagnostics,
+            inputs=self.inputs,
+            meta=self.meta,
+            output_revision=self.output_revision,
         )

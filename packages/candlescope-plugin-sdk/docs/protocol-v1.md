@@ -19,6 +19,8 @@ batch-execution/1
 render.line-series/1
 render.histogram-series/1
 render.structured-output/1
+render.native-scene/1
+render.output-patch/1
 ```
 
 A runtime declares all supported features and the subset it requires from the
@@ -73,6 +75,42 @@ results may also include generic `inputs` for parameter editors.
 
 Runtime compile/execution failures return `ok=false` plus diagnostics. Malformed
 protocol input uses JSON-RPC errors.
+
+#### Output patches
+
+`render.output-patch/1` lets a live stream skip resending unchanged history.
+Only after it was negotiated may a host add
+`"outputPatch": {"stream": "<id>", "base": "<revision>" | null}` to an
+`executeBatch` request. `stream` names the live output stream; `base` is the
+`outputRevision` of the last output the host still holds for it.
+
+A runtime that receives `outputPatch` returns `outputRevision` with every
+successful result. If `base` is exactly the revision it last returned for that
+stream, it may set `"output": null` and return `outputPatch` instead:
+
+```json
+{"base":"r7",
+ "series":[{"base":0,"set":{"id":"close","type":"line","title":"Close","pane":"main","scale":"right","style":{"color":"#2962ff"}},
+            "splice":[{"path":["data"],"keep":16383,"append":[{"time":1700983020,"value":101.5}]}]}],
+ "collections":{"lines":[{"base":0,"splice":[{"path":["data"],"keep":16383,"append":[{"time":1700983020,"value":101.5}]}]}]},
+ "meta":{}}
+```
+
+- `series` is the complete ordered series list; `meta` replaces the output meta.
+- `collections` names only changed fields. A list field carries its complete
+  ordered record list; `strategy` and `objects` carry their full new value or
+  `null`. Omitted fields are unchanged.
+- A record starts as the base record at index `base` (or empty), `set` replaces
+  top-level keys, and each `splice` keeps the first `keep` items of the base
+  record's list at `path` and appends `append`. Series records accept the keys
+  `id`, `type`, `title`, `pane`, `scale` and `style`, and splice only `data` and
+  `style.colorData`.
+
+Applying the patch must give exactly the full output the runtime would have
+sent. New values are validated like a full output; a patch that does not fit
+its base is a protocol violation. Runtimes answer with a full output whenever
+they are unsure (reset, recovery, unknown base). Hosts drop a stream's base
+when the process restarts or a request fails, which forces a full output.
 
 ### shutdown
 
