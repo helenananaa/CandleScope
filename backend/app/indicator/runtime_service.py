@@ -94,6 +94,9 @@ class IndicatorRuntimeRequest:
 
     def to_sdk_request(self) -> ExecuteBatchRequest:
         options = dict(self.options)
+        # A live subscription's session is also its output stream, so a
+        # runtime that negotiated render.output-patch/1 may send patches.
+        output_stream = options.get("pineSessionId") if self.language == "pine" else None
         if self.language == "pine":
             if "__pineLibraries" in self.params:
                 options["pineLibrarySources"] = self.params["__pineLibraries"]
@@ -114,6 +117,7 @@ class IndicatorRuntimeRequest:
             bars=tuple(_to_sdk_bar(item) for item in self.bars),
             params=dict(self.params),
             options=options,
+            output_stream=output_stream if isinstance(output_stream, str) and output_stream else None,
         )
 
 
