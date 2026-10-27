@@ -306,7 +306,9 @@ function reduceOutputLanes(
     case "patch":
       return reuseUnchangedOutputLanes(
         state,
-        mergeIndicatorPatchOutputs(state, action.indicatorId, action.normalized, action.range),
+        mergeIndicatorPatchOutputs(
+          state, action.indicatorId, action.normalized, action.ok === false ? undefined : action.range,
+        ),
       );
     case "replace-range":
       return reuseUnchangedOutputLanes(

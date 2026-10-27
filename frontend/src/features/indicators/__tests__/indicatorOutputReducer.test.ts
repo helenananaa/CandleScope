@@ -397,6 +397,11 @@ test("live bgcolor range clears and restores a forming color without losing hist
     { type: "snapshot", indicatorId: "script", normalized: bgcolorPayload([10, 20, 30, 40]) },
   );
   // The backend can send either an empty group or no bgcolor groups at all.
+  state = indicatorOutputReducer(state, {
+    type: "patch", indicatorId: "script", normalized: bgcolorPayload([]),
+    range: { start: 30, end: 30 }, ok: false,
+  });
+  assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40], "a failed calculation is not a color deletion");
   for (const cleared of [bgcolorPayload([]), normalizeIndicatorPayload({ annotations: [] }, "script")]) {
     state = indicatorOutputReducer(state, {
       type: "patch", indicatorId: "script", normalized: cleared, range: { start: 30, end: 30 },
