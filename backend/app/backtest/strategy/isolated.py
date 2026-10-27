@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import time
 from copy import deepcopy
 from multiprocessing.process import BaseProcess
 from typing import Any
@@ -45,6 +46,49 @@ class IsolatedStrategyProvider:
 
     def step(self, frame: ObservationFrame) -> StrategyOutput | None:
         return self._call("step", frame, timeout_s=self._step_timeout_s)
+
+    def step_batch(
+        self, frames: list[ObservationFrame], *, step_timeout_s: float
+    ) -> tuple[list[StrategyOutput | None], StrategyProviderError | None]:
+        """One request; the child streams one reply per frame and stops early.
+
+        Each reply has its own deadline here, and the child also refuses to
+        continue after a late step, so no frame gets more time than a single
+        call would. Timeouts and crashes terminate the process as before.
+        """
+        timeout_s = min(self._step_timeout_s, max(0.001, float(step_timeout_s)))
+        self._ensure_started()
+        connection = self._connection
+        outputs: list[StrategyOutput | None] = []
+        operation = "step"
+        try:
+            connection.send(("step_batch", (list(frames), timeout_s)))
+            for frame in frames:
+                operation = "warmup" if frame.phase == "WARMUP" else "step"
+                if not connection.poll(timeout_s):
+                    self._terminate()
+                    return outputs, StrategyProviderError(
+                        "PROVIDER_TIMEOUT", f"provider {operation} exceeded {timeout_s:.3f}s"
+                    )
+                status, result = connection.recv()
+                if status == "late":
+                    self._terminate()
+                    return outputs, StrategyProviderError(
+                        "PROVIDER_TIMEOUT", f"provider {operation} exceeded {timeout_s:.3f}s"
+                    )
+                if status != "ok":
+                    code, message = result
+                    return outputs, StrategyProviderError(str(code), str(message))
+                outputs.append(result)
+                if result is not None:
+                    break
+        except (BrokenPipeError, EOFError, OSError):
+            self._terminate()
+            return outputs, StrategyProviderError(
+                "PROVIDER_CRASH_UNRECOVERABLE",
+                f"provider process failed during {operation}",
+            )
+        return outputs, None
 
     def on_execution_report(self, report: dict[str, Any]) -> None:
         self._call("on_execution_report", dict(report), timeout_s=self._step_timeout_s)
@@ -151,6 +195,9 @@ def _provider_process_main(connection: Any, revision_id: str) -> None:
         )
         while True:
             operation, payload = connection.recv()
+            if operation == "step_batch":
+                _step_batch(connection, provider, *payload)
+                continue
             try:
                 if operation == "identity":
                     identity = getattr(provider, "identity", None)
@@ -183,3 +230,25 @@ def _provider_process_main(connection: Any, revision_id: str) -> None:
             connection.close()
         except OSError:
             pass
+
+
+def _step_batch(connection: Any, provider: Any, frames: list[ObservationFrame], timeout_s: float) -> None:
+    """Reply per frame; stop after an output, an error or a step over budget."""
+    for frame in frames:
+        started = time.monotonic()
+        try:
+            result = (provider.warmup if frame.phase == "WARMUP" else provider.step)(frame)
+        except StrategyProviderError as exc:
+            connection.send(("error", (exc.code, str(exc))))
+            return
+        except Exception as exc:
+            connection.send(
+                ("error", ("PROVIDER_CRASH_UNRECOVERABLE", f"{type(exc).__name__}: {exc}"))
+            )
+            return
+        if time.monotonic() - started > timeout_s:
+            connection.send(("late", None))
+            return
+        connection.send(("ok", result))
+        if result is not None:
+            return

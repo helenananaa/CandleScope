@@ -32,7 +32,7 @@ def _measure_worker(args, *, profiling):
         def timed(*values, **kwargs):
             if label == "checkpoint_hash" and not checkpoint_depth[0]:
                 return original(*values, **kwargs)
-            in_checkpoint = label in {"dual_checkpoints", "checkpoints"}
+            in_checkpoint = label in {"dual_checkpoints", "trade_checkpoints", "checkpoints"}
             if in_checkpoint:
                 checkpoint_depth[0] += 1
             started = perf_counter()
@@ -57,7 +57,9 @@ def _measure_worker(args, *, profiling):
     for owner, attribute, label in (
         (module.SimulationKernel, "run", "kernels_including_callbacks"),
         (module.DualClockSimulationKernel, "run", "dual_kernels_including_callbacks"),
+        (module.TradeSimulationKernel, "run", "trade_kernels_including_callbacks"),
         (module.BacktestService, "_save_dual_clock_checkpoint", "dual_checkpoints"),
+        (module.BacktestService, "_save_trade_checkpoint", "trade_checkpoints"),
         (module, "build_cost_sensitivity_matrix", "cost_sensitivity"),
         (module.BacktestService, "_save_bar_checkpoint", "checkpoints"),
         (module.BacktestService, "_persist_completed_run", "report_and_persist"),
@@ -88,6 +90,8 @@ def _measure_worker(args, *, profiling):
         wrap(cost_sensitivity._BarSensitivityKernel, "run_sensitivity", "cost_kernel_loops")
     if hasattr(cost_sensitivity, "_run_bar_scenarios"):
         wrap(cost_sensitivity, "_run_bar_scenarios", "cost_fused_loop")
+    if hasattr(cost_sensitivity, "_run_trade_scenarios"):
+        wrap(cost_sensitivity, "_run_trade_scenarios", "cost_fused_trade_loop")
     profiler = cProfile.Profile() if profiling else None
     started = perf_counter()
     try:
