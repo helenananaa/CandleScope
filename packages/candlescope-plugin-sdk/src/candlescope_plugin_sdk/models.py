@@ -6,6 +6,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import repeat
 from typing import Any
 
 from .constants import PROTOCOL_V1, RENDER_IR_V1
@@ -608,6 +609,22 @@ class AnalyzeResult:
 
 
 @dataclass(frozen=True, slots=True)
+class BarsBase:
+    """The ``keep`` bars from index ``skip`` of the window a runtime holds as ``revision``."""
+
+    revision: str
+    skip: int = 0
+    keep: int = 0
+
+    def __post_init__(self) -> None:
+        _string(self.revision, "executeBatch.barsPatch.base")
+        if _integer(self.skip, "executeBatch.barsPatch.skip") < 0:
+            raise invalid_params("executeBatch.barsPatch.skip must not be negative")
+        if _integer(self.keep, "executeBatch.barsPatch.keep") < 0:
+            raise invalid_params("executeBatch.barsPatch.keep must not be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class ExecuteBatchRequest:
     """One batch execution.
 
@@ -616,6 +633,10 @@ class ExecuteBatchRequest:
     an ``outputPatch`` against ``output_base``, the ``outputRevision`` of the
     last output the host holds for that stream; without a base the runtime
     returns a full output.
+
+    ``bars_stream`` is only sent after ``batch-execution.bars-patch/1`` was
+    negotiated. With ``bars_base`` the window is the base's kept bars followed
+    by ``bars``; the runtime dispatcher rebuilds it before the plugin runs.
     """
 
     source: str
@@ -625,6 +646,8 @@ class ExecuteBatchRequest:
     options: dict[str, Any] = field(default_factory=dict)
     output_stream: str | None = None
     output_base: str | None = None
+    bars_stream: str | None = None
+    bars_base: BarsBase | None = None
 
     def __post_init__(self) -> None:
         if self.output_stream is not None:
@@ -633,6 +656,13 @@ class ExecuteBatchRequest:
             _string(self.output_base, "executeBatch.outputPatch.base")
             if self.output_stream is None:
                 raise invalid_params("executeBatch.outputPatch.base requires a stream")
+        if self.bars_stream is not None:
+            _string(self.bars_stream, "executeBatch.barsPatch.stream")
+        if self.bars_base is not None:
+            if not isinstance(self.bars_base, BarsBase):
+                raise invalid_params("executeBatch.barsPatch base is invalid")
+            if self.bars_stream is None:
+                raise invalid_params("executeBatch.barsPatch.base requires a stream")
         object.__setattr__(
             self,
             "source",
@@ -644,7 +674,8 @@ class ExecuteBatchRequest:
                 field_name="executeBatch.context",
             )
         bars = tuple(self.bars)
-        if not all(isinstance(bar, Bar) for bar in bars):
+        # Checked in C: live windows are rebuilt from tens of thousands of bars.
+        if not all(map(isinstance, bars, repeat(Bar))):
             raise invalid_params(
                 "executeBatch.bars must contain Bar values",
                 field_name="executeBatch.bars",
@@ -673,7 +704,14 @@ class ExecuteBatchRequest:
                 if self.output_stream is not None
                 else {}
             ),
+            **({"barsPatch": self._bars_patch_wire()} if self.bars_stream is not None else {}),
         }
+
+    def _bars_patch_wire(self) -> dict[str, Any]:
+        base = self.bars_base
+        if base is None:
+            return {"stream": self.bars_stream, "base": None}
+        return {"stream": self.bars_stream, "base": base.revision, "skip": base.skip, "keep": base.keep}
 
     @classmethod
     def from_wire(cls, value: Any) -> "ExecuteBatchRequest":
@@ -686,9 +724,23 @@ class ExecuteBatchRequest:
         patch = data.get("outputPatch")
         if patch is not None:
             patch = _mapping(patch, "executeBatch.outputPatch")
+        bars_patch = data.get("barsPatch")
+        bars_base = None
+        if bars_patch is not None:
+            bars_patch = _mapping(bars_patch, "executeBatch.barsPatch")
+            if bars_patch.get("base") is not None:
+                bars_base = BarsBase(bars_patch["base"], bars_patch.get("skip"), bars_patch.get("keep"))
+            elif "skip" in bars_patch or "keep" in bars_patch:
+                raise invalid_params("executeBatch.barsPatch.keep requires a base")
         return cls(
             output_stream=patch.get("stream") if patch is not None else None,
             output_base=patch.get("base") if patch is not None else None,
+            bars_stream=(
+                _string(bars_patch.get("stream"), "executeBatch.barsPatch.stream")
+                if bars_patch is not None
+                else None
+            ),
+            bars_base=bars_base,
             source=_string(
                 data.get("source"),
                 "executeBatch.source",
@@ -1189,6 +1241,9 @@ class ExecuteBatchResult:
     patch returns ``output_revision`` with every successful result, and may
     return ``output_patch`` instead of ``output`` when the request's base is
     the last revision it returned for that stream.
+
+    ``bars_revision`` names the bars window a successful ``barsPatch`` request
+    executed; the runtime dispatcher sets it, never the plugin.
     """
 
     ok: bool
@@ -1198,6 +1253,7 @@ class ExecuteBatchResult:
     meta: dict[str, Any] = field(default_factory=dict)
     output_patch: RenderPatch | None = None
     output_revision: str | None = None
+    bars_revision: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.ok, bool):
@@ -1210,8 +1266,11 @@ class ExecuteBatchResult:
             raise invalid_params("executeBatch result outputPatch is invalid")
         if not self.ok and (
             self.output is not None or self.output_patch is not None or self.output_revision is not None
+            or self.bars_revision is not None
         ):
             raise invalid_params("failed executeBatch result must not contain output")
+        if self.bars_revision is not None:
+            _string(self.bars_revision, "executeBatchResult.barsRevision")
         if self.output_revision is not None:
             _string(self.output_revision, "executeBatchResult.outputRevision")
         elif self.output_patch is not None:
@@ -1240,6 +1299,7 @@ class ExecuteBatchResult:
             "meta": dict(self.meta),
             **({"outputPatch": self.output_patch.to_wire()} if self.output_patch is not None else {}),
             **({"outputRevision": self.output_revision} if self.output_revision is not None else {}),
+            **({"barsRevision": self.bars_revision} if self.bars_revision is not None else {}),
         }
 
     @classmethod
@@ -1257,6 +1317,7 @@ class ExecuteBatchResult:
             meta=_plain_dict(data.get("meta", {}), "executeBatchResult.meta"),
             output_patch=RenderPatch.from_wire(patch) if patch is not None else None,
             output_revision=data.get("outputRevision"),
+            bars_revision=data.get("barsRevision"),
         )
 
     def patched(self, base: RenderOutput) -> "ExecuteBatchResult":
@@ -1270,4 +1331,5 @@ class ExecuteBatchResult:
             inputs=self.inputs,
             meta=self.meta,
             output_revision=self.output_revision,
+            bars_revision=self.bars_revision,
         )

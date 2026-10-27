@@ -7,16 +7,22 @@ import contextlib
 import os
 import time
 import io
+from bisect import bisect_left
 from collections import OrderedDict, deque
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import compress, count
+from operator import attrgetter, is_not
 from typing import Any, TypeVar
 
 from candlescope_plugin_sdk import (
+    BARS_PATCH_BASE_UNKNOWN,
+    FEATURE_BATCH_BARS_PATCH_V1,
     FEATURE_RENDER_OUTPUT_PATCH_V1,
     AnalyzeRequest,
     AnalyzeResult,
+    Bar,
     ExecuteBatchRequest,
     ExecuteBatchResult,
     HandshakeRequest,
@@ -65,10 +71,33 @@ STATE_FAILED = "failed"
 _T = TypeVar("_T")
 # Live output streams whose last full output is kept as a patch base.
 MAX_OUTPUT_STREAMS = 8
+# Live bar streams whose last window is kept as a bars patch base.
+MAX_BARS_STREAMS = 8
 
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _wire_bars(bars: tuple[Bar, ...]) -> list[dict[str, Any]]:
+    return [bar.to_wire() for bar in bars]
+
+
+def _bars_delta(base: tuple[Bar, ...], bars: tuple[Bar, ...]) -> tuple[int, int] | None:
+    """Return (skip, keep) when ``bars`` starts with ``base[skip:skip + keep]``.
+
+    Only the very Bar objects sent at those positions of the runtime's base
+    window are kept. Bars are immutable, so a corrected or re-formed bar, and
+    every bar after it, is always sent again.
+    """
+    if not base or not bars:
+        return None
+    skip = bisect_left(base, bars[0].time, key=attrgetter("time"))
+    if skip >= len(base) or base[skip] is not bars[0]:
+        return None
+    limit = min(len(bars), len(base) - skip)
+    # The first bar that is not the base's bar, compared in C.
+    return skip, next(compress(count(), map(is_not, bars, base[skip:skip + limit])), limit)
 
 
 def _encode_request(request: dict[str, Any], *, max_message_bytes: int) -> bytes:
@@ -157,6 +186,8 @@ class RuntimeSupervisor:
         self._last_request_at: str | None = None
         # stream -> (process generation, output revision, full output)
         self._outputs: OrderedDict[str, tuple[int, str, RenderOutput]] = OrderedDict()
+        # stream -> (process generation, bars revision, the window the runtime holds)
+        self._bars: OrderedDict[str, tuple[int, str, tuple[Bar, ...]]] = OrderedDict()
 
     @property
     def runtime_id(self) -> str:
@@ -194,25 +225,37 @@ class RuntimeSupervisor:
                 message="execute_batch requires an ExecuteBatchRequest value",
                 runtime_id=self.runtime_id,
             )
-        params = await run_indicator(request.to_wire)
-        stream = request.output_stream
-        if stream is None:
+        stream, bars_stream = request.output_stream, request.bars_stream
+        if stream is None and bars_stream is None:
+            params = await run_indicator(request.to_wire)
             return await self._call(
                 METHOD_EXECUTE_BATCH,
                 params,
                 ExecuteBatchResult.from_wire,
                 required_feature="batch-execution/1",
             )
+        # Bars are encoded under the session lock, once it is known which of
+        # them the runtime already holds.
+        params = replace(request, bars=()).to_wire()
 
-        def prepare(params: dict[str, Any]) -> tuple[dict[str, Any], Callable[[Any], ExecuteBatchResult], Callable[[ExecuteBatchResult], ExecuteBatchResult]]:
+        async def prepare(params: dict[str, Any]) -> tuple[dict[str, Any], Callable[[Any], ExecuteBatchResult], Callable[[ExecuteBatchResult], ExecuteBatchResult]]:
             # Runs under the session lock, after start: a base belongs to one process.
-            params = {key: value for key, value in params.items() if key != "outputPatch"}
-            if FEATURE_RENDER_OUTPUT_PATCH_V1 not in self._negotiated_features:
-                return params, ExecuteBatchResult.from_wire, lambda result: result
+            params = {key: value for key, value in params.items() if key not in {"outputPatch", "barsPatch"}}
             generation = self._generation
-            held = self._outputs.pop(stream, None)
-            base = held[1:] if held is not None and held[0] == generation else None
-            params["outputPatch"] = {"stream": stream, "base": base[0] if base else None}
+            base = None
+            if stream is not None and FEATURE_RENDER_OUTPUT_PATCH_V1 in self._negotiated_features:
+                held = self._outputs.pop(stream, None)
+                base = held[1:] if held is not None and held[0] == generation else None
+                params["outputPatch"] = {"stream": stream, "base": base[0] if base else None}
+            bars = request.bars
+            if bars_stream is not None and FEATURE_BATCH_BARS_PATCH_V1 in self._negotiated_features:
+                window = self._bars.pop(bars_stream, None)
+                delta = _bars_delta(window[2], bars) if window is not None and window[0] == generation else None
+                params["barsPatch"] = {"stream": bars_stream, "base": None}
+                if delta is not None:
+                    params["barsPatch"] = {"stream": bars_stream, "base": window[1], "skip": delta[0], "keep": delta[1]}
+                    bars = bars[delta[1]:]
+            params["bars"] = _wire_bars(bars) if len(bars) <= 64 else await run_indicator(_wire_bars, bars)
 
             def parse(raw: Any) -> ExecuteBatchResult:
                 result = ExecuteBatchResult.from_wire(raw)
@@ -227,13 +270,18 @@ class RuntimeSupervisor:
                 return result.patched(base[1])
 
             def finish(result: ExecuteBatchResult) -> ExecuteBatchResult:
-                if result.output_revision is None:
+                if result.output_revision is None and result.bars_revision is None:
                     return result
-                self._outputs[stream] = (generation, result.output_revision, result.output)
-                while len(self._outputs) > MAX_OUTPUT_STREAMS:
-                    self._outputs.popitem(last=False)
+                if result.output_revision is not None and "outputPatch" in params:
+                    self._outputs[stream] = (generation, result.output_revision, result.output)
+                    while len(self._outputs) > MAX_OUTPUT_STREAMS:
+                        self._outputs.popitem(last=False)
+                if result.bars_revision is not None and "barsPatch" in params:
+                    self._bars[bars_stream] = (generation, result.bars_revision, request.bars)
+                    while len(self._bars) > MAX_BARS_STREAMS:
+                        self._bars.popitem(last=False)
                 # Callers see exactly the full result a non-patching runtime returns.
-                return replace(result, output_revision=None)
+                return replace(result, output_revision=None, bars_revision=None)
 
             return params, parse, finish
 
@@ -471,7 +519,7 @@ class RuntimeSupervisor:
         parser: Callable[[Any], _T],
         *,
         required_feature: str,
-        prepare: Callable[[dict[str, Any]], tuple[dict[str, Any], Callable[[Any], _T], Callable[[_T], _T]]] | None = None,
+        prepare: Callable[[dict[str, Any]], Awaitable[tuple[dict[str, Any], Callable[[Any], _T], Callable[[_T], _T]]]] | None = None,
     ) -> _T:
         async with self._lock:
             await self._ensure_started_locked()
@@ -483,31 +531,43 @@ class RuntimeSupervisor:
                     details={"feature": required_feature},
                 )
             finish: Callable[[_T], _T] | None = None
-            if prepare is not None:
-                params, parser, finish = prepare(params)
-            try:
-                raw = await self._request_locked(
-                    method,
-                    params,
-                    timeout=self.spec.request_timeout_seconds,
-                )
-            except PluginRemoteError as exc:
-                self._remote_error_count += 1
-                self._last_remote_error = {**exc.to_dict(), "at": _utc_now()}
-                raise
-            except PluginRequestError:
-                raise
-            except asyncio.CancelledError:
-                error = PluginTransportError(
-                    code="PLUGIN_REQUEST_CANCELLED",
-                    message="runtime request was cancelled; the session was discarded",
-                    runtime_id=self.runtime_id,
-                )
-                await self._mark_failed_locked(error, self._generation)
-                raise
-            except PluginHostError as exc:
-                await self._mark_failed_locked(exc, self._generation)
-                raise
+            for attempt in (1, 2):
+                sent = params
+                if prepare is not None:
+                    # Each attempt starts again from the bases still held.
+                    sent, parser, finish = await prepare(params)
+                try:
+                    raw = await self._request_locked(
+                        method,
+                        sent,
+                        timeout=self.spec.request_timeout_seconds,
+                    )
+                except PluginRemoteError as exc:
+                    if (
+                        attempt == 1
+                        and "barsPatch" in sent
+                        and exc.details.get("remoteCode") == BARS_PATCH_BASE_UNKNOWN
+                    ):
+                        # The runtime no longer holds that window; its base is
+                        # dropped, so the next attempt sends every bar.
+                        continue
+                    self._remote_error_count += 1
+                    self._last_remote_error = {**exc.to_dict(), "at": _utc_now()}
+                    raise
+                except PluginRequestError:
+                    raise
+                except asyncio.CancelledError:
+                    error = PluginTransportError(
+                        code="PLUGIN_REQUEST_CANCELLED",
+                        message="runtime request was cancelled; the session was discarded",
+                        runtime_id=self.runtime_id,
+                    )
+                    await self._mark_failed_locked(error, self._generation)
+                    raise
+                except PluginHostError as exc:
+                    await self._mark_failed_locked(exc, self._generation)
+                    raise
+                break
 
             try:
                 result = await run_indicator(parser, raw)
@@ -762,6 +822,7 @@ class RuntimeSupervisor:
 
     async def _mark_failed_locked(self, error: PluginHostError, token: int) -> None:
         self._outputs.clear()
+        self._bars.clear()
         self._state = STATE_FAILED
         self._record_failure(error, token)
         await self._terminate_process_locked()
@@ -817,6 +878,7 @@ class RuntimeSupervisor:
 
     async def _stop_locked(self) -> None:
         self._outputs.clear()
+        self._bars.clear()
         process = self._process
         if process is None:
             self._state = STATE_STOPPED if self.spec.enabled else STATE_DISABLED

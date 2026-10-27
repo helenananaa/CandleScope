@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import itertools
+import uuid
 from abc import ABC, abstractmethod
+from collections import OrderedDict
+from dataclasses import replace
 from typing import Any
 
 from .constants import (
+    BARS_PATCH_BASE_UNKNOWN,
+    FEATURE_BATCH_BARS_PATCH_V1,
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
     FEATURE_RENDER_OUTPUT_PATCH_V1,
@@ -15,11 +21,13 @@ from .constants import (
     METHOD_EXECUTE_BATCH,
     METHOD_HANDSHAKE,
     METHOD_SHUTDOWN,
+    MAX_BARS_STREAMS,
     PROTOCOL_V1,
     RPC_FEATURE_UNSUPPORTED,
     RPC_HANDSHAKE_ALREADY_COMPLETED,
     RPC_HANDSHAKE_REQUIRED,
     RPC_INTERNAL_ERROR,
+    RPC_INVALID_PARAMS,
     RPC_METHOD_NOT_FOUND,
     RPC_PROTOCOL_UNSUPPORTED,
     RPC_SESSION_CLOSED,
@@ -28,6 +36,7 @@ from .errors import ProtocolError
 from .models import (
     AnalyzeRequest,
     AnalyzeResult,
+    Bar,
     ExecuteBatchRequest,
     ExecuteBatchResult,
     HandshakeRequest,
@@ -64,6 +73,10 @@ class RuntimeDispatcher:
         self._handshake_complete = False
         self._shutdown_requested = False
         self._negotiated_features: tuple[str, ...] = ()
+        # bars stream -> (revision, the window its last successful request executed)
+        self._bars: OrderedDict[str, tuple[str, tuple[Bar, ...]]] = OrderedDict()
+        self._bars_prefix = uuid.uuid4().hex[:12]
+        self._bars_revisions = itertools.count(1)
 
     @property
     def handshake_complete(self) -> bool:
@@ -104,6 +117,9 @@ class RuntimeDispatcher:
             request = ExecuteBatchRequest.from_wire(params)
             if request.output_stream is not None:
                 self._require_feature(FEATURE_RENDER_OUTPUT_PATCH_V1)
+            if request.bars_stream is not None:
+                self._require_feature(FEATURE_BATCH_BARS_PATCH_V1)
+                request = self._full_window(request)
             result = self._checked_result(
                 self._plugin.execute_batch(request),
                 ExecuteBatchResult,
@@ -119,6 +135,18 @@ class RuntimeDispatcher:
                     "PLUGIN_CONTRACT_VIOLATION",
                     "Plugin executeBatch() returned an output patch the host did not request.",
                 )
+            if result.bars_revision is not None:
+                raise ProtocolError(
+                    RPC_INTERNAL_ERROR,
+                    "PLUGIN_CONTRACT_VIOLATION",
+                    "Plugin executeBatch() must not set barsRevision.",
+                )
+            if request.bars_stream is not None and result.ok:
+                revision = f"{self._bars_prefix}-{next(self._bars_revisions)}"
+                self._bars[request.bars_stream] = (revision, request.bars)
+                while len(self._bars) > MAX_BARS_STREAMS:
+                    self._bars.popitem(last=False)
+                result = replace(result, bars_revision=revision)
             return result.to_wire()
         if method == METHOD_SHUTDOWN:
             self._plugin.shutdown()
@@ -163,6 +191,22 @@ class RuntimeDispatcher:
             runtime=descriptor,
             negotiated_features=negotiated,
         ).to_wire()
+
+    def _full_window(self, request: ExecuteBatchRequest) -> ExecuteBatchRequest:
+        """Rebuild a barsPatch request's window, so plugins only see full requests."""
+        # Popped: a request that does not succeed leaves its stream without a base.
+        held = self._bars.pop(request.bars_stream, None)
+        base = request.bars_base
+        if base is None:
+            return request
+        if held is None or held[0] != base.revision or base.skip + base.keep > len(held[1]):
+            raise ProtocolError(
+                RPC_INVALID_PARAMS,
+                BARS_PATCH_BASE_UNKNOWN,
+                "barsPatch does not apply to a window this runtime holds; resend all bars.",
+                {"stream": request.bars_stream},
+            )
+        return replace(request, bars=held[1][base.skip:base.skip + base.keep] + request.bars, bars_base=None)
 
     def _runtime_descriptor(self) -> RuntimeDescriptor:
         if self._descriptor is None:
