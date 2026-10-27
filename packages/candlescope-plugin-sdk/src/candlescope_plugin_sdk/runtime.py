@@ -8,6 +8,7 @@ from typing import Any
 from .constants import (
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
+    FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
     METHOD_ANALYZE,
     METHOD_DESCRIBE,
@@ -100,12 +101,25 @@ class RuntimeDispatcher:
         if method == METHOD_EXECUTE_BATCH:
             self._require_feature(FEATURE_BATCH_EXECUTION_V1)
             self._require_feature(FEATURE_RENDER_LINE_SERIES_V1)
-            result = self._plugin.execute_batch(ExecuteBatchRequest.from_wire(params))
-            return self._checked_result(
-                result,
+            request = ExecuteBatchRequest.from_wire(params)
+            if request.output_stream is not None:
+                self._require_feature(FEATURE_RENDER_OUTPUT_PATCH_V1)
+            result = self._checked_result(
+                self._plugin.execute_batch(request),
                 ExecuteBatchResult,
                 METHOD_EXECUTE_BATCH,
-            ).to_wire()
+            )
+            patch = result.output_patch
+            if (
+                (result.output_revision is not None and request.output_stream is None)
+                or (patch is not None and patch.base != request.output_base)
+            ):
+                raise ProtocolError(
+                    RPC_INTERNAL_ERROR,
+                    "PLUGIN_CONTRACT_VIOLATION",
+                    "Plugin executeBatch() returned an output patch the host did not request.",
+                )
+            return result.to_wire()
         if method == METHOD_SHUTDOWN:
             self._plugin.shutdown()
             self._shutdown_requested = True

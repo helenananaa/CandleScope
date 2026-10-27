@@ -7,12 +7,14 @@ import contextlib
 import os
 import time
 import io
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
 from candlescope_plugin_sdk import (
+    FEATURE_RENDER_OUTPUT_PATCH_V1,
     AnalyzeRequest,
     AnalyzeResult,
     ExecuteBatchRequest,
@@ -23,6 +25,7 @@ from candlescope_plugin_sdk import (
     KNOWN_FEATURES_V1,
     PROTOCOL_V1,
     ProtocolError,
+    RenderOutput,
     RuntimeDescriptor,
 )
 from candlescope_plugin_sdk.constants import (
@@ -31,6 +34,7 @@ from candlescope_plugin_sdk.constants import (
     METHOD_EXECUTE_BATCH,
     METHOD_HANDSHAKE,
     METHOD_SHUTDOWN,
+    RPC_INVALID_PARAMS,
 )
 
 from app.plugin_host.framing import JsonLineError, compact_json_bytes, strict_json_loads
@@ -59,6 +63,8 @@ STATE_STOPPING = "stopping"
 STATE_FAILED = "failed"
 
 _T = TypeVar("_T")
+# Live output streams whose last full output is kept as a patch base.
+MAX_OUTPUT_STREAMS = 8
 
 
 def _utc_now() -> str:
@@ -149,6 +155,8 @@ class RuntimeSupervisor:
         self._last_remote_error: dict[str, Any] | None = None
         self._started_at: str | None = None
         self._last_request_at: str | None = None
+        # stream -> (process generation, output revision, full output)
+        self._outputs: OrderedDict[str, tuple[int, str, RenderOutput]] = OrderedDict()
 
     @property
     def runtime_id(self) -> str:
@@ -187,11 +195,54 @@ class RuntimeSupervisor:
                 runtime_id=self.runtime_id,
             )
         params = await run_indicator(request.to_wire)
+        stream = request.output_stream
+        if stream is None:
+            return await self._call(
+                METHOD_EXECUTE_BATCH,
+                params,
+                ExecuteBatchResult.from_wire,
+                required_feature="batch-execution/1",
+            )
+
+        def prepare(params: dict[str, Any]) -> tuple[dict[str, Any], Callable[[Any], ExecuteBatchResult], Callable[[ExecuteBatchResult], ExecuteBatchResult]]:
+            # Runs under the session lock, after start: a base belongs to one process.
+            params = {key: value for key, value in params.items() if key != "outputPatch"}
+            if FEATURE_RENDER_OUTPUT_PATCH_V1 not in self._negotiated_features:
+                return params, ExecuteBatchResult.from_wire, lambda result: result
+            generation = self._generation
+            held = self._outputs.pop(stream, None)
+            base = held[1:] if held is not None and held[0] == generation else None
+            params["outputPatch"] = {"stream": stream, "base": base[0] if base else None}
+
+            def parse(raw: Any) -> ExecuteBatchResult:
+                result = ExecuteBatchResult.from_wire(raw)
+                if result.output_patch is None:
+                    return result
+                if base is None or result.output_patch.base != base[0]:
+                    raise ProtocolError(
+                        RPC_INVALID_PARAMS,
+                        "OUTPUT_PATCH_BASE_UNKNOWN",
+                        "outputPatch does not apply to the output the host holds",
+                    )
+                return result.patched(base[1])
+
+            def finish(result: ExecuteBatchResult) -> ExecuteBatchResult:
+                if result.output_revision is None:
+                    return result
+                self._outputs[stream] = (generation, result.output_revision, result.output)
+                while len(self._outputs) > MAX_OUTPUT_STREAMS:
+                    self._outputs.popitem(last=False)
+                # Callers see exactly the full result a non-patching runtime returns.
+                return replace(result, output_revision=None)
+
+            return params, parse, finish
+
         return await self._call(
             METHOD_EXECUTE_BATCH,
             params,
             ExecuteBatchResult.from_wire,
             required_feature="batch-execution/1",
+            prepare=prepare,
         )
 
     async def stop(self) -> None:
@@ -420,6 +471,7 @@ class RuntimeSupervisor:
         parser: Callable[[Any], _T],
         *,
         required_feature: str,
+        prepare: Callable[[dict[str, Any]], tuple[dict[str, Any], Callable[[Any], _T], Callable[[_T], _T]]] | None = None,
     ) -> _T:
         async with self._lock:
             await self._ensure_started_locked()
@@ -430,6 +482,9 @@ class RuntimeSupervisor:
                     runtime_id=self.runtime_id,
                     details={"feature": required_feature},
                 )
+            finish: Callable[[_T], _T] | None = None
+            if prepare is not None:
+                params, parser, finish = prepare(params)
             try:
                 raw = await self._request_locked(
                     method,
@@ -455,7 +510,7 @@ class RuntimeSupervisor:
                 raise
 
             try:
-                return await run_indicator(parser, raw)
+                result = await run_indicator(parser, raw)
             except ProtocolError as exc:
                 error = PluginTransportError(
                     code="PLUGIN_RESULT_INVALID",
@@ -465,6 +520,7 @@ class RuntimeSupervisor:
                 )
                 await self._mark_failed_locked(error, self._generation)
                 raise error from exc
+            return finish(result) if finish is not None else result
 
     async def _request_locked(
         self,
@@ -705,6 +761,7 @@ class RuntimeSupervisor:
         )
 
     async def _mark_failed_locked(self, error: PluginHostError, token: int) -> None:
+        self._outputs.clear()
         self._state = STATE_FAILED
         self._record_failure(error, token)
         await self._terminate_process_locked()
@@ -759,6 +816,7 @@ class RuntimeSupervisor:
         signal_process(process, force=force)
 
     async def _stop_locked(self) -> None:
+        self._outputs.clear()
         process = self._process
         if process is None:
             self._state = STATE_STOPPED if self.spec.enabled else STATE_DISABLED
