@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,45 @@ def _write(message: dict[str, Any]) -> None:
     _PROTOCOL.flush()
 
 
+def _observe(strategy: Any, method: str, params: dict[str, Any]) -> Any:
+    assert strategy is not None
+    observation = Observation.from_wire(params["observation"])
+    if method == "warmup":
+        strategy.warmup(observation)
+        return None
+    output = strategy.step(observation)
+    return None if output is None else encode_output(observation.sequence, output)
+
+
+def _step_batch(strategy: Any, params: dict[str, Any]) -> None:
+    """Consecutive warmup/step requests, one reply line each, as if sent singly.
+
+    Stops after a result, an error or a step slower than the per-call budget;
+    the host times out a single call at that budget and kills the worker.
+    """
+    budget = int(params["stepTimeoutMs"]) / 1000
+    for item in params["requests"]:
+        started = time.monotonic()
+        error = None
+        try:
+            method = str(item.get("method") or "")
+            if method not in {"warmup", "step"}:
+                raise ValueError(f"unknown method {method}")
+            result = _observe(strategy, method, item.get("params") or {})
+        except Exception as exc:
+            traceback.print_exc(file=sys.stderr)
+            error = str(exc)
+        if time.monotonic() - started > budget:
+            _write({"id": item.get("id"), "ok": False, "late": True})
+            return
+        if error is not None:
+            _write({"id": item.get("id"), "ok": False, "error": error})
+            return
+        _write({"id": item.get("id"), "ok": True, "result": result})
+        if result is not None:
+            return
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -53,6 +93,9 @@ def main() -> int:
             request_id = request.get("id")
             method = str(request.get("method") or "")
             params = request.get("params") or {}
+            if method == "step_batch":
+                _step_batch(strategy, params)
+                continue
             if method == "ping":
                 result = {"ready": True}
             elif method == "prepare":
@@ -66,15 +109,8 @@ def main() -> int:
                     )
                 )
                 result: Any = {"ok": True}
-            elif method == "warmup":
-                assert strategy is not None
-                strategy.warmup(Observation.from_wire(params["observation"]))
-                result = None
-            elif method == "step":
-                assert strategy is not None
-                observation = Observation.from_wire(params["observation"])
-                output = strategy.step(observation)
-                result = None if output is None else encode_output(observation.sequence, output)
+            elif method in {"warmup", "step"}:
+                result = _observe(strategy, method, params)
             elif method == "on_execution_report":
                 assert strategy is not None
                 strategy.on_execution_report(params["report"])

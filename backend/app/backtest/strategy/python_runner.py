@@ -6,6 +6,7 @@ from app.core.config import getenv as app_getenv
 
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -276,6 +277,127 @@ class IsolatedPythonRunner:
             raise PythonRunnerError(
                 "INVALID_JSON", "worker emitted invalid JSONL"
             ) from exc
+        self._record(request, payload)
+        if not payload.get("ok"):
+            raise PythonRunnerError(
+                "PROVIDER_PROTOCOL_VIOLATION", str(payload.get("error"))
+            )
+        return payload.get("result")
+
+    def step_batch(
+        self,
+        items: list[tuple[str, Mapping[str, Any]]],
+        *,
+        step_timeout_s: float | None = None,
+    ) -> tuple[list[Any], PythonRunnerError | None]:
+        """Consecutive warmup/step calls sent as one request.
+
+        The worker streams one reply per call and stops after a result, an
+        error or a late step. Replies, transcript records and errors are those
+        of the same call() sequence, and every reply keeps the single-call
+        deadline. Returns the completed results and the next call's error.
+        """
+        if (
+            self._process is None
+            or self._process.stdin is None
+            or self._process.stdout is None
+        ):
+            raise PythonRunnerError("RUNNER_NOT_STARTED", "start the runner first")
+        timeout_s = self.step_timeout_s if step_timeout_s is None else min(self.step_timeout_s, step_timeout_s)
+        requests: list[dict[str, Any]] = []
+        count = len(self._transcript)
+        for method, params in items:
+            request = json.loads(json.dumps({
+                "id": (min(count, 1) if self._bound_transcript else count) + 1,
+                "method": method,
+                "params": dict(params or {}),
+            }, default=str))
+            if len((json.dumps(request) + "\n").encode("utf-8")) > MAX_MESSAGE_BYTES:
+                break  # call() refuses it on its own turn
+            requests.append(request)
+            count += 1
+        wire = ""
+        while len(requests) > 1:
+            wire = json.dumps({"id": 0, "method": "step_batch", "params": {
+                "requests": requests, "stepTimeoutMs": max(1, int(timeout_s * 1000)),
+            }}) + "\n"
+            if len(wire.encode("utf-8")) <= MAX_MESSAGE_BYTES:
+                break
+            requests = requests[: len(requests) // 2]
+        if len(requests) <= 1:
+            method, params = items[0]
+            try:
+                return [self.call(method, params, _timeout_s=timeout_s)], None
+            except PythonRunnerError as exc:
+                return [], exc
+        if self._stderr_overflow.is_set():
+            self.close()
+            raise PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
+        process = self._process
+        replies: queue.Queue = queue.Queue()
+
+        def exchange() -> None:
+            try:
+                process.stdin.write(wire)
+                process.stdin.flush()
+                for _ in requests:
+                    line = process.stdout.readline(MAX_MESSAGE_BYTES + 1)
+                    replies.put(line)
+                    if not _batch_continues(line):
+                        return
+            except (OSError, ValueError):
+                replies.put(None)
+
+        if self._io_worker is None:
+            self._io_worker = SerialWorker("python-runner-io")
+        self._io_worker.submit(exchange)
+        results: list[Any] = []
+        for request in requests:
+            try:
+                line = replies.get(timeout=timeout_s)
+            except queue.Empty:
+                self.close()
+                return results, PythonRunnerError(
+                    "PROVIDER_TIMEOUT", f"{request['method']} exceeded its call budget"
+                )
+            if line is None:
+                self.close()
+                return results, PythonRunnerError("PROVIDER_EOF", "worker pipe closed")
+            if self._stderr_overflow.is_set():
+                self.close()
+                return results, PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
+            if not line:
+                self.close()
+                return results, PythonRunnerError("PROVIDER_EOF", "worker closed stdout")
+            if len(line.encode("utf-8")) > MAX_MESSAGE_BYTES:
+                self.close()
+                return results, PythonRunnerError("MESSAGE_TOO_LARGE", "worker JSON exceeded budget")
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                self.close()
+                return results, PythonRunnerError("INVALID_JSON", "worker emitted invalid JSONL")
+            if not isinstance(payload, dict) or payload.get("id") != request["id"]:
+                self.close()
+                return results, PythonRunnerError("INVALID_JSON", "worker batch reply is out of order")
+            if payload.get("late") is True:
+                # The worker saw this call overrun its budget; a single call
+                # would have timed out and killed the worker here.
+                self.close()
+                return results, PythonRunnerError(
+                    "PROVIDER_TIMEOUT", f"{request['method']} exceeded its call budget"
+                )
+            self._record(request, payload)
+            if not payload.get("ok"):
+                return results, PythonRunnerError(
+                    "PROVIDER_PROTOCOL_VIOLATION", str(payload.get("error"))
+                )
+            results.append(payload.get("result"))
+            if payload.get("result") is not None:
+                break
+        return results, None
+
+    def _record(self, request: dict[str, Any], payload: Any) -> None:
         record = {"request": request, "response": payload}
         if self._bound_transcript:
             self._transcript_chain = "sha256:" + sha256_hex(
@@ -284,11 +406,6 @@ class IsolatedPythonRunner:
             self._transcript = [record]
         else:
             self._transcript.append(record)
-        if not payload.get("ok"):
-            raise PythonRunnerError(
-                "PROVIDER_PROTOCOL_VIOLATION", str(payload.get("error"))
-            )
-        return payload.get("result")
 
     def close(self) -> dict[str, Any]:
         process = self._process
@@ -353,6 +470,16 @@ class IsolatedPythonRunner:
                 else "sha256:" + sha256_hex(self._transcript)
             ),
         }
+
+
+def _batch_continues(line: str) -> bool:
+    """The reader's copy of the batch stop rule: only a plain empty success continues."""
+    try:
+        reply = json.loads(line)
+    except ValueError:
+        return False
+    return (isinstance(reply, dict) and bool(reply.get("ok"))
+            and reply.get("late") is not True and reply.get("result") is None)
 
 
 def probe_twice(

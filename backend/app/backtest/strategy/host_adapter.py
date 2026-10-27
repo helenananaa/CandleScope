@@ -66,6 +66,25 @@ class StrategyHostAdapter:
         trade: dict[str, Any] | None = None,
         account_view: dict[str, Any] | None = None,
     ) -> dict[str, Any] | StrategyOutput | None:
+        return self.observe_frame(self.frame(
+            sequence=sequence, event_time_ms=event_time_ms, watermark_ms=watermark_ms,
+            phase=phase, market=market, bar=bar, features=features, trade=trade,
+            account_view=account_view,
+        ))
+
+    def frame(
+        self,
+        *,
+        sequence: int,
+        event_time_ms: int,
+        watermark_ms: int,
+        phase: str,
+        market: dict[str, str],
+        bar: dict[str, Any] | None,
+        features: dict[str, Any] | None = None,
+        trade: dict[str, Any] | None = None,
+        account_view: dict[str, Any] | None = None,
+    ) -> ObservationFrame:
         if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "host refused future bar")
         encoded = None if account_view else try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
@@ -73,7 +92,7 @@ class StrategyHostAdapter:
                       else canonical_hash({"sequence": sequence, "watermark": watermark_ms,
                                            "bar": bar, "trade": trade, "features": features,
                                            **({"account": account_view} if account_view else {})}))
-        frame = ObservationFrame(
+        return ObservationFrame(
             run_id=self.session.run_id,
             sequence=sequence,
             event_time_ms=event_time_ms,
@@ -86,6 +105,38 @@ class StrategyHostAdapter:
             features=features or {},
             account_view=account_view or {},
         )
+
+    def observe_batch(
+        self, frames: list[ObservationFrame]
+    ) -> tuple[list[dict[str, Any] | StrategyOutput | None], StrategyProviderError | None]:
+        """Consecutive frames in one provider exchange; see StrategyProviderSession.step_batch."""
+        if self._closed:
+            raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
+        if self._worker is None and not self._inline:
+            self._worker = SerialWorker(f"strategy-step-{self.session.run_id}")
+
+        def invoke() -> Any:
+            return self.session.step_batch(frames, step_timeout_s=self.step_timeout_s)
+
+        try:
+            if self._inline:
+                outputs, error = invoke()
+            else:
+                assert self._worker is not None
+                # The provider enforces each frame's deadline; this only bounds
+                # the exchange as a whole.
+                outputs, error = self._worker.call(invoke, self.step_timeout_s * len(frames))
+        except TimeoutError:
+            self._closed = True
+            abort = getattr(self.session.provider, "abort", None)
+            if callable(abort):
+                abort()
+            raise StrategyProviderError("PROVIDER_TIMEOUT", "provider step exceeded budget")
+        return [output if self._objects or output is None else output.to_wire()
+                for output in outputs], error
+
+    def observe_frame(self, frame: ObservationFrame) -> dict[str, Any] | StrategyOutput | None:
+        phase = frame.phase
         if self._closed:
             raise StrategyProviderError("PROVIDER_TIMEOUT", "adapter is closed")
         if self._worker is None and not self._inline:

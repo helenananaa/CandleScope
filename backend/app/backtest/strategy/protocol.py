@@ -152,6 +152,47 @@ class StrategyProviderSession:
             )
         return output
 
+    def step_batch(
+        self, frames: list[ObservationFrame], *, step_timeout_s: float
+    ) -> tuple[list[StrategyOutput | None], StrategyProviderError | None]:
+        """Run consecutive frames as if each were a separate warmup/step call.
+
+        The provider stops after the first output, error or late step. The
+        returned error belongs to frame ``len(outputs)``; the caller raises it
+        when that frame's event is reached, exactly where a single call would.
+        """
+        saved = (self.last_sequence, self.watermark_ms)
+        valid = 0
+        try:
+            for frame in frames:
+                self._accept_frame(frame)
+                valid += 1
+        except StrategyProviderError:
+            if not valid:
+                raise
+        finally:
+            self.last_sequence, self.watermark_ms = saved
+        # A frame that a single call would refuse is left for that single call.
+        frames = frames[:valid]
+        outputs, error = self.provider.step_batch(frames, step_timeout_s=step_timeout_s)
+        checked: list[StrategyOutput | None] = []
+        for frame, output in zip(frames, outputs):
+            self._accept_frame(frame)
+            if output is not None and frame.phase == "WARMUP":
+                return checked, StrategyProviderError(
+                    "PROVIDER_PROTOCOL_VIOLATION",
+                    "warmup must not emit a tradable output",
+                )
+            if output is not None and output.sequence != frame.sequence:
+                return checked, StrategyProviderError(
+                    "PROVIDER_PROTOCOL_VIOLATION",
+                    "output sequence must echo the observation",
+                )
+            checked.append(output)
+        if error is not None:
+            self._accept_frame(frames[len(checked)])
+        return checked, error
+
     def on_execution_report(self, report: dict[str, Any]) -> None:
         self._ensure_open()
         if int(report.get("generation", self.generation)) != self.generation:

@@ -48,9 +48,15 @@ def build_cost_sensitivity_matrix(
         ]
         replays.append(_clone_kernel(kernel, _bar_sensitivity=True, participation_rate=base_rate / Decimal("2")))
         fused = iter(_run_bar_scenarios(replays, events, by_sequence))
-    fused_dual = None
-    if (type(kernel) is DualClockSimulationKernel
-            and getenv("BACKTEST_FUSED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1"):
+    fused_trades = None
+    fused_run = None
+    if type(kernel) is DualClockSimulationKernel:
+        fused_run = (_run_dual_scenarios
+                     if getenv("BACKTEST_FUSED_DUAL_SENSITIVITY_ENABLED", "1").strip() == "1" else None)
+    elif type(kernel) is TradeSimulationKernel:
+        fused_run = (_run_trade_scenarios
+                     if getenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", "1").strip() == "1" else None)
+    if fused_run is not None:
         replays = [
             _clone_kernel(kernel, taker_fee_bps=kernel.taker_fee_bps * multiplier,
                           maker_fee_bps=kernel.maker_fee_bps * multiplier,
@@ -60,7 +66,7 @@ def build_cost_sensitivity_matrix(
         replays.append(_clone_kernel(kernel, latency_ms=kernel.latency_ms + 100,
                                      latency_events=kernel.latency_events + 1))
         replays.append(_clone_kernel(kernel, participation_rate=base_rate / Decimal("2")))
-        fused_dual = iter(_run_dual_scenarios(replays, events, by_sequence))
+        fused_trades = iter(fused_run(replays, events, by_sequence))
     scenarios: list[dict[str, object]] = [
         _scenario_wire(
             "BASELINE",
@@ -84,7 +90,7 @@ def build_cost_sensitivity_matrix(
             maker_fee_bps=getattr(kernel, "maker_fee_bps") * multiplier,
             slippage_bps=getattr(kernel, "slippage_bps") * multiplier,
         )
-        result = (next(fused_dual) if fused_dual is not None else
+        result = (next(fused_trades) if fused_trades is not None else
                   next(fused) if fused is not None else _run_scenario(replay, events, strategy))
         scenarios.append(
             _scenario_wire(
@@ -122,7 +128,7 @@ def build_cost_sensitivity_matrix(
             latency_ms=getattr(kernel, "latency_ms") + 100,
             latency_events=getattr(kernel, "latency_events") + 1,
         )
-        result = next(fused_dual) if fused_dual is not None else _run_scenario(replay, events, strategy)
+        result = next(fused_trades) if fused_trades is not None else _run_scenario(replay, events, strategy)
         scenarios.append(
             _scenario_wire(
                 "LATENCY_PLUS_ONE_TIER",
@@ -138,7 +144,7 @@ def build_cost_sensitivity_matrix(
         )
     lower_rate = base_rate / Decimal("2")
     replay = _clone_kernel(kernel, _bar_sensitivity=fast_bar, participation_rate=lower_rate)
-    result = (next(fused_dual) if fused_dual is not None else
+    result = (next(fused_trades) if fused_trades is not None else
                   next(fused) if fused is not None else _run_scenario(replay, events, strategy))
     scenarios.append(
         _scenario_wire(
@@ -407,5 +413,66 @@ def _run_dual_scenarios(replays, events, by_sequence):
         fills, ledger = execution._financial_result()
         ledger["signal_event_count"] = clock.builder.signal_count
         ledger["execution_event_count"] = count
+        results.append(_SensitivityResult(fills, ledger, sha256_hex(fills), sha256_hex(ledger)))
+    return results
+
+
+def _run_trade_scenarios(replays, events, by_sequence):
+    """Owned per-trade clones share one pass over the tape, never accounts.
+
+    Each print follows TradeSimulationKernel.run: mark, funding, match, then
+    the frozen intents. Only fill/ledger evidence is consumed by the matrix, so
+    the per-print decision hashes, derived bars and equity samples are skipped.
+    """
+    from app.market_dataset.trades import assert_trade_stream
+
+    clock = replays[0]
+    trades = tuple(e for e in events if e.role == "TRADES")
+    if len(trades) > clock.max_events:
+        raise MarketDatasetError("trade event budget exceeded", code="BUDGET_EXCEEDED")
+    source_kind = assert_trade_stream(trades)
+    account_v2 = isinstance(clock.account, LinearPerpetualAccountV2)
+    funding = clock.funding_rate != 0 and clock.funding_interval_ms > 0
+    if account_v2:
+        funding = funding and clock.funding_mode == "FIXED_SCENARIO"
+    for replay in replays:
+        replay.source_kind = source_kind
+    count = 0
+    for event in events:
+        if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
+            for replay in replays:
+                replay._last_event = event
+                replay.account.apply(event)
+            continue
+        if event.role != "TRADES":
+            raise MarketDatasetError("trade kernel received unsupported role", code="FIDELITY_MISLABEL")
+        count += 1
+        market_event = (MarketEvent(count, event.event_time_ms, event.role, event.payload)
+                        if account_v2 else event)
+        if account_v2:
+            for replay in replays:
+                replay.account.validate_ready()
+        # The reference parses these in every clone's mark/_match; once here
+        # keeps a malformed print failing even when every clone is idle.
+        price = Decimal(str(event.payload["price"]))
+        Decimal(str(event.payload["qty"]))
+        intents = by_sequence.get(market_event.sequence)
+        for replay in replays:
+            replay._last_event = event
+            replay._market_event_count = count
+            if not account_v2:
+                replay.account.mark = price
+            if funding:
+                replay._apply_funding(market_event)
+            # Owned clones have no external order mutations or restore path.
+            if replay._active_orders:
+                replay._match(market_event)
+            replay._decision_count += 1
+            if intents:
+                replay._enqueue_many(intents, current_sequence=market_event.sequence)
+    results = []
+    for replay in replays:
+        replay.finalize_orders()
+        fills, ledger = replay._financial_result()
         results.append(_SensitivityResult(fills, ledger, sha256_hex(fills), sha256_hex(ledger)))
     return results
