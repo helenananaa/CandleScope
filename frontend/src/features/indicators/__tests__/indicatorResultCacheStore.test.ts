@@ -412,6 +412,19 @@ test("replaceCachedIndicatorRange only rewrites bgcolor regions inside the range
   assert.deepEqual(cachedBgcolorRegionTimes(), [10, 30, 40]);
 });
 
+test("cached live bgcolor range clears and restores a forming color while preserving outside history", () => {
+  resetIndicatorResultCache();
+  resetCacheRegistry();
+  registerBaseKline();
+  cacheIndicatorSnapshot(maIndicator, baseContext, bgcolorPayload([10, 20, 30, 40]));
+  for (const cleared of [bgcolorPayload([]), normalizeIndicatorPayload({ annotations: [] }, maIndicator.id)]) {
+    patchCachedIndicatorResult(maIndicator, baseContext, cleared, { range: { start: 30, end: 30 } });
+    assert.deepEqual(cachedBgcolorRegionTimes(), [10, 20, 40]);
+    patchCachedIndicatorResult(maIndicator, baseContext, bgcolorPayload([30]), { range: { start: 30, end: 30 } });
+    assert.deepEqual(cachedBgcolorRegionTimes(), [10, 20, 30, 40]);
+  }
+});
+
 test("successful range records computed coverage even when warmup produces no output points", () => {
   resetIndicatorResultCache();
   resetCacheRegistry();

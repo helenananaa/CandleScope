@@ -389,3 +389,23 @@ test("bgcolor range replacement only rewrites regions inside the range", () => {
 
   assert.deepEqual(bgcolorRegionTimes(state), [10, 30, 40]);
 });
+
+test("live bgcolor range clears and restores a forming color without losing history or other indicators", () => {
+  const otherBgcolor = { id: "bg", indicatorId: "rsi", regions: [{ time: 30 }] };
+  let state = indicatorOutputReducer(
+    { ...createIndicatorOutputState(), bgcolors: [otherBgcolor] },
+    { type: "snapshot", indicatorId: "script", normalized: bgcolorPayload([10, 20, 30, 40]) },
+  );
+  // The backend can send either an empty group or no bgcolor groups at all.
+  for (const cleared of [bgcolorPayload([]), normalizeIndicatorPayload({ annotations: [] }, "script")]) {
+    state = indicatorOutputReducer(state, {
+      type: "patch", indicatorId: "script", normalized: cleared, range: { start: 30, end: 30 },
+    });
+    assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 40]);
+    assert.strictEqual(state.bgcolors.find((item) => item.indicatorId === "rsi"), otherBgcolor);
+    state = indicatorOutputReducer(state, {
+      type: "patch", indicatorId: "script", normalized: bgcolorPayload([30]), range: { start: 30, end: 30 },
+    });
+    assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40]);
+  }
+});
