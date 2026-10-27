@@ -15,8 +15,9 @@ primitive 显示，支持坐标投影、缩放和清空。字体、标签外形�
 近似处理，不承诺像素一致。资源超限以明确诊断返回。
 
 支持历史批计算，以及已确认历史末尾的一根 forming bar。WebSocket 订阅通过
-`options.pineSessionId` 保留原生会话，支持替换、收盘确认和追加；传输仍返回完整
-Render IR 快照。HTTP 计算保持独立。分析结果的 `meta.hostRequirements` 暴露
+`options.pineSessionId` 保留原生会话，支持替换、收盘确认和追加。协商了
+`render.output-patch/1` 并指明输出流的宿主只收到变化的尾部 `outputPatch`（见 SDK
+协议）；重置、恢复和未知基线仍返回完整 Render IR 快照，其他宿主也一样。HTTP 计算保持独立。分析结果的 `meta.hostRequirements` 暴露
 引擎的宿主需求清单。宿主依据编译后的 HIR 发现请求上下文，包括库依赖及嵌套
 请求；动态符号/周期要求显式数据，无法可靠推导预热长度时要求 `requestWarmupBars`。
 缺失或有缺口的数据不会静默执行，辅助订阅在依赖改变或取消订阅时释放。

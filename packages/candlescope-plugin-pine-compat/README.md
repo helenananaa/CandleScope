@@ -25,8 +25,11 @@ parity with TradingView. `E_RESOURCE_BUDGET` remains a runtime diagnostic.
 
 Historical batches and one trailing forming bar are supported. WebSocket
 subscriptions supply `options.pineSessionId` to retain native sessions across
-forming replacements, confirmation and appends. Transport still returns complete
-Render IR snapshots. HTTP computations are independent. Analysis exposes native
+forming replacements, confirmation and appends. A host that negotiated
+`render.output-patch/1` and names the stream receives only the changed tail as an
+`outputPatch` (see the SDK protocol); resets, recovery and an unknown base answer
+with complete Render IR snapshots, as do all other hosts. HTTP computations are
+independent. Analysis exposes native
 `meta.hostRequirements`. Requested contexts are discovered from compiled HIR,
 including imported libraries and conservative nested-context expansion. Dynamic
 symbols/timeframes require explicit context data; ambiguous warmup requires an

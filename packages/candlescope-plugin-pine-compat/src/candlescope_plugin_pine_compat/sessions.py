@@ -55,15 +55,20 @@ class RecordedSession:
 
     def __init__(self, native, operations):
         self.native, self.operations = native, operations
+        # Output change sets the core returned during the current request.
+        self.changes = []
 
     def __getattr__(self, name):
         method = getattr(self.native, name)
-        if name not in self.MUTATIONS or self.operations is None:
+        if name not in self.MUTATIONS:
             return method
         def invoke(*args, **kwargs):
             result = method(*args, **kwargs)
-            # Arguments belong to the current request and are encoded when it commits.
-            self.operations.append([name, args, kwargs])
+            if self.operations is not None:
+                # Arguments belong to the current request and are encoded when it commits.
+                self.operations.append([name, args, kwargs])
+            if result is not None:
+                self.changes.append(result)
             return result
         return invoke
 
@@ -87,6 +92,8 @@ class Session:
     seq: int = 0
     observation: Any = None
     last_observation: str | None = None
+    # Last output returned to a host that accepts output patches (runtime-owned).
+    output: Any = None
 
     def confirm(self, rows, clocks=None):
         for row in rows:
@@ -227,6 +234,8 @@ class PineSessions:
         )
         if not reset and observed_at is not None and observed_at < entry.observed_at:
             raise ValueError("PINE_REQUEST_DATA_INVALID: requested observation clock regressed")
+        if not reset:
+            entry.native.changes = []
         try:
             if reset:
                 pending = [] if session_id else None
@@ -327,6 +336,8 @@ class PineSessions:
                          "sessionRetained": bool(session_id),
                          # Rows and host seconds the native session retains before a slid window.
                          **({"hostPrefix": (entry.confirmed[:offset], entry.times[:offset])} if offset > 0 and not reset else {}),
+                         # Core change sets of this request (None after a reset) and its revision.
+                         "outputChanges": (None if reset else entry.native.changes, entry.native.revision),
                          **({"historyStartIndex": entry.history_start} if entry.history_start else {}),
                          **({"requestedObservationContract": session_requests.CONTRACT,
                              "requestedObservedAtMs": observed_at} if observed_at is not None else {}),
