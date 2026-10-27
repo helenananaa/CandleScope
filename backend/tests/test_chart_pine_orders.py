@@ -150,8 +150,9 @@ def test_checkpoint_recovery_preserves_pending_brackets_and_actual_entry_allocat
     from app.backtest.strategy.pine_engine import PineEngineProvider
     from app.backtest.strategy.protocol import StrategyProviderError
     from app.market_dataset.snapshot import MarketEvent
-    from tests.test_backtest_chart_pyne import _service
-    service = _service(tmp_path)
+    from app.backtest.service import BacktestService
+    from tests.test_backtest_control_plane import _settings
+    service = BacktestService.start(_settings(tmp_path), now_ms=1, enforce_registered_revisions=True)
     service._colocated_worker = True
     source = '''//@version=6
 strategy("Recover orders",pyramiding=2)
