@@ -807,6 +807,7 @@ export type IndicatorOutputAction =
       type: "patch";
       indicatorId: string;
       normalized: NormalizedIndicatorPayload;
+      range?: IndicatorRange;
     }
   | {
       type: "replace-range";

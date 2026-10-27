@@ -456,8 +456,49 @@ function itemIdentity(item: IndicatorAuxiliaryItem, index = 0): string {
   );
 }
 
-function auxiliaryData(item: IndicatorAuxiliaryItem): IndicatorAnnotationPoint[] | undefined {
-  return "data" in item && Array.isArray(item.data) ? item.data : undefined;
+// Item fields that hold per-bar points keyed by time. Most kinds use `data`;
+// bgcolors keep their bars in `regions` (see splitUnifiedAnnotations).
+const TIMED_ITEM_FIELDS = ["data", "regions"] as const;
+type TimedItemField = (typeof TIMED_ITEM_FIELDS)[number];
+type TimedItemFields = Partial<Record<TimedItemField, IndicatorAnnotationPoint[]>>;
+
+function auxiliaryData(
+  item: IndicatorAuxiliaryItem,
+  field: TimedItemField,
+): IndicatorAnnotationPoint[] | undefined {
+  const value: unknown = (item as Partial<Record<TimedItemField, unknown>>)[field];
+  return Array.isArray(value) ? (value as IndicatorAnnotationPoint[]) : undefined;
+}
+
+function mergeTimedFields(
+  current: IndicatorAuxiliaryItem,
+  item: IndicatorAuxiliaryItem,
+): TimedItemFields {
+  const merged: TimedItemFields = {};
+  for (const field of TIMED_ITEM_FIELDS) {
+    const currentData = auxiliaryData(current, field);
+    const itemData = auxiliaryData(item, field);
+    if (currentData || itemData) {
+      merged[field] = mergeTimeData(currentData || [], itemData || []);
+    }
+  }
+  return merged;
+}
+
+function replaceTimedFieldsRange(
+  current: IndicatorAuxiliaryItem | null,
+  item: IndicatorAuxiliaryItem | null,
+  range: IndicatorRange,
+): TimedItemFields {
+  const replaced: TimedItemFields = {};
+  for (const field of TIMED_ITEM_FIELDS) {
+    const currentData = current ? auxiliaryData(current, field) : undefined;
+    const itemData = item ? auxiliaryData(item, field) : undefined;
+    if (hasTimedData(currentData || []) || hasTimedData(itemData || [])) {
+      replaced[field] = replaceTimeDataRange(currentData || [], itemData || [], range);
+    }
+  }
+  return replaced;
 }
 
 export function mergeIndicatorItems<T extends IndicatorAuxiliaryItem>(
@@ -483,14 +524,10 @@ export function mergeIndicatorItems<T extends IndicatorAuxiliaryItem>(
       indexByKey.set(key, merged.length - 1);
       return;
     }
-    const currentData = auxiliaryData(current);
-    const itemData = auxiliaryData(item);
     merged[existingIndex] = {
       ...current,
       ...item,
-      ...(currentData || itemData
-        ? { data: mergeTimeData(currentData || [], itemData || []) }
-        : {}),
+      ...mergeTimedFields(current, item),
     };
   });
   return merged;
@@ -505,9 +542,8 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
   if (!range) return mergeIndicatorItems(existing, incoming);
 
   const merged = (existing || []).map((item) => {
-    const data = auxiliaryData(item);
-    if (!data || !hasTimedData(data)) return item;
-    return { ...item, data: replaceTimeDataRange(data, [], range) };
+    const cleared = replaceTimedFieldsRange(item, null, range);
+    return Object.keys(cleared).length > 0 ? { ...item, ...cleared } : item;
   });
   const indexByKey = new Map<string, number>();
   merged.forEach((item, index) => {
@@ -518,12 +554,9 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
     const key = itemIdentity(item, incomingIndex);
     const existingIndex = indexByKey.get(key);
     if (existingIndex == null) {
-      const itemData = auxiliaryData(item);
       merged.push({
         ...item,
-        ...(itemData && hasTimedData(itemData)
-          ? { data: replaceTimeDataRange([], itemData, range) }
-          : {}),
+        ...replaceTimedFieldsRange(null, item, range),
       });
       indexByKey.set(key, merged.length - 1);
       return;
@@ -534,15 +567,10 @@ export function replaceIndicatorItemsRange<T extends IndicatorAuxiliaryItem>(
       indexByKey.set(key, merged.length - 1);
       return;
     }
-    const currentData = auxiliaryData(current);
-    const itemData = auxiliaryData(item);
-    const timed = hasTimedData(currentData || []) || hasTimedData(itemData || []);
     merged[existingIndex] = {
       ...current,
       ...item,
-      ...(timed
-        ? { data: replaceTimeDataRange(currentData || [], itemData || [], range) }
-        : {}),
+      ...replaceTimedFieldsRange(current, item, range),
     };
   });
 

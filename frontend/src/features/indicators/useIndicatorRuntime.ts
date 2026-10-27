@@ -1158,6 +1158,7 @@ export function useIndicatorRuntime(
       type: "patch",
       indicatorId,
       normalized,
+      range: payload.range,
     });
   }, [
     activeIndicatorsRef,

@@ -791,7 +791,9 @@ export function patchCachedIndicatorResult(
     fills: mergeIndicatorItems(base.fills, incoming.fills),
     hlines: mergeIndicatorItems(base.hlines, incoming.hlines),
     ...(incoming.drawings || base.drawings ? { drawings: reconcilePineScenes(base.drawings, incoming.drawings) } : {}),
-    bgcolors: mergeIndicatorItems(base.bgcolors, incoming.bgcolors),
+    bgcolors: replaceIndicatorItemsRange(
+      base.bgcolors, incoming.bgcolors, normalizeIndicatorRange(metadata.range),
+    ),
     barcolors: mergeIndicatorItems(base.barcolors, incoming.barcolors),
     signals: mergeIndicatorItems(base.signals, incoming.signals),
   });
