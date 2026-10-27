@@ -9,6 +9,7 @@ an account interaction aborts the unpublished batch for the scalar coordinator.
 
 import json
 from bisect import bisect_right
+from collections import Counter
 from decimal import Decimal
 
 from app.replay.training.persistence import account_marks as account_marks_ops
@@ -30,6 +31,19 @@ MAX_EVENTS_PER_TRACK = 8192
 
 class TapeRiskBoundary(Exception):
     """The speculative batch must be replayed through the interaction path."""
+
+
+def record_outcome(store, outcome):
+    """Count accepted intervals and each reason a range fell back to exact steps."""
+    outcomes = getattr(store, "_tape_interval_outcomes", None)
+    if outcomes is None:
+        outcomes = store._tape_interval_outcomes = Counter()
+    outcomes[outcome] += 1
+
+
+def refuse(store, reason):
+    record_outcome(store, reason)
+    return None
 
 
 def require_safe_prices(store, connection, run_id, planned_prices):
@@ -157,9 +171,10 @@ def update_intent(store, connection, run_id):
 async def try_advance(owner, *, command, binding, tracks, snapshots, target, runtime_snapshot=None, source_goal=None):
     service, store = owner.replay_service, owner.store
     hedge = binding.get("position_mode") == "HEDGE"
+    if not service.settings.replay_fast_forward_optimization_enabled:
+        return refuse(store, "disabled")
     if (
-        not service.settings.replay_fast_forward_optimization_enabled
-        or binding.get("source_kind") != "AGG_TRADE"
+        binding.get("source_kind") != "AGG_TRADE"
         or binding.get("position_mode") not in {"ONE_WAY", "HEDGE"}
         or (source_goal is not None and (not hedge or len(tracks) != 1))
         or binding.get("funding_mode") == "SANDBOX_FIXED"
@@ -167,21 +182,20 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
         or binding.get("book_mode", "OFF") != "OFF"
         or binding.get("account_data_mode") == "HISTORICAL_EXACT"
         or not 1 <= len(tracks) <= 8
-        or any(
-            s["state"] != "PAUSED" or s["cursor"].get("at_end") for _, s in snapshots
-        )
     ):
-        return None
+        return refuse(store, "ineligible_binding")
+    if any(s["state"] != "PAUSED" or s["cursor"].get("at_end") for _, s in snapshots):
+        return refuse(store, "track_not_paused_or_at_end")
     clocks = {s["cursor"]["virtual_time_ms"] for _, s in snapshots}
     if len(clocks) != 1:
-        return None
+        return refuse(store, "clock_diverged")
     current = clocks.pop()
     for _, snapshot in snapshots:
         if any(
             o["status"] in {"OPEN", "PARTIALLY_FILLED"}
             for o in snapshot["components"]["orders"]
         ):
-            return None
+            return refuse(store, "open_order")
     context = None
     if hedge:
         from .hedge_tape_interval import prepare_context
@@ -190,7 +204,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
             current=current, target=target, runtime_snapshot=runtime_snapshot,
         )
         if context is None:
-            return None
+            return None  # prepare_context recorded its own reason.
     parent_target = target
     if hedge:
         target = context["target"]
@@ -211,7 +225,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
             known_snapshot=snapshot,
         )
         if controlled["revision"] != snapshot["revision"]:
-            return None
+            return refuse(store, "controller_revision")
         plan = await service.plan_source_chunk(
             sid,
             target_time_ms=target,
@@ -220,8 +234,10 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
         )
         blocks[sid] = plan.get("prepared_tape")
         times = tuple(plan["event_times_ms"])
-        if not times or times[0] <= current:
-            return None
+        if not times:
+            return refuse(store, "no_source_event")
+        if times[0] <= current:
+            return refuse(store, "source_at_cursor")
         # Exclude the final planned timestamp, which may be split by a page or
         # be a source terminal. Both retain the established exact fallback.
         cap = min(cap, times[-1] - 1)
@@ -231,7 +247,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
         {t for values in plans.values() for t in values if current < t <= cap}
     )
     if len(times) < 2:
-        return None
+        return refuse(store, "single_cohort")
     while True:
         planned_prices = {
             track["track_id"]: prices[service_validation_ops.track_session_id(track)][
@@ -247,10 +263,10 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
             break
         except TapeRiskBoundary as error:
             if str(error) != "price envelope":
-                return None
+                return refuse(store, "risk_boundary")
             times = times[: len(times) // 2]
             if len(times) < 2:
-                return None
+                return refuse(store, "price_envelope")
     from .tape_interval import prepare_intervals, persist_interval, PreparedIntervalRecord
     from ..timing import timed_to_thread
 
@@ -425,7 +441,7 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
         active.add(command.run_id)
         await commit_actor_phases(service, phases, tape=True)
     except TapeRiskBoundary:
-        return None
+        return refuse(store, "commit_risk_boundary")
     finally:
         getattr(store, "_tape_interval_active", set()).discard(command.run_id)
         getattr(store, "_portfolio_summary_runs", {}).pop(command.run_id, None)
@@ -440,4 +456,5 @@ async def try_advance(owner, *, command, binding, tracks, snapshots, target, run
             lambda c: account_marks_ops.hedge_risk_fingerprint(c, run_id=command.run_id)
         )
         store._cache_committed_hedge_fingerprint(command.run_id, fingerprint)
+    record_outcome(store, "accepted")
     return tuple(stable), times[-1]

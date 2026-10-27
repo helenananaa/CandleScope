@@ -83,6 +83,7 @@ def measure(count, name, root, output, v2=False, dense=False, python_batch=False
     if python_batch:
         result['python_execution_protocol'] = 'MARKET_BATCH_V1'
     result['compact_spawn_enabled'] = os.environ.get('BACKTEST_COMPACT_SPAWN_ENABLED', '1') == '1'
+    result['columnar_spawn_enabled'] = os.environ.get('BACKTEST_COLUMNAR_SPAWN_ENABLED', '1') == '1'
     result['host_hotpath_enabled'] = os.environ.get('BACKTEST_HOST_HOTPATH_ENABLED', '1') == '1'
     if name == "PYTHON":
         result["python_case"] = python_case

@@ -155,6 +155,36 @@ class PythonHostProvider:
             raise StrategyProviderError(exc.code, str(exc)) from exc
         return _to_host_output(frame.sequence, payload)
 
+    def step_batch(
+        self, frames: list[ObservationFrame], *, step_timeout_s: float
+    ) -> tuple[list[StrategyOutput | None], StrategyProviderError | None]:
+        """See StrategyProviderSession.step_batch; the worker stays isolated."""
+        batch = getattr(self.runner, "step_batch", None)
+        if batch is None:
+            outputs: list[StrategyOutput | None] = []
+            for frame in frames:
+                try:
+                    output = (self.warmup if frame.phase == "WARMUP" else self.step)(frame)
+                except StrategyProviderError as exc:
+                    return outputs, exc
+                outputs.append(output)
+                if output is not None:
+                    break
+            return outputs, None
+        try:
+            results, error = batch([
+                ("warmup" if frame.phase == "WARMUP" else "step",
+                 {"observation": _author_observation(frame)})
+                for frame in frames
+            ], step_timeout_s=step_timeout_s)
+        except PythonRunnerError as exc:
+            raise StrategyProviderError(exc.code, str(exc)) from exc
+        outputs = [
+            None if frame.phase == "WARMUP" else _to_host_output(frame.sequence, result)
+            for frame, result in zip(frames, results)
+        ]
+        return outputs, None if error is None else StrategyProviderError(error.code, str(error))
+
     def on_execution_report(self, report: dict[str, Any]) -> None:
         try:
             from .local_python import LocalPythonRunner

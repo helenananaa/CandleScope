@@ -219,9 +219,10 @@ def test_chart_workspace_compiles_smokes_and_runs_through_host_ledger(
 ):
     from app.market_dataset.snapshot import MarketEvent
 
-    from tests.test_backtest_chart_pyne import _service
+    from app.backtest.service import BacktestService
+    from tests.test_backtest_control_plane import _settings
 
-    service = _service(tmp_path)
+    service = BacktestService.start(_settings(tmp_path), now_ms=1, enforce_registered_revisions=True)
     provider = PineEngineProvider()
     try:
         revision = service.create_strategy_revision(
