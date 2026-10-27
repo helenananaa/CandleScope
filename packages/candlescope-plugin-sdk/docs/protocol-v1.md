@@ -21,6 +21,7 @@ render.histogram-series/1
 render.structured-output/1
 render.native-scene/1
 render.output-patch/1
+batch-execution.bars-patch/1
 ```
 
 A runtime declares all supported features and the subset it requires from the
@@ -111,6 +112,36 @@ sent. New values are validated like a full output; a patch that does not fit
 its base is a protocol violation. Runtimes answer with a full output whenever
 they are unsure (reset, recovery, unknown base). Hosts drop a stream's base
 when the process restarts or a request fails, which forces a full output.
+
+#### Bar patches
+
+`batch-execution.bars-patch/1` lets a live stream skip resending bars the
+runtime already holds. Only after it was negotiated may a host add
+`"barsPatch": {"stream": "<id>", "base": null}` (`bars` is the whole window) or
+
+```json
+"barsPatch": {"stream": "<id>", "base": "<revision>", "skip": 3, "keep": 16380}
+```
+
+to an `executeBatch` request. With a base, the window is the `keep` bars from
+index `skip` of the window that `base` names, followed by `bars`. A runtime that
+receives `barsPatch` returns `barsRevision` with every successful result; it
+names the full window that request executed.
+
+- A host keeps a bar only where it is exactly the bar it sent at that position
+  of the base window. A corrected or re-formed bar, and every bar after it, is
+  sent again, so the rebuilt window always equals the full request.
+- A runtime may forget any base at any time. If `base` is not the last
+  `barsRevision` it returned for that stream, or `skip + keep` exceeds that
+  window, it answers with the JSON-RPC error `BARS_PATCH_BASE_UNKNOWN` without
+  executing, and the host resends the request with every bar and
+  `"base": null`.
+- Both sides drop a stream's base when a request for it fails, and hosts drop
+  every base when the process restarts.
+
+The Python SDK's `RuntimeDispatcher` keeps the bases (8 streams, dropping the
+least recently used first) and hands plugins the rebuilt full request; a
+runtime only declares the feature.
 
 ### shutdown
 
