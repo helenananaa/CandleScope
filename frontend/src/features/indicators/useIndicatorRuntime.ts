@@ -1159,7 +1159,7 @@ export function useIndicatorRuntime(
       indicatorId,
       normalized,
       range: payload.range,
-      ok: payload.ok,
+      ok: payload.ok !== false,
     });
   }, [
     activeIndicatorsRef,
