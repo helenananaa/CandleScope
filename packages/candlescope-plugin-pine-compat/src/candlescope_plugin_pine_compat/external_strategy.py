@@ -185,11 +185,15 @@ def _execute(request):
                     **({"scheduled": True} if "execution_schedule" in evaluations else {}),
                 )
                 _session_count = 0
+            # A compact reply never reads the chart output, so a core that can
+            # return only this append's intents need not rebuild the history.
+            compact = reply is not None and getattr(pine_compat, "EXTERNAL_COMPACT_APPEND_SCHEMA_VERSION", 0) == 1
             result = _session.append(
                 engine_bars(request["bars"][start:]),
                 accounts,
                 **evaluations,
                 **({"execution_times": clocks[start:]} if clocks is not None else {}),
+                **({"snapshot": False} if compact else {}),
             )
             _session_count = len(request["bars"])
             retained = True
@@ -219,16 +223,22 @@ def _execute(request):
         _session = None
         _session_count = 0
         raise
-    if result["output"].get("diagnostics"):
-        raise ValueError(str(result["output"]["diagnostics"]))
+    diagnostics = result["output"].get("diagnostics") if "output" in result else _session.diagnostics()
+    if diagnostics:
+        raise ValueError(str(diagnostics))
     intents = result["intents"]
+    # Only a compact core append leaves out the intents it emitted earlier.
+    emitted = result.get("intent_base", 0)
+    if emitted and not reply == known == emitted:
+        intents, emitted = _session.snapshot()["intents"], 0
     # A retained session only appends intents. A Host that holds exactly the
     # ones delivered so far needs only the new tail; any other count gets all.
-    base = reply if reply is not None and reply == known and len(intents) >= reply else 0
-    if base:
-        intents = intents[base:]
+    total = emitted + len(intents)
+    base = reply if reply is not None and reply == known and total >= reply else 0
+    if base > emitted:
+        intents = intents[base - emitted:]
     if retained:
-        _intent_count = base + len(intents)
+        _intent_count = total
     if standalone_updates:
         # Implicit close-only schedule preserves the public bar-only coordinates.
         for intent in intents:

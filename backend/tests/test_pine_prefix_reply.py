@@ -143,8 +143,9 @@ def test_real_compact_replies_rebuild_the_complete_evaluator_result(module):
             assert history == expected["intents"]
             assert ({key: value for key, value in result.items() if key not in {"intents", "intent_base", "prefix_reply"}}
                     == {key: value for key, value in expected.items() if key not in {"intents", "graphics", "raw_output"}})
-            compact_bytes += len(encoded(result))
-            full_bytes += len(encoded(expected))
+            # The transport restores the bound identity on both replies.
+            compact_bytes += len(encoded({key: value for key, value in result.items() if key != "identity"}))
+            full_bytes += len(encoded({key: value for key, value in expected.items() if key != "identity"}))
         assert len(history) > 20
         assert compact_bytes < full_bytes / 5
         # The final full reply on the same worker equals a fresh full request.
