@@ -259,8 +259,17 @@ class PineEngineProvider:
         self.execution_times = []
         self.execution_passes = []
         self.execution_contexts = []
+        self.encoded_schedule = []
         self.state_hash = canonical_hash([])
         self.risk_configuration = None
+
+    def _schedule(self):
+        # Only the newest bar's pass group can still change. Earlier groups keep
+        # their encoded objects, so the evaluator transport sends only new rows.
+        encoded = self.encoded_schedule
+        del encoded[max(0, len(self.execution_passes) - 1):]
+        encoded.extend(encode_schedule(self.execution_passes[len(encoded):], self.execution_contexts[len(encoded):]))
+        return encoded
 
     def _evaluate(self, frame, *, warmup=False):
         if (self.worker is None and not self.streaming) or not frame.account_view:
@@ -372,7 +381,7 @@ class PineEngineProvider:
                     **({"contexts": contexts} if contexts else {}),
                     **({"request_updates": self.request_groups} if self.request_feed is not None and not self.pass_mode else {}),
                     **({"execution_times": self.execution_times} if self.needs_clock else {}),
-                    **({"execution_schedule": encode_schedule(self.execution_passes, self.execution_contexts)} if self.scheduled
+                    **({"execution_schedule": self._schedule()} if self.scheduled
                        else {"execution_passes": self.execution_passes} if self.pass_mode else {}),
                     **({"prefix_reply": {"contract": self.compact, "intent_base": len(self.history)}}
                        if self.compact else {}),
@@ -585,6 +594,7 @@ class PineEngineProvider:
                 raise StrategyProviderError("PROVIDER_PROTOCOL_VIOLATION", "restored Pine risk configuration missing")
         if self.scheduled:
             self.execution_passes, self.execution_contexts = decode_schedule(payload.get("execution_schedule"), len(self.bars),streaming=self.streaming)
+            self.encoded_schedule = []
         elif self.fill_callbacks:
             from copy import deepcopy
             passes = payload.get("execution_passes")

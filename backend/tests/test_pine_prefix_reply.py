@@ -103,6 +103,45 @@ def test_reply_requests_ride_along_and_open_pass_groups_resend_the_prefix():
     assert "operation" not in send(worker, {"source": "s", "bars": rows, "accounts": frames, "execution_passes": passes})
 
 
+def test_rebuilt_newest_row_is_compared_alone():
+    worker = transport()
+    rows, frames = [bar(i) for i in range(3)], [account(i) for i in range(3)]
+    send(worker, {"source": "s", "bars": rows, "accounts": frames})
+    compared = []
+
+    class Row(dict):
+        def __eq__(self, other):
+            compared.append(self["time"])
+            return dict.__eq__(self, other)
+
+        __hash__ = None
+
+    rows = rows[:2] + [Row(rows[2]), bar(3)]
+    assert send(worker, {"source": "s", "bars": rows, "accounts": frames + [account(3)]})["prefix_base"] == 3
+    assert set(compared) == {120}
+
+
+def test_chart_provider_keeps_encoded_pass_groups_of_settled_bars():
+    from app.backtest.strategy.pine_engine import PineEngineProvider
+    from app.backtest.strategy.pine_schedule import encode
+    provider = PineEngineProvider.__new__(PineEngineProvider)
+    provider.execution_passes, provider.execution_contexts, provider.encoded_schedule = [], [], []
+    for index in range(4):
+        provider.execution_passes.append([{"confirmed": True, "bar": index}])
+        provider.execution_contexts.append([{"bar_state": "historical", "trigger": "bar_close"}])
+        previous = list(provider.encoded_schedule)
+        schedule = provider._schedule()
+        assert schedule == encode(provider.execution_passes, provider.execution_contexts)
+        assert all(a is b for a, b in zip(schedule[:-1], previous))
+    # Another pass on the newest bar re-encodes only that bar's group.
+    provider.execution_passes[-1].append({"confirmed": True, "bar": 3})
+    provider.execution_contexts[-1].append({"bar_state": "historical", "trigger": "order_fill"})
+    previous = list(provider.encoded_schedule)
+    schedule = provider._schedule()
+    assert schedule == encode(provider.execution_passes, provider.execution_contexts)
+    assert all(a is b for a, b in zip(schedule[:-1], previous[:-1])) and schedule[-1] is not previous[-1]
+
+
 SOURCE = """//@version=6
 strategy("compact")
 if bar_index % 5 == 1

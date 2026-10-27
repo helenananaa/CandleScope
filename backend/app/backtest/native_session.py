@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 from copy import deepcopy
+from itertools import compress, count as counter
 from operator import is_not
 from .native import MAX_BYTES, PROTOCOL, encoded, digest
 from .errors import BacktestError
@@ -81,7 +82,9 @@ class _SentPrefix:
                 return False
             if not sent:
                 continue
-            if any(map(is_not, value, sent)) and value[:count] != sent:
+            # Values decide only from the first row the caller rebuilt.
+            first = next(compress(counter(), map(is_not, value, sent)), count)
+            if value[first:count] != sent[first:]:
                 return False
             if value[count - 1] != last:
                 return False
