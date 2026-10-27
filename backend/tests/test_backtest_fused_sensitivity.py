@@ -78,3 +78,81 @@ def test_empty_fused_matrix_matches_reference():
         bar_path_scenario=BAR_PATH_SCENARIO, participation_rate=Decimal("0.1"))
     primary = kernel.run((), lambda *_: [], finalize=True)
     assert build_cost_sensitivity_matrix(kernel, (), primary) == build_cost_sensitivity_matrix(kernel, (), primary, fast_bar=False)
+
+
+def _trade_kernel(*, account_v2=False, funding="0", end="CANCEL_AT_END", latency=(0, 0)):
+    from app.simulation.trade_kernel import TradeSimulationKernel
+    from scripts.benchmark_trade_strategy import events
+    from tests.test_backtest_account_v2_m4 import rules, event
+
+    options = dict(execution_model_revision=EXECUTION_REALISM_V2, participation_rate=Decimal("0.03"),
+                   taker_fee_bps=Decimal("4"), maker_fee_bps=Decimal("2"), slippage_bps=Decimal("1"),
+                   funding_rate=Decimal(funding), funding_interval_ms=60000, order_end_policy=end,
+                   latency_ms=latency[0], latency_events=latency[1], checkpoint_event_interval=0)
+    tape = events(301, 3)
+    if account_v2:
+        options.update(account_model="LINEAR_PERP_ONE_WAY_V2", funding_mode="FIXED_SCENARIO")
+        tape = (rules(-2), event("MARK_INDEX", -1, mark_price="100", index_price="100"), *tape)
+    return TradeSimulationKernel(**options), tape
+
+
+@pytest.mark.parametrize("indexed", [False, True])
+@pytest.mark.parametrize("account_v2", [False, True])
+@pytest.mark.parametrize("funding", ["0", "0.001"])
+@pytest.mark.parametrize("end", ["CANCEL_AT_END", "KEEP_OPEN"])
+@pytest.mark.parametrize("latency", [(0, 0), (5, 1)])
+def test_fused_trade_scenarios_preserve_full_reference_matrix(monkeypatch, indexed, account_v2, funding, end, latency):
+    from tests.test_trade_strategy_performance import mixed_orders
+
+    monkeypatch.setenv("BACKTEST_TRADE_ACTIVE_INDEX_ENABLED", str(int(indexed)))
+    kernel, tape = _trade_kernel(account_v2=account_v2, funding=funding, end=end, latency=latency)
+    primary = kernel.run(tape, mixed_orders, finalize=True)
+    before = deepcopy(kernel.snapshot())
+    monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", "0")
+    expected = build_cost_sensitivity_matrix(kernel, tape, primary)
+    assert [s["status"] for s in expected["scenarios"]] == ["COMPLETED"] * 5
+    assert len({s["hashes"]["ledger"] for s in expected["scenarios"]}) > 1
+    monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", "1")
+    assert build_cost_sensitivity_matrix(kernel, tape, primary) == expected
+    assert kernel.snapshot() == before
+
+
+def test_fused_trade_scenarios_replace_four_kernel_runs(monkeypatch):
+    from app.simulation.trade_kernel import TradeSimulationKernel
+
+    kernel, tape = _trade_kernel()
+    primary = kernel.run(tape, lambda *_: [], finalize=True)
+    calls = {"run": 0, "match": 0}
+    run, match = TradeSimulationKernel.run, TradeSimulationKernel._match
+
+    def counted_run(self, *args, **kwargs):
+        calls["run"] += 1
+        return run(self, *args, **kwargs)
+
+    def counted_match(self, event):
+        calls["match"] += 1
+        return match(self, event)
+
+    monkeypatch.setattr(TradeSimulationKernel, "run", counted_run)
+    monkeypatch.setattr(TradeSimulationKernel, "_match", counted_match)
+    monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", "0")
+    reference = build_cost_sensitivity_matrix(kernel, tape, primary)
+    assert calls == {"run": 4, "match": 4 * 301}
+    calls.update(run=0, match=0)
+    monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", "1")
+    assert build_cost_sensitivity_matrix(kernel, tape, primary) == reference
+    # Idle clones skip matching; nothing can fill without a working order.
+    assert calls == {"run": 0, "match": 0}
+
+
+@pytest.mark.parametrize("field", ["price", "qty"])
+def test_fused_trade_scenarios_still_reject_malformed_prints(monkeypatch, field):
+    import decimal
+
+    kernel, tape = _trade_kernel()
+    primary = kernel.run(tape, lambda *_: [], finalize=True)
+    bad = (*tape[:10], replace(tape[10], payload={**tape[10].payload, field: "x"}), *tape[11:])
+    for fused in ("0", "1"):
+        monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", fused)
+        with pytest.raises(decimal.InvalidOperation):
+            build_cost_sensitivity_matrix(kernel, bad, primary)
