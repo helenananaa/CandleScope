@@ -122,6 +122,7 @@ function mergeIndicatorPatchOutputs(
   state: IndicatorOutputState,
   indicatorId: string,
   normalized: NormalizedIndicatorPayload,
+  range: IndicatorRange | null = null,
 ): IndicatorOutputState {
   return {
     ...state,
@@ -148,9 +149,11 @@ function mergeIndicatorPatchOutputs(
     ],
     bgcolors: [
       ...withoutIndicator(state.bgcolors, indicatorId),
-      ...mergeIndicatorItems(
+      // A live range is authoritative even when bgcolor changed to na.
+      ...replaceIndicatorItemsRange(
         state.bgcolors.filter((item) => item.indicatorId === indicatorId),
         normalized.bgcolors || [],
+        range,
       ),
     ],
     barcolors: [
@@ -301,7 +304,9 @@ export function indicatorOutputReducer(
     case "patch":
       return reuseUnchangedOutputLanes(
         state,
-        mergeIndicatorPatchOutputs(state, action.indicatorId, action.normalized),
+        mergeIndicatorPatchOutputs(
+          state, action.indicatorId, action.normalized, action.ok === false ? undefined : action.range,
+        ),
       );
     case "replace-range":
       return reuseUnchangedOutputLanes(

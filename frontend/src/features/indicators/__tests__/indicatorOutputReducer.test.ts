@@ -5,9 +5,11 @@ import {
   createIndicatorOutputState,
   indicatorOutputReducer,
 } from "../indicatorOutputReducer.js";
+import { normalizeIndicatorPayload } from "../indicatorPayloadRuntime.js";
 import type {
   IndicatorOutputAction,
   IndicatorOutputState,
+  NormalizedIndicatorPayload,
 } from "../indicatorTypes.js";
 import { structuralMock } from "../../../test/testHelpers.js";
 
@@ -324,4 +326,91 @@ test("failed compute ownership clears stale auxiliary trading outputs", () => {
   assert.deepEqual(next.markers, [unrelatedMarker]);
   assert.deepEqual(next.fills, []);
   assert.deepEqual(next.signals, []);
+});
+
+function bgcolorPayload(times: number[]): NormalizedIndicatorPayload {
+  return normalizeIndicatorPayload({
+    ok: true,
+    annotations: [{
+      id: "bg",
+      pane: "main",
+      type: "bgcolor",
+      data: times.map((time) => ({ time })),
+      style: { color: "rgba(34,197,94,0.2)" },
+    }],
+  }, "script");
+}
+
+function bgcolorRegionTimes(state: IndicatorOutputState, indicatorId = "script") {
+  const bgcolor = state.bgcolors.find((item) => item.indicatorId === indicatorId);
+  return (bgcolor?.regions || []).map((region) => region.time);
+}
+
+test("live bgcolor patches merge regions by time instead of replacing history", () => {
+  const otherBgcolor = { id: "bg", indicatorId: "rsi", regions: [{ time: 10 }] };
+  let state = indicatorOutputReducer(
+    structuralMock<IndicatorOutputState>({
+      ...createIndicatorOutputState(),
+      bgcolors: [otherBgcolor],
+    }),
+    { type: "snapshot", indicatorId: "script", normalized: bgcolorPayload([10, 20, 30]) },
+  );
+
+  state = indicatorOutputReducer(state, {
+    type: "patch",
+    indicatorId: "script",
+    normalized: bgcolorPayload([30, 40]),
+  });
+  assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40]);
+  assert.equal(state.bgcolors.find((item) => item.indicatorId === "script")?.color, "rgba(34,197,94,0.2)");
+
+  state = indicatorOutputReducer(state, {
+    type: "patch",
+    indicatorId: "script",
+    normalized: bgcolorPayload([]),
+  });
+  assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40]);
+  assert.strictEqual(state.bgcolors.find((item) => item.indicatorId === "rsi"), otherBgcolor);
+});
+
+test("bgcolor range replacement only rewrites regions inside the range", () => {
+  let state = indicatorOutputReducer(createIndicatorOutputState(), {
+    type: "snapshot",
+    indicatorId: "script",
+    normalized: bgcolorPayload([10, 20, 30, 40]),
+  });
+
+  state = indicatorOutputReducer(state, {
+    type: "replace-range",
+    indicatorId: "script",
+    normalized: bgcolorPayload([30]),
+    range: { start: 20, end: 30 },
+  });
+
+  assert.deepEqual(bgcolorRegionTimes(state), [10, 30, 40]);
+});
+
+test("live bgcolor range clears and restores a forming color without losing history or other indicators", () => {
+  const otherBgcolor = { id: "bg", indicatorId: "rsi", regions: [{ time: 30 }] };
+  let state = indicatorOutputReducer(
+    { ...createIndicatorOutputState(), bgcolors: [otherBgcolor] },
+    { type: "snapshot", indicatorId: "script", normalized: bgcolorPayload([10, 20, 30, 40]) },
+  );
+  // The backend can send either an empty group or no bgcolor groups at all.
+  state = indicatorOutputReducer(state, {
+    type: "patch", indicatorId: "script", normalized: bgcolorPayload([]),
+    range: { start: 30, end: 30 }, ok: false,
+  });
+  assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40], "a failed calculation is not a color deletion");
+  for (const cleared of [bgcolorPayload([]), normalizeIndicatorPayload({ annotations: [] }, "script")]) {
+    state = indicatorOutputReducer(state, {
+      type: "patch", indicatorId: "script", normalized: cleared, range: { start: 30, end: 30 },
+    });
+    assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 40]);
+    assert.strictEqual(state.bgcolors.find((item) => item.indicatorId === "rsi"), otherBgcolor);
+    state = indicatorOutputReducer(state, {
+      type: "patch", indicatorId: "script", normalized: bgcolorPayload([30]), range: { start: 30, end: 30 },
+    });
+    assert.deepEqual(bgcolorRegionTimes(state), [10, 20, 30, 40]);
+  }
 });
