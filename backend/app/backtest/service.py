@@ -8,6 +8,7 @@ import time
 import uuid
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from collections import deque
 from collections.abc import Iterable, Sequence
 from typing import Any, Callable, Mapping
 
@@ -3341,6 +3342,14 @@ class BacktestService:
                 "FIDELITY_UNSUPPORTED",
                 "execute_trade_run only supports TRADE_TAPE or AGG_TRADE_TAPE",
             )
+        if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
+            from .colocated import provider_spec, execute
+            spec = provider_spec(provider, fidelity=str(record["fidelity_mode"]))
+            if spec is not None:
+                return execute(self, run_id, spec, events, {
+                    "now_ms": now_ms, "warmup_events": warmup_events,
+                    "snapshot_evidence": snapshot_evidence,
+                })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
         expected_generation = int(record["generation"])
@@ -3394,12 +3403,103 @@ class BacktestService:
             aggregate_low: Decimal | None = None
             aggregate_close: Decimal | None = None
             aggregate_volume = Decimal("0")
+            input_modes: tuple[str, ...] | None = None
+            feature_names: tuple[str, ...] | None = None
+            # Isolated providers that can stream several frames per exchange
+            # get them while no order is working; see step_ahead below.
+            batch_size = (
+                0 if getattr(self, "_colocated_worker", False) or self._fault_injector is not None
+                else _provider_step_batch_size(provider)
+            )
+            trades: tuple[MarketEvent, ...] = ()
+            cursor = 0
+            prepared: deque = deque()  # (trade, frame, aggregate after it), not yet sent
+            stepped: deque = deque()  # (trade, aggregate after it, provider output)
+            deferred: tuple | None = None  # (trade, aggregate after it, error)
+
+            def observation(trade_event, sequence, count, state):
+                """Provider inputs for one trade; pure, so frames can be prepared ahead."""
+                trade = dict(trade_event.payload)
+                price = Decimal(str(trade["price"]))
+                qty = Decimal(str(trade["qty"]))
+                open_, high, low, _close, volume = state
+                if open_ is None:
+                    open_ = high = low = price
+                high = max(high or price, price)
+                low = min(low or price, price)
+                state = (open_, high, low, price, volume + qty)
+                bar = {
+                    "open": str(open_),
+                    "high": str(high),
+                    "low": str(low),
+                    "close": str(price),
+                    "volume": str(state[4]),
+                    "authority": "OBSERVATION_ONLY",
+                }
+                self._assert_frame_inputs(provider, bar=bar, trade=trade, _modes=input_modes)
+                frame = adapter.frame(
+                    sequence=sequence,
+                    event_time_ms=trade_event.event_time_ms,
+                    watermark_ms=trade_event.event_time_ms,
+                    phase="WARMUP" if count < warmup_events else "EVALUATION",
+                    market={"venue": "local", "symbol": str(record["dataset_id"])},
+                    bar=bar,
+                    trade=trade,
+                    features=self._observation_features(
+                        provider, bar=bar, trade=trade, _names=feature_names
+                    ),
+                )
+                return frame, state
+
+            def step_ahead(event: MarketEvent, trade_event: MarketEvent) -> None:
+                """Send this trade and the next ones in one provider exchange.
+
+                Only while no order is working, so no fill or order report can
+                reach the provider between these frames, and never past a
+                periodic checkpoint, so every provider snapshot is unchanged.
+                The provider stops at the first output; results are consumed,
+                and any error raised, at each frame's own event.
+                """
+                nonlocal deferred
+                index = cursor - 1
+                limit = min(batch_size, len(trades) - index)
+                if interval > 0:
+                    limit = min(limit, interval - observed % interval)
+                if prepared and prepared[0][0] is not trade_event:
+                    prepared.clear()
+                state = (aggregate_open, aggregate_high, aggregate_low, aggregate_close, aggregate_volume)
+                while len(prepared) < limit:
+                    offset = len(prepared)
+                    item = trades[index + offset]
+                    if prepared:
+                        state = prepared[-1][2]
+                    try:
+                        frame, after = observation(
+                            item,
+                            # Account V2 kernels renumber trades consecutively.
+                            event.sequence + offset if event is not trade_event else item.sequence,
+                            observed + offset,
+                            state,
+                        )
+                    except Exception:
+                        break  # raised again by that trade's own single step
+                    prepared.append((item, frame, after))
+                if len(prepared) < 2:
+                    return
+                outputs, error = adapter.observe_batch([frame for _, frame, _ in list(prepared)[:limit]])
+                for output in outputs:
+                    item, _, after = prepared.popleft()
+                    stepped.append((item, after, output))
+                if error is not None:
+                    item, _, after = prepared.popleft()
+                    deferred = (item, after, error)
 
             def strategy(
                 _visible: tuple[MarketEvent, ...], event: MarketEvent
             ) -> list[dict]:
                 nonlocal observed, aggregate_open, aggregate_high
                 nonlocal aggregate_low, aggregate_close, aggregate_volume
+                nonlocal cursor, deferred
                 if observed % 256 == 0:
                     self._assert_execution_control(
                         run_id,
@@ -3411,38 +3511,42 @@ class BacktestService:
                     run_id=run_id,
                     sequence=event.sequence,
                 )
-                phase = "WARMUP" if observed < warmup_events else "EVALUATION"
-                observed += 1
-                trade = dict(event.payload)
-                price = Decimal(str(trade["price"]))
-                qty = Decimal(str(trade["qty"]))
-                if aggregate_open is None:
-                    aggregate_open = price
-                    aggregate_high = price
-                    aggregate_low = price
-                aggregate_high = max(aggregate_high or price, price)
-                aggregate_low = min(aggregate_low or price, price)
-                aggregate_close = price
-                aggregate_volume += qty
-                bar = {
-                    "open": str(aggregate_open),
-                    "high": str(aggregate_high),
-                    "low": str(aggregate_low),
-                    "close": str(aggregate_close),
-                    "volume": str(aggregate_volume),
-                    "authority": "OBSERVATION_ONLY",
-                }
-                self._assert_frame_inputs(provider, bar=bar, trade=trade)
-                wire = adapter.observe(
-                    sequence=event.sequence,
-                    event_time_ms=event.event_time_ms,
-                    watermark_ms=event.event_time_ms,
-                    phase=phase,
-                    market={"venue": "local", "symbol": str(record["dataset_id"])},
-                    bar=bar,
-                    trade=trade,
-                    features=self._observation_features(provider, bar=bar, trade=trade),
-                )
+                trade_event = event
+                if batch_size > 1:
+                    trade_event = trades[cursor]
+                    cursor += 1
+                    if trade_event.payload is not event.payload:
+                        raise RuntimeError("trade cursor lost the kernel's trade")
+                    if (not stepped and deferred is None
+                            and not any(order.status in {"OPEN", "PARTIAL"}
+                                        for order in kernel._working_orders())):
+                        step_ahead(event, trade_event)
+                if stepped or deferred is not None:
+                    if stepped:
+                        item, after, wire = stepped.popleft()
+                        error = None
+                    else:
+                        (item, after, error), deferred = deferred, None
+                    if item is not trade_event:
+                        raise RuntimeError("batched provider output lost its trade")
+                    observed += 1
+                    aggregate_open, aggregate_high, aggregate_low, aggregate_close, aggregate_volume = after
+                    if error is not None:
+                        raise error
+                else:
+                    if prepared and prepared[0][0] is trade_event:
+                        _, frame, after = prepared.popleft()
+                    else:
+                        prepared.clear()
+                        frame, after = observation(
+                            event,
+                            event.sequence,
+                            observed,
+                            (aggregate_open, aggregate_high, aggregate_low, aggregate_close, aggregate_volume),
+                        )
+                    observed += 1
+                    aggregate_open, aggregate_high, aggregate_low, aggregate_close, aggregate_volume = after
+                    wire = adapter.observe_frame(frame)
                 return planner.plan(
                     wire,
                     context=(None if planner.config is None else _planning_context(kernel, event)),
@@ -3527,6 +3631,12 @@ class BacktestService:
                 int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
                 if config.get("checkpoint_policy", "INTERVAL") == "INTERVAL" else 0
             )
+            if batch_size > 1:
+                trades = tuple(event for event in remaining_events if event.role == "TRADES")
+            if getattr(self, "_colocated_worker", False):
+                # Owned built-in/SDK capabilities are fixed after prepare/restore.
+                input_modes = tuple(provider.describe().input_modes)
+                feature_names = _declared_feature_names(provider) or ()
             last_order_count = len(kernel.orders)
             partial_seen = (sum(order.status == "PARTIAL" for order in kernel._working_orders())
                             if self._fault_injector is not None else 0)
@@ -5172,6 +5282,17 @@ def _declared_feature_names(provider: object) -> tuple[str, ...] | None:
     if not names:
         return None
     return tuple(str(name) for name in names)
+
+
+def _provider_step_batch_size(provider: object) -> int:
+    """Frames per exchange for isolated providers that stream batched replies."""
+    if not callable(getattr(provider, "step_batch", None)):
+        return 0
+    try:
+        size = int(app_getenv("BACKTEST_PROVIDER_STEP_BATCH_SIZE", "64"))
+    except ValueError:
+        return 0
+    return max(0, min(size, 1024))
 
 
 def _provider_report_metadata(provider: object) -> dict[str, object]:

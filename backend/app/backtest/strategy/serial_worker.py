@@ -32,6 +32,20 @@ class SerialWorker:
                 # Do not retain the last closure/provider while idle.
                 del job, invoke, completed
 
+    def submit(self, invoke: Callable[[], Any]) -> queue.Queue:
+        """Queue work without waiting. The caller owns any progress channel and
+        must close this worker if it abandons the job."""
+        if not self._gate.acquire(blocking=False):
+            raise RuntimeError("concurrent serial worker call")
+        try:
+            if self._closed:
+                raise RuntimeError("serial worker is closed")
+            completed: queue.Queue = queue.Queue(maxsize=1)
+            self._jobs.put((invoke, completed))
+            return completed
+        finally:
+            self._gate.release()
+
     def call(self, invoke: Callable[[], Any], timeout: float) -> Any:
         if not self._gate.acquire(blocking=False):
             raise RuntimeError("concurrent serial worker call")
