@@ -3,59 +3,464 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f9f8">
-  <title>CandleScope — 市场分析与行情回放工作台</title>
-  <meta name="description" content="CandleScope 是本地运行的加密市场分析与行情回放工作台。实时图表、订单流、多图联动、行情回放与可编程指标，汇集在同一个工作区。">
+  <meta name="theme-color" content="#04070d">
+  <meta name="color-scheme" content="dark">
+  <title>CandleScope — 本地运行的加密市场分析与行情回放工作台</title>
+  <meta name="description" content="CandleScope 是开源、本地运行的加密市场工作台：实时图表、订单流、多图联动、行情回放、可编程指标与策略研究，汇集在同一个工作区。">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="CandleScope">
   <meta property="og:title" content="CandleScope — 看懂市场，复盘每一次判断。">
-  <meta property="og:description" content="本地运行的市场分析与行情回放工作台。探索功能、阅读文档，前往 GitHub 开始使用。">
+  <meta property="og:description" content="开源、本地运行的加密市场分析与行情回放工作台。Read the market. Replay every decision.">
   <meta property="og:url" content="https://candlescope.app/">
+  <meta property="og:image" content="https://candlescope.app/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://candlescope.app/">
   <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png">
   <link rel="stylesheet" href="./style.css">
+  <script>
+    (function () {
+      var d = document.documentElement, l;
+      d.classList.add('js');
+      try { l = localStorage.getItem('cs-lang'); } catch (e) {}
+      if (l !== 'zh' && l !== 'en') l = /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
+      d.setAttribute('data-lang', l);
+      if (l === 'en') { d.classList.add('i18n-wait'); setTimeout(function () { d.classList.remove('i18n-wait'); }, 1500); }
+    })();
+  </script>
+  <script src="./assets/site.js" defer></script>
 </head>
 <body>
-  <a class="skip-link" href="#main">跳到主要内容</a>
-  <header class="header wrap">
-    <a class="brand" href="./" aria-label="CandleScope 首页"><img src="./assets/mark.svg" width="42" height="42" alt=""><span>CandleScope</span></a>
-    <nav aria-label="主导航"><a href="#features">功能</a><a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md">文档</a><a class="nav-github" href="https://github.com/helenananaa/CandleScope">GitHub <span aria-hidden="true">↗</span></a></nav>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-gh" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+  </svg>
+  <a class="skip-link" href="#main" data-en="Skip to content">跳到主要内容</a>
+
+  <header class="nav" data-nav>
+    <div class="wrap nav-inner">
+      <a class="brand" href="./" aria-label="CandleScope 首页" data-en-aria="CandleScope home">
+        <img src="./assets/mark-dark.svg" width="30" height="30" alt="">
+        <span class="wordmark">Candle<span>Scope</span></span>
+      </a>
+      <nav class="nav-links" aria-label="主导航" data-en-aria="Main">
+        <a href="#features" data-en="Product">产品</a>
+        <a href="#replay" data-en="Replay">回放</a>
+        <a href="#local" data-en="Local-first">本地优先</a>
+        <a href="#start" data-en="Quick start">快速开始</a>
+        <a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md" data-en="Docs">文档</a>
+      </nav>
+      <div class="nav-end">
+        <div class="lang" role="group" aria-label="语言" data-en-aria="Language">
+          <button type="button" data-set-lang="zh" aria-pressed="true">中</button>
+          <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="https://github.com/helenananaa/CandleScope">
+          <svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
   </header>
+
   <main id="main">
-    <section class="hero wrap" aria-labelledby="headline">
-      <div class="hero-copy">
-        <p class="eyebrow"><span class="dot" aria-hidden="true"></span> YOUR LOCAL MARKET WORKSPACE</p>
-        <h1 id="headline">看懂市场，<br>复盘每一次<span class="accent">判断。</span></h1>
-        <p class="intro">从实时行情到历史回放，把图表、订单流与策略研究放在一起。CandleScope，为专注分析而生的本地工作台。</p>
-        <div class="actions"><a class="button primary" href="https://github.com/helenananaa/CandleScope">前往 GitHub <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md#快速开始">阅读使用指南 <span aria-hidden="true">→</span></a></div>
-        <div class="hero-notes"><span>本地运行</span><span>行情回放</span><span>可扩展工作区</span></div>
-      </div>
-      <div class="visual" aria-label="K线分析示意图，并非实时行情或软件截图">
-        <div class="visual-heading"><span class="visual-label">CANDLESCOPE / MARKET STUDY</span><img src="./assets/mark.svg" alt="" width="32" height="32"></div>
-        <svg class="chart" viewBox="0 0 520 340" role="img" aria-labelledby="chart-title">
-          <title id="chart-title">用于展示市场分析主题的 K 线示意图</title>
-          <defs><pattern id="grid" width="52" height="56" patternUnits="userSpaceOnUse"><path d="M 52 0 L 0 0 0 56" fill="none" stroke="#e1e7e4" stroke-width="1"/></pattern></defs>
-          <rect width="520" height="340" fill="url(#grid)"/>
-          <path d="M0 275 C80 270 100 235 155 242 S230 200 270 198 S345 178 375 150 S465 125 520 92" fill="none" stroke="#b1c8c0" stroke-width="2" stroke-dasharray="5 6"/>
-          <g fill="#098979" stroke="#098979" stroke-width="2"><path d="M26 235v62M78 226v62M130 189v68M208 174v65M260 146v70M338 118v75M390 95v58M442 73v80M494 43v85"/><rect x="18" y="252" width="16" height="31"/><rect x="70" y="238" width="16" height="35"/><rect x="122" y="211" width="16" height="30"/><rect x="200" y="195" width="16" height="32"/><rect x="252" y="167" width="16" height="29"/><rect x="330" y="138" width="16" height="40"/><rect x="382" y="109" width="16" height="28"/><rect x="434" y="94" width="16" height="37"/><rect x="486" y="59" width="16" height="39"/></g>
-          <g fill="#536575" stroke="#536575" stroke-width="2"><path d="M52 245v59M104 208v57M156 201v69M182 210v47M234 160v71M286 151v71M312 148v57M364 120v66M416 100v62M468 78v62"/><rect x="44" y="261" width="16" height="27"/><rect x="96" y="224" width="16" height="23"/><rect x="148" y="222" width="16" height="30"/><rect x="174" y="224" width="16" height="20"/><rect x="226" y="180" width="16" height="34"/><rect x="278" y="167" width="16" height="37"/><rect x="304" y="164" width="16" height="22"/><rect x="356" y="136" width="16" height="34"/><rect x="408" y="116" width="16" height="29"/><rect x="460" y="93" width="16" height="27"/></g>
-          <path d="M312 0V340" stroke="#122a3b" stroke-opacity=".25" stroke-dasharray="4 5"/>
-          <circle cx="312" cy="186" r="6" fill="#f7f9f8" stroke="#122a3b" stroke-width="2"/>
+    <!-- ===== Hero ===== -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-bg" aria-hidden="true">
+        <div class="hero-grid"></div>
+        <svg class="hero-orbit" viewBox="0 0 1024 1024" fill="none">
+          <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M525.12 136.23 A376 376 0 0 0 154.41 628.20"/><path d="M498.88 887.77 A376 376 0 0 0 869.59 395.80"/>
+            <path d="M496.09 208.42 A304 304 0 0 0 215.79 580.39"/><path d="M527.91 815.58 A304 304 0 0 0 808.21 443.61"/>
+          </g>
+          <g fill="#1473e6"><circle cx="628.20" cy="154.41" r="4"/><circle cx="733.01" cy="207.84" r="4"/><circle cx="816.16" cy="290.99" r="4"/><circle cx="395.80" cy="869.59" r="4"/><circle cx="290.99" cy="816.16" r="4"/><circle cx="207.84" cy="733.01" r="4"/></g>
         </svg>
-        <div class="visual-footer"><span>观察 · 回放 · 研究</span><span>K 线示意 / 非实时行情</span></div>
-        <div class="visual-caption"><span class="caption-index">01 /</span><p>把市场的每个细节，<br>放回完整的上下文。</p></div>
+      </div>
+
+      <div class="wrap hero-copy">
+        <a class="pill reveal" href="https://github.com/helenananaa/CandleScope">
+          <span class="pulse" aria-hidden="true"></span>
+          <span data-en="Open source · Runs locally · GPL-3.0">开源 · 本地运行 · GPL-3.0</span>
+          <span class="pill-arrow" aria-hidden="true">→</span>
+        </a>
+        <h1 id="hero-title" class="reveal">
+          <span class="h1-line" data-en="Read the market.">看懂市场，</span>
+          <span class="h1-line grad" data-en="Replay every decision.">复盘每一次判断。</span>
+        </h1>
+        <p class="lede reveal" data-en="Live charts, order flow, linked workspaces, market replay and programmable indicators — a crypto market workstation that runs on your own machine.">实时图表、订单流、多图联动、行情回放与可编程指标——一个跑在你自己电脑上的加密市场工作台。</p>
+        <div class="cta reveal">
+          <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope">
+            <svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg>
+            <span data-en="Get it on GitHub">在 GitHub 获取</span>
+          </a>
+          <a class="btn btn-ghost" href="#start"><span data-en="Quick start">快速开始</span><span aria-hidden="true">→</span></a>
+        </div>
+        <ul class="hero-meta reveal">
+          <li>Windows · macOS · Linux</li>
+          <li>Binance · OKX</li>
+          <li data-en="30 interface languages">30 种界面语言</li>
+        </ul>
+      </div>
+
+      <!-- Product mock: an illustration driven by simulated data, not a screenshot -->
+      <div class="wrap mock-stage reveal" data-tilt>
+        <div class="mock" data-hero-mock role="img" aria-label="CandleScope 工作区示意：K 线图、盘口与逐笔成交，使用模拟数据" data-en-aria="Illustration of the CandleScope workspace with a candlestick chart, order book and trades, driven by simulated data">
+          <div class="mock-bar">
+            <img src="./assets/mark-dark.svg" width="18" height="18" alt="">
+            <div class="mock-symbol"><b>BTCUSDT</b><span>Binance · <i data-en="Perp">永续</i></span></div>
+            <div class="mock-intervals" aria-hidden="true"><span>1m</span><span>5m</span><span class="on">15m</span><span>1H</span><span>4H</span><span>1D</span></div>
+            <div class="mock-price"><b data-hero-price>—</b><span data-hero-change>—</span></div>
+            <span class="demo-badge" data-en="DEMO DATA">演示数据</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-tools" aria-hidden="true">
+              <svg viewBox="0 0 20 20"><path d="M5 3l10 6-4.5 1.2L13 16l-2 1-2.5-5.6L5 14z"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M3 16L17 4"/><circle cx="3.5" cy="15.5" r="1.6"/><circle cx="16.5" cy="4.5" r="1.6"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M2 10h16M2 6h16M2 14h16" opacity=".5"/><path d="M2 10h16"/></svg>
+              <svg viewBox="0 0 20 20"><rect x="3.5" y="5" width="13" height="10" rx="1"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M5 4h10M10 4v12"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M3 15L15 3l2 2L5 17z"/><path d="M6 12l1.5 1.5M8.5 9.5L10 11M11 7l1.5 1.5"/></svg>
+              <svg viewBox="0 0 20 20"><path d="M6 3v7a4 4 0 008 0V3"/><path d="M6 6h2M12 6h2"/></svg>
+            </div>
+            <div class="mock-chart">
+              <div class="mock-legend" data-hero-legend aria-hidden="true"></div>
+              <canvas data-hero-canvas aria-hidden="true"></canvas>
+            </div>
+            <aside class="mock-side" aria-hidden="true">
+              <div class="side-head"><b data-en="Order book">盘口</b><span>0.5</span></div>
+              <div class="ob-cols"><span data-en="Price">价格</span><span data-en="Size">数量</span><span data-en="Total">累计</span></div>
+              <div class="ob" data-ob></div>
+              <div class="side-head"><b data-en="Trades">成交</b><span data-en="Live">实时</span></div>
+              <div class="tape" data-tape></div>
+            </aside>
+          </div>
+          <div class="mock-status">
+            <span><i class="live-dot"></i><span data-en="Simulated feed · not live market data">模拟行情 · 非实时数据</span></span>
+            <span class="hide-sm">EMA 21 · EMA 55 · Vol</span>
+            <span>CandleScope</span>
+          </div>
+        </div>
       </div>
     </section>
-    <section class="features wrap" id="features" aria-labelledby="features-title">
-      <div class="section-heading"><p class="eyebrow">ONE WORKSPACE. MORE PERSPECTIVE.</p><h2 id="features-title">从观察，到验证。</h2><p>让实时分析与历史研究，衔接成你的工作流。</p></div>
-      <div class="feature-grid">
-        <article><span class="feature-number">01</span><h3>看见实时市场</h3><p>查看 Binance 与 OKX 的现货和永续市场。结合实时图表、盘口、逐笔成交与订单流，理解价格变化的上下文。</p><span class="feature-tag">实时图表 / 订单流</span></article>
-        <article><span class="feature-number">02</span><h3>在回放中复盘</h3><p>回到历史行情，以同步市场和模拟账户练习。保存训练进度，复盘已有记录，或从任意节点重新开始。</p><span class="feature-tag">历史回放 / 模拟交易</span></article>
-        <article><span class="feature-number">03</span><h3>建立自己的研究方式</h3><p>在多图工作区联动观察，使用 Pine 或前端 JavaScript 编写指标，导入数据开展策略研究，检查结果与测试假设。</p><span class="feature-tag">多图联动 / 可编程指标</span></article>
-      </div>
-      <p class="scope-note">市场视图取决于交易所提供的数据；Pine 兼容覆盖明确支持的子集。行情回放使用模拟委托。</p>
+
+    <!-- ===== Facts ===== -->
+    <section class="facts wrap" aria-label="CandleScope 概览" data-en-aria="CandleScope at a glance">
+      <div class="fact reveal"><b>2</b><span class="fact-k" data-en="exchanges">家交易所</span><span class="fact-d" data-en="Binance and OKX, spot and perpetuals">Binance 与 OKX，现货与永续</span></div>
+      <div class="fact reveal"><b>4</b><span class="fact-k" data-en="linked charts">图联动</span><span class="fact-d" data-en="in the standard workspace; larger layouts are opt-in">标准工作区；更大布局可选开启</span></div>
+      <div class="fact reveal"><b>30</b><span class="fact-k" data-en="interface languages">种界面语言</span><span class="fact-d" data-en="from English and 简体中文 to العربية">从简体中文、English 到 العربية</span></div>
+      <div class="fact reveal"><b>0</b><span class="fact-k" data-en="cloud accounts">个云端账户</span><span class="fact-d" data-en="no sign-up — the app and its API run on 127.0.0.1">无需注册，应用与 API 都运行在 127.0.0.1</span></div>
     </section>
-    <section class="get-started wrap" aria-labelledby="start-title"><div><p class="eyebrow">EXPLORE THE PROJECT</p><h2 id="start-title">下一次研究，<br>从这里开始。</h2><p>在 GitHub 查看源码、安装说明与项目进展。</p></div><div class="start-actions"><a class="button light" href="https://github.com/helenananaa/CandleScope">查看 GitHub 仓库 <span aria-hidden="true">↗</span></a><a class="repo-path" href="https://github.com/helenananaa/CandleScope">helenananaa / CandleScope</a></div></section>
+
+    <!-- ===== Features ===== -->
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="eyebrow" data-en="Product">产品</p>
+          <h2 id="features-title" data-en="One workspace, from first look to tested idea.">一个工作区，从观察到验证。</h2>
+          <p class="section-sub" data-en="Live analysis and historical research, connected in one workflow.">让实时分析与历史研究，衔接成你自己的工作流。</p>
+        </div>
+
+        <div class="bento">
+          <article class="card card-flow reveal" data-spot>
+            <div class="card-copy">
+              <span class="card-tag">01 · <span data-en="Live market">实时市场</span></span>
+              <h3 data-en="Live market & order flow">实时市场与订单流</h3>
+              <p data-en="Follow Binance and OKX spot and perpetual markets with realtime charts, order book, trades, order-flow views and contract context when the exchange provides it.">跟踪 Binance 与 OKX 的现货和永续市场。实时图表、盘口、逐笔成交、订单流视图与合约信息并排呈现（以交易所提供的数据为准）。</p>
+              <ul class="chips"><li data-en="Order book">盘口</li><li data-en="Trades">逐笔成交</li><li>CVD</li><li data-en="Volume delta">成交量差</li></ul>
+            </div>
+            <div class="card-visual flow-visual">
+              <div class="viz-labels" aria-hidden="true"><span><i class="sw sw-price"></i><span data-en="Price">价格</span></span><span><i class="sw sw-delta"></i><span data-en="Volume delta">成交量差</span></span><span><i class="sw sw-cvd"></i>CVD</span></div>
+              <canvas data-flow-canvas aria-hidden="true"></canvas>
+            </div>
+          </article>
+
+          <article class="card card-linked reveal" data-spot>
+            <div class="card-copy">
+              <span class="card-tag">02 · <span data-en="Workspace">工作区</span></span>
+              <h3 data-en="Linked multi-chart workspace">多图联动工作区</h3>
+              <p data-en="Compare markets in a saved workspace. Link symbol, interval, crosshair, visible range, drawings or indicators — only where you need them.">在保存的工作区里比较不同市场与周期。商品、周期、十字线、可视范围、绘图和指标，只在需要的地方联动。</p>
+            </div>
+            <div class="linked" data-linked>
+              <div class="linked-cell"><div class="lc-head"><b>BTCUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
+              <div class="linked-cell"><div class="lc-head"><b>ETHUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
+              <div class="linked-cell"><div class="lc-head"><b>SOLUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
+              <div class="linked-cell"><div class="lc-head"><b>BNBUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
+              <span class="linked-chip"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M5 8l-1.5 1.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5"/></svg><span data-en="Crosshair linked">十字线联动</span></span>
+            </div>
+            <p class="card-hint" data-en="Move your pointer across any chart.">在任意一张图上移动指针试试。</p>
+          </article>
+
+          <article class="card card-pine reveal" data-spot>
+            <div class="card-copy">
+              <span class="card-tag">03 · <span data-en="Indicators">指标</span></span>
+              <h3 data-en="Indicators & scripts">指标与脚本</h3>
+              <p data-en="Use built-in studies, or write your own in Pine or frontend JavaScript. Other runtimes connect through the plugin system.">使用内置指标，或用 Pine 与前端 JavaScript 编写自己的指标。其他运行时可通过插件系统接入。</p>
+            </div>
+            <div class="pine">
+              <div class="code" aria-label="Pine 指标示例代码" data-en-aria="Example Pine indicator">
+                <div class="code-head"><span class="code-file">ema_cross.pine</span><span class="code-lang">Pine</span></div>
+<pre><code><span class="c-cm">//@version=5</span>
+<span class="c-fn">indicator</span>(<span class="c-st">"EMA Cross"</span>, overlay = <span class="c-kw">true</span>)
+fast = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">21</span>)
+slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
+<span class="c-fn">plot</span>(fast, color = color.<span class="c-a">blue</span>)
+<span class="c-fn">plot</span>(slow, color = color.<span class="c-b">orange</span>)
+<span class="c-fn">plotshape</span>(ta.<span class="c-fn">crossover</span>(fast, slow),
+     style = shape.triangleup)</code></pre>
+              </div>
+              <canvas class="pine-canvas" data-pine-canvas aria-hidden="true"></canvas>
+            </div>
+          </article>
+
+          <article class="card card-research reveal" data-spot>
+            <div class="card-copy">
+              <span class="card-tag">04 · <span data-en="Research">研究</span></span>
+              <h3 data-en="Strategy research">策略研究</h3>
+              <p data-en="Import your own data into the local library or use the current chart, then run a script and inspect trades, equity, drawdown, parameters — and the assumptions attached to every result.">把自己的数据导入本地资料库，或直接使用当前图表；运行脚本，检查交易、权益、回撤、参数，以及每份结果附带的测试假设。</p>
+            </div>
+            <div class="research">
+              <div class="metrics" aria-hidden="true">
+                <div><span data-en="Net return">净收益</span><b class="up" data-m-ret>+21.4%</b></div>
+                <div><span data-en="Max drawdown">最大回撤</span><b class="down" data-m-dd>−7.9%</b></div>
+                <div><span data-en="Trades">交易</span><b>138</b></div>
+                <div><span data-en="Win rate">胜率</span><b>54%</b></div>
+              </div>
+              <canvas class="research-canvas" data-research-canvas aria-hidden="true"></canvas>
+              <p class="viz-note" data-en="Example result · assumptions: fees 0.04% · slippage 1 tick · bar close fills">示例结果 · 假设：手续费 0.04% · 滑点 1 tick · K 线收盘成交</p>
+            </div>
+          </article>
+
+          <article class="card card-mini reveal" data-spot>
+            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 004 0"/></svg></span>
+            <h3 data-en="Price & indicator alerts">价格与指标提醒</h3>
+            <p data-en="In-app, browser and sound alerts out of the box. Webhooks stay off until you configure a secure policy.">应用内、浏览器通知与声音提醒开箱即用；Webhook 默认关闭，需显式配置安全策略后才会投递。</p>
+          </article>
+          <article class="card card-mini reveal" data-spot>
+            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3v4M15 3v4"/><rect x="5" y="7" width="14" height="7" rx="2"/><path d="M12 14v3a3 3 0 01-3 3H7"/></svg></span>
+            <h3 data-en="Plugin platform">插件平台</h3>
+            <p data-en="Bring other indicator runtimes and extensions in as plugins — the first-party Pine runtime ships this way.">通过插件接入其他指标运行时与扩展——第一方 Pine 运行时就是以插件方式提供的。</p>
+          </article>
+          <article class="card card-mini reveal" data-spot>
+            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M8.5 12.5l2-3 2 2 3-4"/></svg></span>
+            <h3 data-en="AI chart control (MCP)">AI 图表控制（MCP）</h3>
+            <p data-en="Opt in to a local MCP endpoint in the desktop app: off by default, bound to 127.0.0.1, read-only if you prefer, with no order entry or file access.">桌面版可选开启本地 MCP 接口：默认关闭，仅监听 127.0.0.1，可设为只读，不提供下单与文件访问。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Replay ===== -->
+    <section class="section replay-section" id="replay" aria-labelledby="replay-title">
+      <div class="wrap replay-grid">
+        <div class="replay-copy reveal">
+          <p class="eyebrow eyebrow-amber" data-en="Market replay">行情回放</p>
+          <h2 id="replay-title" data-en="Go back in time. Trade it again.">回到过去，再交易一次。</h2>
+          <p class="section-sub" data-en="Train on historical data: synchronized markets share one clock and one paper account. Pause, save and resume any time — then review the session, or fork it from any bar.">在历史行情中训练：多个市场共享同一个时钟与模拟账户。随时暂停、保存、恢复；结束后复盘，或从任意一根 K 线分叉重来。</p>
+          <ul class="ticks">
+            <li><b data-en="Synchronized markets">同步多市场</b><span data-en="Every symbol advances on one shared clock.">所有商品按同一个时钟推进。</span></li>
+            <li><b data-en="Shared paper account">共享模拟账户</b><span data-en="Paper orders only — nothing reaches an exchange.">只使用模拟委托，绝不发送到交易所。</span></li>
+            <li><b data-en="Resumable sessions">可恢复存档</b><span data-en="Save progress and pick up where you left off.">训练进度随时保存、随时继续。</span></li>
+            <li><b data-en="Review & fork">复盘与分叉</b><span data-en="Revisit every decision, or restart from any point.">回看每一个决策，或从任意节点重新开始。</span></li>
+          </ul>
+        </div>
+
+        <div class="replay reveal" data-replay>
+          <div class="rp-top">
+            <div class="rp-sym"><span class="rp-badge" data-en="REPLAY">回放</span><b>ETHUSDT</b><span>15m</span></div>
+            <div class="rp-clock"><span data-en="Replay clock">回放时钟</span><time data-rp-clock>—</time></div>
+          </div>
+          <div class="rp-chart">
+            <canvas data-rp-canvas aria-hidden="true"></canvas>
+            <div class="rp-toast" data-rp-toast role="status" aria-live="polite"></div>
+          </div>
+          <div class="rp-controls">
+            <button type="button" class="rp-btn" data-rp-play aria-label="播放" data-en-aria="Play">
+              <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.8v10.4L13 8z"/></svg>
+              <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3h3v10H4zM9 3h3v10H9z"/></svg>
+            </button>
+            <button type="button" class="rp-btn" data-rp-step aria-label="前进一根 K 线" data-en-aria="Step one bar">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.8v10.4L10 8zM11 3h2v10h-2z"/></svg>
+            </button>
+            <input type="range" class="rp-scrub" data-rp-scrub min="0" max="1" value="0" aria-label="回放进度（向回拖动即分叉）" data-en-aria="Replay position (drag back to fork)">
+            <div class="rp-speed" role="group" aria-label="回放速度" data-en-aria="Replay speed">
+              <button type="button" data-speed="1" aria-pressed="true">1×</button><button type="button" data-speed="4" aria-pressed="false">4×</button><button type="button" data-speed="16" aria-pressed="false">16×</button>
+            </div>
+          </div>
+          <div class="rp-account">
+            <dl class="rp-stats">
+              <div><dt data-en="Equity">权益</dt><dd data-rp-equity>10,000.00</dd></div>
+              <div><dt data-en="Position">持仓</dt><dd data-rp-pos>—</dd></div>
+              <div><dt data-en="Unrealized P&amp;L">未实现盈亏</dt><dd data-rp-upnl>0.00</dd></div>
+            </dl>
+            <div class="rp-actions">
+              <button type="button" class="rp-buy" data-rp-buy data-en="Buy">买入</button>
+              <button type="button" class="rp-sell" data-rp-sell data-en="Sell">卖出</button>
+              <button type="button" class="rp-close" data-rp-close data-en="Close">平仓</button>
+            </div>
+          </div>
+          <p class="rp-note" data-en="Try it: trade the replay, then drag the timeline back to fork. Demo data · paper orders only.">试试：在回放中买卖，再把进度条往回拖即可分叉。演示数据 · 仅模拟委托。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Local-first ===== -->
+    <section class="section" id="local" aria-labelledby="local-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="eyebrow" data-en="Local-first">本地优先</p>
+          <h2 id="local-title" data-en="Your workstation runs on your machine.">你的工作台，跑在你自己的机器上。</h2>
+          <p class="section-sub" data-en="A local backend plus a browser workspace, connected straight to exchange market data. No sign-up, no cloud account in between.">本地后端加浏览器工作台，直接连接交易所行情。无需注册，中间没有云端账户。</p>
+        </div>
+
+        <div class="arch reveal">
+          <div class="arch-sources">
+            <div class="node node-ex"><span class="ex-dot ex-bn" aria-hidden="true"></span><b>Binance</b><span data-en="Spot · Perpetuals">现货 · 永续</span></div>
+            <div class="node node-ex"><span class="ex-dot ex-okx" aria-hidden="true"></span><b>OKX</b><span data-en="Spot · Perpetuals">现货 · 永续</span></div>
+          </div>
+          <div class="arch-wire" aria-hidden="true">
+            <svg viewBox="0 0 120 200" preserveAspectRatio="none"><path class="wire" d="M0 50 C60 50 60 100 120 100"/><path class="wire" d="M0 150 C60 150 60 100 120 100"/></svg>
+            <span class="wire-label">WebSocket · REST</span>
+          </div>
+          <div class="arch-machine">
+            <div class="machine-head"><span class="machine-dots" aria-hidden="true"><i></i><i></i><i></i></span><b data-en="Your machine">你的电脑</b><span>127.0.0.1</span></div>
+            <div class="machine-row"><span class="mr-ic" aria-hidden="true">API</span><div><b data-en="Market engine & API">行情引擎与 API</b><code>:18080</code></div></div>
+            <div class="machine-row"><span class="mr-ic" aria-hidden="true">UI</span><div><b data-en="Chart workspace">图表工作台</b><code>:15173</code></div></div>
+            <div class="machine-row"><span class="mr-ic" aria-hidden="true">DB</span><div><b data-en="Local library">本地资料库</b><code data-en="history · CSV imports · sessions">历史 K 线 · CSV 导入 · 存档</code></div></div>
+          </div>
+          <ul class="arch-promises">
+            <li data-en="No sign-up or login">无需注册或登录</li>
+            <li data-en="Replay never routes live orders">回放永远不会发送真实委托</li>
+            <li data-en="An offline profile that loads only local data">离线 profile：只加载本地数据</li>
+            <li data-en="GPL-3.0 — read every line">GPL-3.0 开源，每一行都可审计</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Quick start ===== -->
+    <section class="section" id="start" aria-labelledby="start-title">
+      <div class="wrap start-grid">
+        <div class="start-copy reveal">
+          <p class="eyebrow" data-en="Quick start">快速开始</p>
+          <h2 id="start-title" data-en="Up and running in minutes.">几分钟内跑起来。</h2>
+          <p class="section-sub" data-en="Run the backend and the frontend in two terminals, then open the workspace in your browser.">后端与前端各开一个终端，然后在浏览器里打开工作台。</p>
+          <ul class="reqs" aria-label="环境要求" data-en-aria="Requirements">
+            <li>Python 3.11+ <span data-en="(3.12 recommended)">（推荐 3.12）</span></li>
+            <li>Node.js 20+</li>
+            <li>npm 10+</li>
+          </ul>
+          <ol class="steps">
+            <li><b data-en="Clone the repository">克隆仓库</b></li>
+            <li><b data-en="Start the backend">启动后端</b><span data-en="API on 127.0.0.1:18080">API 运行在 127.0.0.1:18080</span></li>
+            <li><b data-en="Start the frontend">启动前端</b><span data-en="in a second terminal">在第二个终端里</span></li>
+            <li><b data-en="Open the workspace">打开工作台</b><a href="http://127.0.0.1:15173/">127.0.0.1:15173</a></li>
+          </ol>
+        </div>
+
+        <div class="term reveal" data-term>
+          <div class="term-head">
+            <div class="term-tabs" role="tablist" aria-label="操作系统" data-en-aria="Operating system">
+              <button type="button" role="tab" aria-selected="true" aria-controls="term-unix" id="tab-unix">macOS / Linux</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="term-win" id="tab-win" tabindex="-1">Windows</button>
+            </div>
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+          <div class="term-body" id="term-unix" role="tabpanel" aria-labelledby="tab-unix">
+            <div class="term-block">
+              <div class="term-label"><span class="t-cm"># <span data-en="Terminal 1 — backend">终端 1 —— 后端</span></span><button type="button" class="copy" data-copy><span data-copy-label data-en="Copy">复制</span></button></div>
+<pre><code><span class="t-ps">$</span> git clone https://github.com/helenananaa/CandleScope.git
+<span class="t-ps">$</span> cd CandleScope/backend
+<span class="t-ps">$</span> python3 -m venv .venv
+<span class="t-ps">$</span> source .venv/bin/activate
+<span class="t-ps">$</span> python -m pip install -r requirements.txt
+<span class="t-ps">$</span> ./dev-server.sh</code></pre>
+            </div>
+            <div class="term-block">
+              <div class="term-label"><span class="t-cm"># <span data-en="Terminal 2 — frontend">终端 2 —— 前端</span></span><button type="button" class="copy" data-copy><span data-copy-label data-en="Copy">复制</span></button></div>
+<pre><code><span class="t-ps">$</span> cd CandleScope/frontend
+<span class="t-ps">$</span> npm install
+<span class="t-ps">$</span> npm run dev
+<span class="t-ok">➜</span> <span class="t-dim">Local:</span> http://127.0.0.1:15173/</code></pre>
+            </div>
+          </div>
+          <div class="term-body" id="term-win" role="tabpanel" aria-labelledby="tab-win" hidden>
+            <div class="term-block">
+              <div class="term-label"><span class="t-cm"># <span data-en="Terminal 1 — backend (PowerShell)">终端 1 —— 后端（PowerShell）</span></span><button type="button" class="copy" data-copy><span data-copy-label data-en="Copy">复制</span></button></div>
+<pre><code><span class="t-ps">&gt;</span> git clone https://github.com/helenananaa/CandleScope.git
+<span class="t-ps">&gt;</span> cd CandleScope\backend
+<span class="t-ps">&gt;</span> python -m venv .venv
+<span class="t-ps">&gt;</span> .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+<span class="t-ps">&gt;</span> .\dev-server.ps1</code></pre>
+            </div>
+            <div class="term-block">
+              <div class="term-label"><span class="t-cm"># <span data-en="Terminal 2 — frontend">终端 2 —— 前端</span></span><button type="button" class="copy" data-copy><span data-copy-label data-en="Copy">复制</span></button></div>
+<pre><code><span class="t-ps">&gt;</span> cd CandleScope\frontend
+<span class="t-ps">&gt;</span> npm install
+<span class="t-ps">&gt;</span> npm run dev
+<span class="t-ok">➜</span> <span class="t-dim">Local:</span> http://127.0.0.1:15173/</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <details class="scope reveal">
+          <summary><span data-en="Current scope">当前范围与限制</span></summary>
+          <ul>
+            <li data-en="Replay uses paper orders and never routes live exchange orders.">回放使用模拟委托，不会向交易所发送真实订单。</li>
+            <li data-en="Advanced market views depend on data provided by the selected exchange and market.">高级市场视图取决于所选交易所与市场提供的数据。</li>
+            <li data-en="The standard workspace supports up to four charts; higher-capacity layouts are opt-in.">标准工作区最多支持四张图，更大容量的布局需手动开启。</li>
+            <li data-en="The first-party Pine plugin bundles currently target Windows with CPython 3.12, and Pine compatibility covers a supported subset.">第一方 Pine 插件包目前面向 Windows + CPython 3.12，Pine 兼容覆盖已支持的子集。</li>
+            <li data-en="The browser app runs on Windows, Linux and macOS. The optional desktop shell supports Windows and native macOS test packages.">浏览器版运行于 Windows、Linux 与 macOS；可选桌面版支持 Windows 与原生 macOS 测试包。</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <!-- ===== Final CTA ===== -->
+    <section class="wrap final reveal" aria-labelledby="final-title">
+      <svg class="final-orbit" viewBox="0 0 1024 1024" fill="none" aria-hidden="true">
+        <g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M525.12 136.23 A376 376 0 0 0 154.41 628.20"/><path d="M498.88 887.77 A376 376 0 0 0 869.59 395.80"/><path d="M496.09 208.42 A304 304 0 0 0 215.79 580.39"/><path d="M527.91 815.58 A304 304 0 0 0 808.21 443.61"/></g>
+      </svg>
+      <img class="final-mark" src="./assets/mark-dark.svg" width="64" height="64" alt="">
+      <h2 id="final-title" data-en="Your next study starts here.">下一次研究，从这里开始。</h2>
+      <p data-en="Browse the source, the setup guide and what's in progress. Stars, issues and contributions are welcome.">查看源码、安装说明与项目进展。欢迎 Star、提 Issue 或参与贡献。</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope"><span data-en="Open on GitHub">前往 GitHub</span><span aria-hidden="true">↗</span></a>
+        <a class="btn btn-ghost" href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md"><span data-en="Read the docs">阅读文档</span></a>
+      </div>
+      <a class="repo" href="https://github.com/helenananaa/CandleScope">github.com/helenananaa/CandleScope</a>
+    </section>
   </main>
-  <footer class="footer wrap"><a class="brand" href="./"><img src="./assets/mark.svg" width="28" height="28" alt=""><span>CandleScope</span></a><p>Local market analysis &amp; replay.</p><div><a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md">文档</a><a href="https://github.com/helenananaa/CandleScope/issues">反馈问题 <span aria-hidden="true">↗</span></a></div></footer>
+
+  <footer class="footer">
+    <div class="wrap footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="./"><img src="./assets/mark-dark.svg" width="26" height="26" alt=""><span class="wordmark">Candle<span>Scope</span></span></a>
+        <p data-en="Local market analysis & replay.">本地运行的市场分析与回放工作台。</p>
+      </div>
+      <div class="footer-col">
+        <h4 data-en="Product">产品</h4>
+        <a href="#features" data-en="Features">功能</a>
+        <a href="#replay" data-en="Market replay">行情回放</a>
+        <a href="#start" data-en="Quick start">快速开始</a>
+      </div>
+      <div class="footer-col">
+        <h4 data-en="Docs">文档</h4>
+        <a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md">README</a>
+        <a href="https://github.com/helenananaa/CandleScope/blob/main/API.md" data-en="API reference">API 参考</a>
+        <a href="https://github.com/helenananaa/CandleScope/blob/main/docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md" data-en="Plugin guide">插件指南</a>
+      </div>
+      <div class="footer-col">
+        <h4 data-en="Project">项目</h4>
+        <a href="https://github.com/helenananaa/CandleScope">GitHub</a>
+        <a href="https://github.com/helenananaa/CandleScope/issues" data-en="Report an issue">反馈问题</a>
+        <a href="https://github.com/helenananaa/CandleScope/blob/main/LICENSE" data-en="GPL-3.0 license">GPL-3.0 许可证</a>
+      </div>
+    </div>
+    <div class="wrap footer-base">
+      <span>© 2026 CandleScope</span>
+      <span data-en="Charts on this page are illustrations driven by simulated data, not live market data.">本页图表均为模拟数据驱动的示意，并非实时行情。</span>
+    </div>
+  </footer>
 </body>
 </html>
