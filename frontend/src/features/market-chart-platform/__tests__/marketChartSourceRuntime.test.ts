@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import test from "node:test";
 
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
@@ -115,7 +116,8 @@ test("RUN_RESULT is isolated from later live-store changes", () => {
     bars: liveBacking.marketData.view.bars,
   });
 
-  liveBacking.marketData.view.seriesStore?.applyTick(
+  // Test-only mutation of the separately owned offline backing fixture.
+  (liveBacking.marketData.view.seriesStore as SeriesWindowStore).applyTick(
     { time: 4_600, open: 11, high: 99, low: 10, close: 98 },
     { source: "live-test" },
   );

@@ -16,7 +16,7 @@ import { defaultKlineApi } from "./feed/klineApi.js";
 import { SharedKlineRequestCoordinator } from "./feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "./feed/sharedKlineStreamCoordinator.js";
 import { MAX_SERIES_BARS } from "./phase1WindowPolicy.js";
-import { SeriesWindowRegistry } from "./window/windowRegistry.js";
+import { MarketWindowRegistry } from "./window/marketWindowSession.js";
 import {
   MarketDataWorkspaceContext,
   type MarketDataWorkspaceResources,
@@ -67,9 +67,8 @@ export function MarketDataWorkspaceProvider({
             }
           : null,
       }) : null,
-      windowRegistry: new SeriesWindowRegistry({
+      windowRegistry: new MarketWindowRegistry({
         maxBars: MAX_SERIES_BARS,
-        rightTruncatedFuturePolicy: "reject",
         sharedSnapshot: workspaceBus?.isNative()
           ? {
               read: (key) => desktopWindowManager.readSeriesSnapshot(key),

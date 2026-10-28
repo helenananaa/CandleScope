@@ -3,7 +3,7 @@ import type {
   ExternalMarkerSource,
   ExternalSeriesMarker,
 } from "../../chart-adapter/externalMarkerSource.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import type { TradeFlowExternalStore } from "./tradeFlowTypes.js";
 
 const EMPTY_SNAPSHOT: ExternalMarkerSnapshot = Object.freeze({
@@ -40,7 +40,7 @@ function sameMarkers(
 }
 
 function resolveSeriesTime(
-  seriesStore: SeriesWindowStore,
+  seriesStore: SeriesWindowView,
   tradeTimeSeconds: number,
   intervalSeconds: number,
 ): number | null {
@@ -80,7 +80,7 @@ export function createTradeFlowMarkerSource({
   maxMarkers = 100,
 }: {
   store: TradeFlowExternalStore;
-  seriesStore: SeriesWindowStore;
+  seriesStore: SeriesWindowView;
   intervalSeconds: number;
   threshold: number;
   buyColor: string;

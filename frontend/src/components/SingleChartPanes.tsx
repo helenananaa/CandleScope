@@ -272,14 +272,14 @@ import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRu
 import type { LoadMoreLeft } from "../features/market-data/useChartLoadMoreLeft.js";
 import { TransferredViewportHistory } from "./transferredViewportHistory";
 import type { KlineBar } from "../features/market-data/marketDataTypes.js";
-import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 import type { PriceBoxSizeMode } from "../features/settings/chartAppearanceSettings.js";
 import type { MainChartType } from "../shared/mainChartTypes.js";
 import type { IntervalString } from "../utils/intervals.js";
 
 export interface SingleChartPanesProps {
   suspended?: boolean;
-  seriesStore?: SeriesWindowStore | null;
+  seriesStore?: SeriesWindowView | null;
   symbol: string;
   drawingKeyBase?: string;
   drawingReadOnly?: boolean;
@@ -496,7 +496,7 @@ interface DrawingPresenceState {
   readonly present: boolean;
 }
 
-function rowsFromStore(store: SeriesWindowStore | null | undefined): KlineBar[] {
+function rowsFromStore(store: SeriesWindowView | null | undefined): KlineBar[] {
   return store?.snapshot?.() || [];
 }
 
@@ -555,7 +555,7 @@ function syncSourceDataRefsFromStore({
   rowMapRef,
   rowIndexMapRef,
 }: {
-  store: SeriesWindowStore | null;
+  store: SeriesWindowView | null;
   rowsRef: MutableRefObject<KlineBar[]>;
   rowMapRef: MutableRefObject<LookupMap<number, KlineBar>>;
   rowIndexMapRef: MutableRefObject<LookupMap<number, number>>;
@@ -983,7 +983,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   const drawingSourceTimeHorizonRef = useRef<number | null>(null);
   const drawingSourceIntervalRef = useRef(interval);
   const drawingSourceIntervalSecondsRef = useRef(parseIntervalSeconds(interval));
-  const seriesStoreRef = useRef<SeriesWindowStore | null>(seriesStore);
+  const seriesStoreRef = useRef<SeriesWindowView | null>(seriesStore);
   const prevIndicatorKeyRef = useRef("");
   const intervalRef = useRef(interval);
   const appliedAppearanceIntervalRef = useRef(interval);

@@ -545,3 +545,17 @@ test("market chart platform permits source-neutral chart and market-data contrac
 
   assert.deepEqual(result, { ok: true, violations: [] });
 });
+
+
+test("live chart consumers cannot import mutable stores or the window commit authority", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/components/BadChart.tsx": 'import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";',
+    "src/features/market-data/bypass.ts": 'import { SeriesWindowRegistry } from "./window/windowRegistry.js";',
+    "src/features/indicators/bypass.ts": 'import { MarketWindowSession } from "../market-data/window/marketWindowSession.js";',
+    "src/components/GoodChart.tsx": 'import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";',
+    "src/features/market-data/window/marketWindowSession.ts": 'import { SeriesWindowStore } from "./seriesWindowStore.js";',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.violations.length, 3);
+  assert.ok(result.violations.every((violation) => violation.rule === "live-window-writer-boundary"));
+});

@@ -1,15 +1,9 @@
-import type { KlineBar, MarketSeries, SeriesKey } from "../marketDataTypes.js";
-import { asSeriesKey } from "../marketDataTypes.js";
+import type { KlineBar, SeriesKey } from "../marketDataTypes.js";
 import {
   SeriesWindowStore,
   type RightTruncatedFuturePolicy,
 } from "./seriesWindowStore.js";
-import { canonicalizeIntervalValue } from "../../../utils/intervals.js";
 import { WINDOW_DELTA_TYPES } from "../klineContracts.js";
-import {
-  isLegacyKlineSeriesIdentity,
-  klineSeriesIdentityKey,
-} from "../klineSeriesIdentity.js";
 
 const SHARED_SNAPSHOT_DELTA_TYPES: ReadonlySet<string> = new Set([
   WINDOW_DELTA_TYPES.REPLACE,
@@ -42,25 +36,7 @@ export interface SeriesWindowActivation {
   store: SeriesWindowStore;
 }
 
-export function buildSeriesWindowKey(series: Partial<MarketSeries> = {}): SeriesKey {
-  const {
-    exchange = "binance",
-    marketType = "spot",
-    symbol = "",
-    interval = "",
-  } = series;
-  const routed = [
-    String(exchange || "binance").trim().toLowerCase(),
-    String(marketType || "spot").trim().toLowerCase(),
-    String(symbol || "").trim().toUpperCase(),
-    canonicalizeIntervalValue(interval) || String(interval || "").trim(),
-  ].join("-");
-  return asSeriesKey(
-    isLegacyKlineSeriesIdentity(exchange, series)
-      ? routed
-      : `${klineSeriesIdentityKey(exchange, series)}::${routed}`,
-  );
-}
+export { buildSeriesWindowKey } from "./seriesWindowKey.js";
 
 /**
  * Create an empty render owner without inserting it into a registry. This is
