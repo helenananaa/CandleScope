@@ -941,6 +941,39 @@ class DataManager:
             ),
         )
 
+    def query_materialized(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+        limit: int,
+        exchange: str = "binance",
+        market_type: str = "spot",
+        series_identity: KlineSeriesIdentity | None = None,
+    ) -> QueryResult:
+        """Probe target cache/storage without deriving or admitting repairs.
+
+        Source-history budgets do not apply to an already materialized target.
+        A miss is only a failed probe, never permission to expand base history.
+        Keep this separate from query() so callers cannot accidentally drop a
+        safety-critical flag through a compatibility adapter.
+        """
+        market_type = self._normalize_market_type(market_type)
+        self._record_cache_access_deferred(
+            symbol, interval, exchange=exchange, market_type=market_type,
+            action="range-query", source="materialized-history-probe",
+        )
+        result = self.query_engine.query(
+            symbol, interval, start_ms=start_ms, end_ms=end_ms, limit=limit,
+            exchange=exchange, market_type=market_type,
+            series_identity=series_identity, auto_backfill=False,
+            _materialized_only=True,
+        )
+        result.metadata["target_materialized_only"] = True
+        return result
+
     def query_latest(
         self,
         symbol: str,

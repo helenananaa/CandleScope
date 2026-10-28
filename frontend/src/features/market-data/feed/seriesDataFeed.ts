@@ -102,6 +102,7 @@ interface GetBarsOptions {
 interface GetHistoryOptions {
   days?: number | null;
   countBack?: number | null;
+  materializedOnly?: boolean;
   source?: string;
   signal?: AbortSignal;
   commit?: FeedCommitMode;
@@ -2557,6 +2558,7 @@ export class SeriesDataFeed {
     {
       days,
       countBack,
+      materializedOnly,
       source = "history",
       signal,
       commit = "active",
@@ -2573,7 +2575,7 @@ export class SeriesDataFeed {
       "history",
       series,
       epoch,
-      [days, countBack, requestScope, maxWaitMs, intent],
+      [days, countBack, requestScope, maxWaitMs, intent, ...(materializedOnly ? ["materialized-only"] : [])],
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-history:${source}`);
@@ -2595,6 +2597,7 @@ export class SeriesDataFeed {
           clientContext,
           seriesIdentity: series,
           ...(countBack === undefined ? {} : { countBack }),
+          ...(materializedOnly === undefined ? {} : { materializedOnly }),
           ...(signal === undefined ? {} : { signal }),
           ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
           ...(intent === undefined ? {} : { intent }),

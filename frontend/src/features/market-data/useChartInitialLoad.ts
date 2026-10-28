@@ -283,6 +283,27 @@ export function planInitialViewportCountBack(
   );
 }
 
+export function planInitialHistoryAdmission(
+  interval: IntervalString,
+  nativeIntervalValues: readonly IntervalString[],
+): { historyCountBack: number; viewportCountBack: number; materializedOnly: boolean } {
+  const plan = planTargetBarRequest({
+    desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
+    interval,
+    nativeIntervals: nativeIntervalValues,
+    sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
+  });
+  // Only a resolved route that exceeds the source budget may use this escape
+  // hatch. It permits a bounded target read, never a larger base-history read.
+  const materializedOnly = plan.blockedReason === null && plan.targetBars === 0;
+  const historyCountBack = materializedOnly ? INITIAL_VIEWPORT_COUNT_BACK : plan.targetBars;
+  return {
+    historyCountBack,
+    viewportCountBack: Math.min(INITIAL_VIEWPORT_COUNT_BACK, historyCountBack),
+    materializedOnly,
+  };
+}
+
 export function initialViewportCountBackCapForCellCount(
   visibleCellCount: number,
 ): number | undefined {
@@ -462,8 +483,9 @@ export function useChartInitialLoad({
       interval: intv,
       ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
     };
-    const initialHistoryCountBack = planInitialHistoryCountBack(intv, nativeIntervalValues);
-    const plannedViewportCountBack = planInitialViewportCountBack(intv, nativeIntervalValues);
+    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues);
+    const initialHistoryCountBack = initialAdmission.historyCountBack;
+    const plannedViewportCountBack = initialAdmission.viewportCountBack;
     const initialViewportCountBack = initialViewportCountBackCap == null
       ? plannedViewportCountBack
       : Math.min(
@@ -746,9 +768,11 @@ export function useChartInitialLoad({
         markInitialDataShown();
       }
       setLoading(false);
-      void seriesDataFeed.repairVisibleGaps(series, historyResult.data, null, {
-        source: "initial-held-gap-planner",
-      });
+      if (!initialAdmission.materializedOnly) {
+        void seriesDataFeed.repairVisibleGaps(series, historyResult.data, null, {
+          source: "initial-held-gap-planner",
+        });
+      }
       return true;
     }
 
@@ -846,6 +870,47 @@ export function useChartInitialLoad({
         stopRetrying();
       };
       controller.signal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    if (initialAdmission.materializedOnly) {
+      try {
+        const result = await seriesDataFeed.getHistory(series, {
+          countBack: initialViewportCountBack,
+          materializedOnly: true,
+          maxWaitMs: 0,
+          source: "initial-materialized-history",
+          signal: controller.signal,
+          commit: "none",
+        });
+        if (!ownsInitialResult(result)) {
+          relinquishInitialOwnership();
+          return;
+        }
+        if (
+          result.data.length > 0
+          && initialHistoryCacheProof(result, initialViewportCountBack).historyComplete
+        ) {
+          commitHistoryResult(result);
+          return;
+        }
+        // A partial/missing target must not start the ordinary repair retry
+        // loop: this route has no admitted source-history budget.
+        setHasMoreLeft(false);
+        setInitialHistoryPending(false);
+        setLoading(false);
+        if (!hasCacheHit) {
+          setConnectionStatus("disconnected");
+          setError(new Error(`No complete stored history is available for ${intv}; preparing it exceeds the current history limit`));
+        }
+      } catch (error) {
+        if (ownsInitialResult(undefined)) {
+          setInitialHistoryPending(false);
+          setLoading(false);
+          setError(error instanceof Error ? error : new Error(String(error)));
+          if (!hasCacheHit) setConnectionStatus("disconnected");
+        }
+      }
+      return;
     }
 
     markPerf("chart.initialLoad.history.request", {

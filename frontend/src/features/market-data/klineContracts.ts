@@ -145,6 +145,8 @@ export type KlineHistoryIntent = "viewport" | "active_hydration";
 
 export interface KlineHistoryRequestOptions extends KlineRequestOptions {
   countBack?: number | null;
+  /** Target cache/storage probe: no base aggregation, repair or prewarm. */
+  materializedOnly?: boolean;
   /** Backend wait budget for the requested history window. */
   maxWaitMs?: number;
   /** Distinguishes the first visible window from active-series hydration. */
