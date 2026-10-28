@@ -70,6 +70,7 @@ function protectSet<T>(source: ReadonlySet<T>): ReadonlySet<T> {
   const view = new Proxy(source, {
     get(target, property) {
       if (property === "add" || property === "delete" || property === "clear") return undefined;
+      if (property === "valueOf") return () => view;
       if (property === "forEach") return (callback: (value: T, key: T, set: ReadonlySet<T>) => void, thisArg?: unknown) => {
         target.forEach((value) => callback.call(thisArg, value, value, view));
       };

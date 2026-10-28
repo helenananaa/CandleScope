@@ -159,6 +159,7 @@ test("selection ABA and closed-window work lose write permission; readers cannot
   const hot = reader.snapshot();
   const times = reader.timeSet();
   assert.equal(reader.timeSet(), times, "reader must not churn projection dependencies");
+  assert.equal(times.valueOf(), times, "valueOf must not expose the mutable owned Set");
   session.transact(current, () => session.apply(key, { type: "tick", row: { ...rows(60)[0]!, close: 2 } }));
   assert.equal(reader.snapshot(), hot, "tail updates retain the O(1) reader path");
   assert.equal(reader.timeSet(), times, "same-time ticks retain axis identity");
