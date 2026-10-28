@@ -70,7 +70,7 @@ from app.data_engine.history import (
 )
 from app.exchanges import HistoryEmptyPageSemantics, supports_history_identity
 
-from .cache import BarCache
+from .cache import BarCache, CacheReadToken
 from .config import QueryConfig
 from .custom_query import CustomIntervalQueryService
 from .models import (
@@ -121,6 +121,10 @@ class _QueryIOMetrics:
             "compact_decode_fallback_rows": self.compact_decode_fallback_rows,
             "legacy_row_decode_rows": self.legacy_row_decode_rows,
         }
+
+
+class _CacheReadConflict(Exception):
+    """Discard the entire mixed cache/storage view before a bounded retry."""
 
 
 class QueryEngine:
@@ -347,6 +351,26 @@ class QueryEngine:
                 )
             )
 
+        return self._run_cache_read(
+            key,
+            io_metrics,
+            lambda token, submit: self._query_native(
+                key, start_ms, end_ms, limit, allow_backfill and submit, t0, io_metrics, token,
+            ),
+        )
+
+    def _query_native(
+        self,
+        key: SeriesKey,
+        start_ms: int | None,
+        end_ms: int | None,
+        limit: int | None,
+        allow_backfill: bool,
+        t0: float,
+        io_metrics: _QueryIOMetrics,
+        read_token: CacheReadToken,
+    ) -> QueryResult:
+        interval = key.interval
         # Ephemeral intervals are cache-only — skip storage and backfill
         if is_ephemeral_interval(interval):
             effective_limit = min(
@@ -445,12 +469,11 @@ class QueryEngine:
                 )
                 rows.reverse()
                 storage_bars = self._storage_rows_to_bars(key, rows, io_metrics)
+                self._adopt_storage_read(key, storage_bars, read_token)
+            except _CacheReadConflict:
+                raise
             except Exception as exc:
                 logger.error("Storage query failed: %s", exc, exc_info=True)
-
-            # Warm cache with storage results
-            if storage_bars:
-                self._cache.bulk_load(key, storage_bars)
 
         # ── Step 3: Merge cache + storage ────────────────────
         merged = self._merge(cached, storage_bars)
@@ -469,6 +492,7 @@ class QueryEngine:
                 missing_ranges,
                 auto_backfill=allow_backfill,
                 io_metrics=io_metrics,
+                read_token=read_token,
             )
             backfill_triggered = bool(
                 allow_backfill and missing_ranges and self._backfill_trigger is not None
@@ -730,6 +754,24 @@ class QueryEngine:
                     identity=identity,
                 )
             )
+        return self._run_cache_read(
+            key,
+            io_metrics,
+            lambda token, submit: self._query_before_native(
+                key, before_ms, limit, allow_backfill and submit, io_metrics, token,
+            ),
+        )
+
+    def _query_before_native(
+        self,
+        key: SeriesKey,
+        before_ms: int,
+        limit: int,
+        allow_backfill: bool,
+        io_metrics: _QueryIOMetrics,
+        read_token: CacheReadToken,
+    ) -> QueryResult:
+        interval = key.interval
         before_s = before_ms // 1000
         effective_limit = min(limit, self._cfg.max_limit)
         history_start_ms, history_end_ms = self._before_window(
@@ -811,8 +853,9 @@ class QueryEngine:
                     limit=effective_limit,
                 )
                 storage_bars = self._storage_rows_to_bars(key, rows, io_metrics)
-                if storage_bars:
-                    self._cache.bulk_load(key, storage_bars)
+                self._adopt_storage_read(key, storage_bars, read_token)
+            except _CacheReadConflict:
+                raise
             except Exception as exc:
                 logger.error("Storage fetch_before failed: %s", exc)
 
@@ -832,6 +875,7 @@ class QueryEngine:
                 repair_start_ms=history_start_ms,
                 repair_end_ms=history_end_ms,
                 io_metrics=io_metrics,
+                read_token=read_token,
             )
             if len(merged) > effective_limit:
                 merged = merged[-effective_limit:]
@@ -845,6 +889,7 @@ class QueryEngine:
                 missing_ranges=missing_ranges,
                 auto_backfill=allow_backfill and history_fetch_allowed,
                 io_metrics=io_metrics,
+                read_token=read_token,
             )
             if len(merged) > effective_limit:
                 merged = merged[-effective_limit:]
@@ -959,6 +1004,58 @@ class QueryEngine:
         if boundary_reached and result.bars:
             result.earliest_available_ms = result.bars[0].time_ms
         return self._attach_io_metrics(result, io_metrics)
+
+    def _run_cache_read(
+        self,
+        key: SeriesKey,
+        io_metrics: _QueryIOMetrics,
+        read: Callable[[CacheReadToken, bool], QueryResult],
+    ) -> QueryResult:
+        # Retry the whole query, including the initial cached prefix. Retrying
+        # just the SQLite page would still merge deleted/stale cached records.
+        for attempt in range(2):
+            with self._cache.read_token(key) as token:
+                try:
+                    # Retrying a pre-delete request is not authorization to
+                    # download the deleted data again. Only its first attempt
+                    # may submit repair work; a later new query is independent.
+                    result = read(token, attempt == 0)
+                except _CacheReadConflict:
+                    continue
+                result.metadata["cache_read_retries"] = attempt
+                return result
+
+        # Continuous writes must not spin indefinitely or present a conflict as
+        # a terminal history boundary. Let the caller retry without scheduling
+        # a download for data that is merely changing concurrently.
+        return self._attach_io_metrics(QueryResult(
+            bars=[],
+            symbol=key.symbol,
+            interval=key.interval,
+            exchange=key.exchange,
+            market_type=key.market_type,
+            **key.identity.to_dict(),
+            source=QuerySource.EMPTY,
+            total=0,
+            has_more=True,
+            cache_hit=False,
+            history_state="pending",
+            complete=False,
+            retryable=True,
+            metadata={
+                "cache_read_retries": 1,
+                "cache_read_conflict": True,
+            },
+        ), io_metrics)
+
+    def _adopt_storage_read(
+        self,
+        key: SeriesKey,
+        bars: list[BarData],
+        read_token: CacheReadToken,
+    ) -> None:
+        if not self._cache.bulk_load_if_unchanged(key, bars, read_token=read_token):
+            raise _CacheReadConflict
 
     def get_bounds(
         self,
@@ -1704,6 +1801,8 @@ class QueryEngine:
         repair_start_ms: int | None = None,
         repair_end_ms: int | None = None,
         io_metrics: _QueryIOMetrics | None = None,
+        *,
+        read_token: CacheReadToken,
     ) -> list[BarData]:
         """Detect interior gaps and fill them from storage.
 
@@ -1767,12 +1866,17 @@ class QueryEngine:
                         ],
                         metrics,
                     )
+                    # Validate each physical read but merge once below, avoiding
+                    # a full cache merge for every small interior gap.
+                    self._adopt_storage_read(key, [], read_token)
                     if fill_bars:
                         all_fill_bars.extend(fill_bars)
                         logger.info(
                             "Filled missing gap [%d → %d] with %d bars from storage",
                             missing_start_ms, missing_end_ms, len(fill_bars),
                         )
+                except _CacheReadConflict:
+                    raise
                 except Exception as exc:
                     logger.error(
                         "Failed to fill gap [%d → %d] from storage: %s",
@@ -1780,8 +1884,7 @@ class QueryEngine:
                     )
 
         if all_fill_bars:
-            # Warm cache with the gap-fill data
-            self._cache.bulk_load(key, all_fill_bars)
+            self._adopt_storage_read(key, all_fill_bars, read_token)
             # Merge into the result
             bars = self._merge(bars, all_fill_bars)
 
@@ -1877,6 +1980,7 @@ class QueryEngine:
         missing_ranges: list[MissingRange],
         auto_backfill: bool,
         io_metrics: _QueryIOMetrics | None = None,
+        read_token: CacheReadToken,
     ) -> list[BarData]:
         """Fill and report the right-boundary gap of a count-based page."""
         gap = self._before_right_gap(key, bars, history_end_ms=history_end_ms)
@@ -1904,6 +2008,9 @@ class QueryEngine:
                     ],
                     metrics,
                 )
+                self._adopt_storage_read(key, fill_bars, read_token)
+            except _CacheReadConflict:
+                raise
             except Exception as exc:
                 logger.error(
                     "Failed to fill before-page right gap [%d → %d] from storage: %s",
@@ -1913,7 +2020,6 @@ class QueryEngine:
                 )
                 fill_bars = []
             if fill_bars:
-                self._cache.bulk_load(key, fill_bars)
                 # Check only the newly extended tail for partial storage fills;
                 # older interior gaps were handled by the preceding pass.
                 repaired_tail = self._fill_interior_gaps(
@@ -1925,6 +2031,7 @@ class QueryEngine:
                     repair_start_ms=gap[0],
                     repair_end_ms=gap[1],
                     io_metrics=io_metrics,
+                    read_token=read_token,
                 )
                 bars = self._merge(bars, repaired_tail)
 

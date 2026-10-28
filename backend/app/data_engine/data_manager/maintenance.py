@@ -754,18 +754,24 @@ class MaintenanceService:
         }
         if series_identity is not None:
             delete_kwargs["series_identity"] = series_identity
-        deleted = await run_storage(
-            storage.delete_bars,
-            **delete_kwargs,
-        )
         invalidate_kwargs: dict[str, Any] = {
             "exchange": exchange,
             "market_type": market_type,
         }
         if series_identity is not None:
             invalidate_kwargs["series_identity"] = series_identity
-        self._cache_invalidator(symbol, interval, **invalidate_kwargs)
-        return int(deleted or 0)
+
+        def delete_and_invalidate() -> int:
+            # run_storage drains a physical write before propagating cancellation.
+            # Keep invalidation in that same worker so a cancelled request cannot
+            # leave committed deletes hidden by cache hits. An uncertain failure
+            # also invalidates conservatively; a fresh query can recover from DB.
+            try:
+                return int(storage.delete_bars(**delete_kwargs) or 0)
+            finally:
+                self._cache_invalidator(symbol, interval, **invalidate_kwargs)
+
+        return await run_storage(delete_and_invalidate)
 
     async def run_storage_gc(
         self,
