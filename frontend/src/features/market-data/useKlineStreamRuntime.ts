@@ -495,7 +495,14 @@ export function useKlineStreamRuntime({
             },
             onBackfillCompleted: (msg) => {
               if (!active) return false;
-              return handleBackfillCompleted(msg);
+              const handled = handleBackfillCompleted(msg);
+              if (handled && (!msg.symbol || msg.symbol === symbol)
+                && (!msg.exchange || msg.exchange === exchange)
+                && (!msg.market_type || msg.market_type === marketType)) {
+                consumerRecovery.observeAvailability();
+                recoverConsumer();
+              }
+              return handled;
             },
             onKline: ({ interval: msgInterval, tick, message }) => {
               if (!active) return;

@@ -1,4 +1,4 @@
-import { hasVerifiedRangeCoverage } from "../quality/klineQualityPolicy.js";
+import { hasVerifiedRangeCoverage, recoveryRetryDecision } from "../quality/klineQualityPolicy.js";
 import type { SeriesDataFeed } from "./seriesDataFeed.js";
 import type { KlineBar, MarketSeries } from "../marketDataTypes.js";
 
@@ -11,6 +11,7 @@ export class KlineConsumerRecovery {
     end: number;
     discoverTail: boolean;
     epoch: number;
+    retryAt?: number;
   }>();
   private running = false;
   private readonly abort = new AbortController();
@@ -62,7 +63,7 @@ export class KlineConsumerRecovery {
           this.pending.delete(key);
           continue;
         }
-        if (!isSubscribed(checkpoint.series.interval)) continue;
+        if (!isSubscribed(checkpoint.series.interval) || Date.now() < (checkpoint.retryAt ?? 0)) continue;
         try {
           let start = checkpoint.start;
           let end = checkpoint.end;
@@ -92,6 +93,9 @@ export class KlineConsumerRecovery {
             this.pending.delete(key);
             const latest = result.data.at(-1);
             if (checkpoint.discoverTail && latest) resumed.push({ series: checkpoint.series, latest });
+          } else if (this.pending.get(key) === checkpoint && !result.stale) {
+            const decision = recoveryRetryDecision(result, Date.now());
+            if (decision) checkpoint.retryAt = decision.retryAt;
           }
         } catch {
           // Keep the explicit recovery state. The owner retries with backoff.
@@ -101,6 +105,13 @@ export class KlineConsumerRecovery {
       this.running = false;
     }
     return resumed;
+  }
+
+  observeAvailability(): void {
+    // A backfill notification is permission to re-read, never recovery proof.
+    for (const checkpoint of this.pending.values()) {
+      if (checkpoint.retryAt !== undefined) checkpoint.retryAt = 0;
+    }
   }
 
   close(): void {

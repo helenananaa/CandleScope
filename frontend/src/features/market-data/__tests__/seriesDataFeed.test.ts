@@ -3966,3 +3966,36 @@ test("completion hints and non-pending rows cannot substitute for readback proof
   assert.equal(cleared, 0);
   assert.equal(feed.pendingGapRepairs.size, 1);
 });
+
+test("unproven exhaustion is terminal availability, not a resolved gap", async () => {
+  let resolved = 0; let terminal = 0;
+  const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES });
+  feed.trackPendingResultRepair(SERIES, { data: [], start_ms: 60_000, end_ms: 120_000,
+    history_state: "exhausted", retryable: false, complete: false },
+  () => { resolved += 1; }, () => { terminal += 1; });
+  assert.equal(resolved, 0); assert.equal(terminal, 1);
+  assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 0);
+  assert.equal(feed.pendingGapRepairs.size, 1, "retain the unresolved obligation and reason");
+});
+
+test("explicit availability retry deadline schedules a probe without declaring terminal failure", () => {
+  let terminal = 0;
+  const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES });
+  const retryAt = Date.now() + 60_000;
+  feed.trackPendingResultRepair(SERIES, { data: [], start_ms: 60_000, end_ms: 120_000,
+    history_state: "exhausted", retryable: false, complete: false, retry_at_ms: retryAt }, undefined,
+  () => { terminal += 1; });
+  const pending = [...feed.pendingGapRepairs.values()][0]!;
+  assert.equal(terminal, 0); assert.equal(pending.terminalReason, undefined); assert.equal(pending.nextPollAt, retryAt);
+});
+
+test("new availability revision wakes an unproven exhausted repair", async () => {
+  const feed = new SeriesDataFeed({ getActiveSeries: () => SERIES,
+    api: { fetchKlinesHistory: async () => ({ data: rows([60]), availability_revision: "available-v2" }) } });
+  feed.trackPendingResultRepair(SERIES, { data: [], start_ms: 60_000, end_ms: 120_000,
+    history_state: "exhausted", retryable: false, complete: false });
+  assert.ok([...feed.pendingGapRepairs.values()][0]!.terminalReason);
+  await feed.getHistory(SERIES);
+  const pending = [...feed.pendingGapRepairs.values()][0]!;
+  assert.equal(pending.terminalReason, undefined); assert.ok(pending.nextPollAt <= Date.now());
+});

@@ -110,3 +110,15 @@ export function isKlineTailFresh(result: KlineFetchResult | null | undefined): b
     && quality.availability === "ready" && !quality.repairPending
     && !quality.reasons.includes("finality-contradiction") && !quality.reasons.includes("completion-contradiction");
 }
+
+/** Declared unavailability stops automatic retry, without proving recovered data. */
+export function recoveryRetryDecision(result: KlineFetchResult, now: number): { retryAt: number; reason: string } | null {
+  if (result.retryable !== false) return null;
+  const stoppedCursor = result.pagination_stop_reason === "missing-cursor" || result.pagination_stop_reason === "stalled-cursor";
+  const reason = stoppedCursor ? `pagination_${result.pagination_stop_reason}`
+    : result.terminal_reason || (result.history_state === "exhausted" ? "history_exhausted_unverified" : null);
+  if (!reason) return null;
+  const retryAt = result.retry_at_ms;
+  return { reason, retryAt: !stoppedCursor && typeof retryAt === "number" && Number.isFinite(retryAt) && retryAt > now
+    ? retryAt : Number.POSITIVE_INFINITY };
+}

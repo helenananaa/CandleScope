@@ -33,7 +33,8 @@ window selections still lose write permission immediately before commit.
 
 - History/before may omit `truncated` when uncapped; range recovery requires
   explicit `truncated: false`. Latest and seeds never prove complete history.
-- Exhaustion may stop retries without proving completeness. Neither an ACK nor
+- Exhaustion may stop retries without proving completeness. Explicit retry
+  deadlines schedule probes; new availability evidence permits re-reading. Neither an ACK nor
   a non-pending response establishes freshness. Completion-event hints require
   HTTP readback; they cannot release loading by themselves.
 - Verified continuity can include a forming tail. Complete final history also

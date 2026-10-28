@@ -1,5 +1,5 @@
 import { BackfillRecoveryQueue } from "./backfillRecoveryQueue.js";
-import { assessKlineQuality, chooseHttpRow, hasFinalityEvidence, hasRetainedFinalRangeProof, hasVerifiedRangeCoverage, preserveFinalRow, isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
+import { assessKlineQuality, chooseHttpRow, hasFinalityEvidence, hasRetainedFinalRangeProof, hasVerifiedRangeCoverage, preserveFinalRow, recoveryRetryDecision, isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
 export { isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
 import type {
   AppliedKlineResult,
@@ -1650,6 +1650,15 @@ export class SeriesDataFeed {
     const revisionChanged = revision != null && current?.revision !== revision;
     if (!Array.isArray(result.excluded_ranges) && !revisionChanged) return;
     const now = Date.now();
+    if (revisionChanged) {
+      for (const pending of this.pendingGapRepairs.values()) {
+        if (this.seriesKey(pending.series) !== key || !pending.terminalReason
+          || pending.terminalReason.startsWith("pagination_")) continue;
+        delete pending.terminalReason;
+        pending.dormant = false;
+        pending.nextPollAt = now;
+      }
+    }
     const resultRetryAtMs = retryAtMilliseconds(result.retry_at_ms);
     const incomingRanges = Array.isArray(result.excluded_ranges)
       ? result.excluded_ranges.map((range) => (
@@ -1711,11 +1720,13 @@ export class SeriesDataFeed {
       resolvedCallback?.(result);
       return;
     }
-    const terminalReason = result.retryable === false
-      && (result.pagination_stop_reason === "missing-cursor"
-        || result.pagination_stop_reason === "stalled-cursor")
-      ? `pagination_${result.pagination_stop_reason}`
-      : null;
+    const retryDecision = recoveryRetryDecision(result, Date.now());
+    if (retryDecision && Number.isFinite(retryDecision.retryAt)) {
+      const pending = this.trackPendingGapRepair(series, range, attempts, true, resolvedCallback, null, terminalCallback);
+      pending.nextPollAt = retryDecision.retryAt;
+      return;
+    }
+    const terminalReason = retryDecision?.reason;
     if (terminalReason) {
       const newlyTerminal = current?.terminalReason !== terminalReason;
       if (newlyTerminal) {
