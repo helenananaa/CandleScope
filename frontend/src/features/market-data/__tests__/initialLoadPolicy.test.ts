@@ -56,6 +56,8 @@ test("renderable stale history still takes the bounded native tail fast path", (
   assert.equal(isInitialHistoryTailFresh({
     data: [{ time: epochSeconds(1) }],
     has_tail_gap: false,
+    verified_contiguous: true,
+    missing_ranges: [],
     history_state: "ready",
     complete: true,
     retryable: false,

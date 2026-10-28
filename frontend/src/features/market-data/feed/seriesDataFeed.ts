@@ -1,3 +1,6 @@
+import { BackfillRecoveryQueue } from "./backfillRecoveryQueue.js";
+import { assessKlineQuality, chooseHttpRow, hasFinalityEvidence, hasRetainedFinalRangeProof, hasVerifiedRangeCoverage, preserveFinalRow, isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
+export { isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
 import type {
   AppliedKlineResult,
   BackfillCompletedMessage,
@@ -234,14 +237,10 @@ interface BackfillReloadJob {
   userVisibleReason: boolean;
   options: Required<Pick<
     BackfillCompletedOptions,
-    "clearPendingInitial"
-    | "getPendingInitial"
+    "getPendingInitial"
     | "getCacheRows"
     | "getFallbackDays"
-    | "setLastPrice"
-    | "setError"
-    | "setConnectionStatus"
-    | "setLoading"
+    | "onRecoveryProgress"
   >> & {
     activeSeries: MarketSeries | null;
     loading: boolean;
@@ -272,7 +271,6 @@ const PENDING_REPAIR_MAX_ATTEMPTS = 5;
 const PENDING_REPAIR_DORMANT_POLL_MS = 10 * 60_000;
 export const ACTIVE_EXACT_REPAIR_POLL_MS = 1_500;
 const ACTIVE_EXACT_REPAIR_ERROR_MAX_MS = 30_000;
-const BACKFILL_EVENT_SEEN_LIMIT = 1_024;
 const GAP_PLANNER_THROTTLE_MS = 1_000;
 const FRONTEND_CONTINUOUS_EXCHANGES: ReadonlySet<string> = new Set(["binance", "okx"]);
 const EXCLUDED_RANGE_SERIES_LIMIT = 64;
@@ -437,24 +435,6 @@ export function countIntervalBarsInRange(range: TimeRangeSec, interval: string):
   return Math.floor((end - start) / width) + 1;
 }
 
-/** A result can contain renderable rows while its requested range is still incomplete. */
-export function isKlineResultRepairPending(
-  result: KlineFetchResult | null | undefined,
-): boolean {
-  if (!result) return true;
-  if (result.history_state === "exhausted" && result.retryable === false) return false;
-  return Boolean(
-    result.history_state === "pending"
-    || result.complete === false
-    || result.retryable === true
-    || result.verified_contiguous === false
-    || result.has_tail_gap === true
-    || result.truncated === true
-    || missingRanges(result).length > 0
-    || (rowsFromResult(result).length === 0 && result.has_more === true)
-  );
-}
-
 function unionRange(
   left: TimeRangeMs | null | undefined,
   right: TimeRangeMs | null | undefined,
@@ -572,29 +552,7 @@ export function capContinuationRanges(
 }
 
 function hasExplicitResolvedRangeProof(result: KlineFetchResult | null | undefined): boolean {
-  return Boolean(
-    result
-    && result.complete === true
-    && result.retryable === false
-    && (result.history_state === "ready" || result.history_state === "exhausted")
-    && result.verified_contiguous === true
-    && result.all_rows_final === true
-    && result.has_tail_gap === false
-    && result.truncated === false
-    && Array.isArray(result.missing_ranges)
-    && result.missing_ranges.length === 0
-  );
-}
-
-function hasExplicitCappedParentRetainedRangeProof(result: KlineFetchResult): boolean {
-  // capContinuationRanges explicitly schedules the pagination continuation and
-  // every reported missing range. A tail-gap flag has no range of its own, so
-  // it cannot be discharged by the child callbacks. Likewise, an omitted
-  // missing_ranges field cannot prove that every retained-range defect was
-  // represented in the scheduled child set.
-  return result.all_rows_final === true
-    && result.has_tail_gap === false
-    && Array.isArray(result.missing_ranges);
+  return assessKlineQuality(result, "range").complete;
 }
 
 export function aggregateResolvedGapRepairResult(
@@ -606,7 +564,7 @@ export function aggregateResolvedGapRepairResult(
   // stopped. Child completion proves only the continuation/hole ranges. A
   // full-window proof is valid only when the parent's retained rows were final
   // and every child carries an explicit, terminal range proof.
-  const complete = hasExplicitCappedParentRetainedRangeProof(parentResult)
+  const complete = hasRetainedFinalRangeProof(parentResult)
     && childResults.length > 0
     && childResults.every(hasExplicitResolvedRangeProof);
   return {
@@ -697,10 +655,8 @@ export class SeriesDataFeed {
   pendingBeforePages: Map<SeriesKey, PendingBeforePage>;
   beforePageFetchInFlight: Map<SeriesKey, EpochLease>;
   beforePageAvailability: Map<SeriesKey, BeforePageAvailability>;
-  backfillReloadInFlight: Set<SeriesKey>;
-  backfillReloadQueues: Map<SeriesKey, BackfillReloadJob[]>;
-  backfillEventInFlight: Set<string>;
-  backfillEventSeenUntil: Map<string, number>;
+  private readonly backfillRecovery: BackfillRecoveryQueue<BackfillReloadJob>;
+  get backfillReloadInFlight(): ReadonlySet<string> { return this.backfillRecovery.activeKeys; }
   pendingGapRepairs: Map<string, PendingGapRepair>;
   gapRepairInFlight: Map<string, EpochLease>;
   gapRepairGenerationBySeries: Map<SeriesKey, number>;
@@ -728,10 +684,24 @@ export class SeriesDataFeed {
     this.pendingBeforePages = new Map();
     this.beforePageFetchInFlight = new Map();
     this.beforePageAvailability = new Map();
-    this.backfillReloadInFlight = new Set();
-    this.backfillReloadQueues = new Map();
-    this.backfillEventInFlight = new Set();
-    this.backfillEventSeenUntil = new Map();
+    this.backfillRecovery = new BackfillRecoveryQueue({
+      merge: (queued, job) => {
+        if (queued.epoch !== job.epoch || !rangesTouch(queued.range, job.range)) return false;
+        queued.range = unionRange(queued.range, job.range);
+        queued.userVisibleReason ||= job.userVisibleReason;
+        queued.detail = { ...queued.detail, ...job.detail };
+        for (const event of job.eventKeys) queued.eventKeys.add(event);
+        if (!queued.options.pendingInitial) queued.options.pendingInitial = job.options.pendingInitial;
+        queued.options.loading ||= job.options.loading;
+        return true;
+      },
+      read: (job) => this.readBackfilledData(job),
+      verify: (job) => this.verifyPendingInitialRange(job),
+      needsVerification: (job) => Boolean(job.options.pendingInitial),
+      isCurrent: (job) => this.isCurrent(job.series, job.epoch) && this.shouldCommitActive(job.series),
+      cooldown: (job) => job.options.cooldownMs,
+      onError: (error) => console.warn("Failed to reload after backfill:", error),
+    });
     this.pendingGapRepairs = new Map();
     this.gapRepairInFlight = new Map();
     this.gapRepairGenerationBySeries = new Map();
@@ -894,6 +864,7 @@ export class SeriesDataFeed {
     const key = this.seriesKey(series);
     const next = (this.epochBySeries.get(key) || 0) + 1;
     this.epochBySeries.set(key, next);
+    this.backfillRecovery.cancel(key);
     this.clearBeforePageAvailability(series);
     this.clearPendingBeforePage(series);
     this.bumpGapRepairGeneration(series);
@@ -912,14 +883,6 @@ export class SeriesDataFeed {
     const key = this.seriesKey(series);
     this.beginEpoch(series);
     this.requestDemandBySeries.delete(key);
-    const queue = this.backfillReloadQueues.get(key);
-    if (queue) {
-      for (const job of queue) {
-        for (const eventKey of job.eventKeys) this.backfillEventInFlight.delete(eventKey);
-      }
-      queue.splice(0, queue.length);
-      this.backfillReloadQueues.delete(key);
-    }
   }
 
   private bumpGapRepairGeneration(series: MarketSeries): number {
@@ -980,6 +943,7 @@ export class SeriesDataFeed {
       state.version += 1;
       if (state.activeRequests.size === 0) continue;
       const previous = state.rows.get(row.time);
+      if (preserveFinalRow(row, previous?.row) !== row) continue;
       state.rows.set(row.time, {
         version: state.version,
         row: { ...row },
@@ -1028,19 +992,17 @@ export class SeriesDataFeed {
     if (expectedRealtimeVersion == null || rows.length === 0) return rows;
     const state = this.realtimeFenceBySeries.get(this.seriesKey(series));
     if (!state || state.rows.size === 0) return rows;
-    const trustedFinalResponse = result.all_rows_final === true;
+    const trustedFinalResponse = hasFinalityEvidence(result);
     let changed = false;
     const reconciled = rows.map((row) => {
       const mutation = state.rows.get(row.time);
-      if (!mutation) return row;
-      if (mutation.authoritative) {
+      const decision = chooseHttpRow(row, mutation, expectedRealtimeVersion, trustedFinalResponse);
+      if (!mutation || decision === "http") return row;
+      if (decision === "realtime") {
         changed = true;
         return mutation.row;
       }
-      if (
-        trustedFinalResponse
-        && row.is_closed === true
-      ) {
+      if (decision === "promote-http") {
         // Match the watchlist preload contract: a provenance-verified final
         // HTTP row may close a concurrently forming realtime row. Promote the
         // fence too, so another older same-epoch request cannot subsequently
@@ -1053,9 +1015,7 @@ export class SeriesDataFeed {
         });
         return row;
       }
-      if (mutation.version <= expectedRealtimeVersion) return row;
-      changed = true;
-      return mutation.row;
+      return row;
     });
     return changed ? reconciled : rows;
   }
@@ -1386,90 +1346,6 @@ export class SeriesDataFeed {
     ].join("|");
   }
 
-  private wasBackfillEventSeen(eventKey: string, now = Date.now()): boolean {
-    if (this.backfillEventInFlight.has(eventKey)) return true;
-    const seenUntil = this.backfillEventSeenUntil.get(eventKey) || 0;
-    if (seenUntil > now) return true;
-    if (seenUntil > 0) this.backfillEventSeenUntil.delete(eventKey);
-    return false;
-  }
-
-  private rememberBackfillEvents(job: BackfillReloadJob): void {
-    const seenUntil = Date.now() + Math.max(1_000, job.options.cooldownMs);
-    for (const eventKey of job.eventKeys) {
-      this.backfillEventInFlight.delete(eventKey);
-      this.backfillEventSeenUntil.set(eventKey, seenUntil);
-    }
-    if (this.backfillEventSeenUntil.size <= BACKFILL_EVENT_SEEN_LIMIT) return;
-    const now = Date.now();
-    for (const [eventKey, expiresAt] of this.backfillEventSeenUntil) {
-      if (expiresAt <= now || this.backfillEventSeenUntil.size > BACKFILL_EVENT_SEEN_LIMIT) {
-        this.backfillEventSeenUntil.delete(eventKey);
-      }
-      if (this.backfillEventSeenUntil.size <= BACKFILL_EVENT_SEEN_LIMIT) break;
-    }
-  }
-
-  private enqueueBackfillReload(job: BackfillReloadJob): void {
-    const reloadKey = this.seriesKey(job.series);
-    const queue = this.backfillReloadQueues.get(reloadKey) || [];
-    const mergeTarget = queue.find((queued) => (
-      queued.epoch === job.epoch && rangesTouch(queued.range, job.range)
-    ));
-    if (mergeTarget) {
-      mergeTarget.range = unionRange(mergeTarget.range, job.range);
-      mergeTarget.userVisibleReason ||= job.userVisibleReason;
-      mergeTarget.detail = { ...mergeTarget.detail, ...job.detail };
-      for (const eventKey of job.eventKeys) mergeTarget.eventKeys.add(eventKey);
-      if (!mergeTarget.options.pendingInitial && job.options.pendingInitial) {
-        mergeTarget.options.pendingInitial = job.options.pendingInitial;
-      }
-      mergeTarget.options.loading ||= job.options.loading;
-    } else {
-      queue.push(job);
-    }
-    for (const eventKey of job.eventKeys) this.backfillEventInFlight.add(eventKey);
-    this.backfillReloadQueues.set(reloadKey, queue);
-    if (this.backfillReloadInFlight.has(reloadKey)) return;
-    this.backfillReloadInFlight.add(reloadKey);
-    void this.drainBackfillReloads(reloadKey);
-  }
-
-  private async drainBackfillReloads(reloadKey: SeriesKey): Promise<void> {
-    try {
-      const queue = this.backfillReloadQueues.get(reloadKey);
-      if (!queue) return;
-      do {
-        let pendingInitialVerification: BackfillReloadJob | null = null;
-        while (queue.length) {
-          const job = queue.shift();
-          if (!job) continue;
-          try {
-            const initialResolved = await this.readBackfilledData(job);
-            if (!this.isCurrent(job.series, job.epoch)) continue;
-            if (!this.shouldCommitActive(job.series)) {
-              this.clearInactivePendingState(job.series);
-              continue;
-            }
-            if (job.options.pendingInitial && !initialResolved) {
-              pendingInitialVerification = job;
-            }
-          } catch (error) {
-            console.warn(`Failed to reload after backfill for ${job.series.interval}:`, error);
-          } finally {
-            this.rememberBackfillEvents(job);
-          }
-        }
-        if (pendingInitialVerification) {
-          await this.verifyPendingInitialRange(pendingInitialVerification);
-        }
-      } while (queue.length);
-    } finally {
-      this.backfillReloadQueues.delete(reloadKey);
-      this.backfillReloadInFlight.delete(reloadKey);
-    }
-  }
-
   private async readBackfilledData(job: BackfillReloadJob): Promise<boolean> {
     if (!this.isCurrent(job.series, job.epoch)) return false;
     if (!this.shouldCommitActive(job.series) && !this.getPendingBeforePage(job.series)) return false;
@@ -1477,12 +1353,8 @@ export class SeriesDataFeed {
       activeSeries,
       loading,
       pendingInitial,
-      clearPendingInitial,
       getCacheRows,
-      setLastPrice,
-      setError,
-      setConnectionStatus,
-      setLoading,
+      onRecoveryProgress,
     } = job.options;
     const pendingBeforePage = this.getPendingBeforePage(job.series);
     const isPendingInitial = Boolean(
@@ -1503,16 +1375,13 @@ export class SeriesDataFeed {
 
     const canReleaseInitialLoading = (result: FeedResult, rows: KlineBar[]): boolean => {
       if (!isSameSeries(job.series, activeSeries)) return false;
-      if (isKlineResultRepairPending(result)) return false;
+      if (!assessKlineQuality(result, result.endpoint ?? "range").complete) return false;
+      if (pendingInitial && job.options.getPendingInitial() !== pendingInitial) return false;
       const rowsRange = rowRangeMs(rows);
       if (pendingInitial && isSameSeries(job.series, pendingInitial)) {
         if (!pendingInitial.range) return true;
         const resultRange = numericResultRange(result) || rowsRange;
-        return rangeCovers(resultRange, pendingInitial.range)
-          || (
-            job.detail.verified_contiguous === true
-            && rangeCovers(job.range, pendingInitial.range)
-          );
+        return rangeCovers(resultRange, pendingInitial.range);
       }
       return loading && job.userVisibleReason;
     };
@@ -1526,12 +1395,9 @@ export class SeriesDataFeed {
         && this.shouldCommitActive(job.series)
         && isSameSeries(job.series, activeSeries)
       ) {
-        setLastPrice((previous) => previous || rows.at(-1) || previous);
-        setError(null);
+        onRecoveryProgress({ type: "rows-read", latest: rows.at(-1)! });
         if (canReleaseInitialLoading(result, rows)) {
-          clearPendingInitial();
-          setConnectionStatus("connected");
-          setLoading(false);
+          onRecoveryProgress({ type: "initial-resolved", owner: pendingInitial ?? null });
           initialResolved = true;
         }
       }
@@ -1590,9 +1456,7 @@ export class SeriesDataFeed {
     if (!isStillAuthoritative()) return;
     const finalize = () => {
       if (!isStillAuthoritative()) return;
-      job.options.clearPendingInitial();
-      job.options.setConnectionStatus("connected");
-      job.options.setLoading(false);
+      job.options.onRecoveryProgress({ type: "initial-resolved", owner: pendingInitial });
     };
     try {
       const result = pendingInitial.range
@@ -1617,11 +1481,10 @@ export class SeriesDataFeed {
       const rows = result.data || [];
       if (result.stale || result.active === false || !isStillAuthoritative()) return;
       if (rows.length > 0) {
-        job.options.setLastPrice((previous) => previous || rows.at(-1) || previous);
-        job.options.setError(null);
+        job.options.onRecoveryProgress({ type: "rows-read", latest: rows.at(-1)! });
       }
       if (!pendingInitial.range) {
-        if (!isKlineResultRepairPending(result) && rows.length > 0) finalize();
+        if (assessKlineQuality(result, "history").complete && rows.length > 0) finalize();
         return;
       }
       const range = {
@@ -1823,15 +1686,11 @@ export class SeriesDataFeed {
     range: TimeRangeSec,
     interval: string,
   ): boolean {
-    if (result.truncated || result.verified_contiguous === false || missingRanges(result).length > 0) {
-      return false;
-    }
-    if (isKlineResultRepairPending(result)) return false;
-    if (result.verified_contiguous === true) return true;
-    if (result.history_state === "exhausted" && result.retryable === false) return true;
-    const expectedBars = countIntervalBarsInRange(range, interval);
-    if (expectedBars === null) return false;
-    return rowsFromResult(result).length >= expectedBars;
+    if (!createIntervalTimeline(interval) || !hasVerifiedRangeCoverage(result)) return false;
+    const proofRange = numericResultRange(result) || rowRangeMs(rowsFromResult(result));
+    return rangeCovers(proofRange, {
+      start: secondsToMilliseconds(range.start), end: secondsToMilliseconds(range.end),
+    });
   }
 
   private updatePendingGapRepairFromResult(
@@ -2221,13 +2080,9 @@ export class SeriesDataFeed {
       loading = false,
       pendingInitial = null,
       getPendingInitial = () => pendingInitial,
-      clearPendingInitial = () => {},
       getCacheRows = () => [],
       getFallbackDays = () => null,
-      setLastPrice = () => {},
-      setError = () => {},
-      setConnectionStatus = () => {},
-      setLoading = () => {},
+      onRecoveryProgress = () => {},
       cooldownMs = 3_000,
       completionMaxAttempts = 3,
     }: BackfillCompletedOptions = {},
@@ -2331,8 +2186,7 @@ export class SeriesDataFeed {
       ? eventRange
       : (activeOverlap || intersectRanges(eventRange, activeCoverage));
     const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange);
-    if (this.wasBackfillEventSeen(eventKey)) return true;
-    this.enqueueBackfillReload({
+    this.backfillRecovery.enqueue(this.seriesKey(eventSeries), {
       series: eventSeries,
       epoch: this.currentEpoch(eventSeries),
       range: fetchRange,
@@ -2344,13 +2198,9 @@ export class SeriesDataFeed {
         loading,
         pendingInitial,
         getPendingInitial,
-        clearPendingInitial,
-        getCacheRows,
+          getCacheRows,
         getFallbackDays,
-        setLastPrice,
-        setError,
-        setConnectionStatus,
-        setLoading,
+        onRecoveryProgress,
         cooldownMs,
         completionMaxAttempts,
       },
@@ -2602,7 +2452,7 @@ export class SeriesDataFeed {
         },
       );
       throwIfAborted(signal);
-      return this.applyResult(series, result, {
+      return this.applyResult(series, { ...result, endpoint: "history" }, {
         epoch,
         source,
         commit,
@@ -2665,7 +2515,7 @@ export class SeriesDataFeed {
         },
       );
       throwIfAborted(signal);
-      const applied = this.applyResult(series, result, {
+      const applied = this.applyResult(series, { ...result, endpoint: "before" }, {
         epoch,
         source,
         commit,
@@ -2751,7 +2601,7 @@ export class SeriesDataFeed {
           },
         );
         throwIfAborted(signal);
-        const applied = this.applyResult(series, result, {
+        const applied = this.applyResult(series, { ...result, endpoint: "range" }, {
           epoch,
           source,
           commit,
@@ -2870,6 +2720,8 @@ export class SeriesDataFeed {
           indicatorWindowOwner,
         });
       }
+      combinedResult.endpoint = "range";
+      combinedResult.quality = assessKlineQuality(combinedResult, "range");
       return combinedResult;
       },
       signal,
@@ -2920,7 +2772,7 @@ export class SeriesDataFeed {
         },
       );
       throwIfAborted(signal);
-      return this.applyResult(series, result, {
+      return this.applyResult(series, { ...result, endpoint: "latest" }, {
         epoch,
         source,
         commit,
@@ -2946,6 +2798,10 @@ export class SeriesDataFeed {
       indicatorWindowOwner,
     }: ApplyResultOptions,
   ): AppliedKlineResult {
+    const endpoint = result.endpoint === "before" || result.endpoint === "range" || result.endpoint === "latest"
+      ? result.endpoint : "history";
+    let quality = assessKlineQuality(result, endpoint);
+    result = { ...result, quality };
     const rawRows = rowsFromResult(result);
     const active = this.shouldCommitActive(series);
     if (!this.isCurrent(series, epoch)) {
@@ -2966,6 +2822,8 @@ export class SeriesDataFeed {
       expectedRealtimeVersion,
     );
 
+    quality = assessKlineQuality({ ...result, data: rows }, endpoint);
+    result = { ...result, quality };
     this.invalidateBeforePageAvailabilityFromObservation(series, {
       rows,
       revision: result.availability_revision,
@@ -2980,6 +2838,7 @@ export class SeriesDataFeed {
       if (commit === "always" || (commit === "active" && active)) {
         this.commitMergedChartData(series.symbol, series.interval, rows, {
           source,
+          quality,
           deferIndicatorWindow: isKlineResultRepairPending(result),
           ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
         });
@@ -2997,6 +2856,7 @@ export class SeriesDataFeed {
         this.commitPatchedChartData(series.symbol, series.interval, rows, {
           seedIfEmpty: true,
           source,
+          quality,
         });
         return { ...result, data: rows, rows, committed: true, stale: false, active };
       }
@@ -3008,12 +2868,14 @@ export class SeriesDataFeed {
           this.patchCacheTick(series.symbol, series.interval, row, {
             marketType: series.marketType,
             exchange: series.exchange,
+          quality,
           });
         }
       } else {
         this.mergeCacheData(series.symbol, series.interval, rows, {
           marketType: series.marketType,
           exchange: series.exchange,
+          quality,
         });
       }
     }
@@ -3034,6 +2896,7 @@ export class SeriesDataFeed {
       // were staged by earlier partial commits for this exact series.
       this.commitMergedChartData(series.symbol, series.interval, [], {
         source,
+        quality,
         deferIndicatorWindow: false,
         ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
       });

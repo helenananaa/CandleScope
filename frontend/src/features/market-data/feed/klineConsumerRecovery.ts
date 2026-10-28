@@ -1,3 +1,4 @@
+import { hasVerifiedRangeCoverage } from "../quality/klineQualityPolicy.js";
 import type { SeriesDataFeed } from "./seriesDataFeed.js";
 import type { KlineBar, MarketSeries } from "../marketDataTypes.js";
 
@@ -85,9 +86,7 @@ export class KlineConsumerRecovery {
           });
           const times = new Set(result.data.map((row) => Number(row.time)));
           if (this.pending.get(key) === checkpoint
-            && !result.stale && result.complete === true && result.verified_contiguous === true
-            && result.retryable === false && result.truncated === false
-            && Array.isArray(result.missing_ranges) && result.missing_ranges.length === 0
+            && !result.stale && hasVerifiedRangeCoverage(result)
             && times.has(start) && times.has(end)
             && checkpoint.times.every((time) => times.has(time))) {
             this.pending.delete(key);

@@ -1,3 +1,4 @@
+import type { KlineQualityEvidence } from "./quality/klineQualityPolicy.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import {
@@ -93,6 +94,7 @@ interface CommitMetaExtra extends Record<string, unknown> {
 }
 
 interface CacheIdentityOptions {
+  quality?: KlineQualityEvidence;
   marketType?: MarketType;
   exchange?: ExchangeId;
 }
@@ -113,6 +115,7 @@ interface RecordCacheAccessInput extends RegisterStoreOptions {
 }
 
 interface ReplaceChartDataOptions {
+  quality?: KlineQualityEvidence;
   cache?: boolean;
   source?: string;
 }
@@ -129,6 +132,7 @@ interface PendingWarmChartPublication {
 }
 
 interface MergeChartDataOptions {
+  quality?: KlineQualityEvidence;
   deferIndicatorWindow?: boolean;
   historyComplete?: boolean;
   historyRepairPending?: boolean;
@@ -139,11 +143,13 @@ interface MergeChartDataOptions {
 }
 
 interface PatchChartDataOptions {
+  quality?: KlineQualityEvidence;
   seedIfEmpty?: boolean;
   source?: string;
 }
 
 interface ForwardChartDataOptions {
+  quality?: KlineQualityEvidence;
   reachedLatest?: boolean;
   source?: string;
 }
@@ -629,7 +635,7 @@ export function useChartDataRuntime({
         exchange: cacheExchange,
         meta: { source: "cache-merge" },
       });
-      const delta = windowRegistry.apply(key, { type: "range", rows: incoming, source: "cache-merge" });
+      const delta = windowRegistry.apply(key, { type: "range", rows: incoming, source: "cache-merge", ...(options.quality ? { quality: options.quality } : {}) });
       const rows = store.snapshot({ force: delta.changed });
       if (delta.type === WINDOW_DELTA_TYPES.NOOP) return rows;
       recordCacheAccess({
@@ -686,7 +692,7 @@ export function useChartDataRuntime({
         exchange: cacheExchange,
       });
       if (!store || store.isEmpty()) return undefined;
-      const delta = windowRegistry.apply(key, { type: "tick", row: tick, source: "cache-tick" });
+      const delta = windowRegistry.apply(key, { type: "tick", row: tick, source: "cache-tick", ...(options.quality ? { quality: options.quality } : {}) });
       const rows = store.snapshot({ force: delta.changed });
       if (delta.type === WINDOW_DELTA_TYPES.NOOP) return rows;
       registerStoreResource(key, store, {
@@ -1132,12 +1138,12 @@ export function useChartDataRuntime({
     sym: SymbolCode,
     intv: IntervalString,
     data: KlineBar[],
-    { cache = false, source = "replace" }: ReplaceChartDataOptions = {},
+    { cache = false, source = "replace", quality }: ReplaceChartDataOptions = {},
   ) => {
     const key = cacheKey(sym, intv);
     indicatorWindowCommitBufferRef.current.discard(key);
     const store = getStore(sym, intv, { meta: { source } });
-    const delta = windowRegistry.apply(key, { type: "replace", rows: data, source });
+    const delta = windowRegistry.apply(key, { type: "replace", rows: data, source, ...(quality ? { quality } : {}) });
     const next = store.snapshot({ force: true });
     if (cache && next.length > 0) {
       recordCacheAccess({
@@ -1218,6 +1224,7 @@ export function useChartDataRuntime({
     intv: IntervalString,
     incoming: KlineBar[],
     {
+      quality,
       deferIndicatorWindow = false,
       historyComplete,
       historyRepairPending,
@@ -1246,6 +1253,7 @@ export function useChartDataRuntime({
       });
     };
     if (!incoming?.length) {
+      if (quality) touchCacheMeta(key, { responseQuality: quality });
       const indicatorWindowCommit = indicatorWindowCommitBufferRef.current.record(key, [], {
         ownerToken: indicatorWindowOwner,
         pending: deferIndicatorWindow,
@@ -1292,7 +1300,7 @@ export function useChartDataRuntime({
     ) {
       windowRegistry.apply(key, { type: "replace", rows: chartDataRef.current, source: "active-seed" });
     }
-    const delta = windowRegistry.apply(key, { type: "range", rows: incoming, source });
+    const delta = windowRegistry.apply(key, { type: "range", rows: incoming, source, ...(quality ? { quality } : {}) });
     const next = store.snapshot({ force: delta.changed });
     if (delta.type === WINDOW_DELTA_TYPES.NOOP) {
       const indicatorWindowCommit = indicatorWindowCommitBufferRef.current.record(key, [], {
@@ -1387,14 +1395,14 @@ export function useChartDataRuntime({
     sym,
     intv,
     incoming,
-    { reachedLatest = false, source = "right-window-page" } = {},
+    { reachedLatest = false, source = "right-window-page", quality } = {},
   ) => {
     const key = cacheKey(sym, intv);
     const store = getStore(sym, intv, { meta: { source } });
     if (store.isEmpty() || !store.rightTruncated) return false;
 
     const wasRightTruncated = store.rightTruncated;
-    const delta = windowRegistry.apply(key, { type: "forward", rows: incoming, reachedLatest, source });
+    const delta = windowRegistry.apply(key, { type: "forward", rows: incoming, reachedLatest, source, ...(quality ? { quality } : {}) });
     const rightEdgeStateChanged = wasRightTruncated !== store.rightTruncated;
     if (delta.type === WINDOW_DELTA_TYPES.NOOP && !rightEdgeStateChanged) return false;
 
@@ -1454,7 +1462,7 @@ export function useChartDataRuntime({
     sym: SymbolCode,
     intv: IntervalString,
     ticks: KlineBar[],
-    { seedIfEmpty = false, source = "patch" }: PatchChartDataOptions = {},
+    { seedIfEmpty = false, source = "patch", quality }: PatchChartDataOptions = {},
   ) => {
     if (!ticks?.length) return;
     const key = cacheKey(sym, intv);
@@ -1463,7 +1471,7 @@ export function useChartDataRuntime({
     const prev = store.snapshot();
 
     if (store.isEmpty() && seedIfEmpty) {
-      const delta = windowRegistry.apply(key, { type: "replace", rows: ticks, source });
+      const delta = windowRegistry.apply(key, { type: "replace", rows: ticks, source, ...(quality ? { quality } : {}) });
       const nextSeeded = store.snapshot({ force: true });
       registerStoreResource(key, store, { symbol: sym, interval: intv, source });
       touchCacheMeta(key, {
@@ -1499,7 +1507,7 @@ export function useChartDataRuntime({
     if (store.isEmpty()) return;
 
     if (ticks.length > 1) {
-      const delta = windowRegistry.apply(key, { type: "range", rows: ticks, source });
+      const delta = windowRegistry.apply(key, { type: "range", rows: ticks, source, ...(quality ? { quality } : {}) });
       if (delta.type === WINDOW_DELTA_TYPES.NOOP) {
         const next = store.snapshot();
         if (shouldAdoptSharedSeriesSnapshot({
@@ -1576,7 +1584,7 @@ export function useChartDataRuntime({
     let trimmedRight = 0;
     const structuralChangedRanges: WindowDelta["changedRanges"] = [];
     for (const tick of ticks) {
-      const delta = windowRegistry.apply(key, { type: "tick", row: tick, source });
+      const delta = windowRegistry.apply(key, { type: "tick", row: tick, source, ...(quality ? { quality } : {}) });
       if (delta.type === WINDOW_DELTA_TYPES.NOOP) continue;
       changed = true;
       structural = structural || delta.type !== WINDOW_DELTA_TYPES.TICK;

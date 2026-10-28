@@ -78,6 +78,9 @@ test("monthly feed helpers use absolute month anchors and calendar successors", 
   ), [{ start: jan2023, end: mar2023 }]);
 });
 
+const resolvedQuality = { complete: true, retryable: false, history_state: "ready" as const,
+  verified_contiguous: true, missing_ranges: [], has_tail_gap: false, all_rows_final: true, truncated: false };
+
 function rows(times: number[]): KlineBar[] {
   return times.map((time) => ({ time: epochSeconds(time), close: time }));
 }
@@ -1447,7 +1450,7 @@ test("backfill completion reloads only the active overlapping range", async () =
     api: {
       fetchKlinesRange: async (_symbol, _interval, start, end) => {
         requested.push({ start, end });
-        return { data: rows([start, end]) };
+        return { ...resolvedQuality, data: rows([start, end]) };
       },
     },
     getActiveSeries: () => SERIES,
@@ -1471,13 +1474,9 @@ test("backfill completion reloads only the active overlapping range", async () =
     activeSeries: SERIES,
     loading: true,
     getCacheRows: () => rows([100, 200]),
-    setLastPrice: (updater) => {
-      lastPrice = updater(lastPrice);
-    },
-    setError: () => {},
-    setConnectionStatus: () => {},
-    setLoading: (next) => {
-      loading = next;
+    onRecoveryProgress: (event) => {
+      if (event.type === "rows-read") lastPrice ||= event.latest;
+      else loading = false;
     },
     cooldownMs: 0,
   }), true);
@@ -1500,6 +1499,7 @@ test("base repair completion immediately wakes a dormant derived-interval gap", 
       fetchKlinesRange: async (_symbol, interval, start, end) => {
         requested.push({ interval, start, end });
         return {
+          ...resolvedQuality,
           data: rows([start, end]),
           verified_contiguous: true,
           history_state: "ready",
@@ -1565,6 +1565,7 @@ test("one base completion verifies every same-interval derived target without cl
       fetchKlinesRange: async (_symbol, interval, start, end) => {
         requested.push({ interval, start, end });
         return {
+          ...resolvedQuality,
           data: rows([start, end]),
           verified_contiguous: true,
           history_state: "ready",
@@ -1638,7 +1639,7 @@ test("duplicate backfill completion releases active loading only once", async ()
       fetchKlinesRange: async (_symbol, _interval, start, end) => {
         fetchCalls += 1;
         await pendingFetch;
-        return { data: rows([start, end]) };
+        return { ...resolvedQuality, data: rows([start, end]) };
       },
     },
     getActiveSeries: () => SERIES,
@@ -1660,11 +1661,8 @@ test("duplicate backfill completion releases active loading only once", async ()
     activeSeries: SERIES,
     loading: true,
     getCacheRows: () => rows([100, 200]),
-    setLastPrice: () => {},
-    setError: () => {},
-    setConnectionStatus: () => {},
-    setLoading: (next) => {
-      if (next === false) loadingReleaseCalls += 1;
+    onRecoveryProgress: (event) => {
+      if (event.type === "initial-resolved") loadingReleaseCalls += 1;
     },
     cooldownMs: 0,
   };
@@ -1863,6 +1861,7 @@ test("pending initial completion chunks only wake the owned exact-range poll", a
         rangeCalls += 1;
         assert.deepEqual({ start, end }, { start: 100, end: 300 });
         return {
+          ...resolvedQuality,
           data: rows([100, 200, 300]),
           verified_contiguous: true,
           history_state: "ready",
@@ -1942,6 +1941,7 @@ test("pending exact gap repairs are re-read without a websocket completion", asy
           };
         }
         return {
+          ...resolvedQuality,
           data: rows([7_200]),
           history_state: "ready",
           complete: true,
@@ -1987,7 +1987,8 @@ test("an active initial exact range keeps polling promptly after five pending pr
           calls += 1;
           return backendReady
             ? {
-              data: rows([7_200]),
+              ...resolvedQuality,
+          data: rows([7_200]),
               history_state: "ready",
               complete: true,
               retryable: false,
@@ -2198,7 +2199,8 @@ test("a pagination cap preserves missing ranges from consumed newer pages", asyn
         requests.push({ start, end });
         if ((start === 3_600 && end === 18_000) || (start === 28_800 && end === 28_800)) {
           return {
-            data: rows([start, end]),
+            ...resolvedQuality,
+          data: rows([start, end]),
             truncated: false,
             verified_contiguous: true,
             history_state: "ready",
@@ -2561,7 +2563,8 @@ test("a stale repair lease cannot block or release the next epoch lease", async 
             missing_ranges: [{ start_ms: start * 1_000, end_ms: end * 1_000 }],
           }
           : {
-            data: rows([start, end]),
+            ...resolvedQuality,
+          data: rows([start, end]),
             start_ms: start * 1_000,
             end_ms: end * 1_000,
             history_state: "ready",
@@ -2618,6 +2621,7 @@ test("cancelling a repair generation aborts the exact request without blocking i
         }
         await secondGate;
         return {
+          ...resolvedQuality,
           data: rows([start, end]),
           history_state: "ready",
           complete: true,
@@ -3029,6 +3033,7 @@ test("availability revision replacement clears stale excluded ranges", async () 
       fetchKlinesRange: async () => {
         rangeCalls += 1;
         return {
+          ...resolvedQuality,
           data: [],
           verified_contiguous: true,
           availability_revision: "calendar-v1",
@@ -3076,7 +3081,8 @@ test("multiple initial completion chunks coalesce into one full-range verificati
         if (requests.length === 1) await firstPending;
         if (start === 100 && end === 300) {
           return {
-            data: rows([100, 200, 300]),
+            ...resolvedQuality,
+          data: rows([100, 200, 300]),
             verified_contiguous: true,
             history_state: "ready",
             complete: true,
@@ -3085,6 +3091,7 @@ test("multiple initial completion chunks coalesce into one full-range verificati
           };
         }
         return {
+          ...resolvedQuality,
           data: rows([start, end]),
           verified_contiguous: true,
           history_state: "ready",
@@ -3106,7 +3113,7 @@ test("multiple initial completion chunks coalesce into one full-range verificati
         end: mustBeDefined(toEpochMilliseconds(300_000)),
       },
     },
-    clearPendingInitial: () => { clearCalls += 1; },
+    onRecoveryProgress: (event) => { if (event.type === "initial-resolved") clearCalls += 1; },
     getCacheRows: () => rows([100, 300]),
     cooldownMs: 0,
   };
@@ -3221,6 +3228,7 @@ test("initial completion without an exact range reuses the planned derived count
       ) => {
         historyCountBacks.push(options.countBack);
         return {
+          ...resolvedQuality,
           data: rows([100, 200]),
           verified_contiguous: true,
           history_state: "ready",
@@ -3248,7 +3256,8 @@ test("initial completion without an exact range reuses the planned derived count
     activeSeries: SERIES,
     pendingInitial,
     getPendingInitial: () => currentPending,
-    clearPendingInitial: () => {
+    onRecoveryProgress: (event) => {
+      if (event.type !== "initial-resolved") return;
       clearCalls += 1;
       currentPending = null;
     },
@@ -3306,7 +3315,7 @@ test("same-series epoch rollover cannot finalize an older initial verification",
         end: mustBeDefined(toEpochMilliseconds(300_000)),
       },
     },
-    clearPendingInitial: () => { clearCalls += 1; },
+    onRecoveryProgress: (event) => { if (event.type === "initial-resolved") clearCalls += 1; },
     getCacheRows: () => rows([100, 300]),
     cooldownMs: 0,
   });
@@ -3374,12 +3383,11 @@ test("switching symbols during initial verification cannot mutate the new active
     activeSeries: SERIES,
     pendingInitial,
     getPendingInitial: () => currentPending,
-    clearPendingInitial: () => { clearCalls += 1; },
     getCacheRows: () => rows([100, 300]),
-    setLastPrice: () => { lastPriceCalls += 1; },
-    setError: () => { errorCalls += 1; },
-    setConnectionStatus: () => { statusCalls += 1; },
-    setLoading: () => { loadingCalls += 1; },
+    onRecoveryProgress: (event) => {
+      if (event.type === "rows-read") { lastPriceCalls += 1; errorCalls += 1; }
+      else { clearCalls += 1; statusCalls += 1; loadingCalls += 1; }
+    },
     cooldownMs: 0,
   });
   while (!requests.some((request) => request.start === 100 && request.end === 300)) {
@@ -3904,4 +3912,57 @@ test("subscribeBars diagnoses invalid WebSocket payloads without updating chart 
   assert.equal(diagnostics.length, 4);
   assert.equal(ticks.length, 1);
   assert.equal(mustBeDefined(ticks[0]).tick.time, 10);
+});
+
+test("a cancelled backfill read cannot strand or erase the next epoch queue", async () => {
+  const releases: Array<() => void> = [];
+  const committed: number[] = [];
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async () => {
+      const index = releases.length;
+      await new Promise<void>((resolve) => { releases.push(resolve); });
+      return { ...resolvedQuality, data: rows([120 + index, 180]) };
+    } },
+    getActiveSeries: () => SERIES,
+    commitMergedChartData: (_symbol, _interval, data) => { if (data[0]) committed.push(data[0].time); },
+  });
+  const event: BackfillCompletedMessage = { type: "backfill_completed", symbol: SERIES.symbol,
+    interval: SERIES.interval, exchange: SERIES.exchange, market_type: SERIES.marketType,
+    detail: { request_id: "same-repair", reason: "visible_range_gap", range_start_ms: 120_000, range_end_ms: 180_000 } };
+  const options = { activeSeries: SERIES, getCacheRows: () => rows([100, 200]) };
+  const until = async (condition: () => boolean) => {
+    for (let attempt = 0; attempt < 100 && !condition(); attempt += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.ok(condition(), "expected recovery transition did not occur");
+  };
+  feed.handleBackfillCompleted(event, options);
+  await until(() => releases.length === 1);
+  feed.cancelSeriesRequests(SERIES);
+  feed.handleBackfillCompleted(event, options);
+  await until(() => releases.length === 2);
+  releases[0]!();
+  // Allow the stale promise/finally chain to settle while successor stays blocked.
+  for (let i = 0; i < 3; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(feed.backfillReloadInFlight.size, 1);
+  assert.deepEqual(committed, []);
+  releases[1]!();
+  await until(() => feed.backfillReloadInFlight.size === 0);
+  assert.deepEqual(committed, [121]);
+});
+
+test("completion hints and non-pending rows cannot substitute for readback proof", async () => {
+  let cleared = 0;
+  const pendingInitial = { ...SERIES, range: { start: toEpochMilliseconds(120_000)!, end: toEpochMilliseconds(180_000)! } };
+  const feed = new SeriesDataFeed({
+    api: { fetchKlinesRange: async () => ({ data: rows([120, 180]) }) },
+    getActiveSeries: () => SERIES,
+  });
+  feed.handleBackfillCompleted({ type: "backfill_completed", symbol: SERIES.symbol,
+    interval: SERIES.interval, exchange: SERIES.exchange, market_type: SERIES.marketType,
+    detail: { reason: "initial_history", range_start_ms: 120_000, range_end_ms: 180_000, verified_contiguous: true } }, {
+    activeSeries: SERIES, pendingInitial, getPendingInitial: () => pendingInitial,
+    onRecoveryProgress: (event) => { if (event.type === "initial-resolved") cleared += 1; },
+  });
+  while (feed.backfillReloadInFlight.size) await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(cleared, 0);
+  assert.equal(feed.pendingGapRepairs.size, 1);
 });
