@@ -1,3 +1,4 @@
+import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
 import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
 import { parseIntervalSeconds } from "../utils/intervals.js";
@@ -922,6 +923,9 @@ function LiveChartCell({
           )}
           <strong>{chartSession.view.symbol}</strong>
           <span>{chartSession.view.interval}</span>
+          {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
+            <span role="status" style={{ color: "var(--text-warning)" }}>{t("interval.historyOnly")}</span>
+          )}
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
@@ -964,7 +968,13 @@ function LiveChartCell({
           </button>
         </header>
         <div className="multi-chart-cell-canvas">
-          <ChartCellCanvas
+          {chartSession.status.exchangeCatalogStatus !== "loading" && !chartSession.status.historyIntervalAvailable ? (
+            <ChartIntervalUnavailable
+              session={chartSession.view}
+              nativeIntervals={chartSession.status.exchangeCapabilityAvailable ? chartSession.view.nativeIntervals : []}
+              onSelectInterval={chartSession.actions.selectInterval}
+            />
+          ) : <ChartCellCanvas
             chart={chartModel}
             source={liveReferenceSource}
             tradeFlow={tradeFlow}
@@ -976,7 +986,7 @@ function LiveChartCell({
             drawingInteractionReady={drawingInteractionReady}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
             paused={obscured || quickReplay !== null}
-          />
+          />}
           {quickReplay && (
             <Suspense fallback={null}>
               <QuickReplayOverlay

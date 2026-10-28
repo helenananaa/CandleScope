@@ -199,11 +199,11 @@ function getCapabilityKlineIntervals(
     ));
   }
 
-  if (!Array.isArray(capability.channels)) {
-    const schemaVersion = Number(capability.capability_schema_version ?? 1);
-    return Number.isInteger(schemaVersion) && schemaVersion === 1
-      ? uniqueNativeIntervals(config.nativeIntervals)
-      : [];
+  const schemaVersion = Number(capability.capability_schema_version ?? 1);
+  if (!Array.isArray(capability.channels) || capability.channels.length === 0) {
+    // The backend adds channels: [] when serializing legacy v1 plugins. That
+    // shape means unknown channel detail, not an authoritative unsupported set.
+    return schemaVersion === 1 ? uniqueNativeIntervals(config.nativeIntervals) : [];
   }
 
   const normalizedMarketType = String(marketType || "spot").toLowerCase();
