@@ -2682,6 +2682,12 @@ export class SeriesDataFeed {
         ? false
         : (allExplicitlyVerified ? true : finalResult?.verified_contiguous);
       const pending = incompletePagination || semanticPending || verifiedContiguous === false;
+      // Incomplete coverage is not permission to retry an unavailable source.
+      // Preserve the blocking page's availability verdict through aggregation;
+      // the consumer still retains its unresolved coverage obligation.
+      const unavailablePage = !incompletePagination
+        ? pages.find((page) => recoveryRetryDecision(page, Date.now()) !== null)
+        : undefined;
       const combinedResult: FeedResult = {
         ...(finalResult || {}),
         data: combinedRows,
@@ -2699,11 +2705,15 @@ export class SeriesDataFeed {
         ...(verifiedContiguous === undefined ? {} : { verified_contiguous: verifiedContiguous }),
         ...(pending ? {
           complete: false,
-          retryable: paginationStopReason === "missing-cursor"
+          retryable: unavailablePage || paginationStopReason === "missing-cursor"
             || paginationStopReason === "stalled-cursor"
             ? false
             : true,
-          history_state: "pending" as const,
+          history_state: unavailablePage?.history_state ?? "pending" as const,
+          ...(unavailablePage ? {
+            terminal_reason: unavailablePage.terminal_reason,
+            retry_at_ms: unavailablePage.retry_at_ms,
+          } : {}),
           ...(paginationStopReason === "missing-cursor"
             || paginationStopReason === "stalled-cursor"
             ? { terminal_reason: `pagination_${paginationStopReason}` }

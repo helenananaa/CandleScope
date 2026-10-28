@@ -29,6 +29,7 @@ import type { EpochSeconds } from "../marketDataTypes.js";
 import { toEpochMilliseconds } from "../marketDataTypes.js";
 import { epochSeconds, mustBeDefined, partialMock } from "../../../test/testHelpers.js";
 import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
+import { KlineConsumerRecovery } from "../feed/klineConsumerRecovery.js";
 
 type TestFeedConfig = Omit<SeriesDataFeedConfig, "api"> & {
   api?: Partial<KlineApi> | null;
@@ -3976,6 +3977,34 @@ test("unproven exhaustion is terminal availability, not a resolved gap", async (
   assert.equal(resolved, 0); assert.equal(terminal, 1);
   assert.equal(await feed.pollPendingRepairs(SERIES, { force: true }), 0);
   assert.equal(feed.pendingGapRepairs.size, 1, "retain the unresolved obligation and reason");
+});
+
+test("range aggregation preserves unverified exhaustion through consumer recovery", async () => {
+  for (const retryAt of [undefined, Date.now() + 60_000]) {
+    let requests = 0;
+    const feed = new SeriesDataFeed({ api: { fetchKlinesRange: async () => {
+      requests += 1;
+      return { data: [], complete: false, verified_contiguous: false, truncated: false,
+        history_state: "exhausted", retryable: false, terminal_reason: "provider_unavailable",
+        ...(retryAt === undefined ? {} : { retry_at_ms: retryAt }) };
+    } } });
+    const result = await feed.getRange(SERIES, { startSec: 60, endSec: 120, strict: true });
+    assert.equal(result.retryable, false);
+    assert.equal(result.history_state, "exhausted");
+    assert.equal(result.quality?.complete, false);
+    assert.equal(result.retry_at_ms, retryAt);
+    const recovery = new KlineConsumerRecovery();
+    recovery.capture(feed, SERIES, rows([60, 120]));
+    await recovery.recover(feed, () => true);
+    assert.equal(recovery.required, true);
+    const first = requests;
+    await recovery.recover(feed, () => true);
+    assert.equal(requests, first, "an unavailable response must not become retryable in the aggregate");
+    recovery.observeAvailability();
+    await recovery.recover(feed, () => true);
+    assert.equal(requests, first + 1);
+    recovery.close();
+  }
 });
 
 test("explicit availability retry deadline schedules a probe without declaring terminal failure", () => {
