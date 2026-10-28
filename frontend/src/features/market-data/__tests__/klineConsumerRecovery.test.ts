@@ -179,3 +179,14 @@ test("explicit navigation retires an old recovery demand before a new request ca
   assert.deepEqual(commits, []);
   assert.equal(recovery.required, false);
 });
+
+test("a fresh gap after navigation does not revive the previous window demand", async () => {
+  const { feed, calls } = harness(async () => proof);
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, held.slice(0, 1));
+  feed.beginEpoch(series);
+  recovery.capture(feed, series, held.slice(-1));
+  await recovery.recover(feed, () => true);
+  assert.deepEqual(calls[0]?.slice(2, 4), [180, 180]);
+  assert.equal(recovery.required, false);
+});
