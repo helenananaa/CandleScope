@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#04070d">
   <meta name="color-scheme" content="dark">
-  <title>CandleScope — 本地运行的加密市场分析与行情回放工作台</title>
-  <meta name="description" content="CandleScope 是开源、本地运行的加密市场工作台：实时图表、订单流、多图联动、行情回放、可编程指标与策略研究，汇集在同一个工作区。">
+  <title>CandleScope — 没有上限的本地看盘、回放与策略工作台</title>
+  <meta name="description" content="CandleScope 是开源、本地运行的看盘工作台：100+ 交易所、任意自定义周期、15 种图表、不限数量的指标与警报、64 图联动、K 线回放训练、实时模拟盘与交易日志、Python / Pine 策略回测。">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="CandleScope">
   <meta property="og:title" content="CandleScope — 看懂市场，复盘每一次判断。">
-  <meta property="og:description" content="开源、本地运行的加密市场分析与行情回放工作台。Read the market. Replay every decision.">
+  <meta property="og:description" content="开源、本地运行：100+ 交易所、任意周期、不限指标与警报、K 线回放训练、实时模拟盘与策略回测。">
   <meta property="og:url" content="https://candlescope.app/">
   <meta property="og:image" content="https://candlescope.app/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -43,10 +43,11 @@
         <span class="wordmark">Candle<span>Scope</span></span>
       </a>
       <nav class="nav-links" aria-label="主导航" data-en-aria="Main">
-        <a href="#features" data-en="Product">产品</a>
+        <a href="#charts" data-en="Charts">图表</a>
         <a href="#replay" data-en="Replay">回放</a>
-        <a href="#local" data-en="Local-first">本地优先</a>
-        <a href="#start" data-en="Quick start">快速开始</a>
+        <a href="#strategy" data-en="Strategies">策略</a>
+        <a href="#paper" data-en="Paper trading">模拟盘</a>
+        <a href="#extend" data-en="Extend">扩展</a>
         <a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md" data-en="Docs">文档</a>
       </nav>
       <div class="nav-end">
@@ -86,7 +87,7 @@
           <span class="h1-line" data-en="Read the market.">看懂市场，</span>
           <span class="h1-line grad" data-en="Replay every decision.">复盘每一次判断。</span>
         </h1>
-        <p class="lede reveal" data-en="Live charts, order flow, linked workspaces, market replay and programmable indicators — a crypto market workstation that runs on your own machine.">实时图表、订单流、多图联动、行情回放与可编程指标——一个跑在你自己电脑上的加密市场工作台。</p>
+        <p class="lede reveal" data-en="100+ exchanges, any custom interval, and no caps on history, indicators or alerts. Charting, replay training, paper trading and backtesting — all on your own machine.">100+ 家交易所、任意自定义周期，历史数据、指标与警报都不设上限。看盘、回放训练、模拟盘与策略回测——全部跑在你自己的电脑上。</p>
         <div class="cta reveal">
           <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope">
             <svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg>
@@ -96,8 +97,9 @@
         </div>
         <ul class="hero-meta reveal">
           <li>Windows · macOS · Linux</li>
-          <li>Binance · OKX</li>
-          <li data-en="30 interface languages">30 种界面语言</li>
+          <li data-en="100+ exchanges">100+ 交易所</li>
+          <li data-en="15 chart types">15 种图表类型</li>
+          <li data-en="30 languages">30 种界面语言</li>
         </ul>
       </div>
 
@@ -107,7 +109,7 @@
           <div class="mock-bar">
             <img src="./assets/mark-dark.svg" width="18" height="18" alt="">
             <div class="mock-symbol"><b>BTCUSDT</b><span>Binance · <i data-en="Perp">永续</i></span></div>
-            <div class="mock-intervals" aria-hidden="true"><span>1m</span><span>5m</span><span class="on">15m</span><span>1H</span><span>4H</span><span>1D</span></div>
+            <div class="mock-intervals" aria-hidden="true"><span>1m</span><span>7m</span><span class="on">15m</span><span>1H</span><span>3H</span><span>4H</span><span>1D</span></div>
             <div class="mock-price"><b data-hero-price>—</b><span data-hero-change>—</span></div>
             <span class="demo-badge" data-en="DEMO DATA">演示数据</span>
           </div>
@@ -142,62 +144,137 @@
       </div>
     </section>
 
-    <!-- ===== Facts ===== -->
-    <section class="facts wrap" aria-label="CandleScope 概览" data-en-aria="CandleScope at a glance">
-      <div class="fact reveal"><b>2</b><span class="fact-k" data-en="exchanges">家交易所</span><span class="fact-d" data-en="Binance and OKX, spot and perpetuals">Binance 与 OKX，现货与永续</span></div>
-      <div class="fact reveal"><b>4</b><span class="fact-k" data-en="linked charts">图联动</span><span class="fact-d" data-en="in the standard workspace; larger layouts are opt-in">标准工作区；更大布局可选开启</span></div>
-      <div class="fact reveal"><b>30</b><span class="fact-k" data-en="interface languages">种界面语言</span><span class="fact-d" data-en="from English and 简体中文 to العربية">从简体中文、English 到 العربية</span></div>
-      <div class="fact reveal"><b>0</b><span class="fact-k" data-en="cloud accounts">个云端账户</span><span class="fact-d" data-en="no sign-up — the app and its API run on 127.0.0.1">无需注册，应用与 API 都运行在 127.0.0.1</span></div>
+    <!-- ===== No caps ===== -->
+    <section class="limits wrap" aria-labelledby="limits-title">
+      <h2 id="limits-title" class="limits-title reveal"><span data-en="No caps.">没有上限。</span> <span class="limits-sub" data-en="If the exchange has it, you can chart it.">交易所有多少，你就能看多少。</span></h2>
+      <div class="stats">
+        <div class="stat reveal"><b>100+</b><span class="stat-k" data-en="exchanges">家交易所</span><span class="stat-d" data-en="Every exchange CCXT supports — spot and perpetuals">内置 CCXT，它支持的交易所都能直接看：现货与永续</span></div>
+        <div class="stat reveal"><b>∞</b><span class="stat-k" data-en="history">历史数据</span><span class="stat-d" data-en="As far back as the exchange serves — no depth limit">交易所能给多少历史，就画多少，不限回溯深度</span></div>
+        <div class="stat reveal"><b>∞</b><span class="stat-k" data-en="indicators & alerts">指标与警报</span><span class="stat-d" data-en="No cap per chart, no cap per account">每张图的指标、你的警报，都不限数量</span></div>
+        <div class="stat reveal"><b>64</b><span class="stat-k" data-en="linked charts">图联动</span><span class="stat-d" data-en="4 windows × 16 charts, linked by group">4 个窗口 × 16 张图，按联动组同步</span></div>
+      </div>
     </section>
+    <div class="exchanges reveal" aria-label="支持的交易所（部分）" data-en-aria="Supported exchanges (selection)">
+      <div class="marquee">
+        <ul class="marquee-track">
+          <li>Binance</li><li>OKX</li><li>Bybit</li><li>Coinbase</li><li>Kraken</li><li>Bitget</li><li>Gate</li><li>KuCoin</li><li>HTX</li><li>MEXC</li><li>BitMEX</li><li>Deribit</li><li>Hyperliquid</li><li>BingX</li><li>Crypto.com</li><li>Bitfinex</li><li>Bitstamp</li><li>Gemini</li><li>Upbit</li><li>Bithumb</li><li>Phemex</li><li>WOO X</li><li>BitMart</li><li>WhiteBIT</li><li>LBank</li><li>CoinEx</li><li>Poloniex</li><li>Kraken Futures</li><li>Bitvavo</li><li>BloFin</li><li>Delta Exchange</li><li>Paradex</li><li>Backpack</li><li>XT</li><li>HashKey</li><li>Coinone</li><li>bitFlyer</li><li>BTCTurk</li><li>AscendEX</li>
+        </ul>
+      </div>
+      <p class="exchanges-note" data-en="…and every other exchange in CCXT. Stocks, ETFs, forex and commodities through the Twelve Data plugin.">……以及 CCXT 中的其他交易所。美股、ETF、外汇与大宗商品可通过 Twelve Data 插件接入。</p>
+    </div>
 
-    <!-- ===== Features ===== -->
-    <section class="section" id="features" aria-labelledby="features-title">
+    <!-- ===== Charts ===== -->
+    <section class="section" id="charts" aria-labelledby="charts-title">
       <div class="wrap">
-        <div class="section-head reveal">
-          <p class="eyebrow" data-en="Product">产品</p>
-          <h2 id="features-title" data-en="One workspace, from first look to tested idea.">一个工作区，从观察到验证。</h2>
-          <p class="section-sub" data-en="Live analysis and historical research, connected in one workflow.">让实时分析与历史研究，衔接成你自己的工作流。</p>
+        <div class="section-head center reveal">
+          <p class="eyebrow" data-en="Charts">图表</p>
+          <h2 id="charts-title" data-en="Any interval. Fifteen chart types. More patterns in plain sight.">任意周期，十五种图表，发现更多市场形态。</h2>
+          <p class="section-sub" data-en="Not just 1m, 15m and 1h — type 7m, 45m or 3h and the chart rebuilds. Candles, bars, Renko, Kagi, Point &amp; Figure… the same market, seen another way.">不只 1m、15m、1h——输入 7m、45m、3h，图表立刻重建。蜡烛图、美国线、砖型图、卡吉图、点数图……同一个市场，换一种方式看。</p>
         </div>
 
-        <div class="bento">
-          <article class="card card-flow reveal" data-spot>
-            <div class="card-copy">
-              <span class="card-tag">01 · <span data-en="Live market">实时市场</span></span>
-              <h3 data-en="Live market & order flow">实时市场与订单流</h3>
-              <p data-en="Follow Binance and OKX spot and perpetual markets with realtime charts, order book, trades, order-flow views and contract context when the exchange provides it.">跟踪 Binance 与 OKX 的现货和永续市场。实时图表、盘口、逐笔成交、订单流视图与合约信息并排呈现（以交易所提供的数据为准）。</p>
-              <ul class="chips"><li data-en="Order book">盘口</li><li data-en="Trades">逐笔成交</li><li>CVD</li><li data-en="Volume delta">成交量差</li></ul>
+        <div class="lab reveal" data-lab>
+          <div class="lab-bar">
+            <div class="lab-sym"><b>BTCUSDT</b><span>Bybit · <span data-en="Perp">永续</span></span></div>
+            <div class="lab-intervals" role="group" aria-label="周期" data-en-aria="Interval">
+              <button type="button" data-iv="1m">1m</button><button type="button" data-iv="3m">3m</button><button type="button" data-iv="7m">7m</button><button type="button" data-iv="15m">15m</button><button type="button" data-iv="45m">45m</button><button type="button" data-iv="1h">1H</button><button type="button" data-iv="3h">3H</button><button type="button" data-iv="4h">4H</button><button type="button" data-iv="1d">1D</button>
             </div>
-            <div class="card-visual flow-visual">
-              <div class="viz-labels" aria-hidden="true"><span><i class="sw sw-price"></i><span data-en="Price">价格</span></span><span><i class="sw sw-delta"></i><span data-en="Volume delta">成交量差</span></span><span><i class="sw sw-cvd"></i>CVD</span></div>
-              <canvas data-flow-canvas aria-hidden="true"></canvas>
+            <label class="lab-custom">
+              <span data-en="Custom">自定义</span>
+              <input type="text" data-lab-input value="13m" maxlength="4" spellcheck="false" autocomplete="off" aria-label="自定义周期，例如 7m、45m、3h" data-en-aria="Custom interval, for example 7m, 45m or 3h">
+            </label>
+            <button type="button" class="lab-draw" data-lab-draw aria-pressed="true"><span data-en="Drawings">画图</span></button>
+          </div>
+          <div class="lab-main">
+            <ul class="lab-tools" aria-hidden="true">
+              <li title="趋势线" data-en-title="Trend line"><svg viewBox="0 0 20 20"><path d="M3 16L17 4"/><circle cx="3.5" cy="15.5" r="1.5"/><circle cx="16.5" cy="4.5" r="1.5"/></svg></li>
+              <li title="射线" data-en-title="Ray"><svg viewBox="0 0 20 20"><path d="M3 16L19 2"/><circle cx="3.5" cy="15.5" r="1.5"/></svg></li>
+              <li title="延长线" data-en-title="Extended line"><svg viewBox="0 0 20 20"><path d="M1 18L19 2"/></svg></li>
+              <li title="水平线" data-en-title="Horizontal line"><svg viewBox="0 0 20 20"><path d="M2 10h16"/></svg></li>
+              <li title="垂直线" data-en-title="Vertical line"><svg viewBox="0 0 20 20"><path d="M10 2v16"/></svg></li>
+              <li title="十字线" data-en-title="Cross line"><svg viewBox="0 0 20 20"><path d="M2 10h16M10 2v16"/></svg></li>
+              <li title="角度测量" data-en-title="Angle"><svg viewBox="0 0 20 20"><path d="M3 16h14M3 16L14 5"/><path d="M9 16a6 6 0 00-1.8-4.3"/></svg></li>
+              <li title="斐波那契回撤" data-en-title="Fib retracement"><svg viewBox="0 0 20 20"><path d="M2 4h16M2 8h16M2 12h16M2 16h16" opacity=".6"/><path d="M3 16L17 4"/></svg></li>
+              <li title="多头仓位" data-en-title="Long position"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="8" rx="1" class="ic-up"/><rect x="3" y="11" width="14" height="5" rx="1" class="ic-dn"/></svg></li>
+              <li title="空头仓位" data-en-title="Short position"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="5" rx="1" class="ic-dn"/><rect x="3" y="9" width="14" height="8" rx="1" class="ic-up"/></svg></li>
+              <li title="矩形" data-en-title="Rectangle"><svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10" rx="1"/></svg></li>
+              <li title="椭圆" data-en-title="Ellipse"><svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.5" ry="5"/></svg></li>
+              <li title="文字" data-en-title="Text"><svg viewBox="0 0 20 20"><path d="M5 4h10M10 4v12"/></svg></li>
+              <li title="画笔" data-en-title="Pen"><svg viewBox="0 0 20 20"><path d="M3 15c3-1 4-6 7-6s2 5 7 3"/></svg></li>
+              <li title="荧光笔" data-en-title="Highlighter"><svg viewBox="0 0 20 20"><path d="M3 15L15 3l2 2L5 17z"/><path d="M3 18h6" class="ic-hl"/></svg></li>
+            </ul>
+            <div class="lab-chart">
+              <div class="lab-legend" data-lab-legend aria-hidden="true"></div>
+              <canvas data-lab-canvas role="img" aria-label="可切换周期与图表类型的示意图表，使用模拟数据" data-en-aria="Illustrative chart with switchable interval and chart type, driven by simulated data"></canvas>
+              <span class="lab-error" data-lab-error role="status" aria-live="polite"></span>
             </div>
-          </article>
+          </div>
+          <div class="lab-types" role="group" aria-label="图表类型" data-en-aria="Chart type">
+            <button type="button" data-ct="candlestick" data-en="Candles">蜡烛图</button>
+            <button type="button" data-ct="hollow-candlestick" data-en="Hollow candles">空心蜡烛</button>
+            <button type="button" data-ct="heikin-ashi" data-en="Heikin Ashi">平均 K 线</button>
+            <button type="button" data-ct="bar" data-en="Bars">美国线</button>
+            <button type="button" data-ct="high-low" data-en="High-Low">高低图</button>
+            <button type="button" data-ct="line" data-en="Line">折线</button>
+            <button type="button" data-ct="line-with-markers" data-en="Line with markers">带点折线</button>
+            <button type="button" data-ct="step-line" data-en="Step line">阶梯线</button>
+            <button type="button" data-ct="area" data-en="Area">面积图</button>
+            <button type="button" data-ct="baseline" data-en="Baseline">基准线</button>
+            <button type="button" data-ct="histogram" data-en="Columns">柱状图</button>
+            <button type="button" data-ct="renko" data-en="Renko">砖型图</button>
+            <button type="button" data-ct="line-break" data-en="Line break">新价线</button>
+            <button type="button" data-ct="kagi" data-en="Kagi">卡吉图</button>
+            <button type="button" data-ct="point-and-figure" data-en="Point &amp; Figure">点数图</button>
+          </div>
+        </div>
 
-          <article class="card card-linked reveal" data-spot>
-            <div class="card-copy">
-              <span class="card-tag">02 · <span data-en="Workspace">工作区</span></span>
-              <h3 data-en="Linked multi-chart workspace">多图联动工作区</h3>
-              <p data-en="Compare markets in a saved workspace. Link symbol, interval, crosshair, visible range, drawings or indicators — only where you need them.">在保存的工作区里比较不同市场与周期。商品、周期、十字线、可视范围、绘图和指标，只在需要的地方联动。</p>
-            </div>
-            <div class="linked" data-linked>
-              <div class="linked-cell"><div class="lc-head"><b>BTCUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
-              <div class="linked-cell"><div class="lc-head"><b>ETHUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
-              <div class="linked-cell"><div class="lc-head"><b>SOLUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
-              <div class="linked-cell"><div class="lc-head"><b>BNBUSDT</b><span>15m</span><em data-lc-price></em></div><canvas aria-hidden="true"></canvas></div>
-              <span class="linked-chip"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M5 8l-1.5 1.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5"/></svg><span data-en="Crosshair linked">十字线联动</span></span>
-            </div>
-            <p class="card-hint" data-en="Move your pointer across any chart.">在任意一张图上移动指针试试。</p>
-          </article>
+        <div class="tools-strip reveal">
+          <b data-en="15 drawing tools">15 种画图工具</b>
+          <p data-en="Trend line · Ray · Extended line · Horizontal · Vertical · Cross line · Angle · Fibonacci retracement · Long position · Short position · Rectangle · Ellipse · Text · Pen · Highlighter">趋势线 · 射线 · 延长线 · 水平线 · 垂直线 · 十字线 · 角度测量 · 斐波那契回撤 · 多头仓位 · 空头仓位 · 矩形 · 椭圆 · 文字 · 画笔 · 荧光笔</p>
+        </div>
+      </div>
+    </section>
 
-          <article class="card card-pine reveal" data-spot>
-            <div class="card-copy">
-              <span class="card-tag">03 · <span data-en="Indicators">指标</span></span>
-              <h3 data-en="Indicators & scripts">指标与脚本</h3>
-              <p data-en="Use built-in studies, or write your own in Pine or frontend JavaScript. Other runtimes connect through the plugin system.">使用内置指标，或用 Pine 与前端 JavaScript 编写自己的指标。其他运行时可通过插件系统接入。</p>
+    <!-- ===== Workspace ===== -->
+    <section class="section" id="workspace" aria-labelledby="workspace-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="eyebrow" data-en="Workspace">多图联动</p>
+          <h2 id="workspace-title" data-en="Up to 64 charts, moving as one.">最多 64 张图，一起联动。</h2>
+          <p class="section-sub" data-en="Four windows of up to sixteen charts each. Sync symbol, interval, crosshair, visible range, drawings and indicators by link group — only where you want it.">4 个窗口，每个最多 16 张图。商品、周期、十字线、可视范围、绘图与指标，按联动组同步——只在你需要的地方。</p>
+        </div>
+        <div class="grid16 reveal" data-grid16>
+          <div class="g16-bar">
+            <div class="g16-tabs" role="group" aria-label="窗口" data-en-aria="Window">
+              <button type="button" data-win="0" aria-pressed="true"><span data-en="Window">窗口</span> 1 · 15m</button>
+              <button type="button" data-win="1" aria-pressed="false"><span data-en="Window">窗口</span> 2 · 1H</button>
+              <button type="button" data-win="2" aria-pressed="false"><span data-en="Window">窗口</span> 3 · 4H</button>
+              <button type="button" data-win="3" aria-pressed="false"><span data-en="Window">窗口</span> 4 · 1D</button>
             </div>
-            <div class="pine">
-              <div class="code" aria-label="Pine 指标示例代码" data-en-aria="Example Pine indicator">
-                <div class="code-head"><span class="code-file">ema_cross.pine</span><span class="code-lang">Pine</span></div>
+            <span class="g16-chip"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5l3-3M5 8l-1.5 1.5a2.1 2.1 0 003 3L8 11M11 8l1.5-1.5a2.1 2.1 0 00-3-3L8 5"/></svg><span data-en="Crosshair linked">十字线联动</span></span>
+          </div>
+          <div class="g16-cells" data-g16-cells></div>
+          <p class="card-hint" data-en="Move your pointer across any chart, or switch windows.">在任意一张图上移动指针，或切换窗口试试。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Indicators ===== -->
+    <section class="section" id="indicators" aria-labelledby="indicators-title">
+      <div class="wrap split">
+        <div class="split-copy reveal">
+          <p class="eyebrow" data-en="Indicators">指标</p>
+          <h2 id="indicators-title" data-en="Unlimited indicators. Bring your Pine scripts.">指标不设上限，Pine 指标直接迁移。</h2>
+          <p class="section-sub" data-en="Stack as many studies on one chart as you like. The Pine interpreter plugin runs the Pine indicators you already have — or write new ones in JavaScript.">一张图上想叠多少指标都行。Pine 解释器插件直接运行你现有的 Pine 指标，也可以用 JavaScript 写新的。</p>
+          <ul class="ticks">
+            <li><b data-en="Pine interpreter plugin">Pine 解释器插件</b><span data-en="Migrate your indicators without rewriting them.">迁移指标，无需重写。</span></li>
+            <li><b data-en="JavaScript indicators">JavaScript 指标</b><span data-en="Build your own studies in the frontend.">在前端编写属于你的指标。</span></li>
+            <li><b data-en="Built-in studies">内置指标</b><span data-en="Moving averages, oscillators, volume and more.">均线、震荡指标、成交量等开箱即用。</span></li>
+          </ul>
+        </div>
+        <div class="split-visual reveal">
+          <div class="pine panel">
+            <div class="code" aria-label="Pine 指标示例代码" data-en-aria="Example Pine indicator">
+              <div class="code-head"><span class="code-file">ema_cross.pine</span><span class="code-lang">Pine</span></div>
 <pre><code><span class="c-cm">//@version=5</span>
 <span class="c-fn">indicator</span>(<span class="c-st">"EMA Cross"</span>, overlay = <span class="c-kw">true</span>)
 fast = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">21</span>)
@@ -206,44 +283,43 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
 <span class="c-fn">plot</span>(slow, color = color.<span class="c-b">orange</span>)
 <span class="c-fn">plotshape</span>(ta.<span class="c-fn">crossover</span>(fast, slow),
      style = shape.triangleup)</code></pre>
-              </div>
-              <canvas class="pine-canvas" data-pine-canvas aria-hidden="true"></canvas>
             </div>
-          </article>
+            <canvas class="pine-canvas" data-pine-canvas aria-hidden="true"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
 
-          <article class="card card-research reveal" data-spot>
-            <div class="card-copy">
-              <span class="card-tag">04 · <span data-en="Research">研究</span></span>
-              <h3 data-en="Strategy research">策略研究</h3>
-              <p data-en="Import your own data into the local library or use the current chart, then run a script and inspect trades, equity, drawdown, parameters — and the assumptions attached to every result.">把自己的数据导入本地资料库，或直接使用当前图表；运行脚本，检查交易、权益、回撤、参数，以及每份结果附带的测试假设。</p>
-            </div>
-            <div class="research">
-              <div class="metrics" aria-hidden="true">
-                <div><span data-en="Net return">净收益</span><b class="up" data-m-ret>+21.4%</b></div>
-                <div><span data-en="Max drawdown">最大回撤</span><b class="down" data-m-dd>−7.9%</b></div>
-                <div><span data-en="Trades">交易</span><b>138</b></div>
-                <div><span data-en="Win rate">胜率</span><b>54%</b></div>
+    <!-- ===== Strategy ===== -->
+    <section class="section" id="strategy" aria-labelledby="strategy-title">
+      <div class="wrap split flip">
+        <div class="split-copy reveal">
+          <p class="eyebrow" data-en="Strategy research">策略回测</p>
+          <h2 id="strategy-title" data-en="Backtest in Python, Pine — or your own model.">用 Python、Pine 或自己的模型，回测你的策略。</h2>
+          <p class="section-sub" data-en="Import your data or use the current chart, run a strategy, then inspect every trade, equity, drawdown and parameter. External quant models connect too — CandleScope supplies the data, matching and accounts.">导入数据或直接使用当前图表，运行策略后检查每笔交易、权益、回撤和参数。外部量化模型也能接入，由 CandleScope 负责行情、撮合与账户。</p>
+          <ul class="ticks">
+            <li><b>Python</b><span data-en="Strategies as Python bundles, run in an isolated studio.">以 Python 包运行策略，运行环境相互隔离。</span></li>
+            <li><b>Pine</b><span data-en="Run Pine strategies through the interpreter plugin.">通过解释器插件运行 Pine 策略。</span></li>
+            <li><b data-en="External models">外部模型</b><span data-en="Connect your own model with the SDK; every decision is recorded.">用 SDK 接入你的模型，每一个决策都有记录。</span></li>
+          </ul>
+        </div>
+        <div class="split-visual reveal">
+          <div class="research panel" data-research>
+            <div class="panel-head">
+              <div class="seg" role="group" aria-label="运行时" data-en-aria="Runtime">
+                <button type="button" data-rt="0" aria-pressed="true">Python</button><button type="button" data-rt="1" aria-pressed="false">Pine</button><button type="button" data-rt="2" aria-pressed="false" data-en="External model">外部模型</button>
               </div>
-              <canvas class="research-canvas" data-research-canvas aria-hidden="true"></canvas>
-              <p class="viz-note" data-en="Example result · assumptions: fees 0.04% · slippage 1 tick · bar close fills">示例结果 · 假设：手续费 0.04% · 滑点 1 tick · K 线收盘成交</p>
+              <span class="panel-badge" data-en="Example result">示例结果</span>
             </div>
-          </article>
-
-          <article class="card card-mini reveal" data-spot>
-            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 004 0"/></svg></span>
-            <h3 data-en="Price & indicator alerts">价格与指标提醒</h3>
-            <p data-en="In-app, browser and sound alerts out of the box. Webhooks stay off until you configure a secure policy.">应用内、浏览器通知与声音提醒开箱即用；Webhook 默认关闭，需显式配置安全策略后才会投递。</p>
-          </article>
-          <article class="card card-mini reveal" data-spot>
-            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3v4M15 3v4"/><rect x="5" y="7" width="14" height="7" rx="2"/><path d="M12 14v3a3 3 0 01-3 3H7"/></svg></span>
-            <h3 data-en="Plugin platform">插件平台</h3>
-            <p data-en="Bring other indicator runtimes and extensions in as plugins — the first-party Pine runtime ships this way.">通过插件接入其他指标运行时与扩展——第一方 Pine 运行时就是以插件方式提供的。</p>
-          </article>
-          <article class="card card-mini reveal" data-spot>
-            <span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M8.5 12.5l2-3 2 2 3-4"/></svg></span>
-            <h3 data-en="AI chart control (MCP)">AI 图表控制（MCP）</h3>
-            <p data-en="Opt in to a local MCP endpoint in the desktop app: off by default, bound to 127.0.0.1, read-only if you prefer, with no order entry or file access.">桌面版可选开启本地 MCP 接口：默认关闭，仅监听 127.0.0.1，可设为只读，不提供下单与文件访问。</p>
-          </article>
+            <div class="metrics" aria-hidden="true">
+              <div><span data-en="Net return">净收益</span><b class="up" data-m-ret>+21.4%</b></div>
+              <div><span data-en="Max drawdown">最大回撤</span><b class="down" data-m-dd>−7.9%</b></div>
+              <div><span data-en="Trades">交易</span><b data-m-trades>138</b></div>
+              <div><span data-en="Win rate">胜率</span><b data-m-win>54%</b></div>
+            </div>
+            <canvas class="research-canvas" data-research-canvas aria-hidden="true"></canvas>
+            <p class="viz-note" data-en="Assumptions shown with every result: fees 0.04% · slippage 1 tick · fills at bar close">每份结果都附带测试假设：手续费 0.04% · 滑点 1 tick · K 线收盘成交</p>
+          </div>
         </div>
       </div>
     </section>
@@ -252,21 +328,25 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
     <section class="section replay-section" id="replay" aria-labelledby="replay-title">
       <div class="wrap replay-grid">
         <div class="replay-copy reveal">
-          <p class="eyebrow eyebrow-amber" data-en="Market replay">行情回放</p>
-          <h2 id="replay-title" data-en="Go back in time. Trade it again.">回到过去，再交易一次。</h2>
-          <p class="section-sub" data-en="Train on historical data: synchronized markets share one clock and one paper account. Pause, save and resume any time — then review the session, or fork it from any bar.">在历史行情中训练：多个市场共享同一个时钟与模拟账户。随时暂停、保存、恢复；结束后复盘，或从任意一根 K 线分叉重来。</p>
-          <ul class="ticks">
-            <li><b data-en="Synchronized markets">同步多市场</b><span data-en="Every symbol advances on one shared clock.">所有商品按同一个时钟推进。</span></li>
-            <li><b data-en="Shared paper account">共享模拟账户</b><span data-en="Paper orders only — nothing reaches an exchange.">只使用模拟委托，绝不发送到交易所。</span></li>
+          <p class="eyebrow eyebrow-amber" data-en="Market replay">K 线回放</p>
+          <h2 id="replay-title" data-en="Train in the past. Positions that behave like the real thing.">在历史里练手，持仓和真的一样。</h2>
+          <p class="section-sub" data-en="Every symbol shares one clock and one paper account. Scale in, scale out, open, close or reverse — and hold several markets at once. Pause, save, review, or fork from any bar.">所有商品共享同一个时钟和模拟账户。任意加仓、减仓、开平仓或反手，还能同时持有多个商品。随时暂停、存档、复盘，或从任意一根 K 线分叉重来。</p>
+          <ul class="ticks ticks-amber">
+            <li><b data-en="Realistic positions">真实的持仓逻辑</b><span data-en="Average price, partial closes and reversals.">均价、部分平仓与反手，一样不少。</span></li>
+            <li><b data-en="Many markets at once">多商品同时持仓</b><span data-en="Every symbol advances on the same clock.">所有商品按同一个时钟推进。</span></li>
             <li><b data-en="Resumable sessions">可恢复存档</b><span data-en="Save progress and pick up where you left off.">训练进度随时保存、随时继续。</span></li>
-            <li><b data-en="Review & fork">复盘与分叉</b><span data-en="Revisit every decision, or restart from any point.">回看每一个决策，或从任意节点重新开始。</span></li>
+            <li><b data-en="Review &amp; fork">复盘与分叉</b><span data-en="Average R, MAE/MFE and hold time — or restart from any bar.">平均 R、MAE/MFE、持仓时长，或从任意节点重来。</span></li>
           </ul>
         </div>
 
         <div class="replay reveal" data-replay>
           <div class="rp-top">
-            <div class="rp-sym"><span class="rp-badge" data-en="REPLAY">回放</span><b>ETHUSDT</b><span>15m</span></div>
-            <div class="rp-clock"><span data-en="Replay clock">回放时钟</span><time data-rp-clock>—</time></div>
+            <div class="rp-syms" role="group" aria-label="商品" data-en-aria="Symbol">
+              <span class="rp-badge" data-en="REPLAY">回放</span>
+              <button type="button" data-rp-sym="0" aria-pressed="true">ETHUSDT</button>
+              <button type="button" data-rp-sym="1" aria-pressed="false">BTCUSDT</button>
+            </div>
+            <div class="rp-clock"><span data-en="Clock">时钟</span><time data-rp-clock>—</time></div>
           </div>
           <div class="rp-chart">
             <canvas data-rp-canvas aria-hidden="true"></canvas>
@@ -286,18 +366,165 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
             </div>
           </div>
           <div class="rp-account">
-            <dl class="rp-stats">
-              <div><dt data-en="Equity">权益</dt><dd data-rp-equity>10,000.00</dd></div>
-              <div><dt data-en="Position">持仓</dt><dd data-rp-pos>—</dd></div>
-              <div><dt data-en="Unrealized P&amp;L">未实现盈亏</dt><dd data-rp-upnl>0.00</dd></div>
-            </dl>
+            <div class="rp-stats">
+              <div><span data-en="Equity">权益</span><b data-rp-equity>10,000.00</b></div>
+              <div><span data-en="Realized">已实现</span><b data-rp-real>0.00</b></div>
+              <div><span data-en="Unrealized">未实现</span><b data-rp-upnl>0.00</b></div>
+            </div>
+            <div class="rp-positions" data-rp-positions></div>
             <div class="rp-actions">
-              <button type="button" class="rp-buy" data-rp-buy data-en="Buy">买入</button>
-              <button type="button" class="rp-sell" data-rp-sell data-en="Sell">卖出</button>
-              <button type="button" class="rp-close" data-rp-close data-en="Close">平仓</button>
+              <button type="button" class="rp-buy" data-rp-buy><span data-en="Buy / add">买入 / 加仓</span></button>
+              <button type="button" class="rp-sell" data-rp-sell><span data-en="Sell / reduce">卖出 / 减仓</span></button>
+              <button type="button" class="rp-close" data-rp-close><span data-en="Close">平仓</span></button>
             </div>
           </div>
-          <p class="rp-note" data-en="Try it: trade the replay, then drag the timeline back to fork. Demo data · paper orders only.">试试：在回放中买卖，再把进度条往回拖即可分叉。演示数据 · 仅模拟委托。</p>
+          <p class="rp-note" data-en="Try it: press Buy twice to scale in, switch symbol to hold both, drag the timeline back to fork. Demo data · paper orders only.">试试：连按两次买入即加仓，切换商品同时持有两个仓位，把进度条往回拖即分叉。演示数据 · 仅模拟委托。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Paper trading & journal ===== -->
+    <section class="section" id="paper" aria-labelledby="paper-title">
+      <div class="wrap split">
+        <div class="split-copy reveal">
+          <p class="eyebrow" data-en="Paper trading &amp; journal">模拟盘与交易日志</p>
+          <h2 id="paper-title" data-en="Live paper trading, and a record of how you grow.">实时模拟盘，记录你的成长历程。</h2>
+          <p class="section-sub" data-en="Limit, stop and bracket orders fill against live candles. Sync your exchange account read-only. Fills group into trades on their own — add plans, reviews and tags, and watch the numbers improve.">限价、止损与括号单在实时行情上撮合。只读同步你的交易所账户。成交会自动归并成一笔笔交易——写下计划、复盘和标签，看着数据一点点变好。</p>
+          <ul class="ticks">
+            <li><b data-en="Live matching">实时撮合</b><span data-en="Practice orders fill on live 1m candles, even catching up after a restart.">模拟委托按实时 1 分钟 K 线撮合，重启后自动补算。</span></li>
+            <li><b data-en="Exchange sync">交易所同步</b><span data-en="Read-only positions, fills and reconciliation (OKX today).">只读同步持仓、成交并对账（目前支持 OKX）。</span></li>
+            <li><b data-en="Trade journal">交易日志</b><span data-en="Win rate, profit factor, expectancy in R and max drawdown, by tag.">按标签统计胜率、盈亏比、R 期望值与最大回撤。</span></li>
+          </ul>
+        </div>
+        <div class="split-visual reveal">
+          <div class="journal panel" data-journal>
+            <div class="jn-accounts">
+              <span class="jn-acc on"><i class="dot dot-live"></i><span data-en="Paper · live matching">模拟盘 · 实时撮合</span></span>
+              <span class="jn-acc"><i class="dot dot-sync"></i><span data-en="OKX · read-only">OKX · 只读同步</span></span>
+            </div>
+            <div class="metrics" aria-hidden="true">
+              <div><span data-en="Win rate">胜率</span><b>57%</b></div>
+              <div><span data-en="Profit factor">盈亏比</span><b>1.86</b></div>
+              <div><span data-en="Expectancy">R 期望</span><b class="up">+0.42R</b></div>
+              <div><span data-en="Trades">交易</span><b>46</b></div>
+            </div>
+            <div class="jn-curve"><span class="jn-curve-label" data-en="Cumulative R">累计 R · 成长曲线</span><canvas data-journal-canvas aria-hidden="true"></canvas></div>
+            <table class="jn-table">
+              <thead><tr><th data-en="Date">日期</th><th data-en="Symbol">商品</th><th data-en="Side">方向</th><th data-en="Result">结果</th><th data-en="Tags">标签</th></tr></thead>
+              <tbody>
+                <tr><td>10-27</td><td>BTCUSDT</td><td class="up" data-en="Long">多</td><td class="up">+2.1R</td><td><span class="tag" data-en="#breakout">#突破</span><span class="tag" data-en="#planned">#按计划</span></td></tr>
+                <tr><td>10-26</td><td>ETHUSDT</td><td class="down" data-en="Short">空</td><td class="down">−1.0R</td><td><span class="tag" data-en="#counter-trend">#逆势</span></td></tr>
+                <tr><td>10-25</td><td>SOLUSDT</td><td class="up" data-en="Long">多</td><td class="up">+0.7R</td><td><span class="tag" data-en="#pullback">#回调</span></td></tr>
+              </tbody>
+            </table>
+            <div class="jn-note"><b data-en="Review">复盘</b><span data-en="Entered one bar early. Wait for the close next time; the stop was right.">入场早了一根，下次等收盘确认；止损位置是对的。</span></div>
+            <p class="viz-note" data-en="Example data">示例数据</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Alerts ===== -->
+    <section class="section" id="alerts" aria-labelledby="alerts-title">
+      <div class="wrap split flip">
+        <div class="split-copy reveal">
+          <p class="eyebrow" data-en="Alerts">警报</p>
+          <h2 id="alerts-title" data-en="Unlimited alerts, with logic as deep as you need.">警报不限数量，逻辑想多复杂都行。</h2>
+          <p class="section-sub" data-en="Nest AND, OR and NOT groups over price and indicator conditions — crosses, ranges, percent change — and see exactly which branch matched.">用 AND、OR、NOT 嵌套组合价格与指标条件——上穿、下穿、区间、涨跌幅——触发时还能看到是哪一条成立的。</p>
+          <ul class="ticks">
+            <li><b data-en="Any depth">任意嵌套</b><span data-en="Groups inside groups, on price or any indicator.">条件组层层嵌套，价格与任意指标都能用。</span></li>
+            <li><b data-en="Rich comparisons">丰富的比较方式</b><span data-en="Above, below, crosses, between, outside, percent change.">大于、小于、上穿、下穿、区间内外、涨跌幅。</span></li>
+            <li><b data-en="Delivered your way">多种送达方式</b><span data-en="In-app, browser notification, sound, or a secured webhook.">应用内、浏览器通知、声音，或带签名的 Webhook。</span></li>
+          </ul>
+        </div>
+        <div class="split-visual reveal">
+          <div class="alerts panel" data-alerts>
+            <div class="al-head"><b>BTCUSDT · 15m</b><span class="al-status" data-al-status data-en="Watching">监控中</span></div>
+            <ul class="al-tree">
+              <li class="al-node al-group" data-node="root">
+                <div class="al-row"><span class="op">AND</span><span data-en="all of">全部满足</span></div>
+                <ul>
+                  <li class="al-node al-leaf" data-node="a"><div class="al-row"><span data-en="Close">收盘价</span> <b data-en="crosses above">上穿</b> EMA 55<em data-val="a"></em></div></li>
+                  <li class="al-node al-group" data-node="or">
+                    <div class="al-row"><span class="op">OR</span><span data-en="any of">任一满足</span></div>
+                    <ul>
+                      <li class="al-node al-leaf" data-node="b"><div class="al-row">RSI 14 <b>&lt;</b> 35<em data-val="b"></em></div></li>
+                      <li class="al-node al-leaf" data-node="c"><div class="al-row"><span data-en="Change (5 bars)">5 根涨幅</span> <b>&gt;</b> 1.5%<em data-val="c"></em></div></li>
+                    </ul>
+                  </li>
+                  <li class="al-node al-group" data-node="not">
+                    <div class="al-row"><span class="op">NOT</span><span data-en="none of">均不满足</span></div>
+                    <ul>
+                      <li class="al-node al-leaf" data-node="d"><div class="al-row"><span data-en="Price">价格</span> <b data-en="between">介于</b> 63,000 – 63,400<em data-val="d"></em></div></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+            <div class="al-deliver"><span data-en="Deliver to">送达</span><i data-en="In-app">应用内</i><i data-en="Browser">浏览器通知</i><i data-en="Sound">声音</i><i>Webhook</i></div>
+            <ol class="al-log" data-al-log aria-live="polite"></ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== AI over MCP ===== -->
+    <section class="section" id="ai" aria-labelledby="ai-title">
+      <div class="wrap split">
+        <div class="split-copy reveal">
+          <p class="eyebrow" data-en="AI · MCP">AI · MCP</p>
+          <h2 id="ai-title" data-en="Let your AI assistant work your charts.">让 AI 助手，直接操作你的图表。</h2>
+          <p class="section-sub" data-en="Turn on the local MCP endpoint in the desktop app and your assistant can read open charts and replay state, switch interval and chart type, and step the replay — then talk you through what it sees.">在桌面版开启本地 MCP，AI 助手就能读取已打开的图表和回放状态，切换周期与图表类型、逐根推进回放，再把它看到的讲给你听。</p>
+          <ul class="ticks">
+            <li><b data-en="Off until you say so">默认关闭</b><span data-en="Bound to 127.0.0.1, with read-only or control permission.">仅监听 127.0.0.1，可选只读或控制权限。</span></li>
+            <li><b data-en="No orders, no files">不下单，不碰文件</b><span data-en="No order entry, script execution or file access.">不提供下单、脚本执行与文件访问。</span></li>
+            <li><b data-en="Revocable">随时撤销</b><span data-en="Revoke access and every session closes; recent calls are logged.">撤销后所有会话立即关闭，最近的调用都有记录。</span></li>
+          </ul>
+        </div>
+        <div class="split-visual reveal">
+          <div class="ai panel" data-ai>
+            <div class="ai-head"><span class="ai-dot" aria-hidden="true"></span><b data-en="AI assistant">AI 助手</b><span data-en="CandleScope MCP · control">CandleScope MCP · 控制</span></div>
+            <div class="ai-chart"><canvas data-ai-canvas aria-hidden="true"></canvas><span class="ai-chart-label" data-ai-label></span></div>
+            <ol class="ai-log" data-ai-log aria-live="polite"></ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Data & plugins ===== -->
+    <section class="section" id="extend" aria-labelledby="extend-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="eyebrow" data-en="Data &amp; plugins">数据与插件</p>
+          <h2 id="extend-title" data-en="Any market. Any feature you're missing.">查看任何市场，补上任何功能。</h2>
+          <p class="section-sub" data-en="Bring in your own data provider to chart any market. Missing a feature? Write a plugin — CandleScope's own Pine runtime ships the same way.">接入自定义数据提供商，查看任何市场。遇到不支持的功能？写一个插件——CandleScope 自己的 Pine 运行时也是这样提供的。</p>
+        </div>
+        <div class="ext-grid">
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Built in">内置</span><h3 data-en="CCXT exchanges">CCXT 交易所</h3><p data-en="100+ crypto exchanges, spot and perpetuals, through one adapter.">100+ 家加密交易所的现货与永续，一个适配器全部接入。</p></article>
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Built in">内置</span><h3 data-en="Native Binance &amp; OKX">Binance 与 OKX 原生适配</h3><p data-en="Order book, trades, order flow and contract context.">盘口、逐笔成交、订单流与合约信息。</p></article>
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Data plugin">数据插件</span><h3>Twelve Data</h3><p data-en="US stocks, ETFs, forex and commodities.">美股、ETF、外汇与大宗商品。</p></article>
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Plugin template">插件模板</span><h3 data-en="Your data provider">自定义数据提供商</h3><p data-en="Start from the template to chart a private feed or any market.">从模板开始，接入私有行情或任何市场。</p></article>
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Indicator plugin">指标插件</span><h3 data-en="Pine interpreter">Pine 解释器</h3><p data-en="Runs and migrates your Pine indicators and strategies.">运行并迁移你的 Pine 指标与策略。</p></article>
+          <article class="ext reveal" data-spot><span class="ext-tag" data-en="Strategy SDK">策略 SDK</span><h3 data-en="External models">外部量化模型</h3><p data-en="Plug your model into backtests; CandleScope handles matching and accounts.">把你的模型接进回测，撮合与账户由 CandleScope 负责。</p></article>
+          <a class="ext ext-cta reveal" href="https://github.com/helenananaa/CandleScope/blob/main/docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md">
+            <span class="ext-plus" aria-hidden="true">+</span>
+            <div><h3 data-en="Missing something? Write a plugin.">缺少某个功能？写一个插件。</h3><p data-en="Read the plugin author guide →">阅读插件开发指南 →</p></div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== And more ===== -->
+    <section class="section more" aria-labelledby="more-title">
+      <div class="wrap">
+        <h2 id="more-title" class="more-title reveal" data-en="And there's more.">还有更多。</h2>
+        <div class="more-grid">
+          <div class="more-item reveal"><b data-en="Order flow">订单流</b><span data-en="Order book, trades, CVD and volume delta">盘口、逐笔、CVD 与成交量差</span></div>
+          <div class="more-item reveal"><b data-en="30 languages">30 种界面语言</b><span data-en="From English and 简体中文 to العربية">从简体中文、English 到 العربية</span></div>
+          <div class="more-item reveal"><b data-en="Desktop app">桌面版</b><span data-en="Windows and native macOS builds">Windows 与原生 macOS</span></div>
+          <div class="more-item reveal"><b data-en="Local library">本地资料库</b><span data-en="Import CSV data and study it offline">导入 CSV，离线研究</span></div>
+          <div class="more-item reveal"><b data-en="Saved workspaces">保存的工作区</b><span data-en="Layouts, drawings and indicators come back as you left them">布局、绘图和指标原样恢复</span></div>
+          <div class="more-item reveal"><b data-en="Open source">开源</b><span data-en="GPL-3.0 — read every line">GPL-3.0，每一行都可审计</span></div>
         </div>
       </div>
     </section>
@@ -308,13 +535,13 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
         <div class="section-head reveal">
           <p class="eyebrow" data-en="Local-first">本地优先</p>
           <h2 id="local-title" data-en="Your workstation runs on your machine.">你的工作台，跑在你自己的机器上。</h2>
-          <p class="section-sub" data-en="A local backend plus a browser workspace, connected straight to exchange market data. No sign-up, no cloud account in between.">本地后端加浏览器工作台，直接连接交易所行情。无需注册，中间没有云端账户。</p>
+          <p class="section-sub" data-en="A local backend plus a browser workspace, connected straight to your exchanges and data providers. No sign-up, no cloud account in between.">本地后端加浏览器工作台，直接连接交易所与数据提供商。无需注册，中间没有云端账户。</p>
         </div>
 
         <div class="arch reveal">
           <div class="arch-sources">
-            <div class="node node-ex"><span class="ex-dot ex-bn" aria-hidden="true"></span><b>Binance</b><span data-en="Spot · Perpetuals">现货 · 永续</span></div>
-            <div class="node node-ex"><span class="ex-dot ex-okx" aria-hidden="true"></span><b>OKX</b><span data-en="Spot · Perpetuals">现货 · 永续</span></div>
+            <div class="node node-ex"><span class="ex-dot ex-bn" aria-hidden="true"></span><b data-en="Exchanges">交易所</b><span data-en="CCXT · 100+">CCXT · 100+</span></div>
+            <div class="node node-ex"><span class="ex-dot ex-okx" aria-hidden="true"></span><b data-en="Data providers">数据提供商</b><span data-en="Twelve Data · your plugin">Twelve Data · 你的插件</span></div>
           </div>
           <div class="arch-wire" aria-hidden="true">
             <svg viewBox="0 0 120 200" preserveAspectRatio="none"><path class="wire" d="M0 50 C60 50 60 100 120 100"/><path class="wire" d="M0 150 C60 150 60 100 120 100"/></svg>
@@ -322,14 +549,14 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
           </div>
           <div class="arch-machine">
             <div class="machine-head"><span class="machine-dots" aria-hidden="true"><i></i><i></i><i></i></span><b data-en="Your machine">你的电脑</b><span>127.0.0.1</span></div>
-            <div class="machine-row"><span class="mr-ic" aria-hidden="true">API</span><div><b data-en="Market engine & API">行情引擎与 API</b><code>:18080</code></div></div>
+            <div class="machine-row"><span class="mr-ic" aria-hidden="true">API</span><div><b data-en="Market engine &amp; API">行情引擎与 API</b><code>:18080</code></div></div>
             <div class="machine-row"><span class="mr-ic" aria-hidden="true">UI</span><div><b data-en="Chart workspace">图表工作台</b><code>:15173</code></div></div>
-            <div class="machine-row"><span class="mr-ic" aria-hidden="true">DB</span><div><b data-en="Local library">本地资料库</b><code data-en="history · CSV imports · sessions">历史 K 线 · CSV 导入 · 存档</code></div></div>
+            <div class="machine-row"><span class="mr-ic" aria-hidden="true">DB</span><div><b data-en="Local library">本地资料库</b><code data-en="history · journal · sessions">历史 K 线 · 交易日志 · 存档</code></div></div>
           </div>
           <ul class="arch-promises">
             <li data-en="No sign-up or login">无需注册或登录</li>
-            <li data-en="Replay never routes live orders">回放永远不会发送真实委托</li>
-            <li data-en="An offline profile that loads only local data">离线 profile：只加载本地数据</li>
+            <li data-en="Replay and paper trading never route live orders">回放与模拟盘永远不会发送真实委托</li>
+            <li data-en="Exchange accounts sync read-only">交易所账户只读同步</li>
             <li data-en="GPL-3.0 — read every line">GPL-3.0 开源，每一行都可审计</li>
           </ul>
         </div>
@@ -406,10 +633,11 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
         <details class="scope reveal">
           <summary><span data-en="Current scope">当前范围与限制</span></summary>
           <ul>
-            <li data-en="Replay uses paper orders and never routes live exchange orders.">回放使用模拟委托，不会向交易所发送真实订单。</li>
-            <li data-en="Advanced market views depend on data provided by the selected exchange and market.">高级市场视图取决于所选交易所与市场提供的数据。</li>
-            <li data-en="The standard workspace supports up to four charts; higher-capacity layouts are opt-in.">标准工作区最多支持四张图，更大容量的布局需手动开启。</li>
-            <li data-en="The first-party Pine plugin bundles currently target Windows with CPython 3.12, and Pine compatibility covers a supported subset.">第一方 Pine 插件包目前面向 Windows + CPython 3.12，Pine 兼容覆盖已支持的子集。</li>
+            <li data-en="Replay and paper trading use simulated orders and never route live exchange orders. Exchange account sync is read-only and currently supports OKX.">回放与模拟盘使用模拟委托，不会向交易所发送真实订单；交易所账户同步为只读，目前支持 OKX。</li>
+            <li data-en="History depth and advanced market views (order book, order flow, contract context) depend on what the selected exchange or provider serves.">历史深度与高级市场视图（盘口、订单流、合约信息）取决于所选交易所或数据提供商能提供的数据。</li>
+            <li data-en="The standard workspace shows up to four charts; 16-chart and multi-window layouts (up to 64 charts) are opt-in.">标准工作区默认最多四张图；16 图与多窗口布局（最多 64 张图）需手动开启。</li>
+            <li data-en="Pine compatibility covers a supported subset. The first-party Pine plugin bundles currently target Windows with CPython 3.12.">Pine 兼容覆盖已支持的子集；第一方 Pine 插件包目前面向 Windows + CPython 3.12。</li>
+            <li data-en="The local MCP endpoint is desktop-only and off by default; it offers no order entry, script execution or file access.">本地 MCP 仅限桌面版且默认关闭；不提供下单、脚本执行与文件访问。</li>
             <li data-en="The browser app runs on Windows, Linux and macOS. The optional desktop shell supports Windows and native macOS test packages.">浏览器版运行于 Windows、Linux 与 macOS；可选桌面版支持 Windows 与原生 macOS 测试包。</li>
           </ul>
         </details>
@@ -423,9 +651,9 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
       </svg>
       <img class="final-mark" src="./assets/mark-dark.svg" width="64" height="64" alt="">
       <h2 id="final-title" data-en="Your next study starts here.">下一次研究，从这里开始。</h2>
-      <p data-en="Browse the source, the setup guide and what's in progress. Stars, issues and contributions are welcome.">查看源码、安装说明与项目进展。欢迎 Star、提 Issue 或参与贡献。</p>
+      <p data-en="Free and open source. Browse the code, the setup guide and what's in progress — stars, issues and contributions are welcome.">免费、开源。查看源码、安装说明与项目进展——欢迎 Star、提 Issue 或参与贡献。</p>
       <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope"><span data-en="Open on GitHub">前往 GitHub</span><span aria-hidden="true">↗</span></a>
+        <a class="btn btn-primary" href="https://github.com/helenananaa/CandleScope"><svg class="gh" aria-hidden="true"><use href="#i-gh"/></svg><span data-en="Get it on GitHub">在 GitHub 获取</span></a>
         <a class="btn btn-ghost" href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md"><span data-en="Read the docs">阅读文档</span></a>
       </div>
       <a class="repo" href="https://github.com/helenananaa/CandleScope">github.com/helenananaa/CandleScope</a>
@@ -436,17 +664,20 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
     <div class="wrap footer-grid">
       <div class="footer-brand">
         <a class="brand" href="./"><img src="./assets/mark-dark.svg" width="26" height="26" alt=""><span class="wordmark">Candle<span>Scope</span></span></a>
-        <p data-en="Local market analysis & replay.">本地运行的市场分析与回放工作台。</p>
+        <p data-en="Local charting, replay and strategy research.">本地运行的看盘、回放与策略研究工作台。</p>
       </div>
       <div class="footer-col">
         <h4 data-en="Product">产品</h4>
-        <a href="#features" data-en="Features">功能</a>
-        <a href="#replay" data-en="Market replay">行情回放</a>
-        <a href="#start" data-en="Quick start">快速开始</a>
+        <a href="#charts" data-en="Charts">图表</a>
+        <a href="#replay" data-en="Market replay">K 线回放</a>
+        <a href="#strategy" data-en="Strategy research">策略回测</a>
+        <a href="#paper" data-en="Paper trading">模拟盘</a>
+        <a href="#alerts" data-en="Alerts">警报</a>
       </div>
       <div class="footer-col">
         <h4 data-en="Docs">文档</h4>
         <a href="https://github.com/helenananaa/CandleScope/blob/main/README_zh.md" data-en-href="https://github.com/helenananaa/CandleScope/blob/main/README.md">README</a>
+        <a href="#start" data-en="Quick start">快速开始</a>
         <a href="https://github.com/helenananaa/CandleScope/blob/main/API.md" data-en="API reference">API 参考</a>
         <a href="https://github.com/helenananaa/CandleScope/blob/main/docs/PLUGIN_PLATFORM_AUTHOR_RUNTIME_GUIDE_zh.md" data-en="Plugin guide">插件指南</a>
       </div>
@@ -459,7 +690,7 @@ slow = ta.<span class="c-fn">ema</span>(close, <span class="c-nu">55</span>)
     </div>
     <div class="wrap footer-base">
       <span>© 2026 CandleScope</span>
-      <span data-en="Charts on this page are illustrations driven by simulated data, not live market data.">本页图表均为模拟数据驱动的示意，并非实时行情。</span>
+      <span data-en="Charts, accounts and results on this page are illustrations driven by simulated data. Exchange names are trademarks of their owners.">本页图表、账户与结果均为模拟数据驱动的示意。交易所名称为其各自所有者的商标。</span>
     </div>
   </footer>
 </body>

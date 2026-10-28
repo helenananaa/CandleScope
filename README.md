@@ -12,7 +12,7 @@ source code remains on `main`. No build tool, dependencies, or backend is requir
 |---|---|
 | `index.html` | Page content. Chinese is authored in the markup; each translatable element carries its English text in `data-en` (plus `data-en-href` / `data-en-aria` for links and labels). |
 | `style.css` | Dark theme matching the product UI. Colors live as tokens on `:root`. |
-| `assets/site.js` | Language switch, scroll reveals, and the canvas demos (hero workspace, order flow, linked charts, Pine, research, replay). |
+| `assets/site.js` | Language switch, scroll reveals, and the canvas demos: hero workspace, chart lab (custom intervals × 15 chart types + drawings), 16-chart linked grid, Pine, strategy research, multi-symbol replay, journal, alert tree and the MCP chat. |
 | `assets/og.png` | 1200 × 630 social preview image. |
 | `assets/*.svg`, `apple-touch-icon.png` | Brand mark and icons. |
 
@@ -21,7 +21,11 @@ and remembers the 中 / EN toggle in `localStorage`.
 
 Every chart on the page is drawn from seeded, simulated data, and the page labels it
 as demo data. Nothing fetches live market data. Keep product claims in sync with the
-root `README.md` on `main`, including the "Current scope" list.
+code on `main` (exchange count from the pinned CCXT version, chart types in
+`frontend/src/shared/mainChartTypes.ts`, drawing tools in
+`frontend/src/features/drawings/drawingTypes.ts`, workspace limits in
+`chartWorkspaceCapacity.ts`, MCP tools in `frontend/desktop/local-mcp-server.mjs`)
+and update the "Current scope" list when a limit changes.
 
 ## Edit and preview
 
