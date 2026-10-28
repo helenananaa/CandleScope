@@ -76,16 +76,19 @@ class _SentPrefix:
         count = len(self.lists[0])
         if static != self.static or len(lists[0]) <= count or self.open != (0, 0):
             return False
+        if any((value is None) != (sent is None) for value, sent in zip(lists, self.lists, strict=True)):
+            return False
         for value, sent, last in zip(lists, self.lists, self.last, strict=True):
-            if (value is None) != (sent is None):
-                return False
             if not sent:
                 continue
-            # List equality tests identity before value, so a row sent again
-            # as the same object costs one pointer comparison.
-            if value[:count] != sent:
-                return False
             if value[count - 1] != last:
+                return False
+            # Compare equal-length lists instead of slicing the new one, so an
+            # unchanged row costs one pointer test and is never touched.
+            sent.extend(value[count:])
+            same = sent == value
+            del sent[count:]
+            if not same:
                 return False
         return True
 

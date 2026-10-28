@@ -90,6 +90,9 @@ def _execute(request):
     reply = reply_base(request.pop("prefix_reply", None))
     # Intents of the retained session that earlier replies already delivered.
     known, _intent_count = (_intent_count if appending else None), None
+    # Rows of a retained prefix were validated when they arrived: any failure
+    # discards the prefix, so an append checks only its own rows.
+    checked = request.get("prefix_base") if appending else 0
     request = normalize_native_request(_prefix.decode(request))
     standalone_updates = validate_request_updates(request)
     if not appending:
@@ -149,7 +152,7 @@ def _execute(request):
         if getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) != 1:
             raise ValueError("EXTERNAL_CLOCK_UNAVAILABLE: install a runtime with explicit external execution clocks")
         if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
-                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
+                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks[checked:])):
             raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
     evaluations = closed_schedule(request, start) if standalone_updates else execution_input(request, start)
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
