@@ -6,6 +6,7 @@ from typing import Any
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 
 from ..models import CcxtRawMarketEvent
 from ..okx import CandleScopeOkx
@@ -97,20 +98,3 @@ class OkxSwapCcxtProfile:
             config.proxy_mode,
             config.http_proxy or "",
         )
-
-
-def _okx_interval(interval: str) -> str:
-    mapped = {
-        "1h": "1H",
-        "2h": "2H",
-        "4h": "4H",
-        "6h": "6Hutc",
-        "12h": "12Hutc",
-        "1d": "1Dutc",
-        "3d": "3Dutc",
-        "1w": "1Wutc",
-        "1M": "1Mutc",
-    }.get(interval, interval)
-    if not mapped:
-        raise ValueError("OKX K-line interval must not be empty")
-    return mapped
