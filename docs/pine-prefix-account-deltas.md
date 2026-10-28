@@ -39,9 +39,9 @@ reproduces that failure. The original 30-percent budget remains in force.
 ## Per-request cost
 
 The Host keeps the prefix it last sent by reference rather than as a deep copy.
-Rows still sent as the same objects are matched by identity; values are compared
-only from the first row the caller rebuilt, and the newest row of each list is
-kept as a detached snapshot. A caller corrects an earlier bar, frame or pass
+Rows still sent as the same objects are matched by identity, rows the caller
+rebuilt are compared by value, and the newest row of each list is kept as a
+detached snapshot. A caller corrects an earlier bar, frame or pass
 group by replacing it; an in-place change to the newest row is still detected.
 Either change resends the full prefix, as before.
 

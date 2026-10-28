@@ -8,8 +8,6 @@ import tempfile
 import threading
 import time
 from copy import deepcopy
-from itertools import compress, count as counter
-from operator import is_not
 from .native import MAX_BYTES, PROTOCOL, encoded, digest
 from .errors import BacktestError
 TICK_CONTRACT = "candlescope.pine-tick-schedule/1"
@@ -58,11 +56,12 @@ def _open_groups(groups, *, schedule):
 class _SentPrefix:
     """The prefix one evaluator already holds, kept without copying its history.
 
-    Elements are held by reference and compared by identity, so an append costs
-    only its new rows. A caller changes an earlier element by replacing it; a
-    rebuilt but equal element still matches by value. The newest element of
-    each list is also kept as a detached snapshot, so an in-place change to the
-    current bar, account frame or pass group still forces a full request.
+    Elements are held by reference, so a row sent again as the same object costs
+    one pointer comparison and nothing is copied. A caller changes an earlier
+    element by replacing it; a rebuilt but equal element still matches by value.
+    The newest element of each list is also kept as a detached snapshot, so an
+    in-place change to the current bar, account frame or pass group still forces
+    a full request.
     """
 
     __slots__ = ("static", "lists", "last", "open")
@@ -82,9 +81,9 @@ class _SentPrefix:
                 return False
             if not sent:
                 continue
-            # Values decide only from the first row the caller rebuilt.
-            first = next(compress(counter(), map(is_not, value, sent)), count)
-            if value[first:count] != sent[first:]:
+            # List equality tests identity before value, so a row sent again
+            # as the same object costs one pointer comparison.
+            if value[:count] != sent:
                 return False
             if value[count - 1] != last:
                 return False
