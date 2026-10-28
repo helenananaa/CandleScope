@@ -1,4 +1,15 @@
-"""Unified interval parsing and bucket policy for data_engine."""
+"""Unified interval parsing and bucket policy for data_engine.
+
+Fixed-minute event grids use ``<duration>~a1~<anchor_ms>`` on the wire.
+Canonicalization stores only ``anchor_ms % duration_ms`` (the phase); zero
+phase aliases the existing duration. Buckets are [A+nD, A+(n+1)D) for any
+integer n, including negative n. Equal phases share history/cache/subscription
+identity; different phases do not. The UI separately retains the event date
+for display. Existing unqualified series and stored rows keep their UTC grid.
+
+Version 1 rejects sub-minute anchors and calendar week/month anchors rather
+than rounding or silently splitting a source candle.
+"""
 from __future__ import annotations
 
 import calendar
@@ -121,7 +132,7 @@ _UNIT_SECONDS = {
     "w": 604800,
     "M": 2592000,
 }
-_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])$")
+_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])(?:~a1~(-?\d+))?$")
 _WEEKLY_RE = re.compile(r"^(\d+)w$")
 _MONTHLY_RE = re.compile(r"^(\d+)M$")
 _WEEK_EPOCH_OFFSET_S = 4 * 86400
@@ -164,7 +175,8 @@ class IntervalSpec:
     alignment: IntervalAlignment
     nominal_ms: int
     count: int
-    signature: tuple[str, int]
+    signature: tuple[str, int] | tuple[str, int, int]
+    phase_ms: int = 0
 
     def floor_ms(self, timestamp_ms: int) -> int:
         timestamp_ms = int(timestamp_ms)
@@ -173,7 +185,7 @@ class IntervalSpec:
         anchor_ms = (
             _WEEK_EPOCH_OFFSET_MS
             if self.alignment is IntervalAlignment.WEEKLY_MONDAY
-            else 0
+            else self.phase_ms
         )
         return (
             ((timestamp_ms - anchor_ms) // self.nominal_ms) * self.nominal_ms
@@ -235,6 +247,8 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         return None
     raw_count = int(match.group(1))
     unit = match.group(2)
+    raw_anchor = match.group(3)
+    phase_ms = 0
     if raw_count <= 0:
         return None
 
@@ -245,7 +259,19 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         canonical, count, nominal_ms = _canonical_fixed_interval(raw_count, unit)
         alignment = IntervalAlignment.FIXED_EPOCH
         signature = (alignment.value, nominal_ms)
+        if raw_anchor is not None:
+            anchor_ms = int(raw_anchor)
+            # v1 accepts exact minute boundaries only. Never round an event
+            # timestamp or split an already aggregated source minute.
+            if nominal_ms % 60_000 or anchor_ms % 60_000 or abs(anchor_ms) > (1 << 53) - 1:
+                return None
+            phase_ms = anchor_ms % nominal_ms
+            if phase_ms:
+                canonical += f"~a1~{phase_ms}"
+                signature = (alignment.value, nominal_ms, phase_ms)
     elif unit == "w":
+        if raw_anchor is not None:
+            return None
         if raw_count > _MAX_INTERVAL_MS // (7 * 86_400_000):
             return None
         canonical = f"{raw_count}w"
@@ -254,6 +280,8 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         alignment = IntervalAlignment.WEEKLY_MONDAY
         signature = (alignment.value, count)
     else:
+        if raw_anchor is not None:
+            return None
         if raw_count > _MAX_CALENDAR_MONTH_COUNT:
             return None
         canonical = f"{raw_count}M"
@@ -269,6 +297,7 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         nominal_ms=nominal_ms,
         count=count,
         signature=signature,
+        phase_ms=phase_ms,
     )
 
 
@@ -296,10 +325,14 @@ def interval_tiles(source: IntervalSpec, target: IntervalSpec) -> bool:
             }
             and source.nominal_ms <= 86_400_000
             and 86_400_000 % source.nominal_ms == 0
+            and source.phase_ms == 0
         )
     if source.alignment is IntervalAlignment.CALENDAR_MONTH:
         return target.count % source.count == 0
-    return target.nominal_ms % source.nominal_ms == 0
+    return (
+        target.nominal_ms % source.nominal_ms == 0
+        and (target.phase_ms - source.phase_ms) % source.nominal_ms == 0
+    )
 
 
 def parse_custom_interval(interval: str) -> int | None:

@@ -1,9 +1,11 @@
+import { intervalAnchorZhHant } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  ...intervalAnchorZhHant,
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時間加上前向視窗包含未來行情。請選擇更早的起點或縮短前向視窗；只能使用已收盤的歷史 K 線。",
   "replay.hub.catalogSyncing": "正在同步官方歷史商品目錄，完成後自動啟用。",

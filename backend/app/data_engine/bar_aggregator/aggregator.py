@@ -115,6 +115,14 @@ class IntervalPipeline:
         self.interval_ms = interval_ms
 
         alignment = AlignmentMode(config.default_alignment_mode)
+        spec = parse_interval_spec(interval)
+        epoch_ms = config.alignment_epoch_ms
+        if spec is not None:
+            # A persisted series key must imply the same grid in history and
+            # realtime, including the zero-phase alias. Process-wide legacy
+            # alignment settings must not silently change that identity.
+            alignment = AlignmentMode.CUSTOM if spec.phase_ms else AlignmentMode.EPOCH
+            epoch_ms = spec.phase_ms
 
         # Monthly intervals need calendar-based bucketing, not fixed 30-day.
         # This applies to ALL month-unit intervals (1M, 2M, 3M, etc.),
@@ -135,7 +143,7 @@ class IntervalPipeline:
         self.time_bucket = TimeBucketEngine(
             interval_ms=interval_ms,
             alignment=alignment,
-            epoch_ms=config.alignment_epoch_ms,
+            epoch_ms=epoch_ms,
             custom_calculator=custom_calc,
         )
         self.bar_state = BarStateEngine(config, self.time_bucket, interval)

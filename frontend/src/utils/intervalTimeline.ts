@@ -131,7 +131,7 @@ export function createIntervalTimeline(interval: unknown): IntervalTimeline | nu
     const widthSeconds = spec.alignment === "weekly-monday"
       ? (spec.weekCount as number) * 604800
       : spec.widthSeconds as number;
-    const anchor = spec.alignment === "weekly-monday" ? WEEKLY_MONDAY_ANCHOR_SECONDS : 0;
+    const anchor = spec.alignment === "weekly-monday" ? WEEKLY_MONDAY_ANCHOR_SECONDS : (spec.phaseSeconds ?? 0);
     return fixedFloor(time, widthSeconds, anchor);
   };
 

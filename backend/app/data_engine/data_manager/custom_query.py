@@ -254,8 +254,9 @@ def _aggregate_fixed_bars_to_interval(
     custom_interval_seconds: int,
     *,
     source_interval_seconds: int | None,
+    phase_seconds: int = 0,
 ) -> list[BarData]:
-    """Aggregate epoch-aligned ``BarData`` in one ordered pass.
+    """Aggregate fixed-grid ``BarData`` in one ordered pass.
 
     ``_aggregate_rows_to_interval`` remains the canonical compatibility path
     for calendar/session-aware callers.  Query results, however, are already
@@ -369,8 +370,8 @@ def _aggregate_fixed_bars_to_interval(
             taker_buy_quote,
         ) = bar.normalized_aggregation_values()
         row_bucket = (
-            row_time // custom_interval_seconds
-        ) * custom_interval_seconds
+            (row_time - phase_seconds) // custom_interval_seconds
+        ) * custom_interval_seconds + phase_seconds
 
         if bucket_start != row_bucket:
             append_bucket()
@@ -2223,6 +2224,7 @@ class CustomIntervalQueryService:
                 base_bars,
                 custom_seconds,
                 source_interval_seconds=source_interval_seconds,
+                phase_seconds=interval_spec.phase_ms // 1000,
             )
         # Calendar source components (especially 1M) do not have a fixed
         # 30-day width. Use their actual opens and target end for completeness.

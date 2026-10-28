@@ -1,10 +1,12 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getLocale, t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import {
   canResolveIntervalFromNativeValues,
   canonicalizeIntervalValue,
   formatIntervalDescription,
+  formatIntervalLabel,
+  intervalWithAnchor,
   formatSecondsCompact,
   groupIntervalsByDuration,
   INTERVAL_UNITS,
@@ -106,7 +108,7 @@ function buildItemFromRecord(record: CustomIntervalRecord): IntervalItem {
   const seconds = parseIntervalSeconds(record.value) || 0;
   return {
     value: record.value,
-    label: record.value,
+    label: formatIntervalLabel(record.value),
     seconds,
     isCustom: true,
     record,
@@ -196,6 +198,7 @@ function chipTitle(
       : formatIntervalDescription(item.value),
     formatSecondsCompact(seconds),
   ];
+  if (record?.anchorTimeMs !== undefined) parts.push(`${new Date(record.anchorTimeMs).toISOString()} ↔`);
   if (record?.pinned) parts.push(t("interval.badge.pinned", {}, locale));
   if (record && record.usageCount > 0) {
     parts.push(t("interval.used", { count: record.usageCount }, locale));
@@ -213,7 +216,7 @@ export interface IntervalSelectorProps {
   customIntervalRecords: CustomIntervalRecord[];
   savedCustomIntervals: IntervalString[];
   onSelectInterval(interval: IntervalString): void;
-  onCreateCustomInterval(interval: IntervalString): CreateCustomIntervalResult;
+  onCreateCustomInterval(interval: IntervalString, anchorTimeMs?: number): CreateCustomIntervalResult;
   onRemoveCustomInterval(interval: IntervalString): void;
   onRestoreCustomInterval(): void;
   onTogglePinCustomInterval(interval: IntervalString): unknown;
@@ -253,11 +256,14 @@ function IntervalSelector({
   variant = "row",
 }: IntervalSelectorProps) {
   const locale = useLocale();
+  const anchorInputId = useId();
   const compact = variant === "compact";
   const favoriteIntervals = useFavoriteIntervals();
   const [open, setOpen] = useState(defaultOpen);
   const [activeTab, setActiveTab] = useState<IntervalTab>(variant === "compact" ? "all" : "common");
   const [search, setSearch] = useState("");
+  const [anchorEnabled, setAnchorEnabled] = useState(false);
+  const [anchorTime, setAnchorTime] = useState("");
   const [amount, setAmount] = useState("45");
   const [unit, setUnit] = useState<IntervalUnit>("m");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -355,11 +361,17 @@ function IntervalSelector({
     ],
   );
 
+  const anchorTimeMs = Date.parse(`${anchorTime}Z`);
   const formValue = useMemo(() => {
     const numeric = parseInt(amount, 10);
     if (!Number.isFinite(numeric) || numeric <= 0) return "";
-    return `${numeric}${unit}`;
-  }, [amount, unit]);
+    const duration = `${numeric}${unit}`;
+    if (!anchorEnabled) return duration;
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(anchorTime)
+      || !Number.isFinite(anchorTimeMs)
+      || new Date(anchorTimeMs).toISOString().slice(0, 16) !== anchorTime) return "";
+    return intervalWithAnchor(duration, anchorTimeMs);
+  }, [amount, unit, anchorEnabled, anchorTime, anchorTimeMs]);
   const formStatus = useMemo(
     () => createStatusForValue(
       formValue,
@@ -559,7 +571,7 @@ function IntervalSelector({
     setInlineMessage(null);
   }, [closePanel, isIntervalAvailable, onSelectInterval, unavailableMessage]);
 
-  const createOrSelectInterval = useCallback((value: IntervalString) => {
+  const createOrSelectInterval = useCallback((value: IntervalString, chosenAnchorTimeMs?: number) => {
     const normalized = canonicalizeIntervalValue(value);
     const status = createStatusForValue(
       normalized,
@@ -581,12 +593,12 @@ function IntervalSelector({
       return;
     }
 
-    const result = onCreateCustomInterval(normalized);
+    const result = onCreateCustomInterval(normalized, chosenAnchorTimeMs);
     if (result?.ok === false) {
       setInlineMessage({ type: "error", text: result.message || t("interval.addFailed", {}, locale) });
       return;
     }
-    setInlineMessage({ type: "success", text: t("interval.addedAndSwitched", { value: normalized }, locale) });
+    setInlineMessage({ type: "success", text: t("interval.addedAndSwitched", { value: formatIntervalLabel(normalized) }, locale) });
     closePanel();
   }, [
     capabilityLoading,
@@ -680,7 +692,7 @@ function IntervalSelector({
         aria-disabled={!available || readOnlyReason !== null}
       >
         {item.isCustom && <span className="interval-custom-dot" />}
-        {item.label}
+        {formatIntervalLabel(item.label || item.value)}
       </button>
     );
   };
@@ -721,7 +733,7 @@ function IntervalSelector({
           title={chipTitle(item, record, available, unavailableMessage(item.value), locale)}
         >
           {item.isCustom && <span className="interval-custom-dot" />}
-          {item.label || item.value}
+          {formatIntervalLabel(item.label || item.value)}
           {pinned && <span className="interval-chip-star" aria-hidden="true"><Icon name="star" size={10} filled /></span>}
         </button>
         {pinOnly && (
@@ -815,7 +827,7 @@ function IntervalSelector({
           title={readOnlyReason ?? t("interval.openPicker", {}, locale)}
         >
           {!compact && <span className="interval-more-label">{t("interval.label", {}, locale)}</span>}
-          {!compact && <span className="interval-more-value">{interval}</span>}
+          {!compact && <span className="interval-more-value">{formatIntervalLabel(interval)}</span>}
           <span className="interval-more-caret" aria-hidden="true"><Icon name="chevron-down" size={12} /></span>
         </button>
       </nav>
@@ -928,6 +940,18 @@ function IntervalSelector({
 
             {showComposer && (
               <section className="interval-composer" data-interval-composer="true">
+                <div className="interval-anchor-controls">
+                  <label>
+                    <input type="checkbox" checked={anchorEnabled} onChange={(event) => setAnchorEnabled(event.target.checked)} />
+                    {t("interval.anchorEnabled", {}, locale)}
+                  </label>
+                  {anchorEnabled && <>
+                    <label htmlFor={anchorInputId}>{t("interval.anchorTime", {}, locale)}</label>
+                    <input id={anchorInputId} type="datetime-local" step="60" value={anchorTime}
+                      onChange={(event) => setAnchorTime(event.target.value)} aria-label={t("interval.anchorTime", {}, locale)} />
+                    <p>{t("interval.anchorHelp", {}, locale)}</p>
+                  </>}
+                </div>
                 <div className="interval-split">
                   <input
                     ref={amountInputRef}
@@ -939,7 +963,7 @@ function IntervalSelector({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        createOrSelectInterval(formValue);
+                        createOrSelectInterval(formValue, anchorEnabled ? anchorTimeMs : undefined);
                       }
                     }}
                     className="interval-number-input"
@@ -961,7 +985,7 @@ function IntervalSelector({
                   <button
                     type="button"
                     className="interval-create-btn"
-                    onClick={() => createOrSelectInterval(formValue)}
+                    onClick={() => createOrSelectInterval(formValue, anchorEnabled ? anchorTimeMs : undefined)}
                     disabled={!formStatus.ok && formStatus.kind === "invalid"}
                   >
                     {formStatus.kind === "native" || formStatus.kind === "exists"
@@ -970,7 +994,7 @@ function IntervalSelector({
                   </button>
                 </div>
                 <div className={clsx("interval-create-status", formStatus.ok ? "ok" : formStatus.kind)}>
-                  {formStatus.text}
+                  {anchorEnabled && !formValue ? t("interval.anchorInvalid", {}, locale) : formStatus.text}
                 </div>
               </section>
             )}

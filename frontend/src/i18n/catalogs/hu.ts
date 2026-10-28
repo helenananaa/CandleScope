@@ -1,9 +1,11 @@
+import { intervalAnchorEn } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  ...intervalAnchorEn,
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "A kezdés és az előretekintő ablak jövőbeli gyertyákat tartalmaz. Válasszon korábbi kezdést vagy rövidebb ablakot; csak lezárt múltbeli gyertyák érhetők el.",
   "replay.hub.catalogSyncing": "Hivatalos történeti piacok keresése folyamatban. Az opció automatikusan elérhetővé válik, amint elkészül.",

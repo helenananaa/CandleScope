@@ -105,7 +105,7 @@ import {
 import { t, type LocaleId } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { normalizeMainChartType } from "../shared/mainChartTypes";
-import { parseIntervalSeconds } from "../utils/intervals";
+import { formatIntervalLabel, parseIntervalSeconds } from "../utils/intervals";
 import {
   createCursorOverlayGeometryCache,
   resolveCursorOverlayPoint,
@@ -5412,7 +5412,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       {loading && (
         <div className="loading-overlay">
           <div className="loading-spinner" />
-          <span className="loading-text">{t("chart.loadingKlines", { symbol, interval }, locale)}</span>
+          <span className="loading-text">{t("chart.loadingKlines", { symbol, interval: formatIntervalLabel(interval) }, locale)}</span>
         </div>
       )}
     </div>

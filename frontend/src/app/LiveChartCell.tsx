@@ -1,6 +1,6 @@
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
 import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
-import { parseIntervalSeconds } from "../utils/intervals.js";
+import { formatIntervalLabel, parseIntervalSeconds } from "../utils/intervals.js";
 import { strategyTradeRange, type StrategyTradeFocus } from "../features/backtest/chart-tester/strategyTradeReview.js";
 import React, {
   Suspense,
@@ -890,7 +890,7 @@ function LiveChartCell({
         data-layout-role={layoutRole ?? "standard"}
         data-link-group={cell.linkGroupId ?? "none"}
         role="group"
-        aria-label={t("chart.aria", { symbol: chartSession.view.symbol, interval: chartSession.view.interval })}
+        aria-label={t("chart.aria", { symbol: chartSession.view.symbol, interval: formatIntervalLabel(chartSession.view.interval) })}
         tabIndex={obscured ? -1 : active ? 0 : -1}
         onFocus={activate}
         onPointerDown={activate}
@@ -921,7 +921,7 @@ function LiveChartCell({
             </span>
           )}
           <strong>{chartSession.view.symbol}</strong>
-          <span>{chartSession.view.interval}</span>
+          <span>{formatIntervalLabel(chartSession.view.interval)}</span>
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>

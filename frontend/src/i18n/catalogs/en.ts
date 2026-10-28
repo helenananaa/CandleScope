@@ -1,9 +1,11 @@
+import { intervalAnchorEn } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...intervalAnchorEn,
   ...readonlyAccountEnglish,
   ...externalProviderEnglish,
   "replay.err.futureInput": "The start time plus the forward window includes future bars. Choose an earlier start or shorten the forward window; only closed historical bars are available.",
