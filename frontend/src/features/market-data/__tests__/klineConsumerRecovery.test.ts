@@ -168,3 +168,14 @@ test("a repeated gap cannot forget an earlier forming obligation", async () => {
   assert.deepEqual(calls[0]?.slice(2, 4), [120, 180]);
   assert.equal(recovery.required, false);
 });
+
+test("explicit navigation retires an old recovery demand before a new request can write", async () => {
+  const { feed, calls, commits } = harness(async () => proof);
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, held);
+  feed.beginEpoch(series);
+  await recovery.recover(feed, () => true);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(commits, []);
+  assert.equal(recovery.required, false);
+});

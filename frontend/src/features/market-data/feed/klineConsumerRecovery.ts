@@ -9,6 +9,7 @@ export class KlineConsumerRecovery {
     start: number;
     end: number;
     discoverTail: boolean;
+    epoch: number;
   }>();
   private running = false;
   private readonly abort = new AbortController();
@@ -26,7 +27,7 @@ export class KlineConsumerRecovery {
     { discoverTail = false }: { discoverTail?: boolean } = {},
   ): void {
     if (this.abort.signal.aborted) return;
-    feed.beginEpoch(series); // Fence HTTP results started before the gap.
+    const epoch = feed.beginEpoch(series); // Fence HTTP results started before the gap.
     // A forming row may finalize while disconnected and fall outside latest2.
     // Keep its timestamp even when no temporal hole remains in the window.
     const times = rows.map((row) => Number(row.time)).filter(Number.isFinite);
@@ -41,6 +42,7 @@ export class KlineConsumerRecovery {
       start: Math.min(previous?.start ?? Infinity, ...times),
       end: Math.max(previous?.end ?? -Infinity, ...times),
       discoverTail: discoverTail || previous?.discoverTail === true,
+      epoch,
     });
   }
 
@@ -53,6 +55,11 @@ export class KlineConsumerRecovery {
     this.running = true;
     try {
       for (const [key, checkpoint] of this.pending) {
+        // Explicit navigation/reset supersedes the old recovery demand too.
+        if (!feed.isCurrent(checkpoint.series, checkpoint.epoch)) {
+          this.pending.delete(key);
+          continue;
+        }
         if (!isSubscribed(checkpoint.series.interval)) continue;
         try {
           let start = checkpoint.start;

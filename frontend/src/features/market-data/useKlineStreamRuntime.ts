@@ -481,12 +481,15 @@ export function useKlineStreamRuntime({
             },
             onControlMessage: (message) => {
               if (!active) return;
+              const previousIntervals = acknowledgementState.activeIntervals;
               acknowledgementState = reduceKlineStreamControlMessage(
                 acknowledgementState,
                 message,
               );
               applyAcknowledgedStatus();
-              nextConsumerRecoveryAt = 0;
+              if (acknowledgementState.activeIntervals.some((interval) => !previousIntervals.includes(interval))) {
+                nextConsumerRecoveryAt = 0;
+              }
               recoverConsumer();
             },
             onBackfillCompleted: (msg) => {
