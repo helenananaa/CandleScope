@@ -238,9 +238,6 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
          "times_ms": [bar["time"] * 1000 for bar in item["bars"]]}
         for item in wire.get("contexts", [])])
         if wire.get("fixed_history_contract") == "candlescope.pine-fixed-history/1" else None)
-    # Like ``accounts``, the bar and clock prefixes grow in place, so a bar
-    # never copies the whole history into its request.
-    prefix_bars, prefix_clocks = [], []
 
     def strategy(_window, event):
         nonlocal latest
@@ -255,13 +252,11 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                          "position_avg_price": None if account.entry_price is None else float(account.entry_price),
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
-        prefix_bars.extend(wire["bars"][len(prefix_bars):count])
-        request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": prefix_bars, "accounts": accounts}
+        request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": wire["bars"][:count], "accounts": accounts}
         if fixed_history is not None:
             request.update(fixed_history)
         if "execution_times" in wire:
-            prefix_clocks.extend(wire["execution_times"][len(prefix_clocks):count])
-            request["execution_times"] = prefix_clocks
+            request["execution_times"] = wire["execution_times"][:count]
         boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
         if request_feed is not None:
             request_groups.append(dict(observed_at_ms=boundary - 1, updates=request_feed.advance(boundary - 1)))
