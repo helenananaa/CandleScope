@@ -3442,6 +3442,7 @@ export const en = {
   "chart.fixedBrick": "Fixed brick {size}",
 
   "settings.diag.chartCache": "Main-chart candle cache",
+  "settings.diag.sharedMarketCache": "Shared market data cache",
   "settings.diag.watchlistFullCache": "Watchlist Full background cache",
   "settings.diag.indicatorCache": "Indicator result cache",
 

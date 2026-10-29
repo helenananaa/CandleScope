@@ -26,6 +26,7 @@ import { desktopWindowManager } from "../../desktop/desktopWindowManager.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../chart-workspace/chartWorkspaceCapacity.js";
 import { defaultWorkspaceBus } from "../chart-workspace/workspaceBus.js";
 import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
+import { registerSharedMarketCache } from "../cache-gc/sharedMarketCacheOwner.js";
 
 export interface MarketDataWorkspaceProviderProps extends PropsWithChildren {
   brokerEnabled?: boolean;
@@ -85,6 +86,7 @@ export function MarketDataWorkspaceProvider({
     };
   });
   const [resourceEffectGuard] = useState(() => new MarketDataWorkspaceEffectGuard());
+  useEffect(() => registerSharedMarketCache(resources.dataManager.cache), [resources]);
 
   useEffect(() => {
     if (!resources.indicatorStreamCoordinator) return undefined;

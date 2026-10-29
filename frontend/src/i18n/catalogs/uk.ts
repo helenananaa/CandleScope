@@ -3122,6 +3122,7 @@ export const uk = {
   "chart.lineBreakDetail": "Прорив {count} ліній",
   "chart.fixedBrick": "Фіксована цеглина {size}",
   "settings.diag.chartCache": "Кеш свічок головного графіка",
+  "settings.diag.sharedMarketCache": "Спільний кеш ринкових даних",
   "settings.diag.watchlistFullCache": "Фоновий кеш повного списку спостереження",
   "settings.diag.indicatorCache": "Кеш результатів індикаторів",
   "workbench.kicker": "Перегляд інвентарю та завантаження історії",

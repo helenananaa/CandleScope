@@ -43,7 +43,7 @@ publication are complete. A passing unit test is not native acceptance.
 2. **In progress:** framework-independent MarketDataManager around existing shared
    transports; route production chart history, real-time and repair inputs
    through it; preserve private bounded window commits and recovery contracts.
-3. **Pending:** unify consumer demand ownership with watchlist K-line warming;
+3. **Implemented; integration acceptance pending:** unify consumer demand ownership with watchlist K-line warming;
    keep quote/indicator protocols and business ownership explicit. Migrate
    duplicate candle storage/acceptance rather than adding another writer.
 4. **Pending:** chart switch orchestration, cache-first range acquisition and
@@ -99,7 +99,36 @@ Development checkpoint (not UI/native acceptance):
   `6494410381`. No PR, performance improvement, complete consumer migration or
   actual UI/native acceptance is claimed at this checkpoint.
 
+Watchlist migration checkpoint:
+
+- The production watchlist hook now consumes the workspace `MarketDataService`.
+  Its old standalone candle store, raw WebSocket manager, preload writer and
+  warm-array resolver have been removed. Price quotes and persistent tiers keep
+  their separate business contract. Their candle demands share chart transport.
+- Discovered and reproduced a stale physical-stream bug: a callback retained
+  from a disconnected socket could still write the shared cache before the
+  downstream lease rejected it. Admission now fences each physical lease.
+  The failing reconnect regression passes; abandoned recovery reads are aborted.
+- ACK is waiting status. Per-interval rejection remains visible, and a historical
+  amendment cannot declare live freshness. Ordinary accepted ticks establish it.
+- Shared-cache diagnostics and conditional GC are registered by each mounted
+  workspace. Data access/mutation/recreation and newly acquired readers/windows
+  reject stale GC plans. Workspace keys prevent one mounted pool deleting another.
+  GC evicts idle entries; internal range-cache capacity owns bounded retention.
+- Old implementation-specific store/socket/preload/resolver tests were replaced
+  by manager, cache, consumer, initial-window and GC boundary regressions. Transport
+  parsing, canonicalization and retry tests remain with the shared transports.
+- 450 focused market-data/watchlist/GC regressions passed. Full `npm run check`
+  subsequently passed 4,493 frontend functional tests, the isolated performance
+  gate and 123 desktop tests, plus architecture, plugin boundary, i18n, both
+  TypeScript projects, ESLint and production build. Log:
+  `/tmp/issue-123-watchlist-check.log`. Existing SingleChartPanes cleanup warning
+  and large-chunk build warnings remain. These are development checks only.
+- Follow-up inspection found a migration coverage gap: the batch transport's
+  partial-ACK retry policy needs parity with its single-stream counterpart. This
+  is being addressed before actual watchlist/dual-chart acceptance.
+
 Preserve failure samples and distinguish controlled fixture proof from live
-exchange and packaged-native evidence. Watchlist storage/transport migration,
+exchange and packaged-native evidence. Watchlist integration acceptance,
 switch/hover orchestration, indicator dependency integration, full validation
 and performance/retention acceptance remain outstanding.

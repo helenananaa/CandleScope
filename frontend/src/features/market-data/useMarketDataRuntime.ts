@@ -8,7 +8,6 @@ import {
 } from "../../utils/intervals.js";
 import type { MutableRefObject } from "react";
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
-import { resolveInitialRows as resolveWatchlistInitialRows } from "../watchlist-full-cache/watchlistFullCacheResolver.js";
 import { useKlineStreamRuntime } from "./useKlineStreamRuntime.js";
 import type { KlineWebSocketStatus } from "./useKlineStreamRuntime.js";
 import {
@@ -56,6 +55,7 @@ import {
   type KlineSeriesIdentityInput,
 } from "./klineSeriesIdentity.js";
 import { useMarketDataWorkspaceResources } from "./marketDataWorkspaceContext.js";
+import { resolveSharedInitialRows } from "./manager/initialMarketRows.js";
 import {
   planRightWindowPage,
   rightWindowPageReachedLatest,
@@ -535,27 +535,11 @@ export function useMarketDataRuntime({
 
   const resolveInitialRows = useCallback(
     (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => {
-      const local = resolveWatchlistInitialRows({
-        symbol: sym,
-        interval: intv,
-        marketType: mt,
-        exchange: ex,
-        getMemoryRows: (cacheSymbol, cacheInterval) => getCache(cacheSymbol, cacheInterval, {
-          marketType: mt,
-          exchange: ex,
-        }),
-      });
-      // An owned window preserves its navigation. Shared facts seed only a
-      // missing window; they do not replace its independent history boundary.
-      if (local?.tier === "market-data-memory") return local;
-      const shared = workspaceResources?.dataManager.cache.read({
+      const memoryRows = getCache(sym, intv, { marketType: mt, exchange: ex });
+      return resolveSharedInitialRows({
         exchange: ex, marketType: mt, symbol: sym, interval: intv,
         ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
-      }, { limit: planInitialViewportCountBack(intv, nativeIntervalValues) });
-      if (!shared?.rows.length || (local && local.rows.length > shared.rows.length
-        && Number(local.rows.at(-1)?.time) >= Number(shared.rows.at(-1)?.time))) return local;
-      return { rows: [...shared.rows], tier: "shared-market" as const, cacheState: "provisional",
-        source: "shared-market-cache", needsRepair: true };
+      }, memoryRows, workspaceResources?.dataManager.cache, planInitialViewportCountBack(intv, nativeIntervalValues));
     },
     [exchange, getCache, marketType, nativeIntervalValues, seriesIdentity, workspaceResources],
   );
@@ -1046,6 +1030,7 @@ export function useMarketDataRuntime({
   }, [backgroundPrefetchPriority]);
 
   useChartBackgroundPrefetch({
+    data: workspaceResources?.dataManager ?? null,
     symbol,
     exchange,
     marketType,

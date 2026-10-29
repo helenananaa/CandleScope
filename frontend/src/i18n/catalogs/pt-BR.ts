@@ -3624,6 +3624,7 @@ export const ptBR = {
   "chart.fixedBrick": "Tijolo fixo {size}",
 
   "settings.diag.chartCache": "Cache de candles do gráfico principal",
+  "settings.diag.sharedMarketCache": "Cache compartilhado de dados de mercado",
   "settings.diag.watchlistFullCache": "Cache completo em segundo plano da lista de observação",
   "settings.diag.indicatorCache": "Cache de resultado do indicador",
 

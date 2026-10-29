@@ -3122,6 +3122,7 @@ export const th = {
   "chart.lineBreakDetail": "เบรก {count} เส้น",
   "chart.fixedBrick": "อิฐคงที่ {size}",
   "settings.diag.chartCache": "แคชแท่งเทียนกราฟหลัก",
+  "settings.diag.sharedMarketCache": "แคชข้อมูลตลาดที่ใช้ร่วมกัน",
   "settings.diag.watchlistFullCache": "แคชพื้นหลังรายการเฝ้าดูเต็ม",
   "settings.diag.indicatorCache": "แคชผลอินดิเคเตอร์",
   "workbench.kicker": "ตรวจสินค้าคงคลังและดาวน์โหลดประวัติ",

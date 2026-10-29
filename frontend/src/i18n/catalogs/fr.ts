@@ -3123,6 +3123,7 @@ export const fr = {
   "chart.lineBreakDetail": "cassure {count} lignes",
   "chart.fixedBrick": "Brique fixe {size}",
   "settings.diag.chartCache": "Cache de chandeliers du graphique principal",
+  "settings.diag.sharedMarketCache": "Cache partagé des données de marché",
   "settings.diag.watchlistFullCache": "Cache d’arrière-plan Complet de la liste de suivi",
   "settings.diag.indicatorCache": "Cache des résultats d’indicateurs",
   "workbench.kicker": "Inspection des données et téléchargement d’historique",

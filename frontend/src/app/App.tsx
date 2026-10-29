@@ -39,6 +39,7 @@ import type { IndicatorDefinition } from "../features/indicators/indicatorTypes.
 import { useFrontendAutoGcRuntime } from "../features/cache-gc/useFrontendAutoGcRuntime.js";
 import { useWatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import { useWatchlistFullCacheRuntime } from "../features/watchlist-full-cache/useWatchlistFullCacheRuntime.js";
+import { useMarketDataWorkspaceResources } from "../features/market-data/marketDataWorkspaceContext.js";
 import { useReplayEntryCapability } from "../features/replay/useReplayEntryCapability.js";
 import { useDrawingToolSelectionState } from "../features/drawings/drawingToolState.js";
 import { buildLiveReplayLaunchContext } from "../features/replay-launcher/replayLaunchContext.js";
@@ -472,7 +473,9 @@ function LiveWorkspaceApp() {
 
   const activeSession = currentActiveEnvironment?.value.session ?? workspace.view.activeCell.session;
   const activeSubscriptionContext = currentActiveEnvironment?.value.subscriptionContext;
+  const marketWorkspace = useMarketDataWorkspaceResources();
   useWatchlistFullCacheRuntime({
+    data: marketWorkspace?.dataManager ?? null,
     enabled: currentActiveEnvironment?.value.marketDataReady === true,
     foregroundPreloadGate,
     watchlists: watchlist.view.watchlists,

@@ -12,6 +12,7 @@ const ALLOWED_NON_SOURCE_EXTENSIONS = new Set([".css", ".md", ".svg"]);
 
 const RULES = {
   admissionNoDisplayScheduler: "admission-no-display-scheduler",
+  watchlistCandlesViaManager: "watchlist-candles-via-manager",
   liveWindowWriterBoundary: "live-window-writer-boundary",
   componentNoServiceImport: "component-no-service-import",
   componentNoLocalStorage: "component-no-local-storage",
@@ -346,6 +347,13 @@ function checkImports(absPath, filePath, content, projectDirectory) {
   for (const { specifier, line, typeOnly } of importSpecifiers(content)) {
     const target = resolveImportSpecifier(absPath, specifier, projectDirectory);
     const normalizedTarget = normalizeModulePath(target);
+    if (!isTestSourcePath(filePath) && filePath.startsWith("src/features/watchlist-full-cache/") && !typeOnly
+      && (normalizedTarget.startsWith("src/services/") || normalizedTarget.startsWith("src/features/market-data/feed/")
+        && normalizedTarget !== "src/features/market-data/feed/backfillRecoveryQueue"
+        || normalizedTarget.startsWith("src/features/market-data/manager/"))) {
+      addViolation({ rule: RULES.watchlistCandlesViaManager, filePath, line, target: normalizedTarget,
+        message: "watchlist candle demands must use the injected market-data service, not own raw transport or storage" });
+    }
     if (!isTestSourcePath(filePath)
       && new Set([
         "src/features/market-data/useKlineStreamRuntime.ts",
@@ -985,6 +993,10 @@ export function runArchitectureCheck({
     }
     const content = sourceModules.get(normalizeModulePath(filePath))?.content
       ?? fs.readFileSync(absPath, "utf8");
+    if (!isTestSourcePath(filePath) && filePath.startsWith("src/features/watchlist-full-cache/") && /new\s+WebSocket\s*\(/.test(content)) {
+      addViolation({ rule: RULES.watchlistCandlesViaManager, filePath, line: 1,
+        message: "watchlist candle demands must use the shared stream lease" });
+    }
     checkImports(absPath, filePath, content, projectDirectory);
     checkLocalStorage(filePath, content);
     checkDrawingInteractionLocalStorageWrites(filePath, content);

@@ -3122,6 +3122,7 @@ export const zhHK = {
   "chart.lineBreakDetail": "{count} 線突破",
   "chart.fixedBrick": "固定磚高 {size}",
   "settings.diag.chartCache": "主圖 K 線快取",
+  "settings.diag.sharedMarketCache": "共享行情快取",
   "settings.diag.watchlistFullCache": "自選 Full 後台快取",
   "settings.diag.indicatorCache": "指標結果快取",
   "workbench.kicker": "庫存檢查與歷史下載",

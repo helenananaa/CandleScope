@@ -28,6 +28,10 @@ export interface MarketReadToken { readonly key: string; release(): void }
 interface Mutation { row: KlineBar; version: number; authoritative: boolean }
 interface Proof { from: number; to: number }
 interface Entry {
+  generation: number;
+  metaRevision: number;
+  lastAccessMs: number;
+  lastUpdatedMs: number;
   key: string;
   series: MarketSeries;
   rows: Map<number, KlineBar>;
@@ -87,6 +91,8 @@ export class SharedMarketCache {
   private readonly maxBarsPerSeries: number;
   private bars = 0;
   private revision = 0;
+  private metadataRevision = 0;
+  private generation = 0;
   private publishing = false;
   private listenerErrors = 0;
   private readonly pendingRealtime: Array<() => void> = [];
@@ -196,6 +202,7 @@ export class SharedMarketCache {
   retain(series: MarketSeries, range: MarketRange): { release(): void } {
     const entry = this.entry(series), id = Symbol(entry.key);
     entry.leases.set(id, { ...range });
+    this.touch(entry);
     return { release: () => { entry.leases.delete(id); } };
   }
 
@@ -204,6 +211,8 @@ export class SharedMarketCache {
     let subscribers = this.listeners.get(key);
     if (!subscribers) { subscribers = new Set(); this.listeners.set(key, subscribers); }
     subscribers.add(listener);
+    const entry = this.entries.get(key);
+    if (entry) this.touch(entry);
     return () => {
       subscribers.delete(listener);
       if (!subscribers.size) this.listeners.delete(key);
@@ -221,6 +230,7 @@ export class SharedMarketCache {
         || entry.series.marketType.toLowerCase() !== instrument.marketType.toLowerCase()
         || entry.series.symbol.toUpperCase() !== instrument.symbol.toUpperCase()) continue;
       entry.proofs = [];
+      entry.metaRevision = ++this.metadataRevision;
       entry.commitRevision = ++this.revision;
     }
   }
@@ -238,6 +248,23 @@ export class SharedMarketCache {
       retainedRanges: Array.from(this.entries.values()).reduce((sum, entry) => sum + entry.leases.size, 0) };
   }
 
+  /** Metadata only: inspection must not refresh LRU or invalidate a GC plan. */
+  diagnosticEntries() {
+    return [...this.entries.values()].map(entry => ({ key: entry.key, series: entry.series,
+      generation: entry.generation, metaRevision: entry.metaRevision, bars: entry.rows.size,
+      lastAccessMs: entry.lastAccessMs, lastUpdatedMs: entry.lastUpdatedMs,
+      protected: entry.reads.size > 0 || entry.leases.size > 0 || Boolean(this.listeners.get(entry.key)?.size),
+    }));
+  }
+
+  evictIfUnchanged(key: string, generation: number, metaRevision: number, bars: number): boolean {
+    const entry = this.entries.get(key);
+    if (!entry || entry.generation !== generation || entry.metaRevision !== metaRevision || entry.rows.size !== bars
+      || entry.reads.size || entry.leases.size || this.listeners.get(key)?.size) return false;
+    this.remove(entry);
+    return true;
+  }
+
   private entry(series: MarketSeries): Entry {
     const key = String(buildSeriesWindowKey(series));
     let entry = this.entries.get(key);
@@ -247,7 +274,8 @@ export class SharedMarketCache {
         if (!victim) throw new Error("Market cache series capacity is in use");
         this.remove(victim);
       }
-      entry = { key, series: { ...series }, rows: new Map(), times: [], version: 0, commitRevision: 0, realtimeVersion: 0,
+      entry = { key, series: { ...series }, generation: ++this.generation, metaRevision: 0, lastAccessMs: 0, lastUpdatedMs: 0,
+        rows: new Map(), times: [], version: 0, commitRevision: 0, realtimeVersion: 0,
         mutations: new Map(), reads: new Set(), leases: new Map(), proofs: [] };
       this.entries.set(key, entry);
     }
@@ -255,7 +283,11 @@ export class SharedMarketCache {
     return entry;
   }
 
-  private touch(entry: Entry): void { this.entries.delete(entry.key); this.entries.set(entry.key, entry); }
+  private touch(entry: Entry): void {
+    entry.metaRevision = ++this.metadataRevision;
+    entry.lastAccessMs = Date.now();
+    this.entries.delete(entry.key); this.entries.set(entry.key, entry);
+  }
 
   private recordMutation(entry: Entry, row: KlineBar, authoritative: boolean): void {
     entry.realtimeVersion += 1;
@@ -302,6 +334,8 @@ export class SharedMarketCache {
   }
 
   private finish(entry: Entry, changed: KlineBar[], source: MarketCacheChange["source"], eventType?: string): void {
+    entry.metaRevision = ++this.metadataRevision;
+    entry.lastUpdatedMs = Date.now();
     if (changed.length) entry.version = ++this.revision;
     entry.commitRevision = ++this.revision;
     this.trim(entry);

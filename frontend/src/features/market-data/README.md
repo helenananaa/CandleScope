@@ -37,13 +37,13 @@ is `loading`; the first warm-cache or REST result swaps the active store, while 
 slow empty load may clear after the configured timeout.
 
 The app composition root owns one `ForegroundPreloadGate` and shares it with
-the active chart and the watchlist full-cache preloader. Physical
+the charts and the watchlist demand consumer. Physical
 `SeriesDataFeed` history/before/range/latest requests are foreground by default;
 speculative callers must opt in with `priority: "preload"` and hold a preload
 lease. Foreground requests and longer-lived chart busy owners synchronously
 abort speculative work, then require a complete quiet dwell before one globally
-serialized preload may resume. The watchlist full-cache transport remains the
-only direct K-line REST exception, and it participates in the same shared gate.
+serialized preload may resume. Watchlist candle reads use the injected
+MarketDataManager service and participate in the same shared gate.
 
 Cold activation is split into two contracts. The visible `viewport` request
 asks for at most 500 bars (or the smaller derived-interval source budget) and
@@ -64,9 +64,10 @@ active session is complete or changes.
   error, and visible-data state for the active session.
 - May use internal chart data and stream helpers from this feature directory.
 - May call backend K-line services through `feed/SeriesDataFeed`.
-- May read `features/watchlist-full-cache` through its resolver during initial
-  symbol/interval load, before falling back to the market-data memory cache or
-  backend queries.
+- `MarketDataManager` owns shared K-line transport leases and immutable range
+  cache admission. Charts and watchlist warming consume its service port.
+- `manager/initialMarketRows` seeds a missing chart with bounded provisional
+  shared rows. An existing chart window keeps its own navigation boundary.
 - May publish indicator range request events when `prepend` or `mid-merge`
   expands the active window; indicators own the actual range request side
   effects.
@@ -80,8 +81,8 @@ active session is complete or changes.
 - Do not call K-line REST services directly outside `feed/`.
 - Do not own drawing, export, watchlist, settings, or alert UI state.
 - Do not expose raw Lightweight Charts objects in the public contract.
-- Do not mutate watchlist full-cache rows; market-data may consume a resolved
-  warm array and then continue its own chart reconciliation.
+- Do not introduce feature-owned candle arrays or bypass shared admission for
+  watchlist/hover warming. The watchlist owns demand policy, not candle storage.
 
 ## Live window ownership (issue #123 P1)
 

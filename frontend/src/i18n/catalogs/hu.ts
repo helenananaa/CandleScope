@@ -3122,6 +3122,7 @@ export const hu = {
   "chart.lineBreakDetail": "{count} vonalas törés",
   "chart.fixedBrick": "Rögzített tégla {size}",
   "settings.diag.chartCache": "Főgrafikon gyertyagyorsítótára",
+  "settings.diag.sharedMarketCache": "Megosztott piaciadat-gyorsítótár",
   "settings.diag.watchlistFullCache": "Figyelőlista teljes háttér-gyorsítótára",
   "settings.diag.indicatorCache": "Indikátoreredmény-gyorsítótár",
   "workbench.kicker": "Leltárvizsgálat és előzményletöltések",

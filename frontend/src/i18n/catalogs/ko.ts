@@ -3573,6 +3573,7 @@ export const ko = {
   "chart.lineBreakDetail": "{count}선 돌파",
   "chart.fixedBrick": "고정 벽돌 {size}",
   "settings.diag.chartCache": "메인 차트 캔들 캐시",
+  "settings.diag.sharedMarketCache": "공유 시장 데이터 캐시",
   "settings.diag.watchlistFullCache": "관심종목 Full 백그라운드 캐시",
   "settings.diag.indicatorCache": "지표 결과 캐시",
   "workbench.kicker": "저장 데이터 확인 및 기록 다운로드",

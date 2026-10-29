@@ -3422,6 +3422,7 @@ export const ja = {
   "chart.lineBreakDetail": "{count} 本ブレイク",
   "chart.fixedBrick": "固定レンガ高 {size}",
   "settings.diag.chartCache": "メインチャートのローソク足キャッシュ",
+  "settings.diag.sharedMarketCache": "共有マーケットデータキャッシュ",
   "settings.diag.watchlistFullCache": "ウォッチリスト Full バックグラウンドキャッシュ",
   "settings.diag.indicatorCache": "インジケーター結果キャッシュ",
   "workbench.kicker": "保存データの確認と履歴ダウンロード",

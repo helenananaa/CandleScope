@@ -5,6 +5,9 @@ import type { MarketSeries } from "../marketDataTypes.js";
 import { SharedKlineRequestCoordinator } from "../feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "../feed/sharedKlineStreamCoordinator.js";
 import { SharedMarketCache, type MarketCacheOptions, type MarketReadToken } from "./sharedMarketCache.js";
+import type { MarketRange } from "./sharedMarketCache.js";
+import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
+import type { MarketDataService } from "../marketDataService.js";
 
 interface StreamTransport {
   subscribe: KlineStreamFactory;
@@ -27,7 +30,7 @@ function aborted(): DOMException { return new DOMException("The operation was ab
 /** Frontend workspace data boundary. Physical responses are admitted once before
  * fan-out. Chart/watchlist consumers own independent request/stream leases;
  * cache facts contain no viewport or chart-selection state. */
-export class MarketDataManager implements KlineApi {
+export class MarketDataManager implements MarketDataService {
   readonly ownsRequestLeases = true;
   readonly cache: SharedMarketCache;
   readonly requestCoordinator: SharedKlineRequestCoordinator;
@@ -69,24 +72,44 @@ export class MarketDataManager implements KlineApi {
     }
     this.requestCoordinator = new SharedKlineRequestCoordinator(admittedApi, options.batchHistory ?? true);
     this.sharedStreams = new SharedKlineStreamCoordinator(api, {
-      createPhysicalStream: (series, streamOptions) => this.transport.subscribe(series, {
+      createPhysicalStream: (series, streamOptions) => {
+        // Fence the physical lease before admission, not only downstream fan-out.
+        // A closed socket may still have a queued message after a reconnect.
+        let active = true;
+        const current = () => active && !this.closed;
+        const controller = this.transport.subscribe(series, {
         ...streamOptions,
+        onOpen: controller => { if (current()) streamOptions.onOpen?.(controller); },
+        onStreamStatus: (event, controller) => { if (current()) streamOptions.onStreamStatus?.(event, controller); },
+        onControlMessage: (event, controller) => { if (current()) streamOptions.onControlMessage?.(event, controller); },
+        onBackfillCompleted: (event, controller) => current() && (streamOptions.onBackfillCompleted?.(event, controller) ?? false),
+        onParseError: (error, event, controller) => { if (current()) streamOptions.onParseError?.(error, event, controller); },
         onKline: (event, controller) => {
-          if (this.closed) return;
+          if (!current()) return;
           const accepted = this.cache.admitRealtime({ ...series, interval: event.interval }, event.tick,
             typeof event.message.event_type === "string" ? event.message.event_type : undefined);
           if (!accepted.accepted || !accepted.row) { this.rejectedRealtime += 1; return; }
           streamOptions.onKline?.({ ...event, tick: accepted.row, message: { ...event.message, data: accepted.row } }, controller);
         },
         onError: (event, controller) => {
+          if (!current()) return;
           this.cache.markDisconnected(series);
           streamOptions.onError?.(event, controller);
         },
         onClose: (event, controller) => {
+          if (!current()) return;
+          active = false;
           this.cache.markDisconnected(series);
           streamOptions.onClose?.(event, controller);
         },
-      }),
+        });
+        return {
+          readyState: () => controller.readyState(), isOpen: () => current() && controller.isOpen(),
+          send: payload => current() && controller.send(payload), sendPing: () => current() && controller.sendPing(),
+          updateIntervals: intervals => { if (current()) controller.updateIntervals(intervals); },
+          close: () => { active = false; controller.close(); },
+        };
+      },
     });
   }
 
@@ -99,6 +122,20 @@ export class MarketDataManager implements KlineApi {
   readonly fetchKlinesBefore: KlineApi["fetchKlinesBefore"] = (...args) => this.requestCoordinator.fetchKlinesBefore(...args);
   readonly fetchLatestKlines: KlineApi["fetchLatestKlines"] = (...args) => this.requestCoordinator.fetchLatestKlines(...args);
   readonly getMultiStreamUrl: KlineApi["getMultiStreamUrl"] = (...args) => this.api.getMultiStreamUrl(...args);
+
+  read(series: MarketSeries, range?: MarketRange) { return this.cache.read(series, range); }
+
+  async recover(series: MarketSeries, options: { from?: number; to?: number; limit?: number; signal?: AbortSignal } = {}): Promise<KlineFetchResult> {
+    // Reuse range pagination and endpoint-proof handling. This detached reader
+    // has no chart commit adapter and cannot acquire a window's write rights.
+    const feed = new SeriesDataFeed({ api: this, getActiveSeries: () => series });
+    if (options.from !== undefined && options.to !== undefined) {
+      return feed.getRange(series, { start: options.from, end: options.to, commit: "none", repair: "none",
+        strict: false, maxPages: 8, source: "manager-recovery", ...(options.signal ? { signal: options.signal } : {}) });
+    }
+    return feed.getLatest(series, { limit: options.limit ?? 500, commit: "none", repair: "wait", waitMs: 1_500,
+      source: "manager-recovery", ...(options.signal ? { signal: options.signal } : {}) });
+  }
 
   readonly fetchKlinesRange: KlineApi["fetchKlinesRange"] = async (...args) => {
     const [symbol, interval, start, end, marketType, exchange, options] = args;

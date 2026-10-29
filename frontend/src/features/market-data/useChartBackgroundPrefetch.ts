@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { symbolKey } from "../../utils/symbolKey.js";
-import { getFullCacheEntry } from "../watchlist-full-cache/watchlistFullCacheStore.js";
-import type { FullCacheStatus } from "../watchlist-full-cache/watchlistFullCacheTypes.js";
+import type { MarketDataService } from "./marketDataService.js";
 import type { UseChartBackgroundPrefetchOptions } from "./marketDataTypes.js";
 import {
   canonicalizeIntervalValue,
@@ -38,7 +37,7 @@ export class ChartBackgroundPrefetchPriorityGate extends ForegroundPreloadGate {
 export interface BackgroundPrefetchSkipInput {
   activeInterval: string;
   fullCacheRows?: number;
-  fullCacheStatus?: FullCacheStatus | null;
+  fullCacheStatus?: "idle" | "loading" | "warm" | "stale" | "partial" | "live" | "error" | null;
   hasMemoryCache: boolean;
   inFlight: boolean;
   interval: string;
@@ -200,7 +199,9 @@ export function useChartBackgroundPrefetch({
   priorityGate,
   isForegroundBusy,
   schedulerOwner,
+  data,
 }: UseChartBackgroundPrefetchOptions & {
+  data?: MarketDataService | null;
   priorityGate?: ForegroundPreloadGate;
   isForegroundBusy?: () => boolean;
   schedulerOwner?: string;
@@ -254,11 +255,11 @@ export function useChartBackgroundPrefetch({
         if (cancelled) return;
         const canonicalInterval = canonicalizeIntervalValue(intv) || intv;
         const key = `${currentSymbolKey}\u0000${canonicalInterval}`;
-        const fullCacheEntry = getFullCacheEntry(currentSymbolKey, canonicalInterval);
+        const shared = data?.read({ symbol, exchange, marketType, interval: canonicalInterval }, { limit: PREFETCH_BAR_LIMIT });
         if (shouldSkipChartBackgroundPrefetch({
           activeInterval,
-          fullCacheRows: fullCacheEntry?.rows.length || 0,
-          fullCacheStatus: fullCacheEntry?.status || null,
+          fullCacheRows: shared?.rows.length || 0,
+          fullCacheStatus: shared?.complete ? "warm" : null,
           hasMemoryCache: hasCache(symbol, canonicalInterval, { marketType, exchange }),
           inFlight: inFlightRef.current.has(key),
           interval: canonicalInterval,
@@ -332,6 +333,7 @@ export function useChartBackgroundPrefetch({
       prefetchPriority.yieldToForeground();
     };
   }, [
+    data,
     activeInterval,
     enabled,
     exchange,

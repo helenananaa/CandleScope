@@ -3624,6 +3624,7 @@ export const zhCN = {
   "chart.fixedBrick": "固定砖高 {size}",
 
   "settings.diag.chartCache": "主图 K 线缓存",
+  "settings.diag.sharedMarketCache": "共享行情缓存",
   "settings.diag.watchlistFullCache": "自选 Full 后台缓存",
   "settings.diag.indicatorCache": "指标结果缓存",
 

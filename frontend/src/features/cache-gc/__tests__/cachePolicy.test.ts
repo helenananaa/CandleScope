@@ -17,7 +17,7 @@ function diagnostics(overrides: CacheDiagnostics = {}): CacheDiagnostics {
           { key: "binance-spot-ETHUSDT-1m", tier: "warm", bars: 2, estimatedBytes: 400 },
         ],
       },
-      watchlist: {
+      market: {
         entries: [
           { key: "binance:spot:SOLUSDT::1m", status: "stale", bars: 1, estimatedBytes: 200 },
         ],
@@ -140,7 +140,7 @@ test("frontend GC dry-run keeps hotter reusable entries longer", () => {
   const report = planFrontendGc(diagnostics({
     estimatedBytes: 2_000,
     owners: {
-      watchlist: {
+      market: {
         entries: [
           { key: "hot", status: "stale", bars: 3, estimatedBytes: 600, heatScore: 20 },
           { key: "cold", status: "stale", bars: 3, estimatedBytes: 600, heatScore: 0 },
@@ -170,7 +170,7 @@ test("frontend GC only selects actions that relieve the remaining pressure", () 
       chart: {
         entries: [{ key: "kline", tier: "warm", bars: 10, estimatedBytes: 1_000 }],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: {
         entries: [{ key: "indicator", tier: "cold", points: 100, estimatedBytes: 1_000 }],
       },
@@ -186,14 +186,14 @@ test("frontend GC only selects actions that relieve the remaining pressure", () 
   assert.equal(report.remainingPressure?.klineBars, 0);
 });
 
-test("frontend GC only range-trims a subscribed watchlist tail", () => {
+test("frontend GC does not infer safe range trimming for protected shared data", () => {
   const report = planFrontendGc({
     estimatedBytes: 160_000,
     indicatorPoints: 0,
     klineBars: 800,
     owners: {
       chart: { entries: [] },
-      watchlist: {
+      market: {
         entries: [{
           key: "binance:spot:BTCUSDT::1m",
           tier: "subscribed",
@@ -218,13 +218,9 @@ test("frontend GC only range-trims a subscribed watchlist tail", () => {
     nowMs: 1_000,
   });
 
-  const victim = mustBeDefined(report.victims[0]);
-  assert.equal(report.protectedCount, 0);
-  assert.equal(victim.action, "trim-range");
-  assert.equal(victim.tier, "subscribed");
-  assert.equal(victim.bars, 300);
-  assert.equal(victim.estimatedBytes, 60_000);
-  assert.equal(report.wouldFreeBars, 300);
+  assert.equal(report.protectedCount, 1);
+  assert.equal(report.victims.length, 0);
+  assert.equal(report.wouldFreeBars, 0);
 });
 
 test("frontend GC uses exact indicator range-trim relief", () => {
@@ -234,7 +230,7 @@ test("frontend GC uses exact indicator range-trim relief", () => {
     klineBars: 0,
     owners: {
       chart: { entries: [] },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: {
         entries: [{
           key: "trim-safe",
@@ -285,7 +281,7 @@ test("frontend GC uses the newest cache timestamp", () => {
           lastRealtimeMs: 999_800,
         }],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {
@@ -315,7 +311,7 @@ test("browser heap pressure triggers only with a real heap limit", () => {
     },
     owners: {
       chart: { entries: [] },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [{ key: "heap-victim", points: 10, estimatedBytes: 1_000 }] },
     },
   }, {
@@ -338,7 +334,7 @@ test("browser heap pressure triggers only with a real heap limit", () => {
     },
     owners: {
       chart: { entries: [] },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [{ key: "heap-victim", points: 10, estimatedBytes: 1_000 }] },
     },
   }, {

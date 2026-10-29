@@ -3122,6 +3122,7 @@ export const ro = {
   "chart.lineBreakDetail": "spargere {count} linii",
   "chart.fixedBrick": "Cărămidă fixă {size}",
   "settings.diag.chartCache": "Cache lumânări grafic principal",
+  "settings.diag.sharedMarketCache": "Cache partajat pentru datele de piață",
   "settings.diag.watchlistFullCache": "Cache de fundal Full al listei de urmărire",
   "settings.diag.indicatorCache": "Cache rezultate indicatori",
   "workbench.kicker": "Inspectarea inventarului și descărcări de istoric",
