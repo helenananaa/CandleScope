@@ -15,7 +15,7 @@ import {
   STANDARD_STEPS,
   initialCursor,
   nextEventCursor,
-  notesBefore,
+  journalAtCursor,
   positionAt,
   previousEventCursor,
   replayEvents,
@@ -197,16 +197,17 @@ export default function QuickReplayOverlay({
     note: tokenColor("--accent-purple", "violet"),
   }), [style.downColor, style.upColor]);
   const entries = useMemo(() => detail?.entries ?? [], [detail]);
+  const { notes, reviewNotes } = useMemo(() => journalAtCursor(entries, cursor), [cursor, entries]);
   useEffect(() => {
     markerSource.update({
       legs: trade.legs,
-      notes: entries,
+      notes,
       cursorSec: cursor,
       intervalSec,
       lastVisibleSec: lastVisible,
       labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker") },
     });
-  }, [cursor, entries, intervalSec, lastVisible, markerSource, trade.legs]);
+  }, [cursor, notes, intervalSec, lastVisible, markerSource, trade.legs]);
 
   const position = useMemo(() => {
     const atCursor = positionAt(trade, shown, cursor, intervalSec);
@@ -216,10 +217,9 @@ export default function QuickReplayOverlay({
     const fine = positionAt(trade, fineClosed, cursor, stepSec);
     return { ...atCursor, mfe: fine.mfe, mae: fine.mae };
   }, [cursor, fineBars, intervalSec, shown, stepSec, trade]);
-  const plan = detail?.plan ?? null;
+  const plan = detail?.plan && detail.plan.lockedAtMs < cursor * 1000 ? detail.plan : null;
   const risk = plan?.riskUsdt ? Number(plan.riskUsdt) : null;
   const toR = (value: number | null) => (value === null || !risk ? null : (value / risk).toFixed(2));
-  const notes = useMemo(() => notesBefore(entries, cursor), [cursor, entries]);
   const events = useMemo(() => replayEvents(trade, entries), [entries, trade]);
   const exitReached = trade.closedAtMs !== null && cursor * 1000 > trade.closedAtMs;
 
@@ -391,10 +391,20 @@ export default function QuickReplayOverlay({
             {notes.map((entry) => (
               <li key={entry.id}>
                 <time>{formatDateTime(entry.marketTimeMs ?? entry.createdAtMs)}</time>
-                <p>{entry.kind === "quick" ? entry.body : (entry.fields.entryBasis ?? t("trading.journal.plan"))}</p>
+                <p>{entry.historyUnavailable ? t("trading.replay.noteHistoryUnavailable")
+                  : entry.kind === "quick" ? entry.body : (entry.fields.entryBasis ?? t("trading.journal.plan"))}</p>
               </li>
             ))}
           </ul>
+          {reviewNotes.length > 0 && <>
+            <h3>{t("trading.journal.reviewNote")}</h3>
+            <ul className="trading-quick-notes">
+              {reviewNotes.map((entry) => <li key={entry.id}>
+                <time>{t("trading.replay.reviewWrittenAt", { time: formatDateTime(entry.updatedAtMs) })}</time>
+                <p>{entry.kind === "quick" ? entry.body : entry.fields.entryBasis}</p>
+              </li>)}
+            </ul>
+          </>}
           <input
             className="trading-quick-input"
             value={captureComment}

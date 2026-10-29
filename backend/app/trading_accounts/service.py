@@ -17,7 +17,6 @@ from .journal import (
     plan_direction,
     plan_timing,
     risk_fields,
-    should_coalesce,
     trade_metrics,
 )
 from .models import (
@@ -571,7 +570,7 @@ class TradingAccountService:
             "plan": plan,
             "metrics": trade_metrics(trade, plan),
             "entries": [
-                self._entry_view(entry, revisions.get(entry["id"], []), trade)
+                self._entry_view(entry, revisions.get(entry["id"], []), trade, include_history=True)
                 for entry in sorted(entries, key=lambda item: item["created_at_ms"])
             ],
             "linkSuggestions": suggestions,
@@ -1177,6 +1176,8 @@ class TradingAccountService:
         entry: dict[str, Any],
         revisions: list[dict[str, Any]],
         trade: Trade | None,
+        *,
+        include_history: bool = False,
     ) -> dict[str, Any]:
         latest = revisions[-1] if revisions else {"fields": {}, "body": "", "saved_at_ms": entry["created_at_ms"]}
         created_phase = phase_at(int(entry["created_at_ms"]), trade)
@@ -1198,6 +1199,7 @@ class TradingAccountService:
             "fields": latest["fields"],
             "body": latest["body"],
             "revisionCount": len(revisions),
+            **({"revisions": [self._revision_view(rev) for rev in revisions]} if include_history else {}),
             "stage": created_phase,
             "reviewNote": entry["market_time_ms"] is not None,
             "fieldTiming": field_timing(revisions, trade),
@@ -1242,6 +1244,10 @@ class TradingAccountService:
         }
 
     def create_entry(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        with self.store.locked():
+            return self._create_entry(account_id, payload)
+
+    def _create_entry(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._account(account_id)
         kind = str(payload.get("kind") or "note")
         if kind not in ENTRY_KINDS:
@@ -1264,7 +1270,16 @@ class TradingAccountService:
         template_version = payload.get("templateVersion")
         template_version = int(template_version) if isinstance(template_version, int) else None
         now = self.clock()
-        entry_id = self.new_id("je")
+        entry_id = payload.get("clientEntryId") or self.new_id("je")
+        if not valid_id(entry_id) or not entry_id.startswith("je_") or entry_id.endswith("~r"):
+            raise invalid("Invalid clientEntryId")
+        previous = self.store.one("SELECT * FROM journal_entries WHERE id = ?", (entry_id,))
+        if previous is not None:
+            if (previous["deleted"] or previous["account_id"] != account_id
+                    or _instrument_of(previous) != instrument or previous["kind"] != kind
+                    or previous["trade_id"] != trade_id or previous["market_time_ms"] != market_time_ms):
+                raise conflict("Journal creation identifier is already in use")
+            return self.entry_detail(entry_id)
         with self.store.transaction() as conn:
             self.store.insert(conn, "journal_entries", {
                 "id": entry_id,
@@ -1285,6 +1300,7 @@ class TradingAccountService:
             self.store.insert(conn, "journal_revisions", {
                 "entry_id": entry_id,
                 "revision": 1,
+                "history_complete": 1,
                 "saved_at_ms": now,
                 "fields_json": json.dumps(fields, sort_keys=True),
                 "body": body,
@@ -1292,39 +1308,39 @@ class TradingAccountService:
         return self.entry_detail(entry_id)
 
     def save_entry(self, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        with self.store.locked():
+            return self._save_entry(entry_id, payload)
+
+    def _save_entry(self, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         entry = self._entry(entry_id)
         revisions = self.store.revisions(entry_id)
         latest = revisions[-1] if revisions else None
         fields = normalize_fields(payload["fields"]) if "fields" in payload else (latest or {}).get("fields", {})
         body = bounded_text(payload.get("body"), "body") if "body" in payload else (latest or {}).get("body", "")
         now = self.clock()
-        trade = self._trade_or_none(entry["account_id"], entry["trade_id"])
-        fill_times = [] if trade is not None else [
-            int(fill["ts_ms"])
-            for fill in self.store.fills(entry["account_id"])
-            if _instrument_of(fill) == _instrument_of(entry)
-        ]
+        expected = payload.get("expectedRevision")
+        if expected is not None and (type(expected) is not int or expected < 1):
+            raise invalid("expectedRevision must be a positive integer")
+        changed = latest is None or latest["fields"] != fields or latest["body"] != body
+        tags_changed = "tags" in payload and normalize_tags(payload["tags"]) != entry["tags"]
+        if expected is not None and expected != (latest["revision"] if latest else 0):
+            if changed or tags_changed:
+                raise conflict("This note changed in another editor. Your local draft has been kept.",
+                               "TRADING_JOURNAL_CONFLICT")
+            return self.entry_detail(entry_id)  # retry after a lost successful response
         values: dict[str, Any] = {"updated_at_ms": now}
         if "tags" in payload:
             values["tags_json"] = json.dumps(normalize_tags(payload.get("tags")))
-        changed = latest is None or latest["fields"] != fields or latest["body"] != body
         with self.store.transaction() as conn:
-            if changed:
-                if should_coalesce(latest, now, trade, fill_times):
-                    assert latest is not None
-                    self.store.update(conn, "journal_revisions", {
-                        "saved_at_ms": now,
-                        "fields_json": json.dumps(fields, sort_keys=True),
-                        "body": body,
-                    }, "entry_id = ? AND revision = ?", (entry_id, latest["revision"]))
-                else:
-                    self.store.insert(conn, "journal_revisions", {
-                        "entry_id": entry_id,
-                        "revision": (latest["revision"] + 1) if latest else 1,
-                        "saved_at_ms": now,
-                        "fields_json": json.dumps(fields, sort_keys=True),
-                        "body": body,
-                    })
+            if changed or (latest and not latest["history_complete"]):
+                self.store.insert(conn, "journal_revisions", {
+                    "entry_id": entry_id,
+                    "revision": (latest["revision"] + 1) if latest else 1,
+                    "saved_at_ms": max(now, int(latest["saved_at_ms"])) if latest else now,
+                    "fields_json": json.dumps(fields, sort_keys=True),
+                    "body": body,
+                    "history_complete": 1,
+                })
             self.store.update(conn, "journal_entries", values, "id = ?", (entry_id,))
         return self.entry_detail(entry_id)
 
@@ -1354,14 +1370,17 @@ class TradingAccountService:
         self._entry(entry_id)
         return {
             "revisions": [
-                {
-                    "revision": rev["revision"],
-                    "savedAtMs": rev["saved_at_ms"],
-                    "fields": rev["fields"],
-                    "body": rev["body"],
-                }
+                self._revision_view(rev)
                 for rev in self.store.revisions(entry_id)
             ]
+        }
+
+    @staticmethod
+    def _revision_view(rev: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "revision": rev["revision"], "savedAtMs": rev["saved_at_ms"],
+            "fields": rev["fields"], "body": rev["body"],
+            "historyComplete": bool(rev["history_complete"]),
         }
 
     # ── snapshots ───────────────────────────────────────────────

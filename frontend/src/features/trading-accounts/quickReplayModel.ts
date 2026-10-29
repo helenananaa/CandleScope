@@ -141,6 +141,13 @@ export function replayEvents(trade: Trade, entries: readonly JournalEntry[]): Re
   const events: ReplayEvent[] = trade.legs.map((leg) => ({ kind: "fill", timeMs: leg.tsMs, id: leg.fillId }));
   for (const entry of entries) {
     events.push({ kind: "note", timeMs: entry.marketTimeMs ?? entry.createdAtMs, id: entry.id });
+    if (entry.marketTimeMs === null) {
+      for (const revision of entry.revisions ?? []) {
+        if (revision.savedAtMs !== entry.createdAtMs) {
+          events.push({ kind: "note", timeMs: revision.savedAtMs, id: `${entry.id}:${revision.revision}` });
+        }
+      }
+    }
   }
   return events.sort((left, right) => left.timeMs - right.timeMs);
 }
@@ -177,6 +184,43 @@ export function notesBefore<T extends { createdAtMs: number; marketTimeMs: numbe
   cursorSec: number,
 ): T[] {
   return entries.filter((entry) => (entry.marketTimeMs ?? entry.createdAtMs) < cursorSec * 1000);
+}
+
+export interface ReplayJournalEntry extends JournalEntry {
+  historyUnavailable: boolean;
+}
+
+/** Original notes use save time; later review annotations stay in a separate list. */
+export function journalAtCursor(entries: readonly JournalEntry[], cursorSec: number): {
+  notes: ReplayJournalEntry[]; reviewNotes: JournalEntry[];
+} {
+  const cut = cursorSec * 1000;
+  const notes: ReplayJournalEntry[] = [];
+  const reviewNotes: JournalEntry[] = [];
+  for (const entry of entries) {
+    if (entry.marketTimeMs !== null) {
+      if (entry.marketTimeMs < cut) reviewNotes.push({ ...entry,
+        // Linking a note also updates entry metadata; it is not a text save.
+        updatedAtMs: entry.revisions?.at(-1)?.savedAtMs ?? entry.updatedAtMs,
+      });
+      continue;
+    }
+    if (entry.createdAtMs >= cut) continue;
+    const revision = entry.revisions?.filter((item) => item.savedAtMs < cut).at(-1);
+    const historyUnavailable = !revision?.historyComplete;
+    notes.push({ ...entry,
+      fields: historyUnavailable ? {} : revision.fields,
+      body: historyUnavailable ? "" : revision.body,
+      updatedAtMs: revision?.savedAtMs ?? entry.createdAtMs,
+      revisionCount: revision?.revision ?? 0,
+      // These latest-only metadata are not historical facts.
+      tags: [], fieldTiming: {}, revisions: [],
+      snapshots: entry.snapshots.filter((snapshot) => snapshot.createdAtMs < cut),
+      plan: entry.plan && entry.plan.lockedAtMs < cut ? entry.plan : null,
+      historyUnavailable,
+    });
+  }
+  return { notes, reviewNotes };
 }
 
 /** Load window: warm-up history before entry, a short tail after the exit. */
