@@ -1,3 +1,4 @@
+import type { StableSeriesSnapshot } from "../market-data/window/stableSeriesSnapshot.js";
 import {
   startTransition,
   useCallback,
@@ -68,6 +69,7 @@ export interface UseIndicatorComputeControllerOptions {
   datasetKey: string;
   exchange: string;
   computeBatch?: IndicatorComputeBatchExecutor;
+  inputSnapshot?: StableSeriesSnapshot;
   onComputePendingChange?(delta: 1 | -1): void;
   forceHostedSubscriptions(): void;
   historyLimit?: number;
@@ -151,6 +153,7 @@ export function useIndicatorComputeController({
   exchange,
   computeBatch = computeIndicatorBatch,
   onComputePendingChange,
+  inputSnapshot,
   forceHostedSubscriptions,
   historyLimit,
   interval,
@@ -194,6 +197,7 @@ export function useIndicatorComputeController({
     context: { datasetKey, exchange, interval, marketType, symbol },
     lifecycleKey: desiredLifecycleKey,
     builtinChartData,
+    inputSnapshot,
   });
 
   const computeAll = useCallback(async (force = false) => {
@@ -204,6 +208,10 @@ export function useIndicatorComputeController({
     const committedRuntime = committedRuntimeRef.current;
     const context = committedRuntime.context;
     const lifecycleKey = committedRuntime.lifecycleKey;
+    // React may not have committed the new lifecycle when a source changes.
+    // Fence directly against the captured owner/input before any publication.
+    const inputIsCurrent = () => committedRuntime.inputSnapshot?.isCurrent("forming-preview") ?? true;
+    if (!inputIsCurrent()) return;
 
     if (!currentChartData || currentChartData.length === 0) {
       recordPerfEvent("indicator.compute.skip", { reason: "no-chart-data" });
@@ -293,7 +301,7 @@ export function useIndicatorComputeController({
     const submittedJobKeys = new Set<string>();
     const publishedJobKeys = new Set<string>();
     const publishResults = (results: IndicatorComputeBatchItem[]) => {
-      if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
+      if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
       const acceptedJobKeyById = new Map<string, string>();
       const accepted = results.flatMap((result) => {
         if (publishedJobKeys.has(result.jobKey)) return [];
@@ -358,7 +366,7 @@ export function useIndicatorComputeController({
       jobCoordinator.complete(cachedJobKeys);
 
       const publishAcceptedResults = () => {
-        if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
+        if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
         outputDispatch({
           type: "compute-results",
           processedIds: processedResults.map((item) => item.id),
@@ -372,7 +380,7 @@ export function useIndicatorComputeController({
         });
 
         setActiveIndicators((prev) => {
-          if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) {
+          if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey) {
             return prev;
           }
           const updated = [...prev];
@@ -470,11 +478,11 @@ export function useIndicatorComputeController({
         stale: scheduled.stale,
       });
       if (scheduled.stale || scheduled.results.length === 0) return;
-      if (committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
+      if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return;
 
       publishResults(scheduled.results);
     } catch (error) {
-      if (committedRuntimeRef.current.lifecycleKey === lifecycleKey) {
+      if (inputIsCurrent() && committedRuntimeRef.current.lifecycleKey === lifecycleKey) {
         const message = error instanceof Error ? error.message : String(error);
         const failedJobKeysById = resolveSubmittedLocalJobKeysById({
           candleDownColor: candleDownColorRef.current,
@@ -500,6 +508,7 @@ export function useIndicatorComputeController({
           paramSchemas: {},
         });
         setActiveIndicators((previous) => {
+          if (!inputIsCurrent() || committedRuntimeRef.current.lifecycleKey !== lifecycleKey) return previous;
           let changed = false;
           const next = previous.map((indicator) => {
             const failedJobKey = failedJobKeysById.get(indicator.id);
@@ -556,11 +565,13 @@ export function useIndicatorComputeController({
       context: { datasetKey, exchange, interval, marketType, symbol },
       lifecycleKey: desiredLifecycleKey,
       builtinChartData,
+      inputSnapshot,
     };
     jobCoordinator.activate(desiredLifecycleKey);
   }, [
     datasetKey,
     builtinChartData,
+    inputSnapshot,
     desiredLifecycleKey,
     exchange,
     interval,

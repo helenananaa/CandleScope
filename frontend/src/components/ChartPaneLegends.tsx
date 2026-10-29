@@ -1,3 +1,4 @@
+import type { ChartDisplaySubscription } from "../features/market-data/chartDisplaySubscription.js";
 import { memo, useCallback, useMemo, useSyncExternalStore } from "react";
 import { t } from "../i18n/index.js";
 import { useLocale } from "../i18n/useLocale.js";
@@ -25,6 +26,7 @@ interface MainChartLegendProps {
   crosshairStore: PaneCrosshairStore;
   lines: readonly IndicatorLine[];
   seriesStore: SeriesWindowView | null;
+  displaySubscription?: ChartDisplaySubscription | null;
 }
 
 interface IndicatorPaneLabelsProps {
@@ -82,12 +84,12 @@ function formatLegendValue(item: ChartPaneLegendValue): string {
   return formatGenericIndicatorValue(item.value);
 }
 
-function useSeriesStoreVersion(seriesStore: SeriesWindowView | null): number {
+function useSeriesStoreVersion(seriesStore: SeriesWindowView | null, display?: ChartDisplaySubscription | null): number {
   const subscribe = useCallback((listener: () => void) => {
     if (!seriesStore) return () => undefined;
-    return seriesStore.subscribe(() => listener());
-  }, [seriesStore]);
-  const getSnapshot = useCallback(() => Number(seriesStore?.version ?? 0), [seriesStore]);
+    return (display ?? seriesStore).subscribe(() => listener());
+  }, [display, seriesStore]);
+  const getSnapshot = useCallback(() => display?.getSnapshot() ?? Number(seriesStore?.version ?? 0), [display, seriesStore]);
   return useSyncExternalStore(subscribe, getSnapshot, () => 0);
 }
 
@@ -117,9 +119,10 @@ export const MainChartLegend = memo(function MainChartLegend({
   crosshairStore,
   lines,
   seriesStore,
+  displaySubscription,
 }: MainChartLegendProps) {
   useLocale();
-  const storeVersion = useSeriesStoreVersion(seriesStore);
+  const storeVersion = useSeriesStoreVersion(seriesStore, displaySubscription);
   const crosshairTime = useSyncExternalStore(
     crosshairStore.subscribe,
     crosshairStore.getSnapshot,

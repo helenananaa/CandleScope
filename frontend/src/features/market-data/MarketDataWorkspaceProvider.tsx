@@ -114,8 +114,9 @@ export function MarketDataWorkspaceProvider({
         const common = {
           enabled: resources.brokerEnabled,
           klineBatchEnabled: batchStreamEnabled,
-          authoritativeCommits: (scheduler?.cells || []).reduce(
-            (sum, cell) => sum + Number(cell.committed?.["authoritative-final"] || 0),
+          authoritativeCommits: resources.windowRegistry.sharedSnapshotDiagnostics().authoritativeAdmissions,
+          displayCommits: (scheduler?.cells || []).reduce(
+            (sum, cell) => sum + Number(cell.committed?.["candle-display"] || 0),
             0,
           ),
           seriesStores: resources.windowRegistry.entries().length,
@@ -155,6 +156,7 @@ export function MarketDataWorkspaceProvider({
             disposed: scheduler.disposed,
             pendingAsync: scheduler.pendingAsync,
             pendingFrames: scheduler.pendingFrames,
+            runnableFrames: scheduler.runnableFrames,
             windowVisible: scheduler.windowVisible,
           } : null,
         };

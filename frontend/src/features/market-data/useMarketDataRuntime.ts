@@ -948,8 +948,6 @@ export function useMarketDataRuntime({
     updateRealtimePrice,
     handleBackfillCompleted,
     setWsStatus,
-    ...(schedulerCellId ? { schedulerCellId } : {}),
-    workScheduler: workspaceResources?.workScheduler || null,
   });
 
   const foregroundIndicatorRequestCount = indicatorRangeRequests.length;
