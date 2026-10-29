@@ -32,6 +32,13 @@ export async function checkIntervalAdmission() {
   secondSource.exchange = "seconds";
   secondSource.native_intervals = ["1s"];
   secondSource.channels[0]!.params.interval = ["1s"];
+  secondSource.native_bar_specs = secondSource.native_bar_specs.map(spec => ({
+    ...spec,
+    provider: "seconds",
+    venue: "seconds",
+    interval: "1s",
+    basis: { ...spec.basis, basis_id: "bar-basis/1:1s", interval: "1s" },
+  }));
   const requests: string[] = [];
   window.fetch = async (input) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
