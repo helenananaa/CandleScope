@@ -266,3 +266,24 @@ def test_stale_fairness_interest_cannot_block_foreground():
         permit.finish(status_code=200)
         assert scheduler.snapshot()["protected"] == 0
     asyncio.run(run())
+
+
+def test_aged_background_cohort_does_not_burst_ahead_of_foreground():
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager(), max_in_flight=1, max_priority_bypass=3)
+        quota = rule("shared", 100)
+        held = await scheduler.acquire([quota], request())
+        order = []
+        async def work(label, traffic):
+            permit = await scheduler.acquire([quota], request(), demand=PublicDemand(traffic))
+            order.append(label)
+            permit.finish(status_code=200)
+        tasks = [asyncio.create_task(work(f"bg{i}", TrafficClass.BACKGROUND)) for i in range(5)]
+        tasks += [asyncio.create_task(work(f"fg{i}", TrafficClass.INTERACTIVE)) for i in range(12)]
+        while scheduler.snapshot()["pending"] != len(tasks):
+            await asyncio.sleep(0)
+        held.finish(status_code=200)
+        await asyncio.wait_for(asyncio.gather(*tasks), 2)
+        assert [name[:2] for name in order[:12]] == ["fg", "fg", "fg", "bg"] * 3
+        assert len([name for name in order if name.startswith("bg")]) == 5
+    asyncio.run(run())

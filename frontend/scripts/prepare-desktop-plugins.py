@@ -143,7 +143,15 @@ def main():
                 stamp.write_text(json.dumps({"filename": wheel.name, "sha256": sha(wheel)}))
         engine_wheels[name] = wheel
         if args.qualification:
-            shutil.copytree(engine_cache / "tests", args.output / "engine-tests", dirs_exist_ok=True)
+            # Preserve the upstream python/tests -> ../../tests/fixtures layout.
+            suite = args.output / "engine-source"
+            shutil.copytree(engine_cache / "tests", suite / "python/tests", dirs_exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix="fixtures-", dir=args.cache) as temporary:
+                with tarfile.open(archive) as tar:
+                    prefix = f"{name}-{engine['commit']}/tests/fixtures/"
+                    tar.extractall(temporary, members=[m for m in tar.getmembers() if m.name.startswith(prefix)], filter="data")
+                shutil.copytree(Path(temporary) / f"{name}-{engine['commit']}" / "tests/fixtures",
+                                suite / "tests/fixtures", dirs_exist_ok=True)
 
     # Current SDK/bridge source is always built, so source edits cannot be
     # hidden by a same-version cached wheel from an earlier package.

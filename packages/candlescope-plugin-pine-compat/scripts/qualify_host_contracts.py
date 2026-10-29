@@ -25,7 +25,7 @@ def main():
     env = {**os.environ, "NATIVE_CALENDAR_TEST": "1", "NATIVE_TEST_PYTHON": sys.executable,
            "DATA_DIR": str(output / "data"), "CANDLE_DATA_DIR": str(output / "data"),
            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"}
-    cases = [output / "engine-tests" / name for name in (
+    cases = [output / "engine-source/python/tests" / name for name in (
         "test_host_bar_boundaries.py", "test_renko_event_requests.py", "test_realtime_session.py")]
     cases += [repo / "packages/candlescope-plugin-pine-compat/tests" / name for name in (
         "test_runtime.py", "test_native_sessions.py", "test_event_strategy.py")]
@@ -36,7 +36,7 @@ def main():
             raise FileNotFoundError(case)
     command = [sys.executable, "-m", "pytest", "-q", "-o", "pythonpath=", "-p", "pytest_asyncio.plugin",
                "-p", "anyio.pytest_plugin", "-p", "pytest_timeout", "--timeout=120",
-               f"--junitxml={output / 'host-contracts.xml'}", *map(str, cases)]
+               f"--junitxml={output / 'host-contracts.xml'}", f"--basetemp={output / 'pytest-tmp'}", *map(str, cases)]
     env["PYTHONPATH"] = str(repo / "backend")
     subprocess.run(command, cwd=repo / "backend", env=env, check=True)
     (output / "qualification-receipt.json").write_text(json.dumps({

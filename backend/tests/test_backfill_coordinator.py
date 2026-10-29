@@ -2147,6 +2147,37 @@ def test_background_dispatch_uses_at_most_one_slot_while_foreground_runs() -> No
     asyncio.run(_run())
 
 
+def test_sustained_foreground_gives_queued_background_a_bounded_dispatch_turn() -> None:
+    async def run():
+        entered, release = asyncio.Event(), asyncio.Event()
+        order = []
+        class Engine:
+            async def run(self, **kwargs):
+                order.append(kwargs["symbol"])
+                if kwargs["symbol"] == "HELD":
+                    entered.set()
+                    await release.wait()
+                return _RepairReport(status="completed")
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            base_delay_seconds=0, max_concurrency=1)
+        def submit(symbol, reason, priority):
+            return coordinator.request(RepairRequest(symbol=symbol, interval="1m", start_ms=0,
+                end_ms=0, reason=reason, priority=priority, request_id=symbol))
+        ids = [submit("HELD", "initial_history", 10)]
+        await entered.wait()
+        ids.append(submit("BACKGROUND", "background_gap_audit", 100))
+        ids += [submit(f"VISIBLE{i}", "initial_history", 10) for i in range(16)]
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*(coordinator.wait_for_request(i) for i in ids)), 5)
+        assert order.index("BACKGROUND") == 9, order  # Held request + eight bypasses.
+        assert coordinator.snapshot()["aged_dispatches"] >= 1
+        assert coordinator.snapshot()["running_chunks"] == 0
+        await coordinator.shutdown()
+    asyncio.run(run())
+
+
 def test_pending_background_waits_while_foreground_is_active() -> None:
     async def _run() -> None:
         class _Engine:

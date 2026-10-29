@@ -103,6 +103,43 @@ def test_priority_queue_reserves_rest_and_is_bounded():
     asyncio.run(run())
 
 
+def test_deferred_archive_chunk_does_not_bypass_admission_via_rest(tmp_path, monkeypatch):
+    from contextlib import asynccontextmanager
+    from app.data_engine.backfill import BackfillEngine
+    from app.data_engine.backfill.models import BackfillTask
+    from app.data_engine.ingestion.config import IngestionConfig
+    from app.data_engine.ingestion.transport import TransportLayer
+    from app.exchanges.public_admission import get_public_admission
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitDeferred, RateLimitRule
+    from tests.test_history_archive_import_cleanup import fixture_object, storage_at
+
+    async def run():
+        cfg, _, ref, http = fixture_object(tmp_path)
+        ingestion = IngestionConfig(proxy_mode="none")
+        transport = TransportLayer(ingestion)
+        engine = BackfillEngine(cfg, storage_at(monkeypatch, tmp_path), transport, ingestion_config=ingestion)
+        router = engine.fetcher._source_router
+        router._http = http
+        @asynccontextmanager
+        async def blocked(*args, **kwargs):
+            raise get_public_admission()._deferred(RateLimitRule("cdn", "archive:cdn", 1, 1),
+                HistoricalRequest("binance", "archive", "/object", ""), "execution_capacity")
+            yield  # pragma: no cover
+        async def unexpected_rest(*args, **kwargs):
+            raise AssertionError("archive admission deferral must not fall back to REST")
+        monkeypatch.setattr(router._cache, "materialize", blocked)
+        monkeypatch.setattr(transport, "http_fetch", unexpected_rest)
+        try:
+            task = BackfillTask(ref.symbol, ref.interval, ref.start_ms, ref.end_ms,
+                                exchange=ref.exchange, market_type=ref.market_type)
+            with pytest.raises(RateLimitDeferred, match="execution_capacity"):
+                await engine.fetcher.fetch([task])
+            assert not router._failed_cache
+        finally:
+            await engine.close()
+    asyncio.run(run())
+
+
 def test_process_budget_spans_worker_loops_and_direct_downloads():
     cfg = config([f"http://localhost:{32100 + i}" for i in range(4)])
     release, entered = threading.Event(), threading.Event()

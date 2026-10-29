@@ -15,6 +15,7 @@ def main() -> int:
     os.chdir(backend)
     sys.path.insert(0, str(backend))
     os.environ["CANDLESCOPE_REQUIRE_CCXT_FORK"] = "1"
+    os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     import pytest
 
     patterns = (

@@ -15,9 +15,13 @@ It does not replace them with a single FIFO.
   background work, including the inline fallback when the catalog worker is
   unavailable.
 - Background work may borrow idle capacity. After eight competing grants, an
-  executable waiting demand receives priority by original enqueue order. Its age
-  survives business deferral/retry. This bounds bypasses, not elapsed time when
-  a source is in cooldown or unavailable. Transmitted work is not preempted or refunded.
+  executable waiting demand receives one turn by original enqueue order, then
+  the fairness cycle restarts. An old background cohort cannot burst ahead of
+  all foreground requests together. The business dispatch queue uses the same
+  eight-dispatch cycle, retains one background slot and preserves series order.
+  Waiting age survives business deferral/retry. This provides finite progress,
+  not a wall-clock promise while a source is unavailable. Transmitted work is
+  not preempted or refunded.
 - A request retains its exchange, product, symbol and data semantics. Only a
   compatible exit can change. Healthy WS connections are not rebalanced.
 

@@ -82,6 +82,7 @@ class _FetchChunk:
     rate_limit_bucket: str | None = None
     defer_count: int = 0
     public_demand: PublicDemand | None = None
+    dispatch_bypasses: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +215,8 @@ class BackfillScheduler:
         self.foreground_reserve_dispatches = 0
         self.covered_chunks_skipped = 0
         self.fairness_rotations = 0
+        self.max_dispatch_bypass = 8
+        self.aged_dispatches = 0
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -743,6 +746,8 @@ class BackfillScheduler:
             "foreground_reserve_dispatches": self.foreground_reserve_dispatches,
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
+            "aged_dispatches": self.aged_dispatches,
+            "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
             "active": active,
             "pending": pending,
@@ -958,6 +963,20 @@ class BackfillScheduler:
             ),
         )
 
+    def _pop_ready(self):
+        # Public admission cannot age work that never leaves the business
+        # queue. Give bypassed chunks a dispatch turn as well; the ordinary
+        # eligibility, same-series, quota and concurrency checks still apply.
+        aged = [item for item in self._ready
+                if (chunk := self._chunks.get(item[3])) is not None
+                and chunk.dispatch_bypasses >= self.max_dispatch_bypass]
+        if aged:
+            item = min(aged, key=lambda row: row[2])
+            self._ready.remove(item)
+            heapq.heapify(self._ready)
+            return item
+        return heapq.heappop(self._ready)
+
     def _drain(self) -> None:
         get_public_admission().refresh()
         if self._shutdown:
@@ -972,7 +991,7 @@ class BackfillScheduler:
                 1 if self._max_concurrency == 1 else 0
             )
             while len(self._tasks) < candidate_capacity and self._ready:
-                item = heapq.heappop(self._ready)
+                item = self._pop_ready()
                 chunk = self._chunks.get(item[3])
                 if chunk is None:
                     continue
@@ -999,7 +1018,8 @@ class BackfillScheduler:
                     continue
                 if self._is_background(chunk.request) and (
                     self._running_background_count() >= 1
-                    or self._has_foreground_work(skipped)
+                    or (chunk.dispatch_bypasses < self.max_dispatch_bypass
+                        and self._has_foreground_work(skipped))
                 ):
                     skipped.append(item)
                     continue
@@ -1009,7 +1029,8 @@ class BackfillScheduler:
                 )
                 fairness_owner = self._fairness_owner(chunk.request)
                 if (
-                    self._last_dispatch_owner.get(fairness_lane) == fairness_owner
+                    chunk.dispatch_bypasses < self.max_dispatch_bypass
+                    and self._last_dispatch_owner.get(fairness_lane) == fairness_owner
                     and self._has_fairness_alternative(chunk, lane=fairness_lane)
                 ):
                     self.fairness_rotations += 1
@@ -1041,6 +1062,15 @@ class BackfillScheduler:
                     ),
                 )
                 self._tasks[chunk.chunk_id] = task
+                aged_dispatch = chunk.dispatch_bypasses >= self.max_dispatch_bypass
+                if aged_dispatch:
+                    self.aged_dispatches += 1
+                chunk.dispatch_bypasses = 0
+                for pending in (*self._ready, *skipped):
+                    waiting = self._chunks.get(pending[3])
+                    if waiting is not None and waiting.eligible_at_monotonic <= now_monotonic:
+                        waiting.dispatch_bypasses = (0 if aged_dispatch else
+                            min(self.max_dispatch_bypass, waiting.dispatch_bypasses + 1))
                 self._last_dispatch_owner[fairness_lane] = fairness_owner
                 if self._is_background(chunk.request):
                     self._active_background_chunks.add(chunk.chunk_id)

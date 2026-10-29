@@ -654,10 +654,26 @@ class HistoricalFetcher:
             for start_ms, end_ms in uncovered
         ]
 
-        archive_values = await asyncio.gather(
-            *(route_plan.future_for(ref) for ref in refs),
-            return_exceptions=True,
-        )
+        try:
+            archive_values = await asyncio.gather(
+                *(route_plan.future_for(ref) for ref in refs),
+                return_exceptions=True,
+            )
+        except BaseException:
+            for pending in rest_tail_tasks:
+                pending.cancel()
+            await asyncio.gather(*rest_tail_tasks, return_exceptions=True)
+            raise
+        deferred_archives = [value for ref, value in zip(refs, archive_values)
+                             if isinstance(value, (RateLimitDeferred, asyncio.CancelledError))
+                             and ref in coverage_refs]
+        if deferred_archives:
+            # Admission is scheduler control flow, never evidence of a missing
+            # object. Release speculative tails and return the chunk to its owner.
+            for pending in rest_tail_tasks:
+                pending.cancel()
+            await asyncio.gather(*rest_tail_tasks, return_exceptions=True)
+            raise max(deferred_archives, key=lambda exc: int(getattr(exc, "retry_at_ms", 0) or 0))
         archive_bars: list[FetchedBar] = []
         archive_receipts: list[dict[str, Any]] = []
         archive_errors: list[str] = []
@@ -665,6 +681,8 @@ class HistoricalFetcher:
         sources: set[str] = set()
 
         for ref, value in zip(refs, archive_values):
+            if isinstance(value, (RateLimitDeferred, asyncio.CancelledError)):
+                continue  # Optional parent prefetch remains eligible later.
             covers_task = _ranges_intersect(
                 task.start_ms,
                 task.end_ms,

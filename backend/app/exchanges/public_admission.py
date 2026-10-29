@@ -305,7 +305,8 @@ class PublicAdmission:
                             self._by_bucket.update(r.rule.bucket_key for r in reservations)
                             self._counts["attempts"] += 1
                             self._counts[f"class_{demand.priority().name.lower()}"] += 1
-                            if demand.bypasses >= self.max_priority_bypass:
+                            aged_grant = demand.bypasses >= self.max_priority_bypass
+                            if aged_grant:
                                 self._counts["fairness_grants"] += 1
                             seen = set()
                             for waiting in (*self._intents.values(), *self._protected.values()):
@@ -313,7 +314,11 @@ class PublicAdmission:
                                     continue
                                 seen.add(waiting.demand)
                                 if waiting.keys & keys or len(self._active) >= self.max_in_flight:
-                                    waiting.demand.bypasses = min(self.max_priority_bypass, waiting.demand.bypasses + 1)
+                                    # One aged turn per fairness cycle. Otherwise
+                                    # a whole old background cohort would leapfrog
+                                    # foreground together and create a large burst.
+                                    waiting.demand.bypasses = (0 if aged_grant else
+                                        min(self.max_priority_bypass, waiting.demand.bypasses + 1))
                             demand.wait_started = None
                             demand.wait_ticket = None
                             demand.bypasses = 0
