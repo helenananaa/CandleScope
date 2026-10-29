@@ -107,6 +107,13 @@ class ExchangeHistoryPolicyResolver:
             # Keep the revision stable; a moving cutoff is availability, not
             # a new provider contract on every request.
             policy = replace(policy, max_page_size=min(policy.max_page_size or 300, 200 if key.exchange == "upbit" else 300))
+        from app.exchanges.trade_candles import uses_trade_candles, trade_candle_profile
+        if key.channel == "kline" and uses_trade_candles(key.exchange, key.market_type, key.variant):
+            profile = trade_candle_profile(key.exchange, key.market_type)
+            if policy is not None:
+                # Native OHLCV retention does not describe a public trade tape.
+                policy = replace(policy, max_age_ms=profile.retention_ms,
+                                 available_from_ms=None, available_to_ms=None)
         market = next(
             (
                 item

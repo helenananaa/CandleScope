@@ -132,7 +132,10 @@ class ManualHistoryPlanner:
             normalized_market = "spot"
         else:
             normalized_market = market_value
-            blocking.append(PlanErrorCode.INVALID_SELECTION)
+            # Generic providers expose settlement-specific market families.
+            # The interval resolver below validates the venue capability too.
+            if market_value not in {"swap", "swap.linear", "swap.inverse", "future", "future.linear", "future.inverse", "option"}:
+                blocking.append(PlanErrorCode.INVALID_SELECTION)
 
         normalized_symbols = self._normalize_symbols(
             symbols, exchange=normalized_exchange, market_type=normalized_market
@@ -359,6 +362,11 @@ class ManualHistoryPlanner:
         width_ms = parse_interval_ms(route.canonical_interval) or 0
         from app.data_engine.history.native_seconds import native_second_history_start
         history_start = native_second_history_start(exchange, route.source_interval, captured_at_ms)
+        if route.kind is IntervalRouteKind.TRADE:
+            from app.exchanges.trade_candles import trade_candle_profile
+            profile = trade_candle_profile(exchange, market_type)
+            if profile is not None and profile.retention_ms is not None:
+                history_start = captured_at_ms - profile.retention_ms
         boundary_reason = None
         if history_start is not None and requested_start_ms < history_start:
             requested_start_ms = history_start

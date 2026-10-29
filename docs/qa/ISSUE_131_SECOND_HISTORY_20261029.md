@@ -177,3 +177,93 @@ Kraken 盘口曾短时显示重同步，随后恢复；盘口链路未在本次�
 日志：`backend-final.log`、`backend-recheck.log`、`restart-regression-final.log`、
 `frontend-regression.log`、`frontend-fixture-recheck.log`、`typecheck-final.log`、`lint-final.log`、`lint-hook-final.log`、`build.log`。
 首次失败日志保留，避免把冷启动超时当作未发生。真实新进程读取另有独立成功证据。
+
+
+## 多交易所成交聚合扩展
+
+在 Kraken 现货基础上新增 9 个交易所目录来源，共 10 个来源、23 种目录市场选择。
+继续按原生目标周期、可精确组合的原生小周期、成交聚合的顺序解析；
+1s、7s、61s 等整秒固定周期共用普通图表、历史查询与手动下载。
+录制、常驻采集和 1s 回放归档仍不在范围内。
+
+| 目录来源 | 本次准入市场 | 成交历史边界 |
+| --- | --- | --- |
+| Kraken | 现货 | 既有 since / last 游标；受分页预算约束 |
+| Bitfinex | 现货、线性永续 | 有界时间查询，无本地固定保留期声明 |
+| Bitvavo | 现货 | 有界时间查询，无本地固定保留期声明 |
+| Coinbase Exchange | 现货 | 从最新成交向前翻页，必须实际到达请求起点以前 |
+| Crypto.com | 现货 | 保守准入最近 1 天 |
+| Bitget | 现货、线性/反向永续、线性/反向交割 | 90 天；历史索引与最新成交衔接需验证 |
+| Binance USD-M | 线性永续、线性交割 | 48 小时 aggTrades |
+| Binance COIN-M | 反向永续、反向交割 | 48 小时 aggTrades |
+| Deribit | 线性/反向永续、线性/反向交割 | 当前 API 保守准入最近 1 天 |
+| Kraken Futures | 线性/反向永续、线性/反向交割 | 公共 executions 时间范围，无本地固定保留期声明 |
+
+“无固定保留期声明”不等于任意年代均可用。所有来源都受接口实际可用性、
+单窗口 100 次请求预算和市场上市/到期范围约束；交割市场的全部具体合约未逐一实测。
+Deribit 六天前和两天前的公开查询实测返回空成功，一天前、12 小时前与近期窗口有成交；
+因此没有沿用旧资料中的 7 天假设，也没有把旧空页认证为无成交。
+本次不接入其单独的延迟历史服务器。Crypto.com 的一天是保守准入边界，非全历史能力声明。
+
+### 完整性与入口
+
+使用各交易所原始公共响应保留游标、分页标志和纳秒字段；不用统一 fetch_trades 的
+截断结果推断完整性。满页递归拆分时间窗口，不能用末笔时间加一跳过同毫秒成交。
+同毫秒仍满页、页数超限、无效价格/数量/市场、时间过滤失效、冲突重复、请求错误或取消
+均使整个窗口失败，不发布已取得的前缀。Coinbase 游标必须严格前进；Bitget 的历史索引
+必须追上与最新成交页的衔接点，不能把索引滞后误当作空历史。
+
+保留纳秒和交易所序号；不按 UUID 字符串排序。反向合约成交量根据各接口的合约张数
+或报价币名义金额换算为基础币，不能一律把 size 当基础币。无成交桶仍使用独立空桶证据，
+按交易所/市场/商品/周期隔离，晚到数据、删除及清理撤销相关证据。
+
+修通原有手动下载的两处限制：界面交易所/市场选择改用实际历史 K 线能力目录，
+规划器接受通用 swap/future 及线性/反向市场；后端继续校验具体交易所的周期能力。
+下载计划在估算前裁剪成交保留期，并展示有效起点。仅有 recent-trades 或尚未验证完整
+分页契约的来源不因 CCXT fetchTrades=true 自动开放成交历史；已有原生秒线来源继续优先走原生。
+
+### 本次验证
+
+- 最终后端相关集合 **197 passed**，4 条既有 FastAPI lifespan 弃用提示。
+  覆盖分页拆分/边界/饱和、取消/失败不发布前缀、排序/去重、合约成交量、
+  来源准入、原生优先、保留期、手动下载市场、空桶隔离/撤销及此前秒线生命周期。
+- 前端相关集合 **16 passed**；全仓 TypeScript 检查、改动文件 ESLint、生产构建通过。
+  构建仍有既有大 chunk 提示。
+- 9 个新增来源各使用一组真实公共行情和独立 SQLite，装配生产后端组件：
+  Bitfinex/Bitvavo/Coinbase Exchange/Crypto.com 现货，Deribit/Binance COIN-M 反向永续，
+  Bitget/Kraken Futures/Binance USD-M 线性永续。70 秒 / 7s 手动任务全部 SUCCEEDED，
+  连续性通过；共享消费者保留订阅、最后消费者退出停流、journal 收尾后行数稳定，
+  新 Python 进程读取相同条数且 complete=true，SQLite quick_check=ok。
+- 原生 1m 对照：Bitfinex、Bitvavo、Coinbase Exchange、Crypto.com 现货，Deribit 线性和
+  反向永续、Kraken Futures 线性永续、Binance 两类合约，共 9 组的 OHLC 一致，
+  基础币成交量相对误差均小于 1e-6（反向合约存在换算舍入）。
+- Bitget 现货和线性永续的同分钟样本，高/低/收盘价及成交量一致，开盘价不同。
+  原生分钟线开盘价分别为 80099.02 / 80058.3，等于其上一根收盘价；
+  成交聚合开盘价 80099.01 / 80059 与窗口内首笔原始成交一致。
+  这两组不计为 OHLC 全相等，不承诺成交生成的所有周期复制交易所原生图表口径。
+- 开发态浏览器实际选择 Bitget 线性永续、BTC/USDT:USDT，添加 7s、预览计划并提交任务。
+  任务进入 BLOCKED_STORAGE：本机约 22 GiB 可用空间低于既有 10% 磁盘阈值。
+  已保存证据并取消测试任务；没有绕过保护或删除用户数据。因此浏览器下载全流程
+  **未通过完成态验收**，前述 9 组为独立后端组件链路证据。
+
+首次 Bitget 市场目录请求超时、重复使用测试任务幂等键和原生对照未找到对应分钟等
+失败日志保留；最终生命周期运行均使用唯一隔离目录。原生 Bitget 对照改用原始历史
+candles 接口后取得对应分钟，并用原始成交与上一根收盘价解释差异。
+未做打包 macOS 验收、多商品长期压力、全部交割合约、保留期全边界或真实断网恢复验收。
+
+本地证据：`output/issue-131/trade-expansion/` 中的 `backend-final.log`、
+`frontend-tests.log`、`typecheck.log`、`lint.log`、`build.log`、`lifecycle-final.log`、
+`lifecycle-*.json`、`compare-*.json`、`bitget-open-control.json`、`deribit-retention.json`、
+`ui-job.json`、`manual-download-ui.png`、`manual-download-storage-guard.png`。
+`lifecycle_matrix.py`、`compare_native.py`、`compare_bitget.py`、`bitget_open_control.py`
+为本地复现脚本；开发服务与浏览器测试页在验收后关闭。
+
+接口依据：
+- [Bitfinex 历史成交](https://docs.bitfinex.com/reference/rest-public-trades)
+- [Bitvavo 成交](https://docs.bitvavo.com/docs/rest-api/get-trades/)
+- [Coinbase Exchange 成交](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-trades)及[分页](https://docs.cdp.coinbase.com/exchange/rest-api/pagination)
+- [Bitget 现货](https://www.bitget.com/zh-CN/docs/catalog/classic-spot-market/classic-spot-market)及[合约](https://www.bitget.com/docs/catalog/classic-contract-market/classic-contract-market)
+- [Binance USD-M aggTrades](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Compressed-Aggregate-Trades-List)及[COIN-M aggTrades](https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Compressed-Aggregate-Trades-List)
+- [Deribit 当前成交 API](https://docs.deribit.com/api-reference/market-data/public-get_last_trades_by_instrument_and_time)
+- [Crypto.com 公共 API](https://exchange-docs.crypto.com/exchange/v1/rest-ws/index-insto-8556ea5c-4dbb-44d4-beb0-20a4d31f63a7.html)
+- [CCXT Kraken Futures 适配器](https://github.com/ccxt/ccxt/blob/v4.5.60/python/ccxt/async_support/krakenfutures.py)，同时依据本地固定版本及实际公共 executions 响应验证字段与成交量。

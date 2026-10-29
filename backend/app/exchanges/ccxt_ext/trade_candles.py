@@ -1,4 +1,4 @@
-"""Bounded Kraken trade pagination and deterministic OHLCV reduction.
+"""Bounded public trade pagination and deterministic OHLCV reduction.
 
 No tick archive or background recorder: requests exist only for active chart
 polls and ordinary history jobs. All pages must succeed before publication.
@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from app.exchanges.trade_candles import fixed_trade_spec
+from app.exchanges.trade_candles import fixed_trade_spec, trade_candle_profile
 from .unified import make_unified_payload
 
 
@@ -24,6 +24,7 @@ class CandleTrade:
     timestamp_ns: int
     price: Decimal
     quantity: Decimal
+    sequence: int | None = None
 
 
 def reduce_trades(trades: list[CandleTrade], interval: str, start_ms: int, end_ms: int) -> list[list]:
@@ -41,7 +42,7 @@ def reduce_trades(trades: list[CandleTrade], interval: str, start_ms: int, end_m
     buckets: dict[int, list] = {}
     def order(trade):
         # Numeric exchange IDs retain exchange order, including 9 -> 10.
-        return trade.timestamp_ns, (0, int(trade.trade_id)) if trade.trade_id.isdigit() else (1, trade.trade_id)
+        return trade.timestamp_ns, (trade.sequence if trade.sequence is not None else int(trade.trade_id) if trade.trade_id.isdigit() else 0)
     for trade in sorted(seen.values(), key=order):
         if not start_ms * 1_000_000 <= trade.timestamp_ns < end_ms * 1_000_000:
             continue
@@ -57,13 +58,11 @@ def reduce_trades(trades: list[CandleTrade], interval: str, start_ms: int, end_m
     return [[row[0], *map(str, row[1:])] for row in buckets.values()]
 
 
-async def fetch_kraken_trade_candles(exchange: Any, symbol: str, req: Any, *, now_ms: int) -> list[dict]:
-    """Return closed candles and a verified coverage marker for one window.
-
-    Kraken's opaque `last` cursor, not milliseconds or assumed consecutive IDs,
-    advances pages. A full page never proves exhaustion. Live polls also emit
-    the forming bucket, explicitly unclosed until a complete range covers it.
-    """
+async def fetch_trade_candles(exchange: Any, symbol: str, req: Any, *, now_ms: int) -> list[dict]:
+    """Publish a window only after all its public trade pages are verified."""
+    profile = trade_candle_profile(req.descriptor.exchange, req.descriptor.market_type)
+    if profile is None:
+        raise ValueError("Unsupported trade candle source")
     spec = fixed_trade_spec(req.descriptor.interval)
     width = spec.nominal_ms
     live = req.start_ms is None and req.end_ms is None
@@ -80,6 +79,35 @@ async def fetch_kraken_trade_candles(exchange: Any, symbol: str, req: Any, *, no
     if end_open < start:
         raise ValueError("Trade candle range has no settled closed buckets")
     end = now_ms if live else end_open + width
+    if profile.retention_ms is not None and start < now_ms - profile.retention_ms:
+        raise ValueError("Trade candle range exceeds provider retention")
+    if req.descriptor.exchange == "kraken":
+        trades = await _kraken_trades(exchange, symbol, start, end)
+    else:
+        from .trade_sources import fetch_public_trades
+        trades = await fetch_public_trades(exchange, symbol, req.descriptor.exchange, start, end, now_ms=now_ms)
+    bars = reduce_trades(trades, spec.canonical, start, end)
+    opened = {int(row[0]) for row in bars}
+    empty_ranges = []
+    cursor_ms = start
+    for value in sorted(opened) + [end]:
+        if cursor_ms < value:
+            empty_ranges.append([cursor_ms, value - width])
+        cursor_ms = value + width
+    output = [make_unified_payload("kline", row, is_closed=int(row[0]) + width <= end,
+                                  trade_coverage_verified=int(row[0]) + width <= end) for row in bars]
+    if not live:
+        output.append({"trade_candle_page": f"{req.descriptor.exchange}.{req.descriptor.market_type}", "interval": spec.canonical,
+                       "start_ms": start, "end_ms": end_open, "empty_ranges": empty_ranges})
+    return output
+
+
+# Kept as a source-specific entry point for the Kraken cursor contract tests.
+async def fetch_kraken_trade_candles(exchange: Any, symbol: str, req: Any, *, now_ms: int) -> list[dict]:
+    return await fetch_trade_candles(exchange, symbol, req, now_ms=now_ms)
+
+
+async def _kraken_trades(exchange: Any, symbol: str, start: int, end: int) -> list[CandleTrade]:
     cursor = max(0, start * 1_000_000 - 1)
     trades: list[CandleTrade] = []
     pair = exchange.market(symbol)["id"]
@@ -121,17 +149,4 @@ async def fetch_kraken_trade_candles(exchange: Any, symbol: str, req: Any, *, no
         cursor = next_cursor
     if not complete:
         raise ValueError("Trade history page budget exhausted; coverage not verified")
-    bars = reduce_trades(trades, spec.canonical, start, end)
-    opened = {int(row[0]) for row in bars}
-    empty_ranges = []
-    cursor_ms = start
-    for value in sorted(opened) + [end]:
-        if cursor_ms < value:
-            empty_ranges.append([cursor_ms, value - width])
-        cursor_ms = value + width
-    output = [make_unified_payload("kline", row, is_closed=int(row[0]) + width <= end,
-                                  trade_coverage_verified=int(row[0]) + width <= end) for row in bars]
-    if not live:
-        output.append({"trade_candle_page": "kraken.spot", "interval": spec.canonical,
-                       "start_ms": start, "end_ms": end_open, "empty_ranges": empty_ranges})
-    return output
+    return trades

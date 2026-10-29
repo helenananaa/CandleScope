@@ -1,15 +1,44 @@
-"""Admitted trade-to-candle sources; recent-trades support alone is insufficient.
-
-Each profile must provide a complete, paginated time range before its output
-may become final history. These capabilities are separate from native OHLCV.
-"""
+"""Explicitly admitted public trade history contracts (not CCXT fetchTrades flags)."""
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 
+DAY_MS = 86_400_000
+
+
+@dataclass(frozen=True, slots=True)
+class TradeCandleProfile:
+    markets: tuple[str, ...]
+    retention_ms: int | None = None
+
+
+# Market selections match the pinned CCXT catalog. Generic aliases are accepted
+# only when that venue actually has the corresponding contract family.
+TRADE_CANDLE_PROFILES = {
+    "kraken": TradeCandleProfile(("spot",)),
+    "bitfinex": TradeCandleProfile(("spot", "swap", "swap.linear")),
+    "bitvavo": TradeCandleProfile(("spot",)),
+    "cryptocom": TradeCandleProfile(("spot",), DAY_MS),
+    "coinbaseexchange": TradeCandleProfile(("spot",)),
+    "bitget": TradeCandleProfile(("spot", "swap", "swap.linear", "swap.inverse", "future", "future.linear", "future.inverse"), 90 * DAY_MS),
+    "binanceusdm": TradeCandleProfile(("swap", "swap.linear", "future", "future.linear"), 2 * DAY_MS),
+    "binancecoinm": TradeCandleProfile(("swap", "swap.inverse", "future", "future.inverse"), 2 * DAY_MS),
+    # Current API only: older windows can silently return empty. Admit the
+    # verified recent day; the separate delayed historical archive is not used.
+    "deribit": TradeCandleProfile(("swap", "swap.linear", "swap.inverse", "future", "future.linear", "future.inverse"), DAY_MS),
+    "krakenfutures": TradeCandleProfile(("swap", "swap.linear", "swap.inverse", "future", "future.linear", "future.inverse")),
+}
+
+
+def trade_candle_profile(exchange: str, market_type: str) -> TradeCandleProfile | None:
+    profile = TRADE_CANDLE_PROFILES.get(exchange)
+    return profile if profile is not None and market_type in profile.markets else None
+
 
 def supports_trade_candles(exchange: str, market_type: str) -> bool:
-    return exchange == "kraken" and market_type == "spot"
+    return trade_candle_profile(exchange, market_type) is not None
 
 
 def uses_trade_candles(exchange: str, market_type: str, interval: str) -> bool:

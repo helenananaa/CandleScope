@@ -11,7 +11,7 @@ from typing import Any, Callable
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
 from app.data_engine.kline_quality import source_rank_sql
-from app.exchanges.trade_candles import uses_trade_candles
+from app.exchanges.trade_candles import uses_trade_candles, supports_trade_candles
 from app.data_engine.history.calendar import (
     AlwaysOpenCalendar,
     CalendarRegistry,
@@ -489,7 +489,7 @@ def upsert_klines(
             cursor = conn.executemany(sql, write_payload)
             affected = (
                 cursor.rowcount
-                if (exchange == "upbit" and interval == "1s") or exchange == "kraken"
+                if (exchange == "upbit" and interval == "1s") or supports_trade_candles(exchange, market_type)
                 else conn.total_changes - changes_before
             )
             if _connection is None:
@@ -498,7 +498,7 @@ def upsert_klines(
     if exchange == "upbit" and market_type == "spot" and interval == "1s":
         from .native_empty_seconds import invalidate_calendar_snapshots
         invalidate_calendar_snapshots()
-    if exchange == "kraken":
+    if supports_trade_candles(exchange, market_type):
         from .trade_empty_buckets import invalidate
         invalidate()
     return int(affected)

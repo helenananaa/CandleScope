@@ -31,6 +31,7 @@ from app.exchanges.models import (
 )
 
 from .binance_usdm import SUPPORTED_CCXT_VERSION
+from app.exchanges.trade_candles import supports_trade_candles, trade_candle_profile
 
 
 _PUBLIC_METHODS = (
@@ -570,7 +571,11 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
             "derivatives.ccxt_unified",
         ],
         limits={
-            "trade_candles.markets": ["spot"] if entry.exchange_id == "kraken" else [],
+            "trade_candles.markets": [market for market in entry.market_types if supports_trade_candles(entry.exchange_id, market)],
+            "trade_candles.retention_ms": {
+                market: trade_candle_profile(entry.exchange_id, market).retention_ms
+                for market in entry.market_types if supports_trade_candles(entry.exchange_id, market)
+            },
             "ccxt.version": SUPPORTED_CCXT_VERSION,
             "ccxt.pro": entry.pro,
             "ccxt.rate_limit_ms": entry.rate_limit_ms,
