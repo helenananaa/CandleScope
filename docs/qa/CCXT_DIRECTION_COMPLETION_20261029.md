@@ -79,11 +79,22 @@ repair. This is not certification of every Pine language feature.
   and schema validation; OKX supplies no checksum sidecar. Archive enablement
   remains explicit and each runtime still probes the website contract.
 - The two existing v2rayN listeners were measured to have the **same exit**.
-  They share one egress group and one CDN bucket. Additional task-owned proxy
-  instances using stored node configurations could not establish working TLS
-  tunnels. Temporary instances and current subscription refreshes are being
-  tested. The user's TUN and saved v2rayN settings are not changed.
-  Independent-exit qualification remains open until distinct exits pass downloads.
+  They share one egress group and one CDN bucket. Subsequent task-owned proxies
+  using the authorized subscription, host DNS and physical-interface binding
+  established **two distinct exits**. Neither TUN nor saved v2rayN settings was
+  changed. Initial remote-DNS/transport failures remain recorded locally.
+- Through those two exits, four 2024 monthly **1m** ZIPs downloaded and parsed
+  **174240 rows / 8525230 ZIP bytes** in **15.812s**, with official checksums and
+  warm-cache identity intact. Each route carried four archive requests; no
+  failed archive attempt or active lease remained. During downloads, eight
+  foreground REST calls succeeded (seven began with two archive leases active)
+  and eight real WS frames arrived, maximum observed inter-frame gap 2.031s.
+  REST durations were 562–2375ms, including the initial cold request. There is
+  no inferred first-paint or percentile SLA from eight requests.
+- The preceding small-file dual-exit run also completed all four objects;
+  one failed physical attempt was settled as unknown and retried through the
+  alternate route. Both the failed attempt and final successful objects remain
+  in its receipt. The large mixed run had no archive failures.
 
 ## Controlled fairness comparison
 
@@ -110,8 +121,9 @@ CPU, queue, request and latency details are in the machine-readable receipt.
 
 ## Remaining acceptance boundaries
 
-- Real independent exits, asymmetric route speed/quota and sustained mixed
-  archive/REST/WS load with a frozen cold-network/first-paint latency budget.
+- Sustained mixed archive/REST/WS load, a frozen cold-network/first-paint latency
+  budget, and a controlled before/after full-import CPU/memory/disk comparison.
+  Short public dual-exit success is not a production-load or speedup claim.
 - Additional OKX archive products and historical periods beyond the qualified
   spot day; its archive feature remains explicitly opt-in and probe-gated.
 - Additional production archive sources and third-party provider live/session
