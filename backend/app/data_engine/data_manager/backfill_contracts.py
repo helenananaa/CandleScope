@@ -124,6 +124,10 @@ class RepairRequest:
     def merged_with(self, other: RepairRequest) -> RepairRequest:
         """Return a range that covers both requests for the same series."""
         metadata = {**self.metadata, **other.metadata}
+        floors = [item.metadata["acquisition_revision"] for item in (self, other)
+                  if isinstance(item.metadata.get("acquisition_revision"), int)]
+        if floors:
+            metadata["acquisition_revision"] = min(floors)
         if (
             repair_requires_trusted_finality(self.metadata, reason=self.reason)
             or repair_requires_trusted_finality(other.metadata, reason=other.reason)

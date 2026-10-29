@@ -896,6 +896,14 @@ class StreamCoordinator:
         now_ms = int(time.time() * 1000)
         start_ms = now_ms - days * 86400 * 1000
 
+        consumer = self._cache.revision_consumer
+        if consumer is not None:
+            bars = consumer.adopt(key, lambda: self._storage.query_bars(
+                symbol=key.symbol, interval=key.interval, start_ms=start_ms, end_ms=now_ms,
+                order="ASC", exchange=key.exchange, market_type=key.market_type,
+                series_identity=key.identity))
+            return len(bars)
+
         rows = self._storage.query_bars(
             symbol=key.symbol,
             interval=key.interval,
