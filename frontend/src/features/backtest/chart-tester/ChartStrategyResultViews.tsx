@@ -1,3 +1,4 @@
+import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { strategyTradeFocus, type StrategyTradeFocus } from "./strategyTradeReview.js";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
 import { command } from "../../app-control/commandRegistry.js";
@@ -180,7 +181,7 @@ export function ChartStrategyResultContextBar({
       data-result-cache-key={result.cacheKey}
     >
       <strong>{stale ? t("chartTester.result.stale") : t("chartTester.result.completed")}</strong>
-      <span>{chart.symbol} · {chart.interval}</span>
+      <span>{chart.symbol} · {formatIntervalLabel(chart.interval)}</span>
       <span title={rangeBounds}>{rangeLabel} · {rangeBounds}</span>
       <span>{fidelityLabel(run.fidelity_mode)}</span>
       <span title={fee}>{fee}</span>

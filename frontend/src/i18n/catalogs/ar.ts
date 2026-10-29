@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ar = {
+  ...intervalBasisMessages["ar"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "يشمل وقت البدء والنافذة الأمامية شموعًا مستقبلية. اختر بداية أقدم أو قصّر النافذة؛ تتوفر فقط الشموع التاريخية المغلقة.",
   "replay.hub.catalogSyncing": "جارٍ اكتشاف الأسواق التاريخية من المصدر الرسمي. سيتم التفعيل تلقائيًا عندما تصبح جاهزة.",

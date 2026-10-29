@@ -36,3 +36,43 @@ This differs intentionally from a display-only chart that fixes its brick
 height from the currently loaded window. No claim of tick/wick Renko or exact
 TradingView construction is made. Requested markets/timeframes must be the
 primary frozen market context or another explicitly frozen context.
+
+# Host candle boundary candidate (issue 117)
+
+`host-bar-boundaries-v1.patch` applies independently to the same official
+v0.3.2 source commit `28ecae3c645e9269e2099d27cc9abbb1f52ee9ea`.
+It adds `BAR_BOUNDARY_SCHEMA = "host-bar-boundaries/1"` and a reserved
+`request_bars["$boundaries"]` dictionary keyed by `SYMBOL:TIMEFRAME`. Each
+entry contains a stable `id` and ordered nonoverlapping `[open_ms,end_ms]`
+windows. The core remains host-neutral; CandleScope freezes its versioned
+rules outside the engine. No host timezone, network or database is consulted.
+
+Actual closes, aliases (`D`/`1D`), `time`/`time_close` offsets,
+`timeframe.change`, security alignment and native sessions consume these
+windows. Missing windows, malformed ranges and unsupported custom sessions
+fail explicitly. The host supplies requested contexts and future/past windows;
+the engine does not synthesize another timezone schedule from a nominal label.
+
+In a separate checkout of the pinned source:
+
+```sh
+git apply /absolute/path/to/host-bar-boundaries-v1.patch
+cargo test -p pine-runtime --lib
+uv run --no-project --with maturin maturin build --release --interpreter /absolute/path/to/python --out /absolute/path/to/wheels
+# Install the produced wheel into an isolated environment with pytest.
+python -m pytest python/tests/test_host_bar_boundaries.py python/tests/test_realtime_session.py
+```
+
+In CandleScope, install its current SDK and Pine bridge into that isolated
+environment, then run with the normal backend test interpreter:
+
+```sh
+NATIVE_CALENDAR_TEST=1 NATIVE_TEST_PYTHON=/absolute/path/to/candidate/python PYTHONPATH=backend python -m pytest backend/tests/test_native_calendar_basis.py
+```
+
+This is an **unpublished local candidate**, retaining the upstream package
+version but with a different digest. Keep official release locks unchanged.
+Source commit, patch and wheel SHA-256 are recorded in the issue 117 QA receipt.
+This patch is qualified independently from the Renko patch above; combining
+both needs a separate integration/release qualification. No claim of a
+published engine upgrade or desktop acceptance is made.

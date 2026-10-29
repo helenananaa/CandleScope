@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  ...intervalBasisMessages["fr"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Le début et la fenêtre suivante incluent des bougies futures. Choisissez un début plus ancien ou raccourcissez la fenêtre ; seules les bougies historiques clôturées sont disponibles.",
   "plugin.runtimeInstalled": "Moteur de scripts installé et vérifié. Fermez puis rouvrez CandleScope pour activer les indicateurs et les stratégies natives compatibles.",

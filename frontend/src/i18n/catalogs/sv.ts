@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  ...intervalBasisMessages["sv"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Starttiden och framåtfönstret innehåller framtida staplar. Välj en tidigare start eller korta fönstret; endast avslutade historiska staplar är tillgängliga.",
   "replay.hub.catalogSyncing": "Historiska marknader hämtas från den officiella källan. Alternativet aktiveras automatiskt när det är klart.",

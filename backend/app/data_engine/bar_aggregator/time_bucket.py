@@ -40,6 +40,19 @@ _MIDNIGHT_ANCHOR_MS = 946_684_800_000
 _DAY_MS = 86_400_000
 
 
+class ScheduleBucketCalculator:
+    """Adapt the shared versioned interval schedule to the live pipeline."""
+
+    def __init__(self, spec):
+        self.spec = spec
+
+    def compute_bucket(self, timestamp_ms):
+        return self.spec.floor_ms(timestamp_ms)
+
+    def compute_bucket_range(self, bucket_start_ms):
+        return bucket_start_ms, self.spec.next_ms(bucket_start_ms)
+
+
 class TimeBucketEngine:
     """Stateless engine that computes time bucket membership.
 

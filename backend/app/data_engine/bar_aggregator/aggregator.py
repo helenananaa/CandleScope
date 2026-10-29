@@ -90,7 +90,7 @@ from .models import (
     parse_interval_ms,
 )
 from .router import EventRouter
-from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator
+from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator, ScheduleBucketCalculator
 from .bar_state import BarStateEngine
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
@@ -115,12 +115,22 @@ class IntervalPipeline:
         self.interval_ms = interval_ms
 
         alignment = AlignmentMode(config.default_alignment_mode)
+        spec = parse_interval_spec(interval)
+        epoch_ms = config.alignment_epoch_ms
+        if spec is not None:
+            # A persisted series key must imply the same grid in history and
+            # realtime, including the zero-phase alias. Process-wide legacy
+            # alignment settings must not silently change that identity.
+            alignment = AlignmentMode.CUSTOM if spec.phase_ms else AlignmentMode.EPOCH
+            epoch_ms = spec.phase_ms
 
         # Monthly intervals need calendar-based bucketing, not fixed 30-day.
         # This applies to ALL month-unit intervals (1M, 2M, 3M, etc.),
         # not just the standard "1M".
         custom_calc = None
-        if interval.endswith("M") and interval[:-1].isdigit():
+        if spec is not None and spec.timezone:
+            custom_calc = ScheduleBucketCalculator(spec)
+        elif interval.endswith("M") and interval[:-1].isdigit():
             month_count = int(interval[:-1])
             if month_count > 0:
                 custom_calc = MonthlyBucketCalculator(months=month_count)
@@ -135,7 +145,7 @@ class IntervalPipeline:
         self.time_bucket = TimeBucketEngine(
             interval_ms=interval_ms,
             alignment=alignment,
-            epoch_ms=config.alignment_epoch_ms,
+            epoch_ms=epoch_ms,
             custom_calculator=custom_calc,
         )
         self.bar_state = BarStateEngine(config, self.time_bucket, interval)

@@ -219,6 +219,10 @@ function getCapabilityKlineIntervals(
         ? [configuredIntervals]
         : [];
     for (const value of values) {
+      if (capability.native_bar_specs && !capability.native_bar_specs.some(spec => (
+        spec.market_type === normalizedMarketType && spec.purpose === purpose && spec.interval === value
+        && spec.qualification !== "unknown" && spec.basis !== null
+      ))) continue;
       const interval = intervalItemFromValue(value);
       if (interval) intervals.push(interval);
     }

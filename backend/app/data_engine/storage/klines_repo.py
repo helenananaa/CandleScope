@@ -286,6 +286,9 @@ def init_klines_storage() -> None:
         # Step 2: Migrate old schema if needed (adds exchange/market_type columns)
         _migrate_kline_series_identity(conn)
 
+        from .basis_migration import migrate_basis_storage
+        migrate_basis_storage(conn, Path(KLINES_DB_PATH), _create_klines_table_sql("klines"))
+
         # Step 3: Create index (safe after migration)
         conn.executescript(
             """

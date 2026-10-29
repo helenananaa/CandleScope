@@ -39,6 +39,7 @@ class IntervalResolutionErrorCode(str, Enum):
     NO_NATIVE_INTERVALS = "no_native_intervals"
     NO_EXACT_BASE = "no_exact_base"
     SERIES_IDENTITY_UNSUPPORTED = "series_identity_unsupported"
+    NATIVE_BASIS_UNKNOWN = "native_bar_basis_unknown"
 
 
 class IntervalResolutionError(ValueError):
@@ -151,8 +152,24 @@ class IntervalResolver:
             purpose=normalized_purpose,
         )
 
-        for native_interval in native_intervals:
-            if intervals_equivalent(requested_interval, native_interval):
+        from app.data_engine.bar_basis import native_bar_spec
+        declared = {}
+        session_intervals = set()
+        for value in native_intervals:
+            lookup = getattr(capabilities, "bar_spec", None)
+            contract = lookup(normalized_market, value, normalized_purpose.value) if callable(lookup) else native_bar_spec(normalized_exchange, normalized_market, value, normalized_purpose.value)
+            if contract.qualification != "unknown" and contract.basis_interval:
+                declared[value] = contract.basis_interval
+                if contract.calendar_id:
+                    session_intervals.add(value)
+        if not declared:
+            raise self._error(IntervalResolutionErrorCode.NATIVE_BASIS_UNKNOWN,
+                f"Native candle boundaries have not been declared for {normalized_exchange}/{normalized_market}",
+                exchange=normalized_exchange, market_type=normalized_market,
+                interval=requested_interval, purpose=normalized_purpose)
+
+        for native_interval, basis_interval in declared.items():
+            if intervals_equivalent(requested_interval, basis_interval):
                 return IntervalRoute(
                     exchange=normalized_exchange,
                     market_type=normalized_market,
@@ -165,8 +182,13 @@ class IntervalResolver:
                 )
 
         best_base: tuple[str, IntervalSpec] | None = None
-        for native_interval in native_intervals:
-            native_spec = parse_interval_spec(native_interval)
+        for native_interval, basis_interval in declared.items():
+            # A session bar's label alone does not prove it covers an entire
+            # continuous target window. Keep native session bars available;
+            # do not turn their gaps into a complete 24/7 derived candle.
+            if native_interval in session_intervals:
+                continue
+            native_spec = parse_interval_spec(basis_interval)
             if (
                 native_spec is None
                 or native_spec.nominal_ms >= spec.nominal_ms

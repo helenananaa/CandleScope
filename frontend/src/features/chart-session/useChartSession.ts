@@ -11,6 +11,7 @@ import {
 } from "./exchangeCatalogRuntime.js";
 import {
   canonicalizeIntervalValue,
+  formatIntervalLabel,
   intervalsSemanticallyEquivalent,
 } from "../../utils/intervals.js";
 import { useIntervalNoticeRuntime } from "./intervalNoticeRuntime.js";
@@ -543,6 +544,7 @@ export function useChartSession({
 
   const createCustomInterval = useCallback((
     nextInterval: IntervalString,
+    anchorTimeMs?: number,
   ): CreateCustomIntervalResult => {
     if (exchangeCatalogStatus === "loading") {
       return { ok: false, message: t("interval.capabilityLoading") };
@@ -562,10 +564,10 @@ export function useChartSession({
         message: unavailableIntervalMessage(exchange, marketType, nextInterval),
       };
     }
-    const result = addCustomInterval(nextInterval, { markUsed: true });
+    const result = addCustomInterval(nextInterval, { markUsed: true, ...(anchorTimeMs === undefined ? {} : { anchorTimeMs }) });
     if (!result.ok) return { ok: false, message: t("interval.invalidPeriod") };
     selectInterval(result.value);
-    showIntervalNotice({ type: "success", text: t("interval.addedAndSwitched", { value: result.value }) });
+    showIntervalNotice({ type: "success", text: t("interval.addedAndSwitched", { value: formatIntervalLabel(result.value) }) });
     return { ok: true, added: result.added };
   }, [addCustomInterval, exchange, exchangeCatalog, exchangeCatalogStatus, marketType, nativeIntervalValues, selectInterval, seriesIdentity, showIntervalNotice]);
 

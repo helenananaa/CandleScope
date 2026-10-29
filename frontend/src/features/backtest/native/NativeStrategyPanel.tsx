@@ -1,3 +1,4 @@
+import { formatIntervalLabel } from "../../../utils/intervals.js";
 import { diagnosticLocation, nativeRunFeedback, type NativeFeedbackStatus } from "./nativeDiagnostics.js";
 import NativeStrategyComparison from "./NativeStrategyComparison.js";
 import { recordStrategyRun, strategyRunIds, strategyInstanceScope, type NativeStrategyInstance } from "./nativeStrategyCollection.js";
@@ -450,7 +451,7 @@ function NativeStrategySession(props: InstanceProps & { executionMode: "NATIVE" 
           reportHash: reportRun?.result?.report_hash, total: reportRun?.result?.[section].length ?? 0, items: reportRun?.result?.[section].slice(offset, offset + limit) ?? [] }), { readOnly: true }),
     ] }), props.active !== false);
   return <section className={`native-strategy-panel${props.docked ? " native-strategy-docked" : ""}`} aria-label={t("native.title")}>
-    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {props.session.interval}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
+    {!props.docked && <header><strong>{t(mode === "NATIVE" ? "native.title" : "native.external.title")}</strong><span>{props.session.symbol} · {formatIntervalLabel(props.session.interval)}</span><button type="button" aria-label={t("backtest.close")} onClick={props.onClose}><Icon name="close" size={14} /></button></header>}
     {props.docked && <StrategyDockSlot name="tabs"><div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
       {SESSION_TABS.map((item) => <button key={item} type="button" role="tab" aria-selected={tab === item} tabIndex={tab === item ? 0 : -1}
         onClick={() => selectTab(item)} onKeyDown={(event) => tabKey(event, item)}>{t(item === "history" ? "ux.history" : `chartTester.tab.${item}`)}</button>)}

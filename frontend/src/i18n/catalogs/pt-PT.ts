@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptPT = {
+  ...intervalBasisMessages["pt-PT"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "O início e a janela à frente incluem velas futuras. Escolha um início anterior ou reduza a janela; só estão disponíveis velas históricas fechadas.",
   "replay.hub.catalogSyncing": "A procurar mercados históricos na fonte oficial. A opção será ativada automaticamente quando estiver pronta.",

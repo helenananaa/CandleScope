@@ -23,6 +23,7 @@ from app.data_engine.ingestion.models import (
 )
 from app.data_engine.market_data.models import MarketChannel, TransportMode
 from app.exchanges.models import ExchangeCapabilities
+from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 from app.exchanges.plugin import BuiltinExchangePlugin, DefaultSymbolNormalizer
 from app.exchanges.realtime import RealtimePolicy, RealtimeUpdateMode
 
@@ -883,20 +884,6 @@ def _raw_messages(
         )
         for value in rows
     ]
-
-
-def _okx_interval(interval: str) -> str:
-    return {
-        "1h": "1H",
-        "2h": "2H",
-        "4h": "4H",
-        "6h": "6Hutc",
-        "12h": "12Hutc",
-        "1d": "1Dutc",
-        "3d": "3Dutc",
-        "1w": "1Wutc",
-        "1M": "1Mutc",
-    }.get(interval, interval)
 
 
 def _okx_index_symbol(exchange: Any, contract_symbol: str) -> str:

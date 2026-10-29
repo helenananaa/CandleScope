@@ -277,6 +277,7 @@ class CcxtUnifiedNormalizer:
 
     def __init__(self, descriptor: StreamDescriptor) -> None:
         self._descriptor = descriptor
+        self._basis_specs = {}
 
     def parse(self, msg: RawMessage) -> MarketEvent | None:
         payload = msg.payload
@@ -346,11 +347,28 @@ class CcxtUnifiedNormalizer:
             return None
         try:
             open_time = int(row[0])
-            interval_ms = _timeframe_ms(self._descriptor.interval)
+            from app.data_engine.interval_policy import parse_interval_spec
+            purpose = "history" if msg.source == DataSource.HTTP_BACKFILL else "realtime"
+            if purpose not in self._basis_specs:
+                from app.exchanges import get_exchange_registry
+                basis_interval = self._descriptor.interval or ""
+                try:
+                    caps = get_exchange_registry().get_capabilities(self._descriptor.exchange)
+                    factory = getattr(caps, "bar_spec", None)
+                    if callable(factory):
+                        contract = factory(self._descriptor.market_type, basis_interval, purpose)
+                        basis_interval = contract.basis_interval or basis_interval
+                except KeyError:
+                    pass  # NormalizeLayer rejects undeclared providers.
+                self._basis_specs[purpose] = parse_interval_spec(basis_interval)
+            spec = self._basis_specs[purpose]
+            if spec is None or spec.floor_ms(open_time) != open_time:
+                return None
+            end_time = spec.next_ms(open_time)
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
-                "close_time": open_time + interval_ms - 1,
+                "close_time": end_time - 1,
                 "open": _finite_float(row[1]),
                 "high": _finite_float(row[2]),
                 "low": _finite_float(row[3]),
@@ -366,7 +384,7 @@ class CcxtUnifiedNormalizer:
                 "is_closed": bool(
                     payload.get(
                         "is_closed",
-                        open_time + interval_ms <= msg.received_at_ms,
+                        end_time <= msg.received_at_ms,
                     )
                 ),
             }

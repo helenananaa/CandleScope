@@ -288,7 +288,12 @@ def pine_chart_symbol(context: Any) -> str | None:
 
 
 def pine_chart_timeframe(context: Any) -> str | None:
-    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(str(context.interval or "").strip())
+    value = str(context.interval or "").strip()
+    if "~" in value:
+        if not re.fullmatch(r"[1-9]\d*[mhd]~a1~\d+|[1-9]\d*[dwM]~c1~(?:UTC|Asia/Shanghai|America/New_York)", value):
+            return None
+        value = value.split("~", 1)[0]
+    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(value)
     if not match:
         return None
     multiplier = int(match.group(1))
@@ -361,6 +366,8 @@ def _feature_is_host_blocked(
 
 def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
     engine, _version = _engine_contract()
+    if "~" in str(context.interval) and getattr(engine, "BAR_BOUNDARY_SCHEMA", None) != "host-bar-boundaries/1":
+        raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "This candle grid requires a runtime with host-bar-boundaries/1 support.")
     raw = engine.analyze_script(source)
     if not isinstance(raw, Mapping):
         raise BridgeError("PINE_ANALYSIS_OUTPUT_INVALID", "Pine analysis must return an object.")
@@ -1348,6 +1355,11 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
                 options["chart_timeframe"] = bindings["chartTimeframe"]
+            if "~" in str(request.context.interval):
+                boundary = request.options.get("barBasis")
+                if not isinstance(boundary, Mapping) or not bindings["chartSymbol"] or not bindings["chartTimeframe"]:
+                    raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "Frozen candle boundaries and chart identity are required.")
+                options["request_bars"] = {"$boundaries": {f"{bindings['chartSymbol']}:{bindings['chartTimeframe']}": dict(boundary)}}
             session_id = request.options.get("pineSessionId")
             if session_id is not None and (
                 not isinstance(session_id, str) or not session_id or len(session_id) > 128
