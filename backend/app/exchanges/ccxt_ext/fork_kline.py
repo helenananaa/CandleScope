@@ -22,6 +22,9 @@ from app.data_engine.ingestion.models import (
 )
 
 SCHEMA = "candlescope.binance.usdm.kline.v1"
+SPOT_SCHEMA = "candlescope.binance.spot.kline.v1"
+OKX_SCHEMA = "candlescope.okx.kline.v1"
+SCHEMAS = frozenset({SCHEMA, SPOT_SCHEMA, OKX_SCHEMA})
 LOCK_PATH = Path(__file__).resolve().parents[3] / "ccxt-fork.lock.json"
 
 
@@ -32,7 +35,9 @@ def require_fork(exchange: Any) -> None:
     required = (
         "candlescope_kline_contract",
         "fetch_candlescope_klines",
-        "parse_candlescope_ws_kline",
+        "parse_candlescope_ws_klines"
+        if getattr(exchange, "id", None) == "okx"
+        else "parse_candlescope_ws_kline",
     )
     if not all(callable(getattr(exchange, name, None)) for name in required):
         raise CcxtCompatibilityError(
@@ -49,7 +54,7 @@ def require_fork(exchange: Any) -> None:
         raise CcxtCompatibilityError("CCXT fork build provenance is missing") from exc
     if exchange.candlescope_kline_contract() != {
         "upstream": lock["upstream_version"],
-        "schema": SCHEMA,
+        "schema": OKX_SCHEMA if getattr(exchange, "id", None) == "okx" else SCHEMA,
     }:
         raise CcxtCompatibilityError(
             "CCXT fork contract differs from the qualified schema"
@@ -74,10 +79,13 @@ def normalize_fork_kline(
     message: RawMessage, descriptor: StreamDescriptor
 ) -> MarketEvent | None:
     payload = message.payload
+    if descriptor.exchange == "okx":
+        return _normalize_okx(message, descriptor)
+    spot = descriptor.market_type == "spot"
     expected = {
-        "schema": SCHEMA,
+        "schema": SPOT_SCHEMA if spot else SCHEMA,
         "exchange": "binance",
-        "marketType": "swap.linear",
+        "marketType": "spot" if spot else "swap.linear",
         "marketId": descriptor.symbol.upper(),
         "timeframe": descriptor.interval,
         "volumeUnit": "base",
@@ -85,7 +93,7 @@ def normalize_fork_kline(
     }
     if (
         descriptor.exchange != "binance"
-        or descriptor.market_type != "futures"
+        or descriptor.market_type not in {"spot", "futures"}
         or descriptor.stream_type != StreamType.KLINE
         or message.stream_type != StreamType.KLINE
         or not isinstance(payload, dict)
@@ -228,6 +236,120 @@ def normalize_fork_kline(
         symbol=descriptor.symbol,
         exchange=descriptor.exchange,
         event_time_ms=event_time,
+        received_at_ms=message.received_at_ms,
+        source=message.source,
+        data=data,
+        stream_key=descriptor.key,
+        sequence=opened,
+        market_type=descriptor.market_type,
+    )
+
+
+def _normalize_okx(
+    message: RawMessage, descriptor: StreamDescriptor
+) -> MarketEvent | None:
+    from app.exchanges.plugins.okx.normalizer import _interval_close_time_ms
+    from .profiles.okx_swap import _okx_interval
+
+    p = message.payload
+    spot = descriptor.market_type == "spot"
+    expected = {
+        "schema": OKX_SCHEMA,
+        "exchange": "okx",
+        "marketType": "spot" if spot else "swap.linear",
+        "marketId": descriptor.symbol.upper(),
+        "timeframe": descriptor.interval,
+        "volumeUnit": "base",
+        "quoteVolumeUnit": "quote",
+        "closeEvidence": "okx_confirm",
+        "sourceVolumeUnit": "base" if spot else "contracts",
+        "volumeCcyUnit": "quote" if spot else "base",
+    }
+    if (
+        descriptor.market_type not in {"spot", "futures"}
+        or descriptor.stream_type != StreamType.KLINE
+        or message.stream_type != StreamType.KLINE
+        or any(p.get(k) != v for k, v in expected.items())
+    ):
+        raise ValueError("OKX source identity/schema/units mismatch")
+    if any(
+        p.get(k) is not None
+        for k in (
+            "trades",
+            "takerBuyBaseVolume",
+            "takerBuyQuoteVolume",
+            "closeTime",
+            "eventTime",
+        )
+    ):
+        raise ValueError("OKX source cannot invent unavailable fields")
+    raw = json.loads(p["raw"])
+    if message.source == DataSource.WEBSOCKET:
+        arg = raw.get("arg", {})
+        if arg.get("instId") != descriptor.symbol or arg.get(
+            "channel"
+        ) != "candle" + _okx_interval(descriptor.interval):
+            raise ValueError("OKX source frame identity mismatch")
+        index = _integer(p, "rawRow")
+        row = raw["data"][index]
+    elif message.source in {DataSource.HTTP, DataSource.HTTP_BACKFILL}:
+        row = raw
+    else:
+        raise ValueError("unsupported OKX source")
+    if not isinstance(row, list) or len(row) < 9 or row[8] not in {"0", "1"}:
+        raise ValueError("invalid OKX source row/confirm")
+    opened = _integer(p, "timestamp")
+    if (
+        str(opened) != row[0]
+        or type(p.get("closed")) is not bool
+        or p["closed"] != (row[8] == "1")
+    ):
+        raise ValueError("OKX source timestamp/confirm mismatch")
+    positions = {
+        "open": 1,
+        "high": 2,
+        "low": 3,
+        "close": 4,
+        "sourceVolume": 5,
+        "volumeCcy": 6,
+        "quoteVolume": 7,
+        "volume": 5 if spot else 6,
+    }
+    for name, index in positions.items():
+        value = p.get(name)
+        if not isinstance(value, str) or value != row[index]:
+            raise ValueError("OKX named field differs from source evidence: " + name)
+        number = Decimal(value)
+        if not number.is_finite() or number < 0 or not math.isfinite(float(number)):
+            raise ValueError("invalid OKX source decimal: " + name)
+    if Decimal(p["low"]) > min(Decimal(p["open"]), Decimal(p["close"])) or Decimal(
+        p["high"]
+    ) < max(Decimal(p["open"]), Decimal(p["close"])):
+        raise ValueError("inconsistent OKX price bounds")
+    data = {k: float(p[k]) for k in ("open", "high", "low", "close", "volume")}
+    data.update(
+        interval=descriptor.interval,
+        open_time=opened,
+        close_time=_interval_close_time_ms(opened, descriptor.interval),
+        quote_volume=float(p["quoteVolume"]),
+        trades=None,
+        taker_buy_base=None,
+        taker_buy_quote=None,
+        enhanced_fields=["volume", "quote_volume"],
+        is_closed=p["closed"],
+        close_evidence="okx_confirm",
+        source_candle=copy.deepcopy(p),
+    )
+    receipt = p.get("_source_receipt")
+    if receipt:
+        if receipt["status"] != "selected":
+            return None
+        data.update(source_ref=dict(receipt["ref"]), is_correction=p["closed"])
+    return MarketEvent(
+        event_type=StreamType.KLINE,
+        symbol=descriptor.symbol,
+        exchange="okx",
+        event_time_ms=opened,
         received_at_ms=message.received_at_ms,
         source=message.source,
         data=data,

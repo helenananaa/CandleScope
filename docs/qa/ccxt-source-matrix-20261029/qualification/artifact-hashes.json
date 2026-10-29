@@ -1,0 +1,19 @@
+{
+  "/private/tmp/ccxt-4.5.60.tgz": {
+    "sha256": "12b0a4b44379cdf74c0f30a649641a94299b4b5382e24938b20c8a024a8fcb1e",
+    "bytes": 8018548
+  },
+  "/private/tmp/ccxt-nuget/ccxt.4.5.60.nupkg": {
+    "sha256": "d6d504dcf31cea1521cfcd1f57231453727f9b5f2dfefa1022bb50975769de4c",
+    "bytes": 11828148
+  },
+  "/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/ccxt/java/lib/build/libs/lib-4.5.60.jar": {
+    "sha256": "9b1146572f33042cf8cd9cc323db25db55d0d6b92ab23de63825ef61d1f2ec75",
+    "bytes": 23671816
+  },
+  "/private/tmp/ccxt-multi-wheel-rebuild/ccxt-4.5.60-py2.py3-none-any.whl": {
+    "sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "bytes": 6489305
+  },
+  "nuget_payload_matches_compiled_dlls": true
+}

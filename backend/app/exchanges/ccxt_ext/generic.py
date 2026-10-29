@@ -103,10 +103,13 @@ class _OwnedThreadedResolverMixin(SharedSslContextMixin):
 
 @lru_cache(maxsize=None)
 def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
-    mixin = _OwnedThreadedResolverMixin if windows else SharedSslContextMixin
+    from .source_capture import RestSourceCaptureMixin
+
+    # Delayed catalog siblings must not reopen a closed owned client on any OS.
+    mixin = _OwnedThreadedResolverMixin
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
-        (mixin, exchange_class),
+        (RestSourceCaptureMixin, mixin, exchange_class),
         {"__module__": __name__},
     )
 
@@ -410,14 +413,10 @@ class _RestExchangePool:
 
     def snapshot(self) -> dict[str, Any]:
         request_average = (
-            self._request_ms_total / self._request_count
-            if self._request_count
-            else 0.0
+            self._request_ms_total / self._request_count if self._request_count else 0.0
         )
         load_average = (
-            self._market_load_ms_total / self._created
-            if self._created
-            else 0.0
+            self._market_load_ms_total / self._created if self._created else 0.0
         )
         return {
             "closed": self._closed,
@@ -524,7 +523,10 @@ class CcxtHistoricalPaginationPolicy(ReverseTimePaginationPolicy):
         if end_ms is not None and newest >= end_ms:
             return None
         next_start = newest + 1
-        if previous_request.start_ms is not None and next_start <= previous_request.start_ms:
+        if (
+            previous_request.start_ms is not None
+            and next_start <= previous_request.start_ms
+        ):
             return None
         return TransportRequest(
             descriptor=previous_request.descriptor,
@@ -670,7 +672,8 @@ class CcxtUnifiedProfile:
             or resolve_market_selection(
                 self.entry,
                 descriptor.market_type,
-            ) != self.selection
+            )
+            != self.selection
         ):
             return False
         methods = _GENERIC_STREAM_METHODS.get(descriptor.stream_type)
@@ -702,12 +705,13 @@ class CcxtUnifiedProfile:
         raw_event_sink: Any,
         lifecycle_sink: Any,
     ) -> Any:
-        del raw_event_sink, lifecycle_sink
         return _create_exchange(
             self.entry,
             config,
             market_type=self.selection,
             websocket=True,
+            raw_event_sink=raw_event_sink,
+            lifecycle_sink=lifecycle_sink,
         )
 
     def resolve_symbol(self, exchange: Any, descriptor: StreamDescriptor) -> str:
@@ -742,18 +746,20 @@ class CcxtUnifiedProfile:
             return await exchange.watch_funding_rate(ccxt_symbol)
         if descriptor.stream_type == StreamType.LIQUIDATION:
             return await exchange.watch_liquidations(ccxt_symbol)
-        raise ValueError(f"Unsupported CCXT unified stream: {descriptor.stream_type.value}")
+        raise ValueError(
+            f"Unsupported CCXT unified stream: {descriptor.stream_type.value}"
+        )
 
     @staticmethod
     def matches(event: Any, descriptor: StreamDescriptor) -> bool:
-        del event, descriptor
-        # Unified profiles project the return value of their own watch call;
-        # they never demultiplex raw exchange envelopes.
-        return False
+        from .source_capture import matches_public_frame
+
+        return matches_public_frame(event, descriptor)
 
     def runtime_key(self, config: IngestionConfig) -> tuple[str, ...]:
         return (
             "ccxt-unified",
+            str(config.ccxt_fork_kline_enabled),
             self.exchange_id,
             self.selection,
             config.proxy_mode,
@@ -890,7 +896,11 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
         descriptor = req.descriptor
         methods = _GENERIC_STREAM_METHODS.get(descriptor.stream_type)
         rest_method = _rest_method_for(req, self.entry)
-        if methods is None or rest_method is None or not self.entry.supports(rest_method):
+        if (
+            methods is None
+            or rest_method is None
+            or not self.entry.supports(rest_method)
+        ):
             raise ValueError(
                 f"{self.id} does not support CCXT REST {descriptor.stream_type.value}",
             )
@@ -923,7 +933,9 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
                     since=req.start_ms,
                     limit=limit,
                 )
-                interval_ms = int(ccxt.Exchange.parse_timeframe(descriptor.interval) * 1000)
+                interval_ms = int(
+                    ccxt.Exchange.parse_timeframe(descriptor.interval) * 1000
+                )
                 now_ms = int(time.time() * 1000)
                 rows = [
                     make_unified_payload(
@@ -967,7 +979,10 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
             elif descriptor.stream_type in {StreamType.TICKER, StreamType.MINI_TICKER}:
                 value = await exchange.fetch_ticker(symbol)
                 rows = [make_unified_payload("ticker", dict(value))]
-            elif descriptor.stream_type in {StreamType.MARK_PRICE, StreamType.INDEX_PRICE}:
+            elif descriptor.stream_type in {
+                StreamType.MARK_PRICE,
+                StreamType.INDEX_PRICE,
+            }:
                 value = await exchange.fetch_mark_price(symbol)
                 rows = [make_unified_payload("derivatives_summary", dict(value))]
             elif descriptor.stream_type == StreamType.FUNDING_RATE:
@@ -986,9 +1001,8 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
                 ]
             elif descriptor.stream_type == StreamType.OPEN_INTEREST:
                 if (
-                    (req.history or req.start_ms is not None or req.end_ms is not None)
-                    and self.entry.supports("fetchOpenInterestHistory")
-                ):
+                    req.history or req.start_ms is not None or req.end_ms is not None
+                ) and self.entry.supports("fetchOpenInterestHistory"):
                     values = await exchange.fetch_open_interest_history(
                         symbol,
                         timeframe=descriptor.interval,
@@ -1130,9 +1144,7 @@ async def load_ccxt_symbols(
     selection = str(market_type or "").strip().lower()
     if not entry.market_types:
         return []
-    resolved_selection = (
-        resolve_market_selection(entry, selection) if selection else ""
-    )
+    resolved_selection = resolve_market_selection(entry, selection) if selection else ""
     exchange = _create_exchange(
         entry,
         config,
@@ -1141,9 +1153,7 @@ async def load_ccxt_symbols(
     )
     try:
         await exchange.load_markets()
-        selections = (
-            (resolved_selection,) if resolved_selection else entry.market_types
-        )
+        selections = (resolved_selection,) if resolved_selection else entry.market_types
         symbols: list[SymbolInfo] = []
         for market in exchange.markets.values():
             if market.get("active") is False:
@@ -1217,6 +1227,8 @@ def _create_exchange(
     *,
     market_type: str,
     websocket: bool,
+    raw_event_sink=None,
+    lifecycle_sink=None,
 ) -> Any:
     assert_supported_ccxt_version()
     module = ccxtpro if websocket else ccxt_async
@@ -1237,10 +1249,17 @@ def _create_exchange(
         windows=sys.platform == "win32",
     )
     options: dict[str, Any] = {"defaultType": base_type}
+    if entry.exchange_id == "okx":
+        options["fetchMarkets"] = {
+            "types": ["spot", "swap"] if base_type == "swap" else [base_type]
+        }
+    elif entry.exchange_id == "binance" and base_type == "spot":
+        options["fetchMarkets"] = {"types": ["spot"]}
     if config.proxy_mode == "pool":
         # Catalog callers do not carry a TransportRequest. Bind their client
         # explicitly rather than accidentally opening a direct connection.
         from app.core.proxy_pool import get_proxy_pool
+
         route = get_proxy_pool().routes(config, entry.exchange_id)[0]
         config = route.bind(config)
     if subtype is not None:
@@ -1251,9 +1270,41 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
+    if websocket and entry.exchange_id == "okx":
+        # OKX retires 8443 on 2026-10-31; retain the pinned parser and use 443.
+        values["urls"] = {"api": {"ws": "wss://ws.okx.com/ws/v5"}}
     if config.http_proxy and config.proxy_mode != "none":
         values["httpsProxy"] = config.http_proxy
         values["wssProxy"] = config.http_proxy
+    if (
+        websocket
+        and config.ccxt_fork_kline_enabled
+        and entry.exchange_id in {"binance", "okx"}
+    ):
+        from dataclasses import replace
+        from .hooks import build_hooked_exchange_class
+        from .source_capture import RAW_ONLY
+        from .binance_usdm import SUPPORTED_CCXT_VERSION
+
+        exchange_class = build_hooked_exchange_class(
+            exchange_class,
+            exchange_id=entry.exchange_id,
+            market_type=market_type,
+            supported_ccxt_version=SUPPORTED_CCXT_VERSION,
+        )
+
+        def capture(event):
+            if raw_event_sink is not None:
+                raw_event_sink(
+                    replace(event, payload={RAW_ONLY: True, "raw": event.payload})
+                )
+
+        return exchange_class(
+            values,
+            raw_event_sink=capture,
+            lifecycle_sink=lifecycle_sink,
+            fork_kline_enabled=True,
+        )
     return exchange_class(values)
 
 

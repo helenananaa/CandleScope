@@ -66,16 +66,10 @@ def build(lock: dict, destination: Path, source_repo: str) -> Path:
             "import fs from 'node:fs'; import ccxt from './js/ccxt.js'; fs.writeFileSync('exchanges.json', JSON.stringify({ids:ccxt.exchanges,ws:ccxt.pro.exchanges}));",
             cwd=source,
         )
-        run(
-            "node",
-            "node_modules/tsx/dist/cli.mjs",
-            "build/transpile.ts",
-            "--python",
-            "--noTests",
-            "binance",
-            cwd=source,
-        )
-        run("node", "--test", "js/src/test/candlescope/binance.test.js", cwd=source)
+        for exchange in ("binance", "okx"):
+            run("node", "node_modules/tsx/dist/cli.mjs", "build/transpile.ts",
+                "--python", "--noTests", exchange, cwd=source)
+            run("node", "--test", f"js/src/test/candlescope/{exchange}.test.js", cwd=source)
         build_env = root / "build-env"
         venv.EnvBuilder(with_pip=True).create(build_env)
         python = build_env / ("Scripts/python.exe" if os.name == "nt" else "bin/python")

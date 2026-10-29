@@ -1,0 +1,3 @@
+[INFO:MAIN] Exchange to test: okx
+[INFO][GO][TEST_SUCCESS] 149 static request tests passed.
+Got res: true

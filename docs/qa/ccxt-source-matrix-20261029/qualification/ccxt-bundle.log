@@ -1,0 +1,18 @@
+
+> ccxt@4.5.60 bundle
+> npm run bundle-cjs && npm run bundle-browser
+
+
+> ccxt@4.5.60 bundle-cjs
+> rollup -c rollup.config.js
+
+
+./js/ccxt.js → ./dist/cjs/...
+/bin/sh: ./dist/cjs/package.json: No such file or directory
+created ./dist/cjs/ in 3m 1.5s
+
+> ccxt@4.5.60 bundle-browser
+> rspack build -c rspack.config.js && CCXT_MINIMIZE=true CCXT_OUTPUT_FILENAME=ccxt.browser.min.js rspack build -c rspack.config.js
+
+Rspack compiled successfully in 6.25 s
+Rspack compiled successfully in 44.94 s

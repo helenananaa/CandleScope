@@ -1,0 +1,101 @@
+[
+  {
+    "series": "[\"okx\",\"spot\",\"BTC-USDT\",\"1m\"]",
+    "open_time": 1788826260000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 79022.5, \"close_time\": 1788826319999, \"exchange\": \"okx\", \"high\": 79075.8, \"interval\": \"1m\", \"low\": 79022.5, \"market_type\": \"spot\", \"open\": 79055.1, \"open_time\": 1788826260000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 95015.14278237, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 1.20194093, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248856075,
+    "checked_at": 1793248859264,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 79,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"okx\",\"spot\",\"BTC-USDT\",\"1m\"]",
+    "open_time": 1788826320000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 78992.7, \"close_time\": 1788826379999, \"exchange\": \"okx\", \"high\": 79022.5, \"interval\": \"1m\", \"low\": 78992.7, \"market_type\": \"spot\", \"open\": 79022.5, \"open_time\": 1788826320000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 40044.11373068, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 0.5068348, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248859266,
+    "checked_at": 1793248859649,
+    "status": "revised",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 80,
+    "differences_json": "{\"quote_volume\": {\"before\": 40044.11373068, \"refetched\": 40044.113730676}}"
+  },
+  {
+    "series": "[\"okx\",\"spot\",\"BTC-USDT\",\"1m\"]",
+    "open_time": 1788826380000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 79043.4, \"close_time\": 1788826439999, \"exchange\": \"okx\", \"high\": 79050.8, \"interval\": \"1m\", \"low\": 78990.6, \"market_type\": \"spot\", \"open\": 78992.7, \"open_time\": 1788826380000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 317484.95703219, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 4.01755493, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248859651,
+    "checked_at": 1793248860023,
+    "status": "revised",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 81,
+    "differences_json": "{\"quote_volume\": {\"before\": 317484.95703219, \"refetched\": 317484.957032192}}"
+  },
+  {
+    "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+    "open_time": 1788828120000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 79214.9, \"close_time\": 1788828179999, \"exchange\": \"okx\", \"high\": 79246.7, \"interval\": \"1m\", \"low\": 79210.0, \"market_type\": \"futures\", \"open\": 79246.7, \"open_time\": 1788828120000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 3190297.09115, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT-SWAP\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 40.2705, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248860055,
+    "checked_at": 1793248860431,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 82,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+    "open_time": 1788828180000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 79160.4, \"close_time\": 1788828239999, \"exchange\": \"okx\", \"high\": 79214.9, \"interval\": \"1m\", \"low\": 79160.4, \"market_type\": \"futures\", \"open\": 79214.9, \"open_time\": 1788828180000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 3260744.22546, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT-SWAP\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 41.1821, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248860432,
+    "checked_at": 1793248860824,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 83,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+    "open_time": 1791676800000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 82949.6, \"close_time\": 1791676859999, \"exchange\": \"okx\", \"high\": 82949.7, \"interval\": \"1m\", \"low\": 82940.4, \"market_type\": \"futures\", \"open\": 82940.5, \"open_time\": 1791676800000, \"price_adjustment\": \"raw\", \"provider_id\": \"okx\", \"quote_volume\": 455844.77628, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTC-USDT-SWAP\", \"taker_buy_base\": null, \"taker_buy_quote\": null, \"trades\": null, \"venue\": \"okx\", \"volume\": 5.4956, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248860827,
+    "checked_at": 1793248861210,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 84,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"binance\",\"spot\",\"BTCUSDT\",\"1m\"]",
+    "open_time": 1791686460000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 83142.0, \"close_time\": 1791686519999, \"exchange\": \"binance\", \"high\": 83142.0, \"interval\": \"1m\", \"low\": 83107.13, \"market_type\": \"spot\", \"open\": 83107.13, \"open_time\": 1791686460000, \"price_adjustment\": \"raw\", \"provider_id\": \"binance\", \"quote_volume\": 4568700.7448415, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTCUSDT\", \"taker_buy_base\": 54.63061, \"taker_buy_quote\": 4541792.8217515, \"trades\": 1393, \"venue\": \"binance\", \"volume\": 54.95428, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248870719,
+    "checked_at": 1793248874819,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 60,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"binance\",\"spot\",\"BTCUSDT\",\"1m\"]",
+    "open_time": 1791686520000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 83146.8, \"close_time\": 1791686579999, \"exchange\": \"binance\", \"high\": 83146.81, \"interval\": \"1m\", \"low\": 83141.99, \"market_type\": \"spot\", \"open\": 83141.99, \"open_time\": 1791686520000, \"price_adjustment\": \"raw\", \"provider_id\": \"binance\", \"quote_volume\": 469405.5593393, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTCUSDT\", \"taker_buy_base\": 5.33158, \"taker_buy_quote\": 443290.8233621, \"trades\": 271, \"venue\": \"binance\", \"volume\": 5.64566, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248874820,
+    "checked_at": 1793248875346,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 61,
+    "differences_json": "{}"
+  },
+  {
+    "series": "[\"binance\",\"spot\",\"BTCUSDT\",\"1m\"]",
+    "open_time": 1791686580000,
+    "original_json": "{\"asset_class\": \"crypto\", \"close\": 83150.0, \"close_time\": 1791686639999, \"exchange\": \"binance\", \"high\": 83150.0, \"interval\": \"1m\", \"low\": 83146.81, \"market_type\": \"spot\", \"open\": 83146.81, \"open_time\": 1791686580000, \"price_adjustment\": \"raw\", \"provider_id\": \"binance\", \"quote_volume\": 257187.0977277, \"series_variant\": \"native\", \"session_variant\": \"continuous\", \"source\": \"legacy_acceptance_copy\", \"symbol\": \"BTCUSDT\", \"taker_buy_base\": 2.91115, \"taker_buy_quote\": 242054.9062764, \"trades\": 364, \"venue\": \"binance\", \"volume\": 3.09314, \"volume_semantics\": \"base_asset\"}",
+    "started_at": 1793248875349,
+    "checked_at": 1793248875870,
+    "status": "matched",
+    "evidence_origin": "historical_refetch",
+    "observation_id": 62,
+    "differences_json": "{}"
+  }
+]

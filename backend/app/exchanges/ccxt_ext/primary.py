@@ -139,8 +139,7 @@ class OkxCombinedSummaryProfile:
 
     @staticmethod
     def matches(event: Any, descriptor: StreamDescriptor) -> bool:
-        del event, descriptor
-        return False
+        return CcxtUnifiedProfile.matches(event, descriptor)
 
     def runtime_key(self, config: IngestionConfig) -> tuple[str, ...]:
         return self._delegate.runtime_key(config)
@@ -212,9 +211,7 @@ class CcxtPrimaryNormalizer:
 
     def parse(self, message: RawMessage) -> Any:
         payload = message.payload
-        if isinstance(payload, dict) and str(payload.get("schema", "")).startswith(
-            "candlescope.binance.usdm.kline."
-        ):
+        if isinstance(payload, dict) and str(payload.get("schema", "")).startswith(("candlescope.binance.", "candlescope.okx.")):
             from .fork_kline import normalize_fork_kline
 
             return normalize_fork_kline(message, self._descriptor)
@@ -371,6 +368,22 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
         req: TransportRequest,
         config: IngestionConfig,
     ) -> list[RawMessage]:
+        if not config.ccxt_fork_kline_enabled:
+            return await self._fetch_source_history(req, config)
+        from .source_capture import REST_CAPTURE
+        from app.core.executors import run_storage
+        from app.data_engine.storage import market_sources
+
+        captured = []
+        token = REST_CAPTURE.set(captured)
+        try:
+            return await self._fetch_source_history(req, config)
+        finally:
+            REST_CAPTURE.reset(token)
+            if captured:
+                await run_storage(market_sources.record_rest, req.descriptor, captured)
+
+    async def _fetch_source_history(self, req, config) -> list[RawMessage]:
         if self.venue == "binance" and req.descriptor.stream_type in {
             StreamType.KLINE,
             StreamType.AGG_TRADE,
@@ -421,7 +434,6 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
             futures = descriptor.market_type == "futures"
             if (
                 descriptor.stream_type == StreamType.KLINE
-                and futures
                 and config.ccxt_fork_kline_enabled
             ):
                 from .fork_kline import require_fork, prepare_source_messages
@@ -429,29 +441,54 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 from app.data_engine.storage import kline_sources
 
                 require_fork(exchange)
-                limit = min(params["limit"], 1500)
-                fork_params = {"until": int(req.end_ms)} if req.end_ms is not None else {}
+                limit = min(params["limit"], 1500 if futures else 1000)
+                fork_params = (
+                    {"until": int(req.end_ms)} if req.end_ms is not None else {}
+                )
                 for attempt in range(3):
                     watermark = await run_storage(kline_sources.rest_watermark)
                     # Observe exchange time BEFORE requesting the candle, so
                     # local clock skew cannot invent or delay its finality.
-                    server_time = await exchange.fetch_time({"type": "swap", "subType": "linear"})
+                    server_time = await exchange.fetch_time(
+                        {"type": "swap", "subType": "linear"}
+                        if futures
+                        else {"type": "spot"}
+                    )
                     if type(server_time) is not int or server_time <= 0:
-                        raise RuntimeError("missing exchange time for fork REST snapshot")
+                        raise RuntimeError(
+                            "missing exchange time for fork REST snapshot"
+                        )
                     values = await exchange.fetch_candlescope_klines(
-                        symbol, descriptor.interval, req.start_ms, limit, fork_params,
+                        symbol,
+                        descriptor.interval,
+                        req.start_ms,
+                        limit,
+                        fork_params,
                     )
-                    values = [dict(value, _source_rest_server_time_ms=server_time) for value in values]
+                    values = [
+                        dict(value, _source_rest_server_time_ms=server_time)
+                        for value in values
+                    ]
                     messages = _raw_messages(
-                        descriptor, values, "/fapi/v1/klines",
-                        request_limit=limit, headers=exchange.last_response_headers,
+                        descriptor,
+                        values,
+                        "/fapi/v1/klines" if futures else "/api/v3/klines",
+                        request_limit=limit,
+                        headers=exchange.last_response_headers,
                     )
-                    await prepare_source_messages(messages, descriptor, watermark=watermark)
-                    if all(message.payload["_source_receipt"]["status"] == "selected" for message in messages):
+                    await prepare_source_messages(
+                        messages, descriptor, watermark=watermark
+                    )
+                    if all(
+                        message.payload["_source_receipt"]["status"] == "selected"
+                        for message in messages
+                    ):
                         return messages
                     if attempt < 2:
-                        await asyncio.sleep(0.25 * (2 ** attempt))
-                raise RuntimeError("source_read_conflict: K-line changed during REST request; retry page")
+                        await asyncio.sleep(0.25 * (2**attempt))
+                raise RuntimeError(
+                    "source_read_conflict: K-line changed during REST request; retry page"
+                )
             if descriptor.stream_type == StreamType.KLINE:
                 params["interval"] = descriptor.interval
                 if req.start_ms is not None:
@@ -583,6 +620,39 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 descriptor,
                 market_type=selection,
             )
+            if config.ccxt_fork_kline_enabled:
+                from .fork_kline import require_fork, prepare_source_messages
+                from app.core.executors import run_storage
+                from app.data_engine.storage import kline_sources
+
+                require_fork(exchange)
+                limit = min(max(1, int(req.limit or 1)), 300)
+                until = {"until": int(req.end_ms)} if req.end_ms is not None else {}
+                for attempt in range(3):
+                    watermark = await run_storage(kline_sources.rest_watermark)
+                    rows = await exchange.fetch_candlescope_klines(
+                        symbol, descriptor.interval, req.start_ms, limit, until
+                    )
+                    messages = _raw_messages(
+                        descriptor,
+                        rows,
+                        "/api/v5/market/history-candles",
+                        request_limit=limit,
+                        headers=getattr(exchange, "last_response_headers", None),
+                    )
+                    await prepare_source_messages(
+                        messages, descriptor, watermark=watermark
+                    )
+                    if all(
+                        m.payload["_source_receipt"]["status"] == "selected"
+                        for m in messages
+                    ):
+                        return messages
+                    if attempt < 2:
+                        await asyncio.sleep(0.25 * (2**attempt))
+                raise RuntimeError(
+                    "source_read_conflict: OKX K-line changed during REST request; retry page"
+                )
             params: dict[str, Any] = {
                 "instId": str(exchange.market(symbol)["id"]),
                 "bar": _okx_interval(descriptor.interval or "1m"),
@@ -600,8 +670,12 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 raise RuntimeError(f"OKX CCXT REST error: {response!r}")
             values = response.get("data") if isinstance(response, dict) else None
             rows = list(reversed(values)) if isinstance(values, list) else []
-            return _raw_messages(descriptor, rows, "ccxt+rest://okx",
-                                 headers=getattr(exchange, "last_response_headers", None))
+            return _raw_messages(
+                descriptor,
+                rows,
+                "ccxt+rest://okx",
+                headers=getattr(exchange, "last_response_headers", None),
+            )
 
     async def _fetch_okx_summary(
         self,

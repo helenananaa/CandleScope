@@ -54,7 +54,6 @@ from .models import (
     BarSourceMode,
     MergeMode,
     BarInputAdapter,
-    parse_interval_ms,
 )
 
 logger = logging.getLogger("bar_aggregator.L1_Router")
@@ -528,9 +527,9 @@ class EventRouter:
                 is_closed=bool(data.get("is_closed", False)),
                 market_type=market_type,
                 quote_volume=float(data.get("quote_volume", 0)),
-                trades=int(data.get("trades", 0)),
-                taker_buy_base=float(data.get("taker_buy_base", 0)),
-                taker_buy_quote=float(data.get("taker_buy_quote", 0)),
+                trades=int(data.get("trades") or 0),
+                taker_buy_base=float(data.get("taker_buy_base") or 0),
+                taker_buy_quote=float(data.get("taker_buy_quote") or 0),
                 enhanced_fields=declared_enhanced_fields(
                     exchange,
                     market_type,

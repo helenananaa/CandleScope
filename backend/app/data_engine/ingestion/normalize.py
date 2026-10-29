@@ -4,6 +4,7 @@ The layer owns pipeline metrics, callback delivery, and malformed payload
 handling. Exchange-specific schema mapping lives under
 ``app.data_engine.ingestion.normalizers``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,10 +51,36 @@ class NormalizeLayer:
     async def ingest(self, msg: RawMessage) -> None:
         """Normalize a raw message and forward the resulting MarketEvent."""
         self._metrics.inc("messages_received")
-        if isinstance(msg.payload, dict) and self._cfg.ccxt_fork_kline_enabled:
-            from app.exchanges.ccxt_ext.fork_kline import SCHEMA, prepare_source_messages
+        if self._cfg.ccxt_fork_kline_enabled and self._descriptor.exchange in {
+            "binance",
+            "okx",
+        }:
+            from app.core.executors import run_storage
+            from app.data_engine.storage import market_sources
+            from app.exchanges.ccxt_ext.source_capture import RAW_ONLY
+            from app.exchanges.ccxt_ext.unified import CCXT_UNIFIED_MARKER
+            from .models import DataSource, StreamType
 
-            if msg.payload.get("schema") == SCHEMA:
+            capture_only = isinstance(msg.payload, dict) and msg.payload.get(RAW_ONLY)
+            unified = (
+                isinstance(msg.payload, dict)
+                and msg.payload.get("schema") == CCXT_UNIFIED_MARKER
+            )
+            if msg.source == DataSource.WEBSOCKET and (
+                capture_only
+                or (self._descriptor.stream_type != StreamType.KLINE and not unified)
+            ):
+                await run_storage(market_sources.record_ws, self._descriptor, msg)
+            if capture_only:
+                return
+
+        if isinstance(msg.payload, dict) and self._cfg.ccxt_fork_kline_enabled:
+            from app.exchanges.ccxt_ext.fork_kline import (
+                SCHEMAS,
+                prepare_source_messages,
+            )
+
+            if msg.payload.get("schema") in SCHEMAS:
                 try:
                     await prepare_source_messages([msg], self._descriptor)
                 except ValueError as exc:
@@ -91,7 +118,8 @@ class NormalizeLayer:
         plugin = get_exchange_registry().get_plugin(self._descriptor.exchange)
         opened = int(message.payload["timestamp"])
         messages = await plugin.fetch_history_with_config(
-            TransportRequest(self._descriptor, limit=1, start_ms=opened, end_ms=opened), self._cfg
+            TransportRequest(self._descriptor, limit=1, start_ms=opened, end_ms=opened),
+            self._cfg,
         )
         if not messages:
             raise RuntimeError("source reconciliation returned no candle")
@@ -112,7 +140,11 @@ class NormalizeLayer:
             for message in messages:
                 await self.ingest(message)
             remaining = await run_storage(kline_sources.pending, self._descriptor, 1)
-            if remaining and remaining[0].payload["_source_receipt"]["ref"] == messages[0].payload["_source_receipt"]["ref"]:
+            if (
+                remaining
+                and remaining[0].payload["_source_receipt"]["ref"]
+                == messages[0].payload["_source_receipt"]["ref"]
+            ):
                 return  # Recovery may buffer until its missing range is available.
 
     def parse_raw(self, msg: RawMessage) -> MarketEvent | None:

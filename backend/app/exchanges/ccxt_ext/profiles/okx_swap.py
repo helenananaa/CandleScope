@@ -34,9 +34,10 @@ class OkxSwapCcxtProfile:
     ) -> CandleScopeOkx:
         values: dict[str, Any] = {
             "newUpdates": True,
+            "urls": {"api": {"ws": "wss://ws.okx.com/ws/v5"}},
             "enableRateLimit": True,
             "aiohttp_trust_env": config.proxy_mode == "system",
-            "options": {"defaultType": "swap"},
+            "options": {"defaultType": "swap", "fetchMarkets": {"types": ["swap"]}},
         }
         if config.http_proxy and config.proxy_mode != "none":
             values["httpsProxy"] = config.http_proxy
@@ -45,6 +46,7 @@ class OkxSwapCcxtProfile:
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
+            fork_kline_enabled=config.ccxt_fork_kline_enabled,
         )
 
     def resolve_symbol(
@@ -96,6 +98,7 @@ class OkxSwapCcxtProfile:
             self.market_type,
             config.proxy_mode,
             config.http_proxy or "",
+            str(config.ccxt_fork_kline_enabled),
         )
 
 

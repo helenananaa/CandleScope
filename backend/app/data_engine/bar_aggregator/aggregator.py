@@ -833,7 +833,7 @@ class BarAggregator:
                     continue
                 sibling = replace(
                     bar_input, open_time_ms=data["open_time"], close_time_ms=data["close_time"],
-                    **{name: data[name] for name in (
+                    **{name: data[name] if data[name] is not None else 0 for name in (
                         "open", "high", "low", "close", "volume", "quote_volume", "trades",
                         "taker_buy_base", "taker_buy_quote",
                     )},

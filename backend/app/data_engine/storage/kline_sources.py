@@ -51,7 +51,9 @@ def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def _decimal_identity(value: str) -> tuple:
+def _decimal_identity(value: str | None) -> tuple | None:
+    if value is None:
+        return None
     # Decimal.normalize() rounds to the ambient context (usually 28 digits).
     # Preserve arbitrary source precision while ignoring insignificant zeros.
     sign, digits, exponent = Decimal(value).as_tuple()
@@ -120,7 +122,11 @@ def _decision(previous, event, value_hash, watermark):
             if watermark is not None and previous["observation_id"] <= watermark
             else "stale"
         )
-    source_time = previous["ws_event_time"]
+    source_time = (
+        previous["ws_event_time"]
+        if event.data["source_candle"].get("eventTime") is not None
+        else None
+    )
     if source_time is not None:
         if event.event_time_ms < source_time:
             return "stale"
@@ -128,7 +134,10 @@ def _decision(previous, event, value_hash, watermark):
             return "reconcile"
     if (
         previous["is_closed"]
-        and previous["source"] != DataSource.WEBSOCKET.value
+        and (
+            previous["source"] != DataSource.WEBSOCKET.value
+            or event.data["source_candle"].get("eventTime") is None
+        )
         and previous["value_hash"] != value_hash
     ):
         return "reconcile"
@@ -141,9 +150,17 @@ def _decision(previous, event, value_hash, watermark):
             "takerBuyBaseVolume",
             "takerBuyQuoteVolume",
         ):
-            if Decimal(new[name]) < Decimal(old[name]):
+            if (
+                new.get(name) is not None
+                and old.get(name) is not None
+                and Decimal(new[name]) < Decimal(old[name])
+            ):
                 return "stale"
-        if new["trades"] < old["trades"]:
+        if (
+            new.get("trades") is not None
+            and old.get("trades") is not None
+            and new["trades"] < old["trades"]
+        ):
             return "stale"
     return "selected"
 
@@ -165,6 +182,12 @@ def record(
         trades=envelope["trades"],
         closed=event.data["is_closed"],
     )
+    for name in ("sourceVolume", "volumeCcy"):
+        if name in envelope:
+            semantic[name] = _decimal_identity(envelope[name])
+    for name in ("volumeUnit", "quoteVolumeUnit", "sourceVolumeUnit", "volumeCcyUnit"):
+        if name in envelope:
+            semantic[name] = envelope[name]
     value_hash = hashlib.sha256(_json(semantic).encode()).hexdigest()
     observation_hash = hashlib.sha256(
         _json([envelope, event.source.value, rest_watermark]).encode()
@@ -233,7 +256,7 @@ def record(
                 else previous["revision"] + int(previous["value_hash"] != value_hash)
             )
             ws_time = (
-                event.event_time_ms
+                envelope.get("eventTime")
                 if event.source == DataSource.WEBSOCKET
                 else (previous["ws_event_time"] if previous else None)
             )
@@ -287,10 +310,12 @@ def latest(descriptor: StreamDescriptor, opened: int) -> dict | None:
 
 
 def observations(descriptor: StreamDescriptor, opened: int) -> list[dict]:
+    from .source_retention import restore_row
+
     with closing(klines_repo._connect()) as conn, conn:
         _schema(conn)
         return [
-            dict(row)
+            restore_row(conn, "kline_source_observations", dict(row))
             for row in conn.execute(
                 "SELECT * FROM kline_source_observations WHERE series=? AND open_time=? ORDER BY id",
                 (series(descriptor), opened),

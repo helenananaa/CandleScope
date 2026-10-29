@@ -270,9 +270,13 @@ class IngestionConfig:
             True,
         ),
     )
-    # Opt-in fixed-source CCXT fork; only Binance USD-M trade klines are qualified.
+    # Opt-in fixed-source CCXT fork for Binance/OKX public market data.
     ccxt_fork_kline_enabled: bool = field(
         default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", False),
+    )
+    # Zero disables automatic lossless source-log compaction; heads stay hot.
+    source_log_retention_days: int = field(
+        default_factory=lambda: _env_int("INGESTION_SOURCE_LOG_RETENTION_DAYS", 30),
     )
     # Raw hooks run synchronously in CCXT's websocket reader.  Overflow is a
     # hard health failure rather than a silent data drop.
