@@ -1283,6 +1283,7 @@ export const zhTW = {
   "settings.proxy.address": "代理位址",
   "settings.proxy.egressGroup": "出口組別",
   "settings.proxy.concurrency": "並行請求上限",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "交易所 ID（逗號分隔，留空表示全部）",
   "settings.proxy.enabled": "啟用",
   "settings.proxy.makePrimary": "設為主路線",

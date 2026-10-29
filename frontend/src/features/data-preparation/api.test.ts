@@ -84,3 +84,48 @@ test("READY preparation verifies the run before opening and distinguishes deleti
   unavailable = true;
   await assert.rejects(submit(), error => !(error instanceof PreparedReplayDeletedError));
 });
+
+test("resubmitting a saved retryable failure retries the same durable job once", async () => {
+  const failed = { ...running(), state: "FAILED" as const, result: null,
+    error: { code: "INSTRUMENT_METADATA_UNAVAILABLE", message: "Catalog was not ready", retryable: true } };
+  const run = { run_id: "prepared-task", kind: "V2", name: "Recovered training", state: "PAUSED",
+    source_kind: "BAR", integrity_mode: "CHALLENGE", time_disclosure_policy: "NONE", last_symbol: "BTCUSDT",
+    subscribed_track_count: 1, progress: { source_sequence: 0 }, equity: "10000", equity_status: "CURRENT",
+    settlement_asset: "USDT", updated_at_ms: 1_800_000_000_000, compatibility: "READY",
+    resume_action: "OPEN_ADAPTER", adapter_session_id: "session", status: { code: "READY", message: "Ready" },
+    report_available: false, review_available: false };
+  const calls: string[] = [];
+  const fetcher: typeof fetch = async (input, options) => {
+    const path = new URL(String(input)).pathname;
+    calls.push(`${options?.method ?? "GET"} ${path}`);
+    if (path.endsWith("/data-preparations/replay")) {
+      assert.equal((JSON.parse(String(options?.body)) as { idempotency_key: string }).idempotency_key, "saved-key");
+      return Response.json(failed);
+    }
+    if (path.endsWith("/progressive-task/retry")) return Response.json({ ...running(), state: "READY", result: { run } });
+    if (path.endsWith("/runs/prepared-task")) return Response.json(run);
+    throw new Error(`Unexpected ${path}`);
+  };
+  const result = await prepareReplay({} as TrainingRunCreatePayload,
+    { exchange: "binance", market_type: "spot", symbol: "BTCUSDT" }, () => {}, undefined,
+    "saved-key", { fetcher, basePath: "http://fixture/api/v1/data-preparations" });
+  assert.equal(result.run.run_id, "prepared-task");
+  assert.deepEqual(calls, ["POST /api/v1/data-preparations/replay",
+    "POST /api/v1/data-preparations/progressive-task/retry", "GET /api/v1/replay/runs/prepared-task"]);
+});
+
+test("an explicit replay retry is bounded and does not restart cancelled or non-retryable jobs", async () => {
+  for (const state of ["FAILED", "CANCELLED", "BLOCKED_STORAGE"] as const) {
+    for (const retryable of [false, true]) {
+      const failed = { ...running(), state, result: null,
+        error: { code: "UNAVAILABLE", message: "Still unavailable", retryable } };
+      const paths: string[] = [];
+      const fetcher: typeof fetch = async input => { paths.push(String(input)); return Response.json(failed); };
+      await assert.rejects(prepareReplay({} as TrainingRunCreatePayload,
+        { exchange: "binance", market_type: "spot", symbol: "BTCUSDT" }, () => {}, undefined,
+        "saved-key", { fetcher, basePath: "http://fixture/api/v1/data-preparations" }), /Still unavailable/);
+      assert.equal(paths.length, state === "FAILED" && retryable ? 2 : 1);
+      if (paths.length === 2) assert.ok(paths[1]?.endsWith("/progressive-task/retry"));
+    }
+  }
+});

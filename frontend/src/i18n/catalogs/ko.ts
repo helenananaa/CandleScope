@@ -1680,6 +1680,7 @@ export const ko = {
   "settings.proxy.address": "프록시 주소",
   "settings.proxy.egressGroup": "출구 그룹",
   "settings.proxy.concurrency": "동시 요청 한도",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "거래소 ID (쉼표로 구분, 비워 두면 모든 거래소)",
   "settings.proxy.enabled": "사용",
   "settings.proxy.makePrimary": "주 경로로 설정",

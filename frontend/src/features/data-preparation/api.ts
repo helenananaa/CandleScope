@@ -92,10 +92,19 @@ export async function prepareReplay(
   idempotencyKey: string = crypto.randomUUID(),
   transport: PreparationTransport = {},
 ): Promise<TrainingRunMutationResponse> {
-  const initial = await preparationRequest<PreparationJob>("/replay", {
+  let initial = await preparationRequest<PreparationJob>("/replay", {
     method: "POST", headers: { "Content-Type": "application/json" }, signal: signal ?? null,
     body: JSON.stringify({ idempotency_key: idempotencyKey, setup, ...market }),
   }, transport);
+  // A saved draft retains its submission key across restart. POST /replay
+  // returns that durable job unchanged, including an old terminal failure.
+  // This explicit submit may resume a retryable failure once; polling alone
+  // must never restart jobs or create a second run with a new key.
+  if (initial.state === "FAILED" && initial.error?.retryable && !initial.cancel_requested) {
+    initial = await preparationRequest<PreparationJob>(`/${initial.id}/retry`, {
+      method: "POST", signal: signal ?? null,
+    }, transport);
+  }
   const ready = await waitForPreparation(initial, onProgress, signal, transport, market.progressive === true);
   if (!ready.result?.run) throw new Error("Prepared training is missing its run");
   // READY is a historical preparation receipt. Its run can have been deleted

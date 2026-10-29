@@ -1701,6 +1701,7 @@ export const zhCN = {
   "settings.proxy.address": "代理地址",
   "settings.proxy.egressGroup": "出口组",
   "settings.proxy.concurrency": "并发请求上限",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "交易所 ID（逗号分隔，留空表示全部）",
   "settings.proxy.enabled": "启用",
   "settings.proxy.makePrimary": "设为主线路",

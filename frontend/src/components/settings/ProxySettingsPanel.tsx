@@ -135,7 +135,7 @@ export default function ProxySettingsPanel({
                                         onChange={(event) => updateRoute(route.id, { url: event.target.value })} /></label>
                                 <label className="st-proxy-field"><span>{t("settings.proxy.egressGroup")}</span>
                                     <input className="st-input" value={route.egress_group} onChange={(event) => updateRoute(route.id, { egress_group: event.target.value })} /></label>
-                                <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")} · ZIP ≤ {Math.max(0, route.max_concurrency - 1)}</span>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")} · {t("settings.proxy.archiveConcurrency", { count: Math.max(0, route.max_concurrency - 1) })}</span>
                                     <input type="number" min={1} max={32} className="st-input" value={route.max_concurrency}
                                         onChange={(event) => updateRoute(route.id, { max_concurrency: Number(event.target.value) })} /></label>
                                 <label className="st-proxy-field"><span>{t("settings.proxy.wsCapacity")}</span>
