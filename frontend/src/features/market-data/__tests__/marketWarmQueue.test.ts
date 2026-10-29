@@ -101,9 +101,26 @@ test("foreground preemption resumes a retained warm intent after the gate reopen
   const foreground = h.gate.enterForeground("unrelated-chart");
   assert.equal(h.reads[0]!.signal.aborted, true);
   await turn(); assert.equal(h.reads.length, 1);
-  foreground.release(); await turn(); assert.equal(h.reads.length, 2);
+  foreground.release(); await turn(); assert.equal(h.reads.length, 1);
+  h.advance(999); await turn(); assert.equal(h.reads.length, 1);
+  h.advance(1); await turn(); assert.equal(h.reads.length, 2);
   h.reads[1]!.resolve({ data: [] });
   assert.equal(await warm.done, "warmed");
+});
+
+test("repeated foreground polls back off a retained hover instead of restarting every second", async t => {
+  const h = harness(); t.after(h.dispose);
+  const warm = h.queue.request(request()); await turn();
+  for (let second = 0; second < 10; second += 1) {
+    const poll = h.gate.enterForeground("latest-poll");
+    await turn(); poll.release(); await turn();
+    h.advance(1_000); await turn();
+  }
+  assert.equal(h.reads.length, 4, "attempts occur at 0, 1, 3 and 7 seconds");
+  assert.equal(h.queue.diagnostics().queued, 1);
+  warm.release();
+  h.advance(60_000); await turn();
+  assert.equal(h.reads.length, 4, "cancelled intent cannot restart at its retry deadline");
 });
 
 test("hover priority reconciles the gate FIFO without starving a previously queued watchlist demand", async t => {

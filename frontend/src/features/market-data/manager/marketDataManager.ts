@@ -142,7 +142,10 @@ export class MarketDataManager implements MarketDataService {
 
   readonly fetchKlinesHistory: KlineApi["fetchKlinesHistory"] = (...args) => {
     const options = args[5];
-    if (args[2] == null && options.intent === "viewport" && options.maxWaitMs === 0 && options.countBack) {
+    // count_back overrides days at the HTTP boundary. getBars supplies a
+    // derived day fallback even for an exact count request; it is not a
+    // different input window and must not prevent the production handoff.
+    if (options.intent === "viewport" && options.maxWaitMs === 0 && options.countBack) {
       const promoted = this.warmQueue.joinForeground(identity(args[0], args[1], args[3], args[4], options), options.countBack, options.signal);
       if (promoted) return promoted;
     }

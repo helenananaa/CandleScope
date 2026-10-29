@@ -154,16 +154,24 @@ test("warming has independent cancellation and populates the same cache read by 
   h.dispose();
 });
 
-test("repeated sync does not spin partial warming and a foreground gate can cancel and resume work", async () => {
+test("repeated sync does not spin partial warming and a foreground gate can cancel and resume work", { timeout: 5_000 }, async t => {
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
   const pending: Array<{ resolve: (value: KlineFetchResult) => void; signal: AbortSignal }> = [];
-  const h = harness({ fetchKlinesHistory: (...args) => new Promise(resolve => pending.push({ resolve, signal: args[5].signal! })) }, gate);
+  let resumed!: () => void;
+  const restarted = new Promise<void>(resolve => { resumed = resolve; });
+  const h = harness({ fetchKlinesHistory: (...args) => new Promise(resolve => {
+    pending.push({ resolve, signal: args[5].signal! });
+    if (pending.length === 2) resumed();
+  }) }, gate);
+  t.after(() => { h.dispose(); gate.dispose(); });
   h.consumer.syncJobs([job]); await turn();
   const foreground = gate.enterForeground("chart-switch");
   assert.equal(pending[0]!.signal.aborted, true);
   pending[0]!.resolve({ data: [row(60, 10, false)] }); await turn();
   assert.equal(pending.length, 1);
   foreground.release(); await turn();
+  assert.equal(pending.length, 1, "foreground release does not bypass preemption backoff");
+  await restarted;
   assert.equal(pending.length, 2);
   pending[1]!.resolve({ data: [row(60, 11, false)], all_rows_final: false }); await turn();
   h.consumer.syncJobs([job]); await turn();

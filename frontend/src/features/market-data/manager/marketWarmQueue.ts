@@ -22,6 +22,7 @@ export interface MarketWarmQueueOptions {
   sourceRowsPerMinute?: number;
   maxInflightBytes?: number;
   cooldownMs?: number;
+  preemptRetryMs?: number;
   now?: () => number;
   schedule?: (work: () => void, delay: number) => unknown;
   cancel?: (handle: unknown) => void;
@@ -36,6 +37,8 @@ interface Job {
   active: { controller: AbortController; lease: PreloadLease } | null;
   promoted: boolean;
   settled: boolean;
+  nextAttemptAt: number;
+  preemptions: number;
 }
 
 const priority: Record<WarmReason, number> = { hover: 0, frequent: 1, watchlist: 2 };
@@ -54,6 +57,7 @@ export class MarketWarmQueue {
   private readonly cancel: NonNullable<MarketWarmQueueOptions["cancel"]>;
   private readonly unsubscribe: () => void;
   private wake: unknown = null;
+  private wakeAt: number | null = null;
   private disposed = false;
   private pumping = false;
   private completed = 0;
@@ -84,7 +88,8 @@ export class MarketWarmQueue {
     if (!job) {
       if (this.jobs.size >= (this.options.maxPending ?? 16)) { this.rejected += 1; return done("budget"); }
       job = { key, request: { ...request, series: { ...request.series } }, consumers: new Map(),
-        foreground: new Map(), holds: new Set(), active: null, promoted: false, settled: false };
+        foreground: new Map(), holds: new Set(), active: null, promoted: false, settled: false,
+        nextAttemptAt: 0, preemptions: 0 };
       this.jobs.set(key, job);
     } else if (priority[request.reason] < priority[job.request.reason]) job.request = { ...job.request, reason: request.reason };
     const id = Symbol(request.owner), target = job;
@@ -141,7 +146,7 @@ export class MarketWarmQueue {
     if (this.disposed) return;
     this.disposed = true; this.unsubscribe();
     if (this.wake !== null) this.cancel(this.wake);
-    this.wake = null;
+    this.wake = null; this.wakeAt = null;
     for (const job of [...this.jobs.values()]) this.finish(job, "cancelled", undefined, aborted());
     this.recent.clear(); this.spent.length = 0;
   }
@@ -159,15 +164,14 @@ export class MarketWarmQueue {
       // queued watchlist owner must not strand a later hover at the queue head.
       for (const job of candidates) this.options.gate.cancelQueued(`market-warm:${job.key}`);
       for (const job of candidates) {
+        if (job.nextAttemptAt > now) { this.schedulePump(job.nextAttemptAt); continue; }
         const active = [...this.jobs.values()].filter(item => item.active);
         if (active.length >= (this.options.maxConcurrent ?? 2)) break;
         if (active.reduce((sum, item) => sum + item.request.limit * 200, 0) + job.request.limit * 200
           > (this.options.maxInflightBytes ?? 2_000_000)) continue;
         if (this.spent.reduce((sum, item) => sum + item.rows, 0) + job.request.estimatedSourceRows
           > (this.options.sourceRowsPerMinute ?? 30_000)) {
-          if (this.wake === null && this.spent.length) this.wake = this.schedule(() => {
-            this.wake = null; this.pump();
-          }, Math.max(1, this.spent[0]!.at + 60_000 - now));
+          if (this.spent.length) this.schedulePump(this.spent[0]!.at + 60_000);
           continue;
         }
         const lease = job.request.reason === "hover"
@@ -188,12 +192,25 @@ export class MarketWarmQueue {
           if (job.settled) return;
           if (attempt.controller.signal.aborted && job.consumers.size && !job.promoted && !this.disposed) {
             job.active = null;
+            // A slow warm request must not restart on every foreground poll.
+            // Keep the consumer's intent, but back off repeated preemption.
+            job.nextAttemptAt = this.now() + Math.min(30_000,
+              (this.options.preemptRetryMs ?? 1_000) * 2 ** Math.min(job.preemptions++, 5));
             this.options.gate.release(attempt.lease);
             this.pump();
           } else this.finish(job, attempt.controller.signal.aborted ? "cancelled" : "failed", undefined, error);
         });
       }
     } finally { this.pumping = false; }
+  }
+
+  private schedulePump(at: number): void {
+    if (this.wakeAt !== null && this.wakeAt <= at) return;
+    if (this.wake !== null) this.cancel(this.wake);
+    this.wakeAt = at;
+    this.wake = this.schedule(() => {
+      this.wake = null; this.wakeAt = null; this.pump();
+    }, Math.max(1, at - this.now()));
   }
 
   private releaseUnused(job: Job): void {

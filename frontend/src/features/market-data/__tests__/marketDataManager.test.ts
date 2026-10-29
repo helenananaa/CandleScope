@@ -70,6 +70,26 @@ test("promoted viewport warming is admitted once and reused by two foreground fe
   handoff.release();
 });
 
+test("the production getBars planner joins promoted count-back warming despite its derived days fallback", async t => {
+  let calls = 0, finish!: (result: KlineFetchResult) => void;
+  const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
+  const { manager } = setup({ fetchKlinesHistory: async () => {
+    calls += 1;
+    return calls === 1 ? new Promise(resolve => { finish = resolve; }) : proof([row(60), row(120)]);
+  } }, gate);
+  t.after(() => { manager.closeAll(); gate.dispose(); });
+  const warm = manager.warm(series, { owner: "chart-hover", reason: "hover", nativeIntervals: ["1m"], limit: 2 });
+  await turn();
+  const handoff = manager.prepareForeground(series);
+  const feed = new SeriesDataFeed({ api: manager, foregroundPreloadGate: gate, getActiveSeries: () => series });
+  const foreground = feed.getBars(series, { countBack: 2, intent: "viewport", maxWaitMs: 0, commit: "none" });
+  warm.release(); await turn();
+  finish(proof([row(60), row(120)]));
+  assert.equal((await foreground).rows.length, 2);
+  assert.equal(calls, 1, "count_back overrides the planner's day-window fallback in the HTTP contract");
+  handoff.release();
+});
+
 test("warm promotion cannot satisfy a different count, hydration intent or repair read", async t => {
   let calls = 0;
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
