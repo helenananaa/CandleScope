@@ -1,0 +1,58 @@
+{
+  "lock": {
+    "repository": "https://github.com/helenananaa/ccxt.git",
+    "upstream_version": "4.5.60",
+    "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+    "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "build_requirements": [
+      "setuptools==80.9.0",
+      "wheel==0.45.1"
+    ],
+    "schemas": [
+      "candlescope.binance.usdm.kline.v1",
+      "candlescope.binance.spot.kline.v1",
+      "candlescope.okx.kline.v1"
+    ]
+  },
+  "desktop_tested": false,
+  "rails": {},
+  "channels": {
+    "okx-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 5,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 5,
+        "events": 3
+      }
+    },
+    "okx-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 3,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 3
+      }
+    }
+  },
+  "legacy": [],
+  "retention": {
+    "archived": 16,
+    "json_bytes": 2257173,
+    "compressed_bytes": 71258,
+    "cutoff": 1793335600870
+  },
+  "restart_readback": {
+    "restored": 16,
+    "pending": 0
+  }
+}

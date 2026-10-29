@@ -102,11 +102,14 @@ def _capabilities(
     channel_intervals: tuple[str, ...] = ("1m",),
     top_level_intervals: tuple[str, ...] = ("1s", "1m"),
 ) -> ExchangeCapabilities:
+    from app.data_engine.bar_basis import NativeBarSpec
     return ExchangeCapabilities(
         exchange="fixture",
         name="Fixture",
         capability_schema_version=3,
         native_intervals=list(top_level_intervals),
+        native_bar_specs=[NativeBarSpec("fixture", "spot", "kline", purpose, value, value, "declared")
+                          for purpose in ("history", "realtime") for value in channel_intervals],
         channels=[
             MarketChannelCapability(
                 channel=MarketChannel.KLINE,

@@ -16,6 +16,7 @@ export function buildStatusBarViewModel({
 
   return {
     connectionStatus: marketView.connectionStatus,
+    historyOnly: sessionStatus.historyIntervalAvailable && !sessionStatus.realtimeIntervalAvailable,
     dataSource: marketView.dataSource || "",
     exchangeLabel,
     marketLabel,

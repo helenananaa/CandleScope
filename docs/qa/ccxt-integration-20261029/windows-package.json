@@ -1,0 +1,55 @@
+{
+  "result": "passed",
+  "executable": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\CandleScope.exe",
+  "platform": "win32",
+  "arch": "x64",
+  "launches": [
+    {
+      "identity": {
+        "packaged": true,
+        "userData": "<workspace>\\output\\playwright\\ccxt-145\\package-final\\profile",
+        "resources": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\resources"
+      },
+      "python": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\resources\\python-runtime\\python\\python.exe",
+      "health": "passed",
+      "pages": [
+        {
+          "entry": "index.html",
+          "title": "行情看盘 · CandleScope"
+        },
+        {
+          "entry": "replay.html",
+          "title": "回放训练 · CandleScope"
+        },
+        {
+          "entry": "strategy.html",
+          "title": "策略研究 · CandleScope"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "packaged": true,
+        "userData": "<workspace>\\output\\playwright\\ccxt-145\\package-final\\profile",
+        "resources": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\resources"
+      },
+      "python": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\resources\\python-runtime\\python\\python.exe",
+      "health": "passed",
+      "pages": [
+        {
+          "entry": "index.html",
+          "title": "行情看盘 · CandleScope"
+        },
+        {
+          "entry": "replay.html",
+          "title": "回放训练 · CandleScope"
+        },
+        {
+          "entry": "strategy.html",
+          "title": "策略研究 · CandleScope"
+        }
+      ]
+    }
+  ],
+  "phase": "graceful-close"
+}

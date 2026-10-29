@@ -29,6 +29,9 @@ import ccxt.async_support as ccxt_async
 
 from app.core.config import GC_UNTRACK_MARKET_TABLES
 from app.core.gc_policy import untrack_acyclic_tree
+from app.exchanges.public_admission import (
+    PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
+)
 
 # The tables ``Exchange.set_markets()`` builds and
 # ``Exchange.set_markets_from_exchange()`` copies (ccxt 4.5.60).
@@ -119,6 +122,7 @@ class _Rail:
     tables: _MarketTables | None = None
     task: asyncio.Task[None] | None = None
     loader: Any = None
+    demand: PublicDemand | None = None
     sharers: weakref.WeakSet[Any] = field(default_factory=weakref.WeakSet)
     loads: int = 0
     reloads: int = 0
@@ -252,6 +256,9 @@ class CcxtMarketTables:
                     self._adopt(rail, exchange)
                     return exchange.markets
                 task = self._start(rail, exchange, reload=reload)
+            if rail.demand is not None:
+                rail.demand.inherit(current_demand())
+                get_public_admission().manager.notify_change()
             # ``wait`` neither cancels the shared load when this caller is
             # cancelled nor raises the loader's failure here.
             await asyncio.wait((task,))
@@ -291,10 +298,13 @@ class CcxtMarketTables:
         return rail
 
     def _start(self, rail: _Rail, exchange: Any, *, reload: bool) -> asyncio.Task[None]:
-        task = asyncio.get_running_loop().create_task(
-            self._run(rail, exchange, reload=reload),
-            name=f"ccxt_markets_{rail.label}",
-        )
+        rail.demand = PublicDemand(TrafficClass.BACKGROUND, purpose="market_metadata")
+        rail.demand.inherit(current_demand())
+        with public_demand(rail.demand):
+            task = asyncio.get_running_loop().create_task(
+                self._run(rail, exchange, reload=reload),
+                name=f"ccxt_markets_{rail.label}",
+            )
         task.add_done_callback(_consume_task_outcome)
         rail.task = task
         rail.loader = exchange
@@ -322,6 +332,7 @@ class CcxtMarketTables:
             if rail.task is asyncio.current_task():
                 rail.task = None
                 rail.loader = None
+                rail.demand = None
 
     def _publish(self, rail: _Rail, loader: Any) -> _MarketTables:
         tables = rail.tables = _MarketTables(loader)

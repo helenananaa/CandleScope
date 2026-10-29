@@ -1,0 +1,339 @@
+{
+  "lock": {
+    "repository": "https://github.com/helenananaa/ccxt.git",
+    "upstream_version": "4.5.60",
+    "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+    "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "build_requirements": [
+      "setuptools==80.9.0",
+      "wheel==0.45.1"
+    ],
+    "schemas": [
+      "candlescope.binance.usdm.kline.v1",
+      "candlescope.binance.spot.kline.v1",
+      "candlescope.okx.kline.v1"
+    ]
+  },
+  "desktop_tested": false,
+  "rails": {
+    "binance-spot": {
+      "status": "passed",
+      "ws_frames": 5,
+      "rest_samples": 2,
+      "closed_at": 1793243220000,
+      "restart": true,
+      "pending": 0
+    },
+    "binance-futures": {
+      "status": "passed",
+      "ws_frames": 131,
+      "rest_samples": 2,
+      "closed_at": 1793243340000,
+      "restart": true,
+      "pending": 0
+    },
+    "okx-spot": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=SPOT')"
+    },
+    "okx-futures": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=SWAP')"
+    }
+  },
+  "channels": {
+    "binance-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 4,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 1
+      }
+    },
+    "binance-spot-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 11
+      }
+    },
+    "binance-spot-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 0
+      }
+    },
+    "binance-spot-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-futures-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 12
+      }
+    },
+    "binance-futures-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 0
+      }
+    },
+    "binance-futures-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-premiumIndex": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-forceOrder": {
+      "rest": {
+        "status": "unsupported",
+        "reason": "binance does not support CCXT REST forceOrder"
+      },
+      "ws": {
+        "status": "no_event_in_window",
+        "snapshot": {
+          "layer": "L2_CcxtProvider",
+          "stream_key": "futures:BTCUSDT@forceOrder",
+          "provider": "ccxt",
+          "proxy_route_id": null,
+          "health": "connected",
+          "ccxt_symbol": "BTC/USDT:USDT",
+          "queue_size": 0,
+          "queue_capacity": 4096,
+          "overflowed": false,
+          "consecutive_failures": 0,
+          "last_message_time": 0.0,
+          "last_lifecycle": "connected",
+          "runtime": {
+            "exchange": "binance",
+            "proxy_route_id": null,
+            "proxy_egress_group": null,
+            "proxy_endpoint": "",
+            "market_type": "futures",
+            "started": true,
+            "closed": false,
+            "subscribers": 1,
+            "raw_events": 0,
+            "lifecycle_events": 1,
+            "websocket_recycles": 0,
+            "websocket_generation": 0,
+            "physical_websockets": 1
+          },
+          "metrics": {
+            "layer": "L2_CcxtProvider",
+            "counters": {
+              "lifecycle_connected": 1
+            },
+            "gauges": {
+              "health": "connected"
+            },
+            "timestamps": {
+              "health_changed_at": 1793243525159
+            }
+          }
+        }
+      }
+    },
+    "okx-spot-trade": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-spot-ticker": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=SWAP')"
+    },
+    "okx-spot-depth": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=SPOT')"
+    },
+    "okx-futures-trade": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-futures-ticker": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-futures-depth": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-futures-markPrice": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-futures-indexPrice": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    },
+    "okx-futures-fundingRate": {
+      "status": "failed",
+      "error": "ExchangeNotAvailable('okx GET https://www.okx.com/api/v5/public/instruments?instType=SWAP')"
+    },
+    "okx-futures-openInterest": {
+      "status": "failed",
+      "error": "RequestTimeout('okx GET https://www.okx.com/api/v5/public/instruments?instType=FUTURES')"
+    }
+  },
+  "legacy": []
+}

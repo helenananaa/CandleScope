@@ -1,4 +1,4 @@
-"""Journal rules: phases, revision coalescing, locked risk and hindsight flags.
+"""Journal rules: phases, immutable revisions, locked risk and hindsight flags.
 
 A trade note is one template document with append-only revisions. Its stage is
 not chosen by the user; it follows from when each revision was saved relative
@@ -9,14 +9,11 @@ plan be locked at the first fill.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable
+from typing import Any
 
 from .models import dec_str
 from .trades import Trade
 
-# Autosave updates the latest revision in place inside this window, but never
-# across a phase boundary, so what existed before entry stays provable.
-COALESCE_WINDOW_MS = 120_000
 RISK_FIELDS = ("entryPrice", "stopPrice", "targetPrice", "riskUsdt")
 # Template fields that describe the plan; the same list drives the frontend's
 # "written after entry" badge (PRE_TRADE_FIELD_KEYS in journalTemplates.ts).
@@ -38,28 +35,6 @@ def phase_at(ts_ms: int, trade: Trade | None) -> str:
     if trade.closed_at_ms is None or ts_ms <= trade.closed_at_ms:
         return "open"
     return "post"
-
-
-def should_coalesce(
-    latest: dict[str, Any] | None,
-    now: int,
-    trade: Trade | None,
-    fill_times: Iterable[int] = (),
-) -> bool:
-    """Whether a save may overwrite ``latest`` instead of appending a revision.
-
-    An unlinked note has no phases yet but may later be linked to a trade that
-    opened or closed in between, so for it any fill on its instrument since
-    ``latest`` was saved (``fill_times``) counts as a boundary.
-    """
-    if latest is None:
-        return False
-    saved = int(latest["saved_at_ms"])
-    if now - saved > COALESCE_WINDOW_MS:
-        return False
-    if trade is None:
-        return not any(saved <= ts < now for ts in fill_times)
-    return phase_at(saved, trade) == phase_at(now, trade)
 
 
 def _decimal(value: Any) -> Decimal | None:

@@ -1,4 +1,5 @@
 import { API_BASE } from "../../../services/apiConfig.js";
+import { parseIntervalParts } from "../../../utils/intervals.js";
 import type { FrozenExecutionSettings } from "./nativeExecutionSettings.js";
 
 export interface NativeResult {
@@ -41,10 +42,10 @@ export async function nativeApi<T>(path: string, body?: unknown, key?: string, s
   return value as T;
 }
 export function nativeTimeframe(interval: string): string {
-  const match = /^(\d+)([smhdwM])$/.exec(interval);
-  if (!match) throw new Error(`Unsupported interval: ${interval}`);
-  const amount = Number(match[1]);
-  switch (match[2]) {
+  const parts = parseIntervalParts(interval);
+  if (!parts) throw new Error(`Unsupported interval: ${interval}`);
+  const { amount, unit } = parts;
+  switch (unit) {
     case "s": return `${amount}S`;
     case "m": return String(amount);
     case "h": return String(amount * 60);

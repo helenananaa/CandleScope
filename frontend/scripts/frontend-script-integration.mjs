@@ -7,10 +7,11 @@ import { spawn } from "node:child_process";
 import { build, preview } from "vite";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const intervalAdmission = process.argv.includes("--interval-admission");
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
-const fixture = historyStages ? "history-stages-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -82,7 +83,7 @@ try {
   page = await CDP.open(tab.webSocketDebuggerUrl);
   await page.send("Runtime.enable");
   const result = await page.send("Runtime.evaluate", {
-    expression: "new Promise((resolve,reject)=>{const until=Date.now()+10000;const ready=()=>{if(window.__frontendScriptCheck)Promise.resolve(window.__frontendScriptCheck()).then(resolve,reject);else if(Date.now()>until)reject(new Error('Fixture did not load'));else setTimeout(ready,20);};ready();})",
+    expression: `new Promise((resolve,reject)=>{const until=Date.now()+10000;const ready=()=>{if(window.${intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"})Promise.resolve(window.${intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"}()).then(resolve,reject);else if(Date.now()>until)reject(new Error('Fixture did not load'));else setTimeout(ready,20);};ready();})`,
     awaitPromise: true, returnByValue: true,
   });
   receipt.result = result;
@@ -95,7 +96,7 @@ try {
   receipt.exceptions = page.events.filter(item => item.method === "Runtime.exceptionThrown");
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!historyStages) {
+  if (!historyStages && !intervalAdmission) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));

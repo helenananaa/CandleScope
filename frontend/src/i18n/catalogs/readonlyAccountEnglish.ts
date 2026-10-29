@@ -1,4 +1,23 @@
 export const readonlyAccountEnglish = {
+  "account.review.identity": "Account UID {uid} · {margin} · Position ID {position}",
+  "account.review.fillIdentity": "Fill ID {fill} · Trade ID {trade} · Order ID {order} · Contracts {contracts}",
+
+  "account.trades": "Trade review",
+  "account.review.scope": "Only verified, complete USDT linear perpetual lifecycles are included. Inverse contracts, incomplete history and unreconciled records are excluded. Totals describe this sample, not account returns.",
+  "account.review.sample": "{count} verified trades · {wins} winners · {cached} cached trades",
+  "account.review.fees": "Fill fees (positive = cost)",
+  "account.review.funding": "Funding cash change",
+  "account.review.net": "Net P&L",
+  "account.review.noR": "No verified pre-trade risk record is available, so R statistics are unavailable. Unrealized P&L and MFE/MAE are candle estimates; historical drawings and indicator state are not reconstructed.",
+  "account.review.cached": "Includes previously verified versions. Current sync or coverage cannot re-verify these records. An open review keeps its selected version.",
+  "account.review.coverage": "History coverage and gaps",
+  "account.review.empty": "No verified trades are ready for review. Sync and reconcile first.",
+  "account.review.verified": "Version verified: {time}",
+  "account.review.open": "Details and journal",
+  "account.review.excluded": "{count} position lifecycles excluded from this read",
+  "account.review.costs": "Fill fees {fees} · Funding cash change {funding} {currency}",
+  "account.review.source": "OKX read-only · {instrument} · {currency} · Fixed verified version",
+
   "account.reconcile": "Reconcile",
   "account.reconcileHelp": "Checks apply to available records only. Missing opening history remains unknown; currencies are never added together.",
   "account.check.matched": "Matched within stated tolerance",

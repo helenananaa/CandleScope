@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..admission import bind_public_client
+
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 
 from ..models import CcxtRawMarketEvent
 from ..okx import CandleScopeOkx
@@ -34,18 +37,20 @@ class OkxSwapCcxtProfile:
     ) -> CandleScopeOkx:
         values: dict[str, Any] = {
             "newUpdates": True,
+            "urls": {"api": {"ws": "wss://ws.okx.com/ws/v5"}},
             "enableRateLimit": True,
             "aiohttp_trust_env": config.proxy_mode == "system",
-            "options": {"defaultType": "swap"},
+            "options": {"defaultType": "swap", "fetchMarkets": {"types": ["swap"]}},
         }
         if config.http_proxy and config.proxy_mode != "none":
             values["httpsProxy"] = config.http_proxy
             values["wssProxy"] = config.http_proxy
-        return CandleScopeOkx(
+        return bind_public_client(CandleScopeOkx(
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
-        )
+            fork_kline_enabled=config.ccxt_fork_kline_enabled,
+        ), config, self.market_type)
 
     def resolve_symbol(
         self,
@@ -96,21 +101,5 @@ class OkxSwapCcxtProfile:
             self.market_type,
             config.proxy_mode,
             config.http_proxy or "",
+            str(config.ccxt_fork_kline_enabled),
         )
-
-
-def _okx_interval(interval: str) -> str:
-    mapped = {
-        "1h": "1H",
-        "2h": "2H",
-        "4h": "4H",
-        "6h": "6Hutc",
-        "12h": "12Hutc",
-        "1d": "1Dutc",
-        "3d": "3Dutc",
-        "1w": "1Wutc",
-        "1M": "1Mutc",
-    }.get(interval, interval)
-    if not mapped:
-        raise ValueError("OKX K-line interval must not be empty")
-    return mapped

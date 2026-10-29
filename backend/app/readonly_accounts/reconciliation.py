@@ -129,7 +129,7 @@ def fill_margin_mode(item, bills_by_id):
     return None
 
 
-def position_check(data, fills, bills, now):
+def position_check(data, fills, bills, now, *, include_evidence=False):
     snapshot = data['snapshots'].get('position_history', {})
     history = snapshot.get('data', {})
     state = data['snapshots'].get('position_history_state', {}).get('data', {})
@@ -285,6 +285,10 @@ def position_check(data, fills, bills, now):
         used.update(f['fillId'] for f in c['_fills'])
         for row in c['_funding']:
             row.update(positionSide=c['positionSide'], positionId=c['id'], reason=None)
+    if include_evidence:
+        for cycle in cycles:
+            cycle['fillIds'] = [fill['fillId'] for fill in cycle['_fills']]
+            cycle['fundingIds'] = [row['billId'] for row in cycle['_funding']]
     clean = [{key: value for key, value in c.items() if not key.startswith('_')} for c in cycles]
     return clean, funding_rows, len(fills)-len(used), fresh
 
@@ -295,7 +299,7 @@ REASONS = frozenset({'historyUnavailable', 'unsupportedPosition', 'openingUnknow
     'identityMismatch', 'cashDifference', 'missingBills', 'missingSnapshot'})
 
 
-def reconcile_account(data, *, now_ms=None):
+def reconcile_account(data, *, now_ms=None, include_evidence=False):
     now = int(time.time()*1000) if now_ms is None else now_ms
     fills = [item for item in data['facts'] if item['kind'] == 'fills']
     bills = [item for item in data['facts'] if item['kind'] == 'bills']
@@ -303,7 +307,7 @@ def reconcile_account(data, *, now_ms=None):
         context.prec = 80
         fees = fee_check(data, fills, bills)
         cash = cash_check(data, bills)
-        positions, funding, unmatched, history_ready = position_check(data, fills, bills, now)
+        positions, funding, unmatched, history_ready = position_check(data, fills, bills, now, include_evidence=include_evidence)
     assigned = sum(row['positionSide'] is not None for row in funding)
     matched = sum(row['status'] == 'matched' for row in positions)
     account = data.get('account') or {}

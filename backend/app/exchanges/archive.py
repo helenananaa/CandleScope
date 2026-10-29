@@ -37,6 +37,14 @@ class ArchiveTransportError(ArchiveDataError):
 class ArchiveGranularity(str, enum.Enum):
     DAILY = "daily"
     MONTHLY = "monthly"
+    BULK = "bulk"
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveRequestContext:
+    source_id: str = ""
+    object_key: str = ""
+    priority: str = "background"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +56,26 @@ class ArchiveCapabilities:
     packaging_timezone: str
     rest_page_size: int
     checksum_required: bool = False
+    venue: str = ""
+    data_type: str = "klines"
+    bar_basis: str = "trade"
+    bar_timezone: str = "UTC"
+    calendar: str = "24x7"
+    instrument_namespace: str = "venue-native"
+    format_version: str = "unspecified"
+    compression: str = "zip"
+    timestamp_unit: str = "unspecified"
+    price_unit: str = "quote-per-base"
+    volume_unit: str = "unspecified"
+    finality: str = "closed-only"
+    gap_policy: str = "missing-is-unknown; repair-with-rest"
+    enhanced_fields: tuple[str, ...] = ()
+    validation_grade: str = "local-sha256"
+    earliest_period: str = ""
+    publication_lag_days: int = 0
+    stability: str = "unqualified"
+    probe_symbol: str = ""
+    probe_market_type: str = "spot"
 
     def supports(self, *, market_type: str, interval: str) -> bool:
         return (

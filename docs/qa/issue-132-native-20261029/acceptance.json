@@ -1,0 +1,145 @@
+{
+  "schema": "candlescope.interval-admission.acceptance.v1",
+  "tested_at_utc": "2026-10-29T01:28:20.570217+00:00",
+  "implementation_commit": "2062e2ce71220dc9a58cdea6ff26a86a9022dbff",
+  "base_commit": "b84b5e3d514e43fca556613fe107e29d12f7a329",
+  "platform": "macOS ARM64",
+  "package_version": "0.3.0",
+  "app_asar_sha256": "746f49f8c978dc85b1ea95da7566bb204c8169840fbc59ebfeed52e16f39c532",
+  "profile": "Fresh isolated desktop profile; same profile and package for two complete exit/restart cycles",
+  "automated": {
+    "npm_run_check": "passed",
+    "frontend_tests": 4442,
+    "isolated_test": 1,
+    "desktop_tests": 123,
+    "packaged_backend_tests": 215,
+    "browser_contract_scenarios": 6
+  },
+  "native_observations": [
+    {
+      "case": "live spot",
+      "result": "passed",
+      "details": "Binance BTCUSDT spot 1h rendered about 1500 bars; WebSocket label and changing OHLCV observed."
+    },
+    {
+      "case": "custom seconds",
+      "result": "passed",
+      "details": "Created 7s on the independent right spot chart; rendered 1503 bars while left chart retained 1h."
+    },
+    {
+      "case": "source change rejection",
+      "result": "passed",
+      "details": "Changed right chart to Binance USD-M BTC/USDT:USDT swap.linear. Requested 7s was preserved, chart displayed an explicit rejection with native alternatives, and left 1h chart continued updating."
+    },
+    {
+      "case": "unavailable restore",
+      "result": "passed",
+      "details": "Complete exit/restart preserved both identities, layout, independent grouping and right 7s rejection; no silent 1h substitution.",
+      "screenshot": "restored-unavailable.png"
+    },
+    {
+      "case": "explicit recovery",
+      "result": "passed",
+      "details": "Selected 1m from the rejection panel. Right contract chart rendered 1502 bars and showed realtime WebSocket status."
+    },
+    {
+      "case": "invalid action",
+      "result": "passed",
+      "details": "Entered 90s and pressed Return. Selector displayed a precise composition rejection, retaining current 1m chart. Saved 7s remained present and disabled."
+    },
+    {
+      "case": "exact composition",
+      "result": "passed",
+      "details": "Entered 120s, normalized to 2m, selected Add and switch. Right contract chart rendered 1502 bars with realtime WebSocket status; left chart retained 1h."
+    },
+    {
+      "case": "valid restore",
+      "result": "passed",
+      "details": "Second complete exit/restart preserved left spot 1h and independent right contract 2m, rendered both charts, and restored realtime status with subsequent OHLCV changes.",
+      "screenshot": "restored-valid.png"
+    }
+  ],
+  "packaged_api": {
+    "capability": {
+      "exchange": "binanceusdm",
+      "native_intervals": [
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "6h",
+        "8h",
+        "12h",
+        "1d",
+        "3d",
+        "1w",
+        "1M"
+      ]
+    },
+    "bypass_ui_rejections": [
+      {
+        "endpoint": "latest",
+        "status": 400,
+        "detail": {
+          "code": "no_exact_base",
+          "message": "No supported native K-line interval can exactly reconstruct '1s' for binanceusdm/swap.linear realtime",
+          "exchange": "binanceusdm",
+          "market_type": "swap.linear",
+          "interval": "1s",
+          "purpose": "realtime"
+        }
+      },
+      {
+        "endpoint": "history",
+        "status": 400,
+        "detail": {
+          "code": "no_exact_base",
+          "message": "No supported native K-line interval can exactly reconstruct '1s' for binanceusdm/swap.linear history",
+          "exchange": "binanceusdm",
+          "market_type": "swap.linear",
+          "interval": "1s",
+          "purpose": "history"
+        }
+      },
+      {
+        "endpoint": "range",
+        "status": 400,
+        "detail": {
+          "code": "no_exact_base",
+          "message": "No supported native K-line interval can exactly reconstruct '1s' for binanceusdm/swap.linear history",
+          "exchange": "binanceusdm",
+          "market_type": "swap.linear",
+          "interval": "1s",
+          "purpose": "history"
+        }
+      },
+      {
+        "endpoint": "history/before",
+        "status": 400,
+        "detail": {
+          "code": "no_exact_base",
+          "message": "No supported native K-line interval can exactly reconstruct '1s' for binanceusdm/swap.linear history",
+          "exchange": "binanceusdm",
+          "market_type": "swap.linear",
+          "interval": "1s",
+          "purpose": "history"
+        }
+      }
+    ],
+    "invalid_ui_history_requests": 0
+  },
+  "coverage_limits": [
+    "Bounded minimal corrections for issue 132; full versioned route/revision/qualification model remains outside this PR.",
+    "History-only and realtime-only combinations are covered by shared wire fixtures and controlled browser lifecycle tests, not a live history-only native provider sample.",
+    "No continuous-contract route substitution or general qualification of other products/providers.",
+    "No exhaustive deep-history coverage, broad native performance qualification, or Intel native acceptance in this local run."
+  ],
+  "screenshots": {
+    "restored-unavailable.png": "a118f692e6886bf90b35828b9c43036b3b04e1f587d58deead61becb61689c1f",
+    "restored-valid.png": "dcd51d1877b5e8897068b848f98111db7a8f4b698d29af75149ca618c4256181"
+  }
+}

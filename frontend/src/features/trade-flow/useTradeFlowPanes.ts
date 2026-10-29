@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import type { WindowDelta } from "../market-data/klineContracts.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import type { IndicatorSubPane } from "../indicators/indicatorPaneProjection.js";
 import { createKlineOrderFlowProjectionMemo } from "../indicators/klineOrderFlowProjection.js";
 import type { TradeFlowRuntime } from "./tradeFlowTypes.js";
@@ -22,7 +22,7 @@ interface SeriesProjectionRevision {
 const EMPTY_REVISION: SeriesProjectionRevision = Object.freeze({ version: 0, structureRevision: 0 });
 
 function createSeriesProjectionRevisionSource(
-  seriesStore: SeriesWindowStore | null | undefined,
+  seriesStore: SeriesWindowView | null | undefined,
   enabled: boolean,
 ): {
   getSnapshot(): SeriesProjectionRevision;
@@ -49,7 +49,7 @@ function createSeriesProjectionRevisionSource(
 
 export function useTradeFlowPanes(
   runtime: TradeFlowRuntime,
-  seriesStore: SeriesWindowStore | null | undefined,
+  seriesStore: SeriesWindowView | null | undefined,
 ): readonly IndicatorSubPane[] {
   const { cvd, delta } = runtime.view.preferences.indicators;
   const cvdVisible = cvd.added && cvd.visible;

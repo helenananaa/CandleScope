@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..admission import bind_public_client
+
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 
@@ -51,12 +53,13 @@ class BinanceUsdmCcxtProfile:
             values["wssProxy"] = config.http_proxy
         from app.exchanges.plugins.binance.plugin import BinancePlugin
 
-        return CandleScopeBinanceUSDM(
+        return bind_public_client(CandleScopeBinanceUSDM(
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
             rate_limit_policy=BinancePlugin._rate_limit_policy(config),
-        )
+            fork_kline_enabled=config.ccxt_fork_kline_enabled,
+        ), config, self.market_type)
 
     def resolve_symbol(
         self,
@@ -125,6 +128,10 @@ class BinanceUsdmCcxtProfile:
         if event.channel != expected:
             return False
         if descriptor.stream_type == StreamType.KLINE:
+            from ..fork_kline import SCHEMA
+
+            if event.payload.get("schema") == SCHEMA:
+                return event.payload.get("timeframe") == descriptor.interval
             kline = event.payload.get("k")
             return isinstance(kline, dict) and str(kline.get("i") or "") == str(
                 descriptor.interval or ""
@@ -132,9 +139,10 @@ class BinanceUsdmCcxtProfile:
         return True
 
     def runtime_key(self, config: IngestionConfig) -> tuple[str, ...]:
-        return (
+        key = (
             self.exchange_id,
             self.market_type,
             config.proxy_mode,
             config.http_proxy or "",
         )
+        return (*key, "fork-kline-v1") if config.ccxt_fork_kline_enabled else key

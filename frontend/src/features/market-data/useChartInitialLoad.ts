@@ -1,3 +1,5 @@
+import { validateKlineDomain } from "../../utils/klineDomainPolicy.js";
+import { assessKlineQuality, isKlineTailFresh } from "./quality/klineQualityPolicy.js";
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
@@ -130,19 +132,7 @@ export function initialHistoryCacheProof(
   FeedCommitMeta,
   "historyComplete" | "historyRepairPending" | "historyValidatedCountBack"
 > {
-  const explicitlyComplete = Boolean(
-    result
-    && result.complete === true
-    && result.retryable === false
-    && (result.history_state === "ready" || result.history_state === "exhausted")
-    && result.verified_contiguous === true
-    && result.all_rows_final === true
-    && result.has_tail_gap === false
-    && result.truncated !== true
-    && Array.isArray(result.missing_ranges)
-    && result.missing_ranges.length === 0
-    && !isKlineResultRepairPending(result)
-  );
+  const explicitlyComplete = assessKlineQuality(result, result?.endpoint ?? "history").complete;
   return {
     historyComplete: explicitlyComplete,
     historyRepairPending: !explicitlyComplete && isKlineResultRepairPending(result),
@@ -237,7 +227,7 @@ export function shouldRequestInitialLatestForReadiness(
 export function isInitialHistoryTailFresh(
   result: KlineFetchResult | null | undefined,
 ): boolean {
-  return Boolean(result?.has_tail_gap === false && !isKlineResultRepairPending(result));
+  return isKlineTailFresh(result);
 }
 
 export function canCommitInitialFeedResult({
@@ -368,6 +358,7 @@ export function releasePendingInitialIndicatorWindow(
     [],
     {
       source,
+      ...(settledResult?.quality ? { quality: settledResult.quality } : {}),
       deferIndicatorWindow: false,
       ...(owner ? { indicatorWindowOwner: owner } : {}),
       ...historyProof,
@@ -436,7 +427,9 @@ export function useChartInitialLoad({
       source: "memory-cache-hit",
       needsRepair: false,
     };
-    const cached = initialRows.rows;
+    // Shared/watchlist seeds are provisional inputs too. Do not derive a quote
+    // or warm-cache shortcut from a row the owned writer would quarantine.
+    const cached = initialRows.rows?.every((row) => !validateKlineDomain(row)) ? initialRows.rows : [];
     const hasCacheHit = cached && cached.length > 0;
     let initialPaintReady = false;
     let tailFresh = false;
@@ -573,6 +566,7 @@ export function useChartInitialLoad({
         commitPatchedChartData(sym, intv, quickResult.data, {
           seedIfEmpty: true,
           source: "initial-latest",
+          ...(quickResult.quality ? { quality: quickResult.quality } : {}),
         });
       }
       const latestTick = quickResult.data[quickResult.data.length - 1];
@@ -728,6 +722,7 @@ export function useChartInitialLoad({
         initialViewportCountBack,
       );
       const historyCommitMeta: FeedCommitMeta = {
+        ...(historyResult?.quality ? { quality: historyResult.quality } : {}),
         source: "initial-history",
         deferIndicatorWindow: repairPending && !terminalFailed,
         ...(historyResult?.indicatorWindowOwner

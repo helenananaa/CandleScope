@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..admission import bind_public_client
+
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor
 
@@ -23,18 +25,20 @@ class OkxSpotCcxtProfile(OkxSwapCcxtProfile):
     ) -> CandleScopeOkxSpot:
         values: dict[str, Any] = {
             "newUpdates": True,
+            "urls": {"api": {"ws": "wss://ws.okx.com/ws/v5"}},
             "enableRateLimit": True,
             "aiohttp_trust_env": config.proxy_mode == "system",
-            "options": {"defaultType": "spot"},
+            "options": {"defaultType": "spot", "fetchMarkets": {"types": ["spot"]}},
         }
         if config.http_proxy and config.proxy_mode != "none":
             values["httpsProxy"] = config.http_proxy
             values["wssProxy"] = config.http_proxy
-        return CandleScopeOkxSpot(
+        return bind_public_client(CandleScopeOkxSpot(
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
-        )
+            fork_kline_enabled=config.ccxt_fork_kline_enabled,
+        ), config, self.market_type)
 
     def resolve_symbol(
         self,

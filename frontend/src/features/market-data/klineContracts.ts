@@ -1,3 +1,4 @@
+import type { KlineEndpoint, KlineQualityEvidence } from "./quality/klineQualityPolicy.js";
 import type { IntervalString } from "../../utils/intervals.js";
 import type { ForegroundPreloadGate } from "./foregroundPreloadGate.js";
 import type { ChartWorkScheduler } from "./chartWorkScheduler.js";
@@ -81,6 +82,8 @@ export interface HistoryMissingRange extends Record<string, unknown> {
 }
 
 export interface KlineFetchResult extends Record<string, unknown> {
+  endpoint?: KlineEndpoint;
+  quality?: KlineQualityEvidence;
   data?: KlineBar[];
   indicatorWindowOwner?: string;
   all_rows_final?: boolean;
@@ -226,6 +229,7 @@ export type FeedApplyMode = "range" | "tick";
 export type FeedRequestPriority = "foreground" | "hydrate" | "preload";
 
 export interface FeedCommitMeta {
+  quality?: KlineQualityEvidence;
   source: string;
   seedIfEmpty?: boolean;
   deferIndicatorWindow?: boolean;
@@ -236,6 +240,7 @@ export interface FeedCommitMeta {
 }
 
 export interface FeedCacheMeta {
+  quality?: KlineQualityEvidence;
   marketType: string;
   exchange: string;
 }
@@ -352,22 +357,18 @@ export interface PendingInitialSeries extends MarketSeries {
   indicatorWindowOwner?: string;
 }
 
-export type LastPriceUpdater = (
-  previous: KlineBar | null,
-) => KlineBar | null;
+export type BackfillRecoveryProgress =
+  | { type: "rows-read"; latest: KlineBar }
+  | { type: "initial-resolved"; owner: PendingInitialSeries | null };
 
 export interface BackfillCompletedOptions {
   activeSeries?: MarketSeries | null;
   loading?: boolean;
   pendingInitial?: PendingInitialSeries | null;
   getPendingInitial?: () => PendingInitialSeries | null;
-  clearPendingInitial?: () => void;
   getCacheRows?: (series: MarketSeries) => KlineBar[];
   getFallbackDays?: (series: MarketSeries) => number | null;
-  setLastPrice?: (updater: LastPriceUpdater) => void;
-  setError?: (error: unknown) => void;
-  setConnectionStatus?: (status: string) => void;
-  setLoading?: (loading: boolean) => void;
+  onRecoveryProgress?: (event: BackfillRecoveryProgress) => void;
   cooldownMs?: number;
   completionMaxAttempts?: number;
 }

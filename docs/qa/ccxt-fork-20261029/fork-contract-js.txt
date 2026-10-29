@@ -1,0 +1,11 @@
+✔ standard six-value projection remains unchanged; extended values retain source precision and calendar close (11.645916ms)
+✔ REST accepts 1500 rows and isolates request-owned range/symbol parameters (9.638375ms)
+✔ WS retains enhanced-only revisions and explicit finality without aliasing raw evidence (3.917333ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 166.536292

@@ -118,8 +118,8 @@ def test_primary_plugins_use_ccxt_protocol_and_venue_pagination_policies() -> No
 
     assert isinstance(binance.protocol(), CcxtUnifiedProtocol)
     assert isinstance(okx.protocol(), CcxtUnifiedProtocol)
-    assert binance.history_archive_provider(BackfillConfig()) is None
-    assert okx.history_archive_provider(BackfillConfig()) is None
+    assert binance.history_archive_provider(BackfillConfig()).id == "binance-public-kline-v1"
+    assert okx.history_archive_provider(BackfillConfig()).id == "okx-public-kline-page-v1"
     assert isinstance(
         binance.pagination_policy(BackfillConfig()),
         BinanceHistoricalPaginationPolicy,

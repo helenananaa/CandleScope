@@ -1,3 +1,4 @@
+import { hasVerifiedCoverage } from "./quality/klineQualityPolicy.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import {
@@ -716,13 +717,14 @@ export function useMarketDataRuntime({
           || result.stale
           || result.active === false
           || isKlineResultRepairPending(result)
-          || result.verified_contiguous !== true
+          || !hasVerifiedCoverage(result, "range")
           || !rightWindowPageRowsAreBounded(rows, plan)
           || (!settledEmptyTail && (rows.length === 0 || result.all_rows_final !== true))
         ) return false;
 
         const committed = commitForwardChartData(symbol, interval, rows, {
           reachedLatest,
+          ...(result.quality ? { quality: result.quality } : {}),
           source: reachedLatest ? "right-window-page-current" : "right-window-page",
         });
         if (!committed) return false;
@@ -840,12 +842,13 @@ export function useMarketDataRuntime({
           !ownsRequest()
           || result.stale
           || result.active === false
-          || isKlineResultRepairPending(result)
+          || !hasVerifiedCoverage(result, "history")
           || !result.data?.length
         ) return false;
 
         replaceChartData(symbol, interval, result.data, {
           source: "right-window-restore",
+          ...(result.quality ? { quality: result.quality } : {}),
         });
         const latest = result.data.at(-1);
         if (latest) updateLastPrice(latest, interval);
@@ -905,16 +908,19 @@ export function useMarketDataRuntime({
     loading: loadingRef.current,
     pendingInitial: pendingInitialHistoryRef.current,
     getPendingInitial: () => pendingInitialHistoryRef.current,
-    clearPendingInitial: () => {
-      const hadPendingInitial = pendingInitialHistoryRef.current != null;
-      pendingInitialHistoryRef.current = null;
-      if (hadPendingInitial) setInitialHistoryPending(false);
-    },
     getCacheRows: getSeriesCacheRows,
-    setLastPrice,
-    setError,
-    setConnectionStatus,
-    setLoading,
+    onRecoveryProgress: (event) => {
+      if (event.type === "rows-read") {
+        setLastPrice((previous) => previous || event.latest);
+        setError(null);
+        return;
+      }
+      if (pendingInitialHistoryRef.current !== event.owner) return;
+      pendingInitialHistoryRef.current = null;
+      if (event.owner) setInitialHistoryPending(false);
+      setConnectionStatus("connected");
+      setLoading(false);
+    },
   }), [
     activeSeries,
     getSeriesCacheRows,
@@ -945,8 +951,6 @@ export function useMarketDataRuntime({
     updateRealtimePrice,
     handleBackfillCompleted,
     setWsStatus,
-    ...(schedulerCellId ? { schedulerCellId } : {}),
-    workScheduler: workspaceResources?.workScheduler || null,
   });
 
   const foregroundIndicatorRequestCount = indicatorRangeRequests.length;

@@ -9,6 +9,7 @@ export type ConnectionStatus = "connected" | "loading" | "disconnected" | string
 
 export interface StatusBarModel {
   connectionStatus: ConnectionStatus;
+  historyOnly?: boolean;
   dataSource: string;
   exchangeLabel: string;
   marketLabel: string;
@@ -29,6 +30,7 @@ export interface StatusBarProps {
 }
 
 function connectionLabel(status: StatusBarModel): string {
+  if (status.historyOnly) return t("interval.historyOnly");
   if (status.connectionStatus === "connected") {
     if (status.wsStatus && status.wsStatus !== "live") return translateWsStatus(status.wsStatus);
     return t("status.connectedTo", { exchange: status.exchangeLabel });
@@ -62,10 +64,10 @@ function StatusBar({ status, extensions }: StatusBarProps) {
     exchangeCatalogStatus,
     exchangeLimitations = [],
   } = status;
-  const connectionStatus = dataConnectionStatus === "connected" && wsStatus && wsStatus !== "live"
+  const connectionStatus = status.historyOnly ? "disconnected" : dataConnectionStatus === "connected" && wsStatus && wsStatus !== "live"
     ? wsStatus === "disconnected" ? "disconnected" : "loading"
     : dataConnectionStatus;
-  const wsLabel = wsStatus ? translateWsStatus(wsStatus) : wsStatusLabel;
+  const wsLabel = status.historyOnly ? t("interval.historyOnly") : wsStatus ? translateWsStatus(wsStatus) : wsStatusLabel;
 
   return (
     <MarketStatusBar

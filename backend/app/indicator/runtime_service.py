@@ -89,6 +89,16 @@ class IndicatorRuntimeRequest:
         object.__setattr__(self, "options", dict(self.options))
 
     def to_sdk_request(self) -> ExecuteBatchRequest:
+        from app.data_engine.bar_basis import frozen_boundary_windows
+        from app.data_engine.interval_policy import parse_interval_spec
+        bars = tuple(_to_sdk_bar(item) for item in self.bars)
+        options = dict(self.options)
+        spec = parse_interval_spec(self.interval)
+        if spec and (spec.phase_ms or spec.timezone) and bars:
+            times = [bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
+            if any(spec.floor_ms(at) != at for at in times):
+                raise ValueError("indicator_bar_basis_mismatch")
+            options["barBasis"] = frozen_boundary_windows(self.interval, times[0], times[-1])
         return ExecuteBatchRequest(
             source=self.source,
             context=MarketContext(
@@ -97,9 +107,9 @@ class IndicatorRuntimeRequest:
                 symbol=self.symbol,
                 interval=self.interval,
             ),
-            bars=tuple(_to_sdk_bar(item) for item in self.bars),
+            bars=bars,
             params=dict(self.params),
-            options=dict(self.options),
+            options=options,
         )
 
 

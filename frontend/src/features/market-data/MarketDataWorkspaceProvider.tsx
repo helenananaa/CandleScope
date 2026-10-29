@@ -16,7 +16,7 @@ import { defaultKlineApi } from "./feed/klineApi.js";
 import { SharedKlineRequestCoordinator } from "./feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "./feed/sharedKlineStreamCoordinator.js";
 import { MAX_SERIES_BARS } from "./phase1WindowPolicy.js";
-import { SeriesWindowRegistry } from "./window/windowRegistry.js";
+import { MarketWindowRegistry } from "./window/marketWindowSession.js";
 import {
   MarketDataWorkspaceContext,
   type MarketDataWorkspaceResources,
@@ -25,6 +25,7 @@ import { MarketDataWorkspaceEffectGuard } from "./marketDataWorkspaceLifecycle.j
 import { desktopWindowManager } from "../../desktop/desktopWindowManager.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../chart-workspace/chartWorkspaceCapacity.js";
 import { defaultWorkspaceBus } from "../chart-workspace/workspaceBus.js";
+import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
 
 export interface MarketDataWorkspaceProviderProps extends PropsWithChildren {
   brokerEnabled?: boolean;
@@ -67,9 +68,8 @@ export function MarketDataWorkspaceProvider({
             }
           : null,
       }) : null,
-      windowRegistry: new SeriesWindowRegistry({
+      windowRegistry: new MarketWindowRegistry({
         maxBars: MAX_SERIES_BARS,
-        rightTruncatedFuturePolicy: "reject",
         sharedSnapshot: workspaceBus?.isNative()
           ? {
               read: (key) => desktopWindowManager.readSeriesSnapshot(key),
@@ -96,20 +96,8 @@ export function MarketDataWorkspaceProvider({
 
   useEffect(() => {
     const scheduler = resources.workScheduler;
-    if (!scheduler || typeof document === "undefined") return undefined;
-    const syncVisibility = () => scheduler.setWindowVisible(document.visibilityState !== "hidden");
-    syncVisibility();
-    document.addEventListener("visibilitychange", syncVisibility);
-    return () => document.removeEventListener("visibilitychange", syncVisibility);
-  }, [resources]);
-
-  useEffect(() => {
-    const scheduler = resources.workScheduler;
     if (!scheduler) return undefined;
-    return desktopWindowManager.onLifecycle((event) => {
-      if (event.windowId !== desktopWindowManager.windowId) return;
-      scheduler.setWindowVisible(event.visible && !event.minimized && event.state !== "hidden");
-    });
+    return observeMarketWindowVisibility((visible) => scheduler.setWindowVisible(visible));
   }, [resources]);
 
   useEffect(() => {
@@ -126,8 +114,9 @@ export function MarketDataWorkspaceProvider({
         const common = {
           enabled: resources.brokerEnabled,
           klineBatchEnabled: batchStreamEnabled,
-          authoritativeCommits: (scheduler?.cells || []).reduce(
-            (sum, cell) => sum + Number(cell.committed?.["authoritative-final"] || 0),
+          authoritativeCommits: resources.windowRegistry.sharedSnapshotDiagnostics().authoritativeAdmissions,
+          displayCommits: (scheduler?.cells || []).reduce(
+            (sum, cell) => sum + Number(cell.committed?.["candle-display"] || 0),
             0,
           ),
           seriesStores: resources.windowRegistry.entries().length,
@@ -167,6 +156,7 @@ export function MarketDataWorkspaceProvider({
             disposed: scheduler.disposed,
             pendingAsync: scheduler.pendingAsync,
             pendingFrames: scheduler.pendingFrames,
+            runnableFrames: scheduler.runnableFrames,
             windowVisible: scheduler.windowVisible,
           } : null,
         };

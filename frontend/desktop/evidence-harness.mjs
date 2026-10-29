@@ -586,7 +586,7 @@ export function createEvidenceHarness({
       const observation = await phase7WindowObservation(minimizedTarget[0], minimizedTarget[1]);
       const scheduler = observation.renderer.scheduler;
       return scheduler?.windowVisible === false
-        && scheduler?.pendingFrames === 0
+        && scheduler?.runnableFrames === 0
         && !appWorkBudget.diagnostics().previewLanes.some((lane) => lane.windowId === minimizedTarget[0]);
     }, 60_000);
     const minimizedBeforeIdle = await phase7WindowObservation(minimizedTarget[0], minimizedTarget[1]);
@@ -596,7 +596,7 @@ export function createEvidenceHarness({
     const replaceableCommitCount = (observation) => (observation.renderer.scheduler?.cells || [])
       .reduce((total, cell) => total
         + Number(cell.committed?.["indicator-preview"] || 0)
-        + Number(cell.committed?.["kline-forming"] || 0), 0);
+        + Number(cell.committed?.["candle-display"] || 0), 0);
     const minimizedActivity = {
       replaceableCommitsBefore: replaceableCommitCount(minimizedBeforeIdle),
       replaceableCommitsAfter: replaceableCommitCount(minimized),
@@ -675,7 +675,7 @@ export function createEvidenceHarness({
         && backendCapacity.dataManager?.leasedSeries === expectedActiveSeries
         ? "pass" : "fail",
       minimizedWorkZero: minimized.renderer.scheduler?.windowVisible === false
-        && minimized.renderer.scheduler?.pendingFrames === 0
+        && minimized.renderer.scheduler?.runnableFrames === 0
         && minimizedActivity.previewLanePresent === false
         && minimizedActivity.replaceableCommitsAfter === minimizedActivity.replaceableCommitsBefore
         ? "pass" : "fail",
@@ -817,13 +817,10 @@ export function createEvidenceHarness({
           disposed: broker.scheduler.disposed,
           pendingAsync: broker.scheduler.pendingAsync,
           pendingFrames: broker.scheduler.pendingFrames,
+          runnableFrames: broker.scheduler.runnableFrames,
           windowVisible: broker.scheduler.windowVisible
         } : null` : "broker?.scheduler ?? null"},
-        authoritativeCommits: Number(broker?.authoritativeCommits || 0)
-          || (broker?.scheduler?.cells || []).reduce(
-            (sum, cell) => sum + Number(cell.committed?.['authoritative-final'] || 0),
-            0
-          ),
+        authoritativeCommits: Number(broker?.authoritativeCommits || 0),
         indicators: ${compact ? `{
           runtimeCount: chartNodes.length,
           definitionCount: compactIndicatorDefinitionCount,
@@ -943,7 +940,7 @@ export function createEvidenceHarness({
     return (sample?.windows || []).every((window) => (
       Number(window.renderer?.scheduler?.activeAsync || 0) === 0
       && Number(window.renderer?.scheduler?.pendingAsync || 0) === 0
-      && Number(window.renderer?.scheduler?.pendingFrames || 0) === 0
+      && Number(window.renderer?.scheduler?.runnableFrames || 0) === 0
       && Number(window.renderer?.broker?.klineHttp?.logicalInflight || 0) === 0
       && Number(window.renderer?.broker?.klineHttp?.physicalInflight || 0) === 0
     ))

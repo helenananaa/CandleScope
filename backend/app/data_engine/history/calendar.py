@@ -212,7 +212,8 @@ class AlwaysOpenCalendar:
         last = self.last_expected_open(start_ms, end_ms, interval)
         if last is None:
             return 0
-        if not is_monthly_interval(interval):
+        spec = parse_interval_spec(interval)
+        if not is_monthly_interval(interval) and not (spec and spec.timezone):
             return ((last - first) // _interval_width_ms(interval)) + 1
         count = 0
         current = first

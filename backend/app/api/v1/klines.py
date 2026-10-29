@@ -101,7 +101,7 @@ class KlineHistoryBatchItem(BaseModel):
 
     request_id: str = Field(min_length=1, max_length=64)
     symbol: str = Field(default="BTCUSDT", min_length=1, max_length=64)
-    interval: str = Field(default="1h", min_length=1, max_length=16)
+    interval: str = Field(default="1h", min_length=1, max_length=64)
     days: float = Field(default=7, ge=0.001)
     count_back: int | None = Field(default=None, ge=1, le=MAX_RANGE_RESPONSE_BARS)
     exchange: str = Field(default=DEFAULT_EXCHANGE, min_length=1, max_length=32)
@@ -238,7 +238,9 @@ def _validate_interval(interval: str) -> None:
             detail=(
                 f"Unsupported interval: {interval}. "
                 f"Supported native: {VALID_INTERVALS}. "
-                f"Custom format: <number><s|m|h|d|w|M>, e.g. 7m, 45m, 3h"
+                f"Custom format: <number><s|m|h|d|w|M>, e.g. 7m, 45m, 3h. "
+                f"Event grids: <fixed-duration>~a1~<anchor_ms>; both duration and "
+                f"anchor must be whole-minute multiples. Seconds are not rounded."
             ),
         )
 

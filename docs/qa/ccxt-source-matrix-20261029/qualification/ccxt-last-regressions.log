@@ -1,0 +1,11 @@
+......................................................................   [100%]
+=============================== warnings summary ===============================
+tests/test_ccxt_owned_close.py::test_delayed_catalog_sibling_cannot_reopen_a_closed_owned_session[False]
+tests/test_ccxt_owned_close.py::test_delayed_catalog_sibling_cannot_reopen_a_closed_owned_session[True]
+tests/test_ccxt_owned_close.py::test_public_capture_wrapper_closes_owned_rest_session
+tests/test_ccxt_okx_shadow.py::test_okx_raw_hook_and_cleanup_are_owned
+  /Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/.venv/lib/python3.12/site-packages/aiohttp/connector.py:993: DeprecationWarning: enable_cleanup_closed ignored because https://github.com/python/cpython/pull/118960 is fixed in Python version sys.version_info(major=3, minor=12, micro=15, releaselevel='final', serial=0)
+    super().__init__(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70 passed, 4 warnings in 8.71s

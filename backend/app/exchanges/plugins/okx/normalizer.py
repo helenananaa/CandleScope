@@ -17,31 +17,11 @@ from app.data_engine.interval_policy import (
     parse_monthly_count,
 )
 
+from app.exchanges.okx_intervals import OKX_UTC_INTERVALS
+
 logger = logging.getLogger("ingestion.normalizers.okx")
 
-_OKX_INTERVALS_TO_INTERNAL = {
-    "1s": "1s",
-    "1m": "1m",
-    "3m": "3m",
-    "5m": "5m",
-    "15m": "15m",
-    "30m": "30m",
-    "1H": "1h",
-    "2H": "2h",
-    "4H": "4h",
-    "6H": "6h",
-    "6Hutc": "6h",
-    "12H": "12h",
-    "12Hutc": "12h",
-    "1D": "1d",
-    "1Dutc": "1d",
-    "3D": "3d",
-    "3Dutc": "3d",
-    "1W": "1w",
-    "1Wutc": "1w",
-    "1M": "1M",
-    "1Mutc": "1M",
-}
+_OKX_INTERVALS_TO_INTERNAL = {value: key for key, value in OKX_UTC_INTERVALS.items()}
 
 
 class OkxNormalizer:
@@ -141,6 +121,9 @@ class OkxNormalizer:
             return None
 
         interval = self._resolve_interval(channel)
+        if not interval or interval != self._descriptor.interval:
+            logger.warning("Unexpected OKX candle channel %s for %s", channel, self._descriptor.interval)
+            return None
         open_time_ms = int(row[0])
 
         # OKX volume semantics differ by instrument type:
@@ -182,7 +165,7 @@ class OkxNormalizer:
     def _resolve_interval(self, channel: str) -> str:
         if channel.startswith("candle"):
             raw_interval = channel[len("candle"):]
-            return _OKX_INTERVALS_TO_INTERNAL.get(raw_interval, self._descriptor.interval or "")
+            return _OKX_INTERVALS_TO_INTERNAL.get(raw_interval, "")
         return self._descriptor.interval or ""
 
 

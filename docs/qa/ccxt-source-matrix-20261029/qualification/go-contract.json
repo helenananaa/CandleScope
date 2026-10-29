@@ -1,0 +1,62 @@
+{
+  "language": "go",
+  "status": "passed",
+  "variants": 1,
+  "envelopes": [
+    [
+      {
+        "close": "102",
+        "closeEvidence": "okx_confirm",
+        "closeTime": null,
+        "closed": true,
+        "eventTime": null,
+        "exchange": "okx",
+        "high": "103",
+        "low": "99",
+        "marketId": "BTC-USDT-SWAP",
+        "marketType": "swap.linear",
+        "open": "100.000000000000001",
+        "quoteVolume": "101",
+        "quoteVolumeUnit": "quote",
+        "raw": "[\"1772323200000\",\"100.000000000000001\",\"103\",\"99\",\"102\",\"100\",\"1\",\"101\",\"1\"]",
+        "schema": "candlescope.okx.kline.v1",
+        "sourceVolume": "100",
+        "sourceVolumeUnit": "contracts",
+        "symbol": "BTC/USDT:USDT",
+        "takerBuyBaseVolume": null,
+        "takerBuyQuoteVolume": null,
+        "timeframe": "1m",
+        "timestamp": 1772323200000,
+        "trades": null,
+        "volume": "1",
+        "volumeCcy": "1",
+        "volumeCcyUnit": "base",
+        "volumeUnit": "base"
+      },
+      {
+        "close": "102",
+        "closeEvidence": "rest_close_time",
+        "closeTime": 1772323259999,
+        "closed": null,
+        "exchange": "binance",
+        "high": "103",
+        "low": "99",
+        "marketId": "BTCUSDT",
+        "marketType": "spot",
+        "open": "100.000000000000001",
+        "quoteVolume": "1010",
+        "quoteVolumeUnit": "quote",
+        "raw": "[1772323200000,\"100.000000000000001\",\"103\",\"99\",\"102\",\"10\",1772323259999,\"1010\",4,\"6\",\"606\",\"0\"]",
+        "schema": "candlescope.binance.spot.kline.v1",
+        "symbol": "BTC/USDT",
+        "takerBuyBaseVolume": "6",
+        "takerBuyQuoteVolume": "606",
+        "timeframe": "1m",
+        "timestamp": 1772323200000,
+        "trades": 4,
+        "volume": "10",
+        "volumeUnit": "base"
+      }
+    ]
+  ]
+}

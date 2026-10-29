@@ -275,13 +275,12 @@ class ExchangeIngestionFactory:
 
             # Create a new L1–L6 pipeline
             try:
-                if on_health is None:
-                    pipeline = await ingress.add_stream(descriptor)
-                else:
-                    pipeline = await ingress.add_stream(
-                        descriptor,
-                        on_health=on_health,
-                    )
+                await ingress.add_stream(
+                    descriptor,
+                    on_health=on_health,
+                    on_market_event=on_market_event,
+                    on_gap=on_gap,
+                )
             except BaseException:
                 if ingress.get_pipeline(descriptor.key) is not None:
                     try:
@@ -294,10 +293,6 @@ class ExchangeIngestionFactory:
                             descriptor.key,
                         )
                 raise
-
-            pipeline.delivery.on_market_event(on_market_event)
-            if on_gap is not None:
-                pipeline.delivery.on_gap(on_gap)
 
             logger.info("Ingestion pipeline started: %s", descriptor.key)
             return _IngestionHandle(self, ingress, descriptor.key)

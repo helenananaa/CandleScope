@@ -1,3 +1,4 @@
+import { captureStableSeries } from "../market-data/window/stableSeriesSnapshot.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeriesIdentity, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
@@ -652,6 +653,7 @@ export function useIndicatorRuntime(
 
   const activeIndicatorsRef = useLatestRef(activeIndicators);
   const chartDataRef = useLatestRef(chartData);
+  const seriesStoreRef = useLatestRef(options.marketData?.view.seriesStore ?? null);
   const chartDataMetaRef = useLatestRef(chartDataMeta);
   const indicatorRangeRequestsRef = useLatestRef(indicatorRangeRequests);
   const historyWindowPendingRef = useLatestRef(historyWindowPending);
@@ -1550,6 +1552,7 @@ export function useIndicatorRuntime(
       }
     }
 
+    const resultGuards = new WeakMap<object, () => boolean>();
     const scheduled = indicatorRangeScheduler.ensureCoverage({
       sessionKey: requestLifecycleKey,
       targets,
@@ -1567,6 +1570,16 @@ export function useIndicatorRuntime(
         // Capture the event frontier before starting physical work. A history
         // completion can arrive while this HTTP request is in flight; using
         // the post-response frontier would lose that wakeup permanently.
+        const sourceAtDispatch = seriesStoreRef.current;
+        const last = sourceAtDispatch?.last();
+        // Hosted calculations have their own server revision fence. Also fence
+        // the locally held closed prefix, which can be corrected before React
+        // or the next server revision notification has run. Forming previews
+        // do not invalidate an unrelated closed-range result.
+        const input = sourceAtDispatch ? captureStableSeries(sourceAtDispatch, {
+          to: Math.min(range.end, last ? Number(last.time) - (last.is_closed === true ? 0 : 1) : range.end),
+        }) : null;
+        const inputCurrent = () => seriesStoreRef.current === sourceAtDispatch && (input?.isCurrent("range") ?? true);
         const afterEventId = latestIndicatorRangeEventId(indicatorRangeRequestsRef.current);
         const revisionAtDispatch = seriesRevisionRef.current || normalizeIndicatorRevision(revision);
         const message = target.message;
@@ -1605,6 +1618,8 @@ export function useIndicatorRuntime(
         const payload = await (workScheduler && workSchedulerCellId
           ? workScheduler.run(workSchedulerCellId, "indicator-range", requestRange)
           : requestRange());
+        if (!inputCurrent()) throw new DOMException("Indicator source changed", "AbortError");
+        if (payload && typeof payload === "object") resultGuards.set(payload, inputCurrent);
         if (payload?.ok !== false || payload.code === "INDICATOR_RANGE_EMPTY") return payload;
         if (payload.code === "INDICATOR_RANGE_NOT_READY") {
           const waitRevision = normalizeIndicatorRevision(payload) || revision;
@@ -1643,11 +1658,12 @@ export function useIndicatorRuntime(
         throw indicatorRangePayloadError(payload, "Indicator range error");
       },
       apply: ({ range, result: payload, target }) => {
-        if (currentStreamLifecycleKeyRef.current !== requestLifecycleKey) return;
-        if (payload?.code === "INDICATOR_RANGE_EMPTY" && !isResolvedIndicatorRangeEmpty(payload)) return;
+        if (payload && resultGuards.get(payload)?.() === false) return false;
+        if (currentStreamLifecycleKeyRef.current !== requestLifecycleKey) return false;
+        if (payload?.code === "INDICATOR_RANGE_EMPTY" && !isResolvedIndicatorRangeEmpty(payload)) return false;
         const currentIndicator = activeIndicatorsRef.current.find((item) => item.id === target.indicator.id);
-        if (!currentIndicator) return;
-        if (buildIndicatorResultCacheKey(currentIndicator, cacheContext) !== target.key) return;
+        if (!currentIndicator) return false;
+        if (buildIndicatorResultCacheKey(currentIndicator, cacheContext) !== target.key) return false;
         const responseRange = normalizeIndicatorRange(payload?.range) || range;
         applyWsReplaceRange(target.indicator.id, {
           ...payload,
@@ -1718,6 +1734,7 @@ export function useIndicatorRuntime(
     runtimeContextRef,
     scheduleIndicatorCorrectionFlush,
     setIndicatorError,
+    seriesStoreRef,
     workScheduler,
     workSchedulerCellId,
   ]);
@@ -3035,7 +3052,7 @@ export function useIndicatorRuntime(
 
   const frontendWindow = useFrontendScriptWindow(
     options.marketData?.view.seriesStore ?? null,
-    options.realtimeEnabled !== false && activeIndicators.some(indicator => isFrontendScript(indicator) && indicator.visible !== false),
+    options.realtimeEnabled !== false && activeIndicators.some(indicator => (isFrontendScript(indicator) || indicator.executionTarget === "local") && indicator.visible !== false),
     sessionKey,
   );
   const computeChartData = frontendWindow.rows ?? chartData;
@@ -3052,6 +3069,7 @@ export function useIndicatorRuntime(
     chartDataMetaRef,
     chartDataRef: computeChartDataRef,
     onComputePendingChange: frontendWindow.onComputePendingChange,
+    ...(frontendWindow.inputSnapshot ? { inputSnapshot: frontendWindow.inputSnapshot } : {}),
     datasetKey,
     exchange,
     forceHostedSubscriptions,

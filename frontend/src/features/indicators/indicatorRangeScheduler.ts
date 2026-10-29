@@ -30,6 +30,8 @@ interface SchedulerExecutionContext<TTarget> {
 
 interface SchedulerApplyContext<TTarget, TResult> extends Omit<SchedulerExecutionContext<TTarget>, "signal"> {
   result: TResult;
+  /** Async consumers must recheck immediately before their own publication. */
+  isCurrent(): boolean;
 }
 
 interface SchedulerSettlementDetail<TTarget, TResult> {
@@ -51,7 +53,7 @@ type SchedulerSettlementListener<TTarget, TResult> = (
 ) => void;
 
 interface EnsureCoverageOptions<TTarget, TResult> {
-  apply?: (context: SchedulerApplyContext<TTarget, TResult>) => void | Promise<void>;
+  apply?: (context: SchedulerApplyContext<TTarget, TResult>) => boolean | void | Promise<boolean | void>;
   execute?: (context: SchedulerExecutionContext<TTarget>) => TResult | Promise<TResult>;
   getCoveredSegments?: (target: TTarget) => readonly IndicatorRangeSegment[];
   interval?: unknown;
@@ -263,13 +265,21 @@ export function createIndicatorRangeScheduler<
         });
         return { applied: false, stale: true };
       }
-      await entry.apply?.({
+      const isCurrent = () => !controller.signal.aborted && taskEpoch === epoch
+        && sessionKey === task.sessionKey
+        && latestRevisionByTarget.get(`${sessionKey ?? ""}|${entry.targetKey}`) === task.revisionSignature;
+      const applied = await entry.apply?.({
         epoch: taskEpoch,
         range,
         reason,
         result,
+        isCurrent,
         target: entry.target,
       });
+      if (applied === false || !isCurrent()) {
+        notify(task.listeners, false, { range, stale: true, target: entry.target });
+        return { applied: false, stale: true };
+      }
       notify(task.listeners, true, { range, result, target: entry.target });
       return { applied: true, result };
     }).catch((error: unknown): SchedulerTaskResult<TResult> => {

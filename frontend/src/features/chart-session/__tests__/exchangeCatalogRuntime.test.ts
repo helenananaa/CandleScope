@@ -130,7 +130,7 @@ test("history and realtime channel flags are purpose-authoritative", () => {
   assert.deepEqual(getBaseWsIntervals("split", catalog, "spot"), ["5m"]);
 });
 
-test("only schema 1 without channels falls back to top-level native intervals", () => {
+test("schema 1 missing or empty channels keeps legacy interval declarations", () => {
   const catalog = buildExchangeCatalog([
     capability("legacy", {
       capability_schema_version: 1,
@@ -163,7 +163,7 @@ test("only schema 1 without channels falls back to top-level native intervals", 
     ["1h", "1w", "30d", "1M"],
   );
   assert.deepEqual(getNativeIntervals("modern-missing", catalog, "spot", "history"), []);
-  assert.deepEqual(getNativeIntervals("legacy-empty", catalog, "spot", "history"), []);
+  assert.deepEqual(getNativeIntervals("legacy-empty", catalog, "spot", "history").map((item) => item.value), ["1s", "8h"]);
   assert.equal(isNativeIntervalSupported("okx", "8h", catalog, "spot"), false);
   assert.equal(isNativeIntervalSupported("okx", "4h", catalog, "spot"), true);
   assert.deepEqual(getNativeIntervals("unknown-plugin", catalog, "spot", "history"), []);
