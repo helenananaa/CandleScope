@@ -388,7 +388,9 @@ export function useChartSession({
     const target = resolveSymbolTarget(input);
     if (buildChartSessionKey(target) === sessionKey) return;
     const native = getNativeIntervals(target.exchange, exchangeCatalog, target.marketType, "history").map(item => item.value);
-    if (native.length) onPreviewSeries(target, native);
+    if (native.length && canResolveIntervalForSeriesIdentity(target.exchange, target.interval, native, target)) {
+      onPreviewSeries(target, native);
+    }
   }, [exchangeCatalog, exchangeCatalogStatus, onPreviewSeries, resolveSymbolTarget, sessionKey]);
 
   const previewInterval = useCallback((nextInterval: IntervalString): void => {
