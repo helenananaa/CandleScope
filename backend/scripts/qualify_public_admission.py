@@ -6,7 +6,6 @@ import hashlib
 import json
 import platform
 from pathlib import Path
-import statistics
 import sys
 import time
 import tracemalloc
