@@ -1,0 +1,497 @@
+{
+  "fork_source": "43f7d748b22757873e1b81776e150ca67b67da07",
+  "upstream": "4.5.60",
+  "rails": {
+    "okx-spot": {
+      "status": "passed",
+      "ws_frames": 13,
+      "rest_samples": 2,
+      "closed_at": 1793248680000,
+      "restart": true,
+      "pending": 0
+    },
+    "okx-futures": {
+      "status": "passed",
+      "ws_frames": 67,
+      "rest_samples": 2,
+      "closed_at": 1793248980000,
+      "restart": true,
+      "pending": 0
+    },
+    "binance-spot": {
+      "status": "passed",
+      "ws_frames": 14,
+      "rest_samples": 2,
+      "closed_at": 1793248680000,
+      "restart": true,
+      "pending": 0
+    },
+    "binance-futures": {
+      "status": "passed",
+      "ws_frames": 33,
+      "rest_samples": 4,
+      "closed_at": 1793248740000,
+      "restart": true,
+      "pending": 0
+    }
+  },
+  "channels": {
+    "okx-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "okx-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 4,
+        "events": 5
+      }
+    },
+    "okx-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 3
+      }
+    },
+    "okx-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "okx-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 3
+      }
+    },
+    "okx-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 5,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 5,
+        "events": 3
+      }
+    },
+    "okx-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 3,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 3
+      }
+    },
+    "okx-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 12
+      }
+    },
+    "binance-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-spot-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 7,
+        "events": 17
+      }
+    },
+    "binance-spot-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 0
+      }
+    },
+    "binance-spot-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 6,
+        "events": 16
+      }
+    },
+    "binance-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 1
+      }
+    },
+    "binance-futures-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 0
+      }
+    },
+    "binance-futures-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-premiumIndex": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-forceOrder": {
+      "rest": {
+        "status": "unsupported",
+        "reason": "binance does not support CCXT REST forceOrder"
+      },
+      "ws": {
+        "status": "no_event_in_window",
+        "snapshot": {
+          "layer": "L2_CcxtProvider",
+          "stream_key": "futures:BTCUSDT@forceOrder",
+          "provider": "ccxt",
+          "proxy_route_id": null,
+          "health": "connected",
+          "ccxt_symbol": "BTC/USDT:USDT",
+          "queue_size": 0,
+          "queue_capacity": 4096,
+          "overflowed": false,
+          "consecutive_failures": 0,
+          "last_message_time": 0.0,
+          "last_lifecycle": "connected",
+          "runtime": {
+            "exchange": "binance",
+            "proxy_route_id": null,
+            "proxy_egress_group": null,
+            "proxy_endpoint": "http://127.0.0.1:7897",
+            "market_type": "futures",
+            "started": true,
+            "closed": false,
+            "subscribers": 1,
+            "raw_events": 3,
+            "lifecycle_events": 1,
+            "websocket_recycles": 0,
+            "websocket_generation": 0,
+            "physical_websockets": 1
+          },
+          "metrics": {
+            "layer": "L2_CcxtProvider",
+            "counters": {
+              "lifecycle_connected": 1,
+              "watch_updates": 3
+            },
+            "gauges": {
+              "health": "connected"
+            },
+            "timestamps": {
+              "health_changed_at": 1793248851094
+            }
+          }
+        }
+      }
+    }
+  },
+  "channel_transport_counts": {
+    "passed": 51,
+    "unsupported": 4,
+    "no_event_in_window": 1
+  },
+  "legacy_sample_rows": 9,
+  "legacy_statuses": {
+    "matched": 7,
+    "revised": 2
+  },
+  "source_retention": {
+    "05": {
+      "archived": 125,
+      "json_bytes": 6298172,
+      "compressed_bytes": 256701,
+      "cutoff": 1793335261212
+    },
+    "06": {
+      "archived": 126,
+      "json_bytes": 63499917,
+      "compressed_bytes": 1009963,
+      "cutoff": 1793335275874
+    },
+    "07": {
+      "archived": 86,
+      "json_bytes": 1532940,
+      "compressed_bytes": 121463,
+      "cutoff": 1793335468995
+    },
+    "08": {
+      "archived": 16,
+      "json_bytes": 2257173,
+      "compressed_bytes": 71258,
+      "cutoff": 1793335600870
+    }
+  },
+  "restart_readback": {
+    "05": {
+      "restored": 138,
+      "pending": 0
+    },
+    "06": {
+      "restored": 137,
+      "pending": 0
+    },
+    "07": {
+      "restored": 93,
+      "pending": 0
+    },
+    "08": {
+      "restored": 16,
+      "pending": 0
+    }
+  },
+  "desktop_tested": false,
+  "production_database_modified": false,
+  "offline_cli_sparse": {
+    "status": "passed",
+    "profile": "/var/folders/m3/7mjl333j70j6nhb5nrxrbx800000gn/T/ccxt-offline-sparse-g6rtblah",
+    "original_db_modified": false,
+    "source": "previously copied read-only legacy sample",
+    "open_times": [
+      1788828120000,
+      1791676800000
+    ],
+    "cli_results": [
+      {
+        "scanned": 2,
+        "matched": 2,
+        "revised": 0,
+        "unavailable": 0,
+        "already_evidenced": 0,
+        "evidence_origin": "historical_refetch",
+        "next_start_ms": 1791676800001
+      },
+      {
+        "scanned": 2,
+        "matched": 0,
+        "revised": 0,
+        "unavailable": 0,
+        "already_evidenced": 2,
+        "evidence_origin": "historical_refetch",
+        "next_start_ms": 1791676800001
+      }
+    ],
+    "pending_source_revisions": 0,
+    "rest_response_count": 4
+  }
+}

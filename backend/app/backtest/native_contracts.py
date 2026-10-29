@@ -1,7 +1,7 @@
 """Validated inputs for native and host-matched engine services."""
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -12,7 +12,7 @@ class FrozenNativeData(BaseModel):
     snapshot_hash: str = Field(min_length=8, max_length=80)
     start_time_ms: int
     end_time_ms: int
-    interval: str = Field(min_length=1, max_length=16)
+    interval: str = Field(min_length=1, max_length=64)
     exchange: str = Field(default="binance", max_length=40)
     market_type: str = Field(default="usdm", max_length=40)
 
@@ -23,15 +23,68 @@ class FrozenNativeData(BaseModel):
         return self
 
 
+class PineChartMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    priceTickSize: str = Field(min_length=1, max_length=80)
+    quantityPrecision: int | None = Field(default=None, ge=0, le=9, strict=True)
+    quantityStep: str | None = Field(default=None, min_length=1, max_length=80, strict=True)
+    minContract: str | None = Field(default=None, min_length=1, max_length=80, strict=True)
+    pointValue: float | None = Field(default=None, gt=0, strict=True)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{1,20}$")
+
+    @model_validator(mode="after")
+    def check_price_tick(self):
+        from fractions import Fraction
+
+        try:
+            tick = Fraction(self.priceTickSize)
+        except (ValueError, ZeroDivisionError) as exc:
+            raise ValueError("priceTickSize must be a positive finite decimal") from exc
+        if tick <= 0 or max(tick.numerator, tick.denominator) > 4_294_967_295:
+            raise ValueError("priceTickSize exceeds the Pine runtime price grid")
+        from .pine_contract_metadata import quantity_decimal
+        if self.quantityStep is not None:
+            places = quantity_decimal(self.quantityStep, "quantityStep")
+            if self.quantityPrecision is not None and places > self.quantityPrecision:
+                raise ValueError("quantityStep exceeds quantityPrecision")
+        if self.minContract is not None:
+            quantity_decimal(self.minContract, "minContract")
+        return self
+
+
 class NativeContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
     symbol: str = Field(min_length=1, max_length=120)
     timeframe: str = Field(min_length=1, max_length=16)
+    metadata: PineChartMetadata | None = None
 
 
 class RequestedNativeData(FrozenNativeData):
     symbol: str = Field(min_length=1, max_length=120)
     timeframe: str = Field(min_length=1, max_length=16)
+    metadata: PineChartMetadata | None = None
+
+
+class PineInstrumentMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    minMove: int = Field(gt=0, le=4294967295, strict=True)
+    priceScale: int = Field(gt=0, le=4294967295, strict=True)
+    pointValue: float | None = Field(default=None, gt=0)
+    quantityPrecision: int | None = Field(default=None, ge=0, le=9, strict=True)
+    quantityStep: str | None = Field(default=None, max_length=64)
+    minContract: str | None = Field(default=None, max_length=64)
+    currency: str | None = Field(default=None, pattern="^[A-Z]+$", max_length=16)
+
+
+class PineHostEnvironment(BaseModel):
+    """Frozen metadata and clocks; market bars continue to require dataset refs."""
+    model_config = ConfigDict(extra="forbid")
+    chartMetadata: PineInstrumentMetadata | None = None
+    symbolMetadata: dict[str, PineInstrumentMetadata] = Field(default_factory=dict)
+    executionTimes: list[Annotated[int, Field(ge=0, strict=True)]] | None = Field(default=None, max_length=100_000)
+    currencyRates: dict[str, Any] | None = None
+    barCalendars: dict[str, Any] | None = None
+    sessionWindows: dict[str, Any] | None = None
 
 
 class NativeRunRequest(FrozenNativeData):
@@ -41,7 +94,22 @@ class NativeRunRequest(FrozenNativeData):
     context: NativeContext
     contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
     libraries: dict[str, str] = Field(default_factory=dict)
+    currency_rates: dict[str, Any] | None = None
     magnifier: FrozenNativeData | None = None
+    host_inputs: PineHostEnvironment = Field(default_factory=PineHostEnvironment)
+
+    @model_validator(mode="after")
+    def host_language(self):
+        if self.language != "pine" and any(value is not None and value != {} for value in self.host_inputs.model_dump().values()):
+            raise ValueError("Pine host inputs require the Pine language")
+        return self
+
+    @model_validator(mode="after")
+    def validate_pine_metadata(self):
+        if self.language != "pine" and (self.context.metadata is not None or self.currency_rates is not None
+                or any(item.metadata is not None for item in self.contexts)):
+            raise ValueError("Pine chart metadata and currency rates require a Pine strategy")
+        return self
 
 
 class HostMatchingSettings(BaseModel):
@@ -66,12 +134,73 @@ class ExecutionData(BaseModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
 
 
-class ExternalRunRequest(NativeRunRequest):
+class AccountEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    time_ms: int = Field(strict=True)
+    role: Literal["INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"]
+    payload: dict[str, Any]
+
+
+class AccountData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    symbol: str = Field(min_length=1, max_length=120)
+    events: list[AccountEvent] = Field(min_length=1, max_length=500_000)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkbenchBarSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    cost_sensitivity_mode: Literal["AUTO", "SKIP"] = "AUTO"
+    account_model: Literal["LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"] | None = None
+    leverage: float = Field(default=1, gt=0, le=1000)
+    funding_mode: Literal["OFF", "HISTORICAL_REQUIRED"] = "OFF"
+    account_data: AccountData | None = None
+    execution_model_revision: Literal["EXECUTION_REALISM_V2"] | None = None
+    participation_rate: float | None = Field(default=None, gt=0, le=1)
+    bar_path_scenario: Literal["OHLC_NEAREST_EXTREME_PATH_V2"] | None = None
+
+    @model_validator(mode="after")
+    def check_account_settings(self):
+        if self.execution_model_revision is None and (self.participation_rate is not None or self.bar_path_scenario is not None):
+            raise ValueError("participation settings require EXECUTION_REALISM_V2")
+        if self.execution_model_revision is not None and self.participation_rate is None:
+            raise ValueError("EXECUTION_REALISM_V2 requires participation_rate")
+        if self.account_model == "LINEAR_PERP_ONE_WAY_V2":
+            if self.account_data is None:
+                raise ValueError("V2 account requires frozen account_data")
+        elif self.account_data is not None or self.funding_mode != "OFF" or self.leverage != 1:
+            raise ValueError("historical account settings require LINEAR_PERP_ONE_WAY_V2")
+        return self
+
+
+    def validate_physical_account_profile(self, fidelity, language="pine"):
+        if fidelity == "BAR_APPROX" or (self.account_model != "LINEAR_PERP_ONE_WAY_V2" and self.execution_model_revision is None):
+            return
+        if language != "pine" or self.account_model != "LINEAR_PERP_ONE_WAY_V2":
+            raise ValueError("physical historical account settings require Pine and V2")
+        if self.bar_path_scenario is not None:
+            raise ValueError("physical clocks cannot use a synthetic BAR path")
+        if self.execution_model_revision is not None and fidelity != "TRADE_TAPE":
+            raise ValueError("book capacity retains its declared physical policy")
+
+
+class ExternalRunRequest(NativeRunRequest, WorkbenchBarSettings):
     execution_mode: Literal["CANDLESCOPE"] = "CANDLESCOPE"
     execution_fidelity: Literal["BAR_APPROX", "TRADE_TAPE", "BOOK_ASSISTED", "BOOK_DEPTH", "BOOK_SAMPLED"] = "BAR_APPROX"
     fill_recalculation: bool = False
+
+    @model_validator(mode="after")
+    def check_physical_account_profile(self):
+        self.validate_physical_account_profile(self.execution_fidelity, self.language)
+        return self
     execution_data: ExecutionData | None = None
     host_settings: HostMatchingSettings = Field(default_factory=HostMatchingSettings)
+
+    @model_validator(mode="after")
+    def host_clock(self):
+        if self.host_inputs.executionTimes is not None or self.host_inputs.sessionWindows is not None:
+            raise ValueError("host matching owns the observation clock and account windows; omit executionTimes and sessionWindows")
+        return self
 
 
 class ReplayCreate(BaseModel):

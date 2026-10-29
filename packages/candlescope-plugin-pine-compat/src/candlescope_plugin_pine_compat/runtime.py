@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import importlib
-from importlib import metadata as importlib_metadata
+import itertools
 import math
 import re
+import uuid
+from bisect import bisect_left
+from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache, partial
+from importlib import metadata as importlib_metadata
+from operator import attrgetter, is_not
 from typing import Any
 
-from .sessions import PineSessions
-
 from candlescope_plugin_sdk import (
+    FEATURE_BATCH_BARS_PATCH_V1,
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_HISTOGRAM_SERIES_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
+    FEATURE_RENDER_NATIVE_SCENE_V1,
+    FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
     AnalyzeRequest,
@@ -27,20 +34,29 @@ from candlescope_plugin_sdk import (
     LanguageDescriptor,
     LinePoint,
     LineSeries,
+    ListSplice,
     ProtocolError,
+    RecordPatch,
     RenderCollections,
     RenderOutput,
+    RenderPatch,
     RuntimeDescriptor,
 )
 
+from .host_inputs import chart_metadata, execution_times, indicator_request_bars, host_inputs, diagnostic_code, SOURCE_FIELDS, normalize_indicator_options
+from .libraries import LIBRARY_PARAMETER, library_digests, library_sources
+from .currency_inputs import currency_rates
+from .object_scene import object_scenes
+from .sessions import PineSessions
 
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
 PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
-PLUGIN_VERSION = "0.3.2"
+PLUGIN_VERSION = "0.4.0"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.2"
+EXPECTED_ENGINE_VERSION = "0.3.3+cs.1"
+INCREMENTAL_ENGINE_VERSION = "0.3.2+external.1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
 PINE_ANALYSIS_SCHEMA_VERSION = 6
@@ -67,19 +83,15 @@ _HOST_BLOCKED_PREFIXES = (
     "timeframe.",
     "session.",
     "ticker.",
-    "label.",
-    "line.",
-    "linefill.",
-    "box.",
-    "table.",
-    "polyline.",
     "chart.",
-    "import",
     "library",
 )
-_HOST_BLOCKED_EXACT = {"plotbar", "plotcandle", "plotchar", "plotarrow"}
+_HOST_BLOCKED_EXACT: set[str] = set()
 _HOST_CHART_SYMBOL_FEATURES = frozenset(
     {"syminfo.prefix", "syminfo.ticker", "syminfo.tickerid"}
+)
+_HOST_CHART_GRID_FEATURES = frozenset(
+    {"syminfo.mintick", "syminfo.minmove", "syminfo.pricescale", "syminfo.mincontract", "syminfo.pointvalue", "syminfo.currency"}
 )
 _HOST_CHART_TIMEFRAME_FEATURES = frozenset(
     {
@@ -97,19 +109,8 @@ _HOST_CHART_TIMEFRAME_FEATURES = frozenset(
 _PINE_SECONDS_MULTIPLIERS = frozenset({1, 5, 10, 15, 30, 45})
 _PINE_CONTEXT_TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _CANDLESCOPE_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])$")
-_UNMAPPABLE_OUTPUT_KEYS = (
-    "plotChars",
-    "plotArrows",
-    "plotBars",
-    "plotCandles",
-    "labels",
-    "lines",
-    "lineFills",
-    "polylines",
-    "boxes",
-    "tables",
-    "strategy",
-)
+_UNMAPPABLE_OUTPUT_KEYS = ("strategy",)
+
 _PANE_DISPLAYS = {"display.all", "display.pane"}
 _HIDDEN_DISPLAYS = {"display.none"}
 _UNSUPPORTED_DISPLAYS = {
@@ -141,7 +142,10 @@ class BridgeError(ValueError):
         )
 
 
+@lru_cache(maxsize=1)
 def _engine_version() -> str:
+    # Distribution metadata cannot change under a running sidecar; the lookup
+    # scans site-packages and took ~5 ms, twice per request.
     try:
         value = importlib_metadata.version(ENGINE_PACKAGE)
     except importlib_metadata.PackageNotFoundError:
@@ -156,7 +160,7 @@ def _load_engine() -> Any:
 def _engine_contract() -> tuple[Any, str]:
     engine = _load_engine()
     version = _engine_version()
-    if version not in {EXPECTED_ENGINE_VERSION, UNKNOWN_SOURCE_VERSION}:
+    if version not in {EXPECTED_ENGINE_VERSION, INCREMENTAL_ENGINE_VERSION, UNKNOWN_SOURCE_VERSION}:
         raise RuntimeError(
             f"{PLUGIN_PACKAGE} requires {ENGINE_PACKAGE} "
             f"{EXPECTED_ENGINE_VERSION}, found {version}"
@@ -212,12 +216,16 @@ def _descriptor() -> RuntimeDescriptor:
             FEATURE_RENDER_LINE_SERIES_V1,
             FEATURE_RENDER_HISTOGRAM_SERIES_V1,
             FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
+            FEATURE_RENDER_NATIVE_SCENE_V1,
+            FEATURE_RENDER_OUTPUT_PATCH_V1,
+            FEATURE_BATCH_BARS_PATCH_V1,
         ),
         required_host_features=(
             FEATURE_BATCH_EXECUTION_V1,
             FEATURE_RENDER_LINE_SERIES_V1,
             FEATURE_RENDER_HISTOGRAM_SERIES_V1,
             FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
+            FEATURE_RENDER_NATIVE_SCENE_V1,
         ),
         meta={
             "engine": ENGINE_PACKAGE,
@@ -246,8 +254,11 @@ def _descriptor() -> RuntimeDescriptor:
                 "bgcolor",
                 "barcolor",
                 "alert",
+                "native-line-label-box-curved-polyline-linefill-table-scene",
+                "plotchar-plotarrow-plotbar-plotcandle-gradient-fill",
             ],
             "unsupportedRenderKinds": list(_UNMAPPABLE_OUTPUT_KEYS),
+            "drawingProjection": "chart-native-objects/1",
             "ui": {
                 "languages": {
                     "pine": {
@@ -275,7 +286,7 @@ def pine_chart_symbol(context: Any) -> str | None:
         return None
     if market_type == "spot":
         ticker = symbol
-    elif market_type in {"futures", "swap"}:
+    elif market_type in {"futures", "swap", "usdm"}:
         if exchange == "BINANCE":
             ticker = symbol if symbol.endswith(".P") else f"{symbol}.P"
         elif symbol.endswith(("-SWAP", "-PERP", ".P")):
@@ -288,7 +299,12 @@ def pine_chart_symbol(context: Any) -> str | None:
 
 
 def pine_chart_timeframe(context: Any) -> str | None:
-    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(str(context.interval or "").strip())
+    value = str(context.interval or "").strip()
+    if "~" in value:
+        if not re.fullmatch(r"[1-9]\d*[mhd]~a1~\d+|[1-9]\d*[dwM]~c1~(?:UTC|Asia/Shanghai|America/New_York)", value):
+            return None
+        value = value.split("~", 1)[0]
+    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(value)
     if not match:
         return None
     multiplier = int(match.group(1))
@@ -347,8 +363,16 @@ def _feature_is_host_blocked(
     *,
     chart_symbol: str | None,
     chart_timeframe: str | None,
+    chart_metadata=None,
+    bar_calendars=None,
 ) -> bool:
     normalized = feature.strip().lower()
+    if normalized in _HOST_CHART_GRID_FEATURES:
+        return False
+    if normalized.startswith("chart.point."):
+        return False
+    if normalized in {"request.security", "request.security_lower_tf", "request.currency_rate"}:
+        return False
     if normalized in _HOST_CHART_SYMBOL_FEATURES and chart_symbol is not None:
         return False
     if normalized in _HOST_CHART_TIMEFRAME_FEATURES and chart_timeframe is not None:
@@ -359,14 +383,35 @@ def _feature_is_host_blocked(
     )
 
 
-def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
-    engine, _version = _engine_contract()
-    raw = engine.analyze_script(source)
+@lru_cache(maxsize=64)
+def _native_analysis(engine, source: str, libraries=()) -> dict[str, Any]:
+    kwargs = {"library_sources": dict(libraries)} if libraries else {}
+    raw = engine.analyze_script(source, **kwargs)
     if not isinstance(raw, Mapping):
         raise BridgeError("PINE_ANALYSIS_OUTPUT_INVALID", "Pine analysis must return an object.")
     analysis = dict(raw)
     if analysis.get("executable") and callable(getattr(engine, "compile_script", None)):
-        analysis["hostRequirements"] = engine.compile_script(source).host_requirements()
+        program = engine.compile_script(source, **kwargs)
+        analysis["hostRequirements"] = program.host_requirements()
+        analysis["calculationBarsCount"] = getattr(program, "calculation_bars_count", None)
+        analysis["executionWindowAvailable"] = hasattr(program, "calculation_bars_count")
+    return analysis
+
+
+def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
+    engine, _version = _engine_contract()
+    if "~" in str(context.interval) and getattr(engine, "BAR_BOUNDARY_SCHEMA", None) != "host-bar-boundaries/1":
+        raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "This candle grid requires a runtime with host-bar-boundaries/1 support.")
+    options = normalize_indicator_options(options or {})
+    supplied = host_inputs(options.get("pineHost"))
+    try:
+        libraries = library_sources(options)
+    except (TypeError, ValueError) as exc:
+        if str(exc).startswith("PINE_HOST_"):
+            code, _, message = str(exc).partition(": ")
+            raise BridgeError(code, message) from exc
+        raise
+    analysis = dict(_native_analysis(engine, source, libraries))
     if analysis.get("schemaVersion") != PINE_ANALYSIS_SCHEMA_VERSION:
         raise BridgeError(
             "PINE_SCHEMA_MISMATCH",
@@ -408,6 +453,8 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
             str(item.get("feature") or ""),
             chart_symbol=bindings["chartSymbol"],
             chart_timeframe=bindings["chartTimeframe"],
+            chart_metadata=supplied.get("chartMetadata"),
+            bar_calendars=supplied.get("barCalendars"),
         )
     ]
     if blocked:
@@ -419,7 +466,7 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
                 message=f"CandleScope Pine protocol v1 does not host: {', '.join(features)}",
                 hint=(
                     "The adapter supports indicator batches and realtime sessions; "
-                    "context requests, strategies, imports, and native objects stay disabled."
+                    "Supply requested data and versioned library sources through the host; unsupported execution contexts remain disabled."
                 ),
                 span=_span(blocked[0].get("span")),
                 data={"blockedFeatures": features},
@@ -438,16 +485,41 @@ def _analyze_native(source: str, context: Any) -> tuple[dict[str, Any], tuple[Di
     return analysis, tuple(diagnostics)
 
 
-def _normalize_bars(request: ExecuteBatchRequest) -> tuple[list[dict[str, float | int]], list[int]]:
+def _reused_prefix(bars: tuple[Any, ...], previous: tuple[Any, ...] | None) -> tuple[int, int]:
+    """Return (start, count): ``bars`` begins with ``previous[start:start + count]``.
+
+    Only the very Bar objects of the previous window count: Bars are
+    immutable, so a corrected bar is always normalized again.
+    """
+    if not previous or not bars:
+        return 0, 0
+    start = bisect_left(previous, bars[0].time, key=attrgetter("time"))
+    if start >= len(previous) or previous[start] is not bars[0]:
+        return 0, 0
+    count = min(len(bars), len(previous) - start)
+    changed = next(itertools.compress(itertools.count(), map(is_not, bars, previous[start:start + count])), count)
+    # A formerly final forming bar is validated again where it is no longer last.
+    if changed == len(previous) - start and changed < len(bars) and not bars[changed - 1].is_closed:
+        changed -= 1
+    return start, changed
+
+
+def _normalize_bars(
+    request: ExecuteBatchRequest,
+    previous: tuple[tuple[Any, ...], list[dict[str, float | int]], list[int]] | None = None,
+) -> tuple[list[dict[str, float | int]], list[int]]:
+    """Validate and convert bars; ``previous`` is an earlier (bars, result) to reuse."""
     if len(request.bars) > MAX_BARS:
         raise BridgeError(
             "PINE_INPUT_LIMIT_EXCEEDED",
             f"Too many Pine bars: {len(request.bars)} > {MAX_BARS}",
         )
-    runtime_bars: list[dict[str, float | int]] = []
-    host_times: list[int] = []
-    previous_runtime_time: int | None = None
-    for index, bar in enumerate(request.bars):
+    start, keep = _reused_prefix(request.bars, previous[0] if previous is not None else None)
+    # Reused rows passed every check below at the same window position.
+    runtime_bars: list[dict[str, float | int]] = previous[1][start:start + keep] if keep else []
+    host_times: list[int] = previous[2][start:start + keep] if keep else []
+    previous_runtime_time: int | None = runtime_bars[-1]["time"] if runtime_bars else None
+    for index, bar in enumerate(request.bars[keep:], keep):
         if not bar.is_closed and index != len(request.bars) - 1:
             raise BridgeError(
                 "PINE_CLOSED_BARS_REQUIRED",
@@ -551,10 +623,10 @@ def _normalize_overrides(params: Mapping[str, Any], analysis: Mapping[str, Any])
                 "PINE_INVALID_PARAMS",
                 f"Pine parameter {key} color integer must fit in u32",
             )
-        if name == "input.source":
+        if name == "input.source" and (not isinstance(value, str) or value not in SOURCE_FIELDS):
             raise BridgeError(
                 "PINE_INVALID_PARAMS",
-                f"Pine parameter {key} cannot override input.source in this host",
+                f"Pine parameter {key} must select a supported OHLCV source",
             )
         if name in {
             "input.string",
@@ -742,6 +814,8 @@ def _param_schema(analysis: Mapping[str, Any], overrides: Mapping[int, Any]) -> 
         for key in ("default", "min", "max", "step", "options"):
             if raw.get(key) is not None:
                 item[key] = raw[key]
+        if name == "input.source":
+            item["options"] = sorted(SOURCE_FIELDS)
         if call_site_id in overrides:
             item["current"] = overrides[call_site_id]
         elif raw.get("default") is not None:
@@ -750,28 +824,89 @@ def _param_schema(analysis: Mapping[str, Any], overrides: Mapping[int, Any]) -> 
     return tuple(schema)
 
 
-def _line_series(record: Mapping[str, Any], *, histogram: bool) -> LineSeries:
-    points = tuple(
-        LinePoint(time=point["time"], value=point.get("value"), color=point.get("color"))
-        for point in record.get("data") or []
-        if isinstance(point, Mapping)
-    )
+def _series_fields(record: Mapping[str, Any], *, histogram: bool) -> dict[str, Any]:
+    """Every series field except its points and per-point color data."""
     color = record.get("color_up") if histogram else record.get("color")
-    style: dict[str, Any] = {
-        "color": color or _PALETTE[0],
-        "lineWidth": record.get("linewidth", 1),
-        "lineStyle": record.get("linestyle", 0),
+    return {
+        "id": str(record["id"]),
+        "type": "histogram" if histogram else "line",
+        "title": str(record.get("title") or record["id"]),
+        "pane": str(record.get("pane") or "separate"),
+        "scale": "right",
+        "style": {
+            "color": color or _PALETTE[0],
+            "lineWidth": record.get("linewidth", 1),
+            "lineStyle": record.get("linestyle", 0),
+        },
     }
+
+
+def _line_point(point: Mapping[str, Any]) -> LinePoint:
+    return LinePoint(time=point["time"], value=point.get("value"), color=point.get("color"))
+
+
+def _line_series(record: Mapping[str, Any], *, histogram: bool) -> LineSeries:
+    fields = _series_fields(record, histogram=histogram)
+    style = fields["style"]
     if record.get("colorData"):
         style["colorData"] = record["colorData"]
     return LineSeries(
-        id=str(record["id"]),
-        title=str(record.get("title") or record["id"]),
-        points=points,
-        pane=str(record.get("pane") or "separate"),
+        id=fields["id"],
+        title=fields["title"],
+        points=tuple(
+            _line_point(point) for point in record.get("data") or [] if isinstance(point, Mapping)
+        ),
+        pane=fields["pane"],
+        scale=fields["scale"],
         style=style,
-        series_type="histogram" if histogram else "line",
+        series_type=fields["type"],
     )
+
+
+# Collections in output order, and the per-bar lists an output patch splices.
+_COLLECTIONS = ("lines", "histograms", "markers", "hlines", "fills", "bgcolors", "barcolors", "signals")
+_PER_BAR_KEYS = {
+    "lines": ("data", "colorData"),
+    "histograms": ("data", "colorData"),
+    "markers": ("data",),
+    "fills": ("colorData",),
+    "bgcolors": ("regions",),
+    "barcolors": ("data",),
+}
+# Core change-set families: per-bar series, and those also rendered as scene rows.
+_SCENE_FAMILIES = frozenset({"plotChar", "plotArrow", "plotBar", "plotCandle"})
+_SERIES_FAMILIES = frozenset({"plot", "plotShape", "bgColor", "barColor"}) | _SCENE_FAMILIES
+_REVISION_PREFIX = uuid.uuid4().hex[:16]
+_REVISIONS = itertools.count(1)
+
+
+@dataclass(slots=True)
+class _Normalized:
+    """Normalized records before they become SDK models or an output patch."""
+
+    collections: dict[str, list[dict[str, Any]]]
+    scenes: list[dict[str, Any]]
+    meta: dict[str, Any]
+    # (collection, record id, per-bar key) -> items kept from the previous output.
+    keeps: dict[tuple[str, str, str], int]
+
+
+@dataclass(slots=True)
+class _OutputState:
+    """The output a patch-accepting host holds for one session."""
+
+    revision: str
+    normalized: _Normalized
+    core_revision: int
+    length: int
+    # Inputs a patch may not change (source, pane, history start) and the
+    # first and last host time the output covered.
+    context: tuple[Any, ...]
+    anchor: tuple[int, int] | None
+
+
+def _item_time(item: Mapping[str, Any]) -> int:
+    return item["time"]
 
 
 def _normalize_output(
@@ -779,11 +914,20 @@ def _normalize_output(
     *,
     source: str,
     host_times: list[int],
+    host_bars: list[dict[str, Any]],
     analysis: Mapping[str, Any],
     overrides: Mapping[int, Any],
     render_hints: Mapping[str, Any] | None,
     host_bindings: Mapping[str, str | None],
-) -> tuple[RenderOutput, tuple[dict[str, Any], ...], dict[str, Any]]:
+    start: int = 0,
+    previous: _Normalized | None = None,
+    scenes: list[dict[str, Any]] | None = None,
+) -> tuple[_Normalized, tuple[dict[str, Any], ...], dict[str, Any]]:
+    """Normalize native output, resuming per-bar lists from ``previous``.
+
+    With ``previous``, items for source indices below ``start`` are reused and
+    only later indices are normalized; ``scenes`` reuses unchanged scenes.
+    """
     if not isinstance(raw_value, Mapping):
         raise BridgeError("PINE_RUNTIME_OUTPUT_INVALID", "Pine runtime output must be an object")
     raw = dict(raw_value)
@@ -828,6 +972,27 @@ def _normalize_output(
     hlines: list[dict[str, Any]] = []
     fills: list[dict[str, Any]] = []
     signals: list[dict[str, Any]] = []
+    keeps: dict[tuple[str, str, str], int] = {}
+    earlier = {} if previous is None else {
+        (name, record["id"]): record
+        for name, records in previous.collections.items()
+        for record in records
+    }
+
+    def resume(collection: str, record_id: str, key: str, offset: int = 0) -> list[dict[str, Any]]:
+        """The previous record's items for source indices below ``start``."""
+        record = earlier.get((collection, record_id))
+        items = record.get(key) if record is not None else None
+        # Target times grow with the source index, so a time cut is an index cut.
+        cut = start + offset
+        if not items or cut <= 0:
+            keep = 0
+        elif cut >= len(host_times):
+            keep = len(items)
+        else:
+            keep = bisect_left(items, host_times[cut], key=_item_time)
+        keeps[(collection, record_id, key)] = keep
+        return items[:keep] if keep else []
 
     for plot_index, plot_value in enumerate(raw.get("plots") or []):
         if not isinstance(plot_value, Mapping):
@@ -862,11 +1027,15 @@ def _normalize_output(
             raise BridgeError(
                 "PINE_RUNTIME_OUTPUT_INVALID", f"Plot {plot_id} values/colors must be arrays"
             )
-        default_color = _PALETTE[plot_index % len(_PALETTE)]
-        has_default_color = False
-        data: list[dict[str, Any]] = []
-        color_data: list[dict[str, Any]] = []
-        for index, value in enumerate(values):
+        record_id = f"pine-plot-{plot_id}"
+        collection = "histograms" if histogram else "lines"
+        data = resume(collection, record_id, "data", settings["offset"])
+        color_data = resume(collection, record_id, "colorData", settings["offset"])
+        # The first per-bar color becomes the default for the rest of the plot.
+        has_default_color = bool(color_data)
+        default_color = color_data[0]["color"] if color_data else _PALETTE[plot_index % len(_PALETTE)]
+        for index in range(start, len(values)):
+            value = values[index]
             if index >= len(host_times) or not _visible_source_index(
                 index, len(host_times), settings["showLast"]
             ):
@@ -889,7 +1058,7 @@ def _normalize_output(
                     has_default_color = True
             data.append(point)
         record: dict[str, Any] = {
-            "id": f"pine-plot-{plot_id}",
+            "id": record_id,
             "title": settings["title"],
             "pane": settings["pane"],
             "data": data,
@@ -922,9 +1091,11 @@ def _normalize_output(
             raise BridgeError(
                 "PINE_RUNTIME_OUTPUT_INVALID", f"plotshape {marker_id} values must be an array"
             )
-        points: list[dict[str, Any]] = []
+        record_id = f"pine-plotshape-{marker_id}"
+        points = resume("markers", record_id, "data", settings["offset"])
         default_color = _PALETTE[(len(lines) + len(histograms) + index) % len(_PALETTE)]
-        for value_index, value in enumerate(values):
+        for value_index in range(start, len(values)):
+            value = values[value_index]
             if value_index >= len(host_times) or not _visible_source_index(
                 value_index, len(host_times), settings["showLast"]
             ):
@@ -1001,7 +1172,7 @@ def _normalize_output(
             first = points[0]
             markers.append(
                 {
-                    "id": f"pine-plotshape-{marker_id}",
+                    "id": record_id,
                     "title": settings["title"],
                     "shape": first["shape"],
                     "color": first["color"],
@@ -1025,8 +1196,11 @@ def _normalize_output(
         settings = _render_settings(item, base_pane=pane, fallback_title=f"Background {item_id}")
         if not settings["paneVisible"]:
             continue
-        regions = []
-        for value_index, value in enumerate(item.get("values") or []):
+        record_id = f"pine-bgcolor-{item_id}"
+        regions = resume("bgcolors", record_id, "regions", settings["offset"])
+        values = item.get("values") or []
+        for value_index in range(start, len(values)):
+            value = values[value_index]
             if value_index >= len(host_times) or value is None or not _visible_source_index(
                 value_index, len(host_times), settings["showLast"]
             ):
@@ -1039,7 +1213,7 @@ def _normalize_output(
         if regions:
             bgcolors.append(
                 {
-                    "id": f"pine-bgcolor-{item_id}",
+                    "id": record_id,
                     "title": settings["title"],
                     "color": regions[0]["color"],
                     "pane": settings["pane"],
@@ -1054,8 +1228,11 @@ def _normalize_output(
         settings = _render_settings(item, base_pane="main", fallback_title=f"Bars {item_id}")
         if not settings["paneVisible"]:
             continue
-        data = []
-        for value_index, value in enumerate(item.get("values") or []):
+        record_id = f"pine-barcolor-{item_id}"
+        data = resume("barcolors", record_id, "data", settings["offset"])
+        values = item.get("values") or []
+        for value_index in range(start, len(values)):
+            value = values[value_index]
             if value_index >= len(host_times) or value is None or not _visible_source_index(
                 value_index, len(host_times), settings["showLast"]
             ):
@@ -1065,7 +1242,7 @@ def _normalize_output(
                 data.append({"time": target, "color": _css_color(value, "#787b86")})
         if data:
             barcolors.append(
-                {"id": f"pine-barcolor-{item_id}", "title": settings["title"], "data": data}
+                {"id": record_id, "title": settings["title"], "data": data}
             )
 
     raw_hlines: dict[Any, dict[str, Any]] = {}
@@ -1100,11 +1277,7 @@ def _normalize_output(
         if not isinstance(item, Mapping):
             raise BridgeError("PINE_RUNTIME_OUTPUT_INVALID", "Pine fill must be an object")
         if item.get("gradient"):
-            raise BridgeError(
-                "PINE_HOST_CAPABILITY_UNSUPPORTED",
-                "CandleScope Render IR v1 does not support Pine gradient fills.",
-                hint="Use a solid fill color for this indicator.",
-            )
+            continue
         item_id = item.get("id", index)
         settings = _render_settings(item, base_pane=pane, fallback_title=f"Fill {item_id}")
         if not settings["paneVisible"]:
@@ -1136,9 +1309,9 @@ def _normalize_output(
                             "linestyle": 0,
                             "pane": settings["pane"],
                             "visible": False,
-                            "data": [
+                            "data": resume("lines", local_id, "data") + [
                                 {"time": timestamp, "value": source_hline["price"]}
-                                for timestamp in host_times
+                                for timestamp in host_times[start:]
                             ],
                         }
                     )
@@ -1156,9 +1329,12 @@ def _normalize_output(
         color_values = item.get("colors") or []
         if not isinstance(color_values, list):
             raise BridgeError("PINE_RUNTIME_OUTPUT_INVALID", f"Fill {item_id} colors must be an array")
-        fallback_color = "rgba(59,130,246,0.12)"
-        color_data = []
-        for value_index, value in enumerate(color_values):
+        record_id = f"pine-fill-{item_id}"
+        color_data = resume("fills", record_id, "colorData")
+        # The first fill color becomes the fallback for the rest of the fill.
+        fallback_color = color_data[0]["color"] if color_data else "rgba(59,130,246,0.12)"
+        for value_index in range(start, len(color_values)):
+            value = color_values[value_index]
             if value_index >= len(host_times) or value is None or not _visible_source_index(
                 value_index, len(host_times), settings["showLast"]
             ):
@@ -1170,7 +1346,7 @@ def _normalize_output(
         if color_values and not color_data:
             continue
         fill = {
-            "id": f"pine-fill-{item_id}",
+            "id": record_id,
             "plot1_id": endpoint_ids[0],
             "plot2_id": endpoint_ids[1],
             "title": settings["title"],
@@ -1210,6 +1386,9 @@ def _normalize_output(
             }
         )
 
+    if scenes is None:
+        scenes = object_scenes(raw, host_times, pane, lambda item: _render_settings(item, base_pane=pane, fallback_title="Native plot"))
+
     series_count = sum(
         len(value)
         for value in (lines, histograms, markers, bgcolors, barcolors, hlines, fills, signals)
@@ -1219,6 +1398,7 @@ def _normalize_output(
         + sum(len(item.get("regions") or []) for item in bgcolors)
         + len(hlines)
         + len(fills)
+        + sum(len(value) for scene in scenes for item in scene["objects"] for value in item["row"].values() if isinstance(value, list))
     )
     if series_count > MAX_OUTPUT_SERIES or point_count > MAX_OUTPUT_POINTS:
         raise BridgeError(
@@ -1228,19 +1408,6 @@ def _normalize_output(
                 f"points={point_count}/{MAX_OUTPUT_POINTS}"
             ),
         )
-    series = tuple(_line_series(item, histogram=False) for item in lines) + tuple(
-        _line_series(item, histogram=True) for item in histograms
-    )
-    collections = RenderCollections(
-        lines=tuple(lines),
-        histograms=tuple(histograms),
-        markers=tuple(markers),
-        hlines=tuple(hlines),
-        fills=tuple(fills),
-        bgcolors=tuple(bgcolors),
-        barcolors=tuple(barcolors),
-        signals=tuple(signals),
-    )
     supported_features = [
         str(item.get("feature"))
         for item in (analysis.get("compatibility") or {}).get("supported", [])
@@ -1266,28 +1433,194 @@ def _normalize_output(
         "outputPoints": point_count,
         "hostBindings": dict(host_bindings),
     }
-    return (
-        RenderOutput(series=series, collections=collections, meta=meta),
-        _param_schema(analysis, overrides),
-        meta,
+    if scenes:
+        meta["drawingProjection"] = "chart-native-objects/1"
+        meta["drawingApproximations"] = ["Host fonts, curve interpolation, arrow sizing and gradient interpolation can differ from TradingView"]
+    normalized = _Normalized(
+        collections={
+            "lines": lines,
+            "histograms": histograms,
+            "markers": markers,
+            "hlines": hlines,
+            "fills": fills,
+            "bgcolors": bgcolors,
+            "barcolors": barcolors,
+            "signals": signals,
+        },
+        scenes=scenes,
+        meta=meta,
+        keeps=keeps,
     )
+    return normalized, _param_schema(analysis, overrides), dict(meta)
+
+
+def _render_output(normalized: _Normalized) -> RenderOutput:
+    collections = normalized.collections
+    series = tuple(_line_series(item, histogram=False) for item in collections["lines"]) + tuple(
+        _line_series(item, histogram=True) for item in collections["histograms"]
+    )
+    return RenderOutput(
+        series=series,
+        collections=RenderCollections(
+            **{name: tuple(collections[name]) for name in _COLLECTIONS},
+            objects={"pineScenes": normalized.scenes} if normalized.scenes else None,
+        ),
+        meta=normalized.meta,
+    )
+
+
+def _patch_start(
+    state: _OutputState,
+    changes: tuple[list[Any] | None, int],
+    raw: Mapping[str, Any],
+    host_times: list[int],
+    context: tuple[Any, ...],
+) -> tuple[int, bool] | None:
+    """First source index to renormalize and whether scenes changed, or None.
+
+    The core's change sets must chain from the revision the host's output was
+    built at; anything this bridge does not model forces a full output.
+    """
+    change_sets, revision = changes
+    if change_sets is None or context != state.context or len(host_times) < state.length:
+        return None
+    if state.anchor is not None and state.anchor != (host_times[0], host_times[state.length - 1]):
+        return None
+    start, scenes_changed = len(host_times), len(host_times) != state.length
+    current = state.core_revision
+    for change in change_sets:
+        if (
+            not isinstance(change, Mapping)
+            or change.get("schemaVersion") != 4
+            or change.get("baseRevision") != current
+            or change.get("retainedFrom") != 0
+            or change.get("hlines")
+            or change.get("diagnostics")
+        ):
+            return None
+        current = change.get("revision")
+        for item in change.get("series") or []:
+            if (
+                item.get("family") not in _SERIES_FAMILIES
+                or item.get("op") not in {"append", "replaceLast"}
+                or isinstance(item.get("start"), bool)
+                or not isinstance(item.get("start"), int)
+            ):
+                return None
+            start = min(start, item["start"])
+            scenes_changed = scenes_changed or item["family"] in _SCENE_FAMILIES
+        for item in change.get("fills") or []:
+            if (
+                item.get("action") not in {"setColors", "setGradient"}
+                or isinstance(item.get("start"), bool)
+                or not isinstance(item.get("start"), int)
+            ):
+                return None
+            start = min(start, item["start"])
+            # Gradient fills render only inside the scenes.
+            scenes_changed = scenes_changed or item["action"] == "setGradient"
+        # Alerts need nothing here: signals are rebuilt from the full alert list.
+        scenes_changed = scenes_changed or bool(change.get("drawings"))
+    if current != revision or start > state.length:
+        return None
+    offsets = [0]
+    for family in ("plots", "plotShapes", "bgColors", "barColors", "fills"):
+        for item in raw.get(family) or []:
+            if not isinstance(item, Mapping) or item.get("showLast") is not None:
+                return None
+            offset = item.get("offset", 0)
+            if isinstance(offset, bool) or not isinstance(offset, int):
+                return None
+            offsets.append(offset)
+            # Gradient fills render plot values inside the scenes.
+            scenes_changed = scenes_changed or bool(family == "fills" and item.get("gradient"))
+    if len(host_times) > state.length:
+        # A positive offset brings unchanged values into range as bars append.
+        start = min(start, state.length - max(offsets))
+    return max(0, start), scenes_changed
+
+
+def _record_patches(name: str, before: list[dict[str, Any]], after: list[dict[str, Any]],
+                    keeps: Mapping[tuple[str, str, str], int]) -> tuple[RecordPatch, ...] | None:
+    """Record patches for one collection, or None when it is unchanged."""
+    positions = {record["id"]: index for index, record in enumerate(before)}
+    if len(positions) != len(before) or len({record["id"] for record in after}) != len(after):
+        raise ValueError("PINE_OUTPUT_PATCH_UNAVAILABLE: duplicate record ids")
+    per_bar = _PER_BAR_KEYS.get(name, ())
+    changed = len(before) != len(after)
+    records = []
+    for index, record in enumerate(after):
+        position = positions.get(record["id"])
+        prior = before[position] if position is not None else None
+        if prior is None or prior.keys() != record.keys():
+            records.append(RecordPatch(values=record))
+            changed = True
+            continue
+        values = {key: value for key, value in record.items() if key not in per_bar and prior[key] != value}
+        splices = []
+        for key in per_bar:
+            if key in record:
+                keep = keeps[(name, record["id"], key)]
+                if keep < len(prior[key]) or keep < len(record[key]):
+                    splices.append(ListSplice((key,), keep, record[key][keep:]))
+        changed = changed or position != index or bool(values) or bool(splices)
+        records.append(RecordPatch(base=position, values=values, splices=tuple(splices)))
+    return tuple(records) if changed else None
+
+
+def _output_patch(base: str, previous: _Normalized, current: _Normalized) -> RenderPatch:
+    earlier = {
+        record["id"]: index
+        for index, record in enumerate((*previous.collections["lines"], *previous.collections["histograms"]))
+    }
+    series = []
+    for name, histogram in (("lines", False), ("histograms", True)):
+        prior = {record["id"] for record in previous.collections[name]}
+        for record in current.collections[name]:
+            keep = current.keeps[(name, record["id"], "data")]
+            splices = [ListSplice(("data",), keep, tuple(
+                _line_point(point).to_wire() for point in record["data"][keep:]))]
+            if record.get("colorData"):
+                color_keep = current.keeps[(name, record["id"], "colorData")]
+                splices.append(ListSplice(("style", "colorData"), color_keep, record["colorData"][color_keep:]))
+            series.append(RecordPatch(
+                base=earlier[record["id"]] if record["id"] in prior else None,
+                values=_series_fields(record, histogram=histogram),
+                splices=tuple(splices),
+            ))
+    collections: dict[str, Any] = {}
+    for name in _COLLECTIONS:
+        records = _record_patches(name, previous.collections[name], current.collections[name], current.keeps)
+        if records is not None:
+            collections[name] = records
+    if current.scenes is not previous.scenes and current.scenes != previous.scenes:
+        collections["objects"] = {"pineScenes": current.scenes} if current.scenes else None
+    return RenderPatch(base=base, series=tuple(series), collections=collections, meta=current.meta)
 
 
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
     """Expose the independently built Pine engine through protocol v1."""
 
-    def __init__(self) -> None:
-        self._sessions = PineSessions()
+    def __init__(self, *, journal_path=None) -> None:
+        self._sessions = PineSessions(journal_path=journal_path)
+        # pineSessionId -> its last request's bars and their normalized rows.
+        # A host that sends bar patches gets the same Bar objects back from the
+        # SDK dispatcher, so an unchanged prefix is never normalized again.
+        self._windows: OrderedDict[str, tuple[tuple[Any, ...], list[dict[str, float | int]], list[int]]] = OrderedDict()
 
     def shutdown(self) -> None:
         self._sessions.clear()
+        self._windows.clear()
+        self._sessions.journal.close()
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()
 
     def analyze(self, request: AnalyzeRequest) -> AnalyzeResult:
         try:
-            analysis, diagnostics = _analyze_native(request.source, request.context)
+            from dataclasses import replace
+            request = replace(request, options=normalize_indicator_options(request.options))
+            analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
         except BridgeError as exc:
             return AnalyzeResult(ok=False, executable=False, diagnostics=(exc.diagnostic(),))
         except Exception as exc:
@@ -1311,6 +1644,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             ok=executable,
             executable=executable,
             diagnostics=diagnostics,
+            dependencies=tuple({"id": path, "version": path.rsplit("/", 1)[-1], "sha256": digest} for path, digest in library_digests(request.options).items()),
             inputs=tuple(
                 dict(item)
                 for item in analysis.get("inputs") or []
@@ -1335,19 +1669,68 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
 
     def execute_batch(self, request: ExecuteBatchRequest) -> ExecuteBatchResult:
         try:
-            analysis, diagnostics = _analyze_native(request.source, request.context)
+            from dataclasses import replace
+            request = replace(request, options=normalize_indicator_options(request.options))
+            analysis, diagnostics = _analyze_native(request.source, request.context, request.options)
             error = next((item for item in diagnostics if item.severity == "error"), None)
             if error is not None:
                 return ExecuteBatchResult(ok=False, diagnostics=diagnostics)
-            runtime_bars, host_times = _normalize_bars(request)
-            overrides = _normalize_overrides(request.params, analysis)
+            window_key = request.options.get("pineSessionId")
+            window_key = window_key if isinstance(window_key, str) and window_key else None
+            runtime_bars, host_times = _normalize_bars(
+                request, self._windows.pop(window_key, None) if window_key else None)
+            if window_key:
+                self._windows[window_key] = (request.bars, runtime_bars, host_times)
+                while len(self._windows) > self._sessions.capacity:
+                    self._windows.popitem(last=False)
+            host_bars = runtime_bars
+            host_environment = host_inputs(request.options.get("pineHost"))
+            overrides = _normalize_overrides({key: value for key, value in request.params.items() if key not in {LIBRARY_PARAMETER, "__pineContexts", "__pineCurrencyRates"}}, analysis)
             bindings = _host_bindings(request.context)
             engine, _version = _engine_contract()
             options: dict[str, Any] = {"input_overrides": overrides}
+            libraries = library_sources(request.options)
+            if libraries:
+                options["library_sources"] = dict(libraries)
+            if request.options.get("pineRequestError"):
+                raise BridgeError("PINE_REQUEST_DATA_REQUIRED", str(request.options["pineRequestError"]))
+            supplied = request.options.get("pineRequestBars")
+            if supplied:
+                if not isinstance(supplied, Mapping) or any(not isinstance(key, str) or key.startswith("$") for key in supplied):
+                    raise BridgeError("PINE_REQUEST_DATA_INVALID", "Requested data must map symbol/timeframe keys to bars.")
+                options["request_bars"] = dict(supplied)
+            grid = chart_metadata(request.options.get("pineChartMetadata"))
+            features = {item.get("feature") for item in analysis.get("compatibility", {}).get("supported", [])}
+            if features & _HOST_CHART_GRID_FEATURES and grid is None:
+                raise BridgeError("PINE_HOST_METADATA_REQUIRED", "This script requires the chart's actual price grid.")
+            if grid is not None:
+                options["request_bars"] = {**options.get("request_bars", {}), "$chart": grid}
+            requested = indicator_request_bars(analysis, request.options, bindings["chartSymbol"], dict(supplied or {}))
+            if requested:
+                options["request_bars"] = requested
+            if "syminfo.currency" in features and (grid is None or "currency" not in grid):
+                raise BridgeError("PINE_HOST_METADATA_REQUIRED", "This script requires the chart's actual quote currency.")
+            rates = currency_rates(request.options.get("pineCurrencyRates"))
+            if rates is not None:
+                options["request_bars"] = {**options.get("request_bars", {}), "$currencyRates": rates}
+            if host_environment.get("sessionWindows") is not None:
+                options["session_windows"] = host_environment["sessionWindows"]
+            if host_environment.get("barCalendars"):
+                options["request_bars"] = {**options.get("request_bars", {}), "$barCalendars": host_environment["barCalendars"]}
+            needs_clock = (analysis.get("hostRequirements") or {}).get("execution", {}).get("clock") == "explicitTimestampWhenEvaluated"
+            clocks = execution_times(runtime_bars, request.options.get("pineExecutionTimeMs")) if needs_clock else None
+            if needs_clock and clocks is None:
+                raise BridgeError("PINE_EXECUTION_CLOCK_REQUIRED", "Supply captured observation timestamps for this script.")
             if bindings["chartSymbol"] is not None:
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
                 options["chart_timeframe"] = bindings["chartTimeframe"]
+            if "~" in str(request.context.interval):
+                boundary = request.options.get("barBasis")
+                if not isinstance(boundary, Mapping) or not bindings["chartSymbol"] or not bindings["chartTimeframe"]:
+                    raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "Frozen candle boundaries and chart identity are required.")
+                options["request_bars"] = {**options.get("request_bars", {}),
+                    "$boundaries": {f"{bindings['chartSymbol']}:{bindings['chartTimeframe']}": dict(boundary)}}
             session_id = request.options.get("pineSessionId")
             if session_id is not None and (
                 not isinstance(session_id, str) or not session_id or len(session_id) > 128
@@ -1359,27 +1742,92 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             if session_id or forming:
                 raw, execution_meta = self._sessions.execute(
                     engine, request.source, runtime_bars, options,
-                    session_id=session_id, forming=forming,
+                    session_id=session_id, forming=forming, execution_times=clocks,
+                    calculation_bars_count=analysis.get("calculationBarsCount"),
+                    request_observation=request.options.get("pineRequestObservation"),
+                    epoch=request.options.get("pineSessionEpoch", "0"),
+                    providers=host_environment.get("contexts", []),
+                    verify_history_clocks=isinstance(request.options.get("pineExecutionTimeMs"), list),
                 )
             else:
-                raw = engine.run_script(request.source, runtime_bars, **options)
+                raw = engine.run_script(request.source, runtime_bars, **options,
+                                        **({"execution_times": clocks} if clocks is not None else {}))
+                host_bars = runtime_bars
+            from .window_alignment import calculation_skip
+            count = analysis.get("calculationBarsCount")
+            prefix = execution_meta.pop("hostPrefix", None)
+            changes = execution_meta.pop("outputChanges", None)
+            if prefix is not None:
+                host_bars, host_times = prefix[0] + host_bars, prefix[1] + host_times
+            start_index = execution_meta.get("historyStartIndex")
+            if start_index is None:
+                start_index = calculation_skip(engine, request.source, runtime_bars, options, clocks, raw, count)
+            if not analysis.get("executionWindowAvailable") and "calc_bars_count" in request.source:
+                raise BridgeError("PINE_HOST_DRAWING_WINDOW_REQUIRED", "This script needs an engine with execution-window metadata.")
+            if start_index:
+                execution_meta["historyStartIndex"] = start_index
+            host_times = host_times[start_index:]
+            host_bars = host_bars[start_index:]
             render_hints = request.options.get("renderHints")
             if not isinstance(render_hints, Mapping):
                 render_hints = None
-            output, inputs, meta = _normalize_output(
+            normalize = partial(
+                _normalize_output,
                 raw,
                 source=request.source,
                 host_times=host_times,
+                host_bars=host_bars,
                 analysis=analysis,
                 overrides=overrides,
                 render_hints=render_hints,
                 host_bindings=bindings,
             )
+            entry = self._sessions.entries.get(session_id) if session_id else None
+            state = entry.output if entry is not None and request.output_stream is not None else None
+            context = (request.source, _infer_pane(request.source, render_hints), start_index)
+            output = patch = None
+            if state is not None and changes is not None and request.output_base == state.revision:
+                resume = _patch_start(state, changes, raw, host_times, context)
+                if resume is not None:
+                    try:
+                        normalized, inputs, meta = normalize(
+                            start=resume[0],
+                            previous=state.normalized,
+                            scenes=None if resume[1] else state.normalized.scenes,
+                        )
+                        patch = _output_patch(state.revision, state.normalized, normalized)
+                    except Exception:
+                        # Any doubt about the patch: the full output decides.
+                        patch = None
+            if patch is None:
+                normalized, inputs, meta = normalize()
+                output = _render_output(normalized)
             meta.update(execution_meta)
+            if libraries:
+                meta["libraryDigests"] = library_digests(request.options)
+            if clocks is not None:
+                meta.setdefault("executionTimesMs", clocks)
+            if grid is not None:
+                meta["chartMetadata"] = grid
+            meta["hostRequirements"] = analysis.get("hostRequirements")
+            meta["pineAlerts"] = raw.get("alerts", [])
+            meta["symbolMetadataSource"] = "host" if grid else "synthetic-defaults"
             meta["closedBarsOnly"] = False
+            self._sessions.commit(session_id)
+            revision = None
+            if entry is not None:
+                entry.output = None
+                if request.output_stream is not None and changes is not None:
+                    revision = f"{_REVISION_PREFIX}-{next(_REVISIONS)}"
+                    entry.output = _OutputState(
+                        revision, normalized, changes[1], len(host_times), context,
+                        (host_times[0], host_times[-1]) if host_times else None,
+                    )
             return ExecuteBatchResult(
                 ok=True,
                 output=output,
+                output_patch=patch,
+                output_revision=revision,
                 diagnostics=tuple(item for item in diagnostics if item.severity != "error"),
                 inputs=inputs,
                 meta=meta,
@@ -1389,6 +1837,9 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             return ExecuteBatchResult(ok=False, diagnostics=(exc.diagnostic(),))
         except (ProtocolError, TypeError, ValueError) as exc:
             self._sessions.entries.pop(str(request.options.get("pineSessionId")), None)
+            if str(exc).startswith(("PINE_HOST_", "PINE_CURRENCY_")):
+                code, _, message = str(exc).partition(": ")
+                return ExecuteBatchResult(ok=False, diagnostics=(Diagnostic(code=code, severity="error", message=message),))
             if isinstance(exc, ValueError) and str(exc).startswith("E_RESOURCE_BUDGET:"):
                 return ExecuteBatchResult(ok=False, diagnostics=(Diagnostic(
                     code="E_RESOURCE_BUDGET",
@@ -1400,10 +1851,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 ok=False,
                 diagnostics=(
                     Diagnostic(
-                        code="PINE_BRIDGE_OUTPUT_INVALID",
+                        code=diagnostic_code(exc),
                         severity="error",
                         message=(
-                            "Pine returned output that cannot be represented by Render IR v1."
+                            str(exc)
                         ),
                         hint=str(exc),
                     ),

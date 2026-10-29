@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  ...intervalBasisMessages["ro"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Începutul și fereastra înainte includ lumânări viitoare. Alegeți un început mai devreme sau scurtați fereastra; sunt disponibile doar lumânări istorice închise.",
   "replay.hub.catalogSyncing": "Se caută piețe istorice în sursa oficială. Opțiunea se va activa automat când datele sunt pregătite.",
@@ -1249,6 +1251,7 @@ export const ro = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

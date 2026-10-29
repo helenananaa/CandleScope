@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  ...intervalBasisMessages["th"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "เวลาเริ่มและช่วงล่วงหน้ารวมแท่งเทียนในอนาคต โปรดเลือกเวลาเริ่มที่เก่ากว่าหรือลดช่วงล่วงหน้า ใช้ได้เฉพาะแท่งเทียนย้อนหลังที่ปิดแล้ว",
   "replay.hub.catalogSyncing": "กำลังค้นหาตลาดย้อนหลังจากแหล่งทางการ ระบบจะเปิดใช้งานโดยอัตโนมัติเมื่อพร้อม",
@@ -1249,6 +1251,7 @@ export const th = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

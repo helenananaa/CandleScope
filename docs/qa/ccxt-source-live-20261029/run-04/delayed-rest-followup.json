@@ -1,0 +1,39 @@
+{
+  "schema": "candlescope.binance.usdm.kline.v1",
+  "exchange": "binance",
+  "marketType": "swap.linear",
+  "marketId": "BTCUSDT",
+  "symbol": "BTC/USDT:USDT",
+  "timeframe": "1m",
+  "timestamp": 1793240160000,
+  "closeTime": 1793240219999,
+  "open": "79890.10",
+  "high": "79936.10",
+  "low": "79872.10",
+  "close": "79920.30",
+  "volume": "137.538",
+  "quoteVolume": "10988643.55760",
+  "trades": 3698,
+  "takerBuyBaseVolume": "83.863",
+  "takerBuyQuoteVolume": "6699883.73770",
+  "volumeUnit": "base",
+  "quoteVolumeUnit": "quote",
+  "closed": null,
+  "closeEvidence": "rest_close_time",
+  "raw": "[1793240160000,\"79890.10\",\"79936.10\",\"79872.10\",\"79920.30\",\"137.538\",1793240219999,\"10988643.55760\",3698,\"83.863\",\"6699883.73770\",\"0\"]",
+  "_source_rest_server_time_ms": 1793240381556,
+  "_source_build": {
+    "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+    "upstream_version": "4.5.60",
+    "schema": "candlescope.binance.usdm.kline.v1"
+  },
+  "_source_receipt": {
+    "status": "selected",
+    "observation_id": 107,
+    "ref": {
+      "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+      "open_time": 1793240160000,
+      "revision": 102
+    }
+  }
+}

@@ -629,6 +629,17 @@ class RetentionService:
             while True:
                 await asyncio.sleep(30 * 60)
                 await self.run_ephemeral_trim()
+                try:
+                    from app.core.executors import run_storage
+                    from app.data_engine.ingestion.config import IngestionConfig
+                    from app.data_engine.storage.source_retention import compact
+                    config = IngestionConfig()
+                    if config.ccxt_fork_kline_enabled and config.source_log_retention_days > 0:
+                        report = await run_storage(compact, retention_days=config.source_log_retention_days)
+                        if report["archived"]:
+                            logger.info("Source log cold storage: %s", report)
+                except Exception:
+                    logger.exception("Source log maintenance failed; retry next cycle")
         except asyncio.CancelledError:
             pass
 

@@ -108,7 +108,7 @@ def _bars(*, closed: bool = True) -> tuple[Bar, ...]:
 
 def _install_fake(monkeypatch: pytest.MonkeyPatch, engine: FakeEngine) -> None:
     monkeypatch.setattr(runtime_module, "_load_engine", lambda: engine)
-    monkeypatch.setattr(runtime_module, "_engine_version", lambda: "0.3.2")
+    monkeypatch.setattr(runtime_module, "_engine_version", lambda: runtime_module.EXPECTED_ENGINE_VERSION)
 
 
 def test_descriptor_advertises_pine_without_source_snapshot(
@@ -130,7 +130,7 @@ def test_descriptor_advertises_pine_without_source_snapshot(
 def test_analysis_blocks_unhosted_features_before_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = FakeEngine(_analysis("indicator", "request.security", "plot"), _output())
+    engine = FakeEngine(_analysis("indicator", "request.financial", "plot"), _output())
     _install_fake(monkeypatch, engine)
 
     result = PineCompatRuntimePlugin().analyze(
@@ -139,7 +139,7 @@ def test_analysis_blocks_unhosted_features_before_execution(
 
     assert result.ok is False
     assert result.diagnostics[-1].code == "PINE_HOST_CAPABILITY_UNSUPPORTED"
-    assert result.diagnostics[-1].data["blockedFeatures"] == ["request.security"]
+    assert result.diagnostics[-1].data["blockedFeatures"] == ["request.financial"]
 
 
 def test_execute_preserves_exact_context_and_render_mapping(
@@ -183,7 +183,7 @@ def test_forming_bar_and_unmapped_native_output_fail_closed(
     forming = PineCompatRuntimePlugin().execute_batch(
         ExecuteBatchRequest(source="indicator('x')", context=_context(), bars=_bars(closed=False))
     )
-    engine.output = _output(labels=[{"id": 1}])
+    engine.output = _output(strategy={"id": 1})
     unmapped = PineCompatRuntimePlugin().execute_batch(
         ExecuteBatchRequest(source="indicator('x')", context=_context(), bars=_bars())
     )

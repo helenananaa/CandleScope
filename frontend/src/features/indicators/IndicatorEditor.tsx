@@ -1,3 +1,9 @@
+import { PineLibraryInputs } from "./PineLibraryInputs.js";
+import { pineLibraryParams, parsePineLibraries } from "./pineLibraryModel.js";
+import { PineContextInputs } from "./PineContextInputs.js";
+import { pineContextParams, parsePineContexts } from "./pineContextModel.js";
+import { PineCurrencyInputs } from "./PineCurrencyInputs.js";
+import { pineCurrencyParams, parsePineCurrencyRates } from "./pineCurrencyModel.js";
 /** Editor for hosted and frontend indicator scripts. */
 import { describeError } from "../../i18n/serverErrors.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -85,6 +91,24 @@ export default function IndicatorEditor({
   const [draft, setDraft] = useState(() => createScriptEditorDraft(indicator.script, Boolean(indicator.id)));
   const modelId = useId();
   const [language, setLanguage] = useState(indicator?.language || "");
+  const [libraryJson, setLibraryJson] = useState(() => JSON.stringify(indicator.params?.__pineLibraries || {}, null, 2));
+  const [contextJson, setContextJson] = useState(() => JSON.stringify(indicator.params?.__pineContexts || [], null, 2));
+  const [currencyJson, setCurrencyJson] = useState(() => indicator.params?.__pineCurrencyRates ? JSON.stringify(indicator.params.__pineCurrencyRates, null, 2) : "");
+  const librariesValid = useMemo(() => { try { parsePineLibraries(libraryJson); parsePineContexts(contextJson); parsePineCurrencyRates(currencyJson); return true; } catch { return false; } }, [libraryJson, contextJson, currencyJson]);
+
+  const [hostText, setHostText] = useState(() => JSON.stringify(indicator.params?.__pineHost || {}, null, 2));
+  const [sessionEpoch, setSessionEpoch] = useState(() => String(indicator.params?.__pineSessionEpoch || "0"));
+  const [pineAlerts, setPineAlerts] = useState(indicator.params?.__pineAlerts === true);
+  const hostConfig = useMemo(() => {
+    try {
+      const value: unknown = JSON.parse(hostText);
+      if (!optionalRecord(value)) throw new Error("Expected a JSON object");
+      return { value, error: "" };
+    } catch (error) { return { value: {}, error: String(error) }; }
+  }, [hostText]);
+  const hostParams = useMemo(() => ({ ...indicator.params,
+    ...(language === "pine" ? { __pineHost: hostConfig.value, __pineSessionEpoch: sessionEpoch, __pineAlerts: pineAlerts } : {}),
+  }), [indicator.params, language, hostConfig, sessionEpoch, pineAlerts]);
   const [runtimeCatalog, setRuntimeCatalog] = useState<ScriptRuntimeCatalog | null>(null);
   const [runtimeCatalogError, setRuntimeCatalogError] = useState<string | null>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -124,6 +148,10 @@ export default function IndicatorEditor({
       : null,
     [allowedRuntimeCatalog, selectedLanguage],
   );
+  const editorParams = useMemo(() => librariesValid && selectedLanguage?.id === "pine"
+    ? pineCurrencyParams(pineContextParams(pineLibraryParams(hostParams, libraryJson), contextJson), currencyJson)
+    : pineCurrencyParams(pineContextParams(pineLibraryParams(hostParams, "{}"), "[]"), ""),
+  [hostParams, selectedLanguage?.id, libraryJson, contextJson, currencyJson, librariesValid]);
   const languageReady = Boolean(selectedLanguage?.available && editorProfile);
   const script = scriptEditorSource(draft, selectedLanguage?.id || language, editorProfile?.starterSource || "");
   const requestedLanguageId = (language || indicator?.language || "").trim();
@@ -163,18 +191,20 @@ export default function IndicatorEditor({
   }, [editorProfile?.pineEnhancements, pineHostCapabilities]);
 
   const handlePreview = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && (!librariesValid || Boolean(hostConfig.error)))) return;
     onPreview({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       isPreset: indicator?.isPreset || false,
     });
   }, [
     editorProfile,
+    editorParams,
+    librariesValid,
     indicator,
     name,
     onPreview,
@@ -182,21 +212,24 @@ export default function IndicatorEditor({
     readOnly,
     script,
     selectedLanguage,
+    hostConfig.error,
   ]);
 
   const handleSave = useCallback(() => {
-    if (readOnly || !selectedLanguage || !editorProfile) return;
+    if (readOnly || !selectedLanguage || !editorProfile || (selectedLanguage.id === "pine" && (!librariesValid || Boolean(hostConfig.error)))) return;
     void onSave({
       id: indicator?.id || previewState?.id || null,
       name,
       script,
-      params: indicator?.params || {},
+      params: editorParams,
       description: indicator?.description || "",
       language: selectedLanguage.id,
       isPreset: indicator?.isPreset || false,
     });
   }, [
     editorProfile,
+    editorParams,
+    librariesValid,
     indicator,
     name,
     onSave,
@@ -204,6 +237,7 @@ export default function IndicatorEditor({
     readOnly,
     script,
     selectedLanguage,
+    hostConfig.error,
   ]);
 
   const handleLanguageChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -296,14 +330,14 @@ export default function IndicatorEditor({
           {readOnly ? (
             <button
               className="indicator-editor-save"
-              disabled={!languageReady}
+              disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
               onClick={() => {
                 if (!selectedLanguage || !editorProfile) return;
                 onForkBuiltin?.({
                   ...indicator,
                   name,
                   script,
-                  params: indicator.params || {},
+                  params: editorParams,
                   language: selectedLanguage.id,
                 });
               }}
@@ -315,7 +349,7 @@ export default function IndicatorEditor({
             <>
               <button
                 className="indicator-editor-run"
-                disabled={!languageReady}
+                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
                 onClick={handlePreview}
                 style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
@@ -323,7 +357,7 @@ export default function IndicatorEditor({
               </button>
               <button
                 className="indicator-editor-save"
-                disabled={!languageReady}
+                disabled={!languageReady || (selectedLanguage?.id === "pine" && !librariesValid)}
                 onClick={handleSave}
                 style={{ background: 'var(--accent-blue)', color: 'var(--text-on-accent)', border: 'none', padding: '6px 16px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)', transition: 'all 0.2s ease', marginLeft: '8px' }}
               >
@@ -360,6 +394,17 @@ export default function IndicatorEditor({
           />
         </div>
 
+        {language === "pine" && <details>
+          <summary>{t("pine.host.title")}</summary>
+          <p>{t("pine.host.hint")}</p>
+          <label>{t("pine.host.json")}<textarea value={hostText} readOnly={readOnly} spellCheck={false}
+            style={{ width: "100%", minHeight: 100 }} onChange={(event) => setHostText(event.target.value)} /></label>
+          {hostConfig.error && <p role="alert">{hostConfig.error}</p>}
+          <button type="button" disabled={readOnly} onClick={() => setSessionEpoch(crypto.randomUUID())}>{t("pine.host.reset")}</button>
+          <p>{t("pine.host.resetHint")}</p>
+          <label><input type="checkbox" checked={pineAlerts} disabled={readOnly} onChange={(event) => setPineAlerts(event.target.checked)} />{t("pine.host.alerts")}</label>
+          <p>{t("pine.host.alertHint")}</p>
+        </details>}
         {/* Code editor */}
         {selectedLanguage?.id === FRONTEND_SCRIPT_LANGUAGE && (
           <p className="indicator-editor-frontend-help" style={{ color: "var(--text-muted)", fontSize: "12px" }}>
@@ -422,7 +467,9 @@ export default function IndicatorEditor({
             {t("indicator.editor.runtimeMissing", { error: runtimeCatalogError })}
           </div>
         )}
-
+        {selectedLanguage?.id === "pine" && <PineLibraryInputs value={libraryJson} onChange={setLibraryJson} readOnly={readOnly} />}
+        {selectedLanguage?.id === "pine" && <PineContextInputs value={contextJson} onChange={setContextJson} readOnly={readOnly} />}
+        {selectedLanguage?.id === "pine" && <PineCurrencyInputs value={currencyJson} onChange={setCurrencyJson} readOnly={readOnly} />}
         <div className="indicator-editor-monaco" style={{ flex: 1, minHeight: 0, border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", overflow: "hidden", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(0, 0, 0, 0.2)" }}>
           <Suspense fallback={null}><Editor
             height="100%"

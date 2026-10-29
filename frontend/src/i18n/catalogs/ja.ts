@@ -1,10 +1,41 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
+import type { MessageCatalog } from "../messageCatalog.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
-import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  ...workbenchEnglish,
+  "research.book.help": "現在のチャートの市場と期間に一致する、順序付きの集約約定と板観測をアップロードしてください。ホストは OHLCV、連続性、利用可能な板の厚さを検証し、ファイルをスナップショットとともに固定します。板モードでは独自の約定容量規則を使用します。",
+  "research.book.invalid": "板ファイルが無効です。symbol、exchange、market_type、provenance、順序付き events、集約約定の元データ番号と板観測を含む、32 MiB 以下の JSON を指定してください。",
+  "research.book.loading": "固定された市場データを読み込み中…",
+  "research.book.loaded": "市場観測を {count} 件読み込みました。実行前にスナップショットの検証が必要です。",
+  "research.book.required": "再現可能なスナップショットを作成する約定と板の記録ファイルを選択してください。",
+  "research.book.changed": "読み込み中に戦略、市場、または期間が変更されました。現在の入力に合わせてファイルを選び直してください。",
+  "native.orderComment": "注文コメント",
+  "native.orderAlertMessage": "約定通知メッセージ",
+  "native.orderAlertEnabled": "約定通知の有効状態",
+  "native.orderFillRole": "約定した注文の種類",
+  "native.replay.host": "チェックポイントから CandleScope の口座と未約定注文を復元し、残りの固定された市場イベントの再生を続けます。",
+  "native.inputs.priceTick": "最小価格刻み",
+  "native.inputs.currency": "建値通貨（実際の価格刻みが必要）",
+  "native.inputs.pointValue": "契約乗数",
+  "native.inputs.quantityStep": "数量刻み（正確な小数）",
+  "native.inputs.minContract": "最小数量",
+  "native.inputs.quantityPrecision": "数量の小数桁数（0～9）",
+  "indicator.pine.currencyRates": "Pine 有効為替レート（JSON）",
+  "indicator.pine.currencyRatesHelp": "実際の利用可能時刻を Unix ミリ秒で指定してください。将来の値は過去の照会に使用されません。為替市場の自動置換は行いません。",
+  "indicator.pine.quoteCurrency": "チャートの建値通貨（実際の価格刻みが必要）",
+  "indicator.pine.contexts": "Pine リクエスト市場（JSON）",
+  "indicator.pine.contextsHelp": "動的または入れ子のリクエストで使用するローカル市場を指定します。時間足は Pine 形式です（60 = 1時間）。必要に応じて marketType を指定し、不足データを先に準備してください。",
+
+  ...intervalBasisMessages["ja"],
+  "interval.historyOnly": "履歴のみ · リアルタイム配信なし",
+  "interval.unavailableHelp": "リクエストしたチャート設定は保持されています。別の時間足を選ぶか、銘柄選択からデータソースを変更してください。",
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時刻と先読み期間に未来の足が含まれています。開始時刻を早めるか期間を短くしてください。確定した過去の足のみ利用できます。",
+  ...pineEnglish,
   "research.external.copyCommand": "起動コマンドをコピー",
   "research.external.commandCopied": "起動コマンドをコピーしました。",
   "research.external.copyFailed": "自動コピーを使用できません。コマンドのテキストを選択してコピーしてください。",
@@ -1547,6 +1578,7 @@ export const ja = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP 同時実行数 ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

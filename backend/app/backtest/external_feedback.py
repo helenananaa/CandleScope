@@ -1,7 +1,6 @@
 """Fill-by-fill callbacks driven by authoritative host executions and visible tape."""
 from __future__ import annotations
 from copy import deepcopy
-from decimal import Decimal
 import time
 from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.interval_policy import parse_interval_spec
@@ -9,15 +8,25 @@ from app.market_dataset.trades import assert_trade_stream
 from .errors import BacktestError
 
 
-def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline):
+def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline, *, state=None, target=None):
     if wire["execution_fidelity"] == "BAR_APPROX":
         raise BacktestError("EXTERNAL_UNSUPPORTED", "fill callbacks require a frozen trade tape")
     interval = parse_interval_spec(wire["interval"])
-    events = [MarketEvent(**item) for item in wire["execution_events"]]
+    from .pine_print_account import events as physical_events, apply_account, observe_market, record_decision, AUXILIARY
+    events = physical_events(wire)
     kernel.source_kind = assert_trade_stream(tuple(event for event in events if event.role == "TRADES"))
-    groups, accounts, history, latest = [], [], [], {}
-    cursor, visible, active_event = 0, None, None
-    last_sequence = 0
+    state=state or {}
+    target=len(wire["bars"]) if target is None else target
+    groups,accounts,history,latest=(state.get(name,default) for name,default in
+        (("groups",[]),("accounts",[]),("history",[]),("latest",{})))
+    from .pine_request_updates import from_wire, pass_observations, validate_replay
+    request_feed = from_wire(wire)
+    if request_feed is not None and state:
+        validate_replay(request_feed, state.get("request_feed"), pass_observations(groups, scheduled=False))
+    cursor,visible,active_event=state.get("bar_cursor",0),None,None
+    pending_account_callbacks = 0
+    last_sequence,event_cursor=state.get("last_sequence",0),state.get("event_cursor",0)
+    end=interval.next_ms(wire["bars"][target-1]["time"]*1000)
 
     def evaluate(event, confirmed):
         nonlocal latest
@@ -46,9 +55,15 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             # A fill at boundary-1 may be followed by more prints with the same
             # millisecond. Only the confirmed close has consumed all of them.
             boundary = event.event_time_ms + (1 if confirmed else 0)
-            groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
-        request = {key: value for key, value in wire.items() if key != "execution_events"}
-        request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups, contexts=[])
+            if request_feed is not None:
+                groups[cursor][-1].update(request_observed_at_ms=boundary-1, request_updates=request_feed.advance(boundary-1))
+            else:
+                groups[cursor][-1]["request_data"] = visible_contexts(wire, boundary)
+        request = {key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}
+        request.update(bars=[*wire["bars"][:cursor], deepcopy(visible)], accounts=accounts, execution_passes=groups,
+            contexts=[{**context, "bars": []} for context in wire.get("contexts", [])])
+        if "execution_times" in wire:
+            request["execution_times"] = wire["execution_times"][:cursor + 1]
         latest = runner(plugin, request, cancelled=cancelled, timeout=max(.1, deadline-time.monotonic()))
         if (latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"]
                 or latest.get("execution_mode") != "CANDLESCOPE" or latest.get("account_authority") != "candlescope"
@@ -63,8 +78,10 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
             raise BacktestError("BUDGET_EXCEEDED", "at most 64 intents per chart bar")
         history.extend(current)
         orders.configure(latest.get("pyramiding", 1))
+        from .pine_workbench import check_risk_response
+        check_risk_response(orders, wire, latest)
         intents = orders.translate(current, event.sequence)
-        kernel.decisions.append({"sequence": event.sequence, "watermark_ms": event.event_time_ms,
+        record_decision(kernel, {"sequence": event.sequence, "watermark_ms": event.event_time_ms,
             "intents": intents, "signal_bar": cursor, "pass_index": pass_index,
             "trigger": "BAR_CLOSE" if confirmed else "ORDER_FILL"})
         # Newly emitted orders cannot consume the event that caused this callback.
@@ -72,47 +89,75 @@ def run_feedback_clock(kernel, orders, wire, plugin, runner, cancelled, deadline
 
     prior_reporter = kernel.execution_reporter
     def report(event):
+        nonlocal pending_account_callbacks
         prior_reporter(event)
-        if event.get("fill"):
-            evaluate(active_event, False)
+        if event.get("fill") and kernel._last_event.payload.get("execution_phase") != "PINE_BAR_CLOSE":
+            if visible is None:
+                pending_account_callbacks += 1
+            else:
+                evaluate(active_event, False)
     kernel.execution_reporter = report
 
     def close_bar():
         nonlocal cursor, visible
-        if visible is None:
-            raise BacktestError("DATA_GAP_REJECTED", "missing visible chart bar")
+        if visible is None or pending_account_callbacks:
+            raise BacktestError("DATA_GAP_REJECTED", "missing visible chart bar or undelivered account callback")
         visible = deepcopy(wire["bars"][cursor])  # All prints have arrived; use the frozen canonical bar.
         boundary = interval.next_ms(visible["time"] * 1000) - 1
         event = MarketEvent(last_sequence, boundary, "TRADES", {"price": str(visible["close"]), "qty": "0"})
         kernel._last_event = event
+        if kernel.market_observer is not None:
+            kernel.market_observer(event)
         evaluate(event, True)
+        if wire.get("closing_ticks"):
+            from .pine_workbench import bar_event
+            from app.simulation.closing_tick import match_closing_tick
+            match_closing_tick(kernel, bar_event(wire, cursor, last_sequence), last_sequence,
+                on_fill=lambda _bar, tick: evaluate(tick, True))
+            kernel._record_equity_point({"sequence": last_sequence, "event_time_ms": boundary,
+                "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
         cursor += 1
         visible = None
 
     try:
-        for event in events:
+        for event in events[event_cursor:]:
+            if event.event_time_ms>=end:
+                break
             if cancelled.is_set():
                 raise BacktestError("NATIVE_CANCELLED", "execution cancelled")
             while cursor < len(wire["bars"]) and interval.next_ms(wire["bars"][cursor]["time"]*1000) <= event.event_time_ms:
                 close_bar()
             active_event = event
             kernel._last_event = event
-            if event.role == "ORDER_BOOK":
+            if event.role in AUXILIARY:
+                apply_account(kernel, event, record_equity=kernel._market_event_count > 0)
+            elif event.role == "ORDER_BOOK":
                 kernel._apply_book(event)
+                if kernel.market_observer is not None:
+                    kernel.market_observer(event)
             else:
                 price, qty = float(event.payload["price"]), float(event.payload["qty"])
                 if visible is None:
                     visible = dict(time=wire["bars"][cursor]["time"], open=price, high=price, low=price, close=price, volume=qty)
                 else:
                     visible.update(high=max(visible["high"], price), low=min(visible["low"], price), close=price, volume=visible["volume"]+qty)
-                kernel.account.mark = Decimal(str(event.payload["price"]))
+                if wire.get("pine_v2_print_contract"):
+                    kernel._market_event_count += 1
+                observe_market(kernel, event)
+                for _ in range(pending_account_callbacks):
+                    evaluate(event, False)
+                pending_account_callbacks = 0
                 kernel._match(event)
                 kernel.equity_curve.append({"sequence": event.sequence, "event_time_ms": event.event_time_ms,
                     "equity": str(kernel.account.equity()), "position_qty": str(kernel.account.position_qty)})
             last_sequence = event.sequence
-        while cursor < len(wire["bars"]):
+            event_cursor+=1
+        while cursor < target:
             close_bar()
-        kernel.finalize_orders()
+        if target==len(wire["bars"]):
+            kernel.finalize_orders()
     finally:
         kernel.execution_reporter = prior_reporter
-    return latest, history, accounts, groups
+    return latest,history,accounts,groups,{"bar_cursor":cursor,"last_sequence":last_sequence,
+        "event_cursor":event_cursor,"groups":groups,"accounts":accounts,"history":history,"latest":latest,
+        **({"request_feed":request_feed.snapshot()} if request_feed is not None else {})}

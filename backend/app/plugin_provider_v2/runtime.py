@@ -424,6 +424,7 @@ class ProviderExchangePlugin:
         raise ValueError("Phase 10 providers support kline and full_depth only")
 
     def _build_capabilities(self) -> ExchangeCapabilities:
+        from app.data_engine.bar_basis import NativeBarSpec
         markets = [
             ExchangeMarket(
                 market_type=item["id"],
@@ -435,10 +436,22 @@ class ProviderExchangePlugin:
             for item in self._symbol_config["marketTypes"]
         ]
         channels: list[MarketChannelCapability] = []
+        native_bar_specs: list[NativeBarSpec] = []
         intervals: set[str] = set()
         for item in self._market_config["channels"]:
             if item["kind"] == "kline":
                 intervals.update(item["intervals"])
+                declaration = item.get("barBasis")
+                if declaration:
+                    native_bar_specs.extend(
+                        NativeBarSpec(self.id, market, "kline", purpose, interval, basis,
+                                      "declared", self._market_contribution.full_id,
+                                      protocol_version="candlescope.stream/1;bar-basis/1",
+                                      calendar_id=declaration.get("calendarId"))
+                        for market in item["marketTypes"]
+                        for purpose in ("history", "realtime") if item[purpose]
+                        for interval, basis in declaration["intervals"].items()
+                    )
                 available_fields = (
                     "open_time",
                     "close_time",
@@ -524,6 +537,7 @@ class ProviderExchangePlugin:
             capability_schema_version=3,
             markets=markets,
             native_intervals=sorted(intervals),
+            native_bar_specs=native_bar_specs,
             supports_symbol_search=True,
             ws_connection_model="plugin_sidecar",
             protocol_features=["platform-v2-provider", "candlescope.stream/1"],
@@ -548,6 +562,12 @@ class ProviderExchangePlugin:
             delisted_at_ms=item.get("delistedAtMs"),
             expiry_at_ms=item.get("expiryAtMs"),
             price_tick_size=item.get("priceTickSize", ""),
+            contract_multiplier=item.get("contractMultiplier", ""),
+            contract_value_model=item.get("contractValueModel", ""),
+            quantity_step=item.get("quantityStep", ""),
+            min_quantity=item.get("minQuantity", ""),
+            quantity_origin=item.get("quantityOrigin", ""),
+            quantity_rule_model=item.get("quantityRuleModel", ""),
         )
 
     # Legacy adapter facade. Provider transport dispatch never calls these URLs.

@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  ...intervalBasisMessages["ms"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Masa mula dan tetingkap ke hadapan merangkumi lilin masa hadapan. Pilih permulaan lebih awal atau pendekkan tetingkap; hanya lilin sejarah yang ditutup tersedia.",
   "replay.hub.catalogSyncing": "Sedang mencari pasaran sejarah daripada sumber rasmi. Pilihan ini akan diaktifkan secara automatik apabila siap.",
@@ -1249,6 +1251,7 @@ export const ms = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

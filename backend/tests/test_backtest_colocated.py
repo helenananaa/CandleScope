@@ -10,6 +10,7 @@ import pytest
 from app.backtest.service import BacktestService
 from app.backtest.errors import BacktestError
 from app.backtest.colocated import provider_spec
+from app.backtest.chart_book import DUAL_MODES
 from app.backtest.strategy.isolated import IsolatedStrategyProvider
 from app.backtest.strategy.python_provider import PythonHostProvider
 from app.market_dataset.snapshot import MarketEvent
@@ -135,6 +136,17 @@ def test_sandbox_provider_never_routes_to_colocated(tmp_path, monkeypatch):
     monkeypatch.setattr("app.backtest.strategy.python_runner.sandbox_available", lambda: True)
     provider = PythonHostProvider(tmp_path, mode="SANDBOXED_LOCAL")
     assert provider_spec(provider) is None
+
+
+@pytest.mark.parametrize("fidelity", sorted(DUAL_MODES))
+def test_dual_clock_modes_keep_their_worker_flag(fidelity, monkeypatch):
+    provider = IsolatedStrategyProvider("builtin-sma-cross-v1", step_timeout_s=2)
+    monkeypatch.setenv("BACKTEST_COLOCATED_BAR_ENABLED", "0")
+    monkeypatch.setenv("BACKTEST_COLOCATED_TRADE_ENABLED", "0")
+    monkeypatch.setenv("BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED", "1")
+    assert provider_spec(provider, fidelity=fidelity) is not None
+    monkeypatch.setenv("BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED", "0")
+    assert provider_spec(provider, fidelity=fidelity) is None
 
 
 @pytest.mark.parametrize("body", ["print('x'*1000000, flush=True)", "__import__('os').write(2, b'x'*1000000)", "__import__('os')._exit(7)"])

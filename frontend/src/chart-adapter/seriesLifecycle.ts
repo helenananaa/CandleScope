@@ -1,4 +1,5 @@
 import { chartSeriesTypes } from "./lightweightChartSurface.js";
+import { pineSceneRange } from "./pineScenePrimitive.js";
 import { createHighLowSeriesPaneView } from "./highLowSeries.js";
 import { createKagiSeriesPaneView } from "./kagiSeries.js";
 import { createPointFigureSeriesPaneView } from "./pointFigureSeries.js";
@@ -260,6 +261,10 @@ export function buildIndicatorSeriesOptions(
 
   if (!isHistogram) {
     options.crosshairMarkerVisible = crosshairMarkerVisible;
+  }
+  if (line?.nativeScene) {
+    options.crosshairMarkerVisible = false;
+    options.autoscaleInfoProvider = () => pineSceneRange(line.nativeScene!);
   }
 
   if (isHistogram && line?.pane === "volume") {

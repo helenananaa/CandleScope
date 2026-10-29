@@ -135,7 +135,7 @@ export default function ProxySettingsPanel({
                                         onChange={(event) => updateRoute(route.id, { url: event.target.value })} /></label>
                                 <label className="st-proxy-field"><span>{t("settings.proxy.egressGroup")}</span>
                                     <input className="st-input" value={route.egress_group} onChange={(event) => updateRoute(route.id, { egress_group: event.target.value })} /></label>
-                                <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")}</span>
+                                <label className="st-proxy-field"><span>{t("settings.proxy.concurrency")} · {t("settings.proxy.archiveConcurrency", { count: Math.max(0, route.max_concurrency - 1) })}</span>
                                     <input type="number" min={1} max={32} className="st-input" value={route.max_concurrency}
                                         onChange={(event) => updateRoute(route.id, { max_concurrency: Number(event.target.value) })} /></label>
                                 <label className="st-proxy-field"><span>{t("settings.proxy.wsCapacity")}</span>
@@ -181,7 +181,7 @@ export default function ProxySettingsPanel({
                                 </>}
                                 {!status?.observations.length ? t("settings.proxy.unobserved") : <>
                                     {status.observations.map((item) => <div key={`${item.exchange}:${item.kind}`}>
-                                        {item.exchange} · {item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
+                                        {item.exchange} · {item.kind.startsWith("archive:") ? `ZIP · ${item.kind.slice(8)}` : item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
                                     </div>)}
                                 </>}
                                 {cooldown > 0 && <div>{t("settings.proxy.cooldown", { seconds: Math.ceil(cooldown) })}</div>}

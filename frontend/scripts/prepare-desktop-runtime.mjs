@@ -44,6 +44,11 @@ const destination = await prepareDesktopRuntime(cache, async staging => {
   run(python, ["-c", "import fastapi, uvicorn, numpy, pandas, orjson, ccxt, exchange_calendars, pyarrow.parquet, candlescope_plugin_sdk, candlescope_backtest_sdk"], {
     env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
   });
+  run(python, [path.join(repo, "backend", "scripts", "verify_ccxt_runtime.py"),
+    "--lock", path.join(repo, "backend", "ccxt-fork.lock.json"),
+    "--output", path.join(staging, "ccxt-receipt.json")], {
+    env: { ...process.env, PYTHONPATH: site, PYTHONNOUSERSITE: "1" },
+  });
   const installed = spawnSync(uv, ["pip", "freeze", "--python", python, "--path", site], { encoding: "utf8" });
   if (installed.status !== 0) throw new Error(installed.stderr);
   await fs.writeFile(path.join(staging, "installed-requirements.txt"), installed.stdout);

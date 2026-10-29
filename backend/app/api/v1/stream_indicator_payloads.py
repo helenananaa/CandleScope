@@ -284,9 +284,34 @@ def _filter_payload_to_range(
                     "data": _filter_points_to_range(
                         group.get("data") or [], start_s, end_s
                     ),
+                    # Script bgcolors keep their per-bar runs in ``regions``.
+                    **(
+                        {
+                            "regions": _filter_points_to_range(
+                                group["regions"], start_s, end_s
+                            )
+                        }
+                        if isinstance(group.get("regions"), list)
+                        else {}
+                    ),
                 }
                 for group in next_payload[key]
             ]
+
+    # Script fills carry per-bar colors beside their endpoints. ``fills`` is
+    # the untimed v2 projection and needs no slicing.
+    if isinstance(next_payload.get("legacyFills"), list):
+        next_payload["legacyFills"] = [
+            {
+                **fill,
+                **{
+                    field: _filter_points_to_range(fill[field], start_s, end_s)
+                    for field in ("data", "colorData")
+                    if isinstance(fill.get(field), list)
+                },
+            }
+            for fill in next_payload["legacyFills"]
+        ]
 
     return next_payload
 
@@ -299,6 +324,13 @@ def _patch_from_snapshot(
     end_s: int,
 ) -> dict[str, Any]:
     patch = _filter_payload_to_range(payload, start_s, end_s)
+    if patch.get("kind") == "script":
+        # A script ``result`` is the structured Render IR with every
+        # collection's full history. The browser's WS envelope never reads it;
+        # the flat and v2 fields above carry the same outputs for this range.
+        # ``drawings`` stays whole: each scene is the current native object
+        # state, indexed by bar, and replaces the browser's previous scene.
+        patch.pop("result", None)
     patch.update(
         {
             "type": "indicator.patch",
@@ -800,8 +832,15 @@ def _script_runtime_request(
     if str(meta.get("language") or "pine") == "pine" and transport.startswith("websocket."):
         # Identity belongs to this subscription, not source text shared by users.
         if not meta.get("pineRuntimeSessionId"):
-            meta["pineRuntimeSessionId"] = uuid.uuid4().hex
+            import hashlib
+            owner = meta.get("pineSessionOwner")
+            meta["pineRuntimeSessionId"] = hashlib.sha256(str((owner, meta.get("exchange"), meta.get("market_type"),
+                meta.get("symbol"), meta.get("interval"))).encode()).hexdigest() if owner else uuid.uuid4().hex
         pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
+        pine_options["pineSessionEpoch"] = (meta.get("params") or {}).get("__pineSessionEpoch", "0")
+        pine_options["pineLiveUpdate"] = bool(meta.get("pineLiveUpdate"))
+        pine_options["pineLiveBarTime"] = int(meta.get("pineLiveBarTime") or 0)
+        pine_options["pineLeaseId"] = meta.get("streamConsumerId")
     return IndicatorRuntimeRequest(
         language=str(meta.get("language") or "pine"),
         source=str(meta.get("script") or ""),
@@ -974,6 +1013,8 @@ async def _compute_script_snapshot_message_async(
 ) -> dict:
     """Compute a script-runtime snapshot without blocking the event loop."""
     service = runtime_service or _unbound_indicator_runtime_service
+    meta["pineLiveUpdate"] = bool(bar_time)
+    meta["pineLiveBarTime"] = int(bar_time)
     bars = await run_script_wait(
         _query_script_snapshot_bars,
         dm,

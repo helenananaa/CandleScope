@@ -1,5 +1,5 @@
 import pytest
-from tests.test_native_backtests import runtime, terminal, pytestmark
+from tests.test_native_backtests import runtime as runtime, terminal, pytestmark as pytestmark
 from tests.test_external_strategy_v2 import source, tape
 
 
@@ -81,7 +81,7 @@ def test_installed_trailing_exit_tracks_real_prints(runtime, language, mode):
 @pytest.mark.parametrize("arguments,tick,error", [
     ("profit=2",None,"price_tick"),
     ("trail_points=2, trail_offset=1",0.5,"trade events"),
-    ("profit=2, limit=11",0.5,"combined trigger families are not supported"),
+    ("profit=2, limit=11",0.5,"choose absolute price or tick distance for each exit leg"),
 ])
 def test_installed_unsupported_price_contract_fails_closed(runtime, language, arguments, tick, error):
     host,payload=runtime
@@ -91,4 +91,6 @@ def test_installed_unsupported_price_contract_fails_closed(runtime, language, ar
 ''',tick=tick)
     assert record["state"] == "FAILED", record
     assert record["result"] is None
+    # The current core exports both trigger families. The Host's explicit
+    # price-family admission must still reject the unsupported combination.
     assert error in str(record["error"])

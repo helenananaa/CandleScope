@@ -58,6 +58,31 @@ function storeWith(start = 47, stop = 50) {
 }
 const noProjection = async (): Promise<never> => { throw new Error("unexpected projection"); };
 
+test("script fallback carries its captured replay clock and discards superseded replies", async () => {
+  const store = storeWith(), submitted = job(store);
+  let current = { ...binding, sourceSequence: 7 };
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const published: unknown[] = [];
+  const source = new ReplayCanonicalIndicators(store, () => current, () => {}, fetch, noProjection,
+    async ({ jobs }) => {
+      assert.deepEqual(jobs[0]?.request.replayContext, {
+        sessionId: binding.sessionId, trackId: binding.trackId, dataEpoch,
+        revealedBoundaryMs: binding.revealedBoundaryMs, sourceSequence: 7,
+      });
+      assert.equal(jobs[0]?.request.ohlcv, submitted.request.ohlcv);
+      await gate;
+      return { ok: true, results: [{ clientId: submitted.clientId, jobKey: submitted.jobKey,
+        payload: parseIndicatorPayloadEnvelope({ ok: true }) }] };
+    });
+  const script = { ...submitted, request: { ...submitted.request, mode: "script", language: "pine", script: "plot(close)" } };
+  const work = source.compute({ jobs: [script], onResults: results => { published.push(results); } });
+  current = { ...current, sourceSequence: 8 }; release();
+  await assert.rejects(work, { name: "AbortError" });
+  assert.deepEqual(published, []);
+  assert.equal(script.request.replayContext, undefined);
+});
+
 test("metadata hydration and equal-price tape advances supersede old compute ownership", () => {
   const key = replayIndicatorCalculationKey("same-ohlcv", 10, 30, 1000);
   assert.equal(key, replayIndicatorCalculationKey("same-ohlcv", 10, 30, 1000));

@@ -64,7 +64,7 @@ class SpotCashAccount(ContractAccount):
         if payload.get("account_model") != ACCOUNT_MODEL:
             raise MarketDatasetError("Spot checkpoint account identity changed", code="IDENTITY_MUTATION")
         super().restore(payload)
-        if self.quote_balance < 0 or self.position_qty < 0 or self.liquidation_enabled or self.funding_paid:
+        if self.quote_balance < 0 or self.position_qty < 0 or self.liquidation_enabled or self.funding_paid or self.multiplier != 1:
             raise MarketDatasetError("Invalid spot cash checkpoint", code="DATA_QUALITY_FAILED")
 
 

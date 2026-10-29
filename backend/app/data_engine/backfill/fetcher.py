@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from typing import Callable, Awaitable, Any
 
@@ -91,6 +92,7 @@ class HistoricalFetcher:
         ingestion_config: IngestionConfig | None = None,
         *,
         source_router: HistoricalSourceRouter | None = None,
+        import_proof_lookup=None,
     ) -> None:
         self._cfg = config
         self._transport = transport
@@ -107,10 +109,10 @@ class HistoricalFetcher:
             and self._cfg.history_archive_enabled
             and isinstance(transport, TransportLayer)
         ):
-            proxy_resolver = getattr(transport, "_resolve_proxy", None)
             self._source_router = HistoricalSourceRouter(
                 config,
-                proxy_resolver=proxy_resolver if callable(proxy_resolver) else None,
+                request_runner=transport.archive_http_request,
+                import_proof_lookup=import_proof_lookup,
             )
 
         # Extension points
@@ -157,6 +159,14 @@ class HistoricalFetcher:
         if self._source_router is None:
             return {"enabled": False, "reason": "archive_router_unavailable"}
         return await self._source_router.probe_enabled_capabilities()
+
+    def request_archive_cleanup(self) -> None:
+        if self._source_router is not None:
+            self._source_router.request_cleanup()
+
+    async def close(self) -> None:
+        if self._source_router is not None:
+            await self._source_router.close()
 
     def acknowledge_archive_imports(
         self,
@@ -401,10 +411,12 @@ class HistoricalFetcher:
                     # queued behind an in-flight 418 cannot slip through with
                     # a stale reservation.
                     await self._rate_limit_admission(task, req)
-                    exchange_semaphore = self._get_exchange_semaphore(task, req)
+                    physical = (callable(getattr(self._transport, "manages_physical_admission", None))
+                                and self._transport.manages_physical_admission(req))
+                    exchange_semaphore = nullcontext() if physical else self._get_exchange_semaphore(task, req)
                     async with exchange_semaphore:
                         quota_reservation: RateLimitReservation | None = None
-                        if self._custom_rate_limiter is None:
+                        if self._custom_rate_limiter is None and not physical:
                             quota_reservation = await self._rate_limit(task, req)
                         req.quota_acquired = True
                         req.defer_on_rate_limit = True
@@ -642,10 +654,26 @@ class HistoricalFetcher:
             for start_ms, end_ms in uncovered
         ]
 
-        archive_values = await asyncio.gather(
-            *(route_plan.future_for(ref) for ref in refs),
-            return_exceptions=True,
-        )
+        try:
+            archive_values = await asyncio.gather(
+                *(route_plan.future_for(ref) for ref in refs),
+                return_exceptions=True,
+            )
+        except BaseException:
+            for pending in rest_tail_tasks:
+                pending.cancel()
+            await asyncio.gather(*rest_tail_tasks, return_exceptions=True)
+            raise
+        deferred_archives = [value for ref, value in zip(refs, archive_values)
+                             if isinstance(value, (RateLimitDeferred, asyncio.CancelledError))
+                             and ref in coverage_refs]
+        if deferred_archives:
+            # Admission is scheduler control flow, never evidence of a missing
+            # object. Release speculative tails and return the chunk to its owner.
+            for pending in rest_tail_tasks:
+                pending.cancel()
+            await asyncio.gather(*rest_tail_tasks, return_exceptions=True)
+            raise max(deferred_archives, key=lambda exc: int(getattr(exc, "retry_at_ms", 0) or 0))
         archive_bars: list[FetchedBar] = []
         archive_receipts: list[dict[str, Any]] = []
         archive_errors: list[str] = []
@@ -653,6 +681,8 @@ class HistoricalFetcher:
         sources: set[str] = set()
 
         for ref, value in zip(refs, archive_values):
+            if isinstance(value, (RateLimitDeferred, asyncio.CancelledError)):
+                continue  # Optional parent prefetch remains eligible later.
             covers_task = _ranges_intersect(
                 task.start_ms,
                 task.end_ms,
@@ -954,13 +984,12 @@ class HistoricalFetcher:
         rule = self._rate_limit_rule(task, historical_request)
         if penalty_seconds > 0:
             self._rate_limit_manager.record_cooldown(rule, penalty_seconds)
-        await self._rate_limit_manager.acquire_nowait(rule, historical_request)
-        return RateLimitReservation(
-            manager=self._rate_limit_manager,
-            rule=rule,
-            request=historical_request,
-            proxy_route=request.proxy_route if request is not None else None,
+        from app.exchanges.public_admission import get_public_admission, current_demand
+        permit = await get_public_admission(self._rate_limit_manager).acquire(
+            [rule], historical_request, demand=replace(current_demand(), defer=True),
         )
+        permit.proxy_route = request.proxy_route if request is not None else None
+        return permit
 
     async def _rate_limit_admission(
         self,

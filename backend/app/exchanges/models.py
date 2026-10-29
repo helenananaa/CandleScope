@@ -311,6 +311,16 @@ class ExchangeCapabilities:
     # Keep this v2 addition last so v1 plugins using positional construction
     # retain the exact field order they were compiled against.
     channels: list[MarketChannelCapability] = field(default_factory=list)
+    # Explicit per-channel boundary declarations. Old plugins have unknown
+    # boundaries until they provide this contract; UTC metadata is not proof.
+    native_bar_specs: list[Any] = field(default_factory=list)
+
+    def bar_spec(self, market_type: str, interval: str, purpose: str):
+        from app.data_engine.bar_basis import native_bar_spec
+        for spec in self.native_bar_specs:
+            if (spec.market_type, spec.interval, spec.purpose) == (market_type, interval, purpose):
+                return spec
+        return native_bar_spec(self.exchange, market_type, interval, purpose)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +331,11 @@ class ExchangeCapabilities:
             "markets": [market.to_dict() for market in self.markets],
             "channels": [channel.to_dict() for channel in self.channels],
             "native_intervals": list(self.native_intervals),
+            "native_bar_specs": [self.bar_spec(market, interval, purpose).to_dict()
+                for channel in self.channels if channel.channel is MarketChannel.KLINE
+                for market in channel.market_types
+                for purpose, enabled in (("history", channel.history), ("realtime", channel.realtime)) if enabled
+                for interval in self.kline_intervals(market, history=purpose == "history")],
             "supports_multi_symbol_ticker": self.supports_multi_symbol_ticker,
             "supports_symbol_search": self.supports_symbol_search,
             "ws_connection_model": self.ws_connection_model,
@@ -445,6 +460,8 @@ class SymbolInfo:
     delisted_at_ms: int | None = None
     expiry_at_ms: int | None = None
     price_tick_size: str = ""
+    quantity_step: str = ""
+    min_quantity: str = ""
     display_name: str = ""
     currency: str = ""
     provider_id: str = ""
@@ -463,6 +480,11 @@ class SymbolInfo:
     entitlement: str = "unknown"
     delay_seconds: int | None = None
     redistribution: str = "unknown"
+    quantity_step: str = ""
+    min_quantity: str = ""
+    quantity_origin: str = ""
+    quantity_rule_model: str = ""
+    contract_value_model: str = ""
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -511,6 +533,9 @@ class SymbolInfo:
             raise ValueError("option_right must be call, put, or empty")
         for field_name, allow_zero in (
             ("contract_multiplier", False),
+            ("quantity_step", False),
+            ("min_quantity", False),
+            ("quantity_origin", True),
             ("option_strike", True),
         ):
             text = str(getattr(self, field_name) or "").strip()
@@ -524,6 +549,14 @@ class SymbolInfo:
                 if not parsed.is_finite() or parsed < 0 or (parsed == 0 and not allow_zero):
                     raise ValueError(f"{field_name} must be a valid decimal string")
             setattr(self, field_name, text)
+        for name, admitted in (
+            ("contract_value_model", {"", "linear", "inverse", "unknown"}),
+            ("quantity_rule_model", {"", "fixed_step", "significant_digits", "unknown"}),
+        ):
+            value = str(getattr(self, name) or "").strip().lower()
+            if value not in admitted:
+                raise ValueError(f"unsupported {name}")
+            setattr(self, name, value)
         if self.delay_seconds is not None:
             if isinstance(self.delay_seconds, bool) or not isinstance(
                 self.delay_seconds,
@@ -570,10 +603,24 @@ class SymbolInfo:
             "delaySeconds": self.delay_seconds,
             "redistribution": self.redistribution,
         }
+        for field, key in (("quantity_step", "quantityStep"), ("min_quantity", "minQuantity"),
+                           ("quantity_origin", "quantityOrigin"), ("quantity_rule_model", "quantityRuleModel"),
+                           ("contract_value_model", "contractValueModel")):
+            if value := getattr(self, field):
+                data[key] = value
         if self.contract_type:
             data["contractType"] = self.contract_type
         if self.price_tick_size:
             data["priceTickSize"] = self.price_tick_size
+        lot = next((item for item in self.raw.get("filters", []) if item.get("filterType") == "LOT_SIZE"), {})
+        quantity_step = self.quantity_step or lot.get("stepSize")
+        minimum = self.min_quantity or lot.get("minQty")
+        if quantity_step:
+            data["quantityStep"] = str(quantity_step)
+        if minimum:
+            data["minQuantity"] = str(minimum)
+        if self.raw.get("inverse") is True:
+            data["inverseContract"] = True
         return data
 
 

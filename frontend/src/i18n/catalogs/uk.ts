@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
+  ...intervalBasisMessages["uk"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Початок і вікно вперед охоплюють майбутні свічки. Виберіть раніший початок або скоротіть вікно; доступні лише закриті історичні свічки.",
   "replay.hub.catalogSyncing": "Пошук історичних ринків в офіційному джерелі. Функцію буде ввімкнено автоматично після завершення.",
@@ -1249,6 +1251,7 @@ export const uk = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

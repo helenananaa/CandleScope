@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  ...intervalBasisMessages["nl"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "De starttijd en het vooruitvenster bevatten toekomstige candles. Kies een eerdere start of verkort het venster; alleen gesloten historische candles zijn beschikbaar.",
   "replay.hub.catalogSyncing": "Historische markten worden ontdekt via de officiële bron. Deze optie wordt automatisch ingeschakeld zodra deze klaar is.",
@@ -1249,6 +1251,7 @@ export const nl = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

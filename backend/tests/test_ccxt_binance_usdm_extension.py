@@ -33,9 +33,9 @@ class _TrackingRateLimitManager(RateLimitManager):
         self.requests: list[Any] = []
         self.responses: list[dict[str, Any]] = []
 
-    async def acquire(self, rule: Any, request: Any) -> Any:
+    async def acquire_many_nowait(self, rules: Any, request: Any) -> Any:
         self.requests.append(request)
-        return None
+        return await super().acquire_many_nowait(rules, request)
 
     def record_response(self, rule: Any, **kwargs: Any) -> bool:
         self.responses.append(dict(kwargs))
@@ -225,7 +225,7 @@ def test_rest_calls_use_shared_budget_and_settle_binance_headers(
     async def run() -> None:
         manager = _TrackingRateLimitManager()
 
-        async def fake_fetch2(self: Any, *args: Any, **kwargs: Any) -> dict[str, bool]:
+        async def fake_fetch(self: Any, *args: Any, **kwargs: Any) -> dict[str, bool]:
             self.on_rest_response(
                 200,
                 "OK",
@@ -238,7 +238,7 @@ def test_rest_calls_use_shared_budget_and_settle_binance_headers(
             )
             return {"ok": True}
 
-        monkeypatch.setattr(CcxtBinanceUSDM, "fetch2", fake_fetch2)
+        monkeypatch.setattr(CcxtBinanceUSDM, "fetch", fake_fetch)
         driver = CandleScopeBinanceUSDM(rate_limit_manager=manager)
 
         result = await driver.fetch2(
@@ -250,13 +250,11 @@ def test_rest_calls_use_shared_budget_and_settle_binance_headers(
         assert result == {"ok": True}
         assert manager.requests[0].endpoint == "/fapi/v1/depth"
         assert manager.requests[0].limit == 1000
-        assert manager.requests[0].params["maxRetriesOnFailure"] == 0
         assert manager.responses == [
             {
                 "status_code": 200,
                 "headers": {"x-mbx-used-weight-1m": "321"},
                 "body_code": None,
-                "retry_after": None,
             }
         ]
 
@@ -269,7 +267,7 @@ def test_rest_rate_limit_response_opens_existing_circuit(
     async def run() -> None:
         manager = _TrackingRateLimitManager()
 
-        async def fake_fetch2(self: Any, *args: Any, **kwargs: Any) -> None:
+        async def fake_fetch(self: Any, *args: Any, **kwargs: Any) -> None:
             self.on_rest_response(
                 418,
                 "Banned",
@@ -282,7 +280,7 @@ def test_rest_rate_limit_response_opens_existing_circuit(
             )
             raise RuntimeError("rate limited")
 
-        monkeypatch.setattr(CcxtBinanceUSDM, "fetch2", fake_fetch2)
+        monkeypatch.setattr(CcxtBinanceUSDM, "fetch", fake_fetch)
         driver = CandleScopeBinanceUSDM(rate_limit_manager=manager)
 
         with pytest.raises(RuntimeError, match="rate limited"):
@@ -290,7 +288,7 @@ def test_rest_rate_limit_response_opens_existing_circuit(
 
         assert manager.responses[0]["status_code"] == 418
         assert manager.responses[0]["body_code"] == "-1003"
-        assert manager.responses[0]["retry_after"] == 60
+        assert manager.responses[0]["headers"]["Retry-After"] == "60"
         circuit = manager.circuit_snapshot()["binance:ip"]
         assert circuit["open"] is True
 

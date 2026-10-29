@@ -35,7 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from .config import IngestionConfig
 from .models import (
@@ -131,6 +131,8 @@ class StreamPipeline:
         self.recovery.on_gap(self.delivery.deliver_gap)
 
     async def start(self) -> None:
+        if self.delivery.has_market_callbacks:
+            await self.normalize.replay_source_pending()
         await self.feed_control.start()
 
     async def stop(self) -> None:
@@ -211,6 +213,8 @@ class MarketDataIngress:
         descriptor: StreamDescriptor,
         *,
         on_health: HealthCallback | None = None,
+        on_market_event: Callable[[MarketEvent], Awaitable[None]] | None = None,
+        on_gap: Callable[[GapMarker], Awaitable[None]] | None = None,
     ) -> StreamPipeline:
         """Create and start a new stream pipeline.
 
@@ -234,6 +238,10 @@ class MarketDataIngress:
             )
             if on_health is not None:
                 pipeline.on_health_change(on_health)
+            if on_market_event is not None:
+                pipeline.delivery.on_market_event(on_market_event)
+            if on_gap is not None:
+                pipeline.delivery.on_gap(on_gap)
             self._pipelines[key] = pipeline
             try:
                 await pipeline.start()

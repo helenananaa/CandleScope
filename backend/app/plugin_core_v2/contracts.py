@@ -1117,6 +1117,7 @@ def _validate_market_provider_channel(
             "pollIntervalMs",
             "ratePerMinute",
             "maxConcurrent",
+            "barBasis",
         },
         required={
             "kind",
@@ -1236,6 +1237,25 @@ def _validate_market_provider_channel(
         "finality": value["finality"],
         "corrections": value["corrections"],
     }
+    if "barBasis" in value:
+        from app.data_engine.interval_policy import parse_interval_spec
+        basis = value["barBasis"]
+        valid = (kind == "kline" and isinstance(basis, dict)
+                 and set(basis) <= {"schemaVersion", "intervals", "calendarId"}
+                 and type(basis.get("schemaVersion")) is int and basis["schemaVersion"] == 1
+                 and isinstance(basis.get("intervals"), dict)
+                 and set(basis["intervals"]) == set(intervals))
+        if valid:
+            valid = all(isinstance(raw, str) and (spec := parse_interval_spec(raw)) is not None
+                        and spec.canonical == raw for raw in basis["intervals"].values())
+        if not valid:
+            _fail("provider barBasis requires version 1 and a canonical basis for every interval",
+                  plugin_id=plugin_id, contribution_id=contribution_id)
+        result["barBasis"] = {"schemaVersion": 1, "intervals": dict(basis["intervals"])}
+        if "calendarId" in basis:
+            result["barBasis"]["calendarId"] = _provider_string(
+                basis["calendarId"], label="provider barBasis calendarId", plugin_id=plugin_id,
+                contribution_id=contribution_id, maximum=160)
     for key, minimum, maximum in (
         ("maxPageSize", 1, 5_000),
         ("maxBatch", 1, 256),

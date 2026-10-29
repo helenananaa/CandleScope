@@ -13,13 +13,14 @@ from dataclasses import fields, replace
 
 from app.core.config import getenv
 from .errors import BacktestError
+from .chart_book import DUAL_MODES
 from .strategy.isolated import IsolatedStrategyProvider
 from .strategy.python_provider import PythonHostProvider
 
 
 _LANES = {
     "BAR_APPROX": ("BACKTEST_COLOCATED_BAR_ENABLED", "COLOCATED_BAR_V1"),
-    "AGG_TRADE_EXECUTION": ("BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED", "COLOCATED_DUAL_CLOCK_V1"),
+    **{mode: ("BACKTEST_COLOCATED_DUAL_CLOCK_ENABLED", "COLOCATED_DUAL_CLOCK_V1") for mode in DUAL_MODES},
     "TRADE_TAPE": ("BACKTEST_COLOCATED_TRADE_ENABLED", "COLOCATED_TRADE_V1"),
     "AGG_TRADE_TAPE": ("BACKTEST_COLOCATED_TRADE_ENABLED", "COLOCATED_TRADE_V1"),
 }
@@ -123,8 +124,8 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
                                    spec["call_timeout"])
         call_deadline.value = 0.0
         fidelity = service.get_run(run_id)["fidelity_mode"]
-        execute_run = {"BAR_APPROX": service.execute_bar_run,
-                       "AGG_TRADE_EXECUTION": service.execute_dual_clock_run}.get(fidelity, service.execute_trade_run)
+        execute_run = (service.execute_dual_clock_run if fidelity in DUAL_MODES else
+                       service.execute_bar_run if fidelity == "BAR_APPROX" else service.execute_trade_run)
         completed = execute_run(run_id, events=events, provider=guarded, **options)
         completed["execution_lane"] = _LANES[fidelity][1]
         completed["worker_python"] = sys.executable

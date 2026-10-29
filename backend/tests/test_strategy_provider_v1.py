@@ -106,6 +106,31 @@ def test_host_adapter_rejects_provider_writes() -> None:
         adapter.reject_host_write("orders")
 
 
+def test_host_adapter_preserves_account_observations_and_input_identity() -> None:
+    class AccountProvider(DeterministicFakeProvider):
+        def step(self, frame):
+            self.received = frame
+            return super().step(frame)
+
+    provider = AccountProvider()
+    session = StrategyProviderSession(provider, run_id="bt_account")
+    adapter = StrategyHostAdapter(session, inline=True)
+    adapter.start({"roles": ["BARS"]})
+    inputs = dict(sequence=1, event_time_ms=1000, watermark_ms=1000,
+                  phase="EVALUATION", market={"venue": "local", "symbol": "BTC-USDT"},
+                  bar={"close": "101"})
+    try:
+        first = adapter.frame(**inputs, account_view={"position_size": 1})
+        second = adapter.frame(**inputs, account_view={"position_size": 2})
+        assert first.input_hash != second.input_hash
+        adapter.observe(**inputs, account_view={"position_size": 2})
+        assert provider.received.account_view == {"position_size": 2}
+        assert provider.received.input_hash == second.input_hash
+    finally:
+        adapter.close()
+        session.close()
+
+
 def test_host_adapter_timeout_returns_without_waiting_for_provider_completion() -> None:
     class SlowProvider(DeterministicFakeProvider):
         def step(self, frame):

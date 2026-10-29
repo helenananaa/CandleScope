@@ -187,6 +187,8 @@ class DeliveryLayer:
 
     async def deliver_event(self, market_event: MarketEvent) -> None:
         """Accept a MarketEvent from L5 and distribute to all consumers."""
+        if market_event.data.get("source_ref") and not self.has_market_callbacks:
+            raise RuntimeError("source delivery requires a registered market consumer")
         self._metrics.inc("events_delivered")
         self._metrics.mark("last_event_at")
 
@@ -198,6 +200,17 @@ class DeliveryLayer:
 
         # Queues
         self._enqueue(event)
+
+        ref = market_event.data.get("source_ref")
+        if ref is not None:
+            from app.core.executors import run_storage
+            from app.data_engine.storage import kline_sources
+
+            await run_storage(kline_sources.acknowledge, ref)
+
+    @property
+    def has_market_callbacks(self) -> bool:
+        return bool(self._market_event_callbacks)
 
     async def deliver_gap(self, gap: GapMarker) -> None:
         """Accept a gap marker from L5 and distribute to all consumers."""
@@ -233,6 +246,8 @@ class DeliveryLayer:
             except Exception as exc:
                 self._metrics.inc("callback_errors")
                 logger.error("MarketEvent callback error: %s", exc, exc_info=True)
+                if market_event.data.get("source_ref") is not None:
+                    raise
 
     async def _fire_gap_callbacks(self, gap: GapMarker) -> None:
         for cb in self._gap_callbacks:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+from itertools import groupby
 import os
 import re
 import shutil
@@ -17,6 +18,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from app.data_engine.bar_basis import BarBasis
 
 from app.data_engine.interval_policy import (
     IntervalAlignment,
@@ -1013,6 +1015,7 @@ class LocalDatasetService:
             "source": source,
             "symbol": symbol,
             "interval": interval.canonical,
+            "bar_basis": BarBasis(interval).to_dict(),
             "volume_available": resolved_columns["volume"] is not None,
             "alignment": interval.alignment.value,
             "alignment_offset_ms": (
@@ -1210,7 +1213,22 @@ class LocalDatasetService:
                 "Dataset manifest identity is invalid", code="dataset_corrupt"
             )
         manifest.setdefault("volume_available", True)
+        self._validate_bar_basis(manifest)
         return manifest, revision_dir
+
+    @staticmethod
+    def _validate_bar_basis(manifest: dict[str, Any]) -> None:
+        definition = manifest.get("bar_basis")
+        if definition is None:  # Old frozen datasets retain their original contract.
+            if "~c" in str(manifest.get("interval", "")):
+                raise LocalDatasetError("Calendar dataset is missing its boundary definition", code="dataset_corrupt")
+            return
+        try:
+            basis = BarBasis.restore(definition)
+            if basis.spec.canonical != manifest["interval"]:
+                raise ValueError("interval mismatch")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise LocalDatasetError("Dataset boundary definition is unavailable or inconsistent", code="dataset_corrupt") from exc
 
     def get_manifest(self, dataset_id: str) -> dict[str, Any]:
         manifest, _revision_dir = self._active_revision(dataset_id)
@@ -1470,6 +1488,21 @@ class LocalDatasetService:
             raise LocalDatasetError(
                 "Dataset revision not found", code="dataset_corrupt"
             )
+        return self._validated_revision_payload(manifest, revision_dir)
+
+    def _validated_pinned_revision_dir(self, dataset_id: str, data_epoch: str) -> tuple[dict[str, Any], Path]:
+        revision_dir = self._specific_revision_dir(dataset_id, data_epoch)
+        try:
+            manifest = json.loads((revision_dir / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LocalDatasetError("Dataset manifest is unreadable", code="dataset_corrupt") from exc
+        if (not isinstance(manifest, dict) or manifest.get("dataset_id") != dataset_id
+                or manifest.get("data_epoch") != data_epoch):
+            raise LocalDatasetError("Pinned dataset manifest identity is invalid", code="DATA_SNAPSHOT_MISMATCH")
+        manifest.setdefault("volume_available", True)
+        return self._validated_revision_payload(manifest, revision_dir)
+
+    def _validated_revision_payload(self, manifest: dict[str, Any], revision_dir: Path) -> tuple[dict[str, Any], Path]:
         bars_path = revision_dir / "bars.sqlite"
         try:
             actual_sqlite_hash = self._file_sha256(bars_path)
@@ -1543,11 +1576,13 @@ class LocalDatasetService:
         data_epoch: str,
         interval: str | None = None,
         max_rows: int = 200_000,
+        pinned_revision: bool = False,
     ) -> tuple[dict[str, Any], list[dict[str, str | int | None]]]:
         """Load one revision as Decimal-safe strings for immutable snapshots."""
         if max_rows < 1:
             raise ValueError("max_rows must be positive")
-        manifest, revision_dir = self._validated_revision_dir(
+        resolver = self._validated_pinned_revision_dir if pinned_revision else self._validated_revision_dir
+        manifest, revision_dir = resolver(
             dataset_id,
             data_epoch,
         )
@@ -1632,83 +1667,66 @@ class LocalDatasetService:
         if not plan.derived:
             raise ValueError("A derived resample plan is required")
         source_ms = plan.source.nominal_ms
-        target_ms = plan.target.nominal_ms
-        last_component_offset_ms = target_ms - source_ms
-        factor = plan.factor
         db_path = revision_dir / "bars.sqlite"
         uri = f"file:{db_path.as_posix()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)
+        derived: list[dict[str, Any]] = []
         try:
             connection.row_factory = sqlite3.Row
-            source_rows = connection.execute(
-                "SELECT * FROM bars ORDER BY open_time_ms ASC"
-            ).fetchall()
+            # Read newest buckets first, stopping after the requested page.
+            # A yearly bucket can contain hundreds of thousands of minutes;
+            # keep only its running totals, not a list of source rows.
+            clauses, params = [], []
+            if before_ms is not None:
+                clauses.append("open_time_ms < ?")
+                params.append(int(before_ms))
+            if start_ms is not None:
+                clauses.append("open_time_ms >= ?")
+                params.append(plan.target.floor_ms(int(start_ms)))
+            if end_ms is not None:
+                clauses.append("open_time_ms < ?")
+                params.append(plan.target.next_ms(plan.target.floor_ms(int(end_ms))))
+            where = " WHERE " + " AND ".join(clauses) if clauses else ""
+            cursor = connection.execute("SELECT * FROM bars" + where + " ORDER BY open_time_ms DESC", params)
+            for bucket, members in groupby(cursor, lambda row: plan.target.floor_ms(int(row["open_time_ms"]))):
+                if (before_ms is not None and bucket >= int(before_ms)
+                    or start_ms is not None and bucket < int(start_ms)
+                    or end_ms is not None and bucket > int(end_ms)):
+                    continue
+                end = plan.target.next_ms(bucket)
+                expected = end - source_ms
+                total: dict[str, Any] | None = None
+                valid = (end - bucket) % source_ms == 0
+                sum_fields = ("volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
+                for row in members:
+                    at = int(row["open_time_ms"])
+                    valid = valid and at == expected and int(row["close_time_ms"]) == at + source_ms - 1
+                    expected = at - source_ms
+                    if total is None:
+                        total = dict(row)
+                        for field in ("high", "low", *sum_fields):
+                            total[field] = Decimal(str(row[field])) if row[field] is not None else None
+                    else:
+                        total["high"] = max(total["high"], Decimal(str(row["high"])))
+                        total["low"] = min(total["low"], Decimal(str(row["low"])))
+                        for field in sum_fields:
+                            total[field] = total[field] + Decimal(str(row[field])) if total[field] is not None and row[field] is not None else None
+                        total["is_closed"] = min(int(total["is_closed"]), int(row["is_closed"]))
+                    total["open"] = row["open"]
+                if total is None or not valid or expected != bucket - source_ms:
+                    continue
+                total["open_time_ms"], total["close_time_ms"] = bucket, end - 1
+                for field in ("high", "low", *sum_fields):
+                    value = total[field]
+                    total[field] = (int(value) if field == "trades" else _decimal_text(value)) if value is not None else None
+                derived.append(total)
+                if len(derived) >= max(1, int(fetch_limit)):
+                    break
         except sqlite3.DatabaseError as exc:
-            raise LocalDatasetError(
-                "Dataset bars are unreadable", code="dataset_corrupt"
-            ) from exc
+            raise LocalDatasetError("Dataset bars are unreadable", code="dataset_corrupt") from exc
         finally:
             connection.close()
-        grouped: dict[int, list[sqlite3.Row]] = {}
-        for row in source_rows:
-            bucket = (int(row["open_time_ms"]) // target_ms) * target_ms
-            grouped.setdefault(bucket, []).append(row)
-        derived: list[dict[str, Any]] = []
-        for bucket, members in grouped.items():
-            if before_ms is not None and bucket >= int(before_ms):
-                continue
-            if start_ms is not None and bucket < int(start_ms):
-                continue
-            if end_ms is not None and bucket > int(end_ms):
-                continue
-            if len(members) != factor:
-                continue
-            opens = [int(item["open_time_ms"]) for item in members]
-            if min(opens) != bucket or max(opens) != bucket + last_component_offset_ms:
-                continue
-            if any(
-                int(item["close_time_ms"]) != int(item["open_time_ms"]) + source_ms - 1
-                for item in members
-            ):
-                continue
-            first = next(
-                item for item in members if int(item["open_time_ms"]) == bucket
-            )
-            last = next(
-                item
-                for item in members
-                if int(item["open_time_ms"]) == bucket + last_component_offset_ms
-            )
-            derived.append(
-                {
-                    "open_time_ms": bucket,
-                    "close_time_ms": bucket + target_ms - 1,
-                    "open": first["open"],
-                    "high": _decimal_text(
-                        max(Decimal(str(item["high"])) for item in members)
-                    ),
-                    "low": _decimal_text(
-                        min(Decimal(str(item["low"])) for item in members)
-                    ),
-                    "close": last["close"],
-                    "volume": _sum_optional_decimals(
-                        item["volume"] for item in members
-                    ),
-                    "quote_volume": _sum_optional_decimals(
-                        item["quote_volume"] for item in members
-                    ),
-                    "trades": _sum_optional_ints(item["trades"] for item in members),
-                    "taker_buy_base": _sum_optional_decimals(
-                        item["taker_buy_base"] for item in members
-                    ),
-                    "taker_buy_quote": _sum_optional_decimals(
-                        item["taker_buy_quote"] for item in members
-                    ),
-                    "is_closed": min(int(item["is_closed"]) for item in members),
-                }
-            )
-        derived.sort(key=lambda item: int(item["open_time_ms"]), reverse=True)
-        return derived[: max(1, int(fetch_limit))]
+        return derived
 
     def query(
         self,
@@ -2146,6 +2164,7 @@ class LocalDatasetService:
             manifest = json.loads(
                 (revision_dir / "manifest.json").read_text(encoding="utf-8")
             )
+            self._validate_bar_basis(manifest)
             if manifest["dataset_id"] != dataset_id:
                 raise LocalDatasetError("Project package mixes dataset identities")
             if manifest["data_epoch"] != f"sha256:{revision_dir.name}":

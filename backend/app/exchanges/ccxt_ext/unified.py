@@ -54,6 +54,13 @@ class CcxtUnifiedProjector:
         self._latest_kline_open: int | None = None
         self._book_revision = 0
 
+    def source_interrupted(self) -> None:
+        # A cached forming candle from before a disconnect cannot be promoted
+        # to a final bar merely because a newer candle arrives after reconnect.
+        self._kline_rows.clear()
+        self._kline_fingerprints.clear()
+        self._latest_kline_open = None
+
     def project(
         self,
         result: Any,
@@ -100,7 +107,7 @@ class CcxtUnifiedProjector:
         if not isinstance(result, (list, tuple)):
             return []
         rows = [
-            list(row[:6])
+            list(row)
             for row in result
             if isinstance(row, (list, tuple))
             and len(row) >= 6
@@ -149,7 +156,7 @@ class CcxtUnifiedProjector:
     def _remember_kline(self, payload: dict[str, Any]) -> bool:
         row = payload["value"]
         open_time = int(row[0])
-        fingerprint = (*row[:6], bool(payload["is_closed"]))
+        fingerprint = (json.dumps(row, sort_keys=True, separators=(",", ":")), bool(payload["is_closed"]))
         if self._kline_fingerprints.get(open_time) == fingerprint:
             return False
         self._kline_fingerprints[open_time] = fingerprint
@@ -160,7 +167,7 @@ class CcxtUnifiedProjector:
         return {
             "schema": CCXT_UNIFIED_MARKER,
             "kind": "kline",
-            "value": list(row[:6]),
+            "value": list(row),
             "is_closed": is_closed,
         }
 
@@ -277,6 +284,7 @@ class CcxtUnifiedNormalizer:
 
     def __init__(self, descriptor: StreamDescriptor) -> None:
         self._descriptor = descriptor
+        self._basis_specs = {}
 
     def parse(self, msg: RawMessage) -> MarketEvent | None:
         payload = msg.payload
@@ -346,16 +354,34 @@ class CcxtUnifiedNormalizer:
             return None
         try:
             open_time = int(row[0])
-            interval_ms = _timeframe_ms(self._descriptor.interval)
+            from app.data_engine.interval_policy import parse_interval_spec
+            purpose = "history" if msg.source == DataSource.HTTP_BACKFILL else "realtime"
+            if purpose not in self._basis_specs:
+                from app.exchanges import get_exchange_registry
+                basis_interval = self._descriptor.interval or ""
+                try:
+                    caps = get_exchange_registry().get_capabilities(self._descriptor.exchange)
+                    factory = getattr(caps, "bar_spec", None)
+                    if callable(factory):
+                        contract = factory(self._descriptor.market_type, basis_interval, purpose)
+                        basis_interval = contract.basis_interval or basis_interval
+                except KeyError:
+                    pass  # NormalizeLayer rejects undeclared providers.
+                self._basis_specs[purpose] = parse_interval_spec(basis_interval)
+            spec = self._basis_specs[purpose]
+            if spec is None or spec.floor_ms(open_time) != open_time:
+                return None
+            end_time = spec.next_ms(open_time)
             data = {
                 "interval": self._descriptor.interval or "",
                 "open_time": open_time,
-                "close_time": open_time + interval_ms - 1,
+                "close_time": end_time - 1,
                 "open": _finite_float(row[1]),
                 "high": _finite_float(row[2]),
                 "low": _finite_float(row[3]),
                 "close": _finite_float(row[4]),
                 "volume": _finite_float(row[5]),
+                "source_unified_value": list(row),
                 # CCXT's unified OHLCV base schema does not promise enhanced
                 # exchange fields.  Keep their numeric storage defaults while
                 # the capability document marks them unavailable.
@@ -366,7 +392,7 @@ class CcxtUnifiedNormalizer:
                 "is_closed": bool(
                     payload.get(
                         "is_closed",
-                        open_time + interval_ms <= msg.received_at_ms,
+                        end_time <= msg.received_at_ms,
                     )
                 ),
             }

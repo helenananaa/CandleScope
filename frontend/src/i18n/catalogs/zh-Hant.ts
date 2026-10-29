@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  ...intervalBasisMessages["zh-Hant"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時間加上前向視窗包含未來行情。請選擇更早的起點或縮短前向視窗；只能使用已收盤的歷史 K 線。",
   "replay.hub.catalogSyncing": "正在同步官方歷史商品目錄，完成後自動啟用。",
@@ -1249,6 +1251,7 @@ export const zhHant = {
   "settings.proxy.address": "代理位址",
   "settings.proxy.egressGroup": "出口群組",
   "settings.proxy.concurrency": "並行請求上限",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "交易所 ID（逗號分隔，留空表示全部）",
   "settings.proxy.enabled": "啟用",
   "settings.proxy.makePrimary": "設為主路線",

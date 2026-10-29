@@ -86,6 +86,29 @@ test("input scope and dependency availability cannot cross semantic identities o
   assert.equal(getCachedIndicatorResult(indicator, context), null);
 });
 
+test("Pine drawing-only results preserve scene ordering and revoke corrected shared inputs", t => {
+  resetIndicatorResultCache();
+  const cache = new SharedMarketCache();
+  t.after(registerSharedMarketCache(cache));
+  admit(cache, [row(60), row(120), row(180)]);
+  const pine = { id: "pine-scene", language: "pine", script: "line.new(0,1,2,3)" };
+  const context = { ...series, inputSource: createIndicatorCacheInputSource(cache) };
+  const scene = (asOf: number, value: number) => normalizeIndicatorPayload({ drawings: [{
+    id: "scene", pane: "main", asOf, times: [60, 120, 180],
+    objects: [{ kind: "lines", row: { x1: 0, x2: 2, y1: 10, y2: value } }],
+  }] }, pine.id);
+  const inputVersion = cache.captureVersion(series, { to: 180 });
+  assert.ok(cacheIndicatorSnapshot(pine, context, scene(180, 20), [], { inputVersion }));
+  patchCachedIndicatorResult(pine, context, scene(120, 15));
+  assert.equal(getCachedIndicatorResult(pine, context)?.normalized.drawings?.[0]?.asOf, 180);
+  cache.admitRealtime(series, row(240), "bar.closed");
+  assert.equal(getCachedIndicatorResult(pine, context)?.normalized.drawings?.[0]?.objects[0]?.row.y2, 20);
+  cache.admitRealtime(series, row(60, 15), "bar.amended");
+  assert.equal(getCachedIndicatorResult(pine, context), null);
+  assert.equal(cacheIndicatorSnapshot(pine, context, scene(180, 20), [], { inputVersion }), null,
+    "an in-flight drawing completion cannot bind itself to the corrected revision");
+});
+
 test("dependency stamps do not retain rows; prefix insertions, eviction and recreation invalidate", () => {
   const cache = new SharedMarketCache({ maxBarsPerSeries: 3 });
   admit(cache, [row(120), row(180)]);

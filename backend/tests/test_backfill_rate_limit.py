@@ -338,7 +338,11 @@ def test_historical_fetcher_rate_limits_once_per_retry_attempt() -> None:
     ]
 
 
-def test_rate_limit_cooldown_defers_matching_bucket_without_sleeping() -> None:
+def test_rate_limit_cooldown_defers_matching_bucket_without_sleeping(monkeypatch) -> None:
+    # Windows' coarse monotonic tick can consume 16 ms of a 50 ms fixture.
+    # Freeze budget time while measuring real elapsed time independently.
+    elapsed_clock = time.monotonic
+    monkeypatch.setattr("app.exchanges.rate_limits.time.monotonic", lambda: 100.0)
     async def run() -> tuple[float, RateLimitDeferred]:
         cfg = BackfillConfig(
             fetch_rate_limit_delay=0,
@@ -352,10 +356,10 @@ def test_rate_limit_cooldown_defers_matching_bucket_without_sleeping() -> None:
             task,
             TransportError("HTTP 429", status_code=429),
         )
-        start = time.monotonic()
+        start = elapsed_clock()
         with pytest.raises(RateLimitDeferred) as caught:
             await fetcher._rate_limit(task)
-        return time.monotonic() - start, caught.value
+        return elapsed_clock() - start, caught.value
 
     elapsed, deferred = asyncio.run(run())
     assert elapsed < 0.04

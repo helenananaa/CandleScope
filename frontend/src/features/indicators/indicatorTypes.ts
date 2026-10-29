@@ -39,6 +39,7 @@ export interface ScriptRuntimeCatalog {
 }
 
 export interface IndicatorDefinition {
+  runtimeNotice?: "pine.host.recovered" | "pine.host.resetNotice" | "pine.host.alertFailed" | null;
   id: string;
   /** Stable identity shared by linked chart groups; computed results remain cell-local. */
   bindingId?: string;
@@ -124,6 +125,7 @@ export type IndicatorAnnotationPoint =
   | (IndicatorAnnotationPointFields & { value: number; time?: number });
 
 export interface IndicatorLine {
+  nativeScene?: Record<string, unknown>;
   data: IndicatorValuePoint[];
   id?: string;
   indicatorId?: string;
@@ -146,6 +148,15 @@ export interface IndicatorLine {
   colorData?: IndicatorColorPoint[] | null;
   /** Internal renderer hint. Historical snapshot/patch/range paths reset it. */
   renderUpdate?: "tail" | "full" | null;
+}
+
+export interface IndicatorDrawing {
+  id: string;
+  indicatorId?: string;
+  pane: string;
+  asOf: number;
+  times: number[];
+  objects: Array<{ kind: "lines" | "labels" | "boxes" | "polylines" | "linefills" | "tables" | "plotseries" | "gradientfills"; row: Record<string, unknown> }>;
 }
 
 export interface IndicatorMarker {
@@ -224,6 +235,7 @@ export type IndicatorOutput =
   | { kind: "signal"; value: IndicatorSignal };
 
 export interface NormalizedIndicatorPayload {
+  drawings?: IndicatorDrawing[] | undefined;
   lines: IndicatorLine[];
   markers: IndicatorMarker[];
   fills: IndicatorFill[];
@@ -261,6 +273,7 @@ export interface IndicatorUnifiedSeries {
   type: IndicatorSeriesType;
   data: IndicatorValuePoint[];
   style: {
+    nativeScene?: Record<string, unknown>;
     title: string;
     color: string;
     lineWidth: number;
@@ -289,6 +302,8 @@ export interface IndicatorUnifiedAnnotation {
 }
 
 export interface IndicatorPayloadEnvelope {
+  drawings?: IndicatorDrawing[] | undefined;
+  meta?: Record<string, unknown>;
   ok: boolean | null;
   schemaVersion?: number;
   outputSchemaVersion?: number;
@@ -422,6 +437,15 @@ export interface IndicatorRangeBatchResponse {
   results: IndicatorRangeBatchItem[];
 }
 
+/** Captured replay observation, shared by all jobs using the same OHLCV. */
+export interface IndicatorReplayContext {
+  sessionId: string;
+  trackId: string;
+  dataEpoch: string;
+  revealedBoundaryMs: number;
+  sourceSequence?: number;
+}
+
 export interface IndicatorComputeRequest {
   mode?: string;
   language?: string;
@@ -434,6 +458,7 @@ export interface IndicatorComputeRequest {
   interval?: string;
   marketType?: string;
   exchange?: string;
+  replayContext?: IndicatorReplayContext;
 }
 
 export interface IndicatorComputeBatchJob {
@@ -763,6 +788,7 @@ export interface IndicatorWsSequenceState {
 }
 
 export interface IndicatorOutputState {
+  drawings?: IndicatorDrawing[] | undefined;
   markers: IndicatorMarker[];
   fills: IndicatorFill[];
   hlines: IndicatorHLine[];
@@ -797,6 +823,7 @@ export type IndicatorOutputAction =
   | { type: "remove-indicator"; indicatorId: string }
   | {
       type: "compute-results";
+      drawings?: IndicatorDrawing[] | undefined;
       processedIds?: string[];
       markers?: IndicatorMarker[];
       fills?: IndicatorFill[];

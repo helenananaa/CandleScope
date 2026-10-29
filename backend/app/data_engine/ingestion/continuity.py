@@ -72,6 +72,7 @@ class ContinuityLayer:
 
         # Last emitted continuity key (for gap detection)
         self._last_continuity_key: int | None = None
+        self._last_kline_closed = False
 
         # Upstream callbacks
         self._on_event: Callable[[MarketEvent], Awaitable[None]] | None = None
@@ -88,6 +89,7 @@ class ContinuityLayer:
             "layer": "L5_Continuity",
             "stream_key": self._descriptor.key,
             "last_continuity_key": self._last_continuity_key,
+            "last_kline_closed": self._last_kline_closed,
             "seen_cache_size": len(self._seen),
             "calendar_id": (
                 self._calendar.calendar_id if self._calendar is not None else None
@@ -144,9 +146,10 @@ class ContinuityLayer:
             if dedup_key in self._seen:
                 self._metrics.inc("events_deduplicated")
                 return
-            self._seen[dedup_key] = True
-            if len(self._seen) > self._cfg.continuity_buffer_size:
-                self._seen.popitem(last=False)
+            if event.data.get("source_ref") is None:
+                self._seen[dedup_key] = True
+                if len(self._seen) > self._cfg.continuity_buffer_size:
+                    self._seen.popitem(last=False)
 
         # ── Gap detection (only for ordered stream types) ──
         continuity_key = event.continuity_key
@@ -168,6 +171,24 @@ class ContinuityLayer:
                     expected_count=gap_count,
                     filled=False,
                 )
+                if st == StreamType.KLINE and expected_next == self._last_continuity_key:
+                    # We saw a preview but missed its final update. Include
+                    # that candle, not only completely absent later candles.
+                    previous = self._calendar.previous_expected_open(
+                        expected_next, self._descriptor.interval,
+                    )
+                    if previous is not None:
+                        gap.gap_start = previous
+                if st == StreamType.KLINE and self._calendar is not None:
+                    opens = []
+                    cursor = expected_next
+                    while cursor is not None and cursor < continuity_key and len(opens) <= 10_000:
+                        opens.append(cursor)
+                        following = self._calendar.next_expected_open(cursor, self._descriptor.interval)
+                        if following is not None and following <= cursor:
+                            raise ValueError("continuity calendar must advance")
+                        cursor = following
+                    gap.expected_open_times = tuple(opens)
                 if self._on_gap:
                     await self._on_gap(gap)
 
@@ -180,12 +201,22 @@ class ContinuityLayer:
 
         # ── Emit ──
         await self._emit(event)
+        if dedup_key is not None and event.data.get("source_ref") is not None:
+            self._seen[dedup_key] = True
+            if len(self._seen) > self._cfg.continuity_buffer_size:
+                self._seen.popitem(last=False)
 
     # ── Internal: Emit ───────────────────────────────────────
 
     async def _emit(self, event: MarketEvent) -> None:
         ck = event.continuity_key
         if ck is not None:
+            if event.event_type == StreamType.KLINE:
+                closed = bool(event.data.get("is_closed", True))
+                if self._last_continuity_key is None or ck > self._last_continuity_key:
+                    self._last_kline_closed = closed
+                elif ck == self._last_continuity_key:
+                    self._last_kline_closed = self._last_kline_closed or closed
             if self._last_continuity_key is None or ck >= self._last_continuity_key:
                 self._last_continuity_key = ck
 
@@ -206,6 +237,8 @@ class ContinuityLayer:
             and self._calendar is not None
         ):
             try:
+                if not self._last_kline_closed:
+                    return self._last_continuity_key
                 return self._calendar.next_expected_open(
                     self._last_continuity_key,
                     self._descriptor.interval,
