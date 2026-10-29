@@ -1,9 +1,9 @@
-import { intervalAnchorPtBR } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
-  ...intervalAnchorPtBR,
+  ...intervalBasisMessages["pt-BR"],
   "account.reconcile": "Conciliação",
   "account.reconcileHelp": "A verificação abrange apenas os registros disponíveis. O histórico inicial ausente permanece desconhecido; moedas distintas não são somadas.",
   "account.check.matched": "Correspondência dentro da tolerância indicada",

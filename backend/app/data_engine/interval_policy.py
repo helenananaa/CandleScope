@@ -135,6 +135,7 @@ _UNIT_SECONDS = {
 _INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])(?:~a1~(-?\d+))?$")
 _WEEKLY_RE = re.compile(r"^(\d+)w$")
 _MONTHLY_RE = re.compile(r"^(\d+)M$")
+_CALENDAR_RE = re.compile(r"^([1-9]\d*)([dwM])~c1~(UTC|Asia/Shanghai|America/New_York)$")
 _WEEK_EPOCH_OFFSET_S = 4 * 86400
 _WEEK_EPOCH_OFFSET_MS = 4 * 86400_000
 _BASE_INTERVALS_ORDERED = [
@@ -164,6 +165,7 @@ class IntervalAlignment(str, Enum):
     FIXED_EPOCH = "fixed_epoch"
     WEEKLY_MONDAY = "weekly_monday"
     CALENDAR_MONTH = "calendar_month"
+    ZONED_CALENDAR = "zoned_calendar"
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,11 +177,23 @@ class IntervalSpec:
     alignment: IntervalAlignment
     nominal_ms: int
     count: int
-    signature: tuple[str, int] | tuple[str, int, int]
+    signature: tuple
     phase_ms: int = 0
+    timezone: str | None = None
+    calendar_unit: str | None = None
+
+    @property
+    def maximum_ms(self) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_maximum_ms
+            return calendar_maximum_ms(self.count, self.calendar_unit)
+        return self.count * 31 * 86_400_000 if self.alignment is IntervalAlignment.CALENDAR_MONTH else self.nominal_ms
 
     def floor_ms(self, timestamp_ms: int) -> int:
         timestamp_ms = int(timestamp_ms)
+        if self.timezone:
+            from .calendar_basis import calendar_floor_ms
+            return calendar_floor_ms(timestamp_ms, self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _calendar_month_floor_ms(timestamp_ms, self.count)
         anchor_ms = (
@@ -193,11 +207,17 @@ class IntervalSpec:
         )
 
     def next_ms(self, open_ms: int) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_shift_ms
+            return calendar_shift_ms(open_ms, self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _shift_calendar_month_open_ms(int(open_ms), self.count)
         return int(open_ms) + self.nominal_ms
 
     def previous_ms(self, open_ms: int) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_shift_ms
+            return calendar_shift_ms(open_ms, -self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _shift_calendar_month_open_ms(int(open_ms), -self.count)
         return int(open_ms) - self.nominal_ms
@@ -242,6 +262,14 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
     # IntervalSpec is frozen. Repeated base-bar validation and bucket queries
     # can share it without reparsing the same interval hundreds of thousands
     # of times. Normalize outside the cache to retain the public input contract.
+    calendar_match = _CALENDAR_RE.fullmatch(requested)
+    if calendar_match:
+        count, unit, zone = int(calendar_match[1]), calendar_match[2], calendar_match[3]
+        if count > {"d": 366, "w": 52, "M": 12}[unit]:
+            return None
+        return IntervalSpec(requested, requested, IntervalAlignment.ZONED_CALENDAR,
+                            count * _UNIT_SECONDS[unit] * 1000, count,
+                            ("calendar-c1", count, unit, zone), timezone=zone, calendar_unit=unit)
     match = _INTERVAL_RE.fullmatch(requested)
     if match is None:
         return None
@@ -313,6 +341,16 @@ def intervals_equivalent(left: str, right: str) -> bool:
 
 def interval_tiles(source: IntervalSpec, target: IntervalSpec) -> bool:
     """Return whether source buckets exactly tile target bucket boundaries."""
+    if target.timezone:
+        if source.timezone:
+            return (source.timezone == target.timezone and source.calendar_unit == target.calendar_unit
+                    and target.count % source.count == 0)
+        # These c1 zones have whole-hour offsets throughout the declared range.
+        # Larger fixed bars cross local midnight or DST boundaries.
+        return (source.alignment is IntervalAlignment.FIXED_EPOCH
+                and 3_600_000 % source.nominal_ms == 0 and source.phase_ms == 0)
+    if source.timezone:
+        return False
     if source.alignment is not target.alignment:
         # UTC fixed bars no wider than one day can tile Monday-aligned weeks
         # and real calendar months exactly.  Multi-day fixed bars cannot: a
@@ -680,6 +718,9 @@ def find_best_base_interval(
     *,
     interval: str | None = None,
 ) -> tuple[str, int]:
+    spec = parse_interval_spec(interval) if interval is not None else None
+    if spec is not None and spec.timezone:
+        return "1h", (spec.maximum_ms + 3_599_999) // 3_600_000
     if interval is not None and is_monthly_interval(interval):
         month_count = parse_monthly_count(interval) or 1
         return "1d", month_count * 30

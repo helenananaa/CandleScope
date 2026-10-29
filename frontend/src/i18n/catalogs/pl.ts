@@ -1,11 +1,11 @@
-import { intervalAnchorEn } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
-  ...intervalAnchorEn,
+  ...intervalBasisMessages["pl"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Początek i okno do przodu obejmują przyszłe świece. Wybierz wcześniejszy początek lub skróć okno; dostępne są tylko zamknięte świece historyczne.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",

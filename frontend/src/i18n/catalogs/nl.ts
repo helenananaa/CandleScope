@@ -1,11 +1,11 @@
-import { intervalAnchorEn } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
-  ...intervalAnchorEn,
+  ...intervalBasisMessages["nl"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "De starttijd en het vooruitvenster bevatten toekomstige candles. Kies een eerdere start of verkort het venster; alleen gesloten historische candles zijn beschikbaar.",
   "replay.hub.catalogSyncing": "Historische markten worden ontdekt via de officiële bron. Deze optie wordt automatisch ingeschakeld zodra deze klaar is.",

@@ -52,7 +52,7 @@ def resolve_local_resample_plan(
         )
     if (
         source.alignment is not IntervalAlignment.FIXED_EPOCH
-        or target.alignment is not IntervalAlignment.FIXED_EPOCH
+        or (target.alignment is not IntervalAlignment.FIXED_EPOCH and not target.timezone)
     ):
         raise LocalResamplingError(
             f"Cannot derive {target.canonical} from {source.canonical}: "
@@ -64,7 +64,7 @@ def resolve_local_resample_plan(
             "source timestamps are not aligned to the declared interval grid",
             code="interval_alignment_incompatible",
         )
-    if target.nominal_ms % source.nominal_ms != 0:
+    if not target.timezone and target.nominal_ms % source.nominal_ms != 0:
         raise LocalResamplingError(
             f"Cannot derive {target.canonical} from {source.canonical}: "
             f"{target.canonical} is not an integer multiple of {source.canonical}",
@@ -74,12 +74,15 @@ def resolve_local_resample_plan(
             f"Cannot derive {target.canonical} from {source.canonical}: incompatible anchor phases",
             code="interval_alignment_incompatible",
         )
-    factor = target.nominal_ms // source.nominal_ms
-    if factor > MAX_LOCAL_RESAMPLE_FACTOR:
+    factor = (target.maximum_ms + source.nominal_ms - 1) // source.nominal_ms
+    # Calendar years can contain 527040 one-minute components. The reader
+    # streams SQLite rows; this bound does not allocate a component array.
+    factor_limit = 600_000 if target.timezone else MAX_LOCAL_RESAMPLE_FACTOR
+    if factor > factor_limit:
         raise LocalResamplingError(
             f"Cannot derive {target.canonical} from {source.canonical}: "
             f"aggregation factor {factor} exceeds the local safety limit "
-            f"of {MAX_LOCAL_RESAMPLE_FACTOR}",
+            f"of {factor_limit}",
             code="interval_resample_factor_too_large",
         )
     return LocalResamplePlan(source=source, target=target, factor=factor, derived=True)

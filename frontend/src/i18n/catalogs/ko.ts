@@ -1,9 +1,9 @@
-import { intervalAnchorKo } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
-  ...intervalAnchorKo,
+  ...intervalBasisMessages["ko"],
   "account.reconcile": "대사",
   "account.reconcileHelp": "확보한 기록만 대사합니다. 누락된 기초 이력은 알 수 없는 상태로 유지하며 통화를 합산하지 않습니다.",
   "account.check.matched": "표시된 허용 오차 내 일치",

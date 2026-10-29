@@ -1,4 +1,5 @@
 import { t, type MessageKey } from "../i18n/index.js";
+import { calendarParts, type CalendarZone } from "./calendarBasis.js";
 
 // Shared interval parsing and display helpers. Versioned ~a1~ anchors are
 // absolute UTC milliseconds on input and phase milliseconds after normalization.
@@ -18,7 +19,7 @@ export const INTERVAL_UNIT_SECONDS = {
 
 export type IntervalUnit = keyof typeof INTERVAL_UNIT_SECONDS;
 export type IntervalString = string;
-export type IntervalAlignment = "fixed-epoch" | "weekly-monday" | "calendar-month";
+export type IntervalAlignment = "fixed-epoch" | "weekly-monday" | "calendar-month" | "zoned-calendar";
 
 export interface IntervalParts {
   amount: number;
@@ -32,6 +33,7 @@ export interface IntervalSemanticSpec extends IntervalParts {
   weekCount: number | null;
   monthCount: number | null;
   phaseSeconds?: number;
+  timezone?: CalendarZone;
 }
 
 export interface IntervalUnitOption {
@@ -65,6 +67,8 @@ function isIntervalUnit(value: string): value is IntervalUnit {
 }
 
 export function parseIntervalParts(interval: unknown): IntervalParts | null {
+  const calendar = calendarParts(String(interval || ""));
+  if (calendar) return { amount: calendar.amount, unit: calendar.unit };
   const match = CUSTOM_INTERVAL_RE.exec(String(interval || "").trim());
   if (!match) return null;
   const amountToken = match[1];
@@ -91,6 +95,7 @@ export function parseIntervalSeconds(interval: unknown): number | null {
 
 export function normalizeIntervalValue(interval: unknown): IntervalString | "" {
   const trimmed = String(interval || "").trim();
+  if (calendarParts(trimmed)) return trimmed;
   const parts = parseIntervalParts(trimmed);
   if (!parts) return "";
   const phase = getIntervalSemanticSpec(trimmed)?.phaseSeconds ?? 0;
@@ -111,6 +116,12 @@ function canonicalFixedInterval(widthSeconds: number): IntervalString {
 export function getIntervalSemanticSpec(interval: unknown): IntervalSemanticSpec | null {
   const parts = parseIntervalParts(interval);
   if (!parts) return null;
+  const calendar = calendarParts(String(interval));
+  if (calendar) return {
+    ...parts, alignment: "zoned-calendar", canonicalValue: `${calendar.amount}${calendar.unit}~c1~${calendar.zone}`,
+    widthSeconds: calendar.amount * INTERVAL_UNIT_SECONDS[calendar.unit], weekCount: null, monthCount: null,
+    timezone: calendar.zone,
+  };
 
   if (parts.unit === "M") {
     return {
@@ -157,6 +168,7 @@ export function canonicalizeIntervalValue(interval: unknown): IntervalString | "
 export function intervalSemanticSignature(interval: unknown): string {
   const spec = getIntervalSemanticSpec(interval);
   if (!spec) return "";
+  if (spec.timezone) return spec.canonicalValue;
   if (spec.alignment === "fixed-epoch") return `${spec.alignment}:${spec.widthSeconds}${spec.phaseSeconds ? `:${spec.phaseSeconds}` : ""}`;
   if (spec.alignment === "weekly-monday") return `${spec.alignment}:${spec.weekCount}`;
   return `${spec.alignment}:${spec.monthCount}`;
@@ -186,6 +198,13 @@ export function intervalTiles(source: unknown, target: unknown): boolean {
   const sourceSpec = getIntervalSemanticSpec(source);
   const targetSpec = getIntervalSemanticSpec(target);
   if (!sourceSpec || !targetSpec) return false;
+  if (targetSpec.timezone) {
+    if (sourceSpec.timezone) return sourceSpec.timezone === targetSpec.timezone
+      && sourceSpec.unit === targetSpec.unit && targetSpec.amount % sourceSpec.amount === 0;
+    return sourceSpec.alignment === "fixed-epoch" && !sourceSpec.phaseSeconds
+      && !!sourceSpec.widthSeconds && 3600 % sourceSpec.widthSeconds === 0;
+  }
+  if (sourceSpec.timezone) return false;
 
   if (sourceSpec.alignment !== targetSpec.alignment) {
     return sourceSpec.alignment === "fixed-epoch"
@@ -215,6 +234,7 @@ export function intervalWithAnchor(interval: unknown, anchorMs: number): Interva
 
 export function formatIntervalLabel(interval: string): string {
   const spec = getIntervalSemanticSpec(interval);
+  if (spec?.timezone) return `${spec.amount}${spec.unit} · ${spec.timezone}`;
   return spec?.phaseSeconds ? `${interval.split("~")[0]} ↔ +${spec.phaseSeconds / 60}m` : interval;
 }
 

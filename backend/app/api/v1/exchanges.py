@@ -46,6 +46,15 @@ def get_exchange_diagnostics() -> dict:
     return get_exchange_registry().diagnostics()
 
 
+@router.get("/bar-basis")
+def get_bar_basis(interval: str) -> dict:
+    from app.data_engine.bar_basis import BarBasis
+    try:
+        return BarBasis.parse(interval).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "bar_basis_unsupported"}) from exc
+
+
 @router.get("/{exchange}/capabilities")
 def get_exchange_capabilities(exchange: str) -> dict:
     """Return capabilities for a single registered exchange."""

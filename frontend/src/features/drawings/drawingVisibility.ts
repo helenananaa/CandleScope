@@ -5,7 +5,7 @@ export function validDrawingIntervals(value: unknown): value is readonly string[
   return value == null || (Array.isArray(value) && value.length > 0 && value.length <= 64
     && new Set(value).size === value.length
     && value.every(item => typeof item === "string" && item.length <= 64
-      && /^[1-9]\d{0,5}[smhdwM](?:~a1~\d+)?$/.test(item) && canonicalizeIntervalValue(item) !== ""));
+      && /^[1-9]\d{0,5}[smhdwM](?:~a1~\d+|~c1~(?:UTC|Asia\/Shanghai|America\/New_York))?$/.test(item) && canonicalizeIntervalValue(item) !== ""));
 }
 
 export function drawingVisibleAtInterval(

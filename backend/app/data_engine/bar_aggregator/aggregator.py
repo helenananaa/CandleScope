@@ -90,7 +90,7 @@ from .models import (
     parse_interval_ms,
 )
 from .router import EventRouter
-from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator
+from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator, ScheduleBucketCalculator
 from .bar_state import BarStateEngine
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
@@ -128,7 +128,9 @@ class IntervalPipeline:
         # This applies to ALL month-unit intervals (1M, 2M, 3M, etc.),
         # not just the standard "1M".
         custom_calc = None
-        if interval.endswith("M") and interval[:-1].isdigit():
+        if spec is not None and spec.timezone:
+            custom_calc = ScheduleBucketCalculator(spec)
+        elif interval.endswith("M") and interval[:-1].isdigit():
             month_count = int(interval[:-1])
             if month_count > 0:
                 custom_calc = MonthlyBucketCalculator(months=month_count)

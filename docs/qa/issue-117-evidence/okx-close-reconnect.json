@@ -1,0 +1,100 @@
+[
+  {
+    "market": "spot",
+    "metadata": "offline instrument fixture",
+    "public_only": true,
+    "closed": [
+      {
+        "open_time": 1793241300000,
+        "close_time": 1793241359999,
+        "volume": 2.01794778,
+        "is_closed": true,
+        "received_at": 1793241359987
+      }
+    ],
+    "lifecycle": [
+      {
+        "state": "connected",
+        "at": 1793241324044
+      },
+      {
+        "state": "disconnected",
+        "at": 1793241359988
+      },
+      {
+        "state": "connected",
+        "at": 1793241362368
+      },
+      {
+        "state": "closed",
+        "at": 1793241362529
+      }
+    ],
+    "errors": [
+      "NetworkError"
+    ],
+    "disconnect_at": 1793241359988,
+    "forced_sockets": 1,
+    "recovered": {
+      "open_time": 1793241360000,
+      "close_time": 1793241419999,
+      "volume": 0.0125329,
+      "is_closed": false,
+      "received_at": 1793241362528
+    },
+    "pass": true,
+    "observations": 39,
+    "cache_intervals": [
+      "1m"
+    ]
+  },
+  {
+    "market": "futures",
+    "metadata": "offline instrument fixture",
+    "public_only": true,
+    "closed": [
+      {
+        "open_time": 1793241300000,
+        "close_time": 1793241359999,
+        "volume": 121.1734,
+        "is_closed": true,
+        "received_at": 1793241360326
+      }
+    ],
+    "lifecycle": [
+      {
+        "state": "connected",
+        "at": 1793241324001
+      },
+      {
+        "state": "disconnected",
+        "at": 1793241360328
+      },
+      {
+        "state": "connected",
+        "at": 1793241362460
+      },
+      {
+        "state": "closed",
+        "at": 1793241362842
+      }
+    ],
+    "errors": [
+      "NetworkError"
+    ],
+    "disconnect_at": 1793241360327,
+    "forced_sockets": 1,
+    "recovered": {
+      "open_time": 1793241360000,
+      "close_time": 1793241419999,
+      "volume": 7.1078,
+      "is_closed": false,
+      "received_at": 1793241362842
+    },
+    "pass": true,
+    "observations": 69,
+    "cache_intervals": [
+      "1m"
+    ]
+  }
+]

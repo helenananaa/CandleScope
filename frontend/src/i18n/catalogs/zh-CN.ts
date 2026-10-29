@@ -1,7 +1,7 @@
-import { intervalAnchorZh } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
-  ...intervalAnchorZh,
+  ...intervalBasisMessages["zh-CN"],
   "account.reconcile": "对账",
   "account.reconcileHelp": "仅核对已取得的记录；缺失的期初历史仍为未知，各币种不合并求和。",
   "account.check.matched": "在所列误差范围内一致",

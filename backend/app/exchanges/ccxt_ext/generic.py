@@ -923,13 +923,16 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
                     since=req.start_ms,
                     limit=limit,
                 )
-                interval_ms = int(ccxt.Exchange.parse_timeframe(descriptor.interval) * 1000)
+                from app.data_engine.interval_policy import parse_interval_spec
+                spec = parse_interval_spec(descriptor.interval)
+                if spec is None:
+                    raise ValueError("native_bar_basis_unknown")
                 now_ms = int(time.time() * 1000)
                 rows = [
                     make_unified_payload(
                         "kline",
                         list(row[:6]),
-                        is_closed=int(row[0]) + interval_ms <= now_ms,
+                        is_closed=spec.next_ms(int(row[0])) <= now_ms,
                     )
                     for row in values
                     if isinstance(row, (list, tuple))

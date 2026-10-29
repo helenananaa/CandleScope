@@ -11,7 +11,7 @@ from typing import Awaitable, Callable
 
 from .config import IngestionConfig
 from .metrics import LayerMetrics
-from .models import MarketEvent, RawMessage, StreamDescriptor
+from .models import DataSource, MarketEvent, RawMessage, StreamDescriptor, StreamType
 from .normalizers import create_normalizer, truncate_payload
 
 logger = logging.getLogger("ingestion.L4_Normalize")
@@ -29,6 +29,7 @@ class NormalizeLayer:
         self._descriptor = descriptor
         self._metrics = LayerMetrics("L4_Normalize")
         self._normalizer = create_normalizer(config, descriptor)
+        self._bar_contracts = {}
         self._on_event: Callable[[MarketEvent], Awaitable[None]] | None = None
 
     @property
@@ -79,6 +80,29 @@ class NormalizeLayer:
     def parse_all(self, msg: RawMessage) -> list[MarketEvent]:
         parse_many = getattr(self._normalizer, "parse_many", None)
         if callable(parse_many):
-            return list(parse_many(msg) or [])
-        event = self._normalizer.parse(msg)
-        return [] if event is None else [event]
+            events = list(parse_many(msg) or [])
+        else:
+            event = self._normalizer.parse(msg)
+            events = [] if event is None else [event]
+        for event in events:
+            if event.event_type is not StreamType.KLINE:
+                continue
+            purpose = "history" if msg.source == DataSource.HTTP_BACKFILL else "realtime"
+            interval = event.data["interval"]
+            key = (purpose, interval)
+            if key not in self._bar_contracts:
+                from app.exchanges import get_exchange_registry
+                from app.data_engine.bar_basis import native_bar_spec
+                caps = get_exchange_registry().get_capabilities(event.exchange)
+                factory = getattr(caps, "bar_spec", None)
+                self._bar_contracts[key] = (factory(event.market_type, interval, purpose) if callable(factory)
+                                            else native_bar_spec(event.exchange, event.market_type, interval, purpose))
+            contract = self._bar_contracts[key]
+            try:
+                contract.validate(int(event.data["open_time"]), int(event.data["close_time"]))
+            except ValueError:
+                self._metrics.inc("boundary_errors")
+                raise
+            event.data["basis_id"] = contract.to_dict()["basis"]["basis_id"]
+            event.data["basis_qualification"] = contract.qualification
+        return events

@@ -35,6 +35,7 @@ import {
   useFavoriteIntervals,
 } from "../features/chart-session/intervalFavoritesStore.js";
 import { Icon } from "./icons/Icon.js";
+import { CALENDAR_ZONES, calendarParts, type CalendarZone } from "../utils/calendarBasis.js";
 
 type IntervalTab = "common" | "custom" | "all";
 type IntervalStatusKind = "invalid" | "native" | "exists" | "new";
@@ -264,6 +265,8 @@ function IntervalSelector({
   const [search, setSearch] = useState("");
   const [anchorEnabled, setAnchorEnabled] = useState(false);
   const [anchorTime, setAnchorTime] = useState("");
+  const [calendarEnabled, setCalendarEnabled] = useState(false);
+  const [calendarZone, setCalendarZone] = useState<CalendarZone>("UTC");
   const [amount, setAmount] = useState("45");
   const [unit, setUnit] = useState<IntervalUnit>("m");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -366,12 +369,16 @@ function IntervalSelector({
     const numeric = parseInt(amount, 10);
     if (!Number.isFinite(numeric) || numeric <= 0) return "";
     const duration = `${numeric}${unit}`;
+    if (calendarEnabled) {
+      const value = `${duration}~c1~${calendarZone}`;
+      return calendarParts(value) ? value : "";
+    }
     if (!anchorEnabled) return duration;
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(anchorTime)
       || !Number.isFinite(anchorTimeMs)
       || new Date(anchorTimeMs).toISOString().slice(0, 16) !== anchorTime) return "";
     return intervalWithAnchor(duration, anchorTimeMs);
-  }, [amount, unit, anchorEnabled, anchorTime, anchorTimeMs]);
+  }, [amount, unit, anchorEnabled, anchorTime, anchorTimeMs, calendarEnabled, calendarZone]);
   const formStatus = useMemo(
     () => createStatusForValue(
       formValue,
@@ -942,7 +949,7 @@ function IntervalSelector({
               <section className="interval-composer" data-interval-composer="true">
                 <div className="interval-anchor-controls">
                   <label>
-                    <input type="checkbox" checked={anchorEnabled} onChange={(event) => setAnchorEnabled(event.target.checked)} />
+                    <input type="checkbox" checked={anchorEnabled} onChange={(event) => { setAnchorEnabled(event.target.checked); setCalendarEnabled(false); }} />
                     {t("interval.anchorEnabled", {}, locale)}
                   </label>
                   {anchorEnabled && <>
@@ -950,6 +957,19 @@ function IntervalSelector({
                     <input id={anchorInputId} type="datetime-local" step="60" value={anchorTime}
                       onChange={(event) => setAnchorTime(event.target.value)} aria-label={t("interval.anchorTime", {}, locale)} />
                     <p>{t("interval.anchorHelp", {}, locale)}</p>
+                  </>}
+                  <label>
+                    <input type="checkbox" checked={calendarEnabled} onChange={(event) => {
+                      setCalendarEnabled(event.target.checked); setAnchorEnabled(false);
+                      if (event.target.checked && !["d", "w", "M"].includes(unit)) { setUnit("d"); setAmount("1"); }
+                    }} />
+                    {t("interval.calendarEnabled", {}, locale)}
+                  </label>
+                  {calendarEnabled && <>
+                    <select value={calendarZone} onChange={(event) => setCalendarZone(event.target.value as CalendarZone)} aria-label={t("interval.calendarZone", {}, locale)}>
+                      {CALENDAR_ZONES.map(zone => <option key={zone} value={zone}>{zone}</option>)}
+                    </select>
+                    <p>{t("interval.calendarHelp", {}, locale)}</p>
                   </>}
                 </div>
                 <div className="interval-split">
@@ -994,7 +1014,7 @@ function IntervalSelector({
                   </button>
                 </div>
                 <div className={clsx("interval-create-status", formStatus.ok ? "ok" : formStatus.kind)}>
-                  {anchorEnabled && !formValue ? t("interval.anchorInvalid", {}, locale) : formStatus.text}
+                  {calendarEnabled && !formValue ? t("interval.calendarInvalid", {}, locale) : anchorEnabled && !formValue ? t("interval.anchorInvalid", {}, locale) : formStatus.text}
                 </div>
               </section>
             )}

@@ -1,11 +1,11 @@
-import { intervalAnchorEn } from "./intervalAnchorMessages.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const uk = {
-  ...intervalAnchorEn,
+  ...intervalBasisMessages["uk"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Початок і вікно вперед охоплюють майбутні свічки. Виберіть раніший початок або скоротіть вікно; доступні лише закриті історичні свічки.",
   "replay.hub.catalogSyncing": "Пошук історичних ринків в офіційному джерелі. Функцію буде ввімкнено автоматично після завершення.",
