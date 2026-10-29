@@ -20,12 +20,15 @@ and header price state.
 The canonical chart data path is:
 
 ```text
-REST/WS -> SeriesDataFeed -> SeriesWindowStore delta -> chart adapter renderer
+shared REST/WS -> existing admission adapters -> MarketWindowSession.transact
+  -> private SeriesWindowStore -> sealed commitState + delta -> read-only chart view
 ```
 
 `SeriesDataFeed` is the only market-data path that should fetch K-line REST
-history. `SeriesWindowStore` owns the active bounded window and emits structural
-deltas (`replace`, `prepend`, `append`, `mid-merge`, `tick`). React `bars` stays
+history. Each mounted chart owns one `MarketWindowSession`, including its own
+bounded windows for warm intervals. A workspace shares HTTP requests, stream
+subscriptions and bounded copied seeds, never the active mutable window.
+The session owns the private `SeriesWindowStore` and emits structural deltas (`replace`, `prepend`, `append`, `mid-merge`, `tick`). React `bars` stays
 as a compatibility/read-model field; renderers should prefer `seriesStore` and
 delta subscriptions for hot paths.
 
@@ -79,3 +82,35 @@ active session is complete or changes.
 - Do not expose raw Lightweight Charts objects in the public contract.
 - Do not mutate watchlist full-cache rows; market-data may consume a resolved
   warm array and then continue its own chart reconciliation.
+
+## Live window ownership (issue #123 P1)
+
+`useChartDataRuntime` retains its existing loading/recovery adapters, but every
+write adapter enters `MarketWindowSession.transact` with a captured selection
+token. The owner rejects stale tokens, including A→B→A and unmounted charts.
+Store writes and proof changes are sealed into one `commitState` before any
+subscriber or deferred indicator callback runs. `commitRevision` also advances
+for proof-only commits; `dataRevision` and `axisRevision` retain their original
+meanings. Reentrant commits wait until the current publication completes.
+
+Consumers receive `SeriesWindowView`, without write methods or writable identity.
+Live readers protect array/row/time-set aliases and retain stable array/time-set
+identity for hot ticks. `MarketWindowReader.capture()` copies a stable input for
+asynchronous work; migrating every asynchronous projection to that API and
+checking its revision before publication is a later phase.
+
+Cache resource and lease keys include the window ID; request/stream keys keep the
+canonical market-series identity so transport is still shared. Closing a chart
+revokes writes immediately and releases only its windows/resources. The existing
+shared HTTP coordinator cancels physical I/O only after the last consumer leaves.
+The seed registry retains at most 64 series × 256 copied rows and provenance. A
+seed does not confer validated history on another window.
+
+The architecture check rejects direct mutable Store/legacy registry imports from
+live components and market-data adapters, and restricts the commit authority to
+the composition root. Offline replay/static sources retain their own owners and
+consume the same source-neutral reader contract. No retired Pyne route is restored.
+
+P1 does not replace history acceptance/recovery decisions or the scheduler. The
+P0 native-restore tail catch-up and disconnect final-bar gaps remain P2 work.
+Rollback is a revert of this change; persisted user-data formats are unchanged.

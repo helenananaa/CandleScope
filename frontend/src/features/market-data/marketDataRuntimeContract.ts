@@ -3,7 +3,7 @@ import type { CacheDiagnosticsEntry } from "../cache-gc/cacheGcTypes.js";
 import type { IndicatorRangeEvent, CrosshairData } from "./klineContracts.js";
 import type { KlineBar } from "./marketDataTypes.js";
 import type { ChartDataCommitMeta } from "./useChartDataRuntime.js";
-import type { SeriesWindowStore } from "./window/seriesWindowStore.js";
+import type { SeriesWindowView } from "./window/seriesWindowView.js";
 
 /**
  * Source-neutral market-data boundary consumed by page shells and chart views.
@@ -42,7 +42,7 @@ export interface MarketDataRuntimeContract {
   view: {
     seriesIdentity?: KlineSeriesIdentityInput;
     bars: KlineBar[];
-    seriesStore: SeriesWindowStore | null;
+    seriesStore: SeriesWindowView | null;
     meta: ChartDataCommitMeta;
     loading: boolean;
     error: unknown | null;

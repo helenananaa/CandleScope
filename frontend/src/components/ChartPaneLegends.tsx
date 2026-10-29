@@ -11,7 +11,7 @@ import {
   formatVolume,
 } from "../features/market-data/marketDataView.js";
 import type { KlineBar } from "../features/market-data/marketDataTypes.js";
-import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 import type { PaneCrosshairStore } from "./paneCrosshairStore.js";
 import {
   groupChartPaneLegendValues,
@@ -24,7 +24,7 @@ interface MainChartLegendProps {
   crosshair: MainSeriesCrosshairValue | null;
   crosshairStore: PaneCrosshairStore;
   lines: readonly IndicatorLine[];
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
 }
 
 interface IndicatorPaneLabelsProps {
@@ -82,7 +82,7 @@ function formatLegendValue(item: ChartPaneLegendValue): string {
   return formatGenericIndicatorValue(item.value);
 }
 
-function useSeriesStoreVersion(seriesStore: SeriesWindowStore | null): number {
+function useSeriesStoreVersion(seriesStore: SeriesWindowView | null): number {
   const subscribe = useCallback((listener: () => void) => {
     if (!seriesStore) return () => undefined;
     return seriesStore.subscribe(() => listener());

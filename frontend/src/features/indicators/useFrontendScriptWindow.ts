@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { INDICATOR_HISTORY_LIMIT } from "./indicatorComputeRuntime.js";
 
 /** Sample the source contract, whose O(1) tick deliberately retains array identity.
@@ -7,7 +7,7 @@ import { INDICATOR_HISTORY_LIMIT } from "./indicatorComputeRuntime.js";
  * otherwise a continuous feed could cancel every attempt before its timeout.
  */
 export function useFrontendScriptWindow(
-  source: SeriesWindowStore | null,
+  source: SeriesWindowView | null,
   enabled: boolean,
   contextKey: string,
 ) {

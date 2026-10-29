@@ -1,3 +1,4 @@
+import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../native/nativeStrategyCollection.js";
 import type { StrategyTradeFocus } from "./strategyTradeReview.js";
@@ -77,7 +78,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   active: boolean;
   panelOpen: boolean;
   bottomPanelHost: HTMLElement | null;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
   onMarkerSourceChange(source: ChartStrategyResultMarkerSource | null): void;
   onLocateTrade(timeMs: number): void;
