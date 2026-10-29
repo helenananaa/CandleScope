@@ -665,7 +665,7 @@ def test_cache_limits_endpoint_accepts_budget_fields() -> None:
     response = _client_with_dm(dm).post(
         "/api/v1/settings/cache-limits",
         json={
-            "db_limits": {"minutes": 123},
+            "db_limits": {"seconds": 86400, "minutes": 123},
             "ephemeral_bars": 3600,
             "sqlite_budget_bytes": 2048,
             "storage_row_limits_enabled": True,
@@ -678,7 +678,7 @@ def test_cache_limits_endpoint_accepts_budget_fields() -> None:
     assert dm.memory_gc_calls == [(
         "cache-limits",
         {
-            "db_limits": {"minutes": 123},
+            "db_limits": {"seconds": 86400, "minutes": 123},
             "ephemeral_bars": 3600,
             "sqlite_budget_bytes": 2048,
             "storage_row_limits_enabled": True,

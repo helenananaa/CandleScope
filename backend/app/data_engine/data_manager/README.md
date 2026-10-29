@@ -55,7 +55,7 @@ Common methods on `DataManager`:
 | `get_subscription_service()` | Access subscription tier manager |
 | `repair_custom_storage()` | Rebuild custom interval rows |
 | `scan_and_fill_storage_gaps()` | Manual gap scan and repair |
-| `update_retention_limits()` | Update DB/ephemeral retention settings |
+| `update_retention_limits()` | Update SQLite retention and 1s memory-cache settings |
 | `snapshot()` | Full diagnostic snapshot |
 | `market_data_control_snapshot()` | Channel ownership, typed namespaces, readiness, and coverage boundaries |
 
@@ -261,3 +261,19 @@ python -m pytest -q \
   tests/test_maintenance_facade.py \
   tests/test_price_subscription_services.py
 ```
+
+## Second history
+
+`1s` uses the same authoritative-close journal, SQLite history queries, backfill
+coordinator, and manual download jobs as other supported native intervals. A
+forming or non-authoritative bar is never promoted to durable history. Exchange
+capability resolution still applies; this does not add a Binance futures route.
+
+The existing `ephemeral_bars` settings field is retained as the 1s **memory**
+capacity, independently of persistence. SQLite retention now accepts `seconds`
+(default 86,400 rows per series when row limits are enabled). Row-limit cleanup
+remains opt-in; the unified GC planner/executor respects active consumers and
+manual-history collection protection floors. Cold 1s cache can be reloaded from
+SQLite. No recording switch, always-on collector, or 1s replay archive is added.
+Full watchlist subscriptions and second-based custom intervals may still own a
+1s stream; the final consumer release stops the upstream stream.

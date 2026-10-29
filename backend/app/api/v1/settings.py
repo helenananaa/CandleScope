@@ -962,7 +962,7 @@ class StoragePolicyRequest(BaseModel):
     def validate_db_limits(cls, value: dict[str, int] | None) -> dict[str, int] | None:
         if value is None:
             return None
-        unknown = set(value) - {"minutes", "hours", "daily"}
+        unknown = set(value) - {"seconds", "minutes", "hours", "daily"}
         if unknown:
             raise ValueError(f"unsupported DB retention tiers: {sorted(unknown)}")
         for tier, limit in value.items():
@@ -1249,12 +1249,12 @@ async def update_cache_limits(request: Request, body: CacheLimitsRequest) -> dic
 
     Accepts:
       - db_limits: per-tier max bar counts for DB-persisted intervals
-      - ephemeral_bars: max bar count for in-memory-only intervals (e.g. 1s)
+      - ephemeral_bars: max in-memory bar count for 1s (also stored in SQLite)
       - sqlite_budget_bytes: soft SQLite file budget for budget-driven GC
       - storage_row_limits_enabled: enable per-tier hard row-limit cleanup
 
-    The row limits are applied only when explicitly enabled. The ephemeral
-    limit takes effect immediately (next trim cycle or on new series creation).
+    The row limits are applied only when explicitly enabled. The 1s memory
+    limit takes effect on the next trim cycle or on new series creation.
     """
     dm = _get_data_manager(request)
     if dm is None:

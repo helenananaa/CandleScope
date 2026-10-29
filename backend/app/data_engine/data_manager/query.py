@@ -35,7 +35,6 @@ from app.data_engine.interval_policy import (
     IntervalAlignment,
     compute_bucket_end_ms,
     compute_bucket_start_ms,
-    is_ephemeral_interval,
     latest_eligible_bar_open_ms,
     parse_custom_interval,
     parse_interval_ms,
@@ -347,18 +346,6 @@ class QueryEngine:
                 )
             )
 
-        # Ephemeral intervals are cache-only — skip storage and backfill
-        if is_ephemeral_interval(interval):
-            effective_limit = min(
-                limit or self._cfg.default_limit,
-                self._cfg.max_limit,
-            )
-            start_s = start_ms // 1000 if start_ms else None
-            end_s = end_ms // 1000 if end_ms else None
-            return self._attach_io_metrics(
-                self._query_cache_only(key, start_s, end_s, effective_limit, t0),
-                io_metrics,
-            )
         effective_limit = min(
             limit or self._cfg.default_limit,
             self._cfg.max_limit,
@@ -747,24 +734,6 @@ class QueryEngine:
         expected_closed_through_s = (
             eligible_end_ms // 1000 if eligible_end_ms is not None else None
         )
-
-        # Ephemeral intervals are cache-only — skip storage and backfill
-        if is_ephemeral_interval(interval):
-            cached = self._cache.get_before(key, before_s, effective_limit)
-            return self._attach_io_metrics(self._apply_history_contract(QueryResult(
-                bars=cached,
-                symbol=key.symbol,
-                interval=key.interval,
-                exchange=key.exchange,
-                market_type=key.market_type,
-                **key.identity.to_dict(),
-                source=QuerySource.CACHE,
-                total=len(cached),
-                has_more=self._cache.series_count(key) > len(cached),
-                cache_hit=bool(cached),
-                backfill_triggered=False,
-                metadata={"ephemeral": True},
-            ), planned, expected_closed_through_s=expected_closed_through_s), io_metrics)
 
         # Try cache first
         cached = self._cache.get_before(key, before_s, effective_limit)
@@ -1957,54 +1926,6 @@ class QueryEngine:
             if identity not in known:
                 missing_ranges.append(missing_range)
         return bars
-
-    def _query_cache_only(
-        self,
-        key: SeriesKey,
-        start_s: int | None,
-        end_s: int | None,
-        limit: int,
-        started_at: float,
-    ) -> QueryResult:
-        """Ephemeral interval query — cache only, no storage, no backfill.
-
-        Used for intervals like 1s where data is never persisted to DB.
-        Returns whatever is currently in the in-memory cache.
-        """
-        if start_s is not None or end_s is not None:
-            bars = self._cache.query(key, start_s, end_s, limit)
-        else:
-            bars = self._cache.get_latest(key, limit)
-
-        if bars:
-            with self._metrics_lock:
-                self._cache_hits += 1
-        elapsed = time.monotonic() - started_at
-        result = QueryResult(
-            bars=bars,
-            symbol=key.symbol,
-            interval=key.interval,
-            exchange=key.exchange,
-            market_type=key.market_type,
-            **key.identity.to_dict(),
-            source=QuerySource.CACHE,
-            total=len(bars),
-            has_more=self._cache.series_count(key) > len(bars),
-            cache_hit=bool(bars),
-            backfill_triggered=False,
-            metadata={"elapsed_ms": round(elapsed * 1000, 2), "ephemeral": True},
-        )
-        eligible_end_ms = self._latest_eligible_open_ms(
-            key,
-            now_ms=int(time.time() * 1000),
-            requested_end_ms=(end_s * 1000 if end_s is not None else None),
-        )
-        return self._apply_finality_contract(
-            result,
-            expected_closed_through_s=(
-                eligible_end_ms // 1000 if eligible_end_ms is not None else None
-            ),
-        )
 
     def _is_complete(
         self,

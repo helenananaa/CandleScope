@@ -111,7 +111,6 @@ def enhanced_components_are_complete(
 
 STANDARD_INTERVAL_MS = {key: value * 1000 for key, value in INTERVAL_SECONDS.items()}
 STANDARD_INTERVALS = STANDARD_INTERVAL_MS
-EPHEMERAL_INTERVALS: set[str] = {"1s"}
 
 _UNIT_SECONDS = {
     "s": 1,
@@ -323,9 +322,10 @@ def is_custom_interval(interval: str) -> bool:
     return not is_standard_interval(interval)
 
 
-def is_ephemeral_interval(interval: str) -> bool:
+def is_one_second_interval(interval: str) -> bool:
+    """Identify the dense 1s cache tier, independently of persistence policy."""
     spec = parse_interval_spec(interval)
-    return spec is not None and spec.canonical in EPHEMERAL_INTERVALS
+    return spec is not None and spec.canonical == "1s"
 
 
 def is_weekly_interval(interval: str) -> bool:

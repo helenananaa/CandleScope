@@ -18,7 +18,7 @@ def test_cache_limits_reject_invalid_ephemeral_capacity(ephemeral_bars: int) -> 
 
 def test_cache_limits_reject_unknown_or_negative_db_limits() -> None:
     with pytest.raises(ValidationError):
-        CacheLimitsRequest(db_limits={"seconds": 10})
+        CacheLimitsRequest(db_limits={"weeks": 10})
     with pytest.raises(ValidationError):
         CacheLimitsRequest(db_limits={"minutes": -1})
 
@@ -51,3 +51,9 @@ def test_auto_gc_rejects_removed_recent_active_grace_override() -> None:
         AutoGcRunRequest.model_validate({
             "never_evict_active_within_ms": 10 * 60_000,
         })
+
+
+def test_cache_limits_accept_second_history_retention() -> None:
+    assert CacheLimitsRequest(db_limits={"seconds": 86400}).db_limits == {"seconds": 86400}
+    with pytest.raises(ValidationError):
+        CacheLimitsRequest(db_limits={"seconds": -1})

@@ -794,7 +794,7 @@ class DataManager:
         if self.retention.storage_row_limits_enabled:
             await self.run_storage_gc()
 
-        # Ephemeral trim loop (every 30 min)
+        # 1s memory-cache trim loop (every 30 min)
         self._cleanup_task = asyncio.create_task(self.retention.ephemeral_trim_loop())
         if self._auto_gc_policy.enabled:
             self._auto_gc_task = asyncio.create_task(
@@ -3614,7 +3614,7 @@ class DataManager:
 
         Args:
             db_limits:      {"minutes": N, "hours": N, "daily": N} where 0 = unlimited.
-            ephemeral_bars: Max bars per ephemeral series (e.g. 86400 for 24h of 1s).
+            ephemeral_bars: In-memory 1s capacity; independent of SQLite retention.
         """
         self.retention.update_limits(
             db_limits=db_limits,
