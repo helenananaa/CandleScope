@@ -95,11 +95,11 @@ def parse(payload, source=DataSource.HTTP, received=1772323200001):
     )
 
 
-def test_fork_flag_defaults_off_and_runtime_is_partitioned(monkeypatch):
+def test_release_defaults_to_fork_and_rollback_runtime_is_partitioned(monkeypatch):
     monkeypatch.delenv("INGESTION_CCXT_FORK_KLINE_ENABLED", raising=False)
-    plain = IngestionConfig()
-    enabled = IngestionConfig(ccxt_fork_kline_enabled=True)
-    assert plain.ccxt_fork_kline_enabled is False
+    plain = IngestionConfig(ccxt_fork_kline_enabled=False)
+    enabled = IngestionConfig()
+    assert enabled.ccxt_fork_kline_enabled is True
     profile = BinanceUsdmCcxtProfile()
     assert profile.runtime_key(plain) != profile.runtime_key(enabled)
 
@@ -263,7 +263,7 @@ def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch):
             return MARKET["symbol"]
 
     plugin = create_binance_ccxt_plugin()
-    monkeypatch.setattr(plugin, "_rest_pool", lambda config: Pool())
+    monkeypatch.setattr(plugin.provider, "_rest_pool", lambda venue, config: Pool())
 
     async def run():
         try:

@@ -137,7 +137,7 @@ def test_default_ccxt_entry_fetches_imports_and_cleans_zip(monkeypatch, tmp_path
             assert stored[0]["taker_buy_quote"] == 78.75
             assert len(await storage.get_history_archive_import_proofs(results[0].metadata["archive_objects"])) == 1
             plugin = bootstrap_default_adapters().get_plugin("binance")
-            assert plugin.history_transport_snapshot(ingestion)["clients_created"] == 0
+            assert plugin.history_transport_snapshot(ingestion) is None
         finally:
             await engine.close()
         assert not router._cleanup.snapshot()["running"]

@@ -100,7 +100,7 @@ class CcxtUnifiedProjector:
         if not isinstance(result, (list, tuple)):
             return []
         rows = [
-            list(row[:6])
+            list(row)
             for row in result
             if isinstance(row, (list, tuple))
             and len(row) >= 6
@@ -149,7 +149,7 @@ class CcxtUnifiedProjector:
     def _remember_kline(self, payload: dict[str, Any]) -> bool:
         row = payload["value"]
         open_time = int(row[0])
-        fingerprint = (*row[:6], bool(payload["is_closed"]))
+        fingerprint = (json.dumps(row, sort_keys=True, separators=(",", ":")), bool(payload["is_closed"]))
         if self._kline_fingerprints.get(open_time) == fingerprint:
             return False
         self._kline_fingerprints[open_time] = fingerprint
@@ -160,7 +160,7 @@ class CcxtUnifiedProjector:
         return {
             "schema": CCXT_UNIFIED_MARKER,
             "kind": "kline",
-            "value": list(row[:6]),
+            "value": list(row),
             "is_closed": is_closed,
         }
 
@@ -374,6 +374,7 @@ class CcxtUnifiedNormalizer:
                 "low": _finite_float(row[3]),
                 "close": _finite_float(row[4]),
                 "volume": _finite_float(row[5]),
+                "source_unified_value": list(row),
                 # CCXT's unified OHLCV base schema does not promise enhanced
                 # exchange fields.  Keep their numeric storage defaults while
                 # the capability document marks them unavailable.

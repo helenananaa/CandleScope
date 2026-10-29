@@ -21,6 +21,8 @@ from .rate_limits import (
     RateLimitReservation, RateLimitRule, get_shared_rate_limit_manager,
 )
 
+_fairness_tickets = itertools.count()
+
 
 class TrafficClass(IntEnum):
     REQUIRED = 0
@@ -41,6 +43,9 @@ class PublicDemand:
     # tasks remove their intent on exit, including cancellation.
     alive: Callable[[], bool] | None = field(default=None, repr=False)
     dependencies: list[PublicDemand] = field(default_factory=list, repr=False)
+    wait_started: float | None = field(default=None, repr=False)
+    bypasses: int = field(default=0, repr=False)
+    wait_ticket: int | None = field(default=None, repr=False)
 
     def priority(self) -> TrafficClass:
         own = self.traffic_class if self.alive is None or self.alive() else TrafficClass.BACKGROUND
@@ -85,6 +90,7 @@ class _Intent:
     since: float
     rules: list[RateLimitRule] = field(default_factory=list)
     request: HistoricalRequest | None = None
+    resource: Any = None
 
 
 @dataclass
@@ -97,6 +103,8 @@ class PublicPermit:
     traffic_class: TrafficClass = TrafficClass.NORMAL
     settled: bool = False
     proxy_route: Any = None
+    resource: Any = None
+    resource_lease: Any = None
 
     @property
     def manager(self) -> RateLimitManager:
@@ -131,15 +139,18 @@ class PublicAdmission:
     """Bounded, resource-specific priority admission with atomic constraints.
 
     Pending critical demands protect their shared quota and execution slots.
-    Idle capacity is borrowable. Already sent work cannot be preempted; under
-    sustained pressure background work has no minimum-throughput guarantee.
+    Critical work normally wins. After a bounded number of competing grants,
+    the oldest bypassed demand gets one turn, without bypassing any quota or
+    concurrency rule. This bounds starvation in executable work, not wall time
+    while the source is unavailable. Deferred business retries retain their age.
     """
 
     def __init__(self, manager: RateLimitManager, *, max_in_flight: int = 32,
-                 max_pending: int = 1024) -> None:
+                 max_pending: int = 1024, max_priority_bypass: int = 8) -> None:
         self.manager = manager
         self.max_in_flight = max(1, max_in_flight)
         self.max_pending = max(1, max_pending)
+        self.max_priority_bypass = max(1, max_priority_bypass)
         self.priority_enabled = True
         self._ids = itertools.count(1)
         self._intents: dict[int, _Intent] = {}
@@ -164,10 +175,14 @@ class PublicAdmission:
         self.priority_enabled = bool(enabled)
         self.manager.notify_change()
 
-    def protect(self, demand: PublicDemand, bucket: str) -> None:
+    def protect(self, demand: PublicDemand, bucket: str, *, rules=(), request=None, resource=None) -> None:
         self._prune()
         if len(self._protected) < self.max_pending or demand in self._protected:
-            self._protected[demand] = _Intent(demand, frozenset((bucket,)), time.monotonic())
+            if demand.wait_started is None:
+                demand.wait_started = time.monotonic()
+                demand.wait_ticket = next(_fairness_tickets)
+            keys = frozenset((bucket,)) | frozenset(resource.keys if resource else ())
+            self._protected[demand] = _Intent(demand, keys, demand.wait_started, list(rules), request, resource)
             self.manager.notify_change()
 
     def _prune(self) -> None:
@@ -183,14 +198,38 @@ class PublicAdmission:
             now + delay, int((time.time() + delay) * 1000), rule.name,
         ))
 
-    async def _higher_priority_can_run(self, demand: PublicDemand) -> bool:
+    def _rank(self, intent: _Intent) -> tuple:
+        if intent.demand.bypasses >= self.max_priority_bypass:
+            return (0, intent.demand.wait_ticket or 0, 0)
+        return (1, int(intent.demand.priority()), intent.demand.wait_ticket or 0)
+
+    async def _protects(self, other: _Intent, current: _Intent) -> bool:
+        if other.demand is current.demand or self._rank(other) >= self._rank(current):
+            return False
+        if not other.keys & current.keys:
+            return False
+        if other.resource is not None and not other.resource.available():
+            return False
+        # A composite request blocked by an unrelated resource cannot fence
+        # runnable work. Shared quota may accumulate for an aged costly request.
+        for rule in other.rules:
+            if rule.bucket_key not in current.keys:
+                if not (await self.manager.inspect(rule, other.request)).allowed:
+                    return False
+                if rule.max_concurrency and self._by_bucket[rule.bucket_key] >= rule.max_concurrency:
+                    return False
+        return True
+
+    async def _higher_priority_can_run(self, current: _Intent) -> bool:
         """Protect scarce shared execution slots only for executable work.
 
         A higher-priority waiter blocked by an unrelated quota must not fence
         the entire process. Deferred business interests protect quota only.
         """
         for intent in self._intents.values():
-            if intent.demand is demand or intent.demand.priority() >= demand.priority():
+            if intent.demand is current.demand or self._rank(intent) >= self._rank(current):
+                continue
+            if intent.resource is not None and not intent.resource.available():
                 continue
             ready = True
             for rule in intent.rules:
@@ -205,49 +244,79 @@ class PublicAdmission:
         return False
 
     async def acquire(self, rules: list[RateLimitRule], request: HistoricalRequest,
-                      *, demand: PublicDemand | None = None) -> PublicPermit:
+                      *, demand: PublicDemand | None = None, resource: Any = None) -> PublicPermit:
         if not rules:
             raise ValueError("physical admission requires at least one constraint")
         demand = demand or current_demand()
         self._prune()
-        keys = frozenset(rule.bucket_key for rule in rules)
+        keys = frozenset(rule.bucket_key for rule in rules) | frozenset(resource.keys if resource else ())
         if len(self._intents) >= self.max_pending:
             raise self._deferred(rules[0], request, "admission_queue_full")
         intent_id = next(self._ids)
-        self._intents[intent_id] = _Intent(demand, keys, time.monotonic(), rules, request)
+        if demand.wait_started is None:
+            demand.wait_started = time.monotonic()
+            demand.wait_ticket = next(_fairness_tickets)
+        current = _Intent(demand, keys, demand.wait_started, rules, request, resource)
+        self._intents[intent_id] = current
         try:
             while True:
                 async with self._lock:
                     self._prune()
                     error = None
                     for intent in (*self._intents.values(), *self._protected.values()):
-                        if (self.priority_enabled and intent.demand is not demand
-                                and intent.demand.priority() < demand.priority()
-                                and intent.keys & keys):
+                        if self.priority_enabled and await self._protects(intent, current):
                             error = self._deferred(rules[0], request, "critical_demand", 0.25)
                             break
                     if error is None and len(self._active) >= self.max_in_flight:
                         error = self._deferred(rules[0], request, "execution_capacity", 0.25)
                     if (error is None and self.priority_enabled
                             and len(self._active) >= self.max_in_flight - 1
-                            and await self._higher_priority_can_run(demand)):
+                            and await self._higher_priority_can_run(current)):
                         error = self._deferred(rules[0], request, "execution_priority", 0.25)
                     for rule in rules:
                         if rule.max_concurrency and self._by_bucket[rule.bucket_key] >= rule.max_concurrency:
                             error = self._deferred(rule, request, "endpoint_concurrency", 0.25)
                             break
                     if error is None:
+                        lease = None
                         try:
+                            # External resources expose synchronous atomic try-
+                            # reserve/release. Never hold them while waiting for
+                            # quota, and never debit quota if reservation fails.
+                            if resource is not None:
+                                for rule in rules:
+                                    admission = await self.manager.inspect(rule, request)
+                                    if not admission.allowed:
+                                        raise RateLimitDeferred(admission)
+                                lease = resource.reserve()
                             reservations = await self.manager.acquire_many_nowait(rules, request)
-                        except RateLimitDeferred as exc:
-                            error = exc
+                        except BaseException as exc:
+                            if lease is not None:
+                                resource.release(lease)
+                            if isinstance(exc, RateLimitDeferred):
+                                error = exc
+                            else:
+                                raise
                         else:
                             permit = PublicPermit(self, next(self._ids), reservations, demand,
-                                                  time.monotonic(), demand.priority())
+                                                  time.monotonic(), demand.priority(),
+                                                  resource=resource, resource_lease=lease)
                             self._active[permit.attempt_id] = permit
                             self._by_bucket.update(r.rule.bucket_key for r in reservations)
                             self._counts["attempts"] += 1
                             self._counts[f"class_{demand.priority().name.lower()}"] += 1
+                            if demand.bypasses >= self.max_priority_bypass:
+                                self._counts["fairness_grants"] += 1
+                            seen = set()
+                            for waiting in (*self._intents.values(), *self._protected.values()):
+                                if waiting.demand is demand or waiting.demand in seen:
+                                    continue
+                                seen.add(waiting.demand)
+                                if waiting.keys & keys or len(self._active) >= self.max_in_flight:
+                                    waiting.demand.bypasses = min(self.max_priority_bypass, waiting.demand.bypasses + 1)
+                            demand.wait_started = None
+                            demand.wait_ticket = None
+                            demand.bypasses = 0
                             if demand.deadline is not None and permit.started > demand.deadline:
                                 self._counts["deadline_misses"] += 1
                             return permit
@@ -261,6 +330,8 @@ class PublicAdmission:
 
     def _finish(self, permit: PublicPermit, feedback: dict[str, Any]) -> None:
         self._active.pop(permit.attempt_id, None)
+        if permit.resource is not None:
+            permit.resource.release(permit.resource_lease)
         for reservation in permit.reservations:
             key = reservation.rule.bucket_key
             self._by_bucket[key] -= 1
@@ -284,6 +355,7 @@ class PublicAdmission:
             "owner_scope": "backend_event_loop_and_catalog_worker",
             "coverage": "host_estimate_external_consumers_unknown",
             "priority_enabled": self.priority_enabled,
+            "fairness": {"policy": "bounded_priority_bypass", "max_competing_grants": self.max_priority_bypass},
             "pending": len(self._intents), "protected": len(self._protected), "in_flight": len(self._active),
             "oldest_wait_seconds": max(
                 (time.monotonic() - i.since for i in self._intents.values()), default=0.0),

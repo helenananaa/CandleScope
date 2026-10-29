@@ -203,3 +203,66 @@ def test_execution_pressure_prioritizes_only_runnable_foreground(foreground_has_
             with pytest.raises(asyncio.CancelledError):
                 await foreground
     asyncio.run(run())
+
+
+def test_sustained_foreground_cannot_starve_executable_background():
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager(), max_in_flight=1, max_priority_bypass=3)
+        quota = rule("shared", 100)
+        held = await scheduler.acquire([quota], request())
+        order = []
+
+        async def work(label, traffic):
+            permit = await scheduler.acquire([quota], request(), demand=PublicDemand(traffic))
+            order.append(label)
+            permit.finish(status_code=200)
+
+        background = asyncio.create_task(work("background", TrafficClass.BACKGROUND))
+        critical = [asyncio.create_task(work(str(i), TrafficClass.INTERACTIVE)) for i in range(12)]
+        while scheduler.snapshot()["pending"] != 13:
+            await asyncio.sleep(0)
+        held.finish(status_code=200)
+        await asyncio.wait_for(asyncio.gather(background, *critical), 2)
+        assert order.index("background") == 3
+        assert scheduler.snapshot()["counts"]["fairness_grants"] >= 1
+        assert scheduler.snapshot()["in_flight"] == 0
+    asyncio.run(run())
+
+
+def test_deferred_background_keeps_fairness_credit_but_never_bypasses_cooldown():
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager(), max_priority_bypass=2)
+        quota = rule("shared", 100)
+        foreground = PublicDemand(TrafficClass.INTERACTIVE, defer=True)
+        background = PublicDemand(TrafficClass.BACKGROUND, defer=True)
+        scheduler.protect(foreground, quota.bucket_key)
+        with pytest.raises(RateLimitDeferred):
+            await scheduler.acquire([quota], request(), demand=background)
+        scheduler.protect(background, quota.bucket_key)
+        for _ in range(2):
+            permit = await scheduler.acquire([quota], request(), demand=foreground)
+            permit.finish(status_code=200)
+        with pytest.raises(RateLimitDeferred, match="critical_demand"):
+            await scheduler.acquire([quota], request(), demand=foreground)
+        scheduler.forget(background)  # Business worker resumes its delayed chunk.
+        permit = await scheduler.acquire([quota], request(), demand=background)
+        permit.finish(status_code=429, retry_after=60)
+        assert background.bypasses == 0
+        scheduler.forget(foreground)
+        with pytest.raises(RateLimitDeferred, match="cooldown"):
+            await scheduler.acquire([quota], request(), demand=background)
+    asyncio.run(run())
+
+
+def test_stale_fairness_interest_cannot_block_foreground():
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager(), max_priority_bypass=1)
+        quota = rule("shared")
+        alive = True
+        background = PublicDemand(TrafficClass.BACKGROUND, alive=lambda: alive, bypasses=1)
+        scheduler.protect(background, quota.bucket_key)
+        alive = False
+        permit = await scheduler.acquire([quota], request(), demand=PublicDemand(TrafficClass.INTERACTIVE, defer=True))
+        permit.finish(status_code=200)
+        assert scheduler.snapshot()["protected"] == 0
+    asyncio.run(run())

@@ -5,6 +5,8 @@
   "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
   "schema": "candlescope.binance.usdm.kline.v1",
   "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+  "release_tag": "candlescope-4.5.60.1",
+  "wheel_url": "https://github.com/helenananaa/ccxt/releases/download/candlescope-4.5.60.1/ccxt-4.5.60-py2.py3-none-any.whl",
   "build_requirements": [
     "setuptools==80.9.0",
     "wheel==0.45.1"

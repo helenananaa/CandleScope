@@ -51,6 +51,8 @@ async function prepareFixture(t, failure = "") {
         fs.writeFileSync(path.join(site, "installed"), "dependency fixture");
       } else if (args[0] === "-c") {
         phase = "imports";
+      } else if (args[0].endsWith("verify_ccxt_runtime.py")) {
+        phase = "ccxt";
       } else if (args[0] === "pip" && args[1] === "freeze") {
         phase = "freeze"; stdout = "fixture==1\\n";
       } else if (args[0].endsWith("prepare-desktop-plugins.py")) {
@@ -92,7 +94,7 @@ test("the preparation entry point promotes installed dependencies and built plug
   }
 });
 
-for (const phase of ["dependencies", "plugins"]) {
+for (const phase of ["dependencies", "ccxt", "plugins"]) {
   test(`the preparation entry point preserves the active runtime when ${phase} fail`, async t => {
     const { cache, result, calls } = await prepareFixture(t, phase);
     assert.equal(result.status, 1, result.stdout + result.stderr);

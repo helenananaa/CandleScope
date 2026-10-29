@@ -18,6 +18,61 @@ async def queued(pool, count):
             await asyncio.sleep(0.005)
 
 
+def test_archive_shares_public_execution_and_settles_each_attempt_once():
+    from app.exchanges.public_admission import PublicDemand, TrafficClass, get_public_admission, public_demand
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitDeferred, RateLimitRule
+
+    async def run():
+        pool, cfg = ProxyPool(), config(["http://localhost:31999"])
+        scheduler = get_public_admission()
+        scheduler.max_in_flight = 1
+        rest = RateLimitRule("rest", "binance:ip", 10, 1)
+        permit = await scheduler.acquire([rest], HistoricalRequest("binance", "spot", "/klines", ""))
+        with public_demand(PublicDemand(TrafficClass.BACKGROUND, defer=True)):
+            with pytest.raises(RateLimitDeferred, match="execution_capacity"):
+                await pool.acquire_archive(cfg, "binance", "cdn", exclude_urls=set())
+        assert not pool._archive_leases and not any(pool._active.values())
+        permit.finish(status_code=200)
+        lease = await pool.acquire_archive(cfg, "binance", "cdn", exclude_urls=set())
+        assert lease.public_permit.scheduler is scheduler
+        assert scheduler.snapshot()["in_flight"] == 1
+        pool.finish_archive(lease, elapsed=1, received_bytes=20, status=200)
+        pool.finish_archive(lease, elapsed=1, received_bytes=20, status=200)
+        snapshot = scheduler.snapshot()
+        assert snapshot["counts"]["attempts"] == snapshot["counts"]["completed"] == 2
+        assert snapshot["in_flight"] == 0
+        assert pool.archive_traffic(lease.route.url)["payload_bytes_total"] == 20
+        assert snapshot["recent"][-1]["buckets"] == ["archive:cdn:egress=exit-0"]
+    asyncio.run(run())
+
+
+def test_archive_admission_deferral_is_not_negative_cached_or_probe_failure(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app.data_engine.backfill.config import BackfillConfig
+    from app.data_engine.backfill.source_router import HistoricalSourceRouter
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule
+    from app.exchanges.public_admission import get_public_admission
+
+    async def run():
+        router = HistoricalSourceRouter(BackfillConfig(history_archive_cache_dir=str(tmp_path)))
+        error = get_public_admission()._deferred(RateLimitRule("cdn", "archive:cdn", 1, 1),
+            HistoricalRequest("binance", "archive", "/object", ""), "execution_capacity")
+        async def deferred(*args):
+            raise error
+        task = asyncio.create_task(deferred())
+        with pytest.raises(type(error)):
+            await task
+        router._remember_completed_failure("object", task)
+        assert not router._failed_cache
+        provider = SimpleNamespace(id="fixture", capabilities=lambda _: SimpleNamespace(
+            probe_symbol="BTCUSDT", probe_market_type="spot", intervals=("1m",)),
+            plan_objects=lambda **_: [], resolve_objects=deferred)
+        with pytest.raises(type(error)):
+            await router._probe_provider("binance", provider)
+        assert not router._probe_retry_at and not router._disabled_providers
+    asyncio.run(run())
+
+
 def test_priority_queue_reserves_rest_and_is_bounded():
     async def run():
         pool, cfg = ProxyPool(), config(["http://localhost:32001"])

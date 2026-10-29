@@ -46,6 +46,7 @@
         "to": "backend",
         "filter": [
           "app/**/*",
+          "ccxt-fork.lock.json",
           "requirements.txt"
         ]
       },

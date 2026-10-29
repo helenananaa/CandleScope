@@ -28,7 +28,8 @@ def main() -> int:
         "test_transport_http_rate_limit_metadata.py", "test_pyne_removal.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
-    return pytest.main(["-q", *files, *sys.argv[1:]])
+    return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",
+                        "-p", "pytest_timeout", *files, *sys.argv[1:]])
 
 
 if __name__ == "__main__":

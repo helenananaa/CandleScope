@@ -1,4 +1,4 @@
-"""Generic CCXT exchange plugins backed by unified REST and Pro methods."""
+"""Reusable CCXT client pools, catalog adapters and Pro profiles."""
 
 from __future__ import annotations
 
@@ -19,8 +19,6 @@ import ccxt.pro as ccxtpro
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
-    DataSource,
-    RawMessage,
     StreamDescriptor,
     StreamType,
     TransportRequest,
@@ -32,25 +30,20 @@ from app.exchanges.catalog_worker import (
 )
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
 from app.exchanges.pagination import ReverseTimePaginationPolicy
-from app.exchanges.plugin import BuiltinExchangePlugin
 from app.exchanges.public_admission import (
     PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
 )
-from app.exchanges.rate_limits import RateLimitAdmission, RateLimitDeferred, RateLimitPolicy
+from app.exchanges.rate_limits import RateLimitAdmission, RateLimitDeferred
 
 from .admission import PublicCcxtAdmissionMixin, bind_public_client
 from .catalog import (
     CcxtCatalogEntry,
     assert_supported_ccxt_version,
-    build_ccxt_capabilities,
-    get_ccxt_catalog,
     market_matches_selection,
     market_selection_parts,
 )
 from .unified import (
-    CcxtUnifiedNormalizer,
     CcxtUnifiedProjector,
-    make_unified_payload,
 )
 from .markets import get_shared_ccxt_market_tables
 from .runtime import close_ccxt_exchange
@@ -820,299 +813,8 @@ class CcxtUnifiedProfile:
         )
 
 
-class CcxtUnifiedPlugin(BuiltinExchangePlugin):
-    """One registry plugin generated from a pinned CCXT exchange class."""
-
-    manages_physical_admission = True
-
-    def __init__(self, entry: CcxtCatalogEntry) -> None:
-        self.entry = entry
-        capabilities = build_ccxt_capabilities(entry)
-        adapter = CcxtUnifiedAdapter(entry, capabilities)
-        delay = max(0.001, entry.rate_limit_ms / 1000.0)
-        super().__init__(
-            adapter,
-            protocol=CcxtUnifiedProtocol(),
-            normalizer_factory=lambda _config, descriptor: CcxtUnifiedNormalizer(
-                descriptor,
-            ),
-            symbol_normalizer=CcxtSymbolNormalizer(),
-            rate_limit_policy_factory=lambda _config: RateLimitPolicy(
-                default_concurrency=1,
-                default_delay_seconds=delay,
-                default_retry_429_backoff_seconds=max(5.0, delay * 10),
-            ),
-            pagination_policy_factory=lambda _config: CcxtHistoricalPaginationPolicy(),
-            price_stream_type_factory=lambda _market_type: StreamType.TICKER,
-        )
-        self._rest_book_revision = 0
-        self._rest_pools: dict[int, tuple[IngestionConfig, _RestExchangePool]] = {}
-        self._rest_pools_closing: set[int] = set()
-
-    def _rest_pool(self, config: IngestionConfig) -> _RestExchangePool:
-        key = id(config)
-        if key in self._rest_pools_closing:
-            raise RuntimeError("CCXT REST transport is closing")
-        current = self._rest_pools.get(key)
-        if current is not None and current[0] is config:
-            return current[1]
-        pool = _RestExchangePool(self.entry, config)
-        self._rest_pools[key] = (config, pool)
-        return pool
-
-    async def close_history_transport(self, config: IngestionConfig) -> None:
-        """Close only the REST clients owned by one transport configuration."""
-
-        current = self._rest_pools.get(id(config))
-        if current is None or current[0] is not config:
-            return
-        key = id(config)
-        self._rest_pools_closing.add(key)
-        self._rest_pools.pop(key, None)
-        try:
-            await current[1].close()
-        finally:
-            self._rest_pools_closing.discard(key)
-
-    def history_transport_snapshot(
-        self,
-        config: IngestionConfig,
-    ) -> dict[str, Any] | None:
-        # Every pinned CCXT ID registers a plugin.  Report only the venues this
-        # transport actually used so diagnostics do not list hundreds of
-        # empty pools.
-        current = self._rest_pools.get(id(config))
-        if current is None or current[0] is not config:
-            return None
-        return current[1].snapshot()
-
-    def supports_provider_stream(self, descriptor: StreamDescriptor) -> bool:
-        if not self.entry.pro:
-            return False
-        try:
-            profile = CcxtUnifiedProfile(self.entry, descriptor.market_type)
-        except ValueError:
-            return False
-        return profile.supports(descriptor)
-
-    @staticmethod
-    def provider_stream_enabled(
-        config: IngestionConfig,
-        descriptor: StreamDescriptor,
-    ) -> bool:
-        del descriptor
-        return bool(getattr(config, "ccxt_unified_stream_enabled", True))
-
-    def create_stream_session(
-        self,
-        config: IngestionConfig,
-        descriptor: StreamDescriptor,
-    ) -> Any | None:
-        if not self.provider_stream_enabled(config, descriptor):
-            return None
-        try:
-            profile = CcxtUnifiedProfile(self.entry, descriptor.market_type)
-        except ValueError:
-            return None
-        if not profile.supports(descriptor):
-            return None
-        from .session import CcxtProviderSession
-
-        return CcxtProviderSession(
-            config=config,
-            descriptor=descriptor,
-            profile=profile,
-        )
-
-    async def fetch_history(self, req: TransportRequest) -> list[RawMessage]:
-        """Compatibility one-shot fetch without leaking a config-scoped pool."""
-
-        config = IngestionConfig()
-        try:
-            return await self.fetch_history_with_config(req, config)
-        finally:
-            await self.close_history_transport(config)
-
-    async def fetch_history_with_config(
-        self,
-        req: TransportRequest,
-        config: IngestionConfig,
-    ) -> list[RawMessage]:
-        descriptor = req.descriptor
-        methods = _GENERIC_STREAM_METHODS.get(descriptor.stream_type)
-        rest_method = _rest_method_for(req, self.entry)
-        if (
-            methods is None
-            or rest_method is None
-            or not self.entry.supports(rest_method)
-        ):
-            raise ValueError(
-                f"{self.id} does not support CCXT REST {descriptor.stream_type.value}",
-            )
-        selection = resolve_market_selection(self.entry, descriptor.market_type)
-        if descriptor.stream_type in {
-            StreamType.MARK_PRICE,
-            StreamType.INDEX_PRICE,
-            StreamType.FUNDING_RATE,
-            StreamType.OPEN_INTEREST,
-            StreamType.LIQUIDATION,
-            StreamType.PREMIUM_INDEX,
-        } and market_selection_parts(selection)[0] not in {"swap", "future"}:
-            raise ValueError(
-                f"{self.id} derivatives stream requires a contract market",
-            )
-        pool = self._rest_pool(config)
-        async with pool.request(selection) as exchange:
-            symbol = await pool.resolve_symbol(
-                selection,
-                exchange,
-                descriptor,
-                market_type=selection,
-            )
-            rows: list[dict[str, Any]] = []
-            if descriptor.stream_type == StreamType.KLINE:
-                limit = min(max(1, int(req.limit or 1)), self.entry.history_limit)
-                values = await exchange.fetch_ohlcv(
-                    symbol,
-                    timeframe=descriptor.interval,
-                    since=req.start_ms,
-                    limit=limit,
-                )
-                from app.data_engine.interval_policy import parse_interval_spec
-                spec = parse_interval_spec(descriptor.interval)
-                if spec is None:
-                    raise ValueError("native_bar_basis_unknown")
-                now_ms = int(time.time() * 1000)
-                rows = [
-                    make_unified_payload(
-                        "kline",
-                        list(row[:6]),
-                        is_closed=spec.next_ms(int(row[0])) <= now_ms,
-                    )
-                    for row in values
-                    if isinstance(row, (list, tuple))
-                    and len(row) >= 6
-                    and (req.end_ms is None or int(row[0]) <= req.end_ms)
-                ]
-            elif descriptor.stream_type == StreamType.TRADE:
-                values = await exchange.fetch_trades(
-                    symbol,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
-                )
-                rows = [
-                    make_unified_payload("trade", dict(value))
-                    for value in values
-                    if isinstance(value, dict)
-                    and (
-                        req.end_ms is None
-                        or _timestamp(value.get("timestamp")) is None
-                        or int(value["timestamp"]) <= req.end_ms
-                    )
-                ]
-            elif descriptor.stream_type == StreamType.DEPTH:
-                value = await exchange.fetch_order_book(
-                    symbol,
-                )
-                self._rest_book_revision += 1
-                rows = [
-                    make_unified_payload(
-                        "order_book",
-                        dict(value),
-                        local_revision=self._rest_book_revision,
-                    )
-                ]
-            elif descriptor.stream_type in {StreamType.TICKER, StreamType.MINI_TICKER}:
-                value = await exchange.fetch_ticker(symbol)
-                rows = [make_unified_payload("ticker", dict(value))]
-            elif descriptor.stream_type in {
-                StreamType.MARK_PRICE,
-                StreamType.INDEX_PRICE,
-            }:
-                value = await exchange.fetch_mark_price(symbol)
-                rows = [make_unified_payload("derivatives_summary", dict(value))]
-            elif descriptor.stream_type == StreamType.FUNDING_RATE:
-                if req.history or req.start_ms is not None or req.end_ms is not None:
-                    values = await exchange.fetch_funding_rate_history(
-                        symbol,
-                        since=req.start_ms,
-                        limit=max(1, int(req.limit or 1)),
-                    )
-                else:
-                    values = [await exchange.fetch_funding_rate(symbol)]
-                rows = [
-                    make_unified_payload("funding_rate", dict(value))
-                    for value in values
-                    if isinstance(value, dict)
-                ]
-            elif descriptor.stream_type == StreamType.OPEN_INTEREST:
-                if (
-                    req.history or req.start_ms is not None or req.end_ms is not None
-                ) and self.entry.supports("fetchOpenInterestHistory"):
-                    values = await exchange.fetch_open_interest_history(
-                        symbol,
-                        timeframe=descriptor.interval,
-                        since=req.start_ms,
-                        limit=max(1, int(req.limit or 1)),
-                    )
-                else:
-                    values = [await exchange.fetch_open_interest(symbol)]
-                rows = [
-                    make_unified_payload("open_interest", dict(value))
-                    for value in values
-                    if isinstance(value, dict)
-                ]
-            elif descriptor.stream_type == StreamType.LIQUIDATION:
-                values = await exchange.fetch_liquidations(
-                    symbol,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
-                )
-                rows = [
-                    make_unified_payload("liquidation", dict(value))
-                    for value in values
-                    if isinstance(value, dict)
-                ]
-            elif descriptor.stream_type == StreamType.PREMIUM_INDEX:
-                values = await exchange.fetch_premium_index_ohlcv(
-                    symbol,
-                    timeframe=descriptor.interval,
-                    since=req.start_ms,
-                    limit=max(1, int(req.limit or 1)),
-                )
-                rows = [
-                    make_unified_payload("premium_index", list(value[:6]))
-                    for value in values
-                    if isinstance(value, (list, tuple)) and len(value) >= 6
-                ]
-            received = int(time.time() * 1000)
-            return [
-                RawMessage(
-                    payload=row,
-                    source=DataSource.HTTP,
-                    stream_type=descriptor.stream_type,
-                    received_at_ms=received,
-                    endpoint=f"ccxt+rest://{self.id}",
-                    http_status=200,
-                    request_limit=req.limit,
-                )
-                for row in rows
-            ]
 
 
-def register_ccxt_plugins(registry: Any) -> int:
-    """Register every pinned CCXT ID not owned by a stricter plugin."""
-
-    registered = 0
-    for entry in get_ccxt_catalog():
-        if registry.has(entry.exchange_id):
-            continue
-        registry.register(
-            CcxtUnifiedPlugin(entry),
-            source=f"builtin:ccxt:{entry.exchange_id}",
-        )
-        registered += 1
-    return registered
 
 
 def resolve_ccxt_symbol(
@@ -1404,3 +1106,14 @@ def _price_tick_size(exchange: Any, market: dict[str, Any]) -> str:
     if not tick.is_finite() or tick <= 0:
         return ""
     return format(tick, "f")
+
+
+def CcxtUnifiedPlugin(entry):
+    """Deprecated factory for a route binding, without a per-venue provider."""
+    from .provider import CcxtProvider
+    return CcxtProvider((entry,)).bind(entry.exchange_id)
+
+
+def register_ccxt_plugins(registry):
+    from .provider import CcxtProvider
+    return registry.register_provider(CcxtProvider())

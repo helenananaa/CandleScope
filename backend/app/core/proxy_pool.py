@@ -123,6 +123,7 @@ class ProxyArchiveLease:
     source_id: str = ""
     object_key: str = ""
     priority: str = "background"
+    public_permit: Any = field(default=None, compare=False, repr=False)
 
 
 @dataclass(slots=True)
@@ -198,6 +199,7 @@ class _HttpState:
         self.cooldowns = {}
         self.traffic = OrderedDict()
         self.waiters = OrderedDict()
+        self.public_waiters = {}
         # Conservative shared ceilings, independent of per-router prefetch limits.
         self.global_limit = 4
         self.host_limit = 2
@@ -494,85 +496,119 @@ class ProxyPool:
         if route:
             self._active[route.url] = max(0, self._active.get(route.url, 0) - 1)
 
+    @_http_locked
+    def _archive_choice(self, config, exchange, host, exclude_urls, priority, non_pool_proxy, *, bound=None):
+        if not getattr(config, "archive_downloads_enabled", True):
+            raise ValueError("archive downloads disabled")
+        available = self.routes(config, exchange) if config.proxy_mode == "pool" else [
+            ProxyRoute("non-pool", "non-pool", non_pool_proxy or "", "non-pool", 5)
+        ]
+        routes = [r for r in available if r.url not in exclude_urls and r.max_concurrency > 1
+                  and (bound is None or r == bound)]
+        if not routes:
+            raise ValueError("no archive route with foreground capacity reserved")
+        now = time.monotonic()
+        for key, until in tuple(self._archive_cooldowns.items()):
+            if until <= now:
+                self._archive_cooldowns.pop(key, None)
+        leases = tuple(self._archive_leases.values())
+        global_limit = self._http.global_limit - (priority == "background")
+        busy = len(leases) >= global_limit or sum(l.host == host for l in leases) >= self._http.host_limit
+        choices = []
+        for index, route in enumerate(routes):
+            health = self.health(route, exchange, f"archive:{host}")
+            group_active = sum(l.route.egress_group == route.egress_group for l in leases)
+            active = self._active.get(route.url, 0)
+            group_limit = min(self._http.egress_limit, *(r.max_concurrency - 1 for r in available
+                              if r.egress_group == route.egress_group and r.max_concurrency > 1))
+            wait = max(0.0, health.retry_at - now, self._archive_cooldowns.get((host, route.egress_group), 0.0) - now)
+            if busy or active >= route.max_concurrency - 1 or group_active >= group_limit:
+                wait = max(wait, 0.05)
+            traffic = self._archive_traffic.get(route.url)
+            speed = traffic.bytes_per_second if traffic else 0
+            service = 1024 ** 2 / speed if speed > 0 else health.latency_ms / 1000
+            delay = (active + 1) * service + health.failures * 0.25
+            score = ((wait > 0, wait, index) if config.proxy_strategy == "failover"
+                     else (wait > 0, wait + delay, index))
+            choices.append((score, wait, route))
+        _, wait, route = min(choices, key=lambda choice: choice[0])
+        return wait, route
+
+    @_http_locked
+    def _release_archive_resource(self, lease):
+        if self._archive_leases.pop(lease.token, None) is not None:
+            self.end(lease.route)
+            for loop, manager in tuple(self._http.public_waiters.values()):
+                if not loop.is_closed():
+                    loop.call_soon_threadsafe(manager.notify_change)
+
     async def acquire_archive(
         self, config: Any, exchange: str, host: str, *, exclude_urls: set[str],
         source_id: str = "", object_key: str = "", priority: str = "background",
         non_pool_proxy: str | None = None,
     ) -> ProxyArchiveLease | None:
-        """Bounded priority queue, shared across replay workers and backfill loops.
+        """Use public demand/permit admission; this pool only supplies resources.
 
-        Archive streams never occupy the last route slot: REST can enter while
-        they drain. A route configured with one slot remains REST-only. Existing
-        streams are not preempted. CDN cooldowns never poison REST/WS health.
+        Cross-loop resource ceilings, last REST slot and shared CDN cooldowns
+        remain process-owned. No independent archive priority queue or token
+        debit runs beside the public scheduler.
         """
+        from app.exchanges.public_admission import PublicDemand, TrafficClass, current_demand, get_public_admission
+        from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule, RateLimitDeferred
         if priority not in {"foreground", "background"}:
             raise ValueError("invalid archive request priority")
         token = uuid.uuid4().hex
-        initial_mode = getattr(config, "proxy_mode", "system")
+        initial_mode = config.proxy_mode
+        scheduler = get_public_admission()
+        parent = current_demand()
+        demand = PublicDemand(
+            TrafficClass.INTERACTIVE if priority == "foreground" else TrafficClass.BACKGROUND,
+            owner=parent.owner, purpose="archive:" + source_id, deadline=parent.deadline,
+            defer=True, alive=parent.alive,
+        )
+        # Preserve caller urgency without turning an ordinary archive's default
+        # NORMAL context into a foreground demand.
+        if parent.priority() < TrafficClass.NORMAL:
+            demand.inherit(parent)
+        if parent.defer:
+            demand = parent  # Retain the business chunk's age across retries.
         with self._http.lock:
             if len(self._http.waiters) >= self._http.queue_limit:
                 raise ValueError("archive admission queue full")
             self._http.waiters[token] = (priority, host)
+            self._http.public_waiters[token] = (asyncio.get_running_loop(), scheduler.manager)
         try:
             while True:
-                with self._http.lock:
-                    if not getattr(config, "archive_downloads_enabled", True):
-                        raise ValueError("archive downloads disabled")
-                    if getattr(config, "proxy_mode", "system") != initial_mode:
-                        return None  # Caller resolves the new mode before retrying.
-                    available_routes = self.routes(config, exchange) if initial_mode == "pool" else [
-                        ProxyRoute("non-pool", "non-pool", non_pool_proxy or "", "non-pool", 5)
-                    ]
-                    routes = [r for r in available_routes if r.url not in exclude_urls and r.max_concurrency > 1]
-                    if not routes:
-                        raise ValueError("no archive route with foreground capacity reserved")
-                    now = time.monotonic()
-                    for key, until in tuple(self._archive_cooldowns.items()):
-                        if until <= now:
-                            self._archive_cooldowns.pop(key, None)
-                    leases = tuple(self._archive_leases.values())
-                    # Reserve one global slot for interactive replay, too.
-                    global_limit = self._http.global_limit - (priority == "background")
-                    busy = (len(leases) >= global_limit or
-                            sum(l.host == host for l in leases) >= self._http.host_limit)
-                    # Order only competing host requests; a cooled CDN must not
-                    # head-of-line block a different source. Priority is FIFO.
-                    competing = [(p != "foreground", i, t) for i, (t, (p, h)) in
-                                 enumerate(self._http.waiters.items()) if h == host]
-                    busy |= min(competing)[2] != token
-                    choices = []
-                    for index, route in enumerate(routes):
-                        health = self.health(route, exchange, f"archive:{host}")
-                        key = (host, route.egress_group)
-                        group_active = sum(l.route.egress_group == route.egress_group for l in leases)
-                        active = self._active.get(route.url, 0)
-                        group_limit = min(self._http.egress_limit, *(r.max_concurrency - 1 for r in available_routes
-                                          if r.egress_group == route.egress_group and r.max_concurrency > 1))
-                        archive_active = sum(l.route.url == route.url for l in leases)
-                        wait = max(0.0, health.retry_at - now, self._archive_cooldowns.get(key, 0.0) - now)
-                        if (busy or active >= route.max_concurrency - 1 or
-                                archive_active >= route.max_concurrency - 1 or group_active >= group_limit):
-                            wait = max(wait, 0.05)
-                        traffic = self._archive_traffic.get(route.url)
-                        # Compare a common 1 MiB workload, not raw durations of
-                        # differently sized objects. Sidecars do not train speed.
-                        speed = traffic.bytes_per_second if traffic else 0
-                        service = 1024 ** 2 / speed if speed > 0 else health.latency_ms / 1000
-                        delay = (active + 1) * service + health.failures * 0.25
-                        score = ((wait > 0, wait, index)
-                                 if getattr(config, "proxy_strategy", "failover") == "failover"
-                                 else (wait > 0, wait + delay, index))
-                        choices.append((score, wait, route))
-                    _, wait, route = min(choices, key=lambda choice: choice[0])
-                    if not wait:
-                        self.begin(route, exchange, kind=f"archive:{host}")
-                        lease = ProxyArchiveLease(token, route, exchange, host, source_id, object_key, priority)
-                        self._archive_leases[token] = lease
-                        return lease
-                await asyncio.sleep(min(wait, 0.1))
+                if config.proxy_mode != initial_mode:
+                    return None
+                _, route = self._archive_choice(config, exchange, host, exclude_urls, priority, non_pool_proxy)
+                # A declared conservative CDN fallback, never an exchange API
+                # request-weight bucket. Host + actual exit is the quota identity.
+                rule = RateLimitRule("archive_cdn", f"archive:{host}:egress={route.egress_group}",
+                                     8, 1.0, max_concurrency=self._http.host_limit, cooldown_seconds=30.0)
+                request = HistoricalRequest(exchange, "archive", f"archive://{host}", "",
+                                            egress_group=route.egress_group)
+                resource = _ArchivePermitResource(self, config, exchange, host, exclude_urls,
+                    priority, non_pool_proxy, route, token, source_id, object_key, scheduler, rule, request)
+                scheduler.forget(demand)
+                try:
+                    permit = await scheduler.acquire([rule], request, demand=demand, resource=resource)
+                except RateLimitDeferred as exc:
+                    if parent.defer:
+                        # Business queues own delayed work; no worker or route
+                        # lease remains occupied while they wait.
+                        parent.bypasses = max(parent.bypasses, demand.bypasses)
+                        raise
+                    scheduler.protect(demand, rule.bucket_key, rules=[rule], request=request, resource=resource)
+                    await scheduler.manager.wait_for_change(exc.retry_after_seconds)
+                    continue
+                lease = replace(permit.resource_lease, public_permit=permit)
+                return lease
         finally:
+            scheduler.forget(demand)
             with self._http.lock:
                 self._http.waiters.pop(token, None)
+                self._http.public_waiters.pop(token, None)
 
     @_http_locked
     def finish_archive(
@@ -580,9 +616,13 @@ class ProxyPool:
         status: int | None = None, retry_after: float = 0.0,
         failed: bool = False, cancelled: bool = False,
     ) -> None:
-        if self._archive_leases.pop(lease.token, None) is None:
+        if lease.token not in self._archive_leases:
             return
-        self.end(lease.route)
+        if lease.public_permit is not None:
+            lease.public_permit.finish(status_code=status, retry_after=retry_after or None,
+                                       response_unknown=cancelled or status is None)
+        else:
+            self._release_archive_resource(lease)
         traffic = self._archive_traffic.setdefault(lease.route.url, _ArchiveTraffic())
         self._archive_traffic.move_to_end(lease.route.url)
         while len(self._archive_traffic) > 128:
@@ -719,6 +759,40 @@ class ProxyPool:
                               "route_id": lease.route.id, "egress_group": lease.route.egress_group}
                              for lease in self._archive_leases.values()]}
 
+
+
+class _ArchivePermitResource:
+    """Atomic non-waiting route reservation used by PublicAdmission."""
+    def __init__(self, pool, config, exchange, host, excluded, priority, proxy, route,
+                 token, source, obj, scheduler, rule, request):
+        self.pool, self.config, self.exchange, self.host = pool, config, exchange, host
+        self.excluded, self.priority, self.proxy, self.route = excluded, priority, proxy, route
+        self.token, self.source, self.obj = token, source, obj
+        self.scheduler, self.rule, self.request = scheduler, rule, request
+        self.keys = ("archive:execution", f"archive:host:{host}", f"archive:exit:{route.egress_group}")
+
+    def available(self):
+        try:
+            wait, _ = self.pool._archive_choice(self.config, self.exchange, self.host,
+                self.excluded, self.priority, self.proxy, bound=self.route)
+            return wait == 0
+        except ValueError:
+            return False  # Disabled or replaced routes cannot protect capacity.
+
+    def reserve(self):
+        with self.pool._http.lock:
+            wait, _ = self.pool._archive_choice(self.config, self.exchange, self.host,
+                self.excluded, self.priority, self.proxy, bound=self.route)
+            if wait:
+                raise self.scheduler._deferred(self.rule, self.request, "archive_resources", wait)
+            self.pool.begin(self.route, self.exchange, kind=f"archive:{self.host}")
+            lease = ProxyArchiveLease(self.token, self.route, self.exchange, self.host,
+                                      self.source, self.obj, self.priority)
+            self.pool._archive_leases[self.token] = lease
+            return lease
+
+    def release(self, lease):
+        self.pool._release_archive_resource(lease)
 
 
 _POOLS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()

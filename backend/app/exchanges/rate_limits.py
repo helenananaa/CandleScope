@@ -829,6 +829,10 @@ class RateLimitManager:
 
     @staticmethod
     def _circuit_key_for_bucket(bucket_key: str) -> str:
+        # CDN bans are scoped to a host and exit, independent of exchange API
+        # bans. A 418 from one archive must not stop unrelated archive hosts.
+        if bucket_key.startswith("archive:"):
+            return bucket_key
         exchange = str(bucket_key or "unknown").split(":", 1)[0]
         suffix = ":egress=" + bucket_key.split(":egress=", 1)[1] if ":egress=" in bucket_key else ""
         return f"{exchange}:ip{suffix}"

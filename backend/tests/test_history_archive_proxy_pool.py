@@ -434,6 +434,9 @@ def test_aliases_share_host_capacity_and_active_timeout_releases_lease():
         assert [lease.route.id, second.route.id] == ["route-0", "route-2"]
         pool.finish_archive(second, elapsed=0, received_bytes=0, cancelled=True)
         pool.finish_archive(lease, elapsed=0, received_bytes=0, cancelled=True)
+        # Unknown completions spend their probe quota. Wait for its conservative
+        # refill so the following timeout exercises an active body, not admission.
+        await asyncio.sleep(0.15)
         from app.data_engine.ingestion.archive_transport import request_archive
         async def hangs(proxy, observe):
             observe(5)

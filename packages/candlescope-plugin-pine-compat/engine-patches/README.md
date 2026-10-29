@@ -1,5 +1,12 @@
 # Renko event-series candidate
 
+The current desktop/release recipe uses `host-contracts-v1.patch`, which combines
+the two historical candidates below and versions the downstream engine as
+`0.3.2+cs.1`. The originals remain as historical evidence. The combined patch
+applies directly to `28ecae3c645e9269e2099d27cc9abbb1f52ee9ea`, without applying
+either original first. Its exact digest is in `frontend/scripts/desktop-plugin-sources.json`.
+Native release qualification is run by `scripts/qualify_host_contracts.py`.
+
 `renko-event-rows-v1.patch` applies to the official Pine runtime source at
 `28ecae3c645e9269e2099d27cc9abbb1f52ee9ea` (v0.3.2). It preserves every
 confirmed brick in a timestamp cohort, uses list order for synthetic history,

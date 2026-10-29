@@ -23,6 +23,7 @@ from app.exchanges.archive import (
 )
 
 from app.exchanges.archive_sources import ArchiveSourceRegistry
+from app.exchanges.rate_limits import RateLimitDeferred
 
 from .archive_cache import (
     AiohttpArchiveHttpClient,
@@ -235,7 +236,7 @@ class HistoricalSourceRouter:
             self._metrics.inc("archive_capability_probe_success")
             self._probe_passed.add(provider.id)
             return {"enabled": True, "provider_id": provider.id, "sample_rows": len(value.bars)}
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, RateLimitDeferred):
             raise
         except Exception as exc:
             if isinstance(exc, ArchiveCompatibilityError):
@@ -334,6 +335,8 @@ class HistoricalSourceRouter:
                 try:
                     resolved = warm + (await provider.resolve_objects(cold, self._http_for(exchange))
                                        if cold else [])
+                except RateLimitDeferred:
+                    raise
                 except ArchiveCompatibilityError as exc:
                     self._disable_provider(exchange, exc)
                     continue
@@ -802,7 +805,7 @@ class HistoricalSourceRouter:
             error = completed.exception()
         except (asyncio.CancelledError, asyncio.InvalidStateError):
             return
-        if error is None:
+        if error is None or isinstance(error, RateLimitDeferred):
             return
         self._failed_cache.pop(key, None)
         self._failed_cache[key] = (time.monotonic(), str(error)[:500])
@@ -837,6 +840,9 @@ class HistoricalSourceRouter:
                         await self._cache.invalidate(ref.object_key)
                         raise
                     parse_elapsed_ms = int((time.monotonic() - parse_started) * 1_000)
+            except RateLimitDeferred:
+                self._metrics.inc("archive_admission_deferred")
+                raise
             except BaseException:
                 self._metrics.inc("archive_object_errors")
                 self._metrics.mark("last_error_at")

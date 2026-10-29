@@ -14,9 +14,10 @@ It does not replace them with a single FIFO.
   WS startup metadata has recovery priority. Ordinary catalog refresh is
   background work, including the inline fallback when the catalog worker is
   unavailable.
-- Background work may borrow idle capacity. Under sustained critical load it
-  can be paused indefinitely; no minimum throughput or anti-starvation guarantee
-  is promised. Already transmitted work is not preempted or refunded.
+- Background work may borrow idle capacity. After eight competing grants, an
+  executable waiting demand receives priority by original enqueue order. Its age
+  survives business deferral/retry. This bounds bypasses, not elapsed time when
+  a source is in cooldown or unavailable. Transmitted work is not preempted or refunded.
 - A request retains its exchange, product, symbol and data semantics. Only a
   compatible exit can change. Healthy WS connections are not rebalanced.
 
@@ -64,6 +65,7 @@ child. Multiple independent backend processes or other programs are not covered.
 | Default CCXT REST and strict Binance/OKX profiles | Hook `fetch`, once per physical HTTP attempt, including `fetch2` retries; task-local `on_rest_response` | Known Binance/OKX endpoints reuse native rules; other endpoint costs/windows remain partial |
 | CCXT market bootstrap | Existing rail cache/singleflight; loader exit is charged; live dependency priority inheritance | Catalog worker and in-process runtime do not share parsed market tables across process boundaries |
 | Catalog worker | Parent-owned IPC permits; complete network configuration preserved | One managed child; no distributed quota service |
+| Archive resolver, probe, checksum and ZIP | Same public demand/permit, atomic route resource reservation and CDN quota; idempotent completion | Host/exit CDN buckets are independent of exchange API weight; physical HTTP ceilings span worker loops |
 | Native WS | Gate before each `websockets.connect`; wrap application control sends | Automatic native pong frames run below the wrapper; one frame/s is reserved conservatively |
 | CCXT WS | Gate each physical client `open` before its network timeout; wrap physical send/ping/pong | Pinned aiohttp client contract in CCXT 4.5.60; unqualified venue protocol rules remain partial |
 
@@ -127,12 +129,21 @@ metadata/WS feature-flag UI in this change.
 
 ## Archive integration (#124)
 
-Archive downloaders can use `public_demand(...)` and `acquire_public(rules,
-request)` with their own CDN/service bucket, scoped to the actual bound exit.
-Supply all applicable constraints, finish exactly once from that attempt's
-response, and honor `RateLimitDeferred`. CDN traffic must not spend a K-line
-request-weight bucket. This change provides the interface; it does not change
-archive storage, import proof, deletion or persistence semantics.
+The production archive downloader now acquires a `PublicPermit` with its bound
+route as an atomic resource reservation. It holds no route while waiting for
+quota. The shared public execution limit also includes archive attempts.
+Process-owned HTTP resources enforce global/host/exit ceilings across loops and
+reserve the last route slot for REST. CDN 418/429 cooldowns cover the same host
+and exit across aliases and venues, without cooling unrelated hosts or REST.
+The declared conservative fallback is eight requests/second per host/exit; this
+is a local safety policy, not a claim about the vendor's published limit.
+
+Deferred business chunks return to their scheduler without negative caching,
+disabling the source, or falling back to REST as if a download failed. Completion
+releases resources exactly once; canceled/unknown attempts do not refund quota.
+Quota and demand ownership still belong to the backend event loop; process-wide
+archive resource limits do not imply a distributed quota service. Storage,
+import proof, deletion and persistence contracts are unchanged.
 
 ## Validation scope
 

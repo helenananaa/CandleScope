@@ -29,6 +29,7 @@ from app.exchanges.ccxt_ext.generic import (
 )
 from app.exchanges.ccxt_ext.primary import OkxCombinedSummaryProfile
 from app.exchanges.ccxt_ext.primary import create_binance_ccxt_plugin
+from app.exchanges.ccxt_ext.provider import CcxtVenueBinding
 from app.exchanges.ccxt_ext.runtime import CcxtRuntimePool, close_ccxt_exchange
 from app.exchanges.ccxt_ext.session import CcxtProviderSession
 from app.exchanges.ccxt_ext.unified import (
@@ -76,15 +77,16 @@ def test_pinned_catalog_registers_all_ids_with_ccxt_primary_venues() -> None:
     registry = bootstrap_default_adapters()
     assert len(registry.list_plugins()) == summary["rest_exchange_ids"] + 1
     assert registry.has("twelvedata")
-    assert registry.get_plugin("binance").__class__.__name__ == "CcxtPrimaryPlugin"
-    assert registry.get_plugin("okx").__class__.__name__ == "CcxtPrimaryPlugin"
+    assert registry.get_plugin("binance").provider is registry.get_plugin("okx").provider
+    assert registry.get_plugin("binance").provider is registry.get_provider("ccxt")
     assert registry.get_plugin("binance").protocol().__class__.__name__ == (
         "CcxtUnifiedProtocol"
     )
     assert "native_transport.retired" in (
         registry.get_plugin("okx").capabilities().protocol_features
     )
-    assert isinstance(registry.get_plugin("bybit"), CcxtUnifiedPlugin)
+    assert isinstance(registry.get_plugin("bybit"), CcxtVenueBinding)
+    assert registry.get_plugin("bybit").provider is registry.get_provider("ccxt")
 
 
 def test_catalog_routes_market_families_and_capabilities_fail_closed() -> None:
@@ -873,7 +875,7 @@ def test_binance_primary_kline_rest_uses_ccxt_implicit_method(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     descriptor = StreamDescriptor(
         "BTCUSDT",
         StreamType.KLINE,
@@ -966,7 +968,7 @@ def test_binance_primary_rest_pool_survives_creator_cancellation(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "BTCUSDT",
@@ -1059,7 +1061,7 @@ def test_binance_primary_rest_pool_drains_borrower_without_replacement_leak(
         create_exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "BTCUSDT",
@@ -1092,7 +1094,7 @@ def test_binance_primary_rest_pool_drains_borrower_without_replacement_leak(
         assert len(await fetch) == 1
         await close
         assert exchange.closed is True
-        assert plugin.history_transport_snapshot(config)["clients"] == 0
+        assert plugin.history_transport_snapshot(config) is None
 
     asyncio.run(run())
 
@@ -1144,7 +1146,7 @@ def test_binance_primary_rest_pool_reloads_stale_symbol_catalog_once(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "BTCUSDT",
@@ -1225,7 +1227,7 @@ def test_binance_primary_rest_pool_untracks_loaded_market_tables(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "BTCUSDT",
@@ -1290,7 +1292,7 @@ def test_binance_primary_rest_pool_releases_borrower_after_repeated_cancel(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "BTCUSDT",
@@ -1346,7 +1348,7 @@ def test_binance_primary_rest_pool_tracks_reload_after_creator_cancel(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     request = TransportRequest(
         StreamDescriptor(
             "NEWUSDT",
@@ -1421,7 +1423,7 @@ def test_binance_primary_full_depth_rest_preserves_snapshot_limit(
         lambda *_args, **_kwargs: exchange,
     )
     plugin = create_binance_ccxt_plugin()
-    config = IngestionConfig(proxy_mode="none")
+    config = IngestionConfig(proxy_mode="none", ccxt_fork_kline_enabled=False)
     descriptor = StreamDescriptor(
         "BTCUSDT",
         StreamType.FULL_DEPTH,

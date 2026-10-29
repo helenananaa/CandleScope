@@ -274,9 +274,9 @@ class IngestionConfig:
             True,
         ),
     )
-    # Opt-in fixed-source CCXT fork for Binance/OKX public market data.
+    # Release-pinned CCXT fork. Explicit false retains the raw-profile rollback.
     ccxt_fork_kline_enabled: bool = field(
-        default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", False),
+        default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", True),
     )
     # Zero disables automatic lossless source-log compaction; heads stay hot.
     source_log_retention_days: int = field(

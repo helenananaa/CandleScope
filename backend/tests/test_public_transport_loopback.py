@@ -40,6 +40,8 @@ def test_default_provider_counts_metadata_and_pages_once_with_exact_route(monkey
         paths = []
         async def handle(request):
             paths.append(request.path)
+            if request.path.endswith("/time"):
+                return web.json_response({"serverTime": 60001})
             if request.path.endswith("exchangeInfo"):
                 symbols = [{"symbol": "BTCUSDT", "status": "TRADING", "baseAsset": "BTC",
                     "quoteAsset": "USDT", "baseAssetPrecision": 8, "quotePrecision": 8,
@@ -60,7 +62,12 @@ def test_default_provider_counts_metadata_and_pages_once_with_exact_route(monkey
             descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="1m", market_type="spot")
             first = await asyncio.wait_for(transport.http_fetch(TransportRequest(descriptor, limit=1)), 10)
             second = await asyncio.wait_for(transport.http_fetch(TransportRequest(descriptor, limit=1)), 10)
-            assert first[0].payload == second[0].payload
+            # Identical candle content is observed twice, retaining distinct
+            # receipts while selecting the same source revision.
+            assert {k: v for k, v in first[0].payload.items() if k != "_source_receipt"} == {
+                k: v for k, v in second[0].payload.items() if k != "_source_receipt"}
+            assert first[0].payload["_source_receipt"]["ref"] == second[0].payload["_source_receipt"]["ref"]
+            assert first[0].payload["_source_receipt"]["observation_id"] != second[0].payload["_source_receipt"]["observation_id"]
             assert paths.count("/api/v3/exchangeInfo") == 1
             assert paths.count("/api/v3/klines") == 2
             snapshot = get_public_admission().snapshot()
