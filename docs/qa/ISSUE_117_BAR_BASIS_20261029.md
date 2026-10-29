@@ -103,9 +103,8 @@ uses a deterministic session fixture; it is not a new live-provider test.
   engine and qualify runtime bundles on supported platforms before claiming a
   general installed-runtime release. It is separate from the Renko candidate.
 - Desktop packaging acceptance is intentionally deferred by the user.
-  No PR was opened in this round because this repository's pull-request
-  workflow automatically builds desktop packages; changes remain in the
-  independent local branch for review.
+  A draft PR was subsequently requested for review. Its automatic desktop
+  packaging CI does not substitute for the deferred manual desktop acceptance.
 - Unknown generic venues, arbitrary local cutover times, subminute anchors and
   session-to-continuous derivation are explicitly unavailable, not silently
   approximated or claimed as universally supported.
