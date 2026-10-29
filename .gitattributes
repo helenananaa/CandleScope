@@ -60,3 +60,4 @@ packages/candlescope-plugin-pine-compat/**/*.py text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.md text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.toml text eol=lf
 packages/candlescope-plugin-pine-compat/**/*.patch text eol=lf
+packages/candlescope-plugin-pine-compat/release/source-probe.*.json text eol=lf

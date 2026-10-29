@@ -51,7 +51,7 @@
   "bridgeProbes": {
     "candlescope-plugin-pine-compat": {
       "path": "packages/candlescope-plugin-pine-compat/release/source-probe.0.4.0.json",
-      "sha256": "sha256:37a9f52a69d2d98227c60ae731fd369c8d40a823e8f96ef1daff9562f98c7a85"
+      "sha256": "sha256:bfcba0f9b8fc8b6b25e2e178a935c2bfbfacae60df9de531257188410bb0e866"
     }
   }
 }
