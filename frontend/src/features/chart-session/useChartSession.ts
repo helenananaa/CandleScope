@@ -31,6 +31,8 @@ import {
 } from "./chartSessionTransition.js";
 import { buildChartDatasetKey } from "./chartDatasetKey.js";
 import { buildRealtimeTrackedIntervals } from "./trackedIntervalsPolicy.js";
+import { useFavoriteIntervals } from "./intervalFavoritesStore.js";
+import { rankWarmIntervals, recordIntervalUse, useIntervalUsage } from "./intervalUsageStore.js";
 import { getVisibleRangeForInterval, saveVisibleRangeForInterval } from "./visibleRangeStorage.js";
 import {
   isLegacyKlineSeriesIdentity,
@@ -67,6 +69,9 @@ export function useChartSession({
   initialSession: configuredInitialSession = null,
   controlledSession = null,
   onSessionChange = null,
+  onSelectionIntent = null,
+  onPreviewSeries = null,
+  onCancelPreview = null,
   visibleRangeScope = null,
 }: UseChartSessionOptions = {}): ChartSessionRuntime {
   const [initialSession] = useState(() => {
@@ -90,6 +95,8 @@ export function useChartSession({
     )
   ));
   const [lastTransition, setLastTransition] = useState<ChartSessionTransition | null>(null);
+  const intervalUsage = useIntervalUsage();
+  const favoriteIntervals = useFavoriteIntervals();
   const transitionIdRef = useRef(0);
   const controlledInterval = canonicalizeIntervalValue(controlledSession?.interval);
   const controlledSessionKey = controlledSession && controlledInterval
@@ -182,7 +189,7 @@ export function useChartSession({
     [baseWsIntervals, interval, webSocketReady],
   );
   const prefetchIntervals = useMemo(
-    () => Array.from(new Set([
+    () => rankWarmIntervals({ available: Array.from(new Set([
       ...nativeIntervals.map((item) => item.value),
       ...savedCustomIntervals.filter((candidate) => (
         canResolveIntervalForSeriesIdentity(
@@ -198,8 +205,9 @@ export function useChartSession({
         nativeIntervalValues,
         seriesIdentity,
       ) ? [interval] : []),
-    ])),
-    [exchange, interval, nativeIntervalValues, nativeIntervals, savedCustomIntervals, seriesIdentity],
+    ])), active: interval, pinned: [...favoriteIntervals, ...customIntervalRecords.filter(item => item.pinned).map(item => item.value)],
+      usage: intervalUsage }),
+    [customIntervalRecords, exchange, favoriteIntervals, interval, intervalUsage, nativeIntervalValues, nativeIntervals, savedCustomIntervals, seriesIdentity],
   );
   const trackedIntervalsRef = useRef(trackedIntervals);
   useEffect(() => {
@@ -256,13 +264,15 @@ export function useChartSession({
       interval: nextSession.interval ?? interval,
     };
     transitionIdRef.current += 1;
-    setLastTransition(createChartSessionTransition({
+    const transition = createChartSessionTransition({
       id: transitionIdRef.current,
       type,
       from,
       to,
-    }));
-  }, [exchange, interval, marketType, seriesIdentity, symbol]);
+    });
+    onSelectionIntent?.(transition);
+    setLastTransition(transition);
+  }, [exchange, interval, marketType, onSelectionIntent, seriesIdentity, symbol]);
 
   useEffect(() => {
     if (!controlledSession || !controlledInterval || !controlledSessionKey) return;
@@ -348,7 +358,7 @@ export function useChartSession({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [saveCurrentVisibleRange]);
 
-  const selectSymbol = useCallback((newSymbolOrObj: SymbolCode | SelectSymbolInput): void => {
+  const resolveSymbolTarget = useCallback((newSymbolOrObj: SymbolCode | SelectSymbolInput): ChartSession => {
     let nextSymbol: SymbolCode;
     let nextMarketType: MarketType;
     let nextExchange: ExchangeId;
@@ -364,14 +374,6 @@ export function useChartSession({
       nextExchange = exchange;
       nextSeriesIdentity = resolveKlineSeriesIdentity(nextExchange);
     }
-    if (
-      nextSymbol === symbol
-      && nextMarketType === marketType
-      && nextExchange === exchange
-      && klineSeriesIdentityKey(nextExchange, nextSeriesIdentity)
-        === klineSeriesIdentityKey(exchange, seriesIdentity)
-    ) return;
-
     const nextInterval = resolveSupportedInterval({
       exchange: nextExchange,
       marketType: nextMarketType,
@@ -382,6 +384,37 @@ export function useChartSession({
       isNativeIntervalSupported,
       seriesIdentity: nextSeriesIdentity,
     });
+
+    return { exchange: nextExchange, marketType: nextMarketType, symbol: nextSymbol, interval: nextInterval, ...nextSeriesIdentity };
+  }, [exchange, exchangeCatalog, interval, marketType, savedCustomIntervals]);
+
+  const previewSymbol = useCallback((input: SymbolCode | SelectSymbolInput): void => {
+    if (!onPreviewSeries || exchangeCatalogStatus !== "ready") return;
+    const target = resolveSymbolTarget(input);
+    if (buildChartSessionKey(target) === sessionKey) return;
+    const native = getNativeIntervals(target.exchange, exchangeCatalog, target.marketType, "history").map(item => item.value);
+    if (native.length) onPreviewSeries(target, native);
+  }, [exchangeCatalog, exchangeCatalogStatus, onPreviewSeries, resolveSymbolTarget, sessionKey]);
+
+  const previewInterval = useCallback((nextInterval: IntervalString): void => {
+    const canonical = canonicalizeIntervalValue(nextInterval);
+    if (!onPreviewSeries || exchangeCatalogStatus !== "ready" || !canonical || canonical === interval
+      || !canResolveIntervalForSeriesIdentity(exchange, canonical, nativeIntervalValues, seriesIdentity)) return;
+    onPreviewSeries({ exchange, marketType, symbol, interval: canonical, ...seriesIdentity }, nativeIntervalValues);
+  }, [exchange, exchangeCatalogStatus, interval, marketType, nativeIntervalValues, onPreviewSeries, seriesIdentity, symbol]);
+  const cancelPreview = useCallback(() => onCancelPreview?.(), [onCancelPreview]);
+
+  const selectSymbol = useCallback((newSymbolOrObj: SymbolCode | SelectSymbolInput): void => {
+    const target = resolveSymbolTarget(newSymbolOrObj);
+    const { symbol: nextSymbol, exchange: nextExchange, marketType: nextMarketType, interval: nextInterval } = target;
+    const nextSeriesIdentity = resolveKlineSeriesIdentity(nextExchange, target);
+    if (
+      nextSymbol === symbol
+      && nextMarketType === marketType
+      && nextExchange === exchange
+      && klineSeriesIdentityKey(nextExchange, nextSeriesIdentity)
+        === klineSeriesIdentityKey(exchange, seriesIdentity)
+    ) return;
 
     updateUserPref("lastSymbol", nextSymbol);
     updateUserPref("lastMarketType", nextMarketType);
@@ -402,12 +435,10 @@ export function useChartSession({
     setInterval(nextInterval);
     setSeriesIdentity(nextSeriesIdentity);
   }, [
+    resolveSymbolTarget,
     exchange,
-    exchangeCatalog,
-    interval,
     marketType,
     publishTransition,
-    savedCustomIntervals,
     seriesIdentity,
     symbol,
   ]);
@@ -435,6 +466,7 @@ export function useChartSession({
     publishTransition(CHART_SESSION_TRANSITION_TYPES.INTERVAL_CHANGE, { interval: canonicalInterval });
     setInterval(canonicalInterval);
     markIntervalUsed(canonicalInterval);
+    recordIntervalUse(canonicalInterval);
     updateUserPref("lastInterval", canonicalInterval);
   }, [exchange, exchangeCatalogStatus, interval, markIntervalUsed, marketType, nativeIntervalValues, publishTransition, saveCurrentVisibleRange, seriesIdentity, showIntervalNotice]);
 
@@ -641,6 +673,9 @@ export function useChartSession({
     },
     actions: {
       selectSymbol,
+      previewSymbol,
+      previewInterval,
+      cancelPreview,
       selectInterval,
       selectMarketType,
       refreshDataset,

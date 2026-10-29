@@ -63,6 +63,7 @@ import {
   shouldEnableWorkspaceIntervalPrefetch,
 } from "../features/market-data/useChartInitialLoad.js";
 import { useMarketDataWorkspaceResources } from "../features/market-data/marketDataWorkspaceContext.js";
+import { ChartMarketController } from "../features/market-data/manager/chartMarketController.js";
 import type { ForegroundPreloadGate } from "../features/market-data/foregroundPreloadGate.js";
 import { useAdvancedMarketDataRuntime } from "../features/advanced-market-data/useAdvancedMarketDataRuntime.js";
 import { useDrawingRuntime } from "../features/drawings/useDrawingRuntime.js";
@@ -239,6 +240,17 @@ function LiveChartCell({
   recordMultiChartCellRender(cell.id);
   useLocale();
   const marketWorkspaceResources = useMarketDataWorkspaceResources();
+  const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
+    data: marketWorkspaceResources.dataManager, owner: `chart:${cell.id}`,
+  }) : null, [cell.id, marketWorkspaceResources]);
+  useEffect(() => () => marketController?.releaseAll(), [marketController]);
+  const handleSelectionIntent = useCallback((transition: import("../features/chart-session/chartSessionTypes.js").ChartSessionTransition) => {
+    marketController?.activate(transition.to);
+  }, [marketController]);
+  const handlePreviewSeries = useCallback((series: ChartSession, nativeIntervals: readonly string[]) => {
+    marketController?.preview(series, nativeIntervals);
+  }, [marketController]);
+  const handleCancelPreview = useCallback(() => marketController?.cancelPreview(), [marketController]);
   const linkGroupName = linkGroup ? chartLinkGroupDisplayName(linkGroup) : null;
   const sectionRef = useRef<HTMLElement | null>(null);
   const [density, setDensity] = useState<WorkspaceCellDensity>("full");
@@ -334,6 +346,9 @@ function LiveChartCell({
     initialSession: cell.session,
     controlledSession: cell.session,
     onSessionChange: handleSessionChange,
+    onSelectionIntent: handleSelectionIntent,
+    onPreviewSeries: handlePreviewSeries,
+    onCancelPreview: handleCancelPreview,
     visibleRangeScope: cellStorageScope,
   });
   useEffect(

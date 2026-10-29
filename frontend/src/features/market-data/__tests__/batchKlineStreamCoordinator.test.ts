@@ -272,6 +272,76 @@ test("a transient subscribe rejection retries the affected logical client", asyn
   coordinator.closeAll();
 });
 
+test("late logical consumers receive the open lifecycle of the shared socket and retired consumers do not", async () => {
+  const socket = new FakeSocket();
+  const coordinator = new BatchKlineStreamCoordinator({ url: "ws://fixture", socketFactory: () => socket });
+  const first = coordinator.subscribe({ exchange: "binance", marketType: "spot", symbol: "BTCUSDT" }, { intervals: ["1m"] });
+  socket.open();
+  let opened = 0, retiredOpened = 0;
+  const second = coordinator.subscribe({ exchange: "binance", marketType: "spot", symbol: "ETHUSDT" }, {
+    intervals: ["5m"], onOpen: () => { opened += 1; },
+  });
+  const retired = coordinator.subscribe({ exchange: "binance", marketType: "spot", symbol: "SOLUSDT" }, {
+    intervals: ["5m"], onOpen: () => { retiredOpened += 1; },
+  });
+  retired.close();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(opened, 1); assert.equal(retiredOpened, 0); assert.equal(second.isOpen(), true);
+  assert.equal(socket.closed, false);
+  first.close(); second.close(); coordinator.closeAll();
+});
+
+test("partial batch rejection retries with cooldown without resending permanent failures", t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const socket = new FakeSocket();
+  const coordinator = new BatchKlineStreamCoordinator({ url: "ws://fixture", socketFactory: () => socket });
+  t.after(() => coordinator.closeAll());
+  coordinator.subscribe({ exchange: "binance", marketType: "spot", symbol: "BTCUSDT" }, { intervals: ["1m", "5m", "7s"] });
+  socket.open();
+  const initial = JSON.parse(socket.sent[0]!) as { items: Array<{ clientId: string }> };
+  const id = initial.items[0]!.clientId;
+  const partial = { type: "subscription_ack", action: "subscribe", status: "partial", ok: true,
+    client_id: id, active_intervals: ["1m"], failed: [
+      { interval: "5m", code: "stream_subscription_failed" }, { interval: "7s", code: "no_exact_base" },
+    ] };
+  socket.message(partial);
+  assert.equal(socket.sent.length, 1, "no synchronous retry loop on partial ACK");
+  t.mock.timers.tick(250);
+  const retry = JSON.parse(socket.sent[1]!) as { action: string; items: Array<{ intervals: string[] }> };
+  assert.equal(retry.action, "update");
+  assert.deepEqual(retry.items[0]!.intervals, ["1m", "5m"]);
+  socket.message({ ...partial, action: "update" });
+  t.mock.timers.tick(499);
+  assert.equal(socket.sent.length, 2);
+  t.mock.timers.tick(1);
+  assert.equal(socket.sent.length, 3);
+  socket.message({ ...partial, action: "update", active_intervals: ["1m", "5m"], failed: [] });
+  t.mock.timers.tick(30_000);
+  assert.equal(socket.sent.length, 3, "success cancels recovery; permanent interval stays rejected");
+});
+
+test("permanent batch rejection stays quiet and closing a transient subscription cancels retry", t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const socket = new FakeSocket();
+  const coordinator = new BatchKlineStreamCoordinator({ url: "ws://fixture", socketFactory: () => socket });
+  t.after(() => coordinator.closeAll());
+  const closed = coordinator.subscribe({ exchange: "binance", marketType: "spot", symbol: "BTCUSDT" }, { intervals: ["7s"] });
+  socket.open();
+  const initial = JSON.parse(socket.sent[0]!) as { items: Array<{ clientId: string }> };
+  const id = initial.items[0]!.clientId;
+  socket.message({ type: "subscription_ack", action: "subscribe", ok: false, client_id: id,
+    active_intervals: [], code: "purpose_unsupported" });
+  t.mock.timers.tick(30_000);
+  assert.equal(socket.sent.length, 1);
+  closed.updateIntervals(["5m"]);
+  socket.message({ type: "subscription_ack", action: "subscribe", ok: false, client_id: id,
+    active_intervals: [], code: "kline_app_capacity" });
+  closed.close();
+  const count = socket.sent.length;
+  t.mock.timers.tick(30_000);
+  assert.equal(socket.sent.length, count);
+});
+
 test("authoritative close and amendment counters remain distinct and parse failures stay visible", () => {
   const socket = new FakeSocket();
   const coordinator = new BatchKlineStreamCoordinator({

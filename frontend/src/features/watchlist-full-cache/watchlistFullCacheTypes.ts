@@ -32,6 +32,7 @@ export interface FullCacheTarget {
   marketType: string;
   intervals: string[];
   preloadIntervals: string[];
+  nativeIntervals?: string[];
 }
 
 export type FullCacheSocketTarget = Omit<FullCacheTarget, "preloadIntervals">;

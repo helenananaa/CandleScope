@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { symbolKey } from "../../utils/symbolKey.js";
 import type { MarketDataService } from "./marketDataService.js";
+import type { MarketWarmLease } from "./manager/marketWarmQueue.js";
 import type { UseChartBackgroundPrefetchOptions } from "./marketDataTypes.js";
 import {
   canonicalizeIntervalValue,
@@ -216,7 +217,7 @@ export function useChartBackgroundPrefetch({
 
   useEffect(() => {
     if (!enabled) {
-      prefetchPriority.yieldToForeground();
+      if (!data) prefetchPriority.yieldToForeground();
       return undefined;
     }
     // Becoming eligible marks the end of foreground ownership, not the start
@@ -225,6 +226,7 @@ export function useChartBackgroundPrefetch({
     // already-admitted active-chart hydration request.
     prefetchPriority.requireQuietDwell();
     let cancelled = false;
+    let sharedWarm: MarketWarmLease | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const currentSymbolKey = symbolKey(symbol, marketType, exchange);
     attemptLedgerRef.current.enterScope(currentSymbolKey);
@@ -267,10 +269,10 @@ export function useChartBackgroundPrefetch({
         })) continue;
         const attemptClaim = attemptLedgerRef.current.claimInterval(canonicalInterval);
         if (!attemptClaim) continue;
-        const lease = prefetchPriority.tryAcquirePreload(
+        const lease = data ? null : prefetchPriority.tryAcquirePreload(
           schedulerOwner || "chart-background-prefetch",
         );
-        if (!lease) {
+        if (!data && !lease) {
           attemptLedgerRef.current.releaseInterval(attemptClaim);
           const waitMs = prefetchPriority.waitMs();
           schedule(Number.isFinite(waitMs)
@@ -287,6 +289,18 @@ export function useChartBackgroundPrefetch({
         inFlightRef.current.add(key);
         let nextDelayMs = PREFETCH_INTERVAL_GAP_MS;
         try {
+          if (data) {
+            sharedWarm = data.warm({ exchange, marketType, symbol, interval: canonicalInterval }, {
+              owner: schedulerOwner || "chart-background-prefetch", reason: "frequent", nativeIntervals, limit: targetBarLimit,
+            });
+            const outcome = await sharedWarm.done;
+            sharedWarm = null;
+            if (outcome === "cancelled") attemptLedgerRef.current.releaseInterval(attemptClaim);
+            else if (outcome === "failed") {
+              const retryDelay = attemptLedgerRef.current.retryAfterFailure(attemptClaim);
+              if (retryDelay !== null) nextDelayMs = Math.max(nextDelayMs, retryDelay);
+            } else attemptLedgerRef.current.completeInterval(attemptClaim);
+          } else if (lease) {
           await seriesDataFeed.getLatest(
             { exchange, marketType, symbol, interval: canonicalInterval },
             {
@@ -303,9 +317,10 @@ export function useChartBackgroundPrefetch({
           } else {
             attemptLedgerRef.current.completeInterval(attemptClaim);
           }
+          }
         } catch {
           // Best-effort warming only; active interval loading owns user-visible errors.
-          if (lease.controller.signal.aborted) {
+          if (lease?.controller.signal.aborted) {
             // Foreground work preempted this attempt before it could warm the
             // cache. Let a future genuinely idle window retry it.
             attemptLedgerRef.current.releaseInterval(attemptClaim);
@@ -315,7 +330,7 @@ export function useChartBackgroundPrefetch({
           }
         } finally {
           inFlightRef.current.delete(key);
-          prefetchPriority.release(lease);
+          if (lease) prefetchPriority.release(lease);
         }
         if (!cancelled) schedule(nextDelayMs);
         return;
@@ -328,9 +343,10 @@ export function useChartBackgroundPrefetch({
       : PREFETCH_BUSY_RECHECK_MS);
     return () => {
       cancelled = true;
+      sharedWarm?.release();
       if (timer != null) clearTimeout(timer);
       prefetchPriority.cancelQueued(schedulerOwner || "chart-background-prefetch");
-      prefetchPriority.yieldToForeground();
+      if (!data) prefetchPriority.yieldToForeground();
     };
   }, [
     data,

@@ -58,6 +58,8 @@ function TopBar({
     currentExchange,
     exchangeCatalog,
     onSelectSymbol,
+    onPreview,
+    onCancelPreview,
     watchlists,
     onAddToWatchlist,
   } = symbolSearch;
@@ -109,6 +111,8 @@ function TopBar({
         <SymbolSearch
           currentSymbol={currentSymbol}
           onSelect={onSelectSymbol}
+          {...(onPreview ? { onPreview } : {})}
+          {...(onCancelPreview ? { onCancelPreview } : {})}
           {...(currentMarketType === undefined ? {} : { currentMarketType })}
           {...(currentExchange === undefined ? {} : { currentExchange })}
           {...(exchangeCatalog === undefined ? {} : { exchangeCatalog })}

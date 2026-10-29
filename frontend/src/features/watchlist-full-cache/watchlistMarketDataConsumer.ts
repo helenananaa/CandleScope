@@ -2,7 +2,7 @@ import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import type { MarketDataService } from "../market-data/marketDataService.js";
 import type { KlineStreamController } from "../market-data/klineContracts.js";
 import type { MarketSeries } from "../market-data/marketDataTypes.js";
-import type { ForegroundPreloadGate, PreloadLease } from "../market-data/foregroundPreloadGate.js";
+import type { MarketWarmLease } from "../market-data/manager/marketWarmQueue.js";
 import type { FullCachePreloadJob, FullCacheSocketTarget } from "./watchlistFullCacheTypes.js";
 import { eventRangeFromDetail } from "../market-data/rangeRuntime.js";
 import { BackfillRecoveryQueue } from "../market-data/feed/backfillRecoveryQueue.js";
@@ -19,7 +19,7 @@ interface Connection {
   status: IntervalStatus;
   intervalStatus: Map<string, IntervalStatus>;
 }
-interface RunningWarm { controller: AbortController; lease?: PreloadLease; job: FullCachePreloadJob }
+interface RunningWarm { lease: MarketWarmLease; job: FullCachePreloadJob }
 interface Recovery {
   epoch: number;
   eventKeys: Set<string>;
@@ -32,8 +32,6 @@ interface Recovery {
 
 export interface WatchlistMarketDataConsumerOptions {
   data: MarketDataService;
-  foregroundPreloadGate?: ForegroundPreloadGate;
-  concurrency?: number;
   limit?: number;
   schedule?: (callback: () => void, delayMs: number) => Timer;
   cancel?: (handle: Timer) => void;
@@ -45,10 +43,10 @@ const jobKey = (job: FullCachePreloadJob) => `${job.symbolKey}:${canonicalizeInt
 /** Watchlist owns demand intent, not candle storage or wire decoding. The
  * injected service shares the chart transport and admits every response. */
 export function createWatchlistMarketDataConsumer(options: WatchlistMarketDataConsumerOptions) {
-  const { data, foregroundPreloadGate: gate } = options;
+  const { data } = options;
   const schedule = options.schedule ?? ((callback, delay) => setTimeout(callback, delay));
   const cancel = options.cancel ?? clearTimeout;
-  const limit = Math.max(1, options.limit ?? 500), concurrency = Math.max(1, options.concurrency ?? 2);
+  const limit = Math.max(1, options.limit ?? 500);
   const connections = new Map<string, Connection>();
   const running = new Map<string, RunningWarm>();
   let desiredJobs = new Map<string, FullCachePreloadJob>();
@@ -194,27 +192,18 @@ export function createWatchlistMarketDataConsumer(options: WatchlistMarketDataCo
   function pump(): void {
     if (disposed) return;
     for (const [key, job] of desiredJobs) {
-      if (running.size >= concurrency) return;
       if (running.has(key) || attempted.has(key)) continue;
-      const lease = gate?.tryAcquirePreload(owner(key));
-      if (gate && !lease) return;
-      const controller = lease?.controller ?? new AbortController();
       attempted.add(key);
-      const active: RunningWarm = { controller, job, ...(lease ? { lease } : {}) };
+      const lease = data.warm(job, { owner: owner(key), reason: "watchlist", limit, nativeIntervals: job.nativeIntervals ?? [] });
+      const active: RunningWarm = { lease, job };
       running.set(key, active);
-      void data.fetchLatestKlines(job.symbol, job.interval, limit, job.marketType, job.exchange, "shared-warm",
-        { signal: controller.signal, clientContext: { priority: 2, cacheMode: "network-only" } })
-        .then(() => { if (!disposed && !controller.signal.aborted) completedWarm += 1; })
-        .catch(error => { if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) errors += 1; })
+      void lease.done
+        .then(outcome => { if (!disposed && outcome === "warmed") completedWarm += 1; else if (outcome === "failed") errors += 1; })
         .finally(() => {
           if (running.get(key) === active) running.delete(key);
-          if (controller.signal.aborted && desiredJobs.has(key)) attempted.delete(key);
-          if (lease) gate?.release(lease);
-          pump();
         });
     }
   }
-  const unsubscribeGate = gate?.subscribe(pump);
 
   return {
     syncTargets(targets: readonly FullCacheSocketTarget[], enabled = true): void {
@@ -246,8 +235,8 @@ export function createWatchlistMarketDataConsumer(options: WatchlistMarketDataCo
     syncJobs(jobs: readonly FullCachePreloadJob[], enabled = true): void {
       if (disposed) return;
       desiredJobs = new Map((enabled ? jobs.slice(0, 16) : []).map(job => [jobKey(job), job]));
-      for (const key of attempted) if (!desiredJobs.has(key)) { attempted.delete(key); gate?.cancelQueued(owner(key)); }
-      for (const [key, active] of running) if (!desiredJobs.has(key)) active.controller.abort();
+      for (const key of attempted) if (!desiredJobs.has(key)) attempted.delete(key);
+      for (const [key, active] of running) if (!desiredJobs.has(key)) { running.delete(key); active.lease.release(); }
       pump();
     },
     diagnostics: () => ({ streams: [...connections.values()].map(item => ({ symbolKey: item.target.symbolKey,
@@ -260,10 +249,8 @@ export function createWatchlistMarketDataConsumer(options: WatchlistMarketDataCo
       disposed = true;
       for (const connection of connections.values()) releaseConnection(connection);
       connections.clear();
-      for (const key of desiredJobs.keys()) gate?.cancelQueued(owner(key));
       desiredJobs.clear(); attempted.clear();
-      for (const active of running.values()) active.controller.abort();
-      unsubscribeGate?.();
+      for (const active of running.values()) active.lease.release();
     },
   };
 }

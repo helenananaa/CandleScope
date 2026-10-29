@@ -7,7 +7,7 @@ import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOpti
 import type { EpochSeconds, KlineBar } from "../../market-data/marketDataTypes.js";
 
 const target = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", symbolKey: "binance:spot:BTCUSDT", intervals: ["1m"] };
-const job = { ...target, preloadIntervals: ["1m"], interval: "1m" };
+const job = { ...target, preloadIntervals: ["1m"], nativeIntervals: ["1m"], interval: "1m" };
 const row = (time: number, close = 10, final = true): KlineBar => ({ time: time as EpochSeconds,
   open: 10, high: 30, low: 0, close, volume: 1, is_closed: final });
 const result = (rows: KlineBar[]): KlineFetchResult => ({ data: rows, all_rows_final: true, complete: true,
@@ -18,7 +18,7 @@ function harness(api: Partial<KlineApi> = {}, gate?: ForegroundPreloadGate) {
   const streams: Array<{ options: KlineStreamOptions; controller: KlineStreamController; closed: boolean; intervals: readonly string[] }> = [];
   const timers = new Map<ReturnType<typeof setTimeout>, { callback: () => void; delay: number }>();
   let sequence = 0;
-  const data = new MarketDataManager({ api: { getMultiStreamUrl: () => "ws://fixture", ...api } as KlineApi, streams: {
+  const data = new MarketDataManager({ api: { getMultiStreamUrl: () => "ws://fixture", ...api } as KlineApi, ...(gate ? { foregroundPreloadGate: gate } : {}), streams: {
     subscribe: (_series, options = {}) => {
       const state = { options, closed: false, intervals: options.intervals ?? [], controller: null as unknown as KlineStreamController };
       state.controller = { readyState: () => 1, isOpen: () => !state.closed, send: () => true, sendPing: () => true,
@@ -27,7 +27,7 @@ function harness(api: Partial<KlineApi> = {}, gate?: ForegroundPreloadGate) {
       return state.controller;
     }, closeAll: () => streams.forEach(stream => stream.controller.close()), diagnostics: () => ({}),
   } });
-  const consumer = createWatchlistMarketDataConsumer({ data, ...(gate ? { foregroundPreloadGate: gate } : {}),
+  const consumer = createWatchlistMarketDataConsumer({ data,
     schedule: (callback, delay) => { const key = ++sequence as unknown as ReturnType<typeof setTimeout>; timers.set(key, { callback, delay }); return key; },
     cancel: handle => { timers.delete(handle); },
   });
@@ -137,12 +137,12 @@ test("disconnect aborts watchlist recovery before a late response can replace sh
 
 test("warming has independent cancellation and populates the same cache read by charts", async () => {
   let calls = 0, complete!: (response: KlineFetchResult) => void, signal!: AbortSignal;
-  const h = harness({ fetchLatestKlines: async (...args) => {
-    calls += 1; signal = args[6].signal!;
+  const h = harness({ fetchKlinesHistory: async (...args) => {
+    calls += 1; signal = args[5].signal!;
     return new Promise(resolve => { complete = resolve; });
   } });
   h.consumer.syncJobs([job]);
-  const chartRead = h.data.fetchLatestKlines("BTCUSDT", "1m", 500, "spot", "binance", "shared-warm", {});
+  const chartRead = h.data.fetchKlinesHistory("BTCUSDT", "1m", null, "spot", "binance", { countBack: 500, maxWaitMs: 0, intent: "viewport" });
   await turn();
   assert.equal(calls, 1);
   h.consumer.syncJobs([], false);
@@ -157,7 +157,7 @@ test("warming has independent cancellation and populates the same cache read by 
 test("repeated sync does not spin partial warming and a foreground gate can cancel and resume work", async () => {
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
   const pending: Array<{ resolve: (value: KlineFetchResult) => void; signal: AbortSignal }> = [];
-  const h = harness({ fetchLatestKlines: (...args) => new Promise(resolve => pending.push({ resolve, signal: args[6].signal! })) }, gate);
+  const h = harness({ fetchKlinesHistory: (...args) => new Promise(resolve => pending.push({ resolve, signal: args[5].signal! })) }, gate);
   h.consumer.syncJobs([job]); await turn();
   const foreground = gate.enterForeground("chart-switch");
   assert.equal(pending[0]!.signal.aborted, true);

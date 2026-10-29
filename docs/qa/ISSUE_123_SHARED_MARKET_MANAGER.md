@@ -46,8 +46,9 @@ publication are complete. A passing unit test is not native acceptance.
 3. **Implemented; integration acceptance pending:** unify consumer demand ownership with watchlist K-line warming;
    keep quote/indicator protocols and business ownership explicit. Migrate
    duplicate candle storage/acceptance rather than adding another writer.
-4. **Pending:** chart switch orchestration, cache-first range acquisition and
-   budgeted hover/favorite-interval warming with promotion/cancellation.
+4. **In progress:** chart switch orchestration and budgeted hover/frequent-interval
+   warming with promotion/cancellation are implemented; production cache-first
+   navigation range acquisition and actual UI acceptance remain pending.
 5. **Pending:** indicator dependency/range revisions and async output fencing;
    architecture enforcement and documentation.
 6. **Pending:** full checks and fixed-corpus baseline/candidate measurement;
@@ -132,3 +133,30 @@ Preserve failure samples and distinguish controlled fixture proof from live
 exchange and packaged-native evidence. Watchlist integration acceptance,
 switch/hover orchestration, indicator dependency integration, full validation
 and performance/retention acceptance remain outstanding.
+
+
+Unified warming and switch checkpoint (development evidence):
+
+- One manager-owned demand queue now covers chart hover/focus, at most three
+  ranked favorite/frequently selected periods, and watchlist full-tier warming.
+  Default limits are 16 pending jobs, 2 active jobs, 10,000 source rows per job,
+  30,000 source rows per minute, 2 MB estimated in-flight rows and a 30-second
+  retry cooldown. The byte figure is an estimate, not measured heap usage.
+- The 150 ms hover dwell is cancellable. Explicit intent can skip the normal
+  quiet grace but never active foreground/hydration work. Removal/selection
+  releases only the caller's lease. Warm activity cannot write persistent tiers.
+- A per-chart switch controller promotes matching running work before releasing
+  hover and before chart busy effects. Matching foreground viewport requests
+  share that response across different chart demand scopes; repair, hydration,
+  different counts and wait budgets cannot join it. Late A-to-B-to-C generations
+  and StrictMode cleanup are covered by deterministic regressions.
+- Batch subscription tests exposed partial ACK retry and late-consumer lifecycle
+  gaps. Transport now retries transient missing intervals with bounded backoff,
+  retains permanent rejection without a retry loop, and supplies open lifecycle
+  to a new logical consumer joining an already open socket.
+- Focused manager/warm queue/controller/consumer and batch lifecycle tests pass.
+  Full `npm run check` passed 4,512 frontend functional tests, one isolated
+  performance gate and 123 desktop tests, plus architecture/plugin/i18n checks,
+  both TypeScript projects, ESLint and production build. Log:
+  `/tmp/issue-123-hover-check.log`. Existing SingleChartPanes cleanup and bundle
+  size warnings remain. No native or comparative-performance claim yet.

@@ -36,14 +36,22 @@ Session switches are optimistic: old bars may remain rendered while `meta.status
 is `loading`; the first warm-cache or REST result swaps the active store, while a
 slow empty load may clear after the configured timeout.
 
-The app composition root owns one `ForegroundPreloadGate` and shares it with
-the charts and the watchlist demand consumer. Physical
-`SeriesDataFeed` history/before/range/latest requests are foreground by default;
-speculative callers must opt in with `priority: "preload"` and hold a preload
-lease. Foreground requests and longer-lived chart busy owners synchronously
-abort speculative work, then require a complete quiet dwell before one globally
-serialized preload may resume. Watchlist candle reads use the injected
-MarketDataManager service and participate in the same shared gate.
+The workspace `MarketDataManager` owns one `ForegroundPreloadGate`. Chart
+foreground requests and busy owners use this same gate. Its `MarketWarmQueue`
+accepts watchlist, hovered-product/interval and frequent-interval demand leases;
+these consumers do not own candle arrays or independent network budgets. Normal
+warming waits for the quiet dwell. A deliberate hover/focus after 150 ms can
+skip that dwell, but cannot preempt foreground or active hydration. Speculative
+work is cancellable, deduplicated by full series and target count, and limited
+by pending jobs, source-row cost, estimated in-flight bytes and cooldown.
+
+Each chart's `ChartMarketController` promotes an already running warm request
+before the selection becomes busy, then releases its own hover lease. The
+foreground viewport joins only matching work; hydration, repair and different
+count/wait requirements keep their own contracts. Cancelling one chart never
+releases another consumer's lease. Up to three available favorite/frequently
+used intervals are ranked from bounded local usage metadata. Hovering never
+changes selection, watchlist tiers or usage history.
 
 Cold activation is split into two contracts. The visible `viewport` request
 asks for at most 500 bars (or the smaller derived-interval source budget) and

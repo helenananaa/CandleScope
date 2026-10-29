@@ -7,7 +7,10 @@ import { SharedKlineStreamCoordinator } from "../feed/sharedKlineStreamCoordinat
 import { SharedMarketCache, type MarketCacheOptions, type MarketReadToken } from "./sharedMarketCache.js";
 import type { MarketRange } from "./sharedMarketCache.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
-import type { MarketDataService } from "../marketDataService.js";
+import type { MarketDataService, MarketWarmOptions } from "../marketDataService.js";
+import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
+import { planTargetBarRequest } from "../intervalRequestBudget.js";
+import { MarketWarmQueue, type MarketWarmLease } from "./marketWarmQueue.js";
 
 interface StreamTransport {
   subscribe: KlineStreamFactory;
@@ -19,6 +22,7 @@ export interface MarketDataManagerOptions {
   streams: StreamTransport;
   batchHistory?: boolean;
   cache?: MarketCacheOptions;
+  foregroundPreloadGate?: ForegroundPreloadGate;
 }
 
 function identity(symbol: string, interval: string, marketType: string, exchange: string, options: KlineRequestOptions): MarketSeries {
@@ -34,9 +38,12 @@ export class MarketDataManager implements MarketDataService {
   readonly ownsRequestLeases = true;
   readonly cache: SharedMarketCache;
   readonly requestCoordinator: SharedKlineRequestCoordinator;
+  readonly foregroundPreloadGate: ForegroundPreloadGate;
+  readonly warmQueue: MarketWarmQueue;
   private readonly sharedStreams: SharedKlineStreamCoordinator;
   private readonly transport: StreamTransport;
   private readonly api: KlineApi;
+  private readonly ownsForegroundGate: boolean;
   private closed = false;
   private rejectedRealtime = 0;
   private rangeHits = 0;
@@ -71,6 +78,15 @@ export class MarketDataManager implements MarketDataService {
       };
     }
     this.requestCoordinator = new SharedKlineRequestCoordinator(admittedApi, options.batchHistory ?? true);
+    this.foregroundPreloadGate = options.foregroundPreloadGate ?? new ForegroundPreloadGate();
+    this.ownsForegroundGate = !options.foregroundPreloadGate;
+    this.warmQueue = new MarketWarmQueue({ gate: this.foregroundPreloadGate,
+      read: (request, signal) => this.requestCoordinator.fetchKlinesHistory(request.series.symbol, request.series.interval,
+        null, request.series.marketType, request.series.exchange, {
+          countBack: request.limit, maxWaitMs: 0, intent: "viewport", seriesIdentity: request.series,
+          signal, clientContext: { priority: 2, cacheMode: "network-only" },
+        }),
+    });
     this.sharedStreams = new SharedKlineStreamCoordinator(api, {
       createPhysicalStream: (series, streamOptions) => {
         // Fence the physical lease before admission, not only downstream fan-out.
@@ -118,12 +134,28 @@ export class MarketDataManager implements MarketDataService {
     return this.sharedStreams.subscribe(series, options);
   };
 
-  readonly fetchKlinesHistory: KlineApi["fetchKlinesHistory"] = (...args) => this.requestCoordinator.fetchKlinesHistory(...args);
+  readonly fetchKlinesHistory: KlineApi["fetchKlinesHistory"] = (...args) => {
+    const options = args[5];
+    if (args[2] == null && options.intent === "viewport" && options.maxWaitMs === 0 && options.countBack) {
+      const promoted = this.warmQueue.joinForeground(identity(args[0], args[1], args[3], args[4], options), options.countBack, options.signal);
+      if (promoted) return promoted;
+    }
+    return this.requestCoordinator.fetchKlinesHistory(...args);
+  };
   readonly fetchKlinesBefore: KlineApi["fetchKlinesBefore"] = (...args) => this.requestCoordinator.fetchKlinesBefore(...args);
   readonly fetchLatestKlines: KlineApi["fetchLatestKlines"] = (...args) => this.requestCoordinator.fetchLatestKlines(...args);
   readonly getMultiStreamUrl: KlineApi["getMultiStreamUrl"] = (...args) => this.api.getMultiStreamUrl(...args);
 
   read(series: MarketSeries, range?: MarketRange) { return this.cache.read(series, range); }
+
+  warm(series: MarketSeries, options: MarketWarmOptions): MarketWarmLease {
+    const plan = planTargetBarRequest({ interval: series.interval, nativeIntervals: options.nativeIntervals,
+      desiredTargetBars: Math.min(500, options.limit ?? 500), sourceRowBudget: 10_000 });
+    return this.warmQueue.request({ series, owner: options.owner, reason: options.reason,
+      limit: plan.targetBars, estimatedSourceRows: plan.estimatedSourceRows });
+  }
+
+  prepareForeground(series: MarketSeries) { return this.warmQueue.prepareForeground(series); }
 
   async recover(series: MarketSeries, options: { from?: number; to?: number; limit?: number; signal?: AbortSignal } = {}): Promise<KlineFetchResult> {
     // Reuse range pagination and endpoint-proof handling. This detached reader
@@ -159,12 +191,14 @@ export class MarketDataManager implements MarketDataService {
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
       sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits,
-      cache: this.cache.diagnostics() };
+      cache: this.cache.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 
   closeAll(): void {
     if (this.closed) return;
     this.closed = true;
+    this.warmQueue.dispose();
+    if (this.ownsForegroundGate) this.foregroundPreloadGate.dispose();
     this.sharedStreams.closeAll();
     this.transport.closeAll();
     this.requestCoordinator.closeAll();

@@ -213,6 +213,8 @@ export interface IntervalSelectorProps {
   customIntervalRecords: CustomIntervalRecord[];
   savedCustomIntervals: IntervalString[];
   onSelectInterval(interval: IntervalString): void;
+  onPreviewInterval?(interval: IntervalString): void;
+  onCancelPreview?(): void;
   onCreateCustomInterval(interval: IntervalString): CreateCustomIntervalResult;
   onRemoveCustomInterval(interval: IntervalString): void;
   onRestoreCustomInterval(): void;
@@ -240,6 +242,8 @@ function IntervalSelector({
   customIntervalRecords,
   savedCustomIntervals,
   onSelectInterval,
+  onPreviewInterval,
+  onCancelPreview,
   onCreateCustomInterval,
   onRemoveCustomInterval,
   onRestoreCustomInterval,
@@ -253,6 +257,7 @@ function IntervalSelector({
   variant = "row",
 }: IntervalSelectorProps) {
   const locale = useLocale();
+  useEffect(() => () => onCancelPreview?.(), [onCancelPreview]);
   const compact = variant === "compact";
   const favoriteIntervals = useFavoriteIntervals();
   const [open, setOpen] = useState(defaultOpen);
@@ -540,12 +545,13 @@ function IntervalSelector({
   }, [compact, open, readOnlyReason]);
 
   const closePanel = useCallback(() => {
+    onCancelPreview?.();
     setOpen(false);
     setComposerOpen(false);
     setSearch("");
     setKeyboardNavigated(false);
     setHighlightIndex(0);
-  }, []);
+  }, [onCancelPreview]);
 
   const selectInterval = useCallback((value: IntervalString) => {
     const normalized = canonicalizeIntervalValue(value) || value;
@@ -672,6 +678,10 @@ function IntervalSelector({
         id={`interval-${item.value}`}
         className={clsx("interval-btn", intervalsSemanticallyEquivalent(interval, item.value) && "active", item.isCustom && "custom-interval-btn", !available && "unavailable", extraClass)}
         onClick={() => selectInterval(item.value)}
+        onMouseEnter={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
+        onMouseLeave={onCancelPreview}
+        onFocus={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
+        onBlur={onCancelPreview}
         title={readOnlyReason ?? (!available
           ? unavailableMessage(item.value)
           : item.isCustom ? t("interval.customNamed", { desc: formatIntervalDescription(item.value) }, locale) : item.value)}
@@ -716,6 +726,10 @@ function IntervalSelector({
             highlighted && "highlighted",
           )}
           onClick={() => selectInterval(item.value)}
+          onMouseEnter={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
+          onMouseLeave={onCancelPreview}
+          onFocus={() => { if (available && readOnlyReason === null) onPreviewInterval?.(item.value); }}
+          onBlur={onCancelPreview}
           disabled={!available}
           aria-disabled={!available}
           title={chipTitle(item, record, available, unavailableMessage(item.value), locale)}

@@ -409,7 +409,8 @@ function LiveWorkspaceApp() {
       if (target.__CANDLESCOPE_WORKSPACE_BUS__ === handle) delete target.__CANDLESCOPE_WORKSPACE_BUS__;
     };
   }, [workspaceBus]);
-  const [foregroundPreloadGate] = useState(() => new ForegroundPreloadGate());
+  const marketWorkspace = useMarketDataWorkspaceResources();
+  const [foregroundPreloadGate] = useState(() => marketWorkspace?.dataManager.foregroundPreloadGate ?? new ForegroundPreloadGate());
   const [activeEnvironment, setActiveEnvironment] = useState<{
     workspaceId: string;
     workspaceRuntimeKey: string;
@@ -473,11 +474,9 @@ function LiveWorkspaceApp() {
 
   const activeSession = currentActiveEnvironment?.value.session ?? workspace.view.activeCell.session;
   const activeSubscriptionContext = currentActiveEnvironment?.value.subscriptionContext;
-  const marketWorkspace = useMarketDataWorkspaceResources();
   useWatchlistFullCacheRuntime({
     data: marketWorkspace?.dataManager ?? null,
     enabled: currentActiveEnvironment?.value.marketDataReady === true,
-    foregroundPreloadGate,
     watchlists: watchlist.view.watchlists,
     subscriptionTiers: watchlist.view.subscriptionTiers,
     exchangeCatalog: activeSubscriptionContext?.exchangeCatalog ?? null,

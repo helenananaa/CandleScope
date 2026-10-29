@@ -80,6 +80,8 @@ function buildWatchlistFullTargets({
         symbol: parsed.symbol,
         exchange: parsed.exchange,
         marketType: parsed.marketType,
+        nativeIntervals: targetNativeIntervals.flatMap(item => typeof item === "string" ? [item]
+          : typeof item.value === "string" ? [item.value] : []),
         intervals,
         preloadIntervals: prioritizeFullCacheIntervals(
           intervals,
