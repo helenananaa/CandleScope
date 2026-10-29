@@ -807,6 +807,7 @@ function LiveChartCell({
     chartProps: {
       ...model.chartWorkspace.chart.chartProps,
       ref: chartSurface.ref,
+      ...(workScheduler ? { displayScheduler: { scheduler: workScheduler, cellId: cell.id } } : {}),
       drawingKeyBase: drawingScopeBase,
       paneLayoutScope: cellStorageScope,
       onCrosshairMove: handleLinkedCrosshairMove,
@@ -814,6 +815,8 @@ function LiveChartCell({
       onUserViewportRangeChange: handleLinkedViewportRangeChange,
     },
   }), [
+    cell.id,
+    workScheduler,
     cellStorageScope,
     chartSurface.ref,
     drawingScopeBase,
@@ -990,7 +993,7 @@ function LiveChartCell({
           {quickReplay && (
             <Suspense fallback={null}>
               <QuickReplayOverlay
-                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.interval}`}
+                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
                 request={quickReplay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}

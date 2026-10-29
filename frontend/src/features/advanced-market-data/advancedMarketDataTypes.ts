@@ -1,5 +1,5 @@
 import type { IndicatorSubPane } from "../indicators/indicatorPaneProjection.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import type {
   MarketMetricChannel,
   MarketMetricId,
@@ -188,7 +188,7 @@ export interface AdvancedMarketRuntimeView {
   identityKey: string;
   interval: string;
   seriesKey: string;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
   marketStudies: readonly AdvancedMarketStudyView[];
   metricCapabilities: Record<MarketMetricChannel, AdvancedMarketMetricCapability>;
   stateMetricsEnabled: boolean;

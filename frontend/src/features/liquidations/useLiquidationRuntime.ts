@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import type { MarketHistoryRange } from "../advanced-market-data/marketHistoryCoverage.js";
 import type {
   AdvancedMarketConnectionStatus,
@@ -36,7 +36,7 @@ interface UseLiquidationRuntimeOptions {
   interval: string;
   seriesKey: string;
   dataMeta: ChartDataCommitMeta;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
   added: boolean;
   visible: boolean;
   supported: boolean;

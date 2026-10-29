@@ -15,7 +15,7 @@ from typing import Any, Iterator
 
 from .models import dec_str
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -180,8 +180,13 @@ class TradingStore:
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
         with self.transaction() as conn:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_revisions)")}
+            if "history_complete" not in columns:
+                # Old autosaves overwrote revisions. Preserve their bytes, but
+                # never advertise them as a complete historical timeline.
+                conn.execute("ALTER TABLE journal_revisions ADD COLUMN history_complete INTEGER NOT NULL DEFAULT 0")
             conn.execute(
-                "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
 

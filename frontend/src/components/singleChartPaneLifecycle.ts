@@ -3,7 +3,7 @@ import { linePointEquals } from "../chart-adapter/chartSeriesData.js";
 import { chartTimesEqual } from "../chart-adapter/chartTime.js";
 import type { IndicatorDataEntry } from "../chart-adapter/chartAdapterTypes.js";
 import type { ChartDataCommitMeta } from "../features/market-data/useChartDataRuntime.js";
-import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";
 
 const EMPTY_DATA_TIME_SET: ReadonlySet<number> = new Set<number>();
 const EMPTY_OPTIONAL_CHART_COLLECTION: never[] = [];
@@ -239,7 +239,7 @@ export function needsIndicatorSeriesDataUpdate(
 }
 
 export function resolveDataTimeSet(
-  seriesStore: Pick<SeriesWindowStore, "timeSet"> | null | undefined,
+  seriesStore: Pick<SeriesWindowView, "timeSet"> | null | undefined,
 ): ReadonlySet<number> {
   return seriesStore?.timeSet?.() || EMPTY_DATA_TIME_SET;
 }
@@ -251,7 +251,7 @@ export function hasCurrentDatasetOwnership({
 }: {
   dataMeta?: Pick<ChartDataCommitMeta, "optimistic" | "seriesKey"> | null;
   datasetKey?: string | null;
-  seriesStore?: Pick<SeriesWindowStore, "seriesKey"> | null;
+  seriesStore?: Pick<SeriesWindowView, "seriesKey"> | null;
 } = {}): boolean {
   return Boolean(
     datasetKey

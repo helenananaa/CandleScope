@@ -117,7 +117,7 @@ function createStaticMarketData(
   source: string,
   session: ChartSession,
   rows: readonly KlineBarInput[],
-): MarketDataRuntimeContract {
+): { marketData: MarketDataRuntimeContract; disposeStore(): void } {
   const copiedRows = rows.map((row) => ({ ...row }));
   const store = new SeriesWindowStore({
     maxBars: Math.max(1, copiedRows.length),
@@ -164,30 +164,33 @@ function createStaticMarketData(
     },
   };
   return {
-    view,
-    actions: {
-      retry() {},
-      async loadMoreLeft() {},
-      async loadMoreRight() { return false; },
-      async restoreLatestWindow() { return false; },
-      onCrosshairMove() {},
-      onVisibleRangeChange() {},
-      consumeIndicatorRangeRequest() {},
-    },
-    status: {
-      hasMoreLeft: false,
-      loadingMoreLeft: false,
-      loadingMoreRight: false,
-      initialHistoryPending: false,
-      activeChartReady: bars.length > 0,
-      canLoadMoreLeft: false,
-      canLoadMoreRight: false,
-      canRestoreLatestWindow: false,
-      barCount: bars.length,
-      cacheDiagnostics: () => ({ source, bars: view.bars.length }),
-      trimCacheEntries: () => ({ source, removed: 0 }),
-      indicatorRangeRequests: [],
-      requestDemand: null,
+    disposeStore: () => store.clear({ source: `${source}:dispose` }),
+    marketData: {
+      view,
+      actions: {
+        retry() {},
+        async loadMoreLeft() {},
+        async loadMoreRight() { return false; },
+        async restoreLatestWindow() { return false; },
+        onCrosshairMove() {},
+        onVisibleRangeChange() {},
+        consumeIndicatorRangeRequest() {},
+      },
+      status: {
+        hasMoreLeft: false,
+        loadingMoreLeft: false,
+        loadingMoreRight: false,
+        initialHistoryPending: false,
+        activeChartReady: bars.length > 0,
+        canLoadMoreLeft: false,
+        canLoadMoreRight: false,
+        canRestoreLatestWindow: false,
+        barCount: bars.length,
+        cacheDiagnostics: () => ({ source, bars: view.bars.length }),
+        trimCacheEntries: () => ({ source, removed: 0 }),
+        indicatorRangeRequests: [],
+        requestDemand: null,
+      },
     },
   };
 }
@@ -265,6 +268,7 @@ class StaticMarketChartSource implements MarketChartSourceRuntime {
   readonly datasetKey: string;
   readonly executionIdentity: MarketChartExecutionIdentity;
   readonly marketData: MarketDataRuntimeContract;
+  private readonly disposeStore: () => void;
   private state: MarketChartSourceLifecycleState = "ACTIVE";
 
   constructor(input: {
@@ -280,7 +284,9 @@ class StaticMarketChartSource implements MarketChartSourceRuntime {
     this.session = Object.freeze(cloneSession(input.session));
     this.datasetKey = requiredText(input.datasetKey, "datasetKey");
     this.executionIdentity = Object.freeze({ ...input.executionIdentity });
-    this.marketData = createStaticMarketData(this.mode, this.session, input.bars);
+    const owned = createStaticMarketData(this.mode, this.session, input.bars);
+    this.marketData = owned.marketData;
+    this.disposeStore = owned.disposeStore;
   }
 
   get lifecycle() { return this.state; }
@@ -296,7 +302,7 @@ class StaticMarketChartSource implements MarketChartSourceRuntime {
   dispose() {
     if (this.state === "DISPOSED") return;
     this.state = "DISPOSED";
-    this.marketData.view.seriesStore?.clear({ source: `${this.mode}:dispose` });
+    this.disposeStore();
     this.marketData.view.seriesStore = null;
     this.marketData.view.bars = [];
     this.marketData.view.lastPrice = null;

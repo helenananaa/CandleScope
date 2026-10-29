@@ -1,3 +1,4 @@
+import { validateKlineDomain } from "../utils/klineDomainPolicy.js";
 const MAX_EPOCH_SECONDS = 10_000_000_000;
 
 export type JsonRecord = Record<string, unknown>;
@@ -313,6 +314,8 @@ export function parseKlineBar(value: unknown, path = "kline"): TransportKlineBar
     close: expectFiniteNumber(record.close, `${path}.close`),
     volume: expectFiniteNumber(record.volume, `${path}.volume`),
   };
+  const issue = validateKlineDomain(bar);
+  if (issue) throw new ApiPayloadError(`${path}.${issue.field}`, issue.reason);
   if ("is_closed" in record) {
     bar.is_closed = expectBoolean(record.is_closed, `${path}.is_closed`);
   }
