@@ -28,7 +28,26 @@ _HookedOkxSpot = build_hooked_exchange_class(
 )
 
 
-class _OwnedOkxSession(PublicCcxtAdmissionMixin, SharedSslContextMixin):
+class OkxWebSocketProtocolMixin:
+    def describe(self):
+        description = super().describe()
+        # Keep production/demo host and path, using the supported TLS port.
+        for environment in ("api", "test"):
+            websocket = description["urls"][environment].get("ws")
+            if isinstance(websocket, str):
+                description["urls"][environment]["ws"] = websocket.replace(":8443/", "/")
+        return description
+
+    def handle_error_message(self, client, message):
+        # This informational notice leaves the socket open; other errors retain
+        # the pinned parser's rejection semantics.
+        if (isinstance(message, dict) and message.get("event") == "notice"
+                and str(message.get("code")) == "64010"):
+            return False
+        return super().handle_error_message(client, message)
+
+
+class _OwnedOkxSession(OkxWebSocketProtocolMixin, PublicCcxtAdmissionMixin, SharedSslContextMixin):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # CCXT Pro uses this same table for subscribe, unsubscribe, reverse

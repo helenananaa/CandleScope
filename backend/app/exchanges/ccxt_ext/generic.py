@@ -104,9 +104,13 @@ def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
 
     # Delayed catalog siblings must not reopen a closed owned client on any OS.
     mixin = _OwnedThreadedResolverMixin
+    protocol_mixins = ()
+    if exchange_class is ccxtpro.okx:
+        from .okx import OkxWebSocketProtocolMixin
+        protocol_mixins = (OkxWebSocketProtocolMixin,)
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
-        (RestSourceCaptureMixin, PublicCcxtAdmissionMixin, mixin, exchange_class),
+        (*protocol_mixins, RestSourceCaptureMixin, PublicCcxtAdmissionMixin, mixin, exchange_class),
         {"__module__": __name__},
     )
 
@@ -1027,9 +1031,6 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
-    if websocket and entry.exchange_id == "okx":
-        # OKX retires 8443 on 2026-10-31; retain the pinned parser and use 443.
-        values["urls"] = {"api": {"ws": "wss://ws.okx.com/ws/v5"}}
     if config.http_proxy and config.proxy_mode != "none":
         values["httpsProxy"] = config.http_proxy
         values["wssProxy"] = config.http_proxy

@@ -66,6 +66,8 @@ class CcxtProviderSession:
         self._consecutive_failures = 0
         self._last_message_time = 0.0
         self._last_lifecycle: CcxtLifecycleEvent | None = None
+        self._source_epoch = 0
+        self._source_break_task: asyncio.Task[None] | None = None
         self._proxy_route: Any | None = None
         self._proxy_ws_lease: Any | None = None
         self._failed_proxy_url: str | None = None
@@ -113,9 +115,10 @@ class CcxtProviderSession:
     async def stop(self) -> None:
         self._running = False
         current = asyncio.current_task()
-        tasks = [self._watch_task, self._delivery_task]
+        tasks = [self._watch_task, self._delivery_task, self._source_break_task]
         self._watch_task = None
         self._delivery_task = None
+        self._source_break_task = None
         for task in tasks:
             if task is not None and task is not current and not task.done():
                 task.cancel()
@@ -162,6 +165,18 @@ class CcxtProviderSession:
     def _observe_lifecycle(self, event: CcxtLifecycleEvent) -> None:
         self._last_lifecycle = event
         self._metrics.inc(f"lifecycle_{event.state}")
+        if self._running and event.state in {"resetting", "disconnected", "error"}:
+            self._source_epoch += 1
+            interrupted = getattr(self._result_projector, "source_interrupted", None)
+            if callable(interrupted):
+                interrupted()
+            while not self._queue.empty():
+                self._queue.get_nowait()
+                self._queue.task_done()
+            if self._source_break_task is None or self._source_break_task.done():
+                self._source_break_task = asyncio.create_task(self._set_health(
+                    SessionHealth.RECONNECTING, event.error or f"CCXT websocket {event.state}",
+                ), name=f"ccxt_source_break_{self._descriptor.key}")
         if (
             self._descriptor.stream_type == StreamType.LIQUIDATION
             and event.state == "connected"
@@ -203,7 +218,10 @@ class CcxtProviderSession:
                     await self._attach_runtime()
                 assert self._runtime is not None
                 assert self._ccxt_symbol is not None
+                if self._source_break_task is not None:
+                    await asyncio.shield(self._source_break_task)
                 watch_generation = self._runtime.websocket_generation
+                source_epoch = self._source_epoch
                 watch = self._runtime.watch(self._descriptor, self._ccxt_symbol)
                 if self._descriptor.stream_type == StreamType.LIQUIDATION:
                     # Liquidations are sparse by definition.  A quiet market is
@@ -217,6 +235,12 @@ class CcxtProviderSession:
                         watch,
                         timeout=float(self._cfg.ws_stale_timeout),
                     )
+                if self._source_break_task is not None:
+                    await asyncio.shield(self._source_break_task)
+                if (watch_generation != self._runtime.websocket_generation
+                        or source_epoch != self._source_epoch):
+                    self._metrics.inc("obsolete_watch_results")
+                    continue
                 if self._result_projector is not None:
                     for event in self._result_projector.project(result):
                         self._enqueue_raw(event)
@@ -391,6 +415,12 @@ class CcxtProviderSession:
                 self._observe_proxy_queue()
             except asyncio.CancelledError:
                 break
+            source_epoch = self._source_epoch
+            if self._source_break_task is not None:
+                await asyncio.shield(self._source_break_task)
+            if source_epoch != self._source_epoch:
+                self._queue.task_done()
+                continue
             message = RawMessage(
                 payload=event.payload,
                 source=DataSource.WEBSOCKET,

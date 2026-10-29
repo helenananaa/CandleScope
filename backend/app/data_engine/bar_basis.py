@@ -78,7 +78,7 @@ class NativeBarSpec:
             value = okx_utc_interval(self.interval)
             protocol = {"rest_parameters": {"bar": value}, "ws_channel": "candle" + value,
                         "finality_evidence": "confirm=1"}
-        elif self.provider == "binance":
+        elif self.provider in {"binance", "binanceusdm"}:
             protocol = {"rest_parameters": {"interval": self.interval},
                         "ws_channel": "{symbol}@kline_" + self.interval, "finality_evidence": "k.x=true"}
         elif self.provider == "bybit" and self.interval == "5m":
@@ -157,7 +157,10 @@ def native_bar_spec(provider: str, market_type: str, interval: str, purpose: str
     list or a UTC market metadata field is deliberately insufficient.
     """
     provider = provider.lower()
-    known = provider in {"binance", "okx"}
+    # The pinned binanceusdm driver uses the same ordinary USD-M Kline
+    # endpoints as binance/futures, not continuous-contract candles. Keep its
+    # vendor identity while sharing that declared boundary convention.
+    known = provider in {"binance", "binanceusdm", "okx"}
     evidence = "docs/architecture/ISSUE_117_BAR_BASIS.md"
     # The official Bybit 5-minute WS fixture includes both start and end.
     # Other native periods remain unknown until independently qualified.

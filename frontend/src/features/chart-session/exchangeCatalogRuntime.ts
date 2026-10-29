@@ -203,7 +203,15 @@ function getCapabilityKlineIntervals(
   if (!Array.isArray(capability.channels) || capability.channels.length === 0) {
     // The backend adds channels: [] when serializing legacy v1 plugins. That
     // shape means unknown channel detail, not an authoritative unsupported set.
-    return schemaVersion === 1 ? uniqueNativeIntervals(config.nativeIntervals) : [];
+    if (schemaVersion !== 1) return [];
+    const market = String(marketType || "spot").toLowerCase();
+    return uniqueNativeIntervals(config.nativeIntervals).filter(item => (
+      !capability.native_bar_specs || capability.native_bar_specs.some(spec => (
+        spec.market_type === market && spec.purpose === purpose
+        && intervalsSemanticallyEquivalent(spec.interval, item.value)
+        && spec.qualification !== "unknown" && spec.basis !== null
+      ))
+    ));
   }
 
   const normalizedMarketType = String(marketType || "spot").toLowerCase();

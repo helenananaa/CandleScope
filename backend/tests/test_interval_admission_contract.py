@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.data_engine.interval_resolution import IntervalResolver, IntervalResolutionError
+from app.data_engine.bar_basis import NativeBarSpec
 from app.exchanges import bootstrap_default_adapters
 from app.exchanges.contracts import validate_exchange_capabilities
 from app.exchanges.registry import _snapshot_capabilities
@@ -23,6 +24,11 @@ def test_shared_wire_admission(document):
         **payload,
         "markets": [ExchangeMarket(**market) for market in payload["markets"]],
         "channels": [MarketChannelCapability(**channel) for channel in payload["channels"]],
+        "native_bar_specs": [NativeBarSpec(
+            spec["provider"], spec["market_type"], spec["channel"], spec["purpose"],
+            spec["interval"], spec["basis"]["interval"] if spec["basis"] else None,
+            spec["qualification"], spec["evidence"], spec["protocol_version"], spec["calendar_id"],
+        ) for spec in payload["native_bar_specs"]],
     })
     assert validate_exchange_capabilities(capability).ok
     assert capability.to_dict() == payload  # fixtures must be real backend wire shapes
@@ -56,11 +62,14 @@ def test_registered_ordinary_usdm_route_does_not_inherit_spot_seconds(purpose):
 def test_registered_generic_swap_market_is_not_a_legacy_futures_alias():
     registry = bootstrap_default_adapters()
     for purpose in ("history", "realtime"):
-        route = IntervalResolver(registry).resolve(
-            exchange="backpack", market_type="swap", interval="1m", purpose=purpose,
-        )
-        assert route.is_native
-        assert route.market_type == "swap"
+        # A real swap declaration must reach the boundary gate instead of
+        # being mistaken for an absent legacy futures capability. Backpack's
+        # boundary convention is still unqualified in this release.
+        with pytest.raises(IntervalResolutionError) as failure:
+            IntervalResolver(registry).resolve(
+                exchange="backpack", market_type="swap", interval="1m", purpose=purpose,
+            )
+        assert failure.value.code.value == "native_bar_basis_unknown"
 
 
 def test_pinned_ccxt_usdm_history_selects_ordinary_contract_endpoint():

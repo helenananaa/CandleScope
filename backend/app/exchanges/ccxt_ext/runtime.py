@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -67,12 +68,33 @@ class CcxtRuntime:
         self._lifecycle_events = 0
         self._websocket_recycles = 0
         self._recycle_lock = asyncio.Lock()
+        self._websocket_ready = asyncio.Event()
+        self._websocket_ready.set()
         self.exchange = profile.create_exchange(
             config,
             raw_event_sink=self._on_raw_event,
             lifecycle_sink=self._on_lifecycle_event,
         )
         self._install_traffic_observer()
+        self._install_lifecycle_observer()
+
+    def _install_lifecycle_observer(self) -> None:
+        # Raw profiles already emit these hooks. Unified CCXT profiles do not,
+        # and a cached watch result can hide a physical close from their waiter.
+        if callable(getattr(self.exchange, "set_lifecycle_sink", None)):
+            return
+        for name, state in (("on_connected", "connected"), ("on_close", "disconnected"),
+                            ("on_error", "error")):
+            original = getattr(self.exchange, name, None)
+            if not callable(original):
+                continue
+            def observed(client, value=None, *, callback=original, transition=state):
+                self._on_lifecycle_event(CcxtLifecycleEvent(
+                    transition, getattr(client, "url", None), int(time.time() * 1000),
+                    str(value) if value is not None and transition != "connected" else None,
+                ))
+                return callback(client, value)
+            setattr(self.exchange, name, observed)
 
     def _install_traffic_observer(self) -> None:
         """Observe each physical CCXT client before decoding/fanout, once.
@@ -167,6 +189,7 @@ class CcxtRuntime:
         return self.profile.resolve_symbol(self.exchange, descriptor)
 
     async def watch(self, descriptor: StreamDescriptor, symbol: str) -> Any:
+        await self._websocket_ready.wait()
         return await self.profile.watch(self.exchange, descriptor, symbol)
 
     @property
@@ -211,11 +234,18 @@ class CcxtRuntime:
         cleaner = getattr(self.exchange, "clean_ws_data", None)
         if not callable(closer) or not callable(cleaner):
             raise TypeError("CCXT exchange does not expose websocket cache cleanup")
-        await self._close_profile_state()
-        await closer()
-        cleaner()
+        self._websocket_ready.clear()
         self._websocket_generation += 1
-        self._websocket_recycles += 1
+        self._on_lifecycle_event(CcxtLifecycleEvent(
+            "resetting", None, int(time.time() * 1000), "CCXT shared websocket state reset",
+        ))
+        try:
+            await self._close_profile_state()
+            await closer()
+            cleaner()
+            self._websocket_recycles += 1
+        finally:
+            self._websocket_ready.set()
 
     async def close(self) -> None:
         async with self._recycle_lock:
@@ -257,6 +287,8 @@ class CcxtRuntime:
         }
 
     def _on_raw_event(self, event: CcxtRawMarketEvent) -> None:
+        if not self._websocket_ready.is_set():
+            return
         self._raw_events += 1
         for descriptor, callback in tuple(self._raw_subscribers.values()):
             if self.profile.matches(event, descriptor):

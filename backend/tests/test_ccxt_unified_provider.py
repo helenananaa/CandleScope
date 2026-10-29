@@ -10,6 +10,7 @@ import pytest
 from app.exchanges.symbol_catalog import _catalog_refresh_requests
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import (
+    SessionHealth,
     DataSource,
     RawMessage,
     StreamDescriptor,
@@ -39,6 +40,21 @@ from app.exchanges.ccxt_ext.unified import (
 )
 from app.exchanges.registry import bootstrap_default_adapters, get_exchange_registry
 from app.exchanges.symbols import normalize_symbol
+
+
+@pytest.mark.parametrize("market_type", ["spot", "swap"])
+def test_unified_okx_websocket_port_and_nonfatal_retirement_notice(market_type):
+    driver = _create_exchange(get_ccxt_catalog_entry("okx"), IngestionConfig(),
+                              market_type=market_type, websocket=True)
+    assert driver.urls["api"]["ws"] == "wss://ws.okx.com/ws/v5"
+    assert driver.urls["test"]["ws"] == "wss://wspap.okx.com/ws/v5"
+    rejected = []
+    client = type("Client", (), {"reject": lambda self, *args: rejected.append(args)})()
+    driver.handle_message(client, {"event": "notice", "code": "64010"})
+    assert rejected == []
+    assert driver.handle_error_message(client, "pong") is True
+    driver.handle_message(client, {"event": "error", "code": "60012", "msg": "Illegal request"})
+    assert len(rejected) == 1
 
 
 def _descriptor(
@@ -571,6 +587,60 @@ def test_provider_session_forwards_unified_watch_results_and_releases_runtime() 
         assert profile.exchange.close_calls == 1
 
     asyncio.run(run())
+
+
+def test_shared_reset_notifies_all_sessions_without_watch_cancellation():
+    async def run():
+        class Profile(_UnifiedFakeProfile):
+            def __init__(self):
+                super().__init__()
+                self.exchange.clients = {"wss://example.test": object()}
+                self.queues = {symbol: asyncio.Queue() for symbol in ("BTC/USDT", "ETH/USDT")}
+            async def watch(self, exchange, descriptor, ccxt_symbol):
+                return await self.queues[descriptor.symbol].get()
+        profile, pool = Profile(), CcxtRuntimePool()
+        sessions, received = [], []
+        async def delivered(message):
+            received.append(message)
+        async def until(predicate):
+            async with asyncio.timeout(2):
+                while not predicate():
+                    await asyncio.sleep(.001)
+        try:
+            for symbol in profile.queues:
+                session = CcxtProviderSession(config=IngestionConfig(ws_stale_timeout=10),
+                    descriptor=StreamDescriptor(symbol, StreamType.DEPTH, depth_levels=5, exchange="bybit"),
+                    profile=profile, pool=pool)
+                session.on_message(delivered)
+                sessions.append(session)
+                await session.start()
+                profile.queues[symbol].put_nowait({"bids": [[10, 1]], "asks": [[11, 1]]})
+            await until(lambda: len(received) == 2)
+            await pool.recycle_all_websockets()  # Fake closer does NOT cancel watch futures.
+            await until(lambda: all(s.health == SessionHealth.RECONNECTING for s in sessions))
+            for queue in profile.queues.values():
+                queue.put_nowait({"bids": [[12, 1]], "asks": [[13, 1]]})
+            await until(lambda: all(s.snapshot()["metrics"]["counters"].get("obsolete_watch_results") == 1 for s in sessions))
+            assert len(received) == 2  # Old-generation watch completions cannot restore state.
+            for queue in profile.queues.values():
+                queue.put_nowait({"bids": [[14, 1]], "asks": [[15, 1]]})
+            await until(lambda: len(received) == 4)
+            assert all(s.health == SessionHealth.CONNECTED for s in sessions)
+        finally:
+            await asyncio.gather(*(s.stop() for s in sessions))
+    asyncio.run(run())
+
+
+def test_interrupted_unified_kline_does_not_finalize_old_preview():
+    projector = CcxtUnifiedProjector(exchange_id="bybit", market_type="spot",
+                                     descriptor=_descriptor(StreamType.KLINE))
+    opened = 1_700_000_040_000
+    first = projector.project([[opened, 10, 11, 9, 10, 1]])
+    assert first[0].payload["is_closed"] is False
+    projector.source_interrupted()
+    resumed = projector.project([[opened + 120_000, 12, 13, 11, 12, 2]])
+    assert [e.payload["value"][0] for e in resumed] == [opened + 120_000]
+    assert resumed[0].payload["is_closed"] is False
 
 
 def test_provider_session_rebuilds_runtime_after_crossed_unified_book() -> None:

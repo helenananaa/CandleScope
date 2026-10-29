@@ -72,6 +72,54 @@
         "native_intervals": [
           "1m"
         ],
+        "native_bar_specs": [
+          {
+            "provider": "minute",
+            "venue": "minute",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "minute",
+            "venue": "minute",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
+        ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
@@ -239,6 +287,100 @@
           "2m",
           "3m"
         ],
+        "native_bar_specs": [
+          {
+            "provider": "multiple",
+            "venue": "multiple",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "2m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:2m",
+              "interval": "2m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "multiple",
+            "venue": "multiple",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "3m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:3m",
+              "interval": "3m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "multiple",
+            "venue": "multiple",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "2m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:2m",
+              "interval": "2m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "multiple",
+            "venue": "multiple",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "3m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:3m",
+              "interval": "3m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
+        ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
@@ -343,6 +485,100 @@
           "1w",
           "1M"
         ],
+        "native_bar_specs": [
+          {
+            "provider": "calendar",
+            "venue": "calendar",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1w",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1w",
+              "interval": "1w",
+              "alignment": "weekly_monday",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "calendar",
+            "venue": "calendar",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1M",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1M",
+              "interval": "1M",
+              "alignment": "calendar_month",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "calendar",
+            "venue": "calendar",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1w",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1w",
+              "interval": "1w",
+              "alignment": "weekly_monday",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "calendar",
+            "venue": "calendar",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1M",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1M",
+              "interval": "1M",
+              "alignment": "calendar_month",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
+        ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
@@ -394,6 +630,7 @@
         "native_intervals": [
           "60m"
         ],
+        "native_bar_specs": [],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
@@ -406,15 +643,15 @@
           "target": "1h",
           "purpose": "history",
           "market": "spot",
-          "kind": "native",
-          "source": "60m"
+          "kind": "unavailable",
+          "code": "native_bar_basis_unknown"
         },
         {
           "target": "90m",
           "purpose": "history",
           "market": "spot",
           "kind": "unavailable",
-          "code": "no_exact_base"
+          "code": "native_bar_basis_unknown"
         }
       ]
     },
@@ -486,6 +723,31 @@
         ],
         "native_intervals": [
           "1m"
+        ],
+        "native_bar_specs": [
+          {
+            "provider": "history-only",
+            "venue": "history-only",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
         ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
@@ -569,6 +831,31 @@
         ],
         "native_intervals": [
           "1m"
+        ],
+        "native_bar_specs": [
+          {
+            "provider": "realtime-only",
+            "venue": "realtime-only",
+            "market_type": "spot",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
         ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
@@ -723,6 +1010,100 @@
         "native_intervals": [
           "1m"
         ],
+        "native_bar_specs": [
+          {
+            "provider": "real-swap",
+            "venue": "real-swap",
+            "market_type": "swap",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "real-swap",
+            "venue": "real-swap",
+            "market_type": "swap",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1m",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1m",
+              "interval": "1m",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "real-swap",
+            "venue": "real-swap",
+            "market_type": "futures",
+            "channel": "kline",
+            "purpose": "history",
+            "interval": "1h",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1h",
+              "interval": "1h",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          },
+          {
+            "provider": "real-swap",
+            "venue": "real-swap",
+            "market_type": "futures",
+            "channel": "kline",
+            "purpose": "realtime",
+            "interval": "1h",
+            "basis": {
+              "schema_version": 1,
+              "basis_id": "bar-basis/1:1h",
+              "interval": "1h",
+              "alignment": "fixed_epoch",
+              "phase_ms": 0,
+              "boundary_convention": "[open,end)",
+              "stored_close": "end-1ms"
+            },
+            "qualification": "declared",
+            "evidence": "controlled interval-admission contract fixture",
+            "protocol": null,
+            "protocol_version": "1",
+            "calendar_id": null,
+            "close_convention": "inclusive_ms"
+          }
+        ],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
@@ -823,6 +1204,7 @@
         "native_intervals": [
           "1s"
         ],
+        "native_bar_specs": [],
         "supports_multi_symbol_ticker": false,
         "supports_symbol_search": true,
         "ws_connection_model": "path_per_stream",
