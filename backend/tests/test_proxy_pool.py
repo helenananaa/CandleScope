@@ -57,6 +57,18 @@ def test_key_credits_are_not_multiplied_by_proxy_groups():
 
 
 @pytest.mark.anyio
+async def test_balanced_prefers_remaining_capacity_when_both_routes_are_allowed():
+    pool, manager, cfg = ProxyPool(), RateLimitManager(), config()
+    quota = RateLimitRule("capacity", "binance:spot:request_weight:ip", 1000, 60,
+                          cost=lambda _: 5)
+    manager.record_response(scope_rate_limit_rule(quota, "a"), status_code=200,
+                            headers={"X-MBX-USED-WEIGHT-1M": "990"})
+    assert (await manager.inspect(scope_rate_limit_rule(quota, "a"), request())).allowed
+    assert (await manager.inspect(scope_rate_limit_rule(quota, "b"), request())).allowed
+    assert (await pool.select_rest(cfg, request(), quota, manager)).id == "b"
+
+
+@pytest.mark.anyio
 async def test_selection_accounts_for_budget_load_and_health_without_resetting_quota():
     cfg, pool, manager = config(), ProxyPool(), RateLimitManager()
     a, b = pool.routes(cfg, "binance")

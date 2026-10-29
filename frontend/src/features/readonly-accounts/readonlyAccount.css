@@ -23,3 +23,7 @@
 .readonly-account-dock details summary { cursor: pointer; line-height: 1.5; }
 .readonly-account-error { padding: 8px; border: 1px solid var(--text-warning); border-radius: 4px; }
 .readonly-account-note-text { white-space: pre-wrap; }
+
+.readonly-review-stats { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+.readonly-review-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+.readonly-review details { margin: 10px 0; }

@@ -10,6 +10,7 @@ from ccxt.pro.binance import binance as CcxtBinanceSpot
 from .binance_usdm import SUPPORTED_CCXT_VERSION
 from .hooks import build_hooked_exchange_class
 from .tls import SharedSslContextMixin
+from .admission import PublicCcxtAdmissionMixin
 
 _HookedBinanceSpot = build_hooked_exchange_class(
     CcxtBinanceSpot,
@@ -20,6 +21,7 @@ _HookedBinanceSpot = build_hooked_exchange_class(
 
 
 class CandleScopeBinanceSpot(  # type: ignore[misc, valid-type]
+    PublicCcxtAdmissionMixin,
     SharedSslContextMixin,
     _HookedBinanceSpot,
 ):

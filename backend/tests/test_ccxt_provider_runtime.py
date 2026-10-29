@@ -374,6 +374,40 @@ def test_runtime_pool_shares_one_exchange_and_closes_at_last_release() -> None:
     asyncio.run(run())
 
 
+def test_runtime_pool_cancels_pending_bootstrap_only_after_last_waiter(monkeypatch) -> None:
+    async def run() -> None:
+        started, canceled = asyncio.Event(), asyncio.Event()
+
+        async def blocked_load(exchange) -> None:
+            from app.exchanges.public_admission import current_demand, TrafficClass
+            assert current_demand().priority() == TrafficClass.RECOVERY
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                canceled.set()
+
+        monkeypatch.setattr(_FakeExchange, "load_markets", blocked_load)
+        pool, profile, config = CcxtRuntimePool(), _FakeProfile(), IngestionConfig()
+        first = asyncio.create_task(pool.acquire(profile, config))
+        await asyncio.wait_for(started.wait(), 1)
+        second = asyncio.create_task(pool.acquire(profile, config))
+        await _wait_until(lambda: pool.snapshot()["runtimes"]["fake|futures"]["references"] == 2)
+        first.cancel()
+        result = await asyncio.wait_for(asyncio.gather(first, return_exceptions=True), 1)
+        assert isinstance(result[0], asyncio.CancelledError)
+        assert not canceled.is_set()
+        assert profile.exchange.close_calls == 0
+        second.cancel()
+        result = await asyncio.wait_for(asyncio.gather(second, return_exceptions=True), 1)
+        assert isinstance(result[0], asyncio.CancelledError)
+        assert canceled.is_set()
+        assert profile.exchange.close_calls == profile.close_calls == 1
+        assert pool.snapshot() == {"runtimes": {}}
+
+    asyncio.run(run())
+
+
 def test_runtime_pool_bounds_okx_kline_descriptors_per_shard(monkeypatch) -> None:
     async def run() -> None:
         from app.core import config as app_config
@@ -510,6 +544,37 @@ def test_provider_session_forwards_raw_payload_without_ccxt_projection() -> None
         assert session.health == SessionHealth.DISCONNECTED
         assert profile.exchange.close_calls == 1
 
+    asyncio.run(run())
+
+
+def test_provider_session_retries_failed_delivery_before_next_message() -> None:
+    async def run():
+        profile = _FakeProfile()
+        session = CcxtProviderSession(
+            config=IngestionConfig(ws_reconnect_delay_initial=0.01),
+            descriptor=_agg_descriptor(), profile=profile, pool=CcxtRuntimePool(),
+        )
+        attempts, delivered, health = [], [], []
+        async def receive(message):
+            attempts.append(message.payload["a"])
+            if len(attempts) == 1:
+                raise OSError("injected source journal failure")
+            delivered.append(message.payload["a"])
+        async def observe(state, reason):
+            health.append(state)
+        session.on_message(receive)
+        session.on_health_change(observe)
+        try:
+            await session.start()
+            await _wait_until(lambda: profile.exchange is not None)
+            await profile.exchange.watch_queue.put(_agg_event(123))
+            await profile.exchange.watch_queue.put(_agg_event(124))
+            await _wait_until(lambda: len(delivered) == 2)
+            assert attempts == [123, 123, 124]
+            assert SessionHealth.UNHEALTHY in health and health[-1] == SessionHealth.CONNECTED
+            assert session.snapshot()["metrics"]["counters"]["delivery_failures"] == 1
+        finally:
+            await session.stop()
     asyncio.run(run())
 
 

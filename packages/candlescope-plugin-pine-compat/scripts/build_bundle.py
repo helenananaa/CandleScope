@@ -87,7 +87,7 @@ def load_release_lock(path: Path = DEFAULT_LOCK_PATH) -> dict[str, Any]:
     engine = wheels["pine-compat-runtime"]
     expected_engine = {
         "0.2.0": "0.2.0", "0.3.0.dev1": "0.3.0rc1", "0.3.0": "0.3.0",
-        "0.3.1": "0.3.1", "0.3.2": "0.3.2", "0.3.3": "0.3.3", "0.4.0": "0.3.3",
+        "0.3.1": "0.3.1", "0.3.2": "0.3.2", "0.3.3": "0.3.2+cs.1", "0.4.0": "0.3.3+cs.1",
     }[plugin["version"]]
     if (lock.get("releaseStatus") == "host-incremental-candidate-unpublished" and plugin["version"] == "0.3.2"
             and engine.get("source") == "isolated-source-candidate"):

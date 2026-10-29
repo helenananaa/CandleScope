@@ -3,7 +3,7 @@ import { t } from "../../i18n/index.js";
 import { API_BASE, httpBaseToWsBase } from "../../services/apiConfig.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
 import type { IntervalString } from "../../utils/intervals.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { createTradeFlowMarkerSource } from "./tradeFlowMarkerSource.js";
 import { useTradeFlowPreferences } from "./tradeFlowPreferencesStore.js";
 import { createTradeFlowStore } from "./tradeFlowStore.js";
@@ -18,7 +18,7 @@ import type { TradeFlowIdentity, TradeFlowRuntime } from "./tradeFlowTypes.js";
 export interface UseTradeFlowRuntimeOptions {
   identity: TradeFlowIdentity;
   interval: IntervalString;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
   buyColor: string;
   sellColor: string;
   /** True when tape and/or profile rail views are open. */

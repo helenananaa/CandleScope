@@ -1,3 +1,4 @@
+import { formatIntervalLabel } from "../../utils/intervals.js";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 
 import SingleChartPanes from "../../components/SingleChartPanes.js";
@@ -88,7 +89,7 @@ export function ImportedDatasetIntervalStrip({
       />
       <div className="local-dataset-truthbar">
         <span>
-          {`${interval}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: manifest.interval })} · ${manifest.timezone} · ${formatResearchRows(manifest.rows)} source bars · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
+          {`${formatIntervalLabel(interval)}${interval === manifest.interval ? t("local.sourceData") : t("local.derived", { interval: formatIntervalLabel(manifest.interval) })} · ${manifest.timezone} · ${formatResearchRows(manifest.rows)} source bars · ${manifest.volume_available ? "OHLCV" : t("local.volumeUnavailable")}`}
         </span>
         <span>{`dataEpoch ${manifest.data_epoch.slice(7, 19)}`}</span>
       </div>
@@ -481,7 +482,7 @@ export function StrategyResearchImportedWorkspace({
         manifest,
       )}
       modeNotice={{
-        label: interval === manifest.interval ? t("local.csvSource") : t("local.derivedLabel", { interval }),
+        label: interval === manifest.interval ? t("local.csvSource") : t("local.derivedLabel", { interval: formatIntervalLabel(interval) }),
         description: interval === manifest.interval
           ? t("local.modeSource")
           : t("local.modeDerived", { interval, source: manifest.interval }),

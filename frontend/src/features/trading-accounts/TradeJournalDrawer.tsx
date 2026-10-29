@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -11,6 +11,8 @@ import {
   type TemplateField,
   type TemplateSection,
 } from "./journalTemplates.js";
+import { JournalDraftError, JournalEditor } from "./journalEditor.js";
+import type { JournalApi } from "./journalApi.js";
 import { tradingApi } from "./tradingApi.js";
 import {
   formatAmount,
@@ -38,8 +40,6 @@ export type JournalTarget =
   | { kind: "entry"; entryId: string }
   | { kind: "plan"; draft: PlanDraft | null };
 
-type SaveState = "idle" | "saving" | "saved" | "failed";
-
 const PRE_KEYS = new Set<string>(PRE_TRADE_FIELD_KEYS);
 const SAVE_DELAY_MS = 800;
 
@@ -50,13 +50,15 @@ function stageOf(trade: TradeDetail | null): JournalStage {
 
 export default function TradeJournalDrawer({
   account,
+  api = tradingApi,
   target,
   context,
   onClose,
   onChanged,
   onOpenQuickReplay,
 }: {
-  account: TradingAccount;
+  account: Pick<TradingAccount, "id">;
+  api?: JournalApi;
   target: JournalTarget;
   context: TradingChartContext;
   onClose(): void;
@@ -65,20 +67,34 @@ export default function TradeJournalDrawer({
 }) {
   useLocale();
   const [trade, setTrade] = useState<TradeDetail | null>(null);
-  const [note, setNote] = useState<JournalEntry | null>(null);
-  const [fields, setFields] = useState<Record<string, string>>({});
   const [excursion, setExcursion] = useState<Excursion | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [quickText, setQuickText] = useState("");
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const noteRef = useRef<JournalEntry | null>(null);
-  const fieldsRef = useRef(fields);
   const timerRef = useRef<number | null>(null);
-  const creatingRef = useRef<Promise<JournalEntry> | null>(null);
-  noteRef.current = note;
-  fieldsRef.current = fields;
+  const sourceRef = useRef({ exchange: context.exchange, marketType: context.marketType, symbol: context.symbol,
+    tradeId: target.kind === "trade" ? target.tradeId : null as string | null });
+  const [editor] = useState(() => new JournalEditor({
+    key: `candlescope.journal-draft.v1:${account.id}:${target.kind === "trade" ? `trade:${target.tradeId}`
+      : target.kind === "entry" ? `entry:${target.entryId}`
+        : `plan:${context.exchange}:${context.marketType}:${context.symbol}`}`,
+    storage: () => window.localStorage,
+    create: (fields, clientEntryId) => api.createEntry(account.id, {
+      ...sourceRef.current,
+      kind: "note", templateId: TRADE_REVIEW_TEMPLATE.id, templateVersion: TRADE_REVIEW_TEMPLATE.version,
+      fields, clientEntryId,
+    }),
+    save: (id, fields, expectedRevision) => api.saveEntry(id, { fields, expectedRevision }),
+    quick: (body, clientEntryId) => api.createEntry(account.id, {
+      ...sourceRef.current,
+      kind: "quick", body, clientEntryId,
+    }),
+  }));
+  const editorState = useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
+  const { note, fields, quickText, status: saveState } = editorState;
+  const editorError = editorState.error instanceof JournalDraftError
+    ? t(editorState.error.reason === "storage" ? "trading.journal.draftStorageFailed" : "trading.journal.draftChanged")
+    : editorState.error ? tradingErrorMessage(editorState.error) : null;
 
   const source = trade ?? note ?? context;
   const instrument = useMemo(
@@ -90,48 +106,40 @@ export default function TradeJournalDrawer({
   const template = templateFor(note?.templateId);
 
   const loadTrade = useCallback(async (tradeId: string) => {
-    const detail = await tradingApi.trade(account.id, tradeId);
+    const detail = await api.trade(account.id, tradeId);
+    sourceRef.current = { exchange: detail.exchange, marketType: detail.marketType, symbol: detail.symbol, tradeId: detail.id };
     setTrade(detail);
-    const tradeNote = detail.entries.find((entry) => entry.id === detail.noteId) ?? null;
-    if (tradeNote && noteRef.current === null) {
-      setNote(tradeNote);
-      setFields(tradeNote.fields);
-    } else if (tradeNote) {
-      setNote(tradeNote);
-    }
     if (detail.status === "closed") {
-      tradingApi.excursion(account.id, tradeId).then(setExcursion).catch(() => setExcursion(null));
+      api.excursion(account.id, tradeId).then(setExcursion).catch(() => setExcursion(null));
     }
     return detail;
-  }, [account.id]);
+  }, [account.id, api]);
 
   useEffect(() => {
     let cancelled = false;
+    editor.activate();
     const run = async () => {
       try {
         if (target.kind === "trade") {
-          await loadTrade(target.tradeId);
+          const detail = await loadTrade(target.tradeId);
+          if (!cancelled) editor.initialize(detail.entries.find((entry) => entry.id === detail.noteId) ?? null);
         } else if (target.kind === "entry") {
-          const entry = await tradingApi.entry(target.entryId);
+          const entry = await api.entry(target.entryId);
           if (cancelled) return;
-          setNote(entry);
-          setFields(entry.fields);
+          sourceRef.current = { exchange: entry.exchange, marketType: entry.marketType, symbol: entry.symbol, tradeId: entry.tradeId };
+          editor.initialize(entry);
           if (entry.tradeId) await loadTrade(entry.tradeId);
         } else {
           const draft = target.draft;
-          const initial = {
+          editor.initialize(null, {
             timeframe: context.interval,
             ...(draft?.entryPrice ? { entryPrice: draft.entryPrice } : {}),
             ...(draft?.stopPrice ? { stopPrice: draft.stopPrice } : {}),
             ...(draft?.targetPrice ? { targetPrice: draft.targetPrice } : {}),
             ...(draft?.riskUsdt ? { riskUsdt: draft.riskUsdt } : {}),
-          };
-          setFields(initial);
-          fieldsRef.current = initial;
-          // A plan prefilled from the order ticket is saved right away so its
-          // risk exists before the order that may fill moments later.
-          if (draft && (draft.stopPrice || draft.riskUsdt)) {
-            timerRef.current = window.setTimeout(() => { void flush(); }, 0);
+          });
+          if (draft && (draft.stopPrice || draft.riskUsdt) && !editor.getSnapshot().recovered) {
+            void editor.flush();
           }
         }
       } catch (cause) {
@@ -139,90 +147,40 @@ export default function TradeJournalDrawer({
       }
     };
     void run();
-    return () => { cancelled = true; };
-    // The drawer is keyed by its target; context changes must not reload it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, loadTrade]);
+    return () => {
+      cancelled = true;
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      editor.dispose();
+    };
+  }, [api, context.interval, editor, loadTrade, target]);
 
-  const ensureNote = useCallback(async (): Promise<JournalEntry> => {
-    if (noteRef.current) return noteRef.current;
-    if (!creatingRef.current) {
-      creatingRef.current = tradingApi.createEntry(account.id, {
-        ...instrument,
-        kind: "note",
-        templateId: TRADE_REVIEW_TEMPLATE.id,
-        templateVersion: TRADE_REVIEW_TEMPLATE.version,
-        ...(trade ? { tradeId: trade.id } : {}),
-        fields: fieldsRef.current,
-      }).then((created) => {
-        setNote(created);
-        noteRef.current = created;
-        onChanged();
-        return created;
-      }).finally(() => { creatingRef.current = null; });
-    }
-    return creatingRef.current;
-  }, [account.id, instrument, onChanged, trade]);
-
-  const flush = useCallback(async () => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    setSaveState("saving");
-    try {
-      const existing = noteRef.current;
-      const saved = existing
-        ? await tradingApi.saveEntry(existing.id, { fields: fieldsRef.current })
-        : await ensureNote();
-      setNote(saved);
-      setSaveState("saved");
-    } catch (cause) {
-      setSaveState("failed");
-      setError(tradingErrorMessage(cause));
-    }
-  }, [ensureNote]);
-
-  useEffect(() => () => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      void flush();
-    }
-  }, [flush]);
-
+  const flush = async () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    const saved = await editor.flush();
+    if (saved) onChanged();
+    return saved;
+  };
+  const ensureNote = async (): Promise<JournalEntry> => {
+    if (!await editor.ensureNote()) throw new Error(t("trading.journal.saveFailed"));
+    onChanged();
+    const saved = editor.getSnapshot().note;
+    if (!saved) throw new Error(t("trading.journal.plan"));
+    return saved;
+  };
   const setField = (key: string, value: string) => {
-    setFields((current) => {
-      const next = { ...current };
-      if (value) next[key] = value;
-      else delete next[key];
-      fieldsRef.current = next;
-      return next;
-    });
-    setSaveState("idle");
+    const next = { ...editor.getSnapshot().fields };
+    if (value) next[key] = value;
+    else delete next[key];
+    editor.edit(next);
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => { void flush(); }, SAVE_DELAY_MS);
   };
-
-  const quickNotes = useMemo(
-    () => (trade?.entries ?? []).filter((entry) => entry.kind === "quick"),
-    [trade],
-  );
-
+  const quickNotes = useMemo(() => (trade?.entries ?? []).filter((entry) => entry.kind === "quick"), [trade]);
   const addQuickNote = async () => {
-    const text = quickText.trim();
-    if (!text) return;
-    try {
-      await tradingApi.createEntry(account.id, {
-        ...instrument,
-        kind: "quick",
-        body: text,
-        ...(trade ? { tradeId: trade.id } : {}),
-      });
-      setQuickText("");
+    if (await editor.saveQuick()) {
       if (trade) await loadTrade(trade.id);
       onChanged();
-    } catch (cause) {
-      setError(tradingErrorMessage(cause));
     }
   };
 
@@ -239,8 +197,8 @@ export default function TradeJournalDrawer({
         capturedAtMs: Date.now(),
         ...(context.describeChart ? context.describeChart() : {}),
       };
-      const updated = await tradingApi.addSnapshot(entry.id, { ...(image ? { image } : {}), state });
-      setNote(updated);
+      const updated = await api.addSnapshot(entry.id, { ...(image ? { image } : {}), state });
+      editor.adopt(updated);
     } catch (cause) {
       setError(tradingErrorMessage(cause));
     }
@@ -249,9 +207,9 @@ export default function TradeJournalDrawer({
   const link = async (entryId: string) => {
     if (!trade) return;
     try {
-      const linked = await tradingApi.linkEntry(entryId, trade.id);
-      setNote(linked);
-      setFields(linked.fields);
+      if (!await flush()) return;
+      const linked = await api.linkEntry(entryId, trade.id);
+      editor.adopt(linked);
       await loadTrade(trade.id);
       onChanged();
     } catch (cause) {
@@ -342,21 +300,35 @@ export default function TradeJournalDrawer({
             : saveState === "saved" ? t("trading.journal.saved")
               : saveState === "failed" ? t("trading.journal.saveFailed") : ""}
         </span>
-        <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={() => { void flush().finally(onClose); }}>×</button>
+        <button type="button" className="trading-icon-button" aria-label={t("trading.close")} onClick={() => {
+          if (!editorState.ready) { onClose(); return; }
+          void flush().then((saved) => { if (saved) onClose(); });
+        }}>×</button>
       </header>
       <div className="trading-drawer-body">
-        {error && <p className="trading-error" role="alert">{error}</p>}
+        {(error || editorError) && <p className="trading-error" role="alert">{editorError ?? error}</p>}
+        {editorState.recovered && <p className="trading-help" role="status">{t("trading.journal.draftRecovered")}</p>}
+        <button type="button" className="trading-button" disabled={!editorState.ready || saveState === "saving"}
+          onClick={() => { void flush(); }}>{t("trading.journal.saveNow")}</button>
+        <fieldset disabled={!editorState.ready} style={{ border: 0, padding: 0, margin: 0 }}>
         {trade && (
           <div className="trading-trade-strip">
             <span>{formatDateTime(trade.openedAtMs)}{trade.closedAtMs ? ` · ${formatDuration(trade.openedAtMs, trade.closedAtMs)}` : ""}</span>
             <strong data-tone={pnlTone(trade.status === "closed" ? trade.netPnl : trade.unrealizedPnl)}>
               {formatSigned(trade.status === "closed" ? trade.netPnl : trade.unrealizedPnl)}
             </strong>
-            <button type="button" className="trading-button" onClick={() => onOpenQuickReplay(trade)}>
+            <button type="button" className="trading-button" onClick={() => { void flush().then((saved) => { if (saved) onOpenQuickReplay(trade); }); }}>
               {t("trading.replay.open")}
             </button>
           </div>
         )}
+        {trade?.readonlySource && <details className="trading-help">
+          <summary>{t("account.review.source", { instrument: trade.readonlySource.instrument, currency: trade.readonlySource.currency })}</summary>
+          <p>{t("account.review.identity", { uid: trade.readonlySource.accountUid, margin: trade.readonlySource.marginMode, position: trade.readonlySource.positionId })}</p>
+          <p>{t("account.review.verified", { time: formatDateTime(trade.readonlySource.verifiedAtMs) })}</p>
+          {trade.readonlySource.fills.map((fill) => <p key={fill.fillId}>{t("account.review.fillIdentity", { fill: fill.fillId, trade: fill.tradeId, order: fill.orderId ?? "—", contracts: fill.contracts })}</p>)}
+          <p>{t("account.review.noR")}</p>
+        </details>}
         {plan && (
           <p className="trading-locked" data-edited={riskEdited}>
             {t("trading.journal.locked", {
@@ -410,7 +382,7 @@ export default function TradeJournalDrawer({
               className="trading-quick-input"
               value={quickText}
               placeholder={t("trading.journal.quickPlaceholder")}
-              onChange={(event) => setQuickText(event.target.value)}
+              onChange={(event) => editor.editQuick(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") void addQuickNote(); }}
             />
           </section>
@@ -421,7 +393,7 @@ export default function TradeJournalDrawer({
             {(note?.snapshots ?? []).map((snapshot) => (
               <figure key={snapshot.id}>
                 {snapshot.hasImage
-                  ? <img src={tradingApi.snapshotImageUrl(snapshot.id)} alt={t("trading.journal.snapshotAlt", { time: formatDateTime(snapshot.createdAtMs) })} />
+                  ? <JournalImage api={api} id={snapshot.id} time={snapshot.createdAtMs} />
                   : <span className="trading-help">{t("trading.journal.snapshotNoImage")}</span>}
                 <figcaption>{formatDateTime(snapshot.createdAtMs)} · {String(snapshot.state.symbol ?? "")} {String(snapshot.state.interval ?? "")}</figcaption>
               </figure>
@@ -436,8 +408,21 @@ export default function TradeJournalDrawer({
             </button>
           </div>
         </section>
+        </fieldset>
       </div>
     </aside>,
     document.body,
   );
+}
+
+
+function JournalImage({ api, id, time }: { api: JournalApi; id: string; time: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve(api.snapshotImageUrl(id)).then((url) => { if (active) setSrc(url); })
+      .catch(() => { if (active) setSrc(null); });
+    return () => { active = false; };
+  }, [api, id]);
+  return src ? <img src={src} alt={t("trading.journal.snapshotAlt", { time: formatDateTime(time) })} /> : <span>—</span>;
 }

@@ -132,6 +132,10 @@ class IngestionConfig:
     Grouped by layer so it's easy to find what you're looking for.
     """
 
+    archive_downloads_enabled: bool = field(default_factory=lambda: _env_bool(
+        "INGESTION_ARCHIVE_DOWNLOADS_ENABLED", True,
+    ))
+
     # ── L1: Transport ──────────────────────────────────────────
     # HTTP endpoints (ordered by preference)
     http_base_urls: list[str] = field(default_factory=lambda: _env_str_list(
@@ -269,6 +273,14 @@ class IngestionConfig:
             "INGESTION_CCXT_UNIFIED_STREAM_ENABLED",
             True,
         ),
+    )
+    # Release-pinned CCXT fork. Explicit false retains the raw-profile rollback.
+    ccxt_fork_kline_enabled: bool = field(
+        default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", True),
+    )
+    # Zero disables automatic lossless source-log compaction; heads stay hot.
+    source_log_retention_days: int = field(
+        default_factory=lambda: _env_int("INGESTION_SOURCE_LOG_RETENTION_DAYS", 30),
     )
     # Raw hooks run synchronously in CCXT's websocket reader.  Overflow is a
     # hard health failure rather than a silent data drop.

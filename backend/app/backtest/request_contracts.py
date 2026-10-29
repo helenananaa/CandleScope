@@ -35,9 +35,9 @@ class RunCreateRequest(BaseModel):
     checkpoint_policy: Literal["INTERVAL", "FINAL_ONLY", "NONE"] | None = None
     checkpoint_interval: int | None = Field(default=None, ge=1, strict=True)
     symbol: str | None = Field(default=None, max_length=80)
-    interval: str | None = Field(default=None, max_length=16)
+    interval: str | None = Field(default=None, max_length=64)
     signal_clock: str | None = Field(default=None, max_length=40)
-    signal_interval: str | None = Field(default=None, max_length=16)
+    signal_interval: str | None = Field(default=None, max_length=64)
     execution_clock: str | None = Field(default=None, max_length=40)
     bar_builder: str | None = Field(default=None, max_length=80)
     timezone: str | None = Field(default=None, max_length=40)
@@ -124,7 +124,7 @@ class StudyCreateRequest(BaseModel):
     dataset_id: str | None = Field(default=None, max_length=80)
     data_epoch: str | None = Field(default=None, max_length=80)
     dataset_snapshot_hash: str | None = Field(default=None, max_length=80)
-    interval: str | None = Field(default=None, max_length=16)
+    interval: str | None = Field(default=None, max_length=64)
     start_ms: int
     end_ms: int
     train_ms: int
@@ -171,7 +171,7 @@ class SnapshotPreviewRequest(BaseModel):
     data_epoch: str = Field(min_length=8, max_length=80)
     start_time_ms: int
     end_time_ms: int
-    interval: str | None = Field(default=None, max_length=16)
+    interval: str | None = Field(default=None, max_length=64)
     fidelity_mode: str = "BAR_APPROX"
     execution_data: ChartBookData | None = None
     exchange: str = Field(default="binance", min_length=1, max_length=40)
@@ -186,7 +186,7 @@ class ChartContextResolveRequest(BaseModel):
     exchange: str = Field(min_length=1, max_length=40)
     market_type: str = Field(min_length=1, max_length=40)
     symbol: str = Field(min_length=1, max_length=80)
-    interval: str = Field(min_length=2, max_length=32)
+    interval: str = Field(min_length=2, max_length=64)
     range_mode: Literal["ALL_AVAILABLE", "VISIBLE", "CUSTOM"]
     start_time_ms: int | None = None
     end_time_ms: int | None = None
@@ -258,7 +258,7 @@ class ResearchChartSessionPayload(BaseModel):
     exchange: str = Field(min_length=1, max_length=40)
     market_type: str = Field(min_length=1, max_length=40)
     symbol: str = Field(min_length=1, max_length=80)
-    interval: str = Field(min_length=1, max_length=32)
+    interval: str = Field(min_length=1, max_length=64)
 
 
 class ResearchRangePayload(BaseModel):

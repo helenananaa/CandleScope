@@ -4,44 +4,15 @@
   "engines": {
     "pine-compat-runtime": {
       "commit": "c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
-      "version": "0.3.3",
+      "version": "0.3.3+cs.1",
       "archive": {
         "filename": "pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc.tar.gz",
         "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
         "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
       },
       "bridge": "candlescope-plugin-pine-compat",
-      "manifest": {
-        "filename": "pine-compat-runtime-v0.3.3-manifest.json",
-        "url": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.3/manifest.json",
-        "sha256": "sha256:46302c44c14c9fe2c1b1e291d49fa89f61fada87952d5928f5f4b7f36b671edf"
-      },
-      "wheels": {
-        "Windows-AMD64": {
-          "filename": "pine_compat_runtime-0.3.3-cp310-abi3-win_amd64.whl",
-          "url": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.3/pine_compat_runtime-0.3.3-cp310-abi3-win_amd64.whl",
-          "sha256": "sha256:d465365c6ea6e2cd7a25e61ef68d5abcf26440f01881435a214f440e83b7903d",
-          "size": 4577738
-        },
-        "Darwin-arm64": {
-          "filename": "pine_compat_runtime-0.3.3-cp310-abi3-macosx_11_0_arm64.whl",
-          "url": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.3/pine_compat_runtime-0.3.3-cp310-abi3-macosx_11_0_arm64.whl",
-          "sha256": "sha256:e2859501e22f7741fa04448c0deb001623b40ee33fe82082084af40801c1a090",
-          "size": 4331838
-        },
-        "Darwin-x86_64": {
-          "filename": "pine_compat_runtime-0.3.3-cp310-abi3-macosx_10_12_x86_64.whl",
-          "url": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.3/pine_compat_runtime-0.3.3-cp310-abi3-macosx_10_12_x86_64.whl",
-          "sha256": "sha256:45f4732129fa7400f5fcca7af623c0021910eb6d26fe00e424e31fafccd1c987",
-          "size": 4596890
-        },
-        "Linux-x86_64": {
-          "filename": "pine_compat_runtime-0.3.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-          "url": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.3/pine_compat_runtime-0.3.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-          "sha256": "sha256:84a6a71482be461caf0be618726e05d941d726a006bc71492fc9ae6b742b1f35",
-          "size": 4687582
-        }
-      }
+      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v2.patch",
+      "patchSha256": "sha256:53cc3758f4fb575d02e00094b5b8a29ff35e2992eddd57273ff72b1af6485ec3"
     }
   },
   "numpy": {
@@ -76,5 +47,11 @@
     "Darwin-x86_64",
     "Linux-x86_64",
     "Windows-AMD64"
-  ]
+  ],
+  "bridgeProbes": {
+    "candlescope-plugin-pine-compat": {
+      "path": "packages/candlescope-plugin-pine-compat/release/source-probe.0.4.0.json",
+      "sha256": "sha256:37a9f52a69d2d98227c60ae731fd369c8d40a823e8f96ef1daff9562f98c7a85"
+    }
+  }
 }

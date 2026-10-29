@@ -1,0 +1,6 @@
+{
+  "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+  "upstream_version": "4.5.60",
+  "schema": "candlescope.binance.usdm.kline.v1",
+  "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c"
+}

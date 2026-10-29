@@ -1,4 +1,5 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
@@ -18,6 +19,10 @@ export const en = {
   "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",
   "indicator.pine.contexts": "Pine requested markets (JSON)",
   "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
+  ...intervalBasisMessages["en"],
+  "interval.historyOnly": "History only · realtime unavailable",
+  "interval.unavailableHelp": "The requested chart has been preserved. Choose another interval, or change the source in the symbol picker.",
+
   ...readonlyAccountEnglish,
   ...pineEnglish,
   ...externalProviderEnglish,
@@ -1558,6 +1563,7 @@ export const en = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

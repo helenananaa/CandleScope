@@ -1,0 +1,179 @@
+{
+  "lock": {
+    "repository": "https://github.com/helenananaa/ccxt.git",
+    "upstream_version": "4.5.60",
+    "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+    "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "build_requirements": [
+      "setuptools==80.9.0",
+      "wheel==0.45.1"
+    ],
+    "schemas": [
+      "candlescope.binance.usdm.kline.v1",
+      "candlescope.binance.spot.kline.v1",
+      "candlescope.okx.kline.v1"
+    ]
+  },
+  "desktop_tested": false,
+  "rails": {
+    "okx-spot": {
+      "status": "passed",
+      "ws_frames": 13,
+      "rest_samples": 2,
+      "closed_at": 1793248680000,
+      "restart": true,
+      "pending": 0
+    },
+    "okx-futures": {
+      "status": "failed",
+      "error": "AssertionError('REST/WS close did not converge')",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 286, in main_run\n    result[\"rails\"][key] = await candles(\n                           ^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 136, in candles\n    raise AssertionError(\"REST/WS close did not converge\")\nAssertionError: REST/WS close did not converge\n"
+    }
+  },
+  "channels": {
+    "okx-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "okx-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 4,
+        "events": 5
+      }
+    },
+    "okx-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 3
+      }
+    },
+    "okx-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 12
+      }
+    },
+    "okx-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 3
+      }
+    },
+    "okx-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 4
+      }
+    },
+    "okx-futures-markPrice": {
+      "status": "failed",
+      "error": "ValueError('unable to resolve one OKX index symbol for BTC/USDT:USDT')",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 318, in main_run\n    result[\"channels\"][name] = await channel(\n                               ^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 195, in channel\n    values = await asyncio.wait_for(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.15_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/tasks.py\", line 520, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 380, in fetch_history_with_config\n    return await self._fetch_source_history(req, config)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 407, in _fetch_source_history\n    return await self._fetch_okx_summary(req, config)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 694, in _fetch_okx_summary\n    index_symbol = _okx_index_symbol(exchange, symbol)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 914, in _okx_index_symbol\n    raise ValueError(\nValueError: unable to resolve one OKX index symbol for BTC/USDT:USDT\n"
+    },
+    "okx-futures-indexPrice": {
+      "status": "failed",
+      "error": "ValueError('unable to resolve one OKX index symbol for BTC/USDT:USDT')",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 318, in main_run\n    result[\"channels\"][name] = await channel(\n                               ^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_matrix.py\", line 195, in channel\n    values = await asyncio.wait_for(\n             ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.12/3.12.15_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/tasks.py\", line 520, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 380, in fetch_history_with_config\n    return await self._fetch_source_history(req, config)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 407, in _fetch_source_history\n    return await self._fetch_okx_summary(req, config)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 694, in _fetch_okx_summary\n    index_symbol = _okx_index_symbol(exchange, symbol)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/app/exchanges/ccxt_ext/primary.py\", line 914, in _okx_index_symbol\n    raise ValueError(\nValueError: unable to resolve one OKX index symbol for BTC/USDT:USDT\n"
+    },
+    "okx-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    }
+  },
+  "legacy": [
+    {
+      "rail": "okx-spot",
+      "original_db_read_only": "/Users/ryanliang/CandleScope/backend/data/candlescope.db",
+      "result": {
+        "scanned": 3,
+        "matched": 1,
+        "revised": 2,
+        "unavailable": 0,
+        "already_evidenced": 0,
+        "evidence_origin": "historical_refetch",
+        "next_start_ms": 1788826380001
+      }
+    },
+    {
+      "rail": "okx-futures",
+      "original_db_read_only": "/Users/ryanliang/CandleScope/backend/data/candlescope.db",
+      "result": {
+        "scanned": 3,
+        "matched": 3,
+        "revised": 0,
+        "unavailable": 0,
+        "already_evidenced": 0,
+        "evidence_origin": "historical_refetch",
+        "next_start_ms": 1791676800001
+      }
+    }
+  ],
+  "retention": {
+    "archived": 125,
+    "json_bytes": 6298172,
+    "compressed_bytes": 256701,
+    "cutoff": 1793335261212
+  },
+  "restart_readback": {
+    "restored": 138,
+    "pending": 0
+  }
+}

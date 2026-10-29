@@ -1,0 +1,29 @@
+{
+  "releaseStatus": "local-remediation-candidate-unpublished",
+  "source": "https://github.com/helenananaa/pine-compat-runtime",
+  "sourceCommit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
+  "platform": "macos-arm64",
+  "contract": "host-bar-boundaries/1",
+  "artifacts": {
+    "rules": {
+      "path": "backend/app/data_engine/basis_rules/calendar-v1.json",
+      "sha256": "31ba9dd648a8d83e7a45fcbe914cdfb91e76b769f806ee0d87eacac4601c626d"
+    },
+    "patch": {
+      "path": "packages/candlescope-plugin-pine-compat/engine-patches/host-bar-boundaries-v1.patch",
+      "sha256": "93fd0b58662ac1b7e1c87c3d1253fc60e7f1c292158dd5cacbfc999713e702ea"
+    },
+    "wheel": {
+      "path": "output/issue-117/calendar-wheels/pine_compat_runtime-0.3.2-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "bc0e51a700140768b7554407e96cf3f072a41815c1fa61df4f2beb5461f446c3"
+    }
+  },
+  "tests": {
+    "pine_runtime_rust": 2328,
+    "engine_python": 59,
+    "pine_adapter": 12,
+    "native_integration": 18
+  },
+  "publication": "not performed",
+  "desktop_packaging": "excluded by user"
+}

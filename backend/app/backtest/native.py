@@ -40,11 +40,34 @@ def digest(value):
 
 def timeframe(interval):
     import re
-    match = re.fullmatch(r"(\d+)([smhdwM])", interval)
-    if match is None:
+    spec = parse_interval_spec(interval)
+    if spec is None:
         raise BacktestError("NATIVE_INPUT_UNSUPPORTED", "unsupported chart interval")
+    # Pine's timeframe describes duration. The qualified interval remains the
+    # frozen data identity; bars must already be on that grid before execution.
+    match = re.fullmatch(r"(\d+)([smhdwM])", spec.requested.split("~", 1)[0])
     n, unit = int(match[1]), match[2]
     return str(n * 60) if unit == "h" else str(n) if unit == "m" else f"{n}{unit.upper()}"
+
+
+def validate_context_grids(payload):
+    """One Pine symbol/timeframe can refer to only one bucket grid."""
+    grids = {}
+    for index, item in enumerate([payload, *payload.get("contexts", [])]):
+        metadata = payload["context"] if index == 0 else item
+        spec = parse_interval_spec(item["interval"])
+        if spec is None:
+            raise BacktestError("NATIVE_INPUT_UNSUPPORTED", "unsupported requested interval")
+        pair = (metadata["symbol"], timeframe(spec.canonical))
+        if pair in grids and grids[pair] != spec.signature:
+            raise BacktestError("NATIVE_CONTEXT_GRID_CONFLICT",
+                               "one Pine symbol/timeframe cannot bind different anchor grids")
+        grids[pair] = spec.signature
+
+
+def frozen_boundaries(interval, bars):
+    from app.data_engine.bar_basis import frozen_boundary_windows
+    return frozen_boundary_windows(interval, bars[0]["time"] * 1000, bars[-1]["time"] * 1000)
 
 
 def resolve_plugin(language):
@@ -177,6 +200,10 @@ class NativeBacktests:
                 if event.role != "BARS":
                     continue
                 bar = event.payload
+                if interval is not None and (interval.phase_ms or interval.timezone) and interval.floor_ms(int(bar["open_time_ms"])) != int(bar["open_time_ms"]):
+                    raise BacktestError("DATA_QUALITY_FAILED", "native snapshot is not aligned to its anchor")
+                if interval is not None and interval.timezone and interval.next_ms(int(bar["open_time_ms"])) - 1 != int(bar["close_time_ms"]):
+                    raise BacktestError("DATA_QUALITY_FAILED", "native snapshot has an incorrect calendar close")
                 if int(bar["open_time_ms"]) < value["start_time_ms"] or int(bar["close_time_ms"]) > value["end_time_ms"]:
                     raise BacktestError("DATA_QUALITY_FAILED", "native ranges must contain whole confirmed bars")
                 if bars and (interval is None or not interval.is_successor(bars[-1]["time"] * 1000, int(bar["open_time_ms"]))):
@@ -223,6 +250,10 @@ class NativeBacktests:
             identity = self.runner(plugin, {"operation": "describe"}, timeout=15)["identity"]
             if identity.get("protocol") != PROTOCOL:
                 raise BacktestError("NATIVE_PROTOCOL_ERROR", "unsupported native plugin protocol")
+            validate_context_grids(payload)
+            needs_boundaries = any(parse_interval_spec(item["interval"]).timezone for item in [payload, *payload.get("contexts", [])])
+            if needs_boundaries and identity.get("bar_boundaries") != "host-bar-boundaries/1":
+                raise BacktestError("NATIVE_CAPABILITY_UNSUPPORTED", "Calendar bars require a Pine runtime with host-bar-boundaries/1 support")
             bars = self._freeze(payload)
             manifest = self.runtime.local_data.get_manifest(payload["dataset_id"])
             if payload["context"]["symbol"].split(":")[-1] != manifest["symbol"] or payload["context"]["timeframe"] != timeframe(payload["interval"]):
@@ -245,7 +276,7 @@ class NativeBacktests:
                                                         context.get("market_type", "usdm"), requested["symbol"])
                     context_metadata = catalog_chart_metadata(cached, context_metadata)
                     context_profile = catalog_contract_profile(cached)
-                contexts.append({"symbol": pair[0], "timeframe": pair[1], "bars": self._freeze(context),
+                contexts.append({"symbol": pair[0], "timeframe": pair[1], "interval": parse_interval_spec(context["interval"]).canonical, "bars": self._freeze(context),
                     **({"metadata": context_metadata} if context_metadata else {}),
                     **({"contract_profile": context_profile} if context_profile else {})})
             magnifier = None
@@ -277,6 +308,7 @@ class NativeBacktests:
                 magnifier = {"schemaVersion": 1, "chartBars": chart_bars}
             wire = {"protocol": PROTOCOL, "identity": identity, "source": payload["source"],
                     "parameters": payload.get("parameters", {}), "bars": bars, "contexts": contexts,
+                    "interval": parse_interval_spec(payload["interval"]).canonical,
                     "libraries": payload.get("libraries", {}), "context": payload["context"], "magnifier": magnifier}
             if payload.get("currency_rates") is not None:
                 wire["currency_rates"] = payload["currency_rates"]
@@ -318,6 +350,10 @@ class NativeBacktests:
                     wire["clock_policy"] = "historical-bar-close"
                 else:
                     wire["clock_policy"] = "scheduled-observation" if external else "host-supplied"
+            if needs_boundaries:
+                wire["bar_boundaries"] = {f"{payload['context']['symbol']}:{payload['context']['timeframe']}": frozen_boundaries(payload["interval"], bars)}
+                for context in contexts:
+                    wire["bar_boundaries"][f"{context['symbol']}:{context['timeframe']}"] = frozen_boundaries(context["interval"], context["bars"])
             if external:
                 from .external import host_identity
                 from .external_market import freeze_execution

@@ -1,6 +1,7 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
@@ -29,6 +30,9 @@ export const ja = {
   "indicator.pine.contexts": "Pine リクエスト市場（JSON）",
   "indicator.pine.contextsHelp": "動的または入れ子のリクエストで使用するローカル市場を指定します。時間足は Pine 形式です（60 = 1時間）。必要に応じて marketType を指定し、不足データを先に準備してください。",
 
+  ...intervalBasisMessages["ja"],
+  "interval.historyOnly": "履歴のみ · リアルタイム配信なし",
+  "interval.unavailableHelp": "リクエストしたチャート設定は保持されています。別の時間足を選ぶか、銘柄選択からデータソースを変更してください。",
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時刻と先読み期間に未来の足が含まれています。開始時刻を早めるか期間を短くしてください。確定した過去の足のみ利用できます。",
   ...pineEnglish,
@@ -1574,6 +1578,7 @@ export const ja = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP 同時実行数 ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

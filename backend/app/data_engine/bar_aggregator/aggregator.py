@@ -70,7 +70,7 @@ import asyncio
 import logging
 import time
 from dataclasses import replace
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.interval_resolution import IntervalResolver
@@ -90,7 +90,7 @@ from .models import (
     parse_interval_ms,
 )
 from .router import EventRouter
-from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator
+from .time_bucket import TimeBucketEngine, MonthlyBucketCalculator, WeeklyBucketCalculator, ScheduleBucketCalculator
 from .bar_state import BarStateEngine
 from .finalizer import Finalizer
 from .publisher import BarAggregatorPublisher
@@ -115,12 +115,22 @@ class IntervalPipeline:
         self.interval_ms = interval_ms
 
         alignment = AlignmentMode(config.default_alignment_mode)
+        spec = parse_interval_spec(interval)
+        epoch_ms = config.alignment_epoch_ms
+        if spec is not None:
+            # A persisted series key must imply the same grid in history and
+            # realtime, including the zero-phase alias. Process-wide legacy
+            # alignment settings must not silently change that identity.
+            alignment = AlignmentMode.CUSTOM if spec.phase_ms else AlignmentMode.EPOCH
+            epoch_ms = spec.phase_ms
 
         # Monthly intervals need calendar-based bucketing, not fixed 30-day.
         # This applies to ALL month-unit intervals (1M, 2M, 3M, etc.),
         # not just the standard "1M".
         custom_calc = None
-        if interval.endswith("M") and interval[:-1].isdigit():
+        if spec is not None and spec.timezone:
+            custom_calc = ScheduleBucketCalculator(spec)
+        elif interval.endswith("M") and interval[:-1].isdigit():
             month_count = int(interval[:-1])
             if month_count > 0:
                 custom_calc = MonthlyBucketCalculator(months=month_count)
@@ -135,7 +145,7 @@ class IntervalPipeline:
         self.time_bucket = TimeBucketEngine(
             interval_ms=interval_ms,
             alignment=alignment,
-            epoch_ms=config.alignment_epoch_ms,
+            epoch_ms=epoch_ms,
             custom_calculator=custom_calc,
         )
         self.bar_state = BarStateEngine(config, self.time_bucket, interval)
@@ -169,6 +179,7 @@ class BarAggregator:
         interval_resolver: IntervalResolver | None = None,
     ) -> None:
         self._cfg = config or BarAggregatorConfig()
+        self._source_component_reader: Callable[[str, int, int], Awaitable[list[dict]]] | None = None
 
         # L1: Event Router
         self._router = EventRouter(self._cfg, interval_resolver=interval_resolver)
@@ -359,6 +370,7 @@ class BarAggregator:
         The event is normalized to BarInput by the Router and dispatched
         to all matching interval pipelines.
         """
+        await self._publisher.retry_source_deliveries()
         await self._router.on_market_event(event)
 
     async def on_backfill_bars(
@@ -785,6 +797,12 @@ class BarAggregator:
             },
         }
 
+    def set_source_component_reader(
+        self, reader: Callable[[str, int, int], Awaitable[list[dict]]],
+    ) -> None:
+        """Bind the owner's source readback without importing a storage backend."""
+        self._source_component_reader = reader
+
     # ── Internal: Core Processing ────────────────────────────
 
     async def _handle_bar_input(
@@ -810,6 +828,34 @@ class BarAggregator:
 
         # L2: Compute which bucket this input belongs to
         bucket_start_ms = pipeline.time_bucket.compute_bucket(bar_input.open_time_ms)
+
+        if (
+            bar_input.extra.get("source_ref")
+            and bar_input.is_closed
+            and bar_input.merge_mode == MergeMode.COMPONENT
+            and pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms) is None
+        ):
+            # After restart/eviction a historical correction is only one
+            # component. Restore its siblings before recalculating the bucket.
+            if self._source_component_reader is None:
+                raise RuntimeError("source component readback is not configured")
+            _, bucket_end_ms = pipeline.time_bucket.compute_bucket_range(bucket_start_ms)
+            components = await self._source_component_reader(
+                bar_input.extra["source_ref"]["series"], bucket_start_ms, bucket_end_ms,
+            )
+            for component in components:
+                data = component["data"]
+                if data["open_time"] == bar_input.open_time_ms:
+                    continue
+                sibling = replace(
+                    bar_input, open_time_ms=data["open_time"], close_time_ms=data["close_time"],
+                    **{name: data[name] if data[name] is not None else 0 for name in (
+                        "open", "high", "low", "close", "volume", "quote_volume", "trades",
+                        "taker_buy_base", "taker_buy_quote",
+                    )},
+                    extra={"source_ref": component["ref"]},
+                )
+                pipeline.bar_state.apply(exchange, market_type, symbol, bucket_start_ms, sibling)
 
         # Check for event-driven close: if this input starts a new bucket,
         # close previous active bars for this symbol

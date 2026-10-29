@@ -1,0 +1,821 @@
+[
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "80000.10",
+    "volume": "160.916",
+    "quoteVolume": "12874526.45100",
+    "trades": 3784,
+    "takerBuyBaseVolume": "93.727",
+    "takerBuyQuoteVolume": "7498599.62010",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239732950,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212813957,\"o\":\"79989.10\",\"c\":\"80000.10\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"160.916\",\"n\":3784,\"x\":false,\"q\":\"12874526.45100\",\"V\":\"93.727\",\"Q\":\"7498599.62010\",\"B\":\"0\"}}",
+    "eventTime": 1793239732950,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 4,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 2
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "80000.00",
+    "volume": "160.979",
+    "quoteVolume": "12879566.45110",
+    "trades": 3786,
+    "takerBuyBaseVolume": "93.728",
+    "takerBuyQuoteVolume": "7498679.62020",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239733208,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212813959,\"o\":\"79989.10\",\"c\":\"80000.00\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"160.979\",\"n\":3786,\"x\":false,\"q\":\"12879566.45110\",\"V\":\"93.728\",\"Q\":\"7498679.62020\",\"B\":\"0\"}}",
+    "eventTime": 1793239733208,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 5,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 3
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "80000.10",
+    "volume": "161.092",
+    "quoteVolume": "12888606.46240",
+    "trades": 3787,
+    "takerBuyBaseVolume": "93.841",
+    "takerBuyQuoteVolume": "7507719.63150",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239733527,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212813960,\"o\":\"79989.10\",\"c\":\"80000.10\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"161.092\",\"n\":3787,\"x\":false,\"q\":\"12888606.46240\",\"V\":\"93.841\",\"Q\":\"7507719.63150\",\"B\":\"0\"}}",
+    "eventTime": 1793239733527,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 6,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 4
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "80000.10",
+    "volume": "163.297",
+    "quoteVolume": "13065006.49650",
+    "trades": 3794,
+    "takerBuyBaseVolume": "94.182",
+    "takerBuyQuoteVolume": "7534999.66560",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239733948,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212813967,\"o\":\"79989.10\",\"c\":\"80000.10\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"163.297\",\"n\":3794,\"x\":false,\"q\":\"13065006.49650\",\"V\":\"94.182\",\"Q\":\"7534999.66560\",\"B\":\"0\"}}",
+    "eventTime": 1793239733948,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 7,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 5
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "80000.00",
+    "volume": "163.305",
+    "quoteVolume": "13065646.49720",
+    "trades": 3797,
+    "takerBuyBaseVolume": "94.189",
+    "takerBuyQuoteVolume": "7535559.66630",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239734210,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212813970,\"o\":\"79989.10\",\"c\":\"80000.00\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"163.305\",\"n\":3797,\"x\":false,\"q\":\"13065646.49720\",\"V\":\"94.189\",\"Q\":\"7535559.66630\",\"B\":\"0\"}}",
+    "eventTime": 1793239734210,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 8,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 6
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79991.40",
+    "volume": "163.606",
+    "quoteVolume": "13089725.55240",
+    "trades": 3860,
+    "takerBuyBaseVolume": "94.190",
+    "takerBuyQuoteVolume": "7535639.65780",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239734483,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814033,\"o\":\"79989.10\",\"c\":\"79991.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"163.606\",\"n\":3860,\"x\":false,\"q\":\"13089725.55240\",\"V\":\"94.190\",\"Q\":\"7535639.65780\",\"B\":\"0\"}}",
+    "eventTime": 1793239734483,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 9,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 7
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "163.758",
+    "quoteVolume": "13101884.12820",
+    "trades": 3890,
+    "takerBuyBaseVolume": "94.191",
+    "takerBuyQuoteVolume": "7535719.64620",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239734854,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814063,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"163.758\",\"n\":3890,\"x\":false,\"q\":\"13101884.12820\",\"V\":\"94.191\",\"Q\":\"7535719.64620\",\"B\":\"0\"}}",
+    "eventTime": 1793239734854,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 10,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 8
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "163.811",
+    "quoteVolume": "13106123.50960",
+    "trades": 3892,
+    "takerBuyBaseVolume": "94.206",
+    "takerBuyQuoteVolume": "7536919.47220",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239735206,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814065,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"163.811\",\"n\":3892,\"x\":false,\"q\":\"13106123.50960\",\"V\":\"94.206\",\"Q\":\"7536919.47220\",\"B\":\"0\"}}",
+    "eventTime": 1793239735206,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 11,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 9
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "164.872",
+    "quoteVolume": "13190991.20200",
+    "trades": 3895,
+    "takerBuyBaseVolume": "95.267",
+    "takerBuyQuoteVolume": "7621787.16460",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239735467,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814068,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.872\",\"n\":3895,\"x\":false,\"q\":\"13190991.20200\",\"V\":\"95.267\",\"Q\":\"7621787.16460\",\"B\":\"0\"}}",
+    "eventTime": 1793239735467,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 12,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 10
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "164.885",
+    "quoteVolume": "13192031.05010",
+    "trades": 3898,
+    "takerBuyBaseVolume": "95.269",
+    "takerBuyQuoteVolume": "7621947.14140",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239735825,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814071,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.885\",\"n\":3898,\"x\":false,\"q\":\"13192031.05010\",\"V\":\"95.269\",\"Q\":\"7621947.14140\",\"B\":\"0\"}}",
+    "eventTime": 1793239735825,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 13,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 11
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "164.886",
+    "quoteVolume": "13192111.03850",
+    "trades": 3899,
+    "takerBuyBaseVolume": "95.270",
+    "takerBuyQuoteVolume": "7622027.12980",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239736192,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814072,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.886\",\"n\":3899,\"x\":false,\"q\":\"13192111.03850\",\"V\":\"95.270\",\"Q\":\"7622027.12980\",\"B\":\"0\"}}",
+    "eventTime": 1793239736192,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 14,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 12
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "164.908",
+    "quoteVolume": "13193870.78140",
+    "trades": 3904,
+    "takerBuyBaseVolume": "95.273",
+    "takerBuyQuoteVolume": "7622267.09500",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239736799,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814077,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.908\",\"n\":3904,\"x\":false,\"q\":\"13193870.78140\",\"V\":\"95.273\",\"Q\":\"7622267.09500\",\"B\":\"0\"}}",
+    "eventTime": 1793239736799,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 15,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 13
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "164.947",
+    "quoteVolume": "13196990.32520",
+    "trades": 3911,
+    "takerBuyBaseVolume": "95.274",
+    "takerBuyQuoteVolume": "7622347.08340",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239737274,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814084,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.947\",\"n\":3911,\"x\":false,\"q\":\"13196990.32520\",\"V\":\"95.274\",\"Q\":\"7622347.08340\",\"B\":\"0\"}}",
+    "eventTime": 1793239737274,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 16,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 14
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "164.983",
+    "quoteVolume": "13199869.90750",
+    "trades": 3919,
+    "takerBuyBaseVolume": "95.309",
+    "takerBuyQuoteVolume": "7625146.67740",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239737556,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814092,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"164.983\",\"n\":3919,\"x\":false,\"q\":\"13199869.90750\",\"V\":\"95.309\",\"Q\":\"7625146.67740\",\"B\":\"0\"}}",
+    "eventTime": 1793239737556,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 17,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 15
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "166.864",
+    "quoteVolume": "13350327.93050",
+    "trades": 3938,
+    "takerBuyBaseVolume": "95.616",
+    "takerBuyQuoteVolume": "7649703.11620",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239738352,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814111,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"166.864\",\"n\":3938,\"x\":false,\"q\":\"13350327.93050\",\"V\":\"95.616\",\"Q\":\"7649703.11620\",\"B\":\"0\"}}",
+    "eventTime": 1793239738352,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 18,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 16
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "167.137",
+    "quoteVolume": "13372164.76370",
+    "trades": 3943,
+    "takerBuyBaseVolume": "95.889",
+    "takerBuyQuoteVolume": "7671539.94940",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239738689,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814116,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.137\",\"n\":3943,\"x\":false,\"q\":\"13372164.76370\",\"V\":\"95.889\",\"Q\":\"7671539.94940\",\"B\":\"0\"}}",
+    "eventTime": 1793239738689,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 19,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 17
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "167.147",
+    "quoteVolume": "13372964.64690",
+    "trades": 3946,
+    "takerBuyBaseVolume": "95.891",
+    "takerBuyQuoteVolume": "7671699.92620",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239738949,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814119,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.147\",\"n\":3946,\"x\":false,\"q\":\"13372964.64690\",\"V\":\"95.891\",\"Q\":\"7671699.92620\",\"B\":\"0\"}}",
+    "eventTime": 1793239738949,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 20,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 18
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.30",
+    "volume": "167.149",
+    "quoteVolume": "13373124.62350",
+    "trades": 3948,
+    "takerBuyBaseVolume": "95.891",
+    "takerBuyQuoteVolume": "7671699.92620",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239739225,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814121,\"o\":\"79989.10\",\"c\":\"79988.30\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.149\",\"n\":3948,\"x\":false,\"q\":\"13373124.62350\",\"V\":\"95.891\",\"Q\":\"7671699.92620\",\"B\":\"0\"}}",
+    "eventTime": 1793239739225,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 21,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 19
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "167.433",
+    "quoteVolume": "13395841.32910",
+    "trades": 3953,
+    "takerBuyBaseVolume": "96.175",
+    "takerBuyQuoteVolume": "7694416.63180",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239739552,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814127,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.433\",\"n\":3953,\"x\":false,\"q\":\"13395841.32910\",\"V\":\"96.175\",\"Q\":\"7694416.63180\",\"B\":\"0\"}}",
+    "eventTime": 1793239739552,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 22,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 20
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "167.532",
+    "quoteVolume": "13403760.18070",
+    "trades": 3956,
+    "takerBuyBaseVolume": "96.274",
+    "takerBuyQuoteVolume": "7702335.48340",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": false,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239739869,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814130,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.532\",\"n\":3956,\"x\":false,\"q\":\"13403760.18070\",\"V\":\"96.274\",\"Q\":\"7702335.48340\",\"B\":\"0\"}}",
+    "eventTime": 1793239739869,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 23,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 21
+      }
+    }
+  },
+  {
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "exchange": "binance",
+    "marketType": "swap.linear",
+    "marketId": "BTCUSDT",
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1m",
+    "timestamp": 1793239680000,
+    "closeTime": 1793239739999,
+    "open": "79989.10",
+    "high": "80053.60",
+    "low": "79980.00",
+    "close": "79988.40",
+    "volume": "167.557",
+    "quoteVolume": "13405759.89050",
+    "trades": 3959,
+    "takerBuyBaseVolume": "96.297",
+    "takerBuyQuoteVolume": "7704175.21660",
+    "volumeUnit": "base",
+    "quoteVolumeUnit": "quote",
+    "closed": true,
+    "closeEvidence": "ws_x",
+    "raw": "{\"e\":\"kline\",\"E\":1793239740010,\"s\":\"BTCUSDT\",\"k\":{\"t\":1793239680000,\"T\":1793239739999,\"s\":\"BTCUSDT\",\"i\":\"1m\",\"f\":8212810160,\"L\":8212814134,\"o\":\"79989.10\",\"c\":\"79988.40\",\"h\":\"80053.60\",\"l\":\"79980.00\",\"v\":\"167.557\",\"n\":3959,\"x\":true,\"q\":\"13405759.89050\",\"V\":\"96.297\",\"Q\":\"7704175.21660\",\"B\":\"0\"}}",
+    "eventTime": 1793239740010,
+    "_source_build": {
+      "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+      "upstream_version": "4.5.60",
+      "schema": "candlescope.binance.usdm.kline.v1"
+    },
+    "_source_receipt": {
+      "status": "selected",
+      "observation_id": 24,
+      "ref": {
+        "series": "[\"binance\",\"futures\",\"BTCUSDT\",\"1m\"]",
+        "open_time": 1793239680000,
+        "revision": 22
+      }
+    }
+  }
+]

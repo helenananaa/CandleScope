@@ -93,6 +93,20 @@ def chart_interval(value):
     return spec.canonical
 
 
+def context_grids(context, dependencies):
+    """Resolve Pine duration keys to explicit grids, including the chart anchor."""
+    grids = {}
+    for item in [context, *dependencies]:
+        symbol = item.get("binding_symbol", f"{item['exchange'].upper()}:{item['symbol']}")
+        spec = parse_interval_spec(item["interval"])
+        pair = (symbol, timeframe(spec.canonical))
+        if pair in grids and grids[pair] != spec.canonical:
+            raise PreparationError("NATIVE_CONTEXT_GRID_CONFLICT",
+                                   "One Pine symbol/timeframe cannot bind different anchor grids")
+        grids[pair] = spec.canonical
+    return grids
+
+
 def plan_inputs(context, dependencies):
     """Deduplicate physical minute-bar acquisition across logical intervals."""
     from app.backtest.chart_context import ChartContextRequest
@@ -171,6 +185,11 @@ def validate_frozen_external(runtime, payload):
         raise PreparationError("INPUT_UNSUPPORTED", "Automatic frozen execution requires archive TRADE_TAPE")
     if payload.get("magnifier"):
         raise PreparationError("EXTERNAL_UNSUPPORTED", "Host matching requires execution events instead of native Magnifier")
+    from app.backtest.native import validate_context_grids
+    try:
+        validate_context_grids(payload)
+    except BacktestError as exc:
+        raise PreparationError(exc.code, str(exc)) from exc
     keys = set()
     for index, item in enumerate([payload, *payload.get("contexts", [])]):
         metadata = payload["context"] if index == 0 else item

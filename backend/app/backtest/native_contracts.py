@@ -12,7 +12,7 @@ class FrozenNativeData(BaseModel):
     snapshot_hash: str = Field(min_length=8, max_length=80)
     start_time_ms: int
     end_time_ms: int
-    interval: str = Field(min_length=1, max_length=16)
+    interval: str = Field(min_length=1, max_length=64)
     exchange: str = Field(default="binance", max_length=40)
     market_type: str = Field(default="usdm", max_length=40)
 

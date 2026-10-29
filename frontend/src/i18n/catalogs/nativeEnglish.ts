@@ -16,6 +16,9 @@ export const nativeEnglish = {
   "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",
   "indicator.pine.contexts": "Pine requested markets (JSON)",
   "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
+  "interval.historyOnly": "History only · realtime unavailable",
+  "interval.unavailableHelp": "The requested chart has been preserved. Choose another interval, or change the source in the symbol picker.",
+
   ...externalProviderEnglish,
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
   ...pineEnglish,

@@ -29,7 +29,7 @@ OFFICIAL_SHA256 = (
     "sha256:889ffeb4a70b330c1cf529b66422fe0c11c303b781968b12e8156fbb854f3918"
 )
 OFFICIAL_PINE_SHA256 = (
-    "sha256:b70f4e2bcf1dbf65ae3ce57ce3c28114e846d19f45b48898c025f923415d388a"
+    "sha256:1a351c1dce73aee5b8aa0549153c0b08e57f1f91e9c37f9d18cb6de1f19671b6"
 )
 
 
@@ -260,19 +260,19 @@ def test_checked_in_release_lock_pins_the_stable_adapter_assets() -> None:
     assert len(releases) == 4
     by_runtime = {release.runtime_id: release for release in releases if release.system == "Windows"}
     pine = by_runtime["candlescope.pine-compat"]
-    assert pine.version == "0.3.2"
+    assert pine.version == "0.3.3"
     assert pine.sha256 == OFFICIAL_PINE_SHA256
-    assert pine.size == 4_195_533
+    assert pine.size == 4_580_867
     assert pine.url.endswith(
-        "/candlescope-plugin-pine-compat-v0.3.2/"
-        "candlescope-pine-compat-0.3.2-cp312-win_amd64.cspkg"
+        "/candlescope-plugin-pine-compat-v0.3.3/"
+        "candlescope-plugin-pine-compat-0.3.3-Windows-AMD64.cspkg"
     )
     pine_variants = [release for release in releases if release.runtime_id == pine.runtime_id]
     assert {(item.system, item.machine) for item in pine_variants} == {
         ("Windows", "AMD64"), ("Linux", "x86_64"),
         ("Darwin", "arm64"), ("Darwin", "x86_64"),
     }
-    assert all(item.version == "0.3.2" and item.python_version == "3.12"
+    assert all(item.version == "0.3.3" and item.python_version == "3.12"
                and item.implementation == "CPython" for item in pine_variants)
 
 

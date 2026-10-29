@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..admission import bind_public_client
+
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 
@@ -37,16 +39,17 @@ class BinanceSpotCcxtProfile:
             "newUpdates": True,
             "enableRateLimit": True,
             "aiohttp_trust_env": config.proxy_mode == "system",
-            "options": {"defaultType": "spot"},
+            "options": {"defaultType": "spot", "fetchMarkets": {"types": ["spot"]}},
         }
         if config.http_proxy and config.proxy_mode != "none":
             values["httpsProxy"] = config.http_proxy
             values["wssProxy"] = config.http_proxy
-        return CandleScopeBinanceSpot(
+        return bind_public_client(CandleScopeBinanceSpot(
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
-        )
+            fork_kline_enabled=config.ccxt_fork_kline_enabled,
+        ), config, self.market_type)
 
     def resolve_symbol(
         self,
@@ -102,6 +105,8 @@ class BinanceSpotCcxtProfile:
         if event.channel != expected:
             return False
         if descriptor.stream_type == StreamType.KLINE:
+            if event.payload.get("schema") == "candlescope.binance.spot.kline.v1":
+                return event.payload.get("timeframe") == descriptor.interval
             kline = event.payload.get("k")
             return isinstance(kline, dict) and str(kline.get("i") or "") == str(
                 descriptor.interval or ""
@@ -114,4 +119,5 @@ class BinanceSpotCcxtProfile:
             self.market_type,
             config.proxy_mode,
             config.http_proxy or "",
+            str(config.ccxt_fork_kline_enabled),
         )

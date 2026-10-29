@@ -48,7 +48,7 @@ class NativeDependencyPayload(BaseModel):
     exchange: str = Field(min_length=1, max_length=40)
     market_type: str = Field(min_length=1, max_length=40)
     symbol: str = Field(min_length=1, max_length=80)
-    interval: str = Field(min_length=1, max_length=16)
+    interval: str = Field(min_length=1, max_length=64)
     binding_symbol: str | None = Field(default=None, min_length=1, max_length=120)
     warmup_bars: int | None = Field(default=None, strict=True, ge=0, le=5000)
 
@@ -134,7 +134,8 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
     import time
     from app.data_engine.interval_policy import parse_interval_spec
     from app.data_preparation.models import canonical
-    from app.data_preparation.native_plan import requested_contexts, requested_lookbacks, chart_interval, plan_inputs
+    from app.data_preparation.native_plan import requested_contexts, requested_lookbacks, chart_interval, context_grids, plan_inputs
+    from app.backtest.native import timeframe
     from app.backtest.chart_context import ChartContextRequest
     submission = payload.model_dump(mode="json")
     if payload.chart_metadata is None:
@@ -194,14 +195,20 @@ async def prepare_native_strategy(request: Request, payload: NativePreparationPa
             symbol=f"{context['exchange'].upper()}:{context['symbol']}", interval=context["interval"], explicit=bool(dependencies)))
     lookbacks = invoke(lambda: requested_lookbacks(source,
         symbol=f"{context['exchange'].upper()}:{context['symbol']}", interval=context["interval"], explicit=bool(dependencies)))
+    grids = invoke(lambda: context_grids(context, dependencies))
+
+    def requested_interval(symbol, requested_timeframe):
+        default = chart_interval(requested_timeframe)
+        return grids.get((symbol, timeframe(default)), default)
+
     required = {}
     for (binding_symbol, requested_timeframe), count in lookbacks.items():
-        pair = (binding_symbol, invoke(lambda: chart_interval(requested_timeframe)))
+        pair = (binding_symbol, invoke(lambda: requested_interval(binding_symbol, requested_timeframe)))
         previous = required.get(pair, 0)
         required[pair] = None if previous is None or count is None else max(previous, count + 1)
     known = {(item.get("binding_symbol", f"{item['exchange'].upper()}:{item['symbol']}"), item["interval"]) for item in dependencies}
     for binding_symbol, requested_timeframe in discovered:
-        interval = invoke(lambda: chart_interval(requested_timeframe))
+        interval = invoke(lambda: requested_interval(binding_symbol, requested_timeframe))
         if (binding_symbol, interval) in known:
             continue
         exchange, symbol = (binding_symbol.split(":", 1) if ":" in binding_symbol else (context["exchange"], binding_symbol))

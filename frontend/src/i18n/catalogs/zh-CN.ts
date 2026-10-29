@@ -1,3 +1,4 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
   "research.book.help": "上传与当前图表市场、区间一致的聚合逐笔和盘口观测。宿主校验 OHLCV、连续性和可见深度后，将文件与快照一起冻结。盘口模式使用自身的容量规则。",
@@ -58,6 +59,28 @@ export const zhCN = {
   "indicator.pine.quoteCurrency": "图表报价币种（需提供实际价格步长）",
   "indicator.pine.contexts": "Pine 请求行情（JSON）",
   "indicator.pine.contextsHelp": "声明动态或嵌套请求使用的本地行情。周期使用 Pine 格式（60 表示一小时），可指定 marketType。缺失的行情需要先准备。",
+  ...intervalBasisMessages["zh-CN"],
+  "interval.historyOnly": "仅历史 · 实时不可用",
+  "interval.unavailableHelp": "已保留请求的图表设置。请选择其他周期，或在交易对选择器中更换来源。",
+  "account.review.identity": "账户 UID {uid} · {margin} · 持仓 ID {position}",
+  "account.review.fillIdentity": "成交 ID {fill} · 交易 ID {trade} · 订单 ID {order} · 张数 {contracts}",
+
+  "account.trades": "交易复盘",
+  "account.review.scope": "仅纳入已核验的 USDT 线性永续完整开平仓周期；币本位、历史不全及未核对的记录不纳入。金额为所列样本合计，不代表账户总收益。",
+  "account.review.sample": "已核验样本 {count} 笔 · 盈利 {wins} 笔 · 历史缓存 {cached} 笔",
+  "account.review.fees": "成交费用（支出为正）",
+  "account.review.funding": "资金费收支",
+  "account.review.net": "净盈亏",
+  "account.review.noR": "未取得可验证的事前风险记录，R 统计不可用。浮盈及 MFE/MAE 为行情估算；未重建当时的画线和指标状态。",
+  "account.review.cached": "包含上次核验的历史版本：当前同步或覆盖状态不能重新证明这些记录。打开的复盘固定使用该版本。",
+  "account.review.coverage": "查看取得的历史范围与缺口",
+  "account.review.empty": "尚无可复盘的已核验交易。先同步并完成对账。",
+  "account.review.verified": "版本核验时间：{time}",
+  "account.review.open": "详情与笔记",
+  "account.review.excluded": "本次未纳入 {count} 个持仓周期",
+  "account.review.costs": "成交费用 {fees} · 资金费收支 {funding} {currency}",
+  "account.review.source": "OKX 只读 · {instrument} · {currency} · 固定核验版本",
+
   "account.reconcile": "对账",
   "account.reconcileHelp": "仅核对已取得的记录；缺失的期初历史仍为未知，各币种不合并求和。",
   "account.check.matched": "在所列误差范围内一致",
@@ -1774,6 +1797,7 @@ export const zhCN = {
   "settings.proxy.address": "代理地址",
   "settings.proxy.egressGroup": "出口组",
   "settings.proxy.concurrency": "并发请求上限",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "交易所 ID（逗号分隔，留空表示全部）",
   "settings.proxy.enabled": "启用",
   "settings.proxy.makePrimary": "设为主线路",

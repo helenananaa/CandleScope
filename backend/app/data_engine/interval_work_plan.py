@@ -76,7 +76,7 @@ def _source_factor(route: IntervalRoute) -> int:
 
     nominal_factor = max(
         1,
-        (int(route.spec.nominal_ms) + source_ms - 1) // source_ms,
+        (int(route.spec.maximum_ms) + source_ms - 1) // source_ms,
     )
     month_count = parse_monthly_count(route.canonical_interval)
     if month_count is None:

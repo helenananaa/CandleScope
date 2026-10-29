@@ -185,7 +185,7 @@ class DurableBarDelivery:
         key = SeriesKey(value["symbol"], value["interval"], exchange=value["exchange"],
                         market_type=value["market_type"], **{k: value[k] for k in identity_names if k in value})
         current = record["canonical_row"]
-        superseded = any(current.get(k) != v for k, v in value["storage_row"].items()) or current["source"] != value["bar"]["source"]
+        superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k != "source_refs") or current["source"] != value["bar"]["source"]
         return DataEvent(DataEventType.BAR_AMENDED if superseded else DataEventType(value["event_type"]), key,
                          BarData.from_storage_row(current) if superseded else BarData.from_dict(value["bar"]),
                          BarData.from_dict(value["previous_bar"]) if value.get("previous_bar") and not superseded else None,

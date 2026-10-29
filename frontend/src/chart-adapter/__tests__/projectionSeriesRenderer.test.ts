@@ -304,7 +304,7 @@ test("projection renderer preserves viewport through setData instead of popping"
   assert.deepEqual(viewportEvents, ["capture", ["apply", 1]]);
 });
 
-test("projection renderer updates an equal-time tail without rebuilding the viewport", () => {
+test("historical corrections retain the time axis instead of popping existing points", () => {
   const events: unknown[] = [];
   const previousData = [
     { time: 10, close: 1 },
@@ -321,7 +321,7 @@ test("projection renderer updates an equal-time tail without rebuilding the view
     series: {
       pop: (count) => { events.push(["pop", count]); return []; },
       setData: (data) => events.push(["setData", data]),
-      update: (point) => events.push(["update", point]),
+      update: (point, historicalUpdate) => events.push(["update", point, historicalUpdate]),
     },
     patch: {
       fromOutputIndex: 1,
@@ -333,13 +333,83 @@ test("projection renderer updates an equal-time tail without rebuilding the view
     },
   });
 
-  assert.equal(result.mode, "pop-update");
+  assert.equal(result.mode, "update");
   assert.deepEqual(events, [
-    ["pop", 2],
-    ["update", insert[0]],
-    ["update", insert[1]],
+    ["update", insert[0], true],
+    ["update", insert[1], true],
   ]);
   assert.deepEqual(result.nextData, [previousData[0], ...insert]);
+});
+
+test("an amendment after a burst preserves a historical viewport and every row", () => {
+  const previous = Array.from({ length: 507 }, (_, index) => ({
+    time: index + 1, open: index + 100, high: index + 110, low: index + 90, close: index + 101,
+  }));
+  const corrected = previous.map((row, index) => index === 482 ? { ...row, close: row.close + 0.5 } : row);
+  let displayed: ChartSeriesInputRow[] = [...previous];
+  let range = { from: 367.5, to: 504 };
+  const before = { ...range };
+  const result = renderMainSeriesProjectionPatch({
+    preserveViewport: true,
+    previousDisplayRows: previous,
+    patch: buildMainSeriesProjectionPatch({
+      displayRows: corrected,
+      previousSeriesData: [...previous],
+      projectionPatch: { fromOutputIndex: 482 },
+      renderOptions: { chartType: "candlestick" },
+    }),
+    series: {
+      // Removing tail points can rebase LWC even if the final time topology
+      // is unchanged. A historical viewport does not follow their re-append.
+      pop: (count) => {
+        range = { from: range.from - count, to: range.to - count };
+        return displayed.splice(-count);
+      },
+      update: (point, historicalUpdate) => {
+        const index = displayed.findIndex(row => row.time === point.time);
+        if (historicalUpdate && index >= 0) displayed[index] = point;
+        else displayed.push(point);
+      },
+      setData: (rows) => { displayed = rows; },
+    },
+  });
+  assert.deepEqual(range, before);
+  assert.deepEqual(displayed.map(row => [row.time, row.close]), corrected.map(row => [row.time, row.close]));
+  assert.equal(result.nextData.length, previous.length);
+});
+
+test("partial historical update failure rebuilds all rows and compensates the captured viewport", () => {
+  const previous = ROWS.map(row => ({ ...row }));
+  const original = previous.slice();
+  const corrected = previous.map(row => ({ ...row, close: row.close + 1 }));
+  let displayed = previous.slice();
+  const events: unknown[] = [];
+  let updates = 0;
+  const result = renderMainSeriesProjectionPatch({
+    preserveViewport: true,
+    previousDisplayRows: previous,
+    resolveDisplayAnchorIndex: () => 1,
+    viewportController: {
+      captureAnchor: () => { events.push("capture"); return { time: 20 }; },
+      applyAnchorShift: () => { events.push("restore"); },
+    },
+    patch: {
+      fromOutputIndex: 0, deleteCount: 3, insert: corrected,
+      previousLength: 3, nextLength: 3, previousData: previous,
+    },
+    series: {
+      update: (row, historical) => {
+        assert.equal(historical, true);
+        if (++updates === 2) throw new Error("historical update failed");
+        displayed[0] = row as typeof ROWS[number];
+      },
+      setData: (rows) => { events.push("rebuild"); displayed = rows as typeof ROWS; },
+    },
+  });
+  assert.equal(result.mode, "setData");
+  assert.deepEqual(events, ["capture", "rebuild", "restore"]);
+  assert.deepEqual(displayed, corrected);
+  assert.deepEqual(previous, original);
 });
 
 test("projection renderer restores full data when pop throws", () => {

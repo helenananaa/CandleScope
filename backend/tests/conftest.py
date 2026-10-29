@@ -87,3 +87,13 @@ def _forbid_developer_replay_data():
 def anyio_backend() -> str:
     """Run anyio-marked tests on the asyncio backend used by the app."""
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_proxy_http_admission(monkeypatch):
+    # Production admission deliberately spans event loops; test cases represent
+    # separate app lifetimes and must not inherit a previous case's cooldowns.
+    import weakref
+    from app.core import proxy_pool
+    monkeypatch.setattr(proxy_pool, "_SHARED_HTTP", proxy_pool._HttpState())
+    monkeypatch.setattr(proxy_pool, "_POOLS", weakref.WeakKeyDictionary())

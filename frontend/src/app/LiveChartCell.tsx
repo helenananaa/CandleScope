@@ -1,6 +1,7 @@
+import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
 import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
-import { parseIntervalSeconds } from "../utils/intervals.js";
+import { formatIntervalLabel, parseIntervalSeconds } from "../utils/intervals.js";
 import { strategyTradeRange, type StrategyTradeFocus } from "../features/backtest/chart-tester/strategyTradeReview.js";
 import React, {
   Suspense,
@@ -806,6 +807,7 @@ function LiveChartCell({
     chartProps: {
       ...model.chartWorkspace.chart.chartProps,
       ref: chartSurface.ref,
+      ...(workScheduler ? { displayScheduler: { scheduler: workScheduler, cellId: cell.id } } : {}),
       drawingKeyBase: drawingScopeBase,
       paneLayoutScope: cellStorageScope,
       onCrosshairMove: handleLinkedCrosshairMove,
@@ -813,6 +815,8 @@ function LiveChartCell({
       onUserViewportRangeChange: handleLinkedViewportRangeChange,
     },
   }), [
+    cell.id,
+    workScheduler,
     cellStorageScope,
     chartSurface.ref,
     drawingScopeBase,
@@ -890,7 +894,7 @@ function LiveChartCell({
         data-layout-role={layoutRole ?? "standard"}
         data-link-group={cell.linkGroupId ?? "none"}
         role="group"
-        aria-label={t("chart.aria", { symbol: chartSession.view.symbol, interval: chartSession.view.interval })}
+        aria-label={t("chart.aria", { symbol: chartSession.view.symbol, interval: formatIntervalLabel(chartSession.view.interval) })}
         tabIndex={obscured ? -1 : active ? 0 : -1}
         onFocus={activate}
         onPointerDown={activate}
@@ -921,7 +925,10 @@ function LiveChartCell({
             </span>
           )}
           <strong>{chartSession.view.symbol}</strong>
-          <span>{chartSession.view.interval}</span>
+          <span>{formatIntervalLabel(chartSession.view.interval)}</span>
+          {chartSession.status.historyIntervalAvailable && !chartSession.status.realtimeIntervalAvailable && (
+            <span role="status" style={{ color: "var(--text-warning)" }}>{t("interval.historyOnly")}</span>
+          )}
           <span className="multi-chart-cell-market">
             {chartSession.view.exchange} · {chartSession.view.marketType}
           </span>
@@ -964,7 +971,13 @@ function LiveChartCell({
           </button>
         </header>
         <div className="multi-chart-cell-canvas">
-          <ChartCellCanvas
+          {chartSession.status.exchangeCatalogStatus !== "loading" && !chartSession.status.historyIntervalAvailable ? (
+            <ChartIntervalUnavailable
+              session={chartSession.view}
+              nativeIntervals={chartSession.status.exchangeCapabilityAvailable ? chartSession.view.nativeIntervals : []}
+              onSelectInterval={chartSession.actions.selectInterval}
+            />
+          ) : <ChartCellCanvas
             chart={chartModel}
             source={liveReferenceSource}
             tradeFlow={tradeFlow}
@@ -976,11 +989,11 @@ function LiveChartCell({
             drawingInteractionReady={drawingInteractionReady}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
             paused={obscured || quickReplay !== null}
-          />
+          />}
           {quickReplay && (
             <Suspense fallback={null}>
               <QuickReplayOverlay
-                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.interval}`}
+                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
                 request={quickReplay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}

@@ -1,7 +1,8 @@
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
-import type { MessageCatalog } from "../messageCatalog.js";
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
+import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
   ...workbenchEnglish,
@@ -68,6 +69,26 @@ export const ptBR = {
   "indicator.pine.quoteCurrency": "Moeda de cotação do gráfico (exige o passo real de preço)",
   "indicator.pine.contexts": "Mercados solicitados pelo Pine (JSON)",
   "indicator.pine.contextsHelp": "Indique os mercados locais usados por solicitações dinâmicas ou aninhadas. Utilize períodos no formato Pine (60 = uma hora). Defina marketType quando necessário e prepare os dados ausentes primeiro.",
+  ...intervalBasisMessages["pt-BR"],
+  "interval.historyOnly": "Somente histórico · tempo real indisponível",
+  "interval.unavailableHelp": "As configurações solicitadas do gráfico foram mantidas. Escolha outro intervalo ou altere a fonte no seletor de símbolos.",
+  "account.trades": "Revisão de operações",
+  "account.review.identity": "UID da conta {uid} · {margin} · ID da posição {position}",
+  "account.review.fillIdentity": "ID da execução {fill} · ID da negociação {trade} · ID da ordem {order} · Contratos {contracts}",
+  "account.review.scope": "Inclui apenas ciclos completos e conciliados de contratos perpétuos lineares em USDT. Contratos inversos, histórico incompleto e registros não conciliados ficam de fora. Os totais representam esta amostra, não o retorno da conta.",
+  "account.review.sample": "{count} operações verificadas · {wins} com lucro · {cached} em cache histórico",
+  "account.review.fees": "Taxas de execução (positivo = custo)",
+  "account.review.funding": "Variação do saldo por financiamento",
+  "account.review.net": "Resultado líquido",
+  "account.review.noR": "Sem um registro verificável do risco anterior à entrada, as estatísticas em R ficam indisponíveis. Resultado não realizado e MFE/MAE são estimativas por candle; desenhos e configurações históricas dos indicadores não são reconstruídos.",
+  "account.review.cached": "Inclui versões verificadas anteriormente. A sincronização ou a cobertura atual não permite verificá-las de novo. Uma revisão aberta mantém a versão selecionada.",
+  "account.review.coverage": "Cobertura do histórico e lacunas",
+  "account.review.empty": "Nenhuma operação verificada está pronta para revisão. Sincronize e concilie primeiro.",
+  "account.review.verified": "Versão verificada em: {time}",
+  "account.review.open": "Detalhes e diário",
+  "account.review.excluded": "{count} ciclos de posição excluídos desta consulta",
+  "account.review.costs": "Taxas de execução {fees} · Variação do saldo por financiamento {funding} {currency}",
+  "account.review.source": "OKX somente leitura · {instrument} · {currency} · Versão verificada fixa",
 
   "account.reconcile": "Conciliação",
   "account.reconcileHelp": "A verificação abrange apenas os registros disponíveis. O histórico inicial ausente permanece desconhecido; moedas distintas não são somadas.",
@@ -1780,6 +1801,7 @@ export const ptBR = {
   "settings.proxy.address": "Endereço do proxy",
   "settings.proxy.egressGroup": "Grupo de saída",
   "settings.proxy.concurrency": "Requisições simultâneas",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "IDs das exchanges (separados por vírgula; vazio inclui todas)",
   "settings.proxy.enabled": "Ativada",
   "settings.proxy.makePrimary": "Definir como principal",

@@ -24,6 +24,11 @@ function sourceRowsPerTargetBar(source: IntervalString, target: IntervalString):
   const targetSpec = getIntervalSemanticSpec(target);
   if (!sourceSpec || !targetSpec) return null;
 
+  if (targetSpec.timezone && sourceSpec.widthSeconds) {
+    const days = { d: 1, w: 7, M: 31 }[targetSpec.unit as "d" | "w" | "M"];
+    return Math.ceil((targetSpec.amount * days * 86400 + 7200) / sourceSpec.widthSeconds);
+  }
+
   if (targetSpec.alignment === "calendar-month") {
     if (sourceSpec.alignment === "calendar-month") {
       return Math.ceil((targetSpec.monthCount || 0) / (sourceSpec.monthCount || 1));

@@ -99,7 +99,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
             className="trading-account-select"
             aria-label={t("trading.account")}
             value={selected?.id ?? ""}
-            onChange={(event) => runtime.actions.select(event.target.value)}
+            onChange={(event) => { setJournal(null); runtime.actions.select(event.target.value); }}
           >
             {runtime.view.accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
@@ -317,7 +317,7 @@ export default function TradingAccountsPanel({ context, onOpenQuickReplay, onReq
       )}
       {journal && selected && (
         <TradeJournalDrawer
-          key={JSON.stringify(journal)}
+          key={`${selected.id}:${JSON.stringify(journal)}:${journal.kind === "plan" ? `${context.exchange}:${context.marketType}:${context.symbol}` : ""}`}
           account={selected}
           target={journal}
           context={context}

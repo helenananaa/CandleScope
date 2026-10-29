@@ -46,6 +46,14 @@ entry" badge. Entry, stop, target and risk (USDT) are locked at the first fill
 and are the only R denominator. `auto` template fields render from the ledger
 and are never stored as text.
 
+The editor writes a profile-local draft synchronously on each edit, scoped by
+account and journal target. Template saves are serialized and use optimistic
+revision checks; close and quick replay wait for the newest edit to be saved.
+Failed saves keep the editor open. Reopening the same target restores its draft,
+including unsent quick text. A conflicting server revision or another window's
+draft is not overwritten automatically; the editor keeps the text available to
+copy. Creation retries retain their client identifier across restarts.
+
 ## Stats
 
 `TradingStatsView` (the Stats tab) shows the selected account's closed trades
@@ -66,3 +74,11 @@ Fill markers, notes, position and P&L use the same cut. Indicators run through
 `useProvidedBarsIndicatorRuntime`, which computes on exactly the bars shown and
 resets on rewind. Current drawings are not shown; snapshot images are the
 record of what was on the chart at the time.
+
+Original notes are projected from immutable revisions saved strictly before the
+cursor; later review annotations appear separately with their actual save time.
+The risk plan is hidden until its saved time. Legacy coalesced or unavailable
+history is shown as unavailable instead of substituting the latest text. This
+projects the currently linked, undeleted entries; it does not reconstruct past
+link/unlink or deletion operations. Snapshot metadata is clipped by capture time;
+the replay still does not restore historical drawings.

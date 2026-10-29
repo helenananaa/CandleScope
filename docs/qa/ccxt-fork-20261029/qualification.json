@@ -1,0 +1,49 @@
+{
+  "status": "offline_prototype_qualified_with_declared_gaps",
+  "candlescope_base": "b84b5e3d514e43fca556613fe107e29d12f7a329",
+  "candlescope_branch": "codex/issue-113-ccxt-fork",
+  "fork_repository": "https://github.com/helenananaa/ccxt",
+  "fork_branch": "codex/candlescope-4.5.60",
+  "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+  "upstream_version": "4.5.60",
+  "schema": "candlescope.binance.usdm.kline.v1",
+  "wheel_sha256": "d6bf360bfef5601b02cc13ed6709a1564b0a919137ee40cccdd94d133bf9d0d2",
+  "clean_remote_builds_with_identical_wheel_sha256": 2,
+  "runtime": {
+    "platform": "macOS arm64",
+    "python": "3.12.15",
+    "node": "24.22.1",
+    "setuptools": "80.9.0",
+    "wheel": "0.45.1"
+  },
+  "checks": {
+    "candlescope_regression_passed": 136,
+    "fork_python_contract_passed": 23,
+    "fork_js_contract_passed": 3,
+    "upstream_static_per_runtime": {
+      "js": 388,
+      "python_sync": 388,
+      "python_async": 388
+    },
+    "typescript_compile": "passed",
+    "scoped_binance_lint": "passed",
+    "transpilation": [
+      "python",
+      "php",
+      "csharp",
+      "go",
+      "java"
+    ],
+    "rebuild_hash": "identical"
+  },
+  "gaps": [
+    "No live exchange REST or WS smoke",
+    "No native application or restart acceptance",
+    "PHP/C#/Go runtimes unavailable; generated but not compiled or executed",
+    "Java Gradle 8.12 build failed under installed JDK 25.0.5 before compilation",
+    "Raw source envelope and close-evidence metadata are not persisted in the existing bar database",
+    "Existing closed-bar continuity dedup may suppress later closed revisions; no downstream correction-policy change",
+    "Python tests use generated local source for upstream tests; CandleScope tests use the installed pinned wheel",
+    "No production default switch and no Issue #113 full provider migration"
+  ]
+}

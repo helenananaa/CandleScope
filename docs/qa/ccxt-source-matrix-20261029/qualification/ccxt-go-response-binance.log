@@ -1,0 +1,3 @@
+[INFO:MAIN] Exchange to test: binance
+[INFO][GO][TEST_SUCCESS] 52 static response tests passed.
+Got res: true

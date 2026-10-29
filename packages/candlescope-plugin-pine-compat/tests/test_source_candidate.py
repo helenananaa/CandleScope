@@ -12,7 +12,7 @@ def test_source_candidate_keeps_the_release_lock_and_engine_pins(tmp_path):
     lock = load_release_lock(DEFAULT_LOCK_PATH)
     original = deepcopy(lock)
     bridge = _fake_wheel(tmp_path, "candlescope-plugin-pine-compat", lock["plugin"]["version"])
-    sdk = _fake_wheel(tmp_path, "candlescope-plugin-sdk", "0.2.1")
+    sdk = _fake_wheel(tmp_path, "candlescope-plugin-sdk", lock["wheels"]["candlescope-plugin-sdk"]["version"])
     candidate = source_candidate_lock(lock, bridge, sdk)
     assert lock == original
     assert candidate["wheels"]["pine-compat-runtime"] == lock["wheels"]["pine-compat-runtime"]

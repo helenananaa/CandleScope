@@ -55,7 +55,7 @@ PLUGIN_PACKAGE = "candlescope-plugin-pine-compat"
 PLUGIN_VERSION = "0.4.0"
 ENGINE_PACKAGE = "pine-compat-runtime"
 ENGINE_MODULE = "pine_compat"
-EXPECTED_ENGINE_VERSION = "0.3.3"
+EXPECTED_ENGINE_VERSION = "0.3.3+cs.1"
 INCREMENTAL_ENGINE_VERSION = "0.3.2+external.1"
 UNKNOWN_SOURCE_VERSION = "0.0.0+unknown"
 
@@ -299,7 +299,12 @@ def pine_chart_symbol(context: Any) -> str | None:
 
 
 def pine_chart_timeframe(context: Any) -> str | None:
-    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(str(context.interval or "").strip())
+    value = str(context.interval or "").strip()
+    if "~" in value:
+        if not re.fullmatch(r"[1-9]\d*[mhd]~a1~\d+|[1-9]\d*[dwM]~c1~(?:UTC|Asia/Shanghai|America/New_York)", value):
+            return None
+        value = value.split("~", 1)[0]
+    match = _CANDLESCOPE_INTERVAL_RE.fullmatch(value)
     if not match:
         return None
     multiplier = int(match.group(1))
@@ -395,6 +400,8 @@ def _native_analysis(engine, source: str, libraries=()) -> dict[str, Any]:
 
 def _analyze_native(source: str, context: Any, options=None) -> tuple[dict[str, Any], tuple[Diagnostic, ...]]:
     engine, _version = _engine_contract()
+    if "~" in str(context.interval) and getattr(engine, "BAR_BOUNDARY_SCHEMA", None) != "host-bar-boundaries/1":
+        raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "This candle grid requires a runtime with host-bar-boundaries/1 support.")
     options = normalize_indicator_options(options or {})
     supplied = host_inputs(options.get("pineHost"))
     try:
@@ -1718,6 +1725,12 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 options["chart_symbol"] = bindings["chartSymbol"]
             if bindings["chartTimeframe"] is not None:
                 options["chart_timeframe"] = bindings["chartTimeframe"]
+            if "~" in str(request.context.interval):
+                boundary = request.options.get("barBasis")
+                if not isinstance(boundary, Mapping) or not bindings["chartSymbol"] or not bindings["chartTimeframe"]:
+                    raise BridgeError("PINE_HOST_CAPABILITY_UNSUPPORTED", "Frozen candle boundaries and chart identity are required.")
+                options["request_bars"] = {**options.get("request_bars", {}),
+                    "$boundaries": {f"{bindings['chartSymbol']}:{bindings['chartTimeframe']}": dict(boundary)}}
             session_id = request.options.get("pineSessionId")
             if session_id is not None and (
                 not isinstance(session_id, str) or not session_id or len(session_id) > 128
