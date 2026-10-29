@@ -176,9 +176,27 @@ export function createSteps(options, selected, files, root, output) {
   if (selected.desktop.length) node("desktop", ["--test", `--test-concurrency=${options.workers}`, "desktop/*.test.mjs"]);
   function backend(id, tests, workers) {
     if (!tests.length) return;
-    const args = ["-u", "-m", "pytest", ...tests.map((file) => file.slice("backend/".length)), "-q", "--durations=30", `--junitxml=${path.join(output, `${id}.xml`)}`];
-    if (workers > 1) args.push("-n", String(workers), "--dist=loadfile");
-    steps.push({ id, command: python, args, cwd: path.join(root, "backend") });
+    const argsFor = (batchId, batch) => ["-u", "-m", "pytest", ...batch, "-q", "--durations=30",
+      `--junitxml=${path.join(output, `${batchId}.xml`)}`,
+      ...(workers > 1 ? ["-n", String(workers), "--dist=loadfile"] : [])];
+    // Leave room for quoting, the executable and numbered report names below
+    // CreateProcess's limit. Partition the selection; never drop or broaden it.
+    const capacity = 24_000 - python.length - argsFor(id, []).join(" ").length - 128;
+    let batch = [], size = 0, index = 0;
+    const flush = () => {
+      if (!batch.length) return;
+      const batchId = index++ === 0 ? id : `${id}-${index}`;
+      steps.push({ id: batchId, command: python, args: argsFor(batchId, batch), cwd: path.join(root, "backend") });
+      batch = []; size = 0;
+    };
+    for (const file of tests) {
+      const relative = file.slice("backend/".length);
+      const cost = relative.length + 3;
+      if (cost > capacity) throw new Error(`Test path exceeds process argument budget: ${file}`);
+      if (size + cost > capacity) flush();
+      batch.push(relative); size += cost;
+    }
+    flush();
   }
   if (options.workers === 1) backend("backend", selected.backend, 1);
   else {

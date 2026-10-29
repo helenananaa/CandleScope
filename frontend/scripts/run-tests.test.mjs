@@ -110,12 +110,33 @@ test("profile preserves serial backend execution and file batches fit Windows pr
   const options = parseArgs(["profile"]);
   const plan = selectTests(options, files);
   const steps = createSteps(options, plan, files, REPO_ROOT, "out");
-  assert.equal(steps.length, 1);
+  assert.ok(steps.length >= 1);
   assert.equal(steps[0].id, "backend");
-  assert.equal(steps[0].args.includes("-n"), false);
-  assert.ok(steps[0].args.includes("tests/backtest_contract/test_no_lookahead.py"));
+  assert.ok(steps.every(step => !step.args.includes("-n")));
+  assert.ok(steps.some(step => step.args.includes("tests/backtest_contract/test_no_lookahead.py")));
+  assert.deepEqual(steps.flatMap(step => step.args.filter(arg => arg.startsWith("tests/"))),
+    plan.backend.map(file => file.slice("backend/".length)));
   const full = parseArgs(["full"]);
   for (const step of createSteps(full, selectTests(full, files), files, REPO_ROOT, "out")) assert.ok(step.args.join(" ").length < 24_000, step.id);
+});
+
+test("large backend selections are partitioned once with distinct reports and unchanged worker policy", () => {
+  const backend = Array.from({ length: 1200 }, (_, index) => `backend/tests/test_long_contract_${String(index).padStart(4, "0")}_history_and_recovery.py`);
+  const inventory = { backend, frontend: [], desktop: [] };
+  for (const workers of [1, 4]) {
+    const options = parseArgs(["full", "--backend", "--workers", String(workers)]);
+    const selected = { backend, frontend: [], desktop: [], parallelBackend: backend.slice(0, 1000), serialBackend: backend.slice(1000) };
+    const steps = createSteps(options, selected, inventory, REPO_ROOT, "out");
+    assert.ok(steps.length > 2);
+    assert.deepEqual(steps.flatMap(step => step.args.filter(arg => arg.startsWith("tests/"))),
+      backend.map(file => file.slice("backend/".length)));
+    assert.equal(new Set(steps.map(step => step.id)).size, steps.length);
+    assert.equal(new Set(steps.map(step => step.args.find(arg => arg.startsWith("--junitxml=")))).size, steps.length);
+    for (const step of steps) {
+      assert.ok(step.args.join(" ").length < 24_000);
+      assert.equal(step.args.includes("-n"), workers > 1 && step.id.startsWith("backend-parallel"));
+    }
+  }
 });
 
 test("runner preserves failing child status, logs and subsequent independent results", async (context) => {
