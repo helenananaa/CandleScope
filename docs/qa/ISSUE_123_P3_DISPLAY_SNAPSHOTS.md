@@ -80,6 +80,98 @@ Keep P0/P1/P2 evidence and the retired-Pyne rejection checks intact.
 
 ## Acceptance status
 
-Native results, fixed-input comparison, source/build hashes and remaining gaps
-will be added after the final candidate is exercised. Unit tests alone do not
-close the issue's full multi-window/long-history/soak acceptance matrix.
+The scoped results below separate observed correctness/performance from the
+known remaining viewport defect and broader acceptance gaps.
+
+### Measured candidate (2026-10-29)
+
+Implementation `7d16f873bb08691a7f75eaad2ea5c5b3d112a797`, parent
+`f0b4d58bdfec29bb7e94ebe39529ebf12b9ae0a5`. Later acceptance-only commits do
+not change the measured renderer. Local evidence root:
+`output/issue-123-p3-20261029` in the primary checkout. The PR/issue link the
+portable evidence archive and exact-head CI separately.
+
+Full local `npm run check` passed: architecture/plugin/i18n checks, typecheck,
+lint, 4482 frontend tests, one separate performance test, 123 desktop tests and
+production build. Final implementation typecheck/build were also rerun. The two
+scheduler regressions fail against the parent. Twelve real Chrome Worker/React
+checks pass, including stable-identity live input, continuous-feed progress,
+hidden indicator restoration and delayed owner-ABA result/cache rejection even
+without a React context change. These are controlled browser integration checks,
+not an installed-app plugin acceptance claim.
+
+Native tests use the production renderer, Electron 43.3.0 desktop host, isolated
+profile and fixed synthetic BTCUSDT 1m input. Baseline artifacts were checked
+against the parent build's SHA-256 inventory. For the minimized/restart tests a
+copy of the same Electron host received a distinct QA bundle identifier to avoid
+ambiguity with another Electron process on this machine. No normal profile,
+exchange credentials, account actions or Windows process were used.
+
+| Path | Parent admission P95 | P3 admission P95 | Parent series update P95 | P3 series update P95 | Parent update + 2 RAF P95 | P3 update + 2 RAF P95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Single focused | 16.6 ms | 0.3 ms | 16.1 ms | 16.0 ms | 49.2 ms | 49.5 ms |
+| Dual focused | 14.2 ms | 0.3 ms | 13.7 ms | 14.1 ms | 46.4 ms | 47.3 ms |
+| Dual secondary | 47.3 ms | 0.2 ms | 46.9 ms | 14.7 ms | 80.6 ms | 47.7 ms |
+
+Each layout/build has one warmup and five measured runs of 200 forming updates,
+requested at 50 ms intervals, over 1500 final rows plus one forming row. Every
+visible chart has 1000 admissions, incremental series updates and two-RAF
+samples. All 20 measured runs preserve final OHLCV/finality; observed full
+`setData`, additional Kline HTTP and >50 ms long tasks are zero, physical WS is
+one. Existing focused comparison budgets (single 21/62 ms, dual 20/61 ms) were
+not raised; secondary also fits the dual display comparison. This is descriptive
+fixed-input evidence, not statistical significance, GPU completion or cold/live
+network latency. This task ran no build/test/benchmark alongside measured runs;
+the shared workstation was not CPU-isolated.
+
+The performance verifier combines unchanged history/count from periodic full
+snapshots with the final direct source and series notifications. A periodic
+snapshot can precede the last input. It filters actual changed tail deltas, so
+later metadata no-ops carrying the last input label are not counted as ticks.
+The functional observer adds full displayed rows and viewports only after the
+performance runs; both observer sources are retained.
+
+Native functional results:
+
+- Two same-series charts retain distinct window IDs and one shared physical WS.
+  Left-only zoom changes no right viewport. Hidden left chart admits seven new
+  rows and a valid historical amendment while its displayed rows remain frozen;
+  restore with no new tick displays all 1511 rows and retains the left range.
+- Actual native lifecycle confirms minimized/visible=false. Three new bars plus
+  200 updates at requested 5 ms spacing are admitted by both owners while both
+  series remain unchanged. Exactly two dirty slots remain, zero runnable slots.
+- During that minimized interval WS and HTTP are blocked; four more bars and a
+  historical amendment are made offline. After network/visibility restoration
+  without a new WS candle, both 1507-row sources match every authoritative
+  OHLCV/finality field and both displayed series match their source OHLC. The UI
+  remains waiting for real-time data instead of claiming live solely from ACK.
+- Same isolated profile is closed and reopened on P2, then P3. Dual selection,
+  independent owners, one physical transport and exact held rows/display survive.
+  Parent and P3 renderers are never enabled together. This is renderer rollback;
+  the desktop host code changed only in its opt-in evidence harness.
+
+### Confirmed remaining issue and unverified coverage
+
+A separate native probe confirmed an existing viewport defect: after a seven-bar
+burst, an old-bar amendment moves the maximized visible chart left by 18 logical
+bars. It reproduces on both P2 and P3 (`viewport-probe-*-before/after.json` and
+`viewport-known-issue.json`). Initial offsets differ, but both move by 18; no
+claim of identical initial viewport is made. In P3 the hidden chart does not
+move; P2's hidden chart also moves. Data/display equality is unaffected. This
+scope does not fix the existing visible-chart anchor behavior, and the complete
+viewport acceptance matrix remains open.
+
+Repeated native drag/horizontal-scroll attempts did not produce a confirmed pan
+in this run. Independent zoom, live return, hidden restoration and owner isolation
+are observed; the full 10000-row A-history/B-live navigation scenario from P1 was
+not freshly revalidated on this candidate. Do not label those attempts passed.
+
+Also unverified: full installed/notarized app interaction; native indicator/plugin
+creation and every hosted provider; export/replay workflows beyond the tested
+snapshot contract; OS sleep; long outages and soak; 16–64 charts/heavy callbacks;
+full-application retained heap, allocations and GC; real network variability;
+GPU presentation; Windows. The synchronous writer now accepts every valid input,
+so a short high-rate burst does not establish sustained-rate CPU/memory limits.
+A frame budget cannot preempt a slow callback. Local captures cannot prove a
+remote server's historical input, which still requires its revision contract.
+Issue #123 remains open; the full matrix is not accepted by this scoped delivery.
