@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      DATA_DIR: ${{ runner.temp }}/ccxt-integration-data
-      CANDLE_DATA_DIR: ${{ runner.temp }}/ccxt-integration-data
+      DATA_DIR: ${{ github.workspace }}/output/ccxt-integration/data
+      CANDLE_DATA_DIR: ${{ github.workspace }}/output/ccxt-integration/data
       CANDLESCOPE_REQUIRE_CCXT_FORK: "1"
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
