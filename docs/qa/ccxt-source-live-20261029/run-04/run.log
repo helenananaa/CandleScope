@@ -1,0 +1,193 @@
+{
+  "status": "passed",
+  "started_at_ms": 1793240180327,
+  "elapsed_seconds": 46.479,
+  "database": "/tmp/candlescope-fork-live-acceptance-04/candlescope.db",
+  "initial_rest_rows": 3,
+  "ws_delivered": 101,
+  "forming_then_closed": true,
+  "rest_attempts": 2,
+  "stable_rest_samples": 2,
+  "closed_open_time": 1793240160000,
+  "ws_rest_values_equal": false,
+  "revision_before_rest": 100,
+  "revision_after_rest": 101,
+  "live_closed_revision_observed": true,
+  "full_source_roundtrip": true,
+  "websocket_restart_verified": true,
+  "reconnect_pipeline": {
+    "stream_key": "futures:BTCUSDT@kline_1m",
+    "feed_control": {
+      "layer": "L3_FeedControl",
+      "stream_key": "futures:BTCUSDT@kline_1m",
+      "mode": "plugin_stream",
+      "ws_probe_successes": 0,
+      "health_observers": 1,
+      "metrics": {
+        "layer": "L3_FeedControl",
+        "counters": {
+          "health_observer_notifications": 2,
+          "ws_activations": 1,
+          "ws_messages_forwarded": 2
+        },
+        "gauges": {
+          "ws_health": "connected",
+          "feed_mode": "plugin_stream"
+        },
+        "timestamps": {
+          "started_at": 1793240224211,
+          "ws_health_changed_at": 1793240225126,
+          "mode_changed_at": 1793240224211
+        }
+      },
+      "session": {
+        "layer": "L2_CcxtProvider",
+        "stream_key": "futures:BTCUSDT@kline_1m",
+        "provider": "ccxt",
+        "proxy_route_id": null,
+        "health": "connected",
+        "ccxt_symbol": "BTC/USDT:USDT",
+        "queue_size": 0,
+        "queue_capacity": 4096,
+        "overflowed": false,
+        "consecutive_failures": 0,
+        "last_message_time": 7652.449669083,
+        "last_lifecycle": "connected",
+        "runtime": {
+          "exchange": "binance",
+          "proxy_route_id": null,
+          "proxy_egress_group": null,
+          "proxy_endpoint": "",
+          "market_type": "futures",
+          "started": true,
+          "closed": false,
+          "subscribers": 1,
+          "raw_events": 2,
+          "lifecycle_events": 1,
+          "websocket_recycles": 0,
+          "websocket_generation": 0,
+          "physical_websockets": 1
+        },
+        "metrics": {
+          "layer": "L2_CcxtProvider",
+          "counters": {
+            "lifecycle_connected": 1,
+            "watch_updates": 2,
+            "events_forwarded": 1
+          },
+          "gauges": {
+            "health": "connected"
+          },
+          "timestamps": {
+            "health_changed_at": 1793240225126
+          }
+        }
+      }
+    },
+    "normalize": {
+      "layer": "L4_Normalize",
+      "stream_key": "futures:BTCUSDT@kline_1m",
+      "normalizer": "CcxtPrimaryNormalizer",
+      "metrics": {
+        "layer": "L4_Normalize",
+        "counters": {
+          "messages_received": 2,
+          "events_emitted": 2
+        },
+        "gauges": {},
+        "timestamps": {
+          "last_event_at": 1793240225658
+        }
+      }
+    },
+    "continuity": {
+      "layer": "L5_Continuity",
+      "stream_key": "futures:BTCUSDT@kline_1m",
+      "last_continuity_key": 1793240220000,
+      "seen_cache_size": 1,
+      "calendar_id": "crypto.24x7.utc",
+      "metrics": {
+        "layer": "L5_Continuity",
+        "counters": {
+          "events_received": 2,
+          "events_emitted": 2
+        },
+        "gauges": {},
+        "timestamps": {
+          "last_emit_at": 1793240225658
+        }
+      }
+    },
+    "recovery": {
+      "layer": "L5_Recovery",
+      "stream_key": "futures:BTCUSDT@kline_1m",
+      "enabled": true,
+      "state": "healthy",
+      "repairing": false,
+      "target_end": null,
+      "expected_missing": 0,
+      "pending_since_ms": null,
+      "next_retry_at_ms": null,
+      "repair_attempt": 0,
+      "last_repair_attempts": 0,
+      "last_error": "",
+      "terminal_failures": 0,
+      "buffered_events": 0,
+      "buffer_capacity": 50000,
+      "retry": {
+        "attempt_timeout_seconds": 10.0,
+        "initial_seconds": 1.0,
+        "max_seconds": 30.0,
+        "deadline_seconds": 900.0
+      },
+      "repaired_dedup_cache_size": 0,
+      "last_emitted_key": 1793240220000,
+      "metrics": {
+        "layer": "L5_Recovery",
+        "counters": {
+          "events_emitted": 2
+        },
+        "gauges": {
+          "state": "healthy"
+        },
+        "timestamps": {}
+      }
+    },
+    "delivery": {
+      "layer": "L6_Delivery",
+      "stream_key": "futures:BTCUSDT@kline_1m",
+      "market_event_callbacks": 1,
+      "gap_callbacks": 0,
+      "event_callbacks": 0,
+      "active_subscribers": 0,
+      "metrics": {
+        "layer": "L6_Delivery",
+        "counters": {
+          "events_delivered": 2
+        },
+        "gauges": {},
+        "timestamps": {
+          "last_event_at": 1793240225658
+        }
+      }
+    }
+  },
+  "separate_process_readback": true,
+  "pending_sources": 0,
+  "source_raw_sha256": "38b9f230b09f4000196c054718b2160621eea67a6bb2ca3c2c193f8bde83d423",
+  "delivery": {
+    "mode": "durable",
+    "degraded": false,
+    "pending": 0,
+    "recovery_pending": 0,
+    "failures": 0,
+    "last_error": null,
+    "recovery_error": null,
+    "unconfirmed_receipt": false,
+    "active_submissions": 0,
+    "admission_rejected": 0,
+    "published": 4,
+    "rejected": 0
+  },
+  "desktop_tested": false
+}

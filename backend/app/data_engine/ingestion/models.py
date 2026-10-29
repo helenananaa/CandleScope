@@ -228,6 +228,9 @@ class MarketEvent:
         - Others: None (no dedup)
         """
         if self.event_type == StreamType.KLINE:
+            ref = self.data.get("source_ref")
+            if ref is not None:
+                return f"{ref['series']}:{ref['open_time']}:revision:{ref['revision']}"
             if self.source == DataSource.PLUGIN and self.data.get(
                 "is_correction", False
             ):

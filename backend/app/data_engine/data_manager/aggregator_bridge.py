@@ -200,6 +200,8 @@ class AggregatorBridge:
         finality = getattr(bar_state, "finality", None)
         if getattr(finality, "value", finality) != BarFinality.AUTHORITATIVE.value:
             return None
+        if bar_state.source_refs:
+            return "source_snapshot_verified"
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
         return {

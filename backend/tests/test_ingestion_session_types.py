@@ -373,9 +373,10 @@ def test_factory_waits_for_kline_stop_before_fast_resubscribe() -> None:
         def get_pipeline(self, key: str):
             return self.pipelines.get(key)
 
-        async def add_stream(self, descriptor: StreamDescriptor):
+        async def add_stream(self, descriptor: StreamDescriptor, **callbacks):
             self.add_calls += 1
             pipeline = _Pipeline()
+            pipeline.delivery.on_market_event(callbacks["on_market_event"])
             self.pipelines[descriptor.key] = pipeline
             return pipeline
 
@@ -447,9 +448,10 @@ def test_factory_cleans_failed_kline_stop_before_reuse() -> None:
                 raise RuntimeError("transient stop failure")
             self.pipelines.pop(key, None)
 
-        async def add_stream(self, descriptor: StreamDescriptor):
+        async def add_stream(self, descriptor: StreamDescriptor, **callbacks):
             self.add_calls += 1
             pipeline = _Pipeline()
+            pipeline.delivery.on_market_event(callbacks["on_market_event"])
             self.pipelines[descriptor.key] = pipeline
             return pipeline
 

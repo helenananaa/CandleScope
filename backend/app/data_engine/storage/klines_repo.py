@@ -385,30 +385,7 @@ def upsert_klines(
 
     identity = _resolved_identity(exchange, series_identity)
     now_ms = int(time.time() * 1000)
-    payload = [
-        (
-            exchange,
-            market_type,
-            *identity.storage_values,
-            symbol,
-            interval,
-            r["open_time"],
-            r["close_time"],
-            r["open"],
-            r["high"],
-            r["low"],
-            r["close"],
-            r["volume"],
-            r["quote_volume"],
-            r["trades"],
-            r["taker_buy_base"],
-            r["taker_buy_quote"],
-            source,
-            now_ms,
-            now_ms,
-        )
-        for r in rows
-    ]
+
 
     write_guard = (
         _ARCHIVE_IMPORT_WRITE_LOCK
@@ -417,6 +394,40 @@ def upsert_klines(
     )
     with write_guard:
         with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
+            from .kline_sources import filter_projection_rows
+
+            if not conn.in_transaction:
+                conn.execute("BEGIN IMMEDIATE")
+            rows = filter_projection_rows(
+                conn, rows, exchange=exchange, market_type=market_type, symbol=symbol,
+                interval=interval, native_identity=identity.is_legacy_default_for(exchange),
+            )
+            if not rows:
+                return 0
+            payload = [
+                (
+                    exchange,
+                    market_type,
+                    *identity.storage_values,
+                    symbol,
+                    interval,
+                    r["open_time"],
+                    r["close_time"],
+                    r["open"],
+                    r["high"],
+                    r["low"],
+                    r["close"],
+                    r["volume"],
+                    r["quote_volume"],
+                    r["trades"],
+                    r["taker_buy_base"],
+                    r["taker_buy_quote"],
+                    "source_snapshot_verified" if r.get("_source_verified") else source,
+                    now_ms,
+                    now_ms,
+                )
+                for r in rows
+            ]
             incoming_rank_sql = source_rank_sql("excluded.source")
             stored_rank_sql = source_rank_sql("klines.source")
             changes_before = conn.total_changes

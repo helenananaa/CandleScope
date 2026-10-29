@@ -1,0 +1,48 @@
+F401 [*] `app.data_engine.interval_policy.STANDARD_INTERVALS` imported but unused
+   --> backend/app/data_engine/bar_aggregator/models.py:551:5
+    |
+550 | from app.data_engine.interval_policy import (  # noqa: E402
+551 |     STANDARD_INTERVALS,
+    |     ^^^^^^^^^^^^^^^^^^
+552 |     is_standard_interval,
+553 |     parse_interval_ms,
+    |
+help: Remove unused import
+
+F401 [*] `app.data_engine.interval_policy.is_standard_interval` imported but unused
+   --> backend/app/data_engine/bar_aggregator/models.py:552:5
+    |
+550 | from app.data_engine.interval_policy import (  # noqa: E402
+551 |     STANDARD_INTERVALS,
+552 |     is_standard_interval,
+    |     ^^^^^^^^^^^^^^^^^^^^
+553 |     parse_interval_ms,
+554 |     parse_interval_spec,
+    |
+help: Remove unused import
+
+F401 [*] `app.data_engine.interval_policy.parse_interval_ms` imported but unused
+   --> backend/app/data_engine/bar_aggregator/models.py:553:5
+    |
+551 |     STANDARD_INTERVALS,
+552 |     is_standard_interval,
+553 |     parse_interval_ms,
+    |     ^^^^^^^^^^^^^^^^^
+554 |     parse_interval_spec,
+555 | )
+    |
+help: Remove unused import
+
+F401 [*] `.models.parse_interval_ms` imported but unused
+  --> backend/app/data_engine/bar_aggregator/router.py:57:5
+   |
+55 |     MergeMode,
+56 |     BarInputAdapter,
+57 |     parse_interval_ms,
+   |     ^^^^^^^^^^^^^^^^^
+58 | )
+   |
+help: Remove unused import: `.models.parse_interval_ms`
+
+Found 4 errors.
+[*] 4 fixable with the `--fix` option.

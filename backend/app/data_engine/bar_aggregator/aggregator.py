@@ -359,6 +359,7 @@ class BarAggregator:
         The event is normalized to BarInput by the Router and dispatched
         to all matching interval pipelines.
         """
+        await self._publisher.retry_source_deliveries()
         await self._router.on_market_event(event)
 
     async def on_backfill_bars(
@@ -810,6 +811,35 @@ class BarAggregator:
 
         # L2: Compute which bucket this input belongs to
         bucket_start_ms = pipeline.time_bucket.compute_bucket(bar_input.open_time_ms)
+
+        if (
+            bar_input.extra.get("source_ref")
+            and bar_input.is_closed
+            and bar_input.merge_mode == MergeMode.COMPONENT
+            and pipeline.bar_state.get_state(exchange, market_type, symbol, bucket_start_ms) is None
+        ):
+            # After restart/eviction a historical correction is only one
+            # component. Restore its siblings before recalculating the bucket.
+            from app.core.executors import run_storage
+            from app.data_engine.storage.kline_sources import closed_components
+
+            _, bucket_end_ms = pipeline.time_bucket.compute_bucket_range(bucket_start_ms)
+            components = await run_storage(
+                closed_components, bar_input.extra["source_ref"]["series"], bucket_start_ms, bucket_end_ms,
+            )
+            for component in components:
+                data = component["data"]
+                if data["open_time"] == bar_input.open_time_ms:
+                    continue
+                sibling = replace(
+                    bar_input, open_time_ms=data["open_time"], close_time_ms=data["close_time"],
+                    **{name: data[name] for name in (
+                        "open", "high", "low", "close", "volume", "quote_volume", "trades",
+                        "taker_buy_base", "taker_buy_quote",
+                    )},
+                    extra={"source_ref": component["ref"]},
+                )
+                pipeline.bar_state.apply(exchange, market_type, symbol, bucket_start_ms, sibling)
 
         # Check for event-driven close: if this input starts a new bucket,
         # close previous active bars for this symbol

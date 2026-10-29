@@ -27,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 from typing import Callable, Awaitable, AsyncIterator
@@ -78,6 +79,7 @@ class BarAggregatorPublisher:
         self._callback_errors: int = 0
         self._queue_recovery_required: int = 0
         self._preview_drops: int = 0
+        self._pending_source_events: dict[str, BarEvent] = {}
 
     # ── Public: Callback Registration ────────────────────────
 
@@ -208,7 +210,10 @@ class BarAggregatorPublisher:
         self._events_emitted += 1
 
         # Fire type-specific callbacks
+        if event.bar.source_refs:
+            self._pending_source_events.setdefault(event.delivery_id, copy.deepcopy(event))
         await self._fire_callbacks(event)
+        self._pending_source_events.pop(event.delivery_id, None)
 
         # Push to subscriber queues
         self._enqueue(event)
@@ -311,6 +316,10 @@ class BarAggregatorPublisher:
 
     # ── Internal: Callback Dispatch ──────────────────────────
 
+    async def retry_source_deliveries(self) -> None:
+        for event in list(self._pending_source_events.values()):
+            await self.emit(event)
+
     async def _fire_callbacks(self, event: BarEvent) -> None:
         """Fire all matching callbacks for this event."""
         et = event.event_type
@@ -341,6 +350,8 @@ class BarAggregatorPublisher:
                     "Bar event callback error (%s): %s",
                     et.value, exc, exc_info=True,
                 )
+                if event.bar.source_refs:
+                    raise BarDeliveryUnavailable(str(exc)) from exc
 
     # ── Internal: Queue Dispatch ─────────────────────────────
 

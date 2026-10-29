@@ -200,6 +200,16 @@ def test_ws_forming_candle_is_not_promoted_by_local_clock():
     )
 
 
+def test_rest_finality_uses_pre_request_exchange_clock_when_present():
+    payload = fork_exchange().parse_candlescope_kline(ROW, MARKET, "1M")
+    payload["_source_rest_server_time_ms"] = ROW[6]
+    assert not parse(payload, received=ROW[6] + 86400000).data["is_closed"]
+    payload["_source_rest_server_time_ms"] = ROW[6] + 1
+    event = parse(payload, received=ROW[6] - 86400000)
+    assert event.data["is_closed"]
+    assert event.data["close_evidence"] == "rest_server_time_elapsed"
+
+
 def test_python_fork_1500_rows_and_concurrent_requests_are_independent():
     exchange = fork_exchange()
     started = asyncio.Event()
@@ -239,6 +249,9 @@ def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch):
         return [ROW]
 
     exchange.fapiPublicGetKlines = fetch
+    async def server_time(params):
+        return ROW[6] + 1
+    exchange.fetch_time = server_time
 
     class Pool:
         @asynccontextmanager

@@ -513,6 +513,37 @@ def test_provider_session_forwards_raw_payload_without_ccxt_projection() -> None
     asyncio.run(run())
 
 
+def test_provider_session_retries_failed_delivery_before_next_message() -> None:
+    async def run():
+        profile = _FakeProfile()
+        session = CcxtProviderSession(
+            config=IngestionConfig(ws_reconnect_delay_initial=0.01),
+            descriptor=_agg_descriptor(), profile=profile, pool=CcxtRuntimePool(),
+        )
+        attempts, delivered, health = [], [], []
+        async def receive(message):
+            attempts.append(message.payload["a"])
+            if len(attempts) == 1:
+                raise OSError("injected source journal failure")
+            delivered.append(message.payload["a"])
+        async def observe(state, reason):
+            health.append(state)
+        session.on_message(receive)
+        session.on_health_change(observe)
+        try:
+            await session.start()
+            await _wait_until(lambda: profile.exchange is not None)
+            await profile.exchange.watch_queue.put(_agg_event(123))
+            await profile.exchange.watch_queue.put(_agg_event(124))
+            await _wait_until(lambda: len(delivered) == 2)
+            assert attempts == [123, 123, 124]
+            assert SessionHealth.UNHEALTHY in health and health[-1] == SessionHealth.CONNECTED
+            assert session.snapshot()["metrics"]["counters"]["delivery_failures"] == 1
+        finally:
+            await session.stop()
+    asyncio.run(run())
+
+
 def test_sparse_liquidation_session_does_not_fail_when_market_is_quiet() -> None:
     async def run() -> None:
         pool = CcxtRuntimePool()

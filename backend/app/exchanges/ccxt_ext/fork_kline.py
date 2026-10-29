@@ -1,7 +1,6 @@
 """Strict boundary for the opt-in, source-pinned CandleScope CCXT fork.
 
-Source evidence is attached to MarketEvent; the existing bar database persists
-its supported numeric columns, not this complete source envelope.
+Source evidence is retained in the source journal before downstream delivery.
 """
 
 from __future__ import annotations
@@ -73,7 +72,7 @@ def _integer(payload: dict, key: str) -> int:
 
 def normalize_fork_kline(
     message: RawMessage, descriptor: StreamDescriptor
-) -> MarketEvent:
+) -> MarketEvent | None:
     payload = message.payload
     expected = {
         "schema": SCHEMA,
@@ -142,8 +141,21 @@ def normalize_fork_kline(
             or payload.get("closed") is not None
         ):
             raise ValueError("fork REST kline cannot claim explicit WS finality")
-        is_closed = closed_at < message.received_at_ms
-        evidence = "rest_close_time_elapsed" if is_closed else "rest_close_time_pending"
+        server_time = payload.get("_source_rest_server_time_ms")
+        if server_time is not None:
+            if type(server_time) is not int or server_time <= 0:
+                raise ValueError("invalid REST exchange time evidence")
+            is_closed = closed_at < server_time
+            evidence = (
+                "rest_server_time_elapsed" if is_closed else "rest_server_time_pending"
+            )
+        else:
+            # Parsing old/offline envelopes remains possible; durable REST
+            # acquisition always supplies an exchange-clock observation.
+            is_closed = closed_at < message.received_at_ms
+            evidence = (
+                "rest_close_time_elapsed" if is_closed else "rest_close_time_pending"
+            )
         event_time = opened
     else:
         raise ValueError("unsupported source for fork kline")
@@ -205,6 +217,12 @@ def normalize_fork_kline(
         close_evidence=evidence,
         source_candle=copy.deepcopy(payload),
     )
+    receipt = payload.get("_source_receipt")
+    if receipt is not None:
+        if receipt["status"] != "selected":
+            return None
+        data["source_ref"] = dict(receipt["ref"])
+        data["is_correction"] = is_closed
     return MarketEvent(
         event_type=StreamType.KLINE,
         symbol=descriptor.symbol,
@@ -217,3 +235,36 @@ def normalize_fork_kline(
         sequence=opened,
         market_type=descriptor.market_type,
     )
+
+
+async def prepare_source_messages(messages, descriptor, *, watermark=None):
+    from app.core.executors import run_storage
+    from app.data_engine.storage import kline_sources
+
+    unrecorded = [
+        message for message in messages if "_source_receipt" not in message.payload
+    ]
+    if not unrecorded:
+        return
+    build = json.loads(LOCK_PATH.read_text())
+    for message in unrecorded:
+        message.payload = dict(
+            message.payload,
+            _source_build={
+                key: build[key]
+                for key in ("source_commit", "upstream_version", "schema")
+            },
+        )
+    events = [normalize_fork_kline(message, descriptor) for message in unrecorded]
+    if (
+        any(event.source != DataSource.WEBSOCKET for event in events)
+        and watermark is None
+    ):
+        raise ValueError(
+            "REST source persistence requires a pre-request database watermark"
+        )
+    receipts = await run_storage(
+        kline_sources.record_batch, events, descriptor, watermark
+    )
+    for message, receipt in zip(unrecorded, receipts, strict=True):
+        message.payload = dict(message.payload, _source_receipt=receipt)

@@ -424,21 +424,34 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 and futures
                 and config.ccxt_fork_kline_enabled
             ):
-                from .fork_kline import require_fork
+                from .fork_kline import require_fork, prepare_source_messages
+                from app.core.executors import run_storage
+                from app.data_engine.storage import kline_sources
 
                 require_fork(exchange)
                 limit = min(params["limit"], 1500)
                 fork_params = {"until": int(req.end_ms)} if req.end_ms is not None else {}
-                values = await exchange.fetch_candlescope_klines(
-                    symbol, descriptor.interval, req.start_ms, limit, fork_params,
-                )
-                return _raw_messages(
-                    descriptor,
-                    values,
-                    "/fapi/v1/klines",
-                    request_limit=limit,
-                    headers=exchange.last_response_headers,
-                )
+                for attempt in range(3):
+                    watermark = await run_storage(kline_sources.rest_watermark)
+                    # Observe exchange time BEFORE requesting the candle, so
+                    # local clock skew cannot invent or delay its finality.
+                    server_time = await exchange.fetch_time({"type": "swap", "subType": "linear"})
+                    if type(server_time) is not int or server_time <= 0:
+                        raise RuntimeError("missing exchange time for fork REST snapshot")
+                    values = await exchange.fetch_candlescope_klines(
+                        symbol, descriptor.interval, req.start_ms, limit, fork_params,
+                    )
+                    values = [dict(value, _source_rest_server_time_ms=server_time) for value in values]
+                    messages = _raw_messages(
+                        descriptor, values, "/fapi/v1/klines",
+                        request_limit=limit, headers=exchange.last_response_headers,
+                    )
+                    await prepare_source_messages(messages, descriptor, watermark=watermark)
+                    if all(message.payload["_source_receipt"]["status"] == "selected" for message in messages):
+                        return messages
+                    if attempt < 2:
+                        await asyncio.sleep(0.25 * (2 ** attempt))
+                raise RuntimeError("source_read_conflict: K-line changed during REST request; retry page")
             if descriptor.stream_type == StreamType.KLINE:
                 params["interval"] = descriptor.interval
                 if req.start_ms is not None:

@@ -50,6 +50,19 @@ class NormalizeLayer:
     async def ingest(self, msg: RawMessage) -> None:
         """Normalize a raw message and forward the resulting MarketEvent."""
         self._metrics.inc("messages_received")
+        if isinstance(msg.payload, dict) and self._cfg.ccxt_fork_kline_enabled:
+            from app.exchanges.ccxt_ext.fork_kline import SCHEMA, prepare_source_messages
+
+            if msg.payload.get("schema") == SCHEMA:
+                try:
+                    await prepare_source_messages([msg], self._descriptor)
+                except ValueError as exc:
+                    self._metrics.inc("parse_errors")
+                    logger.warning("Rejected invalid fork source candle: %s", exc)
+                    return
+                if msg.payload["_source_receipt"]["status"] == "reconcile":
+                    await self._reconcile_source(msg)
+                    return
         try:
             events = self.parse_all(msg)
         except Exception as exc:
@@ -70,6 +83,37 @@ class NormalizeLayer:
             self._metrics.mark("last_event_at")
             if self._on_event:
                 await self._on_event(event)
+
+    async def _reconcile_source(self, message: RawMessage) -> None:
+        from app.exchanges import get_exchange_registry
+        from .models import TransportRequest
+
+        plugin = get_exchange_registry().get_plugin(self._descriptor.exchange)
+        opened = int(message.payload["timestamp"])
+        messages = await plugin.fetch_history_with_config(
+            TransportRequest(self._descriptor, limit=1, start_ms=opened, end_ms=opened), self._cfg
+        )
+        if not messages:
+            raise RuntimeError("source reconciliation returned no candle")
+        self._metrics.inc("source_reconciliations")
+        for resolved in messages:
+            await self.ingest(resolved)
+
+    async def replay_source_pending(self) -> None:
+        if not self._cfg.ccxt_fork_kline_enabled:
+            return
+        from app.core.executors import run_storage
+        from app.data_engine.storage import kline_sources
+
+        while True:
+            messages = await run_storage(kline_sources.pending, self._descriptor)
+            if not messages:
+                return
+            for message in messages:
+                await self.ingest(message)
+            remaining = await run_storage(kline_sources.pending, self._descriptor, 1)
+            if remaining and remaining[0].payload["_source_receipt"]["ref"] == messages[0].payload["_source_receipt"]["ref"]:
+                return  # Recovery may buffer until its missing range is available.
 
     def parse_raw(self, msg: RawMessage) -> MarketEvent | None:
         """Parse a raw message into a MarketEvent without triggering callbacks."""

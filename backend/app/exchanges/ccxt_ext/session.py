@@ -58,6 +58,7 @@ class CcxtProviderSession:
             maxsize=max(1, int(config.ccxt_raw_queue_size)),
         )
         self._overflowed = False
+        self._delivery_failed = False
         self._running = False
         self._watch_task: asyncio.Task[None] | None = None
         self._delivery_task: asyncio.Task[None] | None = None
@@ -229,7 +230,8 @@ class CcxtProviderSession:
                     get_proxy_pool().mark_ws_connected(self._proxy_ws_lease)
                 self._failed_proxy_url = None
                 delay = float(self._cfg.ws_reconnect_delay_initial)
-                await self._set_health(SessionHealth.CONNECTED, "CCXT stream active")
+                if not self._delivery_failed:
+                    await self._set_health(SessionHealth.CONNECTED, "CCXT stream active")
                 self._metrics.inc("watch_updates")
             except asyncio.CancelledError as exc:
                 # CCXT cancels its per-subscription Future when a websocket is
@@ -385,8 +387,23 @@ class CcxtProviderSession:
                 received_at_ms=event.received_at_ms,
                 endpoint="ccxt+ws://" + self._profile.exchange_id,
             )
-            if self._on_message is not None:
-                await self._on_message(message)
+            while self._running:
+                try:
+                    if self._on_message is not None:
+                        await self._on_message(message)
+                    recovered = self._delivery_failed
+                    self._delivery_failed = False
+                    if recovered:
+                        await self._set_health(SessionHealth.CONNECTED, "source delivery recovered")
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self._delivery_failed = True
+                    self._metrics.inc("delivery_failures")
+                    await self._set_health(SessionHealth.UNHEALTHY, "source delivery failed; retrying")
+                    logger.exception("CCXT source delivery failed (%s)", self._descriptor.key)
+                    await asyncio.sleep(min(1.0, max(0.05, self._cfg.ws_reconnect_delay_initial)))
             self._last_message_time = time.monotonic()
             self._metrics.inc("events_forwarded")
             self._queue.task_done()
