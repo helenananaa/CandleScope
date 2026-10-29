@@ -39,6 +39,7 @@ def init_bar_delivery_storage(conn):
 
     for table, column in (("bar_delivery", "observed_revision"),
                           ("bar_delivery", "committed_revision"),
+                          ("bar_delivery", "recovery_required"),
                           ("bar_delivery_watches", "observed_revision")):
         if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
@@ -62,7 +63,7 @@ class BarDeliveryJournal:
                 if existing["payload"] != encoded:
                     raise ValueError("Bar delivery identity reused with different content")
                 return self._record(existing)
-            pending = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed')").fetchone()[0]
+            pending = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
             if pending >= self.max_pending:
                 raise BarDeliveryUnavailable("Bar delivery journal is at capacity")
             conn.execute("INSERT INTO bar_delivery(event_id,payload,phase,created_ms,observed_revision) VALUES (?,?,'pending',?,?)",
@@ -72,14 +73,15 @@ class BarDeliveryJournal:
     def pending(self, limit=64):
         with closing(self._connect()) as conn:
             return [self._record(row) for row in conn.execute(
-                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') ORDER BY sequence LIMIT ?", (limit,))]
+                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1 ORDER BY sequence LIMIT ?", (limit,))]
 
     def pending_count(self):
         with closing(self._connect()) as conn:
-            return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed')").fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
 
     def _prune(self, conn):
         conn.execute("""DELETE FROM bar_delivery WHERE phase IN ('published','rejected')
+            AND recovery_required=0
             AND sequence < (SELECT COALESCE(MAX(sequence),0)-? FROM bar_delivery)""", (self.retained,))
 
     @staticmethod
@@ -125,8 +127,9 @@ class BarDeliveryJournal:
                 predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
                                            (record["sequence"], change["revision"])).fetchone()
                 if change["delete_revision"] > record["observed_revision"] or predecessor is None:
-                    conn.execute("UPDATE bar_delivery SET phase='rejected' WHERE event_id=?", (event_id,))
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
                     record["phase"] = "rejected"
+                    record["recovery_required"] = 1
                     return self._canonical(conn, record)
             if payload.get("derived"):
                 register_derived(conn, series_values(payload["symbol"], payload["interval"],
@@ -144,6 +147,7 @@ class BarDeliveryJournal:
     def acknowledge(self, event_id):
         with closing(self._connect()) as conn, conn:
             conn.execute("UPDATE bar_delivery SET phase='published' WHERE event_id=? AND phase='committed'", (event_id,))
+            conn.execute("UPDATE bar_delivery SET recovery_required=0 WHERE event_id=? AND phase='rejected'", (event_id,))
             # Pending receipts and unpublished commits are never pruned.
             self._prune(conn)
 

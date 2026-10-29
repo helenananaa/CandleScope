@@ -16,8 +16,9 @@ logger = logging.getLogger("data_manager.bar_delivery")
 
 class DurableBarDelivery:
     def __init__(self, storage_provider, publish, *, retry_delay=0.1, max_submissions=64,
-                 recovery_lookback_bars=500):
+                 recovery_lookback_bars=500, require_recovery=None):
         self._storage_provider, self._publish = storage_provider, publish
+        self._require_recovery = require_recovery
         self.retry_delay = retry_delay
         self.owner = uuid.uuid4().hex
         self.recover_source = None
@@ -161,7 +162,7 @@ class DurableBarDelivery:
             self._receipt_failed = True
             raise
         self._wake.set()
-        if record["phase"] in {"published", "rejected"}:
+        if record["phase"] in {"published", "rejected"} and not record.get("recovery_required"):
             return record["phase"]
         # Never accumulate ingestion callbacks waiting for a dispatcher lock.
         # Admission is already durable; the one dispatcher owns its completion.
@@ -181,6 +182,9 @@ class DurableBarDelivery:
                 for pending in records:
                     record = await self._retry(journal.commit, pending["event_id"])
                     if record["phase"] == "rejected":
+                        if record.get("recovery_required"):
+                            self._invalidate(record)
+                            await self._retry(journal.acknowledge, record["event_id"])
                         self._rejected += 1
                     elif record["phase"] == "committed":
                         # A later authoritative repair may already have replaced
@@ -188,6 +192,8 @@ class DurableBarDelivery:
                         # current correction, never roll a cold cache backward.
                         if record["canonical_row"] is not None:
                             await self._publish(self._event(record))
+                        else:
+                            self._invalidate(record)
                         await self._retry(journal.acknowledge, record["event_id"])
                         self._published += 1
                     self._pending -= 1
@@ -201,12 +207,25 @@ class DurableBarDelivery:
             finally:
                 self._dispatch_records = []
 
+    def _invalidate(self, record):
+        # Rejection protects storage but cannot silently remove an expected
+        # close from a live consumer. Keep the receipt pending until the bus
+        # has marked affected subscriptions terminal, independently of callbacks.
+        if self._require_recovery is None:
+            raise BarDeliveryUnavailable("Consumer recovery handler is not configured")
+        self._require_recovery(self._key(record))
+
     @staticmethod
-    def _event(record):
+    def _key(record):
         value = record["payload"]
         identity_names = ("provider_id", "venue", "asset_class", "series_variant", "price_adjustment", "session_variant", "volume_semantics")
-        key = SeriesKey(value["symbol"], value["interval"], exchange=value["exchange"],
-                        market_type=value["market_type"], **{k: value[k] for k in identity_names if k in value})
+        return SeriesKey(value["symbol"], value["interval"], exchange=value["exchange"],
+                         market_type=value["market_type"], **{k: value[k] for k in identity_names if k in value})
+
+    @classmethod
+    def _event(cls, record):
+        value = record["payload"]
+        key = cls._key(record)
         current = record["canonical_row"]
         superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k != "source_refs") or current["source"] != value["bar"]["source"]
         return DataEvent(DataEventType.BAR_AMENDED if superseded else DataEventType(value["event_type"]), key,

@@ -470,6 +470,20 @@ class DataEventBus:
 
     # ── Public: Emit ─────────────────────────────────────────
 
+    def require_recovery(self, key: SeriesKey, reason: str, *,
+                         event_types: set[DataEventType] | None = None) -> None:
+        """Invalidate affected consumers when a producer cannot deliver a bar.
+
+        Called on the bus event loop. Terminal state is set synchronously;
+        user recovery callbacks run in their existing isolated tasks. This
+        also wakes iterators and continuity waits without a later data event.
+        """
+        callbacks, queues = self._matching_subscriptions(key)
+        for _, sub in (*callbacks, *queues):
+            subscribed = sub.handle.event_types
+            if event_types is None or subscribed is None or subscribed & event_types:
+                self._require_recovery(sub, reason, None)
+
     async def emit(self, event: DataEvent) -> None:
         """Emit an event to all matching subscribers.
 

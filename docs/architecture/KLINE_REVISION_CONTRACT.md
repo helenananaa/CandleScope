@@ -100,6 +100,23 @@ retired without fetching; new windows can establish fresh watches. Pending
 receipts survive process exit and cannot resurrect a deleted series. An
 unversioned late backfill notification is only a hint to reread canonical rows.
 
+Revision-rejected receipts also persist `bar_delivery.recovery_required=1` in
+the rejection transaction. They remain in the bounded pending/admission count
+and cannot be pruned until the dispatcher marks matching bar subscriptions
+terminal with `source_revision_superseded` and acknowledges that handoff.
+Callback notifications run separately; iterators fail without waiting for another
+bar. The handoff is idempotent per subscription, including after an acknowledgement
+retry. Quality-rank rejection alone does not request recovery. A canonical row
+deleted after commit or before adoption follows the same snapshot-required path;
+the rejected/deleted payload is never published or written back.
+
+Initialization adds this column with zero for existing records. It does not infer
+missing notifications for previously terminal receipts. Restart consumers with a
+fresh canonical snapshot when upgrading; do not run older writable dispatchers
+alongside pending recovery handoffs because they do not preserve the new marker.
+Strict and gap-aware bar consumers both resnapshot/re-subscribe after this terminal
+delivery failure; an ordinary source gap still follows its selected policy.
+
 ## Shared memory contract
 
 `DataManager.memory_budget` registers bar-cache, realtime-state, event-delivery,
