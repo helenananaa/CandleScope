@@ -798,6 +798,9 @@ export class SeriesDataFeed {
     const cellId = this.chartWorkSchedulerCellId;
     return {
       epoch,
+      // Existing Feed reads include post-backfill verification even when the
+      // server repair mode is "none". Their proof must come from a fresh read.
+      cacheMode: "network-only",
       realtimeVersion: this.realtimeFenceBySeries.get(this.seriesKey(series))?.version ?? 0,
       priority: priority === "foreground" ? 0 : priority === "hydrate" ? 1 : 2,
       ...(scope === undefined ? {} : { scope }),

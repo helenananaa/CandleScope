@@ -13,8 +13,8 @@ import { CHART_WINDOW_BROKER_ENABLED } from "./chartWindowBrokerFeature.js";
 import { KLINE_BATCH_STREAM_ENABLED } from "./klineBatchFeature.js";
 import { BatchKlineStreamCoordinator } from "./feed/batchKlineStreamCoordinator.js";
 import { defaultKlineApi } from "./feed/klineApi.js";
-import { SharedKlineRequestCoordinator } from "./feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "./feed/sharedKlineStreamCoordinator.js";
+import { MarketDataManager } from "./manager/marketDataManager.js";
 import { MAX_SERIES_BARS } from "./phase1WindowPolicy.js";
 import { MarketWindowRegistry } from "./window/marketWindowSession.js";
 import {
@@ -45,9 +45,16 @@ export function MarketDataWorkspaceProvider({
     const workspaceBus = CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
       ? defaultWorkspaceBus(desktopWindowManager.windowId)
       : null;
-    const requestCoordinator = new SharedKlineRequestCoordinator(defaultKlineApi, brokerEnabled);
+    const dataManager = new MarketDataManager({
+      api: defaultKlineApi,
+      batchHistory: brokerEnabled,
+      streams: batchStreamEnabled
+        ? new BatchKlineStreamCoordinator()
+        : new SharedKlineStreamCoordinator(defaultKlineApi),
+    });
     return {
       brokerEnabled,
+      dataManager,
       indicatorStreamCoordinator: brokerEnabled
         ? new SharedIndicatorStreamCoordinator({
             // Fail closed until /indicators/diagnostics advertises its limit.
@@ -55,11 +62,9 @@ export function MarketDataWorkspaceProvider({
             url: getIndicatorStreamUrl,
           })
         : null,
-      klineApi: requestCoordinator,
-      requestCoordinator,
-      streamCoordinator: batchStreamEnabled
-        ? new BatchKlineStreamCoordinator()
-        : new SharedKlineStreamCoordinator(defaultKlineApi),
+      klineApi: dataManager,
+      requestCoordinator: dataManager.requestCoordinator,
+      streamCoordinator: dataManager,
       workScheduler: brokerEnabled ? new ChartWorkScheduler({
         appBudget: workspaceBus?.isNative()
           ? {
@@ -121,6 +126,7 @@ export function MarketDataWorkspaceProvider({
           ),
           seriesStores: resources.windowRegistry.entries().length,
           sharedSeries: resources.windowRegistry.sharedSnapshotDiagnostics(),
+          marketDataManager: resources.dataManager.diagnostics(),
         };
         if (!options.compact) {
           return { ...common, indicator, klineHttp, klineStream, scheduler };

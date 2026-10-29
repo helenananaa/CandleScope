@@ -1,4 +1,5 @@
 import { hasVerifiedCoverage } from "./quality/klineQualityPolicy.js";
+import { bindSharedWindow } from "./manager/sharedWindowBinding.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import {
@@ -523,18 +524,40 @@ export function useMarketDataRuntime({
     schedulerCellId,
   ]);
 
+  useLayoutEffect(() => {
+    const cache = workspaceResources?.dataManager.cache;
+    if (!cache) return undefined;
+    return bindSharedWindow(cache, { exchange, marketType, symbol, interval, ...seriesIdentity }, {
+      read: () => getCache(symbol, interval, { marketType, exchange }) ?? [],
+      commit: (rows, quality) => commitPatchedChartData(symbol, interval, rows, { source: "shared-market-range", quality }),
+    });
+  }, [commitPatchedChartData, exchange, getCache, interval, marketType, seriesIdentity, symbol, workspaceResources]);
+
   const resolveInitialRows = useCallback(
-    (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => resolveWatchlistInitialRows({
-      symbol: sym,
-      interval: intv,
-      marketType: mt,
-      exchange: ex,
-      getMemoryRows: (cacheSymbol, cacheInterval) => getCache(cacheSymbol, cacheInterval, {
+    (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => {
+      const local = resolveWatchlistInitialRows({
+        symbol: sym,
+        interval: intv,
         marketType: mt,
         exchange: ex,
-      }),
-    }),
-    [getCache],
+        getMemoryRows: (cacheSymbol, cacheInterval) => getCache(cacheSymbol, cacheInterval, {
+          marketType: mt,
+          exchange: ex,
+        }),
+      });
+      // An owned window preserves its navigation. Shared facts seed only a
+      // missing window; they do not replace its independent history boundary.
+      if (local?.tier === "market-data-memory") return local;
+      const shared = workspaceResources?.dataManager.cache.read({
+        exchange: ex, marketType: mt, symbol: sym, interval: intv,
+        ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
+      }, { limit: planInitialViewportCountBack(intv, nativeIntervalValues) });
+      if (!shared?.rows.length || (local && local.rows.length > shared.rows.length
+        && Number(local.rows.at(-1)?.time) >= Number(shared.rows.at(-1)?.time))) return local;
+      return { rows: [...shared.rows], tier: "shared-market" as const, cacheState: "provisional",
+        source: "shared-market-cache", needsRepair: true };
+    },
+    [exchange, getCache, marketType, nativeIntervalValues, seriesIdentity, workspaceResources],
   );
 
   const {

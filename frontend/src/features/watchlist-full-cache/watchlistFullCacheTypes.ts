@@ -95,7 +95,7 @@ export interface WarmRowsResolution extends WarmCacheRow {
 
 export interface InitialRowsResolution {
   rows: KlineBar[];
-  tier: "watchlist-full" | "market-data-memory";
+  tier: "watchlist-full" | "market-data-memory" | "shared-market";
   cacheState: string;
   source: string;
   needsRepair: boolean;
