@@ -1,3 +1,4 @@
+import { assessRealtimeEffect } from "./quality/klineQualityPolicy.js";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { markPerfOnce, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
@@ -494,22 +495,38 @@ export function useKlineStreamRuntime({
             },
             onBackfillCompleted: (msg) => {
               if (!active) return false;
-              return handleBackfillCompleted(msg);
+              const handled = handleBackfillCompleted(msg);
+              if (handled && (!msg.symbol || msg.symbol === symbol)
+                && (!msg.exchange || msg.exchange === exchange)
+                && (!msg.market_type || msg.market_type === marketType)) {
+                consumerRecovery.observeAvailability();
+                recoverConsumer();
+              }
+              return handled;
             },
             onKline: ({ interval: msgInterval, tick, message }) => {
               if (!active) return;
               const currentIntv = intervalRef.current;
 
-              // Historical corrections are useful data, but cannot establish
-              // that the exchange's current candle is still updating.
-              if (message.event_type !== "bar.amended") {
+              const series = { exchange, marketType, symbol, interval: msgInterval };
+              const heldRows = getCacheRows(series);
+              const latest = heldRows.at(-1);
+              // The normal forming path is O(1); only historical events search.
+              const held = latest?.time === tick.time ? latest
+                : latest && tick.time < latest.time ? heldRows.find((row) => row.time === tick.time) : undefined;
+              const effect = assessRealtimeEffect(tick, message.event_type, held, latest?.time ?? null);
+              if (!effect.accepted) return;
+              if (effect.requiresReadback && held) {
+                consumerRecovery.capture(seriesDataFeed, series, [held]);
+              }
+              if (effect.updatesFreshness) {
                 acknowledgementState = acknowledgeKlineStreamInterval(
                   acknowledgementState,
                   msgInterval,
                 );
               }
 
-              if (msgInterval === "1m" && tick.close != null) {
+              if (effect.updatesQuote && msgInterval === "1m" && tick.close != null) {
                 updateRealtimePrice(tick.close);
               }
 
@@ -531,7 +548,7 @@ export function useKlineStreamRuntime({
                   // patchCacheTick first would turn the commit into a NOOP.
                   markPerfOnce("ws.kline.firstTick", { symbol, marketType, exchange, interval: currentIntv });
                   commitPatchedChartData(symbol, currentIntv, [tick], { source: "kline-ws" });
-                  updateLastPrice(tick, currentIntv);
+                  if (effect.updatesQuote) updateLastPrice(tick, currentIntv);
                 } else {
                   patchCacheTick(symbol, msgInterval, tick, { marketType, exchange });
                 }
@@ -555,6 +572,7 @@ export function useKlineStreamRuntime({
                   commitTick,
                 );
               }
+              if (effect.requiresReadback) recoverConsumer();
             },
             onParseError: (parseErr) => {
               console.error("WS parse failed:", parseErr);

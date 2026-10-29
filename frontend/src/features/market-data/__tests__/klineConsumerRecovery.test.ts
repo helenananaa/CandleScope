@@ -190,3 +190,19 @@ test("a fresh gap after navigation does not revive the previous window demand", 
   assert.deepEqual(calls[0]?.slice(2, 4), [180, 180]);
   assert.equal(recovery.required, false);
 });
+
+test("declared exhausted readback stops automatic requests without pretending recovery succeeded", async () => {
+  let available = false;
+  const { feed, calls } = harness(async () => available ? proof : {
+    data: [], complete: false, history_state: "exhausted", retryable: false, terminal_reason: "source_unavailable",
+  });
+  const recovery = new KlineConsumerRecovery(); recovery.capture(feed, series, held);
+  await recovery.recover(feed, () => true); await recovery.recover(feed, () => true);
+  assert.equal(calls.length, 1);
+  assert.equal(recovery.required, true);
+  available = true;
+  recovery.observeAvailability(); // A notification permits a new read, but does not clear required.
+  assert.equal(recovery.required, true);
+  await recovery.recover(feed, () => true);
+  assert.equal(calls.length, 2); assert.equal(recovery.required, false);
+});

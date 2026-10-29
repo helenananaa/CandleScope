@@ -1,3 +1,5 @@
+import { validateKlineDomain } from "../../../utils/klineDomainPolicy.js";
+import { preserveFinalRow, type KlineQualityEvidence } from "../quality/klineQualityPolicy.js";
 import type { SeriesWindowView, WindowCommitState } from "./seriesWindowView.js";
 import type { EpochSeconds, KlineBar, KlineBarInput } from "../marketDataTypes.js";
 import type { WindowDelta, WindowDeltaDetail } from "../klineContracts.js";
@@ -16,7 +18,7 @@ export type WindowCommand = (
   | { type: "forward"; rows: readonly KlineBarInput[]; reachedLatest?: boolean }
   | { type: "tick"; row: KlineBarInput }
   | { type: "clear" }
-) & { source?: string };
+) & { source?: string; quality?: KlineQualityEvidence };
 
 export interface WindowSelection {
   readonly windowId: string;
@@ -26,6 +28,7 @@ export interface WindowSelection {
 
 interface WindowEntry {
   store: SeriesWindowStore;
+  rejectedRange?: { from: number; to: number };
   reader: MarketWindowReader;
   meta: Record<string, unknown>;
   state: WindowCommitState;
@@ -243,6 +246,31 @@ export class MarketWindowSession {
     const entry = this.#entries.get(key);
     if (!entry) throw new Error(`Missing owned window: ${key}`);
     const { store } = entry;
+    if (command.type !== "clear") {
+      const incoming = command.type === "tick" ? [command.row] : command.rows;
+      for (let index = 0; index < incoming.length; index += 1) {
+        const issue = validateKlineDomain(incoming[index]!);
+        if (!issue) continue;
+        const times = incoming.map((row) => Number(row.time)).filter(Number.isFinite);
+        entry.rejectedRange = { from: Math.min(...times), to: Math.max(...times) };
+        this.touchMeta(key, { admission: { status: "rejected", source: command.source ?? command.type, index, ...issue } });
+        return createWindowDelta(WINDOW_DELTA_TYPES.NOOP, { rejection: issue });
+      }
+      if (entry.rejectedRange && command.type !== "tick" && incoming.length
+        && (command.type === "replace" || (command.quality?.coverage === "verified" && Math.min(...incoming.map((row) => Number(row.time))) <= entry.rejectedRange.from
+          && Math.max(...incoming.map((row) => Number(row.time))) >= entry.rejectedRange.to))) {
+        delete entry.rejectedRange;
+        this.touchMeta(key, { admission: { status: "accepted", source: command.source ?? command.type } });
+      }
+      // Preserve finality at the single writer, including cache/seed/navigation
+      // adapters that do not traverse an HTTP request fence.
+      if (command.type === "tick") {
+        const row = preserveFinalRow(command.row, store.getByTime(command.row.time));
+        command = { ...command, row };
+      } else {
+        command = { ...command, rows: incoming.map((row) => preserveFinalRow(row, store.getByTime(row.time))) };
+      }
+    } else delete entry.rejectedRange;
     const detail: WindowDeltaDetail = command.source === undefined ? {} : { source: command.source };
     let delta: WindowDelta;
     switch (command.type) {
@@ -274,6 +302,12 @@ export class MarketWindowSession {
         source: command.source, changedRanges: [...(previous.changedRanges || []), ...(delta.changedRanges || [])],
       }) : delta);
     }
+    const acceptedRows = command.type === "clear" ? [] : command.type === "tick" ? [command.row] : command.rows;
+    if (delta.changed || command.quality) {
+      this.touchMeta(key, { admission: { status: "accepted", source: command.source ?? command.type,
+        rows: acceptedRows.length, dataRevision: Number(store.version),
+        inputQuality: command.quality ?? null } });
+    }
     return delta;
   }
 
@@ -282,6 +316,8 @@ export class MarketWindowSession {
     if (!entry) return;
     if (Object.keys(patch).length > 0) this.#requireTransaction();
     entry.meta = { ...entry.meta, ...immutableCopy(patch) as Record<string, unknown>, lastAccessMs: Date.now(), metaRevision: Number(entry.meta.metaRevision || 0) + 1 };
+    if (entry.rejectedRange) entry.meta = { ...entry.meta, historyComplete: false,
+      historyRepairPending: true, historyValidatedCountBack: null, lastValidatedMs: null };
     if (Object.keys(patch).length > 0 && !this.#pending.has(entry)) {
       this.#pending.set(entry, createWindowDelta(WINDOW_DELTA_TYPES.NOOP));
     }
