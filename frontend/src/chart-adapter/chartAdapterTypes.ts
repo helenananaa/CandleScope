@@ -189,6 +189,7 @@ export interface SeriesDataWriter<TData> {
 }
 
 export interface ProjectionSeriesWriter<TData> extends SeriesDataWriter<TData> {
+  update(data: TData, historicalUpdate?: boolean): void;
   pop(count: number): TData[];
 }
 

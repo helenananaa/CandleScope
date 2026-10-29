@@ -150,16 +150,31 @@ Native functional results:
   Parent and P3 renderers are never enabled together. This is renderer rollback;
   the desktop host code changed only in its opt-in evidence harness.
 
-### Confirmed remaining issue and unverified coverage
+### Initial viewport finding, follow-up fix and remaining coverage
 
 A separate native probe confirmed an existing viewport defect: after a seven-bar
 burst, an old-bar amendment moves the maximized visible chart left by 18 logical
 bars. It reproduces on both P2 and P3 (`viewport-probe-*-before/after.json` and
 `viewport-known-issue.json`). Initial offsets differ, but both move by 18; no
 claim of identical initial viewport is made. In P3 the hidden chart does not
-move; P2's hidden chart also moves. Data/display equality is unaffected. This
-scope does not fix the existing visible-chart anchor behavior, and the complete
-viewport acceptance matrix remains open.
+move; P2's hidden chart also moves. Data/display equality is unaffected. This was the initial P3 result. The follow-up below fixes this path; the complete
+viewport acceptance matrix still depends on the separately declared coverage.
+
+The follow-up changes bounded equal-time suffix corrections to LWC historical
+updates. Popping/re-appending rows temporarily changes the axis even when the
+final timestamps match; it is therefore unsuitable for an amendment. Structural
+changes retain the full-rebuild/anchor path, ordinary forming/appends retain their
+existing fast path, and a failed historical update rebuilds the complete data and
+compensates the captured viewport. Regression tests cover the unchanged time axis,
+burst/correction data integrity and partial-update fallback.
+
+A fresh native baseline/candidate comparison uses the same 500-row starting
+window, seven appended rows and a correction at source index 10990. The maximized
+visible range starts at [407.75, 504] in both builds. The baseline ends at
+[389.75, 486]; the candidate retains [407.75, 504]. Both sources hold 507 rows and
+share one physical WS. Follow-up evidence is recorded under
+`output/issue-123-p3-followup-20261029` and linked from the issue/PR. The initial P3
+archive remains historical evidence rather than being overwritten.
 
 Repeated native drag/horizontal-scroll attempts did not produce a confirmed pan
 in this run. Independent zoom, live return, hidden restoration and owner isolation
