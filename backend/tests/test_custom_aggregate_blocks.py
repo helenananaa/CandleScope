@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import random
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from app.data_engine.data_manager.aggregate_blocks import AggregateBlockCache
-from app.data_engine.data_manager.cache import BarCache
-from app.data_engine.data_manager.config import QueryConfig
-from app.data_engine.data_manager.custom_query import CustomIntervalQueryService, _aggregate_fixed_bars_to_interval
+from scripts.experimental_aggregate_blocks import AggregateBlockCache
+from app.data_engine.data_manager.custom_query import _aggregate_fixed_bars_to_interval
 from app.data_engine.data_manager.models import BarData, SeriesKey
 
 
@@ -20,6 +18,13 @@ def rows(count=100, source_width=86400):
                     quote_volume=rng.random() * 1e10, trades=i * 17,
                     taker_buy_base=rng.random(), taker_buy_quote=rng.random(), source="backfill")
             for i in range(count)]
+
+
+def decoded(bar, *, declared_fields=None):
+    return BarData.from_storage_components((bar.time_ms, bar.open, bar.high, bar.low,
+        bar.close, bar.volume, bar.quote_volume, bar.trades, bar.taker_buy_base,
+        bar.taker_buy_quote, bar.source), exchange="binance", market_type="futures",
+        declared_fields=declared_fields)
 
 
 def reduce(cache, source, factor, key=SeriesKey("BTCUSDT", "1d"), source_width=86400):
@@ -47,7 +52,7 @@ def test_mixed_cover_exactly_preserves_canonical_values_and_finality(factor, var
     elif variant == "enhanced":
         source[1] = replace(source[1], quote_volume=None)
         source[2] = replace(source[2], trades=-1, taker_buy_base=float("nan"))
-        source[-1]._prevalidated_aggregation_fields = (None, None, None, None)
+        source[-1] = decoded(source[-1], declared_fields=())
     random.Random(45).shuffle(source)
     cache = AggregateBlockCache()
     cold = reduce(cache, source, factor)
@@ -81,11 +86,12 @@ def test_cross_period_blocks_share_only_same_source_and_cover_boundaries():
     ("taker_buy_base", 0.123), ("taker_buy_quote", 0.456), ("source", "archive"),
     ("is_closed", False), ("_prevalidated_aggregation_fields", (None, None, None, None)),
 ])
-def test_corrections_including_mutation_and_decoder_contract_cannot_reuse_stale_values(field, value):
+def test_corrections_and_decoder_contract_cannot_reuse_stale_values(field, value):
     cache = AggregateBlockCache()
     source = rows(40)
     reduce(cache, source, 4)
-    setattr(source[2], field, value)
+    source[2] = (decoded(source[2], declared_fields=()) if field == "_prevalidated_aggregation_fields"
+                 else replace(source[2], **{field: value}))
     reduce(cache, source, 4)
     reduce(cache, source, 2)
     del source[3]
@@ -122,84 +128,18 @@ def test_cached_complete_child_cannot_certify_a_partial_parent():
     assert partial[0].quote_volume is None
 
 
-def test_published_mutable_targets_cannot_modify_shared_blocks():
+def test_published_immutable_targets_cannot_modify_shared_blocks():
     cache = AggregateBlockCache()
     source = rows(12)
     outputs = reduce(cache, source, 4)
-    outputs[0].volume = -1
+    with pytest.raises(FrozenInstanceError):
+        outputs[0].volume = -1
     reduce(cache, source, 4)
 
 
 def test_compact_decoded_rows_retain_their_twice_normalized_contract():
-    source = rows(100)
-    for bar in source:
-        values = bar.normalized_aggregation_values()
-        bar.open, bar.high, bar.low, bar.close, bar.volume = values[1:6]
-        bar._prevalidated_aggregation_fields = bar.normalized_aggregation_fields()
-    source[3]._prevalidated_aggregation_fields = (None, None, None, None)
+    source = [decoded(bar) for bar in rows(100)]
+    source[3] = decoded(source[3], declared_fields=())
     cache = AggregateBlockCache()
     for factor in [2, 4, 5, 2, 4, 5]:
         reduce(cache, source, factor)
-
-
-@pytest.mark.parametrize("stream", [False, True])
-def test_production_query_wires_shared_blocks_and_rollback(stream):
-    from tests.test_custom_history_streaming import service_for
-    source = rows(100, 900)
-    service = service_for(source, enabled=stream, page_size=11 if stream else 1000)
-    service._cfg.share_custom_aggregate_blocks = True
-    kwargs = dict(symbol="BTCUSDT", interval="45m", start_ms=0,
-                  end_ms=30 * 2700_000, limit=30, started_at=0)
-    first = service.query_from_base(**kwargs)
-    second = service.query_from_base(**kwargs)
-    assert first.bars == second.bars
-    assert service.snapshot()["aggregate_blocks_hits"] > 0
-    assert service.snapshot()["aggregate_blocks_builds"] > 0
-    service._cfg.share_custom_aggregate_blocks = False
-    snapshot = service._aggregate_blocks.snapshot()
-    assert service.query_from_base(**kwargs).bars == first.bars
-    assert service._aggregate_blocks.snapshot() == snapshot
-
-
-def test_native_three_day_and_calendar_paths_are_not_replaced():
-    service = CustomIntervalQueryService(cache=BarCache(), config=QueryConfig(share_custom_aggregate_blocks=True), base_query=lambda: None)
-    source = rows(20)
-    service.aggregate_custom_bars(source, "BTCUSDT", "3d", source_interval="3d")
-    service.aggregate_custom_bars(source, "BTCUSDT", "2M", source_interval="1d")
-    assert service._aggregate_blocks.snapshot()["entries"] == 0
-
-
-@pytest.mark.parametrize("correct_source", [False, True])
-def test_sqlite_cross_period_sharing_revalidates_committed_source_rows(monkeypatch, tmp_path, correct_source):
-    from app.data_engine.data_manager.query import QueryEngine
-    from app.data_engine.storage import klines_repo
-    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "mixed.sqlite")
-    klines_repo.init_klines_storage()
-    source = rows(40)
-    def write(items):
-        klines_repo.upsert_klines("BTCUSDT", "1d", [dict(
-            open_time=bar.time_ms, close_time=bar.time_ms + 86400_000 - 1,
-            open=bar.open, high=bar.high, low=bar.low, close=bar.close,
-            volume=bar.volume, quote_volume=bar.quote_volume, trades=bar.trades,
-            taker_buy_base=bar.taker_buy_base, taker_buy_quote=bar.taker_buy_quote,
-        ) for bar in items], source="backfill", exchange="binance", market_type="futures")
-    write(source)
-    cache = BarCache()
-    engine = QueryEngine(cache, klines_repo.KlinesRepoAdapter(), QueryConfig(
-        auto_backfill=False, share_custom_aggregate_blocks=True))
-    def query(factor):
-        return engine.query("BTCUSDT", f"{factor}d", start_ms=0,
-                            end_ms=(40 - factor) * 86400_000, limit=40 // factor, market_type="futures")
-    assert query(2).complete and query(4).complete
-    if correct_source:
-        source[2] = replace(source[2], volume=source[2].volume * 3, high=99)
-        write([source[2]])
-        # The storage writer's normal cache invalidation is outside this
-        # fixture. Keep the aggregate-block cache warm while refreshing base.
-        cache.invalidate(SeriesKey("BTCUSDT", "1d", market_type="futures"))
-    result = query(5)
-    assert result.complete and len(result.bars) == 8
-    assert engine.custom_intervals.snapshot()["aggregate_blocks_mixed_buckets"] > 0
-    assert engine.custom_intervals.snapshot()["aggregate_blocks_hits"] > 0
-    oracle = _aggregate_fixed_bars_to_interval(source, 5 * 86400, source_interval_seconds=86400)
-    assert [bar.to_kline_dict() for bar in result.bars] == [bar.to_kline_dict() for bar in oracle]

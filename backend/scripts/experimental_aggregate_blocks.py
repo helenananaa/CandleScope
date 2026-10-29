@@ -1,4 +1,6 @@
-"""Content-validated canonical blocks shared across fixed target intervals.
+"""Benchmark-only prototype; not a production cache or the B130 contract.
+
+Content-validated canonical blocks shared across fixed target intervals.
 
 Coarse blocks and fine boundaries always come from the selected base series,
 never substituted exchange-native candles. Original additive contributions
@@ -14,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from .models import BarData, SeriesKey
+from app.data_engine.data_manager.models import BarData, SeriesKey
 
 
 class SourceSnapshot(NamedTuple):

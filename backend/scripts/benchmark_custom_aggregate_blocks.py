@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.data_engine.data_manager.aggregate_blocks import AggregateBlockCache
+from scripts.experimental_aggregate_blocks import AggregateBlockCache
 from app.data_engine.data_manager.custom_query import _aggregate_fixed_bars_to_interval
 from app.data_engine.data_manager.models import BarData, SeriesKey
 from app.data_engine.interval_policy import parse_interval_ms
@@ -30,10 +30,11 @@ def source_rows(count: int, width: int, decoded: bool) -> list[BarData]:
                     taker_buy_base=0.2, taker_buy_quote=20, source="backfill")
             for i in range(count)]
     if decoded:
-        for bar in bars:
-            values = bar.normalized_aggregation_values()
-            bar.open, bar.high, bar.low, bar.close, bar.volume = values[1:6]
-            bar._prevalidated_aggregation_fields = bar.normalized_aggregation_fields()
+        for index, bar in enumerate(bars):
+            bars[index] = BarData.from_storage_components((bar.time_ms, bar.open, bar.high,
+                bar.low, bar.close, bar.volume, bar.quote_volume, bar.trades,
+                bar.taker_buy_base, bar.taker_buy_quote, bar.source),
+                exchange="binance", market_type="futures")
     return bars
 
 

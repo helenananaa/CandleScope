@@ -152,6 +152,9 @@ def test_regular_history_keeps_coarse_source_math_and_materialization(
         exchange="binance", market_type="futures")
     kwargs = dict(start_ms=0, end_ms=(count - 1) * target_width, limit=count,
                   exchange="binance", market_type="futures", auto_backfill=False)
+    # D126 may intentionally defer a read inside the adoption polling window.
+    # This fixture tests coarse-source math on the already committed revision.
+    dm.cache.revision_consumer.sync(force=True)
     result = dm.query("BTCUSDT", interval, **kwargs)
     assert result.complete and len(result.bars) == count
     assert all(bar.trusted_final for bar in result.bars)

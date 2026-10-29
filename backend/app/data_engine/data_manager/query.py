@@ -192,6 +192,7 @@ class QueryEngine:
             target_query_before=self._query_materialized_target_before,
             target_writer=self._write_materialized_target,
             calendar_provider=self._calendar_for,
+            memory_budget_provider=lambda: getattr(self, "memory_budget", None),
         )
 
     # ── Public: Dependency Access ────────────────────────────

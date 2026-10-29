@@ -102,11 +102,6 @@ class QueryConfig:
     # Fixed-width multi-page reads reduce each page before pulling the next.
     # False retains the bounded batch implementation for comparison/rollback.
     stream_custom_history: bool = True
-    # Experimental opt-in: canonical same-source blocks can be shared across
-    # fixed targets. Small-factor cold CPU is higher in the measured workload,
-    # so production keeps the direct reducer until that tradeoff improves.
-    share_custom_aggregate_blocks: bool = False
-    aggregate_block_max_components: int = 32_768
 
 
 @dataclass
@@ -233,8 +228,6 @@ class DataManagerConfig:
                 "sync_backfill_timeout_seconds": self.query.sync_backfill_timeout_seconds,
                 "auto_backfill": self.query.auto_backfill,
                 "stream_custom_history": self.query.stream_custom_history,
-                "share_custom_aggregate_blocks": self.query.share_custom_aggregate_blocks,
-                "aggregate_block_max_components": self.query.aggregate_block_max_components,
             },
             "event_bus": {
                 "subscriber_queue_size": self.event_bus.subscriber_queue_size,

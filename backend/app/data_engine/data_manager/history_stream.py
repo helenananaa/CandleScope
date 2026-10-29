@@ -32,8 +32,10 @@ class FixedHistoryStream:
         *,
         lower_bound_ms: int | None = None,
         upper_bound_ms: int | None = None,
+        phase_seconds: int = 0,
     ) -> None:
         self.width_seconds = width_seconds
+        self.phase_seconds = phase_seconds
         self.reduce = reduce
         self.lower_bound_ms = lower_bound_ms
         self.upper_bound_ms = upper_bound_ms
@@ -50,7 +52,7 @@ class FixedHistoryStream:
         # within the held bucket are safe; a revision to a flushed bucket
         # requires the caller's bounded legacy fallback, not double counting.
         if self._oldest_bucket is not None and any(
-            bar.time // self.width_seconds > self._oldest_bucket for bar in bars
+            self._bucket(bar.time) > self._oldest_bucket for bar in bars
         ):
             raise StreamingOrderError("older page overlaps an already reduced bucket")
         previous_size = len(self.pending)
@@ -65,23 +67,26 @@ class FixedHistoryStream:
         if not self.pending:
             return
         assert self.oldest_ms is not None
-        oldest_bucket = self.oldest_ms // 1000 // self.width_seconds
+        oldest_bucket = self._bucket(self.oldest_ms // 1000)
         if oldest_bucket == self._oldest_bucket:
             # A large target may span many small pages. Do not repeatedly sort
             # its growing prefix until a previous bucket actually arrives.
             return
         self._oldest_bucket = oldest_bucket
-        if all(bar.time // self.width_seconds == oldest_bucket for bar in bars):
+        if all(self._bucket(bar.time) == oldest_bucket for bar in bars):
             # This is only sufficient on the first page (otherwise the held
             # newer bucket must be flushed together with this page).
             if previous_size == 0:
                 return
         ordered = sorted(self.pending.values(), key=lambda bar: bar.time)
         cut = 0
-        while cut < len(ordered) and ordered[cut].time // self.width_seconds == self._oldest_bucket:
+        while cut < len(ordered) and self._bucket(ordered[cut].time) == self._oldest_bucket:
             cut += 1
         self.pending = {bar.time: bar for bar in ordered[:cut]}
         self._reduce(ordered[cut:])
+
+    def _bucket(self, time_seconds: int) -> int:
+        return (time_seconds - self.phase_seconds) // self.width_seconds
 
     def _bounded(self, bars: list[BarData]) -> list[BarData]:
         return [bar for bar in bars if (

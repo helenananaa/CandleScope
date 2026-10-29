@@ -82,8 +82,26 @@ try {
   if (!tab) throw new Error("Owned integration page is missing");
   page = await CDP.open(tab.webSocketDebuggerUrl);
   await page.send("Runtime.enable");
+  // The tab can be discoverable while its initial document is still being
+  // replaced. Probe readiness without starting the fixture, then invoke it
+  // exactly once in the committed document.
+  const checkName = intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
+  let fixtureReady = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      const ready = await page.send("Runtime.evaluate", {
+        expression: `document.readyState === 'complete' && typeof window.${checkName} === 'function'`,
+        returnByValue: true,
+      });
+      if (ready.result?.value === true) { fixtureReady = true; break; }
+    } catch (error) {
+      if (!String(error).includes("Execution context was destroyed")) throw error;
+    }
+    await sleep(100);
+  }
+  if (!fixtureReady) throw new Error("Fixture did not load");
   const result = await page.send("Runtime.evaluate", {
-    expression: `new Promise((resolve,reject)=>{const until=Date.now()+10000;const ready=()=>{if(window.${intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"})Promise.resolve(window.${intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"}()).then(resolve,reject);else if(Date.now()>until)reject(new Error('Fixture did not load'));else setTimeout(ready,20);};ready();})`,
+    expression: `window.${checkName}()`,
     awaitPromise: true, returnByValue: true,
   });
   receipt.result = result;

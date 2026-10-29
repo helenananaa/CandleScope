@@ -37,12 +37,12 @@ from app.data_engine.history.calendar import (
     expected_bucket_end_ms,
 )
 from app.data_engine.kline_quality import incoming_source_can_replace, source_rank
+from app.data_engine.memory_budget import reserve_work
 
 from .cache import BarCache, HistoryCapacityReservation
 from .config import QueryConfig
 from .models import BarData, MissingRange, QueryResult, QuerySource, SeriesKey
 from .history_stream import FixedHistoryStream, StreamingOrderError
-from .aggregate_blocks import AggregateBlockCache
 
 BaseQuery = Callable[..., QueryResult]
 BaseQueryBefore = Callable[..., QueryResult]
@@ -499,6 +499,7 @@ class CustomIntervalQueryService:
         target_writer: TargetWriter | None = None,
         calendar_provider: CalendarProvider | None = None,
         bar_aggregator: Any | None = None,
+        memory_budget_provider: Callable[[], Any] | None = None,
     ) -> None:
         self._cache = cache
         self._cfg = config
@@ -509,7 +510,7 @@ class CustomIntervalQueryService:
         self._target_writer = target_writer
         self._calendar_provider = calendar_provider
         self._bar_aggregator = bar_aggregator
-        self._aggregate_blocks = AggregateBlockCache(max_components=config.aggregate_block_max_components)
+        self._memory_budget_provider = memory_budget_provider
         self._flight_lock = threading.Lock()
         self._flights: dict[tuple[Any, ...], Future[QueryResult]] = {}
         self._base_window_flight_lock = threading.Lock()
@@ -542,7 +543,6 @@ class CustomIntervalQueryService:
         """Return cumulative custom-query work, including joined singleflights."""
         with self._metrics_lock:
             return {
-                **{f"aggregate_blocks_{key}": value for key, value in self._aggregate_blocks.snapshot().items()},
                 "logical_queries": self._logical_queries,
                 "singleflight_owners": self._singleflight_owners,
                 "singleflight_joins": self._singleflight_joins,
@@ -1532,14 +1532,19 @@ class CustomIntervalQueryService:
         source_ms = parse_interval_ms(interval)
         target_seconds = parse_custom_interval(target_interval)
         assert source_ms and target_seconds and self._base_query_before is not None
+        target_spec = parse_interval_spec(target_interval)
+        assert target_spec is not None
+        phase_seconds = target_spec.phase_ms // 1000
         stream = FixedHistoryStream(
             target_seconds,
             lambda rows: self._aggregate_fixed(
                 rows, target_seconds, source_interval_seconds=source_ms // 1000,
                 source_key=SeriesKey(symbol, interval, exchange=exchange, market_type=market_type),
+                phase_seconds=phase_seconds,
             ),
             lower_bound_ms=aggregation_lower_bound_ms,
             upper_bound_ms=before_ms - 1,
+            phase_seconds=phase_seconds,
         )
         summaries: list[QueryResult] = []
         fetched_rows = 0
@@ -1554,6 +1559,18 @@ class CustomIntervalQueryService:
             page_capacity = max(page_capacity, (max(0, before_ms - lower_bound_ms) + source_ms - 1) // source_ms)
         requested_max_pages = max(2, (page_capacity + self._cfg.max_limit - 1) // self._cfg.max_limit + 4)
         max_pages = min(requested_max_pages, _MAX_CUSTOM_BASE_PAGES)
+        # Admit before the first source read. Reserve a conservative ceiling
+        # for decoded-page containers, the cross-page bucket, sparse target
+        # outputs and quality summaries. Sparse inputs can produce one target
+        # per source row, so dividing this allowance by the factor is unsafe.
+        # The outer D126 query scope holds it through materialization and the
+        # final revision check, including fallback, errors and cancellation.
+        source_capacity = min(target_limit + max_pages, max_pages * self._cfg.max_limit)
+        page_rows = min(target_limit, self._cfg.max_limit)
+        boundary_rows = min(source_capacity, target_seconds * 1000 // source_ms)
+        reserved_bytes = (2 * (page_rows + boundary_rows + source_capacity) + max_pages) * 1024
+        budget = self._memory_budget_provider() if self._memory_budget_provider else None
+        reserve_work(budget, "history-query", reserved_bytes)
         while len(summaries) < max_pages:
             if lower_bound_ms is not None:
                 if stream.oldest_ms is not None and stream.oldest_ms <= lower_bound_ms:
@@ -1637,6 +1654,7 @@ class CustomIntervalQueryService:
             "base_physical_rows_fetched": owned_rows,
             "base_window_flight_role": "join" if owned_pages == 0 else "owner",
             "base_streaming": True,
+            "base_stream_reserved_bytes": reserved_bytes if budget is not None else 0,
             "base_stream_peak_buffered_rows": stream.peak_buffered_rows,
             "base_stream_boundary_rows": len(boundary),
             "base_stream_aggregation_ms": aggregation_seconds * 1000,
@@ -2417,6 +2435,7 @@ class CustomIntervalQueryService:
                 base_bars, custom_seconds,
                 source_interval_seconds=(parse_interval_ms(source_interval) or 0) // 1000,
                 source_key=SeriesKey(symbol, source_interval, exchange=exchange, market_type=market_type),
+                phase_seconds=spec.phase_ms // 1000,
             )
         else:
             result = self._aggregate_read_only(
@@ -2431,16 +2450,12 @@ class CustomIntervalQueryService:
 
     def _aggregate_fixed(
         self, bars: list[BarData], width: int, *, source_interval_seconds: int,
-        source_key: SeriesKey,
+        source_key: SeriesKey, phase_seconds: int = 0,
     ) -> list[BarData]:
-        def fallback(rows: list[BarData], on_bucket=None) -> list[BarData]:
-            return _aggregate_fixed_bars_to_interval(
-                rows, width, source_interval_seconds=source_interval_seconds,
-                on_bucket=on_bucket,
-            )
-        if not self._cfg.share_custom_aggregate_blocks or self._cfg.aggregate_block_max_components <= 0:
-            return fallback(bars)
-        return self._aggregate_blocks.aggregate(bars, source_key, width, source_interval_seconds, fallback)
+        return _aggregate_fixed_bars_to_interval(
+            bars, width, source_interval_seconds=source_interval_seconds,
+            phase_seconds=phase_seconds,
+        )
 
     @staticmethod
     def _omit_bars_overlapping_base_gaps(
