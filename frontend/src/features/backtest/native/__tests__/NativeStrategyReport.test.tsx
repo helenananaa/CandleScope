@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { NativeStrategyReport } from "../NativeStrategyReport.js";
 import type { NativeRun } from "../nativeBacktestApi.js";
 
-function report(values: number[], tradeCount = 0, view: "overview" | "trades" = "overview", stale = false) {
+function report(values: number[], tradeCount = 0, view: "overview" | "trades" = "overview", stale = false, annotation = false) {
   const run: NativeRun = {
     execution_mode: "CANDLESCOPE", run_id: "layout-test", state: "COMPLETED", created_at_ms: 0,
     runtime_identity: { engine: { package: "test", version: "1", code_sha256: "test" } },
@@ -13,8 +13,17 @@ function report(values: number[], tradeCount = 0, view: "overview" | "trades" = 
       bars: [], graphics: [], raw_output: {}, diagnostics: [],
       equity: values.map((value, time) => ({ time, value })) },
   };
+  if (annotation) run.result!.trades = [{time: 0, qty: "7", pine_comment: "开仓 <script>", pine_alert_message: "literal {{strategy.order.id}}", pine_alert_enabled: false, pine_fill_role: "entry"}];
   return renderToStaticMarkup(<NativeStrategyReport run={run} view={view} stale={stale} />);
 }
+
+test("Host fill annotations render as escaped text and remain visible when alerts are disabled", () => {
+  const html = report([100, 99],1,"trades",false,true);
+  assert.match(html,/开仓 &lt;script&gt;/);
+  assert.match(html,/literal \{\{strategy.order.id\}\}/);
+  assert.match(html,/<td>false<\/td>/);
+  assert.doesNotMatch(html,/<script>/);
+});
 test("a report from a previous dataset revision remains readable with a visible stale status", () => {
   const current = report([100, 200, 150, 190]);
   const previous = report([100, 200, 150, 190], 0, "overview", true);

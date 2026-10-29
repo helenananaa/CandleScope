@@ -10,13 +10,15 @@ const KEYWORDS = [
   "type", "var", "varip", "while",
 ];
 const HOST_COMPLETION_KEYWORDS = KEYWORDS.filter(
-  (keyword) => !["import", "library", "strategy"].includes(keyword),
+  (keyword) => !["library", "strategy"].includes(keyword),
 );
 
 const BUILTINS = [
   "open", "high", "low", "close", "volume", "time", "bar_index",
   "plot", "plotshape", "hline", "fill", "bgcolor",
   "barcolor", "alert", "alertcondition", "input", "ta", "math", "color",
+  "request", "line", "linefill", "label", "box", "polyline", "table", "chart",
+  "plotchar", "plotarrow", "plotbar", "plotcandle", "timenow",
 ];
 
 let hostedContextFeatures = new Set<string>();

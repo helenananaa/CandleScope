@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { datasetIdentityChanged, defaultExecutionDraft, executionSettingsChanged, restoreExecutionDraft, sameExecutionData } from "./nativeExecutionSettings.js";
 
+test("cost selection survives drafts and changes mark a prior report stale", () => {
+  const draft = { ...defaultExecutionDraft(), costSensitivityMode: "SKIP" as const };
+  assert.deepEqual(restoreExecutionDraft(JSON.stringify(draft)), draft);
+  const config = { host_settings: { ...draft.hostSettings }, cost_sensitivity_mode: "AUTO" as const };
+  assert.equal(executionSettingsChanged(config, draft, true), true);
+  assert.equal(executionSettingsChanged({ ...config, cost_sensitivity_mode: "SKIP" }, draft, true), false);
+  assert.equal(executionSettingsChanged({ host_settings: { ...draft.hostSettings } }, defaultExecutionDraft(), true), false);
+});
+
 test("an immutable report belongs to both its dataset and data revision", () => {
   const config = Object.freeze({ dataset_id: "LTC-six-bars", data_epoch: "original-epoch" });
   const original = { datasetId: config.dataset_id, dataEpoch: config.data_epoch };

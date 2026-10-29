@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, Iterable, Mapping
 
 from app.market_dataset.snapshot import MarketDatasetError, MarketEvent, sha256_hex
+from .instrument_rules import positive_rule, quantity_bounds
 
 KIND_RANK = {
     "INSTRUMENT_RULES": 0,
@@ -42,6 +43,8 @@ class ContractAccount:
     tick: Decimal | None = None
     step: Decimal | None = None
     min_notional: Decimal | None = None
+    min_quantity: Decimal | None = None
+    max_quantity: Decimal | None = None
     rule_version: str | None = None
     maintenance_rate: Decimal = Decimal("0.005")
     require_mark: bool = True
@@ -98,7 +101,7 @@ class ContractAccount:
                 self.entry_price = None
             elif (1 if self.position_qty > 0 else -1) != prior_sign:
                 self.entry_price = price
-        charged = fee if fee is not None else (price * qty * self.taker_fee_bps / Decimal("10000"))
+        charged = fee if fee is not None else (price * qty * self.multiplier * self.taker_fee_bps / Decimal("10000"))
         if charged:
             charged = abs(charged)
             self.quote_balance -= charged
@@ -129,9 +132,22 @@ class ContractAccount:
             "liquidated": self.liquidated,
             "liquidation_enabled": self.liquidation_enabled,
             "journal": list(self.journal),
+            "contract_rules": {
+                "multiplier": str(self.multiplier),
+                **{key: None if getattr(self, key) is None else str(getattr(self, key))
+                   for key in ("tick", "step", "min_notional", "min_quantity", "max_quantity")},
+            },
         }
 
     def restore(self, payload: Mapping[str, Any]) -> None:
+        rules = payload.get("contract_rules") or {}
+        multiplier = positive_rule(rules.get("multiplier", "1"), "contract multiplier", required=True, code="CHECKPOINT_CORRUPT")
+        minimum, maximum = quantity_bounds(rules, code="CHECKPOINT_CORRUPT")
+        values = {key: positive_rule(rules.get(key), key, code="CHECKPOINT_CORRUPT")
+                  for key in ("tick", "step", "min_notional")}
+        self.multiplier, self.min_quantity, self.max_quantity = multiplier, minimum, maximum
+        for key, value in values.items():
+            setattr(self, key, value)
         self.quote_balance = Decimal(str(payload["quote_balance"]))
         self.position_qty = Decimal(str(payload["position_qty"]))
         self.entry_price = (
@@ -164,14 +180,13 @@ class ContractAccount:
 
     def _apply_rules(self, event: MarketEvent) -> None:
         payload = event.payload
-        if payload.get("multiplier") is not None:
-            self.multiplier = Decimal(str(payload["multiplier"]))
-        if payload.get("tick") is not None:
-            self.tick = Decimal(str(payload["tick"]))
-        if payload.get("step") is not None:
-            self.step = Decimal(str(payload["step"]))
-        if payload.get("min_notional") is not None:
-            self.min_notional = Decimal(str(payload["min_notional"]))
+        # Validate the entire update before changing the active contract.
+        values = {key: positive_rule(payload.get(key), key) for key in ("multiplier", "tick", "step", "min_notional")}
+        minimum, maximum = quantity_bounds({key: payload.get(key, getattr(self, key)) for key in ("min_quantity", "max_quantity")})
+        for key, value in values.items():
+            if value is not None:
+                setattr(self, key, value)
+        self.min_quantity, self.max_quantity = minimum, maximum
         self.rule_version = str(payload.get("version") or self.rule_version)
         self.journal.append({"kind": "RULES", "version": str(self.rule_version)})
 

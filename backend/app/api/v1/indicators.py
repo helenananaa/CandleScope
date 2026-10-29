@@ -78,6 +78,8 @@ from app.indicator.runtime_service import (
     removed_in_process_runtime,
 )
 from app.indicator.runtime_routes import IndicatorRuntimeRoutesError
+from app.indicator.replay_context import IndicatorReplayContext, replay_execution_options
+from app.replay.training.errors import TrainingRunError
 from app.indicator.serialization import (
     build_error_payload,
     rebind_indicator_payload_identity,
@@ -125,6 +127,7 @@ class ComputeRequest(BaseModel):
     securityMode: str | None = Field(
         None, description="'safe', 'research', or 'unsafe' for scripts"
     )
+    replayContext: IndicatorReplayContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +157,7 @@ class IndicatorComputeBatchContext(BaseModel):
     marketType: str = Field(..., description="Market type context")
     symbol: str = Field(..., description="Trading symbol")
     interval: str = Field(..., description="K-line interval")
+    replayContext: IndicatorReplayContext | None = None
 
 
 class IndicatorComputeBatchItem(BaseModel):
@@ -1281,6 +1285,16 @@ async def compute_range_batch(req: IndicatorRangeBatchRequest, request: Request)
 #  Compute endpoint — unified
 # ═══════════════════════════════════════════════════════════════
 
+async def _replay_options(request, context, *, exchange, market_type, symbol):
+    replay = getattr(request.app.state, "replay_service", None) if request is not None else None
+    try:
+        return await replay_execution_options(
+            context, getattr(replay, "training", None),
+            exchange=exchange, market_type=market_type, symbol=symbol,
+        )
+    except TrainingRunError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=build_error_payload(exc.code, exc.message)) from exc
+
 @router.post("/compute/batch")
 async def compute_batch(
     req: IndicatorComputeBatchRequest,
@@ -1301,6 +1315,10 @@ async def compute_batch(
         return shared_ohlcv_error
 
     context = req.context
+    execution_options = await _replay_options(
+        request, context.replayContext, exchange=context.exchange,
+        market_type=context.marketType, symbol=context.symbol,
+    )
     prepared: list[
         tuple[
             str,
@@ -1353,6 +1371,7 @@ async def compute_batch(
             shared_bars_error=shared_bars_error,
             runtime_service=_resolve_indicator_runtime_service(request),
             origin=origin_from(request.headers) if request is not None else None,
+            execution_options=execution_options,
         )
         for _, _, compute_req, route, indicator_name, route_error in prepared
     ))
@@ -1383,6 +1402,10 @@ async def compute(req: ComputeRequest, request: Request = None):
     Returns ``{ok, error, lines, result}`` — ``lines`` is the flat list
     for direct frontend rendering, ``result`` is the full structured output.
     """
+    execution_options = await _replay_options(
+        request, req.replayContext, exchange=req.exchange,
+        market_type=req.market_type, symbol=req.symbol,
+    )
     route, indicator_name, route_error = _resolve_compute_route(req)
     if route_error is not None:
         return route_error
@@ -1393,6 +1416,7 @@ async def compute(req: ComputeRequest, request: Request = None):
             req,
             runtime_service=_resolve_indicator_runtime_service(request),
             origin=origin_from(request.headers) if request is not None else None,
+            execution_options=execution_options,
         )
     return build_error_payload(
         "INDICATOR_REQUEST_EMPTY",
@@ -1522,6 +1546,7 @@ async def _compute_batch_item(
     shared_bars_error: dict[str, Any] | None,
     runtime_service: IndicatorRuntimeService | None = None,
     origin: str | None = None,
+    execution_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute one batch item while containing unexpected sibling failures."""
     if route_error is not None:
@@ -1537,7 +1562,7 @@ async def _compute_batch_item(
             )
         if route == "script":
             return await _compute_script(
-                req, runtime_service=runtime_service, origin=origin
+                req, runtime_service=runtime_service, origin=origin, execution_options=execution_options
             )
         return build_error_payload(
             "INDICATOR_REQUEST_EMPTY",
@@ -1659,6 +1684,7 @@ async def _compute_script(
     *,
     runtime_service: IndicatorRuntimeService | None = None,
     origin: str | None = None,
+    execution_options: dict[str, Any] | None = None,
 ) -> dict:
     """Compute a script through its configured isolated runtime plugin."""
     service = runtime_service or _unbound_indicator_runtime_service
@@ -1682,7 +1708,7 @@ async def _compute_script(
         interval=req.interval,
         bars=tuple(req.ohlcv),
         params=req.params or {},
-        options={"securityMode": security_mode} if security_mode is not None else {},
+        options={**(execution_options or {}), **({"securityMode": security_mode} if security_mode is not None else {})},
         transport="http.compute",
     )
     try:

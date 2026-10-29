@@ -145,6 +145,7 @@ export function clampProvidedBarsIndicatorOutput({
           }),
     })),
     outputState: {
+      ...(outputState.drawings ? { drawings: outputState.drawings.filter((scene) => scene.asOf <= visibleThroughSeconds) } : {}),
       markers: clampMarkers(outputState.markers, visibleThroughSeconds),
       fills: clampFills(outputState.fills, visibleThroughSeconds),
       hlines: clampHlines(outputState.hlines, visibleThroughSeconds),

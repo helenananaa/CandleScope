@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 import math
 import re
 from collections.abc import Mapping, Sequence
@@ -364,6 +366,8 @@ def _symbol(value: Any, path: str) -> dict[str, Any]:
                 "delistedAtMs",
                 "expiryAtMs",
                 "priceTickSize",
+                "contractMultiplier", "contractValueModel", "quantityStep", "minQuantity",
+                "quantityOrigin", "quantityRuleModel",
             }
         ),
     )
@@ -394,6 +398,24 @@ def _symbol(value: Any, path: str) -> dict[str, Any]:
     tick = result.get("priceTickSize")
     if tick is not None and (_DECIMAL.fullmatch(tick) is None or float(tick) <= 0):
         raise contract_error(f"{path}.priceTickSize is invalid", path=f"{path}.priceTickSize")
+    for name in ("contractMultiplier", "quantityStep", "minQuantity", "quantityOrigin"):
+        if name not in data:
+            continue
+        text = _string(data[name], f"{path}.{name}", maximum=80)
+        try:
+            number = Decimal(text)
+        except InvalidOperation as exc:
+            raise contract_error(f"{path}.{name} is invalid", path=f"{path}.{name}") from exc
+        if not number.is_finite() or number < 0 or (number == 0 and name != "quantityOrigin"):
+            raise contract_error(f"{path}.{name} is invalid", path=f"{path}.{name}")
+        result[name] = text
+    for name, admitted in (("contractValueModel", {"linear", "inverse", "unknown"}),
+                           ("quantityRuleModel", {"fixed_step", "significant_digits", "unknown"})):
+        if name in data:
+            text = _string(data[name], f"{path}.{name}", maximum=32)
+            if text not in admitted:
+                raise contract_error(f"{path}.{name} is unsupported", path=f"{path}.{name}")
+            result[name] = text
     return result
 
 

@@ -43,6 +43,7 @@ import type {
   BacktestResearchTask,
 } from "./backtestResearchTypes.js";
 import { externalRunDraft, externalSnapshotRequest, isExternalRevision, matchingExternalConnections } from "./externalProviderModel.js";
+import { chartBookMode } from "./chartBookInputs.js";
 
 interface LoadedRunBundle {
   run: BacktestRunRecord;
@@ -389,6 +390,11 @@ export function useBacktestResearchRuntime(options: {
     const timer = window.setTimeout(() => {
       let draftConfig: Record<string, unknown> = {};
       try { draftConfig = parseResearchObjectJson(runDraftText, "Run draft"); } catch { /* draft may be mid-edit */ }
+      if (chartBookMode(draftConfig.fidelity_mode) && !draftConfig.execution_data) {
+        setSnapshot(null);
+        setOperationError(null);
+        return;
+      }
       void api.previewSnapshot({
         dataset_id: activeDataset.dataset_id,
         data_epoch: activeDataset.data_epoch,
@@ -405,6 +411,7 @@ export function useBacktestResearchRuntime(options: {
           ? "LINEAR_PERP_ONE_WAY_V2"
           : String(draftConfig.account_model ?? "LINEAR_PERP_ONE_WAY_V1"),
         funding_mode: String(draftConfig.funding_mode ?? "OFF"),
+        ...(draftConfig.execution_data !== undefined ? { execution_data: draftConfig.execution_data } : {}),
       }, controller.signal).then((next) => {
         if (!controller.signal.aborted) setSnapshot(next);
       }).catch((reason: unknown) => {
@@ -660,6 +667,7 @@ export function useBacktestResearchRuntime(options: {
       setRunDraftText: (text) => {
         inputSelectionRevision.current += 1;
         setNotice(null);
+        setOperationError(null);
         setSnapshot(null);
         setRunDraftText(text);
       },

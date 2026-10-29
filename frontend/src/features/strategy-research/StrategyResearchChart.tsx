@@ -230,6 +230,7 @@ function StrategyResearchChartPanes({
           indicatorFills={indicators.view.fills}
           indicatorHlines={indicators.view.hlines}
           indicatorBgcolors={indicators.view.bgcolors}
+      indicatorDrawings={indicators.view.drawings}
           indicatorBarcolors={indicators.view.barcolors}
           invertScale={invertScale}
           onInvertScaleChange={onInvertScaleChange}

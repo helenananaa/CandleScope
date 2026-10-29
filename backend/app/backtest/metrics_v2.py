@@ -551,7 +551,8 @@ def _execution_metrics(
     for fill in fills:
         qty = _decimal(fill.get("qty", "0"))
         price = _decimal(fill.get("price", "0"))
-        turnover_notional += qty * price
+        multiplier = _decimal(fill.get("contract_multiplier", "1"))
+        turnover_notional += qty * price * multiplier
         source = source_prices.get(
             str(fill.get("source_sequence") or fill.get("sequence") or "")
         )
@@ -561,6 +562,7 @@ def _execution_metrics(
             slippage += (
                 (price - source_price)
                 * qty
+                * multiplier
                 * (Decimal("1") if str(fill.get("side")) == "BUY" else Decimal("-1"))
             )
     average_equity = (

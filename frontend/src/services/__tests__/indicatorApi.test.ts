@@ -34,6 +34,34 @@ test.after(async () => {
   await server?.close();
 });
 
+test("local compute preserves a shared replay observation and rejects mixed clocks", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const replayContext = { sessionId: "session", trackId: "track", dataEpoch: `sha256:${"a".repeat(64)}`,
+    revealedBoundaryMs: 123456, sourceSequence: 7 };
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = async (_url, options) => {
+    body = JSON.parse(String(options?.body)) as Record<string, unknown>;
+    const requests = body.requests as Array<Record<string, unknown>> | undefined;
+    return new Response(JSON.stringify(requests
+      ? { ok: true, results: requests.map((item) => ({ ...item, payload: { ok: true } })) }
+      : { ok: true }), { headers: { "Content-Type": "application/json" } });
+  };
+  const request = { mode: "script", language: "pine", script: "plot(close)", ohlcv: [], replayContext };
+  await computeIndicator(request);
+  assert.deepEqual(body.replayContext, replayContext);
+  const jobs = [{ clientId: "one", jobKey: "one", request }, { clientId: "two", jobKey: "two", request: {
+    ...request, replayContext: { sourceSequence: 7, revealedBoundaryMs: 123456,
+      dataEpoch: replayContext.dataEpoch, trackId: "track", sessionId: "session" },
+  } }];
+  await computeIndicatorBatch({ jobs });
+  assert.deepEqual((body.context as Record<string, unknown>).replayContext, replayContext);
+  assert.equal((body.requests as Array<Record<string, unknown>>)[0]?.replayContext, undefined);
+  await assert.rejects(computeIndicatorBatch({ jobs: [jobs[0]!, { ...jobs[1]!, request: {
+    ...request, replayContext: { ...replayContext, revealedBoundaryMs: 123457 },
+  } }] }), /share one chart context/);
+});
+
 test("indicator WebSocket limits are parsed from diagnostics and fail closed", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => { globalThis.fetch = originalFetch; });

@@ -4,6 +4,18 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .native_contracts import RequestedNativeData, PineChartMetadata, ExecutionData, ExecutionEvent
+
+
+class ChartBookEvent(ExecutionEvent):
+    time_ms: int = Field(strict=True)
+
+
+class ChartBookData(ExecutionData):
+    exchange: str = Field(min_length=1, max_length=40)
+    market_type: str = Field(min_length=1, max_length=40)
+    events: list[ChartBookEvent] = Field(min_length=1, max_length=500_000)
+    provenance: dict[str, Any] = Field(min_length=1)
 
 
 class RunCreateRequest(BaseModel):
@@ -14,6 +26,7 @@ class RunCreateRequest(BaseModel):
     data_epoch: str = Field(min_length=8, max_length=80)
     snapshot_hash: str = Field(min_length=8, max_length=80)
     fidelity_mode: str
+    execution_data: ChartBookData | None = None
     source_event_kind: str | None = None
     start_time_ms: int
     end_time_ms: int
@@ -29,6 +42,8 @@ class RunCreateRequest(BaseModel):
     bar_builder: str | None = Field(default=None, max_length=80)
     timezone: str | None = Field(default=None, max_length=40)
     parameters: dict[str, Any] = Field(default_factory=dict)
+    pine_contexts: list[RequestedNativeData] = Field(default_factory=list, max_length=16)
+    pine_chart_metadata: PineChartMetadata | None = None
     strategy_source: str | None = Field(default=None, max_length=2_000)
     signal_trace_mode: str = Field(default="LEGACY_INLINE_V1", max_length=32)
     output_mode: str = Field(default="TARGET_POSITION", max_length=32)
@@ -158,6 +173,7 @@ class SnapshotPreviewRequest(BaseModel):
     end_time_ms: int
     interval: str | None = Field(default=None, max_length=64)
     fidelity_mode: str = "BAR_APPROX"
+    execution_data: ChartBookData | None = None
     exchange: str = Field(default="binance", min_length=1, max_length=40)
     market_type: str = Field(default="usdm", min_length=1, max_length=40)
     contract_data_mode: str = Field(default="LEGACY_FIXED_V1", max_length=40)
@@ -206,6 +222,7 @@ class StrategyRevisionRequest(BaseModel):
     base_revision_id: str | None = None
     source_text: str = Field(default="", max_length=100_000)
     parameter_schema: list[dict[str, Any]] = Field(default_factory=list)
+    libraries: dict[str, str] = Field(default_factory=dict, max_length=64)
 
 
 class StrategyCopyRequest(BaseModel):

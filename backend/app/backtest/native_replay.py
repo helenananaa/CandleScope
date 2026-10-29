@@ -1,7 +1,8 @@
 """Historical-prefix replay. Checkpoints bind input identity and a committed cursor.
 
 Both native batch and incremental scripts use their historical batch semantics.
-Never substitute realtime bar flags, persist a foreign account, or rematch fills.
+Native results retain native authority. External replay checkpoints preserve
+the Host matcher, allocation, execution cursor and evaluator feedback transcript.
 """
 from __future__ import annotations
 
@@ -16,6 +17,11 @@ from collections import OrderedDict
 from app.data_engine.interval_policy import parse_interval_spec
 from .errors import BacktestError
 
+_KEEP_STATE=object()
+# Large seeks can replace the private base after rechecking the prior read's
+# validated bytes. Sequential play and small steps retain structural deltas.
+PRIVATE_REBASE_MIN_BARS=64
+
 
 class NativeReplay:
     def __init__(self, native):
@@ -25,6 +31,8 @@ class NativeReplay:
         self.workers = {}
         self.closed = False
         self._inputs = OrderedDict()
+        from .native_replay_views import ResultViews
+        self.views = ResultViews()
         db = native.db
         db.execute("CREATE TABLE IF NOT EXISTS native_replays (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
         db.execute("CREATE TABLE IF NOT EXISTS native_replay_snapshots (id TEXT PRIMARY KEY, record TEXT NOT NULL)")
@@ -40,7 +48,8 @@ class NativeReplay:
                 self._save(self.get(key) | {"state": "INTERRUPTED", "revision": record["revision"]})
         db.commit()
 
-    def _save(self, record):
+    def _save(self, record, *, external_state=_KEEP_STATE, restoring=False, external_validation=None,
+              consume_external_state=False):
         from .native import encoded
         from .native_replay_storage import SCHEMA
         header = {**record, "result": None, "_resultStorage": SCHEMA}
@@ -48,38 +57,89 @@ class NativeReplay:
         body = {k: v for k, v in result.items() if k not in {"bars", "report_hash"}} if result is not None else None
         try:
             with self.native.db:
+                if external_state is not _KEEP_STATE:
+                    header["_externalStateRevision"]=self.results.save("host:"+record["replay_id"],external_state,
+                        **({"compare_base_bytes":True} if restoring else {}),
+                        **({"validated_base":external_validation} if external_validation is not None else {}))
+                    if consume_external_state and external_state is not None:
+                        # A seek owns this detached checkpoint and has no next
+                        # step to resume. Once encoded in the transaction, its
+                        # graph need not overlap public-result cache creation.
+                        # A later failure rolls back the DB and drops the job;
+                        # recovery still reads the prior committed checkpoint.
+                        external_state.clear()
+                else:
+                    old=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(record["replay_id"],)).fetchone()
+                    if old and "_externalStateRevision" in (previous:=json.loads(old[0])):
+                        header["_externalStateRevision"]=previous["_externalStateRevision"]
                 header["_resultRevision"] = self.results.save(record["replay_id"], body)
                 self.native.db.execute("INSERT OR REPLACE INTO native_replays VALUES (?,?)", (record["replay_id"], encoded(header)))
+            self.views.discard(record["replay_id"])
         except BaseException:
             self.results.cache.clear()
+            self.views.discard()
             raise
 
-    def get(self, key):
+    def get(self, key, *, if_revision=None, _metadata_only=False, _borrow_result=False):
         with self.native.lock:
             row = self.native.db.execute("SELECT record FROM native_replays WHERE id=?", (key,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native replay not found")
             record = json.loads(row[0])
+            record.pop("_externalStateRevision",None)
             storage = record.pop("_resultStorage", None)
             result_revision = record.pop("_resultRevision", None)
             if storage is not None:
-                from .native import digest
                 from .native_replay_storage import SCHEMA
                 if storage != SCHEMA:
                     raise ValueError("unsupported native replay result storage")
                 if type(result_revision) is not int:
                     raise ValueError("native replay result revision is missing")
-                result = copy.deepcopy(self.results.load(key, expected_revision=result_revision))
+                if if_revision is not None and if_revision == record["revision"]:
+                    self.results.check_revision(key, expected_revision=result_revision)
+                    record.pop("result", None)
+                    return {**record, "result_unchanged": True}
+                # Validate the stored revision even when an encoded view is
+                # cached; a cold journal still verifies its checksums first.
+                result = self.results.load(key, expected_revision=result_revision)
+                if _metadata_only:
+                    if result is not None:
+                        # Full reads also require the frozen input. Retain that
+                        # admission check without constructing its public view.
+                        self._input(record["run_id"])
+                    record["result"] = None
+                    return record
                 if result is not None:
-                    result["bars"] = copy.deepcopy(self._input(record["run_id"])["bars"][:record["cursor"]])
-                    result["report_hash"] = digest(result)
+                    view_key = (key, record["run_id"], record["input_hash"], result_revision, record["cursor"])
+                    bars = self._input(record["run_id"])["bars"][:record["cursor"]]
+                    if _borrow_result:
+                        result = self.views._borrow(view_key, result, bars)
+                    else:
+                        result = self.views.read(view_key, result, bars)
                 record["result"] = result
             return record
 
     def list(self):
         with self.native.lock:
-            return [{k: v for k, v in json.loads(row[0]).items() if k not in {"result", "_resultStorage", "_resultRevision"}}
+            return [{k: v for k, v in json.loads(row[0]).items() if k not in {"result", "_resultStorage", "_resultRevision", "_externalStateRevision"}}
                     for row in self.native.db.execute("SELECT record FROM native_replays ORDER BY rowid DESC LIMIT 100")]
+
+    def _host_state(self,key,*,detached=True,validation=False):
+        raw=self.native.db.execute("SELECT record FROM native_replays WHERE id=?",(key,)).fetchone()
+        header=json.loads(raw[0])
+        revision=header.get("_externalStateRevision")
+        receipt=None
+        if revision is None:
+            state=None
+        elif validation:
+            state,receipt=self.results.load("host:"+key,expected_revision=revision,validation=True)
+        else:
+            state=self.results.load("host:"+key,expected_revision=revision)
+        if header.get("execution_mode")=="CANDLESCOPE" and ((header["cursor"]==0 and state is not None)
+                or (header["cursor"] and (not state or state.get("cursor")!=header["cursor"]))):
+            raise BacktestError("NATIVE_IDENTITY_MISMATCH","external account state does not match replay cursor")
+        state=copy.deepcopy(state) if detached else state
+        return (state,receipt) if validation else state
 
     def _input(self, run_id):
         if run_id in self._inputs:
@@ -94,13 +154,22 @@ class NativeReplay:
             self._inputs.popitem(last=False)
         return wire
 
+    def _take_host_state(self,key,*,validation=False):
+        # Active jobs exclude same-key snapshot/restore/write operations. The
+        # cache's validated JSON value becomes this job's private owned input;
+        # default inspection and public snapshots still return detached values.
+        state=self._host_state(key,detached=False,validation=validation)
+        self.results.cache.pop("host:"+key,None)
+        return state
+
     def create(self, run_id):
         with self.native.lock:
             if self.closed:
                 raise BacktestError("NATIVE_REPLAY_CLOSED", "replay service stopped")
-            origin = self.native.get(run_id)
-            if origin["execution_mode"] != "NATIVE":
-                raise BacktestError("EXTERNAL_UNSUPPORTED", "native replay cannot restore a CandleScope matching account")
+            origin = self.native._replay_origin(run_id)
+            external=origin["execution_mode"]=="CANDLESCOPE"
+            if external and origin["config"]["language"]!="pine":
+                raise BacktestError("EXTERNAL_UNSUPPORTED","external replay currently requires the Pine feedback contract")
             if origin["state"] != "COMPLETED":
                 raise BacktestError("NATIVE_REPLAY_NOT_READY", "complete native backtest before replay")
             wire = self._input(run_id)
@@ -109,11 +178,13 @@ class NativeReplay:
                       "method": "HISTORICAL_PREFIX_REBUILD", "input_hash": origin["input_hash"],
                       "runtime_identity": wire["identity"], "result": None, "error": None,
                       "created_at_ms": int(time.time() * 1000), "snapshots": []}
+            if external:
+                record.update(execution_mode="CANDLESCOPE",method="HOST_ACCOUNT_CHECKPOINT")
             self._save(record)
             return record
 
-    def _current(self, key, revision):
-        record = self.get(key)
+    def _current(self, key, revision, *, _metadata_only=False, _borrow_result=False):
+        record = self.get(key, _metadata_only=_metadata_only, _borrow_result=_borrow_result)
         if record["revision"] != revision:
             raise BacktestError("NATIVE_REPLAY_CONFLICT", "replay changed; refresh before retry")
         return record
@@ -144,8 +215,10 @@ class NativeReplay:
     def _prefix(self, wire, config, count):
         # Detach only the revealed prefix; never copy unrevealed history.
         clipped = {key: copy.deepcopy(value) for key, value in wire.items()
-                   if key not in {"bars", "contexts", "magnifier"}}
+                   if key not in {"bars", "contexts", "magnifier", "execution_times"}}
         clipped["bars"] = copy.deepcopy(wire["bars"][:count])
+        if "execution_times" in wire:
+            clipped["execution_times"] = list(wire["execution_times"][:count])
         boundary = parse_interval_spec(config["interval"]).next_ms(clipped["bars"][-1]["time"] * 1000)
         clipped["contexts"] = []
         for context, ref in zip(wire["contexts"], config.get("contexts", []), strict=True):
@@ -157,10 +230,13 @@ class NativeReplay:
                                if wire.get("magnifier") else None)
         return clipped
 
-    def _worker(self, key, plugin, wire, cancelled):
+    def _worker(self, key, plugin, wire, cancelled, *, external=False):
         from .native import invoke
         from .native_session import SessionWorker
-        if self.native.runner is not invoke or wire["identity"].get("historical_session") != "fixed-history/1":
+        if self.native.runner is not invoke or (not external and wire["identity"].get("historical_session") != "fixed-history/1"):
+            return None
+        from .external_support import pine_replay_available
+        if external and not pine_replay_available(wire["identity"]):
             return None
         with self.native.lock:
             if key in self.workers:
@@ -173,7 +249,14 @@ class NativeReplay:
                 if evicted is not None:
                     evicted.close()
             self.workers[key] = None  # Reserve a slot before launching outside the lock.
-        worker = SessionWorker(plugin, wire, cancelled)
+        if external and (wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract")):
+            if wire.get("pine_print_tick_contract"):
+                from .pine_print_tick_execution import ReplayWorker
+            else:
+                from .pine_history_tick_execution import ReplayWorker
+            worker=ReplayWorker(plugin,wire)
+        else:
+            worker = SessionWorker(plugin, wire, cancelled,evaluator=external)
         if not worker.supported:
             worker.close()
             worker = None
@@ -183,45 +266,99 @@ class NativeReplay:
 
     def _execute(self, key, action, target, cancelled):
         from .native import digest
+        from .native_checkpoint import checkpoint_digest
         try:
             with self.native.lock:
-                current = self.get(key)
-                origin = self.native.get(current["run_id"])
+                current = self.get(key,_metadata_only=True)
+                origin = self.native._replay_origin(current["run_id"])
+                # Replay needs the original seal/authority and input settings,
+                # not a second resident copy of the complete batch report or
+                # uploaded physical-event configuration.
+                origin["result"] = {name: origin["result"].get(name) for name in ("account_authority", "report_hash")}
+                origin["config"] = {name: origin["config"][name] for name in ("language", "interval", "contexts")
+                                    if name in origin["config"]}
                 wire = self._input(current["run_id"])
+                external=origin["execution_mode"]=="CANDLESCOPE"
+                external_validation=None
+                if external and action=="seek" and abs(target-current["cursor"])>=PRIVATE_REBASE_MIN_BARS:
+                    external_state,external_validation=self._take_host_state(key,validation=True)
+                else:
+                    external_state=self._take_host_state(key) if external else None
             if digest(wire) != current["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "replay input changed")
             plugin = origin.get("runtime_launch") or self.native.resolver(origin["config"]["language"])
             if self.native.runner(plugin, {"operation": "describe"}, cancelled=cancelled, timeout=15)["identity"] != wire["identity"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "reinstall the frozen runtime before continuing")
-            worker = self._worker(key, plugin, wire, cancelled)
-            method = "FIXED_HORIZON_INCREMENTAL" if worker else "HISTORICAL_PREFIX_REBUILD"
+            worker = self._worker(key, plugin, wire, cancelled,external=external)
+            method = "HOST_ACCOUNT_CHECKPOINT" if external else "FIXED_HORIZON_INCREMENTAL" if worker else "HISTORICAL_PREFIX_REBUILD"
+            if external and target<current["cursor"]:
+                external_state=None
             counts = range(current["cursor"] + 1, target + 1) if action == "play" else [target]
             for count in counts:
                 if cancelled.is_set():
                     return
+                current["result"]=None
+                result=None
                 if count == 0:
                     result = None
+                    external_state=None
                 else:
-                    result = worker.advance(count, cancelled) if worker else self.native.runner(plugin, self._prefix(wire, origin["config"], count), cancelled=cancelled)
-                    if result.get("identity") != wire["identity"] or result.get("account_authority") != origin["result"]["account_authority"] or result.get("execution_mode") != "NATIVE":
+                    if external:
+                        from .external import _run_external_host
+                        if wire.get("pine_history_tick_contract") or wire.get("pine_print_tick_contract"):
+                            if worker:
+                                result,external_state=worker.execute(self.native.runner,cancelled,resume=external_state,target=count,
+                                    resume_owned=True,capture_owned=True)
+                            else:
+                                from .external import run_external_host
+                                result,external_state=run_external_host(plugin,wire,self.native.runner,cancelled,
+                                    resume=external_state,target=count)
+                        else:
+                            evaluate=(lambda _plugin,payload,**kwargs:worker.request(payload,**kwargs)) if worker else self.native.runner
+                            result,external_state=_run_external_host(plugin,wire,evaluate,cancelled,resume=external_state,target=count,
+                                _scenario_runner=self.native.runner)
+                    else:
+                        result = worker.advance(count, cancelled) if worker else self.native.runner(plugin, self._prefix(wire, origin["config"], count), cancelled=cancelled)
+                    if result.get("identity") != wire["identity"] or result.get("account_authority") != origin["result"]["account_authority"] or result.get("execution_mode") != origin["execution_mode"]:
                         raise BacktestError("NATIVE_IDENTITY_MISMATCH", "unexpected replay account authority")
                     if count == current["total"]:
                         result["bars"] = wire["bars"]
-                        result["report_hash"] = digest(result)
+                        result["report_hash"] = checkpoint_digest(result)
                         if result["report_hash"] != origin["result"]["report_hash"]:
                             raise BacktestError("NATIVE_REPLAY_PARITY_FAILED", "replay endpoint differs from frozen batch result")
                 with self.native.lock:
                     if cancelled.is_set():
                         return
+                    if external and count == current["total"]:
+                        # Execution and endpoint parity are complete; the owned
+                        # checkpoint no longer needs its evaluator. Release it
+                        # before journal encoding and the public result copy.
+                        # A failed save still preserves the prior committed
+                        # cursor and follows the ordinary failure cleanup.
+                        finished_worker = self.workers.pop(key, None)
+                        if finished_worker:
+                            finished_worker.close()
                     record = current
                     record.update(cursor=count, result=result, method=method, revision=record["revision"] + 1,
                                   state="COMPLETED" if count == record["total"] else "RUNNING" if action == "play" else "PAUSED")
-                    self._save(record)
+                    self._save(record,**({"external_state":external_state,"external_validation":external_validation,
+                        "consume_external_state":action=="seek"} if external else {}))
+                    if count == target:
+                        # The committed journal owns the complete result now.
+                        # Release the job's temporary report before a reader
+                        # can acquire this lock and build its independent view.
+                        # This cursor already has its final state; saving it
+                        # again would only extend the report's lifetime.
+                        current["result"] = None
+                        result = external_state = None
+                        return
                 if action == "play" and cancelled.wait(0.1):
                     return
             with self.native.lock:
                 if not cancelled.is_set():
-                    record = current
+                    # An empty play range still needs to finish RUNNING, but
+                    # the metadata-only starting record has no result to save.
+                    record = self.get(key)
                     record.update(state="COMPLETED" if record["cursor"] == record["total"] else "PAUSED")
                     self._save(record)
         except Exception as exc:
@@ -243,35 +380,60 @@ class NativeReplay:
                 self.jobs.pop(key, None)
 
     def snapshot(self, key, revision):
-        from .native import digest, encoded
+        from .native import MAX_BYTES
+        from .native_checkpoint import pack_with_checksum, detached_json
         with self.native.lock:
-            record = self._current(key, revision)
+            # The checkpoint only serializes this borrowed public body while
+            # holding the lock. Detach the returned view after releasing the
+            # temporary private account graph, so both copies needn't overlap.
+            record = self._current(key, revision, _borrow_result=True)
             if key in self.jobs or record["state"] == "RUNNING":
                 raise BacktestError("NATIVE_REPLAY_BUSY", "pause before saving a checkpoint")
             checkpoint_id = "nrs_" + uuid.uuid4().hex
             checkpoint = {"replay_id": key, "input_hash": record["input_hash"], "cursor": record["cursor"], "result": record["result"]}
-            checkpoint["checksum"] = digest(checkpoint)
-            self.native.db.execute("INSERT INTO native_replay_snapshots VALUES (?,?)", (checkpoint_id, encoded(checkpoint)))
+            if record.get("execution_mode")=="CANDLESCOPE":
+                # Only serialize the borrowed journal value while holding the
+                # native lock. It never escapes this call or reaches a mutable
+                # execution path; normal callers still receive a detached copy.
+                checkpoint["external_state"]=self._host_state(key,detached=False)
+            stored, _ = pack_with_checksum(checkpoint)
+            if len(stored.encode("utf-8")) > MAX_BYTES:
+                raise BacktestError("BUDGET_EXCEEDED", "replay checkpoint exceeds 64 MiB")
+            self.native.db.execute("INSERT INTO native_replay_snapshots VALUES (?,?)", (checkpoint_id, stored))
             record["snapshots"].append({"snapshot_id": checkpoint_id, "cursor": record["cursor"]})
             record["revision"] += 1
             self._save(record)
-            return record
+            self.results.cache.pop("host:" + key, None)
+            checkpoint.clear()
+            del stored
+            return detached_json(record, preserve_aliases=False)
 
     def restore(self, key, revision, checkpoint_id):
-        from .native import digest
+        from .native_checkpoint import unpack, checkpoint_digest
         with self.native.lock:
-            record = self._current(key, revision)
+            # The checkpoint replaces the complete result. Validate the current
+            # journal without also detaching its soon-to-be-replaced public view.
+            record = self._current(key, revision, _metadata_only=True)
             if key in self.jobs:
                 raise BacktestError("NATIVE_REPLAY_BUSY", "pause before restoring a checkpoint")
             row = self.native.db.execute("SELECT record FROM native_replay_snapshots WHERE id=?", (checkpoint_id,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "checkpoint not found")
-            checkpoint = json.loads(row[0])
+            checkpoint = unpack(row[0])
             checksum = checkpoint.pop("checksum")
-            if digest(checkpoint) != checksum or checkpoint["replay_id"] != key or checkpoint["input_hash"] != record["input_hash"]:
+            if checkpoint_digest(checkpoint) != checksum or checkpoint["replay_id"] != key or checkpoint["input_hash"] != record["input_hash"]:
                 raise BacktestError("NATIVE_IDENTITY_MISMATCH", "checkpoint does not belong to this replay")
+            if record.get("execution_mode")=="CANDLESCOPE" and checkpoint["cursor"]:
+                from .external_replay import validate_state
+                state=checkpoint.get("external_state")
+                if not state or state.get("cursor")!=checkpoint["cursor"]:
+                    raise BacktestError("NATIVE_IDENTITY_MISMATCH","checkpoint account cursor differs")
+                validate_state(self._input(record["run_id"]),state)
+            elif record.get("execution_mode")=="CANDLESCOPE" and checkpoint.get("external_state") is not None:
+                raise BacktestError("NATIVE_IDENTITY_MISMATCH","zero cursor must have no external account state")
             record.update(cursor=checkpoint["cursor"], result=checkpoint["result"], state="PAUSED", error=None, revision=revision + 1)
-            self._save(record)
+            self._save(record,restoring=True,
+                **({"external_state":checkpoint.get("external_state")} if record.get("execution_mode")=="CANDLESCOPE" else {}))
             return record
 
     def shutdown(self):
@@ -288,4 +450,5 @@ class NativeReplay:
                 worker.close()
         self.workers.clear()
         self.results.cache.clear()
+        self.views.discard()
         self._inputs.clear()

@@ -11,7 +11,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from build_bundle import build_locked_bundle, load_release_lock
+if __package__:
+    from .build_bundle import build_locked_bundle, load_release_lock
+else:
+    from build_bundle import build_locked_bundle, load_release_lock
 
 
 def download(url: str, path: Path, expected: str) -> None:
@@ -20,6 +23,16 @@ def download(url: str, path: Path, expected: str) -> None:
     if hashlib.sha256(data).hexdigest() != expected.removeprefix("sha256:"):
         raise ValueError(f"Release asset digest mismatch: {path.name}")
     path.write_bytes(data)
+
+
+def materialize_sdk(record, output):
+    path = output / record["artifactFilename"]
+    if path.exists():
+        if hashlib.sha256(path.read_bytes()).hexdigest() != record["sha256"].removeprefix("sha256:"):
+            raise ValueError("Built SDK wheel digest mismatch")
+    else:
+        download(record["releaseUrl"], path, record["sha256"])
+    return path
 
 
 def main() -> None:

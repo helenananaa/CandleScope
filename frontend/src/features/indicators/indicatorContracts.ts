@@ -349,6 +349,7 @@ function parseIndicatorLine(value: unknown, path: string): IndicatorLine {
     parseIndicatorValuePoint,
   );
   const line: IndicatorLine = { data };
+  if (record.nativeScene !== undefined) line.nativeScene = expectIndicatorRecord(record.nativeScene, `${path}.nativeScene`);
   const strings = [
     "id",
     "indicatorId",
@@ -440,6 +441,7 @@ function parseIndicatorUnifiedSeries(
       parseIndicatorValuePoint,
     ),
     style: {
+      ...(style.nativeScene !== undefined ? { nativeScene: expectIndicatorRecord(style.nativeScene, `${path}.style.nativeScene`) } : {}),
       title: optionalIndicatorString(style.title, `${path}.style.title`) ?? "",
       color:
         optionalIndicatorString(style.color, `${path}.style.color`) ??
@@ -888,7 +890,22 @@ export function parseIndicatorPayloadEnvelope(
   const range = record.range;
   const revision = record.dataRevision ?? record.data_revision;
   const envelope: IndicatorPayloadEnvelope = {
+    ...(record.meta !== undefined ? { meta: expectIndicatorRecord(record.meta, `${path}.meta`) } : {}),
     ok,
+    ...(record.drawings === undefined ? {} : { drawings: parseOptionalArray(record.drawings, `${path}.drawings`, (value, path) => {
+      const scene = expectIndicatorRecord(value, path);
+      const objects = parseOptionalArray(scene.objects, `${path}.objects`, (value, path) => {
+        const object = expectIndicatorRecord(value, path);
+        const kind = expectIndicatorString(object.kind, `${path}.kind`);
+        if (!["lines", "labels", "boxes", "polylines", "linefills", "tables", "plotseries", "gradientfills"].includes(kind)) throw new IndicatorPayloadError(path, "Invalid drawing kind");
+        return { kind: kind as import("./indicatorTypes.js").IndicatorDrawing["objects"][number]["kind"], row: expectIndicatorRecord(object.row, `${path}.row`) };
+      });
+      if (objects.length > 3000) throw new IndicatorPayloadError(path, "Too many drawings");
+      const times = parseOptionalArray(scene.times, `${path}.times`, expectIndicatorFiniteNumber);
+      if (times.length > 100000 || times.some((time, i) => i > 0 && time <= times[i - 1]!)) throw new IndicatorPayloadError(path, "Invalid drawing timeline");
+      return { id: expectIndicatorNonEmptyString(scene.id, `${path}.id`), pane: optionalIndicatorString(scene.pane, `${path}.pane`) || "main",
+        asOf: expectIndicatorFiniteNumber(scene.asOf, `${path}.asOf`), times, objects };
+    }) }),
     lines: parseOptionalArray(
       record.lines,
       `${path}.lines`,
