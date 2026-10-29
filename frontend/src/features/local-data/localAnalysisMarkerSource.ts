@@ -3,7 +3,7 @@ import type {
   ExternalMarkerSource,
   ExternalSeriesMarker,
 } from "../../chart-adapter/externalMarkerSource.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { floorIntervalTime } from "../../utils/intervalTimeline.js";
 import type { LocalAnalysisEventStore } from "./localAnalysisStore.js";
 import {
@@ -45,7 +45,7 @@ export function createLocalAnalysisMarkerSource({
   interval,
 }: {
   eventStore: LocalAnalysisEventStore;
-  seriesStore: SeriesWindowStore;
+  seriesStore: SeriesWindowView;
   interval?: string;
 }): ExternalMarkerSource {
   let eventRevision = -1;

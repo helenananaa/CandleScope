@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from typing import Any
 
@@ -58,6 +59,7 @@ class CcxtProviderSession:
             maxsize=max(1, int(config.ccxt_raw_queue_size)),
         )
         self._overflowed = False
+        self._delivery_failed = False
         self._running = False
         self._watch_task: asyncio.Task[None] | None = None
         self._delivery_task: asyncio.Task[None] | None = None
@@ -253,7 +255,8 @@ class CcxtProviderSession:
                     get_proxy_pool().mark_ws_connected(self._proxy_ws_lease)
                 self._failed_proxy_url = None
                 delay = float(self._cfg.ws_reconnect_delay_initial)
-                await self._set_health(SessionHealth.CONNECTED, "CCXT stream active")
+                if not self._delivery_failed:
+                    await self._set_health(SessionHealth.CONNECTED, "CCXT stream active")
                 self._metrics.inc("watch_updates")
             except asyncio.CancelledError as exc:
                 # CCXT cancels its per-subscription Future when a websocket is
@@ -276,13 +279,23 @@ class CcxtProviderSession:
                     exc,
                 )
                 await self._rebuild_runtime_after_failure(watch_generation)
-                await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
+                await asyncio.sleep(random.uniform(0.5, 1.0) * min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
             except RateLimitDeferred as exc:
                 await self._set_health(SessionHealth.RECONNECTING, exc.reason)
                 await asyncio.sleep(max(0.05, min(exc.retry_after_seconds,
                                                 max(1, self._cfg.ws_reconnect_delay_max))))
             except Exception as exc:  # noqa: BLE001 - CCXT exchange/network errors
+                from .admission import quota_error_feedback
+                feedback = quota_error_feedback(exc)
+                if feedback.get("status_code") in {418, 429} or feedback.get("body_code") in {"-1003", "50011"}:
+                    # Implicit REST (e.g. a depth snapshot) may reject a watch.
+                    # Its physical hook has already updated the exact bucket.
+                    # Do not turn quota pressure into proxy failure/migration.
+                    self._metrics.inc("quota_deferrals")
+                    await self._set_health(SessionHealth.RECONNECTING, "exchange_quota")
+                    await asyncio.sleep(max(1.0, min(60.0, self._cfg.ws_reconnect_delay_max)))
+                    continue
                 if self._proxy_route is not None and not isinstance(exc, CcxtRawQueueOverflow):
                     from app.core.proxy_pool import get_proxy_pool
                     get_proxy_pool().record(self._proxy_route, self._descriptor.exchange, error=exc, kind="ws")
@@ -310,7 +323,7 @@ class CcxtProviderSession:
                         self._queue.get_nowait()
                         self._queue.task_done()
                 await self._rebuild_runtime_after_failure(watch_generation)
-                await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
+                await asyncio.sleep(random.uniform(0.5, 1.0) * min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
 
     async def _rebuild_runtime_after_failure(
@@ -415,8 +428,23 @@ class CcxtProviderSession:
                 received_at_ms=event.received_at_ms,
                 endpoint="ccxt+ws://" + self._profile.exchange_id,
             )
-            if self._on_message is not None:
-                await self._on_message(message)
+            while self._running:
+                try:
+                    if self._on_message is not None:
+                        await self._on_message(message)
+                    recovered = self._delivery_failed
+                    self._delivery_failed = False
+                    if recovered:
+                        await self._set_health(SessionHealth.CONNECTED, "source delivery recovered")
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    self._delivery_failed = True
+                    self._metrics.inc("delivery_failures")
+                    await self._set_health(SessionHealth.UNHEALTHY, "source delivery failed; retrying")
+                    logger.exception("CCXT source delivery failed (%s)", self._descriptor.key)
+                    await asyncio.sleep(min(1.0, max(0.05, self._cfg.ws_reconnect_delay_initial)))
             self._last_message_time = time.monotonic()
             self._metrics.inc("events_forwarded")
             self._queue.task_done()

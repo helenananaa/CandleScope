@@ -11,6 +11,11 @@ test("interval filters distinguish minute/month, preserve old drawings and rejec
   assert.equal(drawingVisibleAtInterval({ visibleIntervals: null }, "4h"), true);
   assert.equal(drawingVisibleAtInterval({ visibleIntervals: ["1m"] }, "1M"), false);
   assert.equal(drawingVisibleAtInterval({ visibleIntervals: ["1h", "4h"] }, "4h"), true);
+  const anchored = "7m~a1~60000";
+  assert.equal(validDrawingIntervals([anchored]), true);
+  assert.equal(drawingVisibleAtInterval({ visibleIntervals: [anchored] }, "7m~a1~120000"), false);
+  const saved = exportDrawingDocument(importSavedDrawings("anchor", [{ id: "x", type: "text", visibleIntervals: [anchored] }])!);
+  assert.deepEqual(saved?.[0]?.visibleIntervals, [anchored]);
   for (const value of [[], ["1h", "1h"], ["bad"], ["0m"], ["1H"], "1h", [null]]) assert.equal(validDrawingIntervals(value), false);
 });
 

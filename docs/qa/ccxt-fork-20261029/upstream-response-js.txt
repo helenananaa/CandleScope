@@ -1,0 +1,10 @@
+
+> ccxt@4.5.60 response-js
+> npm run ti-js  -- --responseTests binance
+
+
+> ccxt@4.5.60 ti-js
+> node js/src/test/tests.init.js --responseTests binance
+
+[INFO:MAIN] Exchange to test: binance
+[INFO][JS][TEST_SUCCESS] 52 static response tests passed.

@@ -13,6 +13,7 @@ from typing import Any
 
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
+from app.exchanges.public_admission import PublicDemand, TrafficClass, current_demand, public_demand
 
 from .markets import get_shared_ccxt_market_tables
 from .models import CcxtLifecycleEvent, CcxtRawMarketEvent
@@ -160,7 +161,10 @@ class CcxtRuntime:
         if self._closed:
             raise RuntimeError("CCXT runtime is already closed")
         # REST pools and other runtimes of the same rail share one table.
-        await get_shared_ccxt_market_tables().load(self.exchange)
+        demand = PublicDemand(TrafficClass.RECOVERY, purpose="ws_market_metadata")
+        demand.inherit(current_demand())
+        with public_demand(demand):
+            await get_shared_ccxt_market_tables().load(self.exchange)
         self._started = True
 
     def subscribe(
@@ -427,6 +431,7 @@ class CcxtRuntimePool:
                         self._entries.pop(key, None)
                         should_close = True
             if should_close:
+                entry.start_task.cancel()
                 await asyncio.shield(
                     asyncio.gather(entry.start_task, return_exceptions=True)
                 )

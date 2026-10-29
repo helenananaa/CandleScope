@@ -26,10 +26,15 @@ import signal
 import threading
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Any
 
 from app.core import config as app_config
+from app.exchanges.public_admission import (
+    PublicDemand, TrafficClass, _broker, current_demand, get_public_admission,
+)
+from app.exchanges.rate_limits import RateLimitRule
 
 logger = logging.getLogger("candlescope.catalog_worker")
 
@@ -89,6 +94,9 @@ async def shutdown_catalog_worker() -> None:
 class _Request:
     future: asyncio.Future[list[Any]]
     rows: list[Any] = field(default_factory=list)
+    demand: PublicDemand = field(default_factory=PublicDemand)
+    admissions: dict[int, asyncio.Task[Any]] = field(default_factory=dict)
+    permits: dict[int, Any] = field(default_factory=dict)
 
 
 @dataclass(eq=False)
@@ -128,6 +136,10 @@ class _CatalogWorker:
         self._cancel_idle()
         request_id = next(self._ids)
         request = _Request(generation.loop.create_future())
+        inherited = current_demand()
+        request.demand = replace(inherited, defer=False, alive=None,
+            traffic_class=(TrafficClass.BACKGROUND if inherited.traffic_class == TrafficClass.NORMAL
+                           else inherited.traffic_class), purpose="symbol_catalog")
         generation.pending[request_id] = request
         try:
             try:
@@ -151,6 +163,7 @@ class _CatalogWorker:
                         generation.requests.send(("cancel", request_id))
                 raise
         finally:
+            self._release_admissions(request)
             generation.pending.pop(request_id, None)
             self._arm_idle(generation)
 
@@ -281,14 +294,57 @@ class _CatalogWorker:
             self._retire(generation, message[1])
             return
         request = generation.pending.get(message[1])
+        if request is not None and kind in {"admission_done", "admission_cancel"}:
+            attempt_id = message[2]
+            task = request.admissions.pop(attempt_id, None)
+            if task is not None:
+                task.cancel()
+            permit = request.permits.pop(attempt_id, None)
+            if permit is not None:
+                permit.finish(**(message[3] if kind == "admission_done" else {"response_unknown": True}))
+            return
         if request is None or request.future.done():
             return
-        if kind == "rows":
+        if kind == "admission":
+            attempt_id = message[2]
+            task = generation.loop.create_task(self._admit(generation, message[1], request, message))
+            request.admissions[attempt_id] = task
+            task.add_done_callback(_consume_outcome)
+        elif kind == "rows":
             request.rows.extend(message[2])
         elif kind == "done":
             request.future.set_result(request.rows)
         elif kind == "error":
             request.future.set_exception(_decode_error(*message[2]))
+
+    async def _admit(self, generation: _Generation, request_id: int,
+                     owner: _Request, message: tuple[Any, ...]) -> None:
+        attempt_id, wire_rules, historical_request = message[2:]
+        try:
+            rules = []
+            for values, cost in wire_rules:
+                rules.append(RateLimitRule(**values, cost=partial(_fixed_cost, cost)))
+            permit = await get_public_admission().acquire(
+                rules, historical_request, demand=replace(owner.demand),
+            )
+            owner.permits[attempt_id] = permit
+            generation.requests.send(("admission_result", request_id, attempt_id, None))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            with contextlib.suppress(EOFError, OSError):
+                generation.requests.send(("admission_result", request_id, attempt_id, _encode_error(exc)))
+        finally:
+            owner.admissions.pop(attempt_id, None)
+
+    @staticmethod
+    def _release_admissions(request: _Request) -> None:
+        for task in request.admissions.values():
+            task.cancel()
+        request.admissions.clear()
+        for permit in request.permits.values():
+            permit.finish(response_unknown=True)
+        request.permits.clear()
 
     def _exited(self, generation: _Generation) -> None:
         if generation.retired:
@@ -315,6 +371,7 @@ class _CatalogWorker:
             if not generation.ready.done():
                 generation.ready.set_exception(CatalogWorkerUnavailable(reason))
             for request in generation.pending.values():
+                self._release_admissions(request)
                 if not request.future.done():
                     request.future.set_exception(CatalogWorkerUnavailable(reason))
         generation.pending.clear()
@@ -476,11 +533,12 @@ async def _serve(requests: Any, results: Any) -> None:
     threading.Thread(target=receive, name="catalog-worker-requests", daemon=True).start()
     results.send(("ready",))
     running: dict[int, asyncio.Task[None]] = {}
+    admissions: dict[tuple[int, int], asyncio.Future[Any]] = {}
     while (message := await inbox.get()) is not None:
         kind, request_id = message[0], message[1]
         if kind == "load":
             task = asyncio.create_task(
-                _answer(results, request_id, message[2], message[3]),
+                _answer(results, request_id, message[2], message[3], admissions),
             )
             running[request_id] = task
             task.add_done_callback(
@@ -488,6 +546,10 @@ async def _serve(requests: Any, results: Any) -> None:
             )
         elif kind == "cancel" and (task := running.get(request_id)) is not None:
             task.cancel()
+        elif kind == "admission_result":
+            future = admissions.get((request_id, message[2]))
+            if future is not None and not future.done():
+                future.set_result(message[3])
     for task in list(running.values()):
         task.cancel()
     await asyncio.gather(*running.values(), return_exceptions=True)
@@ -498,7 +560,9 @@ async def _answer(
     request_id: int,
     function: Callable[..., Awaitable[list[Any]]],
     args: tuple[Any, ...],
+    admissions: dict[tuple[int, int], asyncio.Future[Any]] | None = None,
 ) -> None:
+    token = _broker.set(_ChildAdmission(results, request_id, admissions if admissions is not None else {}))
     try:
         rows = list(await function(*args))
     except asyncio.CancelledError:
@@ -506,9 +570,50 @@ async def _answer(
     except Exception as exc:  # noqa: BLE001 - preserve arbitrary loader errors across the process boundary
         results.send(("error", request_id, _encode_error(exc)))
         return
+    finally:
+        _broker.reset(token)
     for start in range(0, len(rows), _ROW_CHUNK):
         results.send(("rows", request_id, rows[start:start + _ROW_CHUNK]))
     results.send(("done", request_id))
+
+
+def _fixed_cost(cost: int, _request: Any) -> int:
+    return cost
+
+
+class _ChildPermit:
+    def __init__(self, broker: Any, attempt_id: int) -> None:
+        self.broker, self.attempt_id, self.settled = broker, attempt_id, False
+
+    def finish(self, **feedback: Any) -> None:
+        if not self.settled:
+            self.settled = True
+            self.broker.results.send(("admission_done", self.broker.request_id,
+                                      self.attempt_id, feedback))
+
+
+class _ChildAdmission:
+    def __init__(self, results: Any, request_id: int, pending: dict) -> None:
+        self.results, self.request_id, self.pending = results, request_id, pending
+        self.ids = itertools.count(1)
+
+    async def acquire(self, rules: list[RateLimitRule], request: Any) -> _ChildPermit:
+        attempt_id = next(self.ids)
+        key = (self.request_id, attempt_id)
+        future = asyncio.get_running_loop().create_future()
+        self.pending[key] = future
+        try:
+            self.results.send(("admission", self.request_id, attempt_id,
+                               [(r.to_dict(), r.request_cost(request)) for r in rules], request))
+            error = await future
+            if error is not None:
+                raise _decode_error(*error)
+            return _ChildPermit(self, attempt_id)
+        except BaseException:
+            self.results.send(("admission_cancel", self.request_id, attempt_id))
+            raise
+        finally:
+            self.pending.pop(key, None)
 
 
 def _encode_error(exc: Exception) -> tuple[str, str, bytes | None]:

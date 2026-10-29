@@ -1,0 +1,176 @@
+{
+  "schema": "candlescope.okx-archive-rest-parity/1",
+  "passed": true,
+  "scope": "One probe-selected spot daily ZIP; local SHA-256, no vendor checksum.",
+  "probe": {
+    "okx": {
+      "enabled": true,
+      "provider_id": "okx-public-kline-page-v1",
+      "sample_rows": 1440
+    }
+  },
+  "archive": {
+    "object_key": "okx-public-kline-page-v1:okx:spot:BTC-USDT:1m:daily:2026-10-24",
+    "provider_id": "okx-public-kline-page-v1",
+    "exchange": "okx",
+    "market_type": "spot",
+    "symbol": "BTC-USDT",
+    "interval": "1m",
+    "granularity": "daily",
+    "period": "2026-10-24",
+    "start_ms": 1792771200000,
+    "end_ms": 1792857599999,
+    "content_sha256": "0b005dd14a10b7807c6701f3cb894431d1c2a5e514b1d29458a4936d5d16f5b5",
+    "provider_checksum": null,
+    "row_count": 1440,
+    "source_url": "https://static.okx.com/cdn/okex/traderecords/candlesticks/daily/20261024/BTC-USDT-candlesticks-2026-10-24.zip?v=1001",
+    "revision_changed": false,
+    "import_version": "history-archive-import.v1",
+    "cache_generation": "9d06abaf501841bc9daa3be1c763c8b6"
+  },
+  "rest_rows": 1440,
+  "archive_rows": 1440,
+  "rest_pages": 5,
+  "difference_count": 0,
+  "differences": [],
+  "timeline_sha256": "3a48090e1e04e13db7443050167e87e147539dcebc47d04e3ea3e9d189fccdac",
+  "reread_same_digest": true,
+  "admission": {
+    "owner_scope": "backend_event_loop_and_catalog_worker",
+    "coverage": "host_estimate_external_consumers_unknown",
+    "priority_enabled": true,
+    "fairness": {
+      "policy": "bounded_priority_bypass",
+      "max_competing_grants": 8
+    },
+    "pending": 0,
+    "protected": 0,
+    "in_flight": 0,
+    "oldest_wait_seconds": 0.0,
+    "counts": {
+      "attempts": 9,
+      "class_background": 3,
+      "completed": 9,
+      "class_normal": 6
+    },
+    "recent": [
+      {
+        "attempt_id": 2,
+        "buckets": [
+          "archive:www.okx.com:egress=non-pool"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 2297.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 4,
+        "buckets": [
+          "archive:static.okx.com:egress=non-pool"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 2687.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 6,
+        "buckets": [
+          "archive:www.okx.com:egress=non-pool"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 1454.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 8,
+        "buckets": [
+          "okx:public-instruments:spot:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 1954.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 10,
+        "buckets": [
+          "okx:history-candles:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 500.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 12,
+        "buckets": [
+          "okx:history-candles:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 516.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 14,
+        "buckets": [
+          "okx:history-candles:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 500.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 16,
+        "buckets": [
+          "okx:history-candles:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 328.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 18,
+        "buckets": [
+          "okx:history-candles:ip"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "normal",
+        "elapsed_ms": 328.0,
+        "status_code": 200,
+        "unknown": false
+      }
+    ]
+  }
+}

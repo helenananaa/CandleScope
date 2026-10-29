@@ -1,0 +1,2 @@
+[INFO:MAIN] Exchange to test: binance
+[INFO][PY][TEST_SUCCESS] 52 static response tests passed.

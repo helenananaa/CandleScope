@@ -25,6 +25,7 @@ const env = { ...process.env, CANDLESCOPE_DESKTOP_USER_DATA: profile,
   REPLAY_ENABLED: "1", CANDLESCOPE_DESKTOP_UI_PORT: "0", CANDLESCOPE_DESKTOP_BACKEND_PORT: "0",
   CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT: path.join(root, "plugins"),
   CANDLESCOPE_LOCAL_DATA_DIR: path.join(root, "local-data"),
+  SYMBOL_CATALOG_SNAPSHOT_PATH: path.join(data, "smoke-symbol-catalog.json"),
 };
 for (const key of ["ELECTRON_RUN_AS_NODE", "PYTHONPATH", "CANDLESCOPE_DESKTOP_URL", "CANDLESCOPE_DESKTOP_SKIP_SIDECAR",
   "CANDLESCOPE_DESKTOP_SIDECAR_COMMAND_JSON", "CANDLESCOPE_PYTHON"]) delete env[key];
@@ -32,7 +33,17 @@ const seed = spawnSync(arg("--python", path.join(repo, ".venv/Scripts/python.exe
   "import os, sqlite3; import scripts.replay_smoke_fixture as f; f._seed_klines(); db=sqlite3.connect(os.environ['KLINES_DB_PATH']); db.execute(\"UPDATE klines SET source='backfill'\"); db.commit(); db.close(); f._seed_replay_history_archive()"],
 { cwd: path.join(repo, "backend"), env, encoding: "utf8", windowsHide: true });
 assert.equal(seed.status, 0, seed.stderr);
+// The synthetic history also needs a matching instrument catalog. Use the
+// ordinary persisted snapshot seam so offline replay does not depend on a
+// fresh exchangeInfo request; the packaged backend remains unmodified.
+writeFileSync(env.SYMBOL_CATALOG_SNAPSHOT_PATH, JSON.stringify({
+  version: 1, revision: 1, saved_at: Date.now() / 1000,
+  markets: [{ exchange: "binance", market_type: "spot", last_success_at: Date.now() / 1000,
+    symbols: [{ exchange: "binance", marketType: "spot", symbol: "BTCUSDT",
+      baseAsset: "BTC", quoteAsset: "USDT", status: "TRADING", active: true }] }],
+}));
 const report = { schema: "candlescope.replay-desktop-open/1", executable, root, syntheticData: true,
+  syntheticInstrumentCatalog: true,
   startedAt: new Date().toISOString(), appAsarSha256: createHash("sha256").update(readFileSync(path.join(path.dirname(executable), "resources/app.asar"))).digest("hex"),
   phases: [], exceptions: [], result: "running" };
 const save = () => writeFileSync(path.join(root, "report.json"), JSON.stringify(report, null, 2));
@@ -106,7 +117,7 @@ try {
   assert.notEqual(submissions[1].idempotency_key, submissions[2].idempotency_key);
   record("recover-deleted-result-from-saved-draft", { firstRun, secondRun, submissions: submissions.length });
   const cursor = await page.locator('[data-replay-cursor-ms]').getAttribute('data-replay-cursor-ms');
-  await page.getByRole("button", { name: "下一根 1m", exact: true }).click();
+  await page.locator('[data-replay-action="advance-base"]').click();
   await page.waitForFunction(before => Number(document.querySelector('[data-replay-cursor-ms]')?.getAttribute('data-replay-cursor-ms')) > Number(before), cursor);
   await page.reload(); await ready();
   record("advance-and-reload", { runId: secondRun });

@@ -43,10 +43,12 @@ class KlineFactory:
 
     async def emit(self, opened, *, is_closed=True):
         d = self.pipeline.descriptor
+        from app.data_engine.interval_policy import parse_interval_ms
+        closed_at = opened + parse_interval_ms(d.interval) - 1
         await self.pipeline.continuity.ingest(MarketEvent(
-            StreamType.KLINE, d.symbol, d.exchange, opened + 59_999, opened + 59_999,
+            StreamType.KLINE, d.symbol, d.exchange, closed_at, closed_at,
             DataSource.WEBSOCKET,
-            data={"open_time": opened, "close_time": opened + 59_999, "interval": d.interval,
+            data={"open_time": opened, "close_time": closed_at, "interval": d.interval,
                   "is_closed": is_closed, "open": 100, "high": 100, "low": 100, "close": 100,
                   "volume": 1}, market_type=d.market_type,
         ))
@@ -97,7 +99,11 @@ async def test_kline_policy_has_no_exchange_or_symbol_allowlist(tmp_path, monkey
     factory, requests = KlineFactory(), []
     dm.set_ingestion_factory(factory)
     dm.set_backfill_trigger(lambda *args, **kwargs: requests.append((args, kwargs)))
-    identity = dict(exchange=exchange, market_type=market, symbol=symbol, interval="1m")
+    # Exercise each route within its declared BarBasis qualification. The
+    # Bybit evidence currently qualifies 5m, not every catalog timeframe.
+    interval, width = ("5m", 300_000) if exchange == "bybit" else ("1m", 60_000)
+    first = T // width * width
+    identity = dict(exchange=exchange, market_type=market, symbol=symbol, interval=interval)
     try:
         if exchange == "twelvedata":
             from app.data_engine.interval_resolution import IntervalResolutionError
@@ -109,15 +115,15 @@ async def test_kline_policy_has_no_exchange_or_symbol_allowlist(tmp_path, monkey
         await dm.ensure_stream(**identity)
         strict, errors, _ = capture(dm, identity=identity)
         live, _, _ = capture(dm, identity=identity, policy="gap_aware")
-        await factory.emit(T)
+        await factory.emit(first)
         await _until(lambda: len(closed(strict)) == 1)
-        await factory.emit(T + 120_000)
+        await factory.emit(first + 2 * width)
         await _until(lambda: len(closed(live)) == 2)
         assert len(closed(strict)) == 1
-        assert requests[0][0][:2] == (symbol, "1m")
+        assert requests[0][0][:2] == (symbol, interval)
         assert requests[0][0][4:] == (exchange, market)
         await dm.on_bars_backfilled(**identity, bars=[BarData(
-            T // 1000 + 60, 100, 100, 100, 100, 1, source="backfill_rest_verified")])
+            (first + width) // 1000, 100, 100, 100, 100, 1, source="backfill_rest_verified")])
         await _until(lambda: len(closed(strict)) == 3)
         assert errors == []
         assert factory.pipeline.recovery.snapshot()["ordered_filter_enabled"] is True
@@ -343,6 +349,9 @@ def test_provider_declared_swap_is_resolved_before_legacy_futures_alias():
     from tests.test_interval_resolution import _capabilities, _StubRegistry, IntervalResolver
     capabilities = _capabilities()
     capabilities.channels = [replace(capabilities.channels[0], market_types=("swap",))]
+    from app.exchanges.models import ExchangeMarket
+    capabilities.markets = [ExchangeMarket("swap", "perpetual", "Swap")]
+    capabilities.native_bar_specs = [replace(spec, market_type="swap") for spec in capabilities.native_bar_specs]
     route = IntervalResolver(_StubRegistry(capabilities)).resolve(
         exchange="fixture", market_type="swap", interval="1m", purpose="realtime")
     assert route.market_type == "swap" and route.native_interval == "1m"

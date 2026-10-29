@@ -99,6 +99,10 @@ export function autoFieldText(
       }) + (excursion.mfeR ? ` · ${excursion.mfeR}R / ${excursion.maeR}R` : "");
     case "costs":
       if (!trade) return "—";
+      if (trade.readonlySource) return t("account.review.costs", {
+        fees: formatAmount(trade.fees, 4), funding: formatSigned(trade.readonlySource.funding, 4),
+        currency: trade.readonlySource.currency,
+      });
       return t("trading.auto.costsValue", {
         fees: formatAmount(trade.fees, 4),
         slippage: trade.metrics?.entrySlippage ? formatSigned(trade.metrics.entrySlippage, 4) : "—",

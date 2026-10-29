@@ -187,10 +187,16 @@ def test_factory_registers_health_on_new_and_reused_market_pipeline() -> None:
             descriptor: StreamDescriptor,
             *,
             on_health: object | None = None,
+            on_market_event=None,
+            on_gap=None,
+            gap_repair_owner="inline",
         ) -> _Pipeline:
+            assert gap_repair_owner == "inline"
             self.add_calls += 1
             self.health_received_by_add = on_health
             self.pipeline = _Pipeline()
+            if on_market_event is not None:
+                self.pipeline.delivery.on_market_event(on_market_event)
             if on_health is not None:
                 self.pipeline.on_health_change(on_health)
             return self.pipeline

@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  ...intervalBasisMessages["id"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Waktu mulai dan jendela ke depan mencakup candle masa depan. Pilih awal lebih lama atau pendekkan jendela; hanya candle historis tertutup yang tersedia.",
   "plugin.runtimeInstalled": "Script runtime installed and verified. Quit and reopen CandleScope to activate indicators and supported native strategies.",
@@ -1248,6 +1250,7 @@ export const id = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { t } from "../../i18n/index.js";
+import { formatIntervalLabel } from "../../utils/intervals.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { visibleCellIds } from "./chartWorkspaceLayout.js";
 import { chartLinkGroupDisplayName } from "./chartWorkspaceI18n.js";
@@ -66,7 +67,7 @@ export default function WorkspaceLinkMembers({ runtime, groups }: {
               <div key={cell.id} className="workspace-member-row">
                 <label>
                   <input type="checkbox" checked={selectedIds.includes(cell.id)} onChange={() => toggle([cell.id])} />
-                  <span><strong>{cell.session.symbol} · {cell.session.interval}</strong>
+                  <span><strong>{cell.session.symbol} · {formatIntervalLabel(cell.session.interval)}</strong>
                     <small>{t("workspace.memberLocation", { window: windowIndex + 1, chart: index + 1 })}
                       {" · "}{cell.session.exchange} · {cell.session.marketType}</small>
                   </span>

@@ -4,6 +4,7 @@ The layer owns pipeline metrics, callback delivery, and malformed payload
 handling. Exchange-specific schema mapping lives under
 ``app.data_engine.ingestion.normalizers``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,7 +12,7 @@ from typing import Awaitable, Callable
 
 from .config import IngestionConfig
 from .metrics import LayerMetrics
-from .models import MarketEvent, RawMessage, StreamDescriptor
+from .models import DataSource, MarketEvent, RawMessage, StreamDescriptor, StreamType
 from .normalizers import create_normalizer, truncate_payload
 
 logger = logging.getLogger("ingestion.L4_Normalize")
@@ -29,6 +30,7 @@ class NormalizeLayer:
         self._descriptor = descriptor
         self._metrics = LayerMetrics("L4_Normalize")
         self._normalizer = create_normalizer(config, descriptor)
+        self._bar_contracts = {}
         self._on_event: Callable[[MarketEvent], Awaitable[None]] | None = None
 
     @property
@@ -50,6 +52,45 @@ class NormalizeLayer:
     async def ingest(self, msg: RawMessage) -> None:
         """Normalize a raw message and forward the resulting MarketEvent."""
         self._metrics.inc("messages_received")
+        if self._cfg.ccxt_fork_kline_enabled and self._descriptor.exchange in {
+            "binance",
+            "okx",
+        }:
+            from app.core.executors import run_storage
+            from app.data_engine.storage import market_sources
+            from app.exchanges.ccxt_ext.source_capture import RAW_ONLY
+            from app.exchanges.ccxt_ext.unified import CCXT_UNIFIED_MARKER
+            from .models import DataSource, StreamType
+
+            capture_only = isinstance(msg.payload, dict) and msg.payload.get(RAW_ONLY)
+            unified = (
+                isinstance(msg.payload, dict)
+                and msg.payload.get("schema") == CCXT_UNIFIED_MARKER
+            )
+            if msg.source == DataSource.WEBSOCKET and (
+                capture_only
+                or (self._descriptor.stream_type != StreamType.KLINE and not unified)
+            ):
+                await run_storage(market_sources.record_ws, self._descriptor, msg)
+            if capture_only:
+                return
+
+        if isinstance(msg.payload, dict) and self._cfg.ccxt_fork_kline_enabled:
+            from app.exchanges.ccxt_ext.fork_kline import (
+                SCHEMAS,
+                prepare_source_messages,
+            )
+
+            if msg.payload.get("schema") in SCHEMAS:
+                try:
+                    await prepare_source_messages([msg], self._descriptor)
+                except ValueError as exc:
+                    self._metrics.inc("parse_errors")
+                    logger.warning("Rejected invalid fork source candle: %s", exc)
+                    return
+                if msg.payload["_source_receipt"]["status"] == "reconcile":
+                    await self._reconcile_source(msg)
+                    return
         try:
             events = self.parse_all(msg)
         except Exception as exc:
@@ -71,6 +112,42 @@ class NormalizeLayer:
             if self._on_event:
                 await self._on_event(event)
 
+    async def _reconcile_source(self, message: RawMessage) -> None:
+        from app.exchanges import get_exchange_registry
+        from .models import TransportRequest
+
+        plugin = get_exchange_registry().get_plugin(self._descriptor.exchange)
+        opened = int(message.payload["timestamp"])
+        messages = await plugin.fetch_history_with_config(
+            TransportRequest(self._descriptor, limit=1, start_ms=opened, end_ms=opened),
+            self._cfg,
+        )
+        if not messages:
+            raise RuntimeError("source reconciliation returned no candle")
+        self._metrics.inc("source_reconciliations")
+        for resolved in messages:
+            await self.ingest(resolved)
+
+    async def replay_source_pending(self) -> None:
+        if not self._cfg.ccxt_fork_kline_enabled:
+            return
+        from app.core.executors import run_storage
+        from app.data_engine.storage import kline_sources
+
+        while True:
+            messages = await run_storage(kline_sources.pending, self._descriptor)
+            if not messages:
+                return
+            for message in messages:
+                await self.ingest(message)
+            remaining = await run_storage(kline_sources.pending, self._descriptor, 1)
+            if (
+                remaining
+                and remaining[0].payload["_source_receipt"]["ref"]
+                == messages[0].payload["_source_receipt"]["ref"]
+            ):
+                return  # Recovery may buffer until its missing range is available.
+
     def parse_raw(self, msg: RawMessage) -> MarketEvent | None:
         """Parse a raw message into a MarketEvent without triggering callbacks."""
         events = self.parse_all(msg)
@@ -79,6 +156,29 @@ class NormalizeLayer:
     def parse_all(self, msg: RawMessage) -> list[MarketEvent]:
         parse_many = getattr(self._normalizer, "parse_many", None)
         if callable(parse_many):
-            return list(parse_many(msg) or [])
-        event = self._normalizer.parse(msg)
-        return [] if event is None else [event]
+            events = list(parse_many(msg) or [])
+        else:
+            event = self._normalizer.parse(msg)
+            events = [] if event is None else [event]
+        for event in events:
+            if event.event_type is not StreamType.KLINE:
+                continue
+            purpose = "history" if msg.source == DataSource.HTTP_BACKFILL else "realtime"
+            interval = event.data["interval"]
+            key = (purpose, interval)
+            if key not in self._bar_contracts:
+                from app.exchanges import get_exchange_registry
+                from app.data_engine.bar_basis import native_bar_spec
+                caps = get_exchange_registry().get_capabilities(event.exchange)
+                factory = getattr(caps, "bar_spec", None)
+                self._bar_contracts[key] = (factory(event.market_type, interval, purpose) if callable(factory)
+                                            else native_bar_spec(event.exchange, event.market_type, interval, purpose))
+            contract = self._bar_contracts[key]
+            try:
+                contract.validate(int(event.data["open_time"]), int(event.data["close_time"]))
+            except ValueError:
+                self._metrics.inc("boundary_errors")
+                raise
+            event.data["basis_id"] = contract.to_dict()["basis"]["basis_id"]
+            event.data["basis_qualification"] = contract.qualification
+        return events

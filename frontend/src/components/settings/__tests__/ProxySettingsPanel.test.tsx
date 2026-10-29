@@ -48,7 +48,8 @@ test("pool controls show exit grouping and cooldown without inventing websocket 
         native_websockets:1,ccxt_physical_websockets:2,ws_traffic:{window_seconds:30,messages_per_second:12.5,payload_bytes_per_second:2048,
           messages_total:375,payload_bytes_total:61440,disconnects_total:7,disconnects_recent:2,last_message_age_seconds:4.8,
           queue_size:8,queue_capacity:64,queue_pressure:0.125},
-        observations:[{exchange:"binance",kind:"ws",successes:0,failures:3,latency_ms:null,cooldown_seconds:5}],budgets:{}}]}}/>);
+        observations:[{exchange:"binance",kind:"ws",successes:0,failures:3,latency_ms:null,cooldown_seconds:5},
+          {exchange:"binance",kind:"archive:data.binance.vision",successes:2,failures:0,latency_ms:1500,cooldown_seconds:0}],budgets:{}}]}}/>);
     assert.ok(html.includes("Exit group"));
     assert.ok(html.includes("Smart balancing"));
     assert.ok(html.includes("Waiting / cooldown: 5 s"));
@@ -63,5 +64,7 @@ test("pool controls show exit grouping and cooldown without inventing websocket 
     assert.ok(html.includes("Disconnects in the last 30 s: 2"));
     assert.ok(html.includes("Last received payload: 4 s ago"));
     assert.ok(html.includes("Payload bytes exclude network overhead"));
+    assert.ok(html.includes("ZIP · data.binance.vision"));
+    assert.ok(html.includes("ZIP ≤ 3"));
   } finally { setLocale(previous); }
 });

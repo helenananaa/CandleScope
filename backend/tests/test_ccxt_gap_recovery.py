@@ -317,6 +317,51 @@ def test_kline_current_revision_passes_but_older_reconnect_replay_drops() -> Non
     asyncio.run(run())
 
 
+def test_missing_final_update_repairs_seen_preview_before_resumed_kline() -> None:
+    async def run() -> None:
+        descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="1m", market_type="futures")
+        transport = _FakeTransport([_kline_row(60_000), _kline_row(120_000)])
+        config = _enabled_config()
+        continuity = ContinuityLayer(config, transport, descriptor)
+        recovery = RecoveryLayer(config, transport, descriptor)
+        emitted, gaps = [], []
+        continuity.on_event(recovery.ingest_event)
+        continuity.on_gap(recovery.ingest_gap)
+        recovery.on_event(_append_async(emitted))
+        recovery.on_gap(_append_async(gaps))
+        try:
+            await continuity.ingest(_kline_event(60_000))
+            await continuity.ingest(_kline_event(180_000))
+            async with asyncio.timeout(2):
+                await transport.started.wait()
+            assert [e.continuity_key for e in emitted] == [60_000]
+            assert transport.requests[0].start_ms == 60_000
+            transport.release.set()
+            await recovery.wait_idle()
+            assert [e.continuity_key for e in emitted] == [60_000, 60_000, 120_000, 180_000]
+            assert emitted[1].data["is_closed"] is True
+            assert len(gaps) == 1 and gaps[0].filled
+            assert gaps[0].expected_open_times == (60_000, 120_000)
+        finally:
+            await recovery.stop()
+    asyncio.run(run())
+
+
+def test_closed_kline_followed_by_late_preview_does_not_reopen_gap() -> None:
+    async def run() -> None:
+        descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="1m", market_type="futures")
+        continuity = ContinuityLayer(_enabled_config(), _FakeTransport([]), descriptor)
+        gaps = []
+        continuity.on_gap(_append_async(gaps))
+        closed = _kline_event(60_000)
+        closed.data["is_closed"] = True
+        await continuity.ingest(closed)
+        await continuity.ingest(_kline_event(60_000))
+        await continuity.ingest(_kline_event(120_000))
+        assert gaps == []
+    asyncio.run(run())
+
+
 def test_live_event_cannot_interleave_with_recovery_batch_publication() -> None:
     async def run() -> None:
         transport = _FakeTransport([_agg_payload(value) for value in (11, 12, 13)])

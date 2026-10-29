@@ -210,6 +210,16 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
     channels: list[MarketChannelCapability] = []
     market_types = tuple(entry.market_types)
 
+    # CCXT 4.5.60 inherits spot's 1s enum on binanceusdm, but fetchOHLCV
+    # executes ordinary /fapi/v1/klines, which rejects 1s. Continuous-contract
+    # candles are a different dataset and are not an alternative execution route.
+    # Keep the installed ordinary K-line profile conservative for both purposes;
+    # do not infer ordinary WS support from the continuous-contract channel.
+    kline_intervals = tuple(
+        interval for interval in entry.timeframes
+        if not (entry.exchange_id == "binanceusdm" and interval == "1s")
+    )
+
     fetch_ohlcv = entry.supports("fetchOHLCV")
     watch_ohlcv = entry.supports("watchOHLCV") and entry.pro
     if market_types and (fetch_ohlcv or watch_ohlcv):
@@ -234,7 +244,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 delivery=DeliveryClass.LATEST,
                 snapshot=True,
                 sequence="timestamp",
-                params={"interval": list(entry.timeframes)},
+                params={"interval": list(kline_intervals)},
                 available_fields=(
                     "interval",
                     "open_time",
@@ -540,7 +550,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
         capability_schema_version=3 if markets else 1,
         markets=markets,
         channels=channels,
-        native_intervals=list(entry.timeframes),
+        native_intervals=list(kline_intervals),
         supports_multi_symbol_ticker=False,
         supports_symbol_search=True,
         ws_connection_model=(

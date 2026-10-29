@@ -605,6 +605,8 @@ class RecoveryLayer:
         previous = self._last_emitted_key
         if previous is not None:
             if key < previous:
+                if event.data.get("source_ref") and event.data.get("is_correction"):
+                    return False  # Durable revision selection already rejected stale replays.
                 self._metrics.inc("events_out_of_order_dropped")
                 self._metrics.mark("last_out_of_order_drop_at")
                 return True

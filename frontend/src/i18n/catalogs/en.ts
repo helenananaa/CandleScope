@@ -1,9 +1,14 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...intervalBasisMessages["en"],
+  "interval.historyOnly": "History only · realtime unavailable",
+  "interval.unavailableHelp": "The requested chart has been preserved. Choose another interval, or change the source in the symbol picker.",
+
   ...readonlyAccountEnglish,
   ...externalProviderEnglish,
   "replay.err.futureInput": "The start time plus the forward window includes future bars. Choose an earlier start or shorten the forward window; only closed historical bars are available.",
@@ -1538,6 +1543,7 @@ export const en = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

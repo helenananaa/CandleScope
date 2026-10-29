@@ -1,0 +1,177 @@
+{
+  "schema": "candlescope.admission-loopback/1",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.7 | packaged by Anaconda, Inc. | (main, Oct  4 2024, 13:17:27) [MSC v.1929 64 bit (AMD64)]",
+  "input": {
+    "foreground": 128,
+    "background": 32,
+    "concurrency": 1,
+    "response_delay_seconds": 0.002,
+    "quota_capacity": 1000
+  },
+  "runs": [
+    {
+      "model": "strict_priority",
+      "http_requests": 160,
+      "first_background_position": 128,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 4455.037,
+          "p95_ms": 4511.139,
+          "p99_ms": 4513.142
+        },
+        "fg": {
+          "p50_ms": 2989.272,
+          "p95_ms": 4249.373,
+          "p99_ms": 4296.283
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 39.361,
+        "p99_ms": 50.344
+      },
+      "wall_seconds": 4.543,
+      "cpu_seconds": 4.172,
+      "python_peak_bytes": 899773,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    },
+    {
+      "model": "bounded_priority_bypass",
+      "http_requests": 160,
+      "first_background_position": 8,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 3725.358,
+          "p95_ms": 3780.289,
+          "p99_ms": 3781.793
+        },
+        "fg": {
+          "p50_ms": 2648.072,
+          "p95_ms": 3634.604,
+          "p99_ms": 3659.695
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 32.024,
+        "p99_ms": 42.977
+      },
+      "wall_seconds": 3.803,
+      "cpu_seconds": 3.453,
+      "python_peak_bytes": 834695,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    },
+    {
+      "model": "strict_priority",
+      "http_requests": 160,
+      "first_background_position": 128,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 4377.022,
+          "p95_ms": 4436.226,
+          "p99_ms": 4437.806
+        },
+        "fg": {
+          "p50_ms": 2957.763,
+          "p95_ms": 4165.459,
+          "p99_ms": 4213.883
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 36.563,
+        "p99_ms": 51.404
+      },
+      "wall_seconds": 4.457,
+      "cpu_seconds": 4.172,
+      "python_peak_bytes": 824781,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    },
+    {
+      "model": "bounded_priority_bypass",
+      "http_requests": 160,
+      "first_background_position": 8,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 3892.471,
+          "p95_ms": 3950.227,
+          "p99_ms": 3951.571
+        },
+        "fg": {
+          "p50_ms": 2790.853,
+          "p95_ms": 3802.068,
+          "p99_ms": 3827.259
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 34.35,
+        "p99_ms": 44.991
+      },
+      "wall_seconds": 3.969,
+      "cpu_seconds": 3.656,
+      "python_peak_bytes": 831270,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    },
+    {
+      "model": "strict_priority",
+      "http_requests": 160,
+      "first_background_position": 128,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 4126.324,
+          "p95_ms": 4182.492,
+          "p99_ms": 4183.914
+        },
+        "fg": {
+          "p50_ms": 2722.966,
+          "p95_ms": 3927.189,
+          "p99_ms": 3974.14
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 35.194,
+        "p99_ms": 45.077
+      },
+      "wall_seconds": 4.204,
+      "cpu_seconds": 3.891,
+      "python_peak_bytes": 818956,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    },
+    {
+      "model": "bounded_priority_bypass",
+      "http_requests": 160,
+      "first_background_position": 8,
+      "pending_peak": 160,
+      "waiting": {
+        "bg": {
+          "p50_ms": 3794.298,
+          "p95_ms": 3846.21,
+          "p99_ms": 3847.58
+        },
+        "fg": {
+          "p50_ms": 2735.503,
+          "p95_ms": 3713.042,
+          "p99_ms": 3736.604
+        }
+      },
+      "loop_lag": {
+        "p50_ms": 0,
+        "p95_ms": 31.806,
+        "p99_ms": 46.529
+      },
+      "wall_seconds": 3.865,
+      "cpu_seconds": 3.594,
+      "python_peak_bytes": 832684,
+      "results_sha256": "3d854a2cafd32240e83157c88b42106e18fc8c07eac559d41f0ed07be85ada5c"
+    }
+  ],
+  "scope": "Loopback HTTP; timings are observations on this host, not public source or desktop SLA qualification."
+}

@@ -1,9 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  ...intervalBasisMessages["cs"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Začátek a dopředné okno zahrnují budoucí svíčky. Zvolte dřívější začátek nebo zkraťte okno; dostupné jsou jen uzavřené historické svíčky.",
   "replay.hub.catalogSyncing": "Vyhledávají se historické trhy v oficiálním zdroji. Po dokončení se tato možnost automaticky povolí.",
@@ -1249,6 +1251,7 @@ export const cs = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

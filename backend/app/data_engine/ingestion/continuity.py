@@ -146,9 +146,10 @@ class ContinuityLayer:
             if dedup_key in self._seen:
                 self._metrics.inc("events_deduplicated")
                 return
-            self._seen[dedup_key] = True
-            if len(self._seen) > self._cfg.continuity_buffer_size:
-                self._seen.popitem(last=False)
+            if event.data.get("source_ref") is None:
+                self._seen[dedup_key] = True
+                if len(self._seen) > self._cfg.continuity_buffer_size:
+                    self._seen.popitem(last=False)
 
         # ── Gap detection (only for ordered stream types) ──
         continuity_key = event.continuity_key
@@ -200,6 +201,10 @@ class ContinuityLayer:
 
         # ── Emit ──
         await self._emit(event)
+        if dedup_key is not None and event.data.get("source_ref") is not None:
+            self._seen[dedup_key] = True
+            if len(self._seen) > self._cfg.continuity_buffer_size:
+                self._seen.popitem(last=False)
 
     # ── Internal: Emit ───────────────────────────────────────
 

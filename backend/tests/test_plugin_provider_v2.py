@@ -33,10 +33,14 @@ from app.data_engine.ingestion.models import (
 )
 from app.data_engine.ingestion.normalize import NormalizeLayer
 from app.data_engine.ingestion.transport import TransportLayer
+from app.data_engine.interval_resolution import (
+    IntervalResolutionError,
+    IntervalResolutionErrorCode,
+    IntervalResolver,
+)
 from app.data_engine.storage import AsyncKlinesRepoAdapter, KlinesRepoAdapter
 from app.data_engine.storage import klines_repo
 from app.exchanges import (
-    RateLimitAdmission,
     bootstrap_default_adapters,
     get_exchange_registry,
 )
@@ -45,6 +49,7 @@ from app.plugin_core_v2.contracts import core_contributions
 from app.plugin_core_v2.runtime import CorePluginPlatform
 from app.plugin_installer_v2 import PlatformPluginInstaller
 from app.plugin_provider_v2 import PluginProviderRuntime
+from app.exchanges.rate_limits import RateLimitManager
 from tests.plugin_platform_bundle_testkit import build_mock_exchange_provider_bundle
 
 
@@ -112,36 +117,64 @@ class _MockSidecar:
         return result
 
 
-class _ProviderResponseAccounting:
+class _ProviderResponseAccounting(RateLimitManager):
     def __init__(self) -> None:
+        super().__init__()
         self.responses: list[dict[str, object]] = []
 
-    async def inspect(
-        self,
-        rule: object,
-        request: object,
-    ) -> RateLimitAdmission:
-        return RateLimitAdmission(
-            allowed=True,
-            bucket_key=str(getattr(rule, "bucket_key", "provider:test")),
-            cost=1,
-            reason=None,
-            retry_after_seconds=0,
-            retry_at_monotonic=None,
-            retry_at_ms=None,
-            rule_name=str(getattr(rule, "name", "provider_test")),
-        )
-
-    async def acquire_nowait(self, rule: object, request: object) -> None:
-        return None
+    async def inspect(self, rule, request):
+        # This fixture drives BackfillEngine directly. Emulate the coordinator's
+        # deferred scheduling while retaining real physical permit accounting.
+        while True:
+            admission = await super().inspect(rule, request)
+            if admission.allowed:
+                return admission
+            await asyncio.sleep(max(admission.retry_after_seconds, 0.001))
 
     def record_response(self, rule: object, **kwargs: object) -> bool:
         self.responses.append(dict(kwargs))
-        return False
+        return super().record_response(rule, **kwargs)
 
 
 def _contributions():
     return core_contributions(mock_exchange_provider_manifest())
+
+
+@pytest.mark.parametrize("declaration", [
+    {"schemaVersion": True, "intervals": {"1m": "1m", "5m": "5m"}},
+    {"schemaVersion": 2, "intervals": {"1m": "1m", "5m": "5m"}},
+    {"schemaVersion": 1, "intervals": {"1m": "1m"}},
+    {"schemaVersion": 1, "intervals": {"1m": "60s", "5m": "5m"}},
+    {"schemaVersion": 1, "intervals": {"1m": "unknown", "5m": "5m"}},
+])
+def test_provider_rejects_invalid_bar_basis_declarations(declaration) -> None:
+    manifest = mock_exchange_provider_manifest().to_wire()
+    manifest["contributions"][1]["configuration"]["channels"][0]["barBasis"] = declaration
+    with pytest.raises(CorePluginError, match="provider barBasis requires"):
+        core_contributions(PluginManifest.from_wire(manifest))
+
+
+@_async_test
+async def test_provider_without_bar_basis_does_not_infer_utc_from_market_timezone() -> None:
+    manifest = mock_exchange_provider_manifest().to_wire()
+    channel = manifest["contributions"][1]["configuration"]["channels"][0]
+    channel.pop("barBasis")
+    runtime = PluginProviderRuntime(invoke=_MockSidecar().invoke)
+    registry = get_exchange_registry()
+    registry.unregister("mock")
+    try:
+        runtime.register_plugin(core_contributions(PluginManifest.from_wire(manifest)))
+        capabilities = registry.get_capabilities("mock")
+        assert capabilities.markets[0].timezone == "UTC"
+        assert capabilities.bar_spec("spot", "1m", "history").qualification == "unknown"
+        with pytest.raises(IntervalResolutionError) as captured:
+            IntervalResolver().resolve(
+                exchange="mock", market_type="spot", interval="1m", purpose="history",
+            )
+        assert captured.value.code is IntervalResolutionErrorCode.NATIVE_BASIS_UNKNOWN
+    finally:
+        await runtime.stop()
+        registry.unregister("mock")
 
 
 def test_provider_contributions_fail_closed_on_unpaired_or_colliding_exchanges() -> (
@@ -183,6 +216,11 @@ async def test_provider_registry_symbols_and_history_use_existing_normalizer_pat
         runtime.register_plugin(_contributions())
         provider = registry.get_plugin("mock")
         assert provider.capabilities().ws_connection_model == "plugin_sidecar"
+        for purpose in ("history", "realtime"):
+            spec = provider.capabilities().bar_spec("spot", "1m", purpose)
+            assert spec.qualification == "declared"
+            assert spec.basis_interval == "1m"
+            assert spec.evidence.endswith(".market-data")
         assert [
             item.symbol for item in await provider.adapter().list_symbols("spot")
         ] == [
@@ -234,6 +272,7 @@ async def test_provider_registry_symbols_and_history_use_existing_normalizer_pat
             event is not None and event.data["source_quality"]["quality"] == "synthetic"
             for event in events
         )
+        assert all(event.data["basis_id"] == "bar-basis/1:1m" for event in events)
     finally:
         await runtime.stop()
         registry.unregister("mock")

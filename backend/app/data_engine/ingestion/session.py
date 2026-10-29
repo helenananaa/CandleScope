@@ -14,6 +14,7 @@ It simply reports its health status and keeps trying to reconnect.
 from __future__ import annotations
 
 import asyncio
+import random
 import json
 import logging
 import time
@@ -353,7 +354,7 @@ class SessionLayer:
         delay = min(self._current_delay, self._cfg.ws_reconnect_delay_max)
         logger.debug("Backoff: waiting %.1fs before reconnect", delay)
         self._metrics.set("backoff_delay", delay)
-        await asyncio.sleep(delay)
+        await asyncio.sleep(random.uniform(0.5, 1.0) * delay)
         # Exponential backoff: double delay each time, capped at max
         self._current_delay = min(self._current_delay * 2, self._cfg.ws_reconnect_delay_max)
 

@@ -1,0 +1,10 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ccxt -> /Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/ccxt/cs/ccxt/bin/Release/netstandard2.1/ccxt.dll
+  ccxt -> /Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/ccxt/cs/ccxt/bin/Release/netstandard2.0/ccxt.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:03:19.39
