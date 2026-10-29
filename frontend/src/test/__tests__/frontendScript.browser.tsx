@@ -1,22 +1,22 @@
-import { computeFrontendScript } from "../features/indicators/frontendScriptRuntime.js";
-import { FRONTEND_SCRIPT_STARTER } from "../features/indicators/frontendScriptContract.js";
-import type { IndicatorComputeRequest } from "../features/indicators/indicatorTypes.js";
+import { computeFrontendScript } from "../../features/indicators/frontendScriptRuntime.js";
+import { FRONTEND_SCRIPT_STARTER } from "../../features/indicators/frontendScriptContract.js";
+import type { IndicatorComputeRequest } from "../../features/indicators/indicatorTypes.js";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { useLayoutEffect, useState } from "react";
-import { t } from "../i18n/index.js";
-import { useProvidedBarsIndicatorRuntime } from "../features/indicators/useProvidedBarsIndicatorRuntime.js";
-import { createActiveIndicatorPersistence } from "../features/indicators/activeIndicatorStore.js";
-import type { IndicatorRuntime } from "../features/indicators/indicatorRuntimeContract.js";
-import { epochSeconds } from "./testHelpers.js";
-import IndicatorPanel from "../features/indicators/IndicatorPanel.js";
-import type { IndicatorDefinition } from "../features/indicators/indicatorTypes.js";
-import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
-import { MarketWindowRegistry } from "../features/market-data/window/marketWindowSession.js";
-import type { MarketDataRuntime } from "../features/market-data/useMarketDataRuntime.js";
-import { structuralMock } from "./testHelpers.js";
-import { klineDependencyKey, registerCacheResource, unregisterCacheResource } from "../features/cache-gc/cacheRegistry.js";
-import { getCachedIndicatorMetadata } from "../features/indicators/indicatorResultCacheStore.js";
+import { t } from "../../i18n/index.js";
+import { useProvidedBarsIndicatorRuntime } from "../../features/indicators/useProvidedBarsIndicatorRuntime.js";
+import { createActiveIndicatorPersistence } from "../../features/indicators/activeIndicatorStore.js";
+import type { IndicatorRuntime } from "../../features/indicators/indicatorRuntimeContract.js";
+import { epochSeconds } from "../testHelpers.js";
+import IndicatorPanel from "../../features/indicators/IndicatorPanel.js";
+import type { IndicatorDefinition } from "../../features/indicators/indicatorTypes.js";
+import { useIndicatorRuntime } from "../../features/indicators/useIndicatorRuntime.js";
+import { MarketWindowRegistry } from "../../features/market-data/window/marketWindowSession.js";
+import type { MarketDataRuntime } from "../../features/market-data/useMarketDataRuntime.js";
+import { structuralMock } from "../testHelpers.js";
+import { klineDependencyKey, registerCacheResource, unregisterCacheResource } from "../../features/cache-gc/cacheRegistry.js";
+import { getCachedIndicatorMetadata } from "../../features/indicators/indicatorResultCacheStore.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 const bars = Array.from({ length: 30 }, (_, index) => ({ time: epochSeconds(1_700_000_000 + 60 * index), open: index + 1, high: index + 2, low: index, close: index + 1, volume: 1 }));

@@ -86,12 +86,12 @@ known remaining viewport defect and broader acceptance gaps.
 ### Measured candidate (2026-10-29)
 
 Implementation `7d16f873bb08691a7f75eaad2ea5c5b3d112a797`, parent
-`f0b4d58bdfec29bb7e94ebe39529ebf12b9ae0a5`. Later acceptance-only commits do
+`f0b4d58bdfec29bb7e94ebe39529ebf12b9ae0a5`. Later acceptance and browser-fixture location changes do
 not change the measured renderer. Local evidence root:
 `output/issue-123-p3-20261029` in the primary checkout. The PR/issue link the
 portable evidence archive and exact-head CI separately.
 
-Full local `npm run check` passed: architecture/plugin/i18n checks, typecheck,
+The local full `npm run check` passed before the last browser fixture edit: architecture/plugin/i18n checks, typecheck,
 lint, 4482 frontend tests, one separate performance test, 123 desktop tests and
 production build. Final implementation typecheck/build were also rerun. The two
 scheduler regressions fail against the parent. Twelve real Chrome Worker/React
@@ -175,3 +175,8 @@ so a short high-rate burst does not establish sustained-rate CPU/memory limits.
 A frame budget cannot preempt a slow callback. Local captures cannot prove a
 remote server's historical input, which still requires its revision contract.
 Issue #123 remains open; the full matrix is not accepted by this scoped delivery.
+
+CI initially caught the browser-only writer fixture outside the existing test
+namespace. It was moved under `src/test/__tests__` and the browser harness import
+updated, preserving the production writer rule. Final architecture/type checks
+and the real browser suite were rerun; CI validates the resulting exact head.
