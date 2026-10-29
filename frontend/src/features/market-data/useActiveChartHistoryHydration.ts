@@ -4,7 +4,7 @@ import type { CommitChartData } from "./klineContracts.js";
 import type { MarketSeries } from "./marketDataTypes.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
 import type { ForegroundPreloadGate } from "./foregroundPreloadGate.js";
-import { initialHistoryCacheProof } from "./useChartInitialLoad.js";
+import { INITIAL_VIEWPORT_COUNT_BACK, initialHistoryCacheProof } from "./useChartInitialLoad.js";
 
 export const ACTIVE_HISTORY_HYDRATION_RETRY_BASE_MS = 750;
 export const ACTIVE_HISTORY_HYDRATION_RETRY_MAX_MS = 5_000;
@@ -16,6 +16,7 @@ const HYDRATION_GATE_RECHECK_MS = 250;
 export type ActiveHistoryHydrationOutcome =
   | "blocked"
   | "complete"
+  | "progress"
   | "pending"
   | "preempted";
 
@@ -47,7 +48,7 @@ export function activeHistoryHydrationContinuationDelayMs(
   outcome: ActiveHistoryHydrationOutcome,
   pendingRound: number,
 ): number | null {
-  if (outcome === "complete") return null;
+  if (outcome === "complete" || outcome === "progress") return null;
   if (outcome === "blocked" || outcome === "preempted") {
     return HYDRATION_GATE_RECHECK_MS;
   }
@@ -61,6 +62,7 @@ export interface RunActiveHistoryHydrationOptions {
   series: MarketSeries;
   sessionKey: string;
   targetCountBack: number;
+  validatedCountBack?: number | null;
   seriesDataFeed: SeriesDataFeed;
   priorityGate: ForegroundPreloadGate;
   commitMergedChartData: CommitChartData;
@@ -69,6 +71,12 @@ export interface RunActiveHistoryHydrationOptions {
   maxDurationMs?: number;
   now?: () => number;
   sleep?: HydrationSleep;
+}
+
+export function nextHistoryHydrationCountBack(target: number, validated?: number | null): number {
+  return validated != null && validated < INITIAL_VIEWPORT_COUNT_BACK
+    ? Math.min(target, INITIAL_VIEWPORT_COUNT_BACK)
+    : target;
 }
 
 /**
@@ -82,6 +90,7 @@ export async function runActiveHistoryHydration({
   series,
   sessionKey,
   targetCountBack,
+  validatedCountBack,
   seriesDataFeed,
   priorityGate,
   commitMergedChartData,
@@ -98,6 +107,7 @@ export async function runActiveHistoryHydration({
   signal?.addEventListener("abort", abortLease, { once: true });
 
   const epoch = seriesDataFeed.currentEpoch(series);
+  const stageCountBack = nextHistoryHydrationCountBack(targetCountBack, validatedCountBack);
   const startedAt = now();
   let attempt = 0;
   try {
@@ -112,7 +122,7 @@ export async function runActiveHistoryHydration({
 
       try {
         const result = await seriesDataFeed.getBars(series, {
-          countBack: targetCountBack,
+          countBack: stageCountBack,
           maxWaitMs: 0,
           intent: "active_hydration",
           source: "active-history-hydration",
@@ -134,7 +144,8 @@ export async function runActiveHistoryHydration({
           || result.active === false
         ) return "preempted";
 
-        const proof = initialHistoryCacheProof(result, targetCountBack);
+        const exhausted = result.history_state === "exhausted" && result.has_more === false;
+        const proof = initialHistoryCacheProof(result, exhausted ? targetCountBack : stageCountBack);
         recordPerfEvent("chart.activeHistoryHydration.probe", {
           attempt,
           bars: result.data?.length || 0,
@@ -150,15 +161,17 @@ export async function runActiveHistoryHydration({
             deferIndicatorWindow: false,
             ...proof,
           });
-          markPerf("chart.activeHistoryHydration.complete", {
+          const outcome = exhausted || stageCountBack >= targetCountBack ? "complete" : "progress";
+          markPerf(`chart.activeHistoryHydration.${outcome}`, {
             bars: result.data?.length || 0,
-            countBack: targetCountBack,
+            countBack: stageCountBack,
+            targetCountBack,
             exchange: series.exchange,
             marketType: series.marketType,
             symbol: series.symbol,
             interval: series.interval,
           });
-          return "complete";
+          return outcome;
         }
       } catch (error) {
         if (lease.controller.signal.aborted || isCancelled() || signal?.aborted) return "preempted";
@@ -244,25 +257,28 @@ export function useActiveChartHistoryHydration({
     })) return undefined;
 
     let cancelled = false;
+    let finished = false;
     const controller = new AbortController();
     let running = false;
     let pendingRound = 0;
+    const eligibleAt = Date.now() + HYDRATION_GATE_RECHECK_MS;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const schedule = (delayMs: number) => {
-      if (cancelled || running) return;
+      if (cancelled || finished || running) return;
       if (timer != null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
         void hydrate();
-      }, Math.max(0, delayMs));
+      }, Math.max(0, delayMs, eligibleAt - Date.now()));
     };
     const hydrate = async () => {
-      if (cancelled || running) return;
+      if (cancelled || finished || running) return;
       running = true;
       const outcome = await runActiveHistoryHydration({
         series,
         sessionKey,
         targetCountBack,
+        validatedCountBack,
         seriesDataFeed,
         priorityGate,
         commitMergedChartData,
@@ -271,6 +287,10 @@ export function useActiveChartHistoryHydration({
       });
       running = false;
       if (cancelled) return;
+      // A successful publication must reach React/indicator consumers before
+      // the next stage. The new validatedCountBack starts a fresh effect;
+      // unrelated gate wakeups cannot reuse this effect's older proof.
+      if (outcome === "complete" || outcome === "progress") finished = true;
       const continuationDelayMs = activeHistoryHydrationContinuationDelayMs(
         outcome,
         pendingRound,
@@ -279,7 +299,9 @@ export function useActiveChartHistoryHydration({
       if (continuationDelayMs != null) schedule(continuationDelayMs);
     };
     const unsubscribe = priorityGate.subscribe(() => schedule(0));
-    schedule(0);
+    // Give first paint and the just-committed indicator window a turn before
+    // acquiring the next hydration lease. Foreground demand can take priority.
+    schedule(HYDRATION_GATE_RECHECK_MS);
 
     return () => {
       cancelled = true;

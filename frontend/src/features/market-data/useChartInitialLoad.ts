@@ -36,6 +36,7 @@ const INITIAL_BACKFILL_TIMEOUT_MS = 10_000;
 const INITIAL_BACKFILL_MAX_WAIT_MS = 60_000;
 export const INITIAL_HISTORY_COUNT_BACK = 1_500;
 export const INITIAL_VIEWPORT_COUNT_BACK = 500;
+export const STAGED_INITIAL_VIEWPORT_COUNT_BACK = 128;
 // A 4x4 Cell is only about 300 CSS px wide at the release viewport. 128 bars
 // preserves enough context for the shipped MA/RSI/SMA fixtures, then the
 // focused Cell uses the existing serialized hydration lane to reach 1,500.
@@ -277,10 +278,9 @@ export function planInitialViewportCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
 ): number {
-  return Math.min(
-    INITIAL_VIEWPORT_COUNT_BACK,
-    planInitialHistoryCountBack(interval, nativeIntervalValues),
-  );
+  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues);
+  // Materialized probes cannot start the source-backed hydration lane.
+  return admission.materializedOnly ? 0 : admission.viewportCountBack;
 }
 
 export function planInitialHistoryAdmission(
@@ -297,9 +297,18 @@ export function planInitialHistoryAdmission(
   // hatch. It permits a bounded target read, never a larger base-history read.
   const materializedOnly = plan.blockedReason === null && plan.targetBars === 0;
   const historyCountBack = materializedOnly ? INITIAL_VIEWPORT_COUNT_BACK : plan.targetBars;
+  // Stage regular low-fanout derived periods and multi-day native periods.
+  // Keep expensive irregular intervals on their existing budgeted admission.
+  const staged = !materializedOnly && plan.blockedReason === null && (
+    (plan.derived && plan.sourceFactor > 1 && plan.sourceFactor <= 5)
+    || /^[2-5]d$/.test(interval)
+  );
   return {
     historyCountBack,
-    viewportCountBack: Math.min(INITIAL_VIEWPORT_COUNT_BACK, historyCountBack),
+    viewportCountBack: Math.min(
+      staged ? STAGED_INITIAL_VIEWPORT_COUNT_BACK : INITIAL_VIEWPORT_COUNT_BACK,
+      historyCountBack,
+    ),
     materializedOnly,
   };
 }

@@ -51,7 +51,7 @@ def measure(interval, source, target_count, enabled, *, memory=False):
                            metadata={"all_rows_final": True, "storage_reads": 1,
                                      "storage_rows": len(bars)})
     service = CustomIntervalQueryService(
-        cache=BarCache(), config=QueryConfig(stream_custom_history=enabled),
+        cache=BarCache(), config=QueryConfig(stream_custom_history=enabled, share_custom_aggregate_blocks=False),
         base_query=lambda *a, **kw: QueryResult(), base_query_before=read,
     )
     gc.collect()

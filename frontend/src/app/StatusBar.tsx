@@ -17,6 +17,8 @@ export interface StatusBarModel {
   barCount: number;
   loadingMoreLeft: boolean;
   hasMoreLeft: boolean;
+  historyPreparing?: boolean;
+  indicatorComputing?: boolean;
   exchangeCatalogStatus: string;
   exchangeLimitations?: string[];
 }
@@ -75,6 +77,8 @@ function StatusBar({ status, extensions }: StatusBarProps) {
           {t("status.klineScope")} {connectionLabel(status)}
         </span>
         <span data-live-bar-count={barCount}>{tPlural("status.barCount", barCount)}</span>
+        {status.historyPreparing && <span role="status" data-history-preparing="true">{t("preparation.title")}</span>}
+        {status.indicatorComputing && <span role="status">{t("indicator.title")} {t("indicator.computing")}</span>}
         {loadingMoreLeft && <span style={{ color: "var(--text-accent)" }}>{t("status.loadingOlder")}</span>}
         {!hasMoreLeft && !loadingMoreLeft && <span style={{ color: "var(--text-muted)" }}>{t("status.noMoreHistory")}</span>}
         {dataSource === "mock" && (

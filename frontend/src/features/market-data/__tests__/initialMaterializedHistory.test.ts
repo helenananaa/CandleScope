@@ -16,7 +16,8 @@ const ready: KlineFetchResult = {
   all_rows_final: true, verified_contiguous: true, has_tail_gap: false, missing_ranges: [],
 };
 
-function harness(response: () => Promise<KlineFetchResult>) {
+function harness(response: () => Promise<KlineFetchResult>, interval = "10007m") {
+  const activeSeries = { ...series, interval };
   const calls: KlineHistoryRequestOptions[] = [];
   const commits: KlineBar[][] = [];
   const errors: unknown[] = [];
@@ -36,8 +37,12 @@ function harness(response: () => Promise<KlineFetchResult>) {
     fetchKlinesBefore: forbidden, fetchKlinesRange: forbidden, fetchLatestKlines: forbidden,
     getMultiStreamUrl: () => { throw new Error("no stream in history probe"); },
   };
-  const feed = new SeriesDataFeed({ api, getActiveSeries: () => series });
-  feed.repairVisibleGaps = async () => { throw new Error("probe must not admit gap repair"); };
+  const feed = new SeriesDataFeed({ api, getActiveSeries: () => activeSeries,
+    commitMergedChartData: (_symbol, _interval, rows) => { commits.push(rows); },
+  });
+  if (interval === "10007m") {
+    feed.repairVisibleGaps = async () => { throw new Error("probe must not admit gap repair"); };
+  }
   const noop = () => {};
   const options: UseChartInitialLoadOptions = {
     enabled: true, exchange: "binance", marketType: "futures",
@@ -62,6 +67,18 @@ function harness(response: () => Promise<KlineFetchResult>) {
   // Exercise the real hook callback and feed without mounting a desktop app.
   renderToString(createElement(Host));
   return { calls, commits, errors, pending, feed, load, started };
+}
+
+for (const interval of ["45m", "90m", "2d", "4d", "5d"]) {
+  test(`${interval} initial hook requests the small first stage through the real feed`, async () => {
+    const h = harness(async () => ready, interval);
+    await h.load("BTCUSDT", interval);
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0]?.countBack, 128);
+    assert.notEqual(h.calls[0]?.materializedOnly, true);
+    assert.deepEqual(h.commits.filter(rows => rows.length > 0), [ready.data]);
+    assert.equal(h.pending.at(-1), false);
+  });
 }
 
 test("over-budget initial history paints a trusted stored target using one read-only probe", async () => {

@@ -9,7 +9,8 @@ import { build, preview } from "vite";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
-const fixture = trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const historyStages = process.argv.includes("--history-stages");
+const fixture = historyStages ? "history-stages-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -94,9 +95,11 @@ try {
   receipt.exceptions = page.events.filter(item => item.method === "Runtime.exceptionThrown");
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
-  receipt.editor = editor;
-  if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));
+  if (!historyStages) {
+    const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
+    receipt.editor = editor;
+    if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));
+  }
   receipt.passed = true;
 } catch (error) {
   receipt.passed = false; receipt.error = String(error); process.exitCode = 1;

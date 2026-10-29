@@ -54,6 +54,7 @@ export interface MarketDataRuntimeContract {
     display: MarketDataDisplayState;
   };
   actions: {
+    holdHistoryHydrationForIndicators?(): () => void;
     retry(): void;
     loadMoreLeft(oldestLoadedTime?: number | null): Promise<void>;
     loadMoreRight?(): Promise<boolean>;
@@ -67,6 +68,7 @@ export interface MarketDataRuntimeContract {
     loadingMoreLeft: boolean;
     loadingMoreRight?: boolean;
     initialHistoryPending: boolean;
+    historyPreparing?: boolean;
     activeChartReady: boolean;
     canLoadMoreLeft: boolean;
     canLoadMoreRight?: boolean;

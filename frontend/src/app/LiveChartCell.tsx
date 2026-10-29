@@ -1,6 +1,7 @@
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
 import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
 import { parseIntervalSeconds } from "../utils/intervals.js";
+import { useIndicatorHistoryPreparation } from "../features/market-data/useIndicatorHistoryPreparation.js";
 import { strategyTradeRange, type StrategyTradeFocus } from "../features/backtest/chart-tester/strategyTradeReview.js";
 import React, {
   Suspense,
@@ -510,6 +511,11 @@ function LiveChartCell({
     streamIdentity: indicatorStreamIdentity,
     workSchedulerCellId: cell.id,
   });
+  useIndicatorHistoryPreparation(
+    sourceMarketData.status.historyPreparing === true,
+    indicators.status.computing,
+    sourceMarketData.actions.holdHistoryHydrationForIndicators,
+  );
   useEffect(() => {
     onControlObservation?.(cell.id, {
       session: { exchange: chartSession.view.exchange, marketType: chartSession.view.marketType,

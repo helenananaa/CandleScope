@@ -40,6 +40,7 @@ from .cache import BarCache, HistoryCapacityReservation
 from .config import QueryConfig
 from .models import BarData, MissingRange, QueryResult, QuerySource, SeriesKey
 from .history_stream import FixedHistoryStream, StreamingOrderError
+from .aggregate_blocks import AggregateBlockCache
 
 BaseQuery = Callable[..., QueryResult]
 BaseQueryBefore = Callable[..., QueryResult]
@@ -255,6 +256,7 @@ def _aggregate_fixed_bars_to_interval(
     custom_interval_seconds: int,
     *,
     source_interval_seconds: int | None,
+    on_bucket: Callable[[list, tuple[tuple, ...], BarData], None] | None = None,
 ) -> list[BarData]:
     """Aggregate epoch-aligned ``BarData`` in one ordered pass.
 
@@ -308,6 +310,8 @@ def _aggregate_fixed_bars_to_interval(
     trades_complete = True
     taker_base_complete = True
     taker_quote_complete = True
+    bucket_inputs: list = []
+    bucket_values: list[tuple] = []
 
     def append_bucket() -> None:
         if bucket_start is None:
@@ -354,8 +358,11 @@ def _aggregate_fixed_bars_to_interval(
                 else None
             ),
         ))
+        if on_bucket is not None:
+            on_bucket(bucket_inputs, tuple(bucket_values), result[-1])
 
     for bar in bars:
+        normalized = bar.normalized_aggregation_values()
         (
             row_time,
             row_open,
@@ -368,7 +375,7 @@ def _aggregate_fixed_bars_to_interval(
             trades,
             taker_buy_base,
             taker_buy_quote,
-        ) = bar.normalized_aggregation_values()
+        ) = normalized
         row_bucket = (
             row_time // custom_interval_seconds
         ) * custom_interval_seconds
@@ -391,8 +398,14 @@ def _aggregate_fixed_bars_to_interval(
             trades_complete = True
             taker_base_complete = True
             taker_quote_complete = True
+            bucket_inputs = []
+            bucket_values = []
         elif source_seconds is not None and row_time - last_time != source_seconds:
             contiguous = False
+
+        if on_bucket is not None:
+            bucket_inputs.append(bar)
+            bucket_values.append(normalized)
 
         high_value = max(high_value, row_high)
         low_value = min(low_value, row_low)
@@ -489,6 +502,7 @@ class CustomIntervalQueryService:
         self._target_writer = target_writer
         self._calendar_provider = calendar_provider
         self._bar_aggregator = bar_aggregator
+        self._aggregate_blocks = AggregateBlockCache(max_components=config.aggregate_block_max_components)
         self._flight_lock = threading.Lock()
         self._flights: dict[tuple[Any, ...], Future[QueryResult]] = {}
         self._base_window_flight_lock = threading.Lock()
@@ -521,6 +535,7 @@ class CustomIntervalQueryService:
         """Return cumulative custom-query work, including joined singleflights."""
         with self._metrics_lock:
             return {
+                **{f"aggregate_blocks_{key}": value for key, value in self._aggregate_blocks.snapshot().items()},
                 "logical_queries": self._logical_queries,
                 "singleflight_owners": self._singleflight_owners,
                 "singleflight_joins": self._singleflight_joins,
@@ -1512,8 +1527,9 @@ class CustomIntervalQueryService:
         assert source_ms and target_seconds and self._base_query_before is not None
         stream = FixedHistoryStream(
             target_seconds,
-            lambda rows: _aggregate_fixed_bars_to_interval(
+            lambda rows: self._aggregate_fixed(
                 rows, target_seconds, source_interval_seconds=source_ms // 1000,
+                source_key=SeriesKey(symbol, interval, exchange=exchange, market_type=market_type),
             ),
             lower_bound_ms=aggregation_lower_bound_ms,
             upper_bound_ms=before_ms - 1,
@@ -2384,19 +2400,40 @@ class CustomIntervalQueryService:
         key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
         calendar = self._calendar_for(key)
 
-        result = self._aggregate_read_only(
-            base_bars,
-            interval,
-            custom_seconds,
-            source_interval=source_interval,
-            calendar=calendar,
-        )
+        spec = parse_interval_spec(interval)
+        source_spec = parse_interval_spec(source_interval) if source_interval else None
+        if (source_spec is not None and spec is not None
+                and spec.alignment is IntervalAlignment.FIXED_EPOCH
+                and source_spec.alignment is IntervalAlignment.FIXED_EPOCH
+                and (calendar is None or isinstance(calendar, AlwaysOpenCalendar))):
+            result = self._aggregate_fixed(
+                base_bars, custom_seconds,
+                source_interval_seconds=(parse_interval_ms(source_interval) or 0) // 1000,
+                source_key=SeriesKey(symbol, source_interval, exchange=exchange, market_type=market_type),
+            )
+        else:
+            result = self._aggregate_read_only(
+                base_bars, interval, custom_seconds, source_interval=source_interval, calendar=calendar,
+            )
 
         if start_ms is not None:
             result = [bar for bar in result if bar.time_ms >= start_ms]
         if end_ms is not None:
             result = [bar for bar in result if bar.time_ms <= end_ms]
         return result
+
+    def _aggregate_fixed(
+        self, bars: list[BarData], width: int, *, source_interval_seconds: int,
+        source_key: SeriesKey,
+    ) -> list[BarData]:
+        def fallback(rows: list[BarData], on_bucket=None) -> list[BarData]:
+            return _aggregate_fixed_bars_to_interval(
+                rows, width, source_interval_seconds=source_interval_seconds,
+                on_bucket=on_bucket,
+            )
+        if not self._cfg.share_custom_aggregate_blocks or self._cfg.aggregate_block_max_components <= 0:
+            return fallback(bars)
+        return self._aggregate_blocks.aggregate(bars, source_key, width, source_interval_seconds, fallback)
 
     @staticmethod
     def _omit_bars_overlapping_base_gaps(

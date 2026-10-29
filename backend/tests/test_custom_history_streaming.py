@@ -185,12 +185,12 @@ def test_stream_quality_and_boundary_semantics_match_batch(case):
 def test_stream_reduces_before_reading_next_page_and_stops_on_read_failure(monkeypatch, failure):
     from app.data_engine.data_manager import custom_query
     reduced = []
-    original = custom_query._aggregate_fixed_bars_to_interval
+    original = custom_query.CustomIntervalQueryService._aggregate_fixed
     def reduce(*args, **kwargs):
         result = original(*args, **kwargs)
         reduced.extend(result)
         return result
-    monkeypatch.setattr(custom_query, "_aggregate_fixed_bars_to_interval", reduce)
+    monkeypatch.setattr(custom_query.CustomIntervalQueryService, "_aggregate_fixed", reduce)
     reads = []
     writes = []
     def observe(selected):

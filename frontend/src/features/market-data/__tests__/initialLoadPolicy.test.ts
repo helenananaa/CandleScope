@@ -25,11 +25,11 @@ import {
 } from "../useChartLoadMoreLeft.js";
 import { epochSeconds } from "../../../test/testHelpers.js";
 
-test("regular custom intervals keep their viewport and background history budgets", () => {
+test("regular intervals stage first paint while retaining the full history budget", () => {
   const nativeIntervals = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "3d"];
   for (const interval of ["45m", "90m", "2d", "3d", "4d", "5d"]) {
     assert.deepEqual(planInitialHistoryAdmission(interval, nativeIntervals), {
-      historyCountBack: 1500, viewportCountBack: 500, materializedOnly: false,
+      historyCountBack: 1500, viewportCountBack: 128, materializedOnly: false,
     }, interval);
   }
   assert.deepEqual(planInitialHistoryAdmission("10007m", nativeIntervals), {
@@ -313,7 +313,7 @@ test("derived initial history is bounded by native source-row expansion", () => 
   assert.equal(planInitialHistoryCountBack("89m", []), 0);
 
   assert.equal(planInitialViewportCountBack("1m", nativeIntervals), 500);
-  assert.equal(planInitialViewportCountBack("45m", nativeIntervals), 500);
+  assert.equal(planInitialViewportCountBack("45m", nativeIntervals), 128);
   assert.equal(planInitialViewportCountBack("57m", nativeIntervals), 500);
   assert.equal(planInitialViewportCountBack("47m", nativeIntervals), 422);
   assert.equal(planInitialViewportCountBack("91m", nativeIntervals), 216);
