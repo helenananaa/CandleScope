@@ -65,6 +65,7 @@ async def validate(output: Path, timeout: float) -> dict:
         mark_bar_received=lambda key: None,
         is_started=lambda: True,
     )
+    aggregator.set_source_component_reader(bridge.read_source_components)
     aggregator.publisher.on_bar_event(bridge.on_bar_event)
     events, frames, health = [], [], []
     closed = asyncio.Event()

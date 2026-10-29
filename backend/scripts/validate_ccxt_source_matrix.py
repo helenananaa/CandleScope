@@ -70,6 +70,7 @@ class Harness:
             mark_bar_received=lambda key: None,
             is_started=lambda: True,
         )
+        self.agg.set_source_component_reader(self.bridge.read_source_components)
         self.agg.publisher.on_bar_event(self.bridge.on_bar_event)
         from app.data_engine.ingestion import StreamPipeline
 
