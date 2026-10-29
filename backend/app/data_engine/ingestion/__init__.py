@@ -102,6 +102,7 @@ class StreamPipeline:
         descriptor: StreamDescriptor,
         session_factory: Callable[[], SessionLike] | None = None,
         calendar_resolver: Callable[[str, str, str], Any] | None = None,
+        gap_repair_owner: str = "inline",
     ) -> None:
         self.descriptor = descriptor
 
@@ -119,7 +120,7 @@ class StreamPipeline:
             descriptor,
             calendar_resolver=calendar_resolver,
         )
-        self.recovery = RecoveryLayer(config, transport, descriptor)
+        self.recovery = RecoveryLayer(config, transport, descriptor, gap_repair_owner=gap_repair_owner)
         self.delivery = DeliveryLayer(config, descriptor)
 
         # Wire: L3 → L4 → L5 → L5.5 → L6
@@ -211,6 +212,7 @@ class MarketDataIngress:
         descriptor: StreamDescriptor,
         *,
         on_health: HealthCallback | None = None,
+        gap_repair_owner: str = "inline",
     ) -> StreamPipeline:
         """Create and start a new stream pipeline.
 
@@ -231,6 +233,7 @@ class MarketDataIngress:
                 descriptor,
                 session_factory=self._create_session_factory(descriptor),
                 calendar_resolver=self._calendar_resolver,
+                gap_repair_owner=gap_repair_owner,
             )
             if on_health is not None:
                 pipeline.on_health_change(on_health)

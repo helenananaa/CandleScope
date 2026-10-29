@@ -25,7 +25,26 @@ _HookedOkxSpot = build_hooked_exchange_class(
 )
 
 
-class _OwnedOkxSession(SharedSslContextMixin):
+class OkxWebSocketProtocolMixin:
+    def describe(self):
+        description = super().describe()
+        # OKX retires public-internet port 8443 on 2026-10-31. Keep the
+        # upstream host/path and migrate both production and demo defaults.
+        for environment in ("api", "test"):
+            websocket = description["urls"][environment].get("ws")
+            if isinstance(websocket, str):
+                description["urls"][environment]["ws"] = websocket.replace(":8443/", "/")
+        return description
+
+    def handle_error_message(self, client, message):
+        # The retirement notice leaves the socket open. Pinned CCXT treats
+        # every nonzero code as an error and otherwise rejects all watches.
+        if isinstance(message, dict) and message.get("event") == "notice" and str(message.get("code")) == "64010":
+            return False
+        return super().handle_error_message(client, message)
+
+
+class _OwnedOkxSession(OkxWebSocketProtocolMixin, SharedSslContextMixin):
     def open(self) -> None:
         if sys.platform != "win32" or self.session is not None or not self.own_session:
             super().open()

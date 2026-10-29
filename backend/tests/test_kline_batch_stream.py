@@ -143,11 +143,13 @@ async def main():
         await connection.close()
     assert scope.cancel_called and not connection.subscriptions
     assert events == [("unsubscribe", 0), ("release", "1m"), ("unsubscribe", 1), ("release", "1m")], events
-asyncio.run(main())
+asyncio.run(asyncio.wait_for(main(), timeout=2))
 '''
     subprocess.run(
         [sys.executable, "-c", script], check=True, capture_output=True, text=True,
-        cwd=os.path.dirname(os.path.dirname(__file__)), timeout=5,
+        # Cold imports share the developer machine with other test processes.
+        # Bound cleanup itself above; retain an outer guard for a spinning loop.
+        cwd=os.path.dirname(os.path.dirname(__file__)), timeout=30,
     )
 
 

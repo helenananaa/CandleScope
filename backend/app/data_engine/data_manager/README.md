@@ -35,6 +35,55 @@ ingestion -> bar_aggregator -> DataManager -> API / WS / Indicator
 
 ## Public API
 
+### Source continuity per subscription
+
+`subscribe()`, `subscribe_async()` and `subscribe_iter()` accept `continuity`:
+
+```python
+from app.data_engine.data_manager import ContinuityPolicy, DataEventType
+
+strict = dm.subscribe(on_closed, symbol="BTCUSDT", interval="1m",
+    event_types={DataEventType.BAR_CLOSED}, on_recovery=reload_snapshot,
+    continuity=ContinuityPolicy("strict", max_wait_seconds=2.0))
+live = dm.subscribe(on_live_or_control, symbol="BTCUSDT", interval="1m",
+    continuity="gap_aware")
+```
+
+The default is `strict`, with a 10-second deadline measured from gap detection.
+DataManager-owned K-line pipelines delegate repair to the existing shared
+BackfillCoordinator; L5.5 retains its ordered replay filter but does not hold all
+consumers behind one REST repair. TradeFlow also delegates to its shared ID repair service, so one strict
+consumer does not hold the shared ingress behind REST.
+
+Strict consumers wait in their own bounded EventBus worker/replay window. Only
+trusted final rows covering every missing open time release the wait. Missing
+bars are delivered in order as `BAR_CLOSED` with `continuity_replayed=True`,
+followed by the queued tail. Queued bars received during the gap carry the same
+flag; alerts update state without treating catch-up as fresh signals.
+Timeout, failed repair, source stop, replay exhaustion, or a deferred durable
+receipt regressing behind a replayed close requires a new snapshot
+and subscription (`on_recovery` for callbacks, `ConsumerRecoveryRequired` for
+iterators). A strict subscription joining an already gapped stream must also
+reseed after repair: it did not receive the pre-subscription tail.
+
+Gap-aware consumers receive `SOURCE_GAP` and `SOURCE_GAP_RESOLVED` even when their
+event filter excludes them. Bars published while incomplete carry
+`detail.source_continuity`; repaired bars are `BAR_AMENDED` when that type is
+selected. A resolved control supplies the range for consumers that instead
+reload history. This policy requires a consumer that handles these controls;
+existing browser protocols are not implicitly switched to it.
+
+The guarantee covers **detected source gaps in final K-line bars**, not initial
+history, missing intrabar ticks, or an exactly-once external side effect.
+Calendars supply expected open times. Derived intervals get their own affected
+bucket ranges and require verified target bars, not merely repaired base bars.
+Unsubscribe/cancellation does not cancel shared repair. Wildcard subscriptions
+have one delivery worker; use separate handles for independent series latency.
+Gap evidence is bounded to 256 records and 10,000 expected bars in total. If
+pending evidence would be evicted, strict delivery fails closed until the data
+manager is restarted and consumers reseed. Diagnostics are exposed under
+`market_data_control_snapshot().source_continuity`.
+
 Common methods on `DataManager`:
 
 | Method | Purpose |
@@ -261,3 +310,38 @@ python -m pytest -q \
   tests/test_maintenance_facade.py \
   tests/test_price_subscription_services.py
 ```
+
+
+### Other channels and providers
+
+There is no exchange or instrument allowlist in the subscription policy. Existing
+plugin capability, market-name, calendar and entitlement checks still apply.
+`dm.continuity_contract(key)` reports availability, policies and the exact
+guarantee. A history-only provider does not acquire a realtime feed from selecting
+this option (the current Twelve Data K-line plugin is history-only).
+
+The `continuity` argument is available on `dm.trades.attach`,
+`dm.books.partial.attach`, `dm.books.full.attach`, `dm.liquidations.attach` and
+`dm.market_state.subscribe` (also `dm.subscribe_market`). These non-bar APIs opt in
+explicitly; omission preserves their existing delivery interface.
+
+- Monotonic-ID trades with authoritative history replay share service repair.
+  Strict consumers replay exact missing IDs within one bounded batch wait budget;
+  gap-aware consumers inspect `batch.detail.source_continuity` and process
+  `batch.corrections`, including empty-record control batches. Replayed strict
+  batches carry `continuity_replayed=True`. The budget starts when the consumer
+  observes the missing-ID batch. A missing retained range requires resync.
+- Full books resume strict delivery only after the engine verifies a new snapshot.
+  Partial books and latest market state wait for a fresh valid replacement.
+  These contracts guarantee **current state**, not every historical transition.
+  Gap-aware status notifications survive latest-wins coalescing.
+  If the shared hub exhausts unresolved-gap evidence, strict delivery fails with
+  `source_gap_tracking_exhausted`; recreate the owning service and obtain a fresh
+  snapshot. Resubscribing to the same hub does not restore the guarantee.
+- Observational trades and sampled liquidations only accept `gap_aware`.
+  `strict` raises `ContinuityUnsupported`; notifications expose non-exhaustive
+  quality and unrecoverable connection breaks without inventing missing events.
+
+Cancellation never cancels shared repair. Existing browser protocols are not
+implicitly opted in. Controlled cross-provider tests are not live-exchange
+acceptance evidence.

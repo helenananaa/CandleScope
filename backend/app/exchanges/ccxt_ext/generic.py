@@ -104,9 +104,13 @@ class _OwnedThreadedResolverMixin(SharedSslContextMixin):
 @lru_cache(maxsize=None)
 def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
     mixin = _OwnedThreadedResolverMixin if windows else SharedSslContextMixin
+    protocol_mixins = ()
+    if exchange_class is ccxtpro.okx:
+        from .okx import OkxWebSocketProtocolMixin
+        protocol_mixins = (OkxWebSocketProtocolMixin,)
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
-        (mixin, exchange_class),
+        (*protocol_mixins, mixin, exchange_class),
         {"__module__": __name__},
     )
 

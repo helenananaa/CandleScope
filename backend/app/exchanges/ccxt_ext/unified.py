@@ -54,6 +54,13 @@ class CcxtUnifiedProjector:
         self._latest_kline_open: int | None = None
         self._book_revision = 0
 
+    def source_interrupted(self) -> None:
+        # A cached forming candle from before a disconnect cannot be promoted
+        # to a final bar merely because a newer candle arrives after reconnect.
+        self._kline_rows.clear()
+        self._kline_fingerprints.clear()
+        self._latest_kline_open = None
+
     def project(
         self,
         result: Any,

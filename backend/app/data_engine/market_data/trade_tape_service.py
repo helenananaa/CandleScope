@@ -126,7 +126,10 @@ class TradeTapeService:
                 self._metrics["hub_append_rejected"] += 1
 
         try:
-            handle = await self._factory.start_market(_descriptor(identity), _on_event)
+            from .continuity import health_callback, ingestion_options
+            handle = await self._factory.start_market(_descriptor(identity), _on_event,
+                **ingestion_options(self._factory, on_health=health_callback(self.hub, lambda: (identity,)
+                    if self._physical.get(identity) is reservation else ())))
             reservation.handle = handle
             async with self._lock:
                 self._ensure_open()
@@ -185,8 +188,11 @@ class TradeTapeService:
         *,
         recent_limit: int = 500,
         max_pending_records: int | None = None,
+        continuity=None,
     ) -> TradeTapeAttachment:
         self._ensure_open()
+        from app.data_engine.continuity_policy import observational_policy
+        policy = observational_policy(continuity, channel="trade")
         requested = [keys] if isinstance(keys, MarketStreamKey) else list(keys)
         identities = tuple(dict.fromkeys(self._validate_key(key) for key in requested))
         if not identities:
@@ -197,7 +203,9 @@ class TradeTapeService:
         subscription = self.hub.subscribe(
             max_pending_records=max_pending_records,
             predicate=lambda record: record.stream_identity in identity_set,
+            source_quality="observed_trades" if policy is not None else None,
         )
+        subscription.stream_identities = identity_set
         recent = {
             identity: self.engine.raw_tail(identity, bounded) if bounded else ()
             for identity in identities

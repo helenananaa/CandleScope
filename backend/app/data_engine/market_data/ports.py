@@ -36,6 +36,7 @@ class AdvancedMarketDataPort(Protocol):
         *,
         max_pending: int = 64,
         replay: bool = True,
+        continuity: Any = None,
     ) -> Any: ...
 
     def diagnostics(self) -> dict[str, Any]: ...

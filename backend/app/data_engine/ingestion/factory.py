@@ -190,6 +190,8 @@ class ExchangeIngestionFactory:
         exchange: str = "binance",
         market_type: str = "spot",
         on_gap: Callable[[Any], Awaitable[None]] | None = None,
+        *,
+        gap_repair_owner: str = "inline",
     ) -> _IngestionHandle:
         """Start an ingestion stream for (symbol, interval).
 
@@ -218,6 +220,7 @@ class ExchangeIngestionFactory:
             descriptor,
             on_market_event,
             on_gap=on_gap,
+            gap_repair_owner=gap_repair_owner,
         )
 
     async def start_market(
@@ -227,6 +230,7 @@ class ExchangeIngestionFactory:
         *,
         on_gap: Callable[[Any], Awaitable[None]] | None = None,
         on_health: HealthCallback | None = None,
+        gap_repair_owner: str = "inline",
     ) -> _IngestionHandle:
         """Start one non-K-line physical market-data pipeline.
 
@@ -241,6 +245,7 @@ class ExchangeIngestionFactory:
             on_market_event,
             on_gap=on_gap,
             on_health=on_health,
+            gap_repair_owner=gap_repair_owner,
         )
 
     async def _start_descriptor(
@@ -250,6 +255,7 @@ class ExchangeIngestionFactory:
         *,
         on_gap: Callable[[Any], Awaitable[None]] | None = None,
         on_health: HealthCallback | None = None,
+        gap_repair_owner: str = "inline",
     ) -> _IngestionHandle:
         ingress = await self._ensure_ingress()
         descriptor.validate()
@@ -262,6 +268,9 @@ class ExchangeIngestionFactory:
             # stopping and will be removed immediately afterwards.
             existing = ingress.get_pipeline(descriptor.key)
             if existing is not None:
+                owner = getattr(getattr(existing, "recovery", None), "gap_repair_owner", "inline")
+                if owner != gap_repair_owner:
+                    raise ValueError("cannot change gap repair owner on an active pipeline")
                 logger.info(
                     "Pipeline already exists for %s, reusing",
                     descriptor.key,
@@ -275,7 +284,11 @@ class ExchangeIngestionFactory:
 
             # Create a new L1–L6 pipeline
             try:
-                if on_health is None:
+                if gap_repair_owner != "inline":
+                    pipeline = await ingress.add_stream(
+                        descriptor, on_health=on_health, gap_repair_owner=gap_repair_owner,
+                    )
+                elif on_health is None:
                     pipeline = await ingress.add_stream(descriptor)
                 else:
                     pipeline = await ingress.add_stream(

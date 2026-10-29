@@ -46,12 +46,20 @@ class RecoveryLayer:
         config: IngestionConfig,
         transport: TransportLayer,
         descriptor: StreamDescriptor,
+        *,
+        gap_repair_owner: str = "inline",
     ) -> None:
+        if gap_repair_owner not in {"inline", "data_manager", "trade_flow"}:
+            raise ValueError("unknown gap repair owner")
+        self.gap_repair_owner = gap_repair_owner
         self._cfg = config
         self._transport = transport
         self._descriptor = descriptor
         self._normalizer = NormalizeLayer(config, descriptor)
         self._enabled = self._is_enabled()
+        self._ordered_filter_enabled = self._enabled or (
+            gap_repair_owner != "inline" and descriptor.stream_type in _SUPPORTED_STREAMS
+        )
         self._metrics = LayerMetrics("L5_Recovery")
         self._on_event: Callable[[MarketEvent], Awaitable[None]] | None = None
         self._on_gap: Callable[[GapMarker], Awaitable[None]] | None = None
@@ -114,7 +122,7 @@ class RecoveryLayer:
         await self._emit_event(event)
 
     async def ingest_gap(self, gap: GapMarker) -> None:
-        if not self._enabled or not self._repairable(gap):
+        if self.gap_repair_owner != "inline" or not self._enabled or not self._repairable(gap):
             self._metrics.inc("gaps_passthrough")
             await self._emit_gap(gap)
             return
@@ -167,6 +175,8 @@ class RecoveryLayer:
             "layer": "L5_Recovery",
             "stream_key": self._descriptor.key,
             "enabled": self._enabled,
+            "gap_repair_owner": self.gap_repair_owner,
+            "ordered_filter_enabled": self._ordered_filter_enabled,
             "state": self._state,
             "repairing": self._active_gap is not None,
             "target_end": self._target_end,
@@ -565,7 +575,10 @@ class RecoveryLayer:
             await self._emit_event_unlocked(event)
 
     async def _emit_event_unlocked(self, event: MarketEvent) -> None:
-        if self._enabled and self._drop_replayed_ordered_event(event):
+        is_correction = (event.event_type == StreamType.KLINE
+                         and event.source == DataSource.PLUGIN
+                         and event.data.get("is_correction", False))
+        if self._ordered_filter_enabled and not is_correction and self._drop_replayed_ordered_event(event):
             return
         self._metrics.inc("events_emitted")
         if self._on_event is not None:

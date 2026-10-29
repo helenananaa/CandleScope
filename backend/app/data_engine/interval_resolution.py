@@ -235,16 +235,19 @@ class IntervalResolver:
         purpose: IntervalPurpose,
     ) -> tuple[str, ...]:
         schema_version = int(getattr(capabilities, "capability_schema_version", 1))
-        capability_market = {
-            "swap": "futures",
-            "perpetual": "futures",
-        }.get(market_type, market_type)
+        capability_market = market_type
         channel_resolver = getattr(capabilities, "channel_capability", None)
         channel = (
             channel_resolver(MarketChannel.KLINE, capability_market)
             if callable(channel_resolver)
             else None
         )
+        # Prefer the provider's own market vocabulary. Older native adapters
+        # use futures for swaps; generic CCXT adapters declare swap directly.
+        if channel is None and market_type in {"swap", "perpetual"}:
+            capability_market = "futures"
+            channel = (channel_resolver(MarketChannel.KLINE, capability_market)
+                       if callable(channel_resolver) else None)
         if schema_version >= 2:
             if channel is None:
                 raise self._error(
