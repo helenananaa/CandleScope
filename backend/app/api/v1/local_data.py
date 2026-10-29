@@ -172,6 +172,10 @@ async def capabilities(request: Request) -> dict[str, Any]:
             "rule": "target_must_be_integer_multiple_of_source",
             "complete_buckets_only": True,
             "max_aggregation_factor": MAX_LOCAL_RESAMPLE_FACTOR,
+            "supported_alignments": ["fixed_epoch", "fixed_minute_anchor", "calendar_c1"],
+            "calendar_zones": ["UTC", "Asia/Shanghai", "America/New_York"],
+            "calendar_source_rule": "continuous_fixed_source_dividing_one_hour",
+            "calendar_max_aggregation_factor": 600_000,
         },
         "static_indicators": sorted(LOCAL_INDICATOR_NAMES),
         "static_indicator_max_bars": MAX_LOCAL_INDICATOR_BARS,
@@ -432,7 +436,7 @@ async def import_csv(
     request: Request,
     name: Annotated[str, Query(min_length=1, max_length=160)],
     symbol: Annotated[str, Query(min_length=1, max_length=80)],
-    interval: Annotated[str, Query(min_length=2, max_length=16)],
+    interval: Annotated[str, Query(min_length=2, max_length=64)],
     timezone_name: Annotated[
         str, Query(alias="timezone", min_length=1, max_length=80)
     ] = "UTC",
@@ -487,7 +491,7 @@ async def create_import_job(
     request: Request,
     name: Annotated[str, Query(min_length=1, max_length=160)],
     symbol: Annotated[str, Query(min_length=1, max_length=80)],
-    interval: Annotated[str, Query(min_length=2, max_length=16)],
+    interval: Annotated[str, Query(min_length=2, max_length=64)],
     timezone_name: Annotated[
         str, Query(alias="timezone", min_length=1, max_length=80)
     ] = "UTC",

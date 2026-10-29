@@ -228,6 +228,9 @@ class MarketEvent:
         - Others: None (no dedup)
         """
         if self.event_type == StreamType.KLINE:
+            ref = self.data.get("source_ref")
+            if ref is not None:
+                return f"{ref['series']}:{ref['open_time']}:revision:{ref['revision']}"
             if self.source == DataSource.PLUGIN and self.data.get(
                 "is_correction", False
             ):
@@ -279,10 +282,11 @@ class GapMarker:
     stream_key: str  # pipeline key
     symbol: str
     stream_type: StreamType
-    gap_start: int  # last seen continuity_key before gap
+    gap_start: int  # exclusive lower boundary; K-lines may include a seen but unclosed bar
     gap_end: int  # first continuity_key after gap
     expected_count: int  # how many events are missing (estimate)
     filled: bool = False  # True if auto-fill succeeded
+    expected_open_times: tuple[int, ...] | None = None  # calendar-aware K-line opens, ms
 
     def to_dict(self) -> dict:
         return {

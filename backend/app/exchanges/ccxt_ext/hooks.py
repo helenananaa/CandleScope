@@ -52,17 +52,27 @@ class CcxtRawHooksMixin:
         sink = self._candlescope_raw_event_sink
         if sink is None or not isinstance(message, dict):
             return
-        result = sink(
-            CcxtRawMarketEvent(
-                channel=_raw_channel(message),
-                symbol=_raw_symbol(message),
-                payload=dict(message),
-                received_at_ms=int(time.time() * 1000),
-                exchange=self._candlescope_exchange_id,
-                market_type=self._candlescope_market_type,
+        channel = _raw_channel(message)
+        payloads = [message]
+        if self._candlescope_fork_kline_enabled:
+            if self._candlescope_exchange_id == "binance" and channel == "kline":
+                payloads = [self.parse_candlescope_ws_kline(message)]
+            elif self._candlescope_exchange_id == "okx" and channel.startswith(
+                "candle"
+            ):
+                payloads = self.parse_candlescope_ws_klines(message)
+        for payload in payloads:
+            result = sink(
+                CcxtRawMarketEvent(
+                    channel=channel,
+                    symbol=_raw_symbol(message),
+                    payload=dict(payload),
+                    received_at_ms=int(time.time() * 1000),
+                    exchange=self._candlescope_exchange_id,
+                    market_type=self._candlescope_market_type,
+                )
             )
-        )
-        _require_synchronous_sink(result, "raw_event_sink")
+            _require_synchronous_sink(result, "raw_event_sink")
 
     def _candlescope_emit_lifecycle(
         self,
@@ -102,6 +112,7 @@ def build_hooked_exchange_class(
             raw_event_sink: RawEventSink | None = None,
             lifecycle_sink: LifecycleSink | None = None,
             enforce_version: bool = True,
+            fork_kline_enabled: bool = False,
         ) -> None:
             if enforce_version and ccxt.__version__ != supported_ccxt_version:
                 raise RuntimeError(
@@ -109,16 +120,21 @@ def build_hooked_exchange_class(
                     f"found {ccxt.__version__}"
                 )
             super().__init__(dict(config or {}))
+            self._candlescope_fork_kline_enabled = fork_kline_enabled
+            if fork_kline_enabled:
+                from .fork_kline import require_fork
+
+                require_fork(self)
             self._candlescope_raw_event_sink = raw_event_sink
             self._candlescope_lifecycle_sink = lifecycle_sink
             self._candlescope_exchange_id = exchange_id
             self._candlescope_market_type = market_type
             self._candlescope_closing = False
 
-        async def close(self, *args: Any, **kwargs: Any) -> Any:
+        async def close(self, clean_instance_data: bool = True) -> Any:
             self._candlescope_closing = True
             try:
-                return await super().close(*args, **kwargs)
+                return await super().close(clean_instance_data=clean_instance_data)
             finally:
                 self._candlescope_closing = False
 

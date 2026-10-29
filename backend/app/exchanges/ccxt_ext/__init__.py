@@ -16,12 +16,12 @@ from .generic import CcxtUnifiedPlugin, register_ccxt_plugins
 from .models import CcxtLifecycleEvent, CcxtRawMarketEvent
 from .okx import CandleScopeOkx, CandleScopeOkxSpot
 from .primary import (
-    CcxtPrimaryPlugin,
     CcxtPrimaryNormalizer,
     OkxCombinedSummaryProfile,
     create_binance_ccxt_plugin,
     create_okx_ccxt_plugin,
 )
+from .provider import CcxtProvider, CcxtVenueBinding
 from .runtime import CcxtRuntime, CcxtRuntimePool, get_shared_ccxt_runtime_pool
 from .session import CcxtProviderSession, CcxtRawQueueOverflow
 from .unified import (
@@ -50,6 +50,8 @@ from .shadow_okx import (
 )
 
 __all__ = [
+    "CcxtProvider",
+    "CcxtVenueBinding",
     "SHADOW_SCHEMA_VERSION",
     "SPOT_SHADOW_SCHEMA_VERSION",
     "MATRIX_SHADOW_SCHEMA_VERSION",
@@ -70,7 +72,6 @@ __all__ = [
     "CcxtCompatibilityError",
     "CcxtLifecycleEvent",
     "CcxtProviderSession",
-    "CcxtPrimaryPlugin",
     "CcxtPrimaryNormalizer",
     "CcxtRawHooksMixin",
     "CcxtRawMarketEvent",

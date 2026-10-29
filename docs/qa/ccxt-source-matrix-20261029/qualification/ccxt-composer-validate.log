@@ -1,0 +1,27 @@
+./composer.json is valid, but with a few warnings
+See https://getcomposer.org/doc/04-schema.md for details on the schema
+# General warnings
+- require.clue/http-proxy-react : exact version constraints (1.9.0) should be avoided if the package follows semantic versioning
+- require.evenement/evenement : exact version constraints (3.0.2) should be avoided if the package follows semantic versioning
+- require.fig/http-message-util : exact version constraints (1.1.5) should be avoided if the package follows semantic versioning
+- require.guzzlehttp/psr7 : exact version constraints (2.12.1) should be avoided if the package follows semantic versioning
+- require.kornrunner/keccak : exact version constraints (1.1.0) should be avoided if the package follows semantic versioning
+- require.pear/console_table : exact version constraints (1.3.1) should be avoided if the package follows semantic versioning
+- require.phpseclib/phpseclib : exact version constraints (2.0.55) should be avoided if the package follows semantic versioning
+- require.psr/http-factory : exact version constraints (1.1.0) should be avoided if the package follows semantic versioning
+- require.psr/http-factory-implementation : exact version constraints (1.0.0) should be avoided if the package follows semantic versioning
+- require.psr/http-message : exact version constraints (1.1) should be avoided if the package follows semantic versioning
+- require.ralouphie/getallheaders : exact version constraints (3.0.3) should be avoided if the package follows semantic versioning
+- require.react/async : exact version constraints (4.3.0) should be avoided if the package follows semantic versioning
+- require.react/cache : exact version constraints (1.2.0) should be avoided if the package follows semantic versioning
+- require.react/dns : exact version constraints (1.14.0) should be avoided if the package follows semantic versioning
+- require.react/event-loop : exact version constraints (1.6.0) should be avoided if the package follows semantic versioning
+- require.react/http : exact version constraints (1.11.0) should be avoided if the package follows semantic versioning
+- require.react/promise : exact version constraints (3.3.0) should be avoided if the package follows semantic versioning
+- require.react/promise-timer : exact version constraints (1.11.0) should be avoided if the package follows semantic versioning
+- require.react/socket : exact version constraints (1.17.0) should be avoided if the package follows semantic versioning
+- require.react/stream : exact version constraints (1.4.0) should be avoided if the package follows semantic versioning
+- require.ringcentral/psr7 : exact version constraints (1.3.0) should be avoided if the package follows semantic versioning
+- require.symfony/deprecation-contracts : exact version constraints (3.7.0) should be avoided if the package follows semantic versioning
+- require.symfony/polyfill-mbstring : exact version constraints (1.38.2) should be avoided if the package follows semantic versioning
+- require.symfony/polyfill-php80 : exact version constraints (1.37.0) should be avoided if the package follows semantic versioning

@@ -17,6 +17,7 @@ def _serialize_plugin_capabilities(registry: object, plugin: object) -> dict:
     capabilities = registry.get_capabilities(plugin.id)
     payload = serialize_exchange_capabilities(capabilities)
     payload["support"] = serialize_exchange_support(plugin, capabilities)
+    payload["connector"] = {"id": getattr(plugin, "connector_id", plugin.id), "venue": plugin.id}
     return payload
 
 
@@ -44,6 +45,22 @@ def get_exchange_diagnostics() -> dict:
     """Return exchange plugin load status and compatibility diagnostics."""
     bootstrap_default_adapters()
     return get_exchange_registry().diagnostics()
+
+
+@router.get("/providers")
+def list_providers() -> dict:
+    """Connector/venue routing catalog; dataset vendor identities are unchanged."""
+    registry = bootstrap_default_adapters()
+    return {"schema_version": 1, "providers": registry.provider_catalog()}
+
+
+@router.get("/bar-basis")
+def get_bar_basis(interval: str) -> dict:
+    from app.data_engine.bar_basis import BarBasis
+    try:
+        return BarBasis.parse(interval).to_dict()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "bar_basis_unsupported"}) from exc
 
 
 @router.get("/{exchange}/capabilities")

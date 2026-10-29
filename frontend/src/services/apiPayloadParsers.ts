@@ -158,6 +158,7 @@ export interface ExchangeCapabilityPayload extends JsonRecord {
   name: string;
   markets: ExchangeMarketPayload[];
   native_intervals: string[];
+  native_bar_specs?: Array<{ market_type: string; purpose: string; interval: string; qualification: string; basis: JsonRecord | null }>;
   capability_schema_version?: number;
   channels?: ExchangeChannelCapabilityPayload[];
   protocol_features: string[];
@@ -681,6 +682,19 @@ export function parseExchangeCapability(
     limits: expectRecord(record.limits, `${path}.limits`),
     known_limitations: expectStringArray(record.known_limitations, `${path}.known_limitations`),
   };
+  if ("native_bar_specs" in record) {
+    if (!Array.isArray(record.native_bar_specs)) throw new ApiPayloadError(`${path}.native_bar_specs`, "expected an array");
+    result.native_bar_specs = record.native_bar_specs.map((value, index) => {
+      const itemPath = `${path}.native_bar_specs[${index}]`, item = expectRecord(value, itemPath);
+      return {
+        market_type: expectNonEmptyString(item.market_type, `${itemPath}.market_type`),
+        purpose: expectNonEmptyString(item.purpose, `${itemPath}.purpose`),
+        interval: expectNonEmptyString(item.interval, `${itemPath}.interval`),
+        qualification: expectNonEmptyString(item.qualification, `${itemPath}.qualification`),
+        basis: item.basis === null ? null : expectRecord(item.basis, `${itemPath}.basis`),
+      };
+    });
+  }
   if ("capability_schema_version" in record) {
     const schemaVersion = expectNonNegativeInteger(
       record.capability_schema_version,

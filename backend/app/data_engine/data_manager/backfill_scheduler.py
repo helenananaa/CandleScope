@@ -18,6 +18,9 @@ from app.data_engine.interval_policy import parse_interval_ms
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolver
 from app.data_engine.interval_work_plan import IntervalWorkPlan, resolve_interval_work_plan
 from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.exchanges.public_admission import (
+    PublicDemand, TrafficClass, get_public_admission, public_demand,
+)
 from app.exchanges.rate_limits import RateLimitDeferred
 from .backfill_contracts import (
     RepairOutcome,
@@ -78,6 +81,8 @@ class _FetchChunk:
     defer_reason: str | None = None
     rate_limit_bucket: str | None = None
     defer_count: int = 0
+    public_demand: PublicDemand | None = None
+    dispatch_bypasses: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +215,8 @@ class BackfillScheduler:
         self.foreground_reserve_dispatches = 0
         self.covered_chunks_skipped = 0
         self.fairness_rotations = 0
+        self.max_dispatch_bypass = 8
+        self.aged_dispatches = 0
 
     def submit(self, request: RepairRequest) -> tuple[str, asyncio.Future[RepairOutcome]]:
         if self._shutdown:
@@ -690,6 +697,7 @@ class BackfillScheduler:
         self._requests.clear()
         self._series.clear()
         self._tasks.clear()
+        get_public_admission().refresh()
 
     def snapshot(self) -> dict[str, Any]:
         active: list[dict[str, Any]] = []
@@ -738,6 +746,8 @@ class BackfillScheduler:
             "foreground_reserve_dispatches": self.foreground_reserve_dispatches,
             "covered_chunks_skipped": self.covered_chunks_skipped,
             "fairness_rotations": self.fairness_rotations,
+            "aged_dispatches": self.aged_dispatches,
+            "max_dispatch_bypass": self.max_dispatch_bypass,
             "running_background_chunks": self._running_background_count(),
             "active": active,
             "pending": pending,
@@ -953,7 +963,22 @@ class BackfillScheduler:
             ),
         )
 
+    def _pop_ready(self):
+        # Public admission cannot age work that never leaves the business
+        # queue. Give bypassed chunks a dispatch turn as well; the ordinary
+        # eligibility, same-series, quota and concurrency checks still apply.
+        aged = [item for item in self._ready
+                if (chunk := self._chunks.get(item[3])) is not None
+                and chunk.dispatch_bypasses >= self.max_dispatch_bypass]
+        if aged:
+            item = min(aged, key=lambda row: row[2])
+            self._ready.remove(item)
+            heapq.heapify(self._ready)
+            return item
+        return heapq.heappop(self._ready)
+
     def _drain(self) -> None:
+        get_public_admission().refresh()
         if self._shutdown:
             return
         skipped: list[tuple[int, int, int, str]] = []
@@ -966,7 +991,7 @@ class BackfillScheduler:
                 1 if self._max_concurrency == 1 else 0
             )
             while len(self._tasks) < candidate_capacity and self._ready:
-                item = heapq.heappop(self._ready)
+                item = self._pop_ready()
                 chunk = self._chunks.get(item[3])
                 if chunk is None:
                     continue
@@ -993,7 +1018,8 @@ class BackfillScheduler:
                     continue
                 if self._is_background(chunk.request) and (
                     self._running_background_count() >= 1
-                    or self._has_foreground_work(skipped)
+                    or (chunk.dispatch_bypasses < self.max_dispatch_bypass
+                        and self._has_foreground_work(skipped))
                 ):
                     skipped.append(item)
                     continue
@@ -1003,7 +1029,8 @@ class BackfillScheduler:
                 )
                 fairness_owner = self._fairness_owner(chunk.request)
                 if (
-                    self._last_dispatch_owner.get(fairness_lane) == fairness_owner
+                    chunk.dispatch_bypasses < self.max_dispatch_bypass
+                    and self._last_dispatch_owner.get(fairness_lane) == fairness_owner
                     and self._has_fairness_alternative(chunk, lane=fairness_lane)
                 ):
                     self.fairness_rotations += 1
@@ -1035,6 +1062,15 @@ class BackfillScheduler:
                     ),
                 )
                 self._tasks[chunk.chunk_id] = task
+                aged_dispatch = chunk.dispatch_bypasses >= self.max_dispatch_bypass
+                if aged_dispatch:
+                    self.aged_dispatches += 1
+                chunk.dispatch_bypasses = 0
+                for pending in (*self._ready, *skipped):
+                    waiting = self._chunks.get(pending[3])
+                    if waiting is not None and waiting.eligible_at_monotonic <= now_monotonic:
+                        waiting.dispatch_bypasses = (0 if aged_dispatch else
+                            min(self.max_dispatch_bypass, waiting.dispatch_bypasses + 1))
                 self._last_dispatch_owner[fairness_lane] = fairness_owner
                 if self._is_background(chunk.request):
                     self._active_background_chunks.add(chunk.chunk_id)
@@ -1161,7 +1197,8 @@ class BackfillScheduler:
             return True
         for item in (*self._ready, *tuple(extra)):
             chunk = self._chunks.get(item[3])
-            if chunk is None or self._is_background(chunk.request):
+            if (chunk is None or self._is_background(chunk.request)
+                    or chunk.eligible_at_monotonic > time.monotonic()):
                 continue
             state = self._requests.get(chunk.parent_id)
             if state is not None and not state.stale and state.failed is None:
@@ -1169,11 +1206,10 @@ class BackfillScheduler:
         return False
 
     def has_foreground_work(self) -> bool:
-        """Return whether unresolved user-visible work owns the scheduler.
+        """Return whether runnable/active foreground work needs execution capacity.
 
-        Rate-deferred foreground chunks still count: speculative warmup must
-        not consume another exchange or worker budget merely because the
-        visible request is waiting for its exact Retry-After deadline.
+        Quota-deferred work protects only its shared resource through public
+        admission; independent background resources remain usable.
         """
 
         return self._has_foreground_work()
@@ -1190,7 +1226,7 @@ class BackfillScheduler:
             return True
         for item in self._ready:
             chunk = self._chunks.get(item[3])
-            if chunk is None:
+            if chunk is None or chunk.eligible_at_monotonic > time.monotonic():
                 continue
             state = self._requests.get(chunk.parent_id)
             if state is not None and not state.stale and state.failed is None:
@@ -1249,12 +1285,24 @@ class BackfillScheduler:
             self._active_background_chunks.add(chunk.chunk_id)
         try:
             try:
-                outcome = await self._execute(chunk.request)
+                if chunk.public_demand is None:
+                    chunk.public_demand = PublicDemand(
+                        TrafficClass.INTERACTIVE if foreground_chunk else TrafficClass.BACKGROUND,
+                        owner=chunk.parent_id, purpose=chunk.request.reason, defer=True,
+                        alive=lambda: (chunk.chunk_id in self._chunks
+                            and (state := self._requests.get(chunk.parent_id)) is not None
+                            and not state.stale and not state.cancel_requested and state.failed is None),
+                    )
+                get_public_admission().forget(chunk.public_demand)
+                with public_demand(chunk.public_demand):
+                    outcome = await self._execute(chunk.request)
             except RepairRetryDeferred as exc:
                 chunk.request._retry_attempt = exc.attempt + 1
                 await self._defer_chunk(chunk, exc)
                 return
             except RateLimitDeferred as exc:
+                if chunk.public_demand is not None:
+                    get_public_admission().protect(chunk.public_demand, exc.bucket_key)
                 await self._defer_chunk(chunk, exc)
                 return
             except asyncio.CancelledError:
@@ -1277,6 +1325,8 @@ class BackfillScheduler:
             self._active_foreground_chunks.discard(chunk.chunk_id)
             self._active_background_chunks.discard(chunk.chunk_id)
             self._tasks.pop(chunk.chunk_id, None)
+            if chunk.public_demand is not None and not chunk.public_demand.alive():
+                get_public_admission().forget(chunk.public_demand)
             self._drain()
 
     async def _defer_chunk(

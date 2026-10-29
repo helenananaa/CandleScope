@@ -122,8 +122,9 @@ class _GatedBinanceRateLimitResponse(_BinanceRateLimitResponse):
         return self
 
 
-class _CountingRateLimits:
+class _CountingRateLimits(RateLimitManager):
     def __init__(self) -> None:
+        super().__init__()
         self.acquire_calls = 0
         self.inspect_calls = 0
         self.response_calls = 0
@@ -148,6 +149,10 @@ class _CountingRateLimits:
     async def acquire_nowait(self, rule: object, request: object) -> None:
         self.acquire_calls += 1
 
+    async def acquire_many_nowait(self, rules, request):
+        self.acquire_calls += 1
+        return [RateLimitReservation(self, rule, request) for rule in rules]
+
     def record_response(self, rule: object, **kwargs: object) -> bool:
         self.response_calls += 1
         self.responses.append(dict(kwargs))
@@ -169,6 +174,10 @@ class _TrackingRateLimitManager(RateLimitManager):
             rule,
             request,
         )
+
+    async def acquire_many_nowait(self, rules, request):
+        self.acquires.extend((rule, request) for rule in rules)
+        return await super().acquire_many_nowait(rules, request)
 
     def record_response(self, rule: object, **kwargs: object) -> bool:
         self.responses.append(dict(kwargs))

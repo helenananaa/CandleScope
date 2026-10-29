@@ -1,0 +1,158 @@
+{
+  "markPrice": {
+    "channels": [
+      "funding-rate",
+      "index-tickers",
+      "mark-price"
+    ],
+    "payloads": [
+      {
+        "arg": {
+          "channel": "mark-price",
+          "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+          {
+            "instId": "BTC-USDT-SWAP",
+            "instType": "SWAP",
+            "markPx": "80065.8",
+            "ts": "1793249197197"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "mark-price",
+          "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+          {
+            "instId": "BTC-USDT-SWAP",
+            "instType": "SWAP",
+            "markPx": "80065.9",
+            "ts": "1793249197399"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "index-tickers",
+          "instId": "BTC-USDT"
+        },
+        "data": [
+          {
+            "high24h": "81818.9",
+            "idxPx": "80099.3",
+            "instId": "BTC-USDT",
+            "low24h": "79705.9",
+            "open24h": "81031.2",
+            "sodUtc0": "81346.1",
+            "sodUtc8": "80551.2",
+            "ts": "1793249197104"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "index-tickers",
+          "instId": "BTC-USDT"
+        },
+        "data": [
+          {
+            "high24h": "81818.9",
+            "idxPx": "80099.6",
+            "instId": "BTC-USDT",
+            "low24h": "79705.9",
+            "open24h": "81031.2",
+            "sodUtc0": "81346.1",
+            "sodUtc8": "80551.2",
+            "ts": "1793249197496"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "funding-rate",
+          "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+          {
+            "formulaType": "withRate",
+            "fundingRate": "0.0000387213598781",
+            "fundingTime": "1793260800000",
+            "impactValue": "20000.0000000000000000",
+            "instId": "BTC-USDT-SWAP",
+            "instType": "SWAP",
+            "interestRate": "0.0001000000000000",
+            "maxFundingRate": "0.00375",
+            "method": "current_period",
+            "minFundingRate": "-0.00375",
+            "nextFundingRate": "",
+            "nextFundingTime": "1793289600000",
+            "premium": "-0.0004320323250080",
+            "prevFundingTime": "1793232000000",
+            "settFundingRate": "0.0001000000000000",
+            "settState": "settled",
+            "ts": "1793249181732"
+          }
+        ]
+      }
+    ],
+    "provenance_checked": true
+  },
+  "indexPrice": {
+    "channels": [
+      "index-tickers",
+      "mark-price"
+    ],
+    "payloads": [
+      {
+        "arg": {
+          "channel": "mark-price",
+          "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+          {
+            "instId": "BTC-USDT-SWAP",
+            "instType": "SWAP",
+            "markPx": "80062.8",
+            "ts": "1793249200813"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "mark-price",
+          "instId": "BTC-USDT-SWAP"
+        },
+        "data": [
+          {
+            "instId": "BTC-USDT-SWAP",
+            "instType": "SWAP",
+            "markPx": "80062.6",
+            "ts": "1793249201015"
+          }
+        ]
+      },
+      {
+        "arg": {
+          "channel": "index-tickers",
+          "instId": "BTC-USDT"
+        },
+        "data": [
+          {
+            "high24h": "81818.9",
+            "idxPx": "80098",
+            "instId": "BTC-USDT",
+            "low24h": "79705.9",
+            "open24h": "81031.2",
+            "sodUtc0": "81346.1",
+            "sodUtc8": "80551.2",
+            "ts": "1793249200701"
+          }
+        ]
+      }
+    ],
+    "provenance_checked": true
+  }
+}

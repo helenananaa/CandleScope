@@ -16,7 +16,18 @@ def describe():
     result = identity("candlescope-plugin-pine-compat", "pine-compat-runtime",
                     adapter="pine-native/2")
     result["historical_session"] = "fixed-history/1"
+    if getattr(pine_compat, "BAR_BOUNDARY_SCHEMA", None) == "host-bar-boundaries/1":
+        result["bar_boundaries"] = "host-bar-boundaries/1"
     return result
+
+
+def requested_bars(request):
+    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])}
+    if request.get("bar_boundaries"):
+        if getattr(pine_compat, "BAR_BOUNDARY_SCHEMA", None) != "host-bar-boundaries/1":
+            raise ValueError("NATIVE_CAPABILITY_UNSUPPORTED: host-bar-boundaries/1 is required")
+        supplied["$boundaries"] = request["bar_boundaries"]
+    return supplied
 
 
 def prepare(request):
@@ -46,7 +57,7 @@ def prepare(request):
 def execute(request):
     program, overrides, requirements, uses_magnifier = prepare(request)
     context = request["context"]
-    supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"]) for item in request.get("contexts", [])}
+    supplied = requested_bars(request)
     output = run_with_event_requests(lambda request_bars: program.run(engine_bars(request["bars"]), input_overrides=overrides or None,
                          chart_symbol=context["symbol"], chart_timeframe=context["timeframe"],
                          request_bars=request_bars, magnifier_bars=engine_magnifier(request.get("magnifier"))),

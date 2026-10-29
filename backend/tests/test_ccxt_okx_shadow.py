@@ -28,6 +28,22 @@ class _Client:
     url = "wss://ws.okx.com:8443/ws/v5/public"
 
 
+@pytest.mark.parametrize("driver_type", [CandleScopeOkx, CandleScopeOkxSpot])
+def test_okx_uses_supported_port_and_retirement_notice_preserves_watches(driver_type):
+    captured, rejected = [], []
+    driver = driver_type(raw_event_sink=captured.append)
+    assert driver.urls["api"]["ws"] == "wss://ws.okx.com/ws/v5"
+    assert driver.urls["test"]["ws"] == "wss://wspap.okx.com/ws/v5"
+    client = type("Client", (), {"reject": lambda self, *args: rejected.append(args)})()
+    notice = {"event": "notice", "code": "64010", "msg": "Port 8443 will be retired"}
+    driver.handle_message(client, notice)
+    assert captured[-1].payload == notice
+    assert rejected == []
+    assert driver.handle_error_message(client, "pong") is True
+    driver.handle_message(client, {"event": "error", "code": "60012", "msg": "Illegal request"})
+    assert len(rejected) == 1
+
+
 def _kline(symbol: str, *, close: str = "2", confirmed: str = "1") -> dict:
     return {
         "arg": {"channel": "candle1m", "instId": symbol},

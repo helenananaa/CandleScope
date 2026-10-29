@@ -1,0 +1,40 @@
+{
+  "base_commit": "901030ff671122078bba1d78a6cfc935d15df851",
+  "branch": "codex/issue-113-ccxt-fork",
+  "code_sha256": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "7b14e15df543047f6d95cedd67c18fab0825856bf0b2b78d0df1a62cb798cd89",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "5eba64f48bf2c1d9a2a2d36afa6d27bc3108665f83a97d54820bc9b4f42fb330",
+    "backend/app/data_engine/bar_aggregator/models.py": "62575cc7d3933e8e3386f32f7b7f44bcf43242a9b753c4688ba01ccf7eecc66e",
+    "backend/app/data_engine/bar_aggregator/publisher.py": "3049549cfeeb6f4a5a674c2f89dacd34dfa2bf30fa5b3f40fce807735a772052",
+    "backend/app/data_engine/bar_aggregator/router.py": "cce664ab160598e3d7399088530acc53fe56ce030645ed94408ffb9091f577b2",
+    "backend/app/data_engine/data_manager/aggregator_bridge.py": "9fbb5065fe68015e3f1301c31b4a566f1df8e3f11465ebfa2c3602a0732dba77",
+    "backend/app/data_engine/data_manager/bar_delivery.py": "baaae8c71c0450b91096196df5b22e0e676b9c1e38394831fdc6ba8e79d569f9",
+    "backend/app/data_engine/ingestion/__init__.py": "28408b879c24a9f12bf0cd87fdfb47290c04307491acafd2a673dc8531d7e75d",
+    "backend/app/data_engine/ingestion/continuity.py": "ccca5c915165ab5f9b5b29e31c986b19095d569f0be00b98e658bc1f9f2312a9",
+    "backend/app/data_engine/ingestion/delivery.py": "68e204f05546944d030841a991e057cee184b88602ef68eb92a721f1943ca128",
+    "backend/app/data_engine/ingestion/factory.py": "5c06564d05d6c8705bea9eae609ac5fadc7b166ab0555d4d020a60a4e846d7f3",
+    "backend/app/data_engine/ingestion/models.py": "635d0fdd4fbb2149067de80afafa49a17a20173782c41fcdf04ea304c7bf0107",
+    "backend/app/data_engine/ingestion/normalize.py": "7a8d2d3eee477a9e71ce3b931c882c7ef661712616e85f2eb4a52a1bb3e1943f",
+    "backend/app/data_engine/ingestion/recovery.py": "3c75deac4293815bf246e224e1912106e563703c67723f86ff5fb4e5c5de878b",
+    "backend/app/data_engine/kline_quality.py": "1790a11eb483ddb0032d097f8cff761a2b20672449e953f17660eabd788e975a",
+    "backend/app/data_engine/storage/kline_sources.py": "cb47602d12845a85a93ee43c162e567e8306298b6e5477e5895c8eaaff58e5bc",
+    "backend/app/data_engine/storage/klines_repo.py": "4209b781180c0a6a4b17149c29c5bc527da40bcbb8eed18a914316e00fd32f39",
+    "backend/app/exchanges/ccxt_ext/fork_kline.py": "8bb9cf9dae2ba82724a77be787793ed3fb8a613c0afb0bdd0b4c91cc3a8bf93b",
+    "backend/app/exchanges/ccxt_ext/primary.py": "7d17f7bf329523c1d1ed90e55fc22f29d16cd5e385df6c2be284edc608b327a7",
+    "backend/app/exchanges/ccxt_ext/session.py": "a2b0d1056b3617fa45a1f4a7fb52a83e63ad3ded73b3e6250abedd7751364941",
+    "backend/scripts/validate_ccxt_source_live.py": "140fb587631313d2bf7a64a728ccc2185c5ec1244fd63959d0e49d79316ca0c2",
+    "backend/tests/test_ccxt_fork_kline.py": "cc09a8b80e96e9c972e08d9fee84825db785eda99b5f327a03459af1387c4177",
+    "backend/tests/test_ccxt_provider_runtime.py": "3587532b410b9fcbc76390c1969473d1452fda97c37899de26e13d7b9e246068",
+    "backend/tests/test_ingestion_health_observer.py": "aeae4c6bacb7376c0d0bc643aff2e1885b15d1593ac51840f907797df1bc9f7d",
+    "backend/tests/test_ingestion_session_types.py": "31072c597a92c13c68d97659b157878a1ef7d2da13e213c1c8c2f9181e542583",
+    "backend/tests/test_kline_source_journal.py": "a066c91d33b6cb8cf6f713b69e40f9c27ab3476ca2efa26657897bff91b9cdf2",
+    "backend/tests/test_source_revision_pipeline.py": "4a868291d146afd260b01b3d414ba7666d1a5f8507c4a4069c3827de728f2547"
+  },
+  "tests": {
+    "passed": 469,
+    "warnings": 14,
+    "cwd": "backend"
+  },
+  "final_live_result": "run-05/result.json",
+  "desktop_tested": false
+}

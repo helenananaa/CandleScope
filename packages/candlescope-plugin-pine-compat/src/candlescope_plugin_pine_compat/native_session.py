@@ -1,6 +1,6 @@
 """Fixed-horizon Pine state with frozen request and magnifier data."""
 from candlescope_plugin_sdk.native_strategy import serve_session
-from .native_strategy import describe, prepare, pack
+from .native_strategy import describe, prepare, pack, requested_bars
 from .strategy_time import engine_bars, engine_magnifier
 from .event_requests import run_with_event_requests
 import pine_compat
@@ -11,8 +11,7 @@ class Session:
         self.request = request
         program, overrides, self.requirements, self.uses_magnifier = prepare(request)
         bars = engine_bars(request["bars"])
-        supplied = {f"{item['symbol']}:{item['timeframe']}": engine_bars(item["bars"])
-                    for item in request.get("contexts", [])}
+        supplied = requested_bars(request)
         # Runtime ticker descriptors cannot be inferred from source text. Resolve
         # them against the immutable horizon once; the engine still reveals only
         # the event cohorts confirmed by each market bar as the session advances.

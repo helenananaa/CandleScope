@@ -1,0 +1,528 @@
+{
+  "schema": "candlescope.public-archive-routes/1",
+  "independent_exits": 2,
+  "provider": "binance-public-kline-v1",
+  "interval": "1m",
+  "objects": [
+    {
+      "period": "2024-01",
+      "rows": 44640,
+      "bytes": 2169570,
+      "sha256": "40b78258091a468f8756843f207f5913eafc1d6e756c40a78711320d93fa5e75",
+      "provider_checksum": "40b78258091a468f8756843f207f5913eafc1d6e756c40a78711320d93fa5e75",
+      "download_ms": 6296,
+      "verify_ms": 2218,
+      "cold_cache_hit": false,
+      "warm_cache_hit": true
+    },
+    {
+      "period": "2024-02",
+      "rows": 41760,
+      "bytes": 2013843,
+      "sha256": "431132e0db8b9fe6e5c93c8e9ba3ae37dbcfa0edcdd57618b1b78ac18d14be79",
+      "provider_checksum": "431132e0db8b9fe6e5c93c8e9ba3ae37dbcfa0edcdd57618b1b78ac18d14be79",
+      "download_ms": 5000,
+      "verify_ms": 1109,
+      "cold_cache_hit": false,
+      "warm_cache_hit": true
+    },
+    {
+      "period": "2024-03",
+      "rows": 44640,
+      "bytes": 2221094,
+      "sha256": "a9af86295eae839f1d072643c67eed7fcc47bb1d82c12ef312d041eec9511e7b",
+      "provider_checksum": "a9af86295eae839f1d072643c67eed7fcc47bb1d82c12ef312d041eec9511e7b",
+      "download_ms": 2125,
+      "verify_ms": 4171,
+      "cold_cache_hit": false,
+      "warm_cache_hit": true
+    },
+    {
+      "period": "2024-04",
+      "rows": 43200,
+      "bytes": 2120723,
+      "sha256": "753040cbfaa72bf9b1fdc6253a3b521a9a174a664dfd0929a556be327b016bc6",
+      "provider_checksum": "753040cbfaa72bf9b1fdc6253a3b521a9a174a664dfd0929a556be327b016bc6",
+      "download_ms": 7061,
+      "verify_ms": 7562,
+      "cold_cache_hit": false,
+      "warm_cache_hit": true
+    }
+  ],
+  "scope": "Four public ZIPs; mixed mode is a short live sample, not a sustained-load or first-paint SLA.",
+  "elapsed_seconds": 15.812,
+  "mixed": {
+    "rest": [
+      {
+        "elapsed_ms": 2375.0,
+        "archive_leases_at_start": 0,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 578.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 579.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 562.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 563.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 812.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 891.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      },
+      {
+        "elapsed_ms": 625.0,
+        "archive_leases_at_start": 2,
+        "rows": 1
+      }
+    ],
+    "ws_frames_during_archive": 8,
+    "ws_max_gap_seconds": 2.031
+  },
+  "routes": [
+    {
+      "id": "route-0",
+      "egress_group": "b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85",
+      "requests_total": 4,
+      "payload_bytes_total": 4390840,
+      "failures_total": 0,
+      "cancellations_total": 0,
+      "active_requests": 0,
+      "payload_bytes_per_second": 1031721.4
+    },
+    {
+      "id": "route-1",
+      "egress_group": "9817f1ebfe5f714544237595b7d640ee430c50d1f915ffa4c4e542358d66dce4",
+      "requests_total": 4,
+      "payload_bytes_total": 4134742,
+      "failures_total": 0,
+      "cancellations_total": 0,
+      "active_requests": 0,
+      "payload_bytes_per_second": 383309.4
+    }
+  ],
+  "admission": {
+    "owner_scope": "backend_event_loop_and_catalog_worker",
+    "coverage": "host_estimate_external_consumers_unknown",
+    "priority_enabled": true,
+    "fairness": {
+      "policy": "bounded_priority_bypass",
+      "max_competing_grants": 8
+    },
+    "pending": 0,
+    "protected": 0,
+    "in_flight": 0,
+    "oldest_wait_seconds": 0.0,
+    "counts": {
+      "attempts": 29,
+      "class_recovery": 3,
+      "completed": 29,
+      "class_required": 2,
+      "class_background": 8,
+      "deferred_probe_in_flight": 27,
+      "class_interactive": 16,
+      "deferred_critical_demand": 2,
+      "deferred_archive_resources": 65
+    },
+    "recent": [
+      {
+        "attempt_id": 2,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          20
+        ],
+        "traffic_class": "recovery",
+        "elapsed_ms": 2359.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 4,
+        "buckets": [
+          "binance:ws_connect:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85",
+          "binance:ws_connect_pacing:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1,
+          1
+        ],
+        "traffic_class": "recovery",
+        "elapsed_ms": 2641.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 6,
+        "buckets": [
+          "binance:ws_control:connection:1:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "required",
+        "elapsed_ms": 0.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 8,
+        "buckets": [
+          "binance:ws_control:connection:1:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "recovery",
+        "elapsed_ms": 0.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 12,
+        "buckets": [
+          "archive:data.binance.vision:egress=9817f1ebfe5f714544237595b7d640ee430c50d1f915ffa4c4e542358d66dce4"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 1046.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 17,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 2031.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 10,
+        "buckets": [
+          "archive:data.binance.vision:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 2172.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 43,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 58,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 266.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 66,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 265.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 76,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 266.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 84,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 266.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 49,
+        "buckets": [
+          "archive:data.binance.vision:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 1953.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 98,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 104,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 112,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 118,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 29,
+        "buckets": [
+          "archive:data.binance.vision:egress=9817f1ebfe5f714544237595b7d640ee430c50d1f915ffa4c4e542358d66dce4"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 4984.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 128,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 281.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 92,
+        "buckets": [
+          "archive:data.binance.vision:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 2125.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 137,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 142,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 132,
+        "buckets": [
+          "archive:data.binance.vision:egress=9817f1ebfe5f714544237595b7d640ee430c50d1f915ffa4c4e542358d66dce4"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 1485.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 144,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 266.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 148,
+        "buckets": [
+          "binance:spot:legacy:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 140,
+        "buckets": [
+          "archive:data.binance.vision:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 2219.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 150,
+        "buckets": [
+          "binance:spot:request_weight:ip:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          2
+        ],
+        "traffic_class": "interactive",
+        "elapsed_ms": 250.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 152,
+        "buckets": [
+          "binance:ws_control:connection:1:egress=b156c126c39217bc5f1c14350550c33e01b038bcdc91559b32b7fe6bb4dc2d85"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "required",
+        "elapsed_ms": 0.0,
+        "status_code": 200,
+        "unknown": false
+      },
+      {
+        "attempt_id": 146,
+        "buckets": [
+          "archive:data.binance.vision:egress=9817f1ebfe5f714544237595b7d640ee430c50d1f915ffa4c4e542358d66dce4"
+        ],
+        "costs": [
+          1
+        ],
+        "traffic_class": "background",
+        "elapsed_ms": 7062.0,
+        "status_code": 200,
+        "unknown": false
+      }
+    ]
+  },
+  "passed": true
+}

@@ -138,6 +138,15 @@ class StandardOHLCVMerge:
             state.tick_count += 1
             state.last_input_at_ms = bar_input.open_time_ms
 
+        if bar_input.extra.get("source_ref") and merge_mode == MergeMode.SNAPSHOT:
+            # This is a selected complete native snapshot, including corrected
+            # extrema. Do not union old highs/lows or round quantities to 8 dp.
+            for name in (
+                "open", "high", "low", "close", "volume", "quote_volume", "trades",
+                "taker_buy_base", "taker_buy_quote",
+            ):
+                setattr(state, name, getattr(bar_input, name))
+
         # Track whether the last component bar is closed.
         # Only update from the native channel (source_interval matches
         # the target interval) or from tick data.  Cross-interval
@@ -180,6 +189,7 @@ class ComponentSnapshotOHLCVMerge:
     @staticmethod
     def _snapshot_from_input(bar_input: BarInput) -> dict:
         return {
+            "source_ref": bar_input.extra.get("source_ref"),
             "open_time_ms": bar_input.open_time_ms,
             "close_time_ms": bar_input.close_time_ms,
             "open": bar_input.open,
@@ -266,6 +276,14 @@ class ComponentSnapshotOHLCVMerge:
     ) -> bool:
         if candidate == existing:
             return False
+
+        source_ref = candidate.get("source_ref")
+        previous_ref = existing.get("source_ref")
+        if source_ref is not None:
+            if previous_ref is not None and source_ref["revision"] <= previous_ref["revision"]:
+                return False
+            if allow_authoritative_correction:
+                return True
 
         existing_sequence = existing.get("sequence")
         candidate_sequence = candidate.get("sequence")
@@ -472,6 +490,12 @@ class BarStateEngine:
         market_type = market_type.strip().lower()
         key = (exchange, market_type, symbol, bucket_start_ms)
         merge_strategy = self._strategy_for(bar_input)
+        existing_state = self._active.get(key) or self._closed.get(key)
+        source_ref = bar_input.extra.get("source_ref")
+        if existing_state is not None and source_ref is not None:
+            previous_ref = existing_state.source_refs.get(bar_input.input_key)
+            if previous_ref is not None and source_ref["revision"] <= previous_ref["revision"]:
+                return existing_state, BarStateChange.NO_CHANGE
 
         if key in self._active:
             # Existing active bar — merge
@@ -491,6 +515,8 @@ class BarStateEngine:
             ):
                 return state, BarStateChange.NO_CHANGE
             # Move to end (most recently updated)
+            if source_ref is not None:
+                state.source_refs[bar_input.input_key] = dict(source_ref)
             self._active.move_to_end(key)
             return state, BarStateChange.UPDATED
 
@@ -531,6 +557,8 @@ class BarStateEngine:
                     )
                 ):
                     return state, BarStateChange.NO_CHANGE
+                if source_ref is not None:
+                    state.source_refs[bar_input.input_key] = dict(source_ref)
                 return state, BarStateChange.AMENDED
             # Realtime data for an already-closed bar — ignore
             return old_state, BarStateChange.NO_CHANGE
@@ -554,6 +582,8 @@ class BarStateEngine:
         state = merge_strategy.apply(state, bar_input, is_new=True)
         self._mark_authoritative_close_policy(state, bar_input)
         self._active[key] = state
+        if source_ref is not None:
+            state.source_refs[bar_input.input_key] = dict(source_ref)
 
         # Evict oldest active bars if limit exceeded
         self._enforce_active_limit(exchange, market_type, symbol)

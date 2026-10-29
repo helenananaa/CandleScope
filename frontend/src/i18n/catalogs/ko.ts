@@ -1,7 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...intervalBasisMessages["ko"],
+  "interval.historyOnly": "과거 데이터만 · 실시간 사용 불가",
+  "interval.unavailableHelp": "요청한 차트 설정은 유지됩니다. 다른 주기를 선택하거나 종목 선택에서 데이터 소스를 변경하세요.",
   "account.trades": "거래 복기",
   "account.review.identity": "계정 UID {uid} · {margin} · 포지션 ID {position}",
   "account.review.fillIdentity": "체결 ID {fill} · 거래 ID {trade} · 주문 ID {order} · 계약 수 {contracts}",
@@ -1698,6 +1702,7 @@ export const ko = {
   "settings.proxy.address": "프록시 주소",
   "settings.proxy.egressGroup": "출구 그룹",
   "settings.proxy.concurrency": "동시 요청 한도",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "거래소 ID (쉼표로 구분, 비워 두면 모든 거래소)",
   "settings.proxy.enabled": "사용",
   "settings.proxy.makePrimary": "주 경로로 설정",

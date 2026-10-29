@@ -25,3 +25,14 @@ test("observed live data and disconnected transports retain distinct indicators"
   assert.ok(render("live").includes(t("status.connectedTo", { exchange: "Binance" })));
   assert.match(render("disconnected"), /data-connection-status="disconnected"/);
 });
+
+test("history-only availability stays explicit even when transport status is stale", () => {
+  const status: StatusBarModel = { historyOnly: true, connectionStatus: "connected", dataSource: "cache",
+    exchangeLabel: "Fixture", marketLabel: "spot", wsStatus: "live", wsStatusLabel: "", barCount: 20,
+    loadingMoreLeft: false, hasMoreLeft: true, exchangeCatalogStatus: "ready" };
+  const html = renderToStaticMarkup(<StatusBar status={status} />);
+  assert.ok(html.includes(t("interval.historyOnly")));
+  assert.ok(!html.includes(t("status.connectedTo", { exchange: "Fixture" })));
+  assert.match(html, /data-live-bar-count="20"/);
+  assert.doesNotMatch(html, /data-connection-status="loading"/);
+});

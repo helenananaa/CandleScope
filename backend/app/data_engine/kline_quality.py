@@ -34,6 +34,8 @@ class SourceQuality:
 # deliberately replaceable so a later revision from the same authority can
 # amend values without requiring another schema column.
 SOURCE_QUALITY: dict[str, SourceQuality] = {
+    # Revision-selected source evidence; writes are fenced against the durable head.
+    "source_snapshot_verified": SourceQuality(100, FinalityTrust.TRUSTED_FINAL),
     # Legacy timeout/teardown CLOSED rows did not prove an exchange close.
     "data_manager_closed": SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Explicit exchange close (for example Binance kline x=true).

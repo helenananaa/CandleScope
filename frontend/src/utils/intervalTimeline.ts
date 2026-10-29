@@ -2,6 +2,7 @@ import {
   getIntervalSemanticSpec,
   type IntervalSemanticSpec,
 } from "./intervals.js";
+import { calendarFloor, calendarShift, type CalendarUnit } from "./calendarBasis.js";
 
 interface CalendarMonthInterval {
   matched: boolean;
@@ -17,6 +18,7 @@ export interface FutureIntervalBasis {
   calendarMonths: number | null;
   horizon: number;
   step: number;
+  calendarInterval?: string;
 }
 
 export interface CreateFutureIntervalBasisOptions {
@@ -125,18 +127,20 @@ export function createIntervalTimeline(interval: unknown): IntervalTimeline | nu
   if (!spec) return null;
 
   const floor = (time: unknown): number | null => {
+    if (spec.timezone) return safeTimeMagnitude(time) ? calendarFloor(time, spec.amount, spec.unit as CalendarUnit, spec.timezone) : null;
     if (spec.alignment === "calendar-month") {
       return calendarMonthFloor(time, spec.monthCount as number);
     }
     const widthSeconds = spec.alignment === "weekly-monday"
       ? (spec.weekCount as number) * 604800
       : spec.widthSeconds as number;
-    const anchor = spec.alignment === "weekly-monday" ? WEEKLY_MONDAY_ANCHOR_SECONDS : 0;
+    const anchor = spec.alignment === "weekly-monday" ? WEEKLY_MONDAY_ANCHOR_SECONDS : (spec.phaseSeconds ?? 0);
     return fixedFloor(time, widthSeconds, anchor);
   };
 
   const shift = (time: unknown, direction: -1 | 1): number | null => {
     if (!safeTimeMagnitude(time)) return null;
+    if (spec.timezone) return calendarShift(time, direction * spec.amount, spec.unit as CalendarUnit, spec.timezone);
     if (spec.alignment === "calendar-month") {
       return addUtcCalendarMonths(time, direction * (spec.monthCount as number));
     }
@@ -264,6 +268,8 @@ export function createFutureIntervalBasis(
   }: CreateFutureIntervalBasisOptions = {},
 ): FutureIntervalBasis | null {
   if (!safeTimeMagnitude(horizon)) return null;
+  const spec = getIntervalSemanticSpec(sourceInterval);
+  if (spec?.timezone) return { horizon, step: spec.widthSeconds!, calendarMonths: null, calendarInterval: spec.canonicalValue };
   const calendarInterval = calendarMonthInterval(sourceInterval);
   const step = Number(sourceIntervalSeconds);
   if ((calendarInterval.matched && calendarInterval.months === null)
@@ -282,6 +288,13 @@ export function futureTimeFromIntervalDistance(
   cellDistance: unknown,
 ): number | null {
   if (!basis || !finiteNumber(cellDistance) || cellDistance <= 0) return null;
+  if (basis.calendarInterval) {
+    const spec = getIntervalSemanticSpec(basis.calendarInterval)!;
+    const cells = Math.floor(cellDistance);
+    const lower = calendarShift(basis.horizon, cells * spec.amount, spec.unit as CalendarUnit, spec.timezone!);
+    const upper = calendarShift(basis.horizon, (cells + 1) * spec.amount, spec.unit as CalendarUnit, spec.timezone!);
+    return lower === null || upper === null ? null : lower + (cellDistance - cells) * (upper - lower);
+  }
   if (basis.calendarMonths !== null) {
     return calendarFutureTime(basis.horizon, basis.calendarMonths, cellDistance);
   }
@@ -294,6 +307,23 @@ export function futureIntervalDistanceFromTime(
   time: number,
 ): number | null {
   if (!basis) return null;
+  if (basis.calendarInterval) {
+    if (!finiteNumber(time) || time <= basis.horizon) return null;
+    let low = 0, high = 1;
+    while (high < 1_000_000) {
+      const at = futureTimeFromIntervalDistance(basis, high);
+      if (at === null || at > time) break;
+      high *= 2;
+    }
+    while (high - low > 1) {
+      const middle = Math.floor((low + high) / 2);
+      const at = futureTimeFromIntervalDistance(basis, middle);
+      if (at !== null && at <= time) low = middle; else high = middle;
+    }
+    const lower = low ? futureTimeFromIntervalDistance(basis, low) : basis.horizon;
+    const upper = futureTimeFromIntervalDistance(basis, high);
+    return lower === null || upper === null ? null : low + (time - lower) / (upper - lower);
+  }
   if (basis.calendarMonths !== null) {
     return calendarFutureCellDistance(basis.horizon, basis.calendarMonths, time);
   }

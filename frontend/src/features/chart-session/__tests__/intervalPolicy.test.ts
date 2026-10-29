@@ -7,7 +7,7 @@ import {
   getFallbackIntervalAfterCustomClear,
   getFallbackIntervalAfterCustomRemove,
   isExchangeIntervalCapabilityAvailable,
-  resolveSupportedInterval,
+  resolveRequestedInterval,
 } from "../intervalPolicy.js";
 import type { CustomIntervalRecord } from "../chartSessionTypes.js";
 
@@ -47,53 +47,17 @@ function customInterval(value: string, lastUsedAt: number): CustomIntervalRecord
   };
 }
 
-test("supported interval resolution preserves custom/native values and otherwise falls back", () => {
-  const isNative = (_exchange: string, interval: string) => nativeIntervals.some((item) => item.value === interval);
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
-    interval: "45m",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["45m"],
-    nativeIntervals,
-    isNativeIntervalSupported: isNative,
-  }), "45m");
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
-    interval: "1d",
-    exchangeCatalog: {},
-    savedCustomIntervals: [],
-    nativeIntervals,
-    isNativeIntervalSupported: isNative,
-  }), "1d");
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
-    interval: "bad",
-    exchangeCatalog: {},
-    savedCustomIntervals: [],
-    nativeIntervals,
-    isNativeIntervalSupported: isNative,
-  }), "1h");
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
-    interval: "7s",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["7s"],
-    nativeIntervals,
-    isNativeIntervalSupported: isNative,
-  }), "1h", "saved syntax alone must not bypass exact history capabilities");
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
-    interval: "45m",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["45m"],
-    nativeIntervals: [],
-    isNativeIntervalSupported: () => false,
-  }), "45m", "an unavailable market must not invent a native 1h route");
+test("restoring a requested interval does not depend on favorites or capability", () => {
+  for (const interval of ["89m", "7s", "1d"]) {
+    assert.equal(resolveRequestedInterval({ interval, nativeIntervals }), interval);
+    assert.equal(resolveRequestedInterval({ interval, nativeIntervals: [] }), interval);
+  }
+  assert.equal(resolveRequestedInterval({ interval: "bad", nativeIntervals }), "1h");
+  assert.equal(resolveRequestedInterval({ interval: "120s", nativeIntervals }), "2m");
 });
 
 test("non-default series identities allow native intervals but reject derived custom intervals", () => {
   const nativeValues = nativeIntervals.map((item) => item.value);
-  const isNative = (_exchange: string, interval: string) => nativeValues.includes(interval);
 
   assert.equal(canResolveIntervalForSeriesIdentity(
     "twelvedata",
@@ -113,25 +77,13 @@ test("non-default series identities allow native intervals but reject derived cu
     nativeValues,
     undefined,
   ), true);
-  assert.equal(resolveSupportedInterval({
-    exchange: "twelvedata",
-    marketType: "stock",
+  assert.equal(resolveRequestedInterval({
     interval: "7m",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["7m"],
     nativeIntervals,
-    isNativeIntervalSupported: isNative,
-    seriesIdentity: twelveDataNasdaqIdentity,
-  }), "1h");
-  assert.equal(resolveSupportedInterval({
-    exchange: "twelvedata",
-    marketType: "stock",
+  }), "7m");
+  assert.equal(resolveRequestedInterval({
     interval: "1m",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["7m"],
     nativeIntervals,
-    isNativeIntervalSupported: isNative,
-    seriesIdentity: twelveDataNasdaqIdentity,
   }), "1m");
 });
 
@@ -195,19 +147,14 @@ test("saved custom provenance is masked when the current exchange supports it na
 });
 
 test("semantic aliases migrate onto the native canonical interval", () => {
-  const isNative = (_exchange: string, interval: string) => nativeIntervals.some((item) => item.value === interval);
   assert.deepEqual(getEffectiveCustomIntervalRecords([
     customInterval("60m", 1),
     customInterval("24h", 2),
     customInterval("7d", 3),
   ], nativeIntervals).map((record) => record.value), ["7d"]);
-  assert.equal(resolveSupportedInterval({
-    exchange: "binance",
+  assert.equal(resolveRequestedInterval({
     interval: "60m",
-    exchangeCatalog: {},
-    savedCustomIntervals: ["60m"],
     nativeIntervals,
-    isNativeIntervalSupported: isNative,
   }), "1h");
   assert.equal(getFallbackIntervalAfterCustomClear({
     interval: "24h",

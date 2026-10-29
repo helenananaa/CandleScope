@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   canonicalizeIntervalValue,
+  intervalWithAnchor,
   intervalSemanticSignature,
   parseIntervalSeconds,
 } from "../../utils/intervals.js";
@@ -39,6 +40,9 @@ function normalizeRecord(
 
   return {
     value,
+    ...(typeof source?.anchorTimeMs === "number" && Number.isFinite(new Date(source.anchorTimeMs).getTime())
+      && intervalWithAnchor(value, source.anchorTimeMs) === value
+      ? { anchorTimeMs: source.anchorTimeMs } : {}),
     createdAt: finiteNumber(source?.createdAt, timestamp),
     lastUsedAt: finiteNumber(source?.lastUsedAt, 0),
     usageCount: finiteNumber(source?.usageCount, 0),
@@ -147,6 +151,9 @@ export function useCustomIntervals(): CustomIntervalsRuntime {
     const maxOrder = records.reduce((max, record) => Math.max(max, record.order), -1);
     const record = {
       value,
+      ...(options.anchorTimeMs !== undefined && Number.isFinite(new Date(options.anchorTimeMs).getTime())
+        && intervalWithAnchor(value, options.anchorTimeMs) === value
+        ? { anchorTimeMs: options.anchorTimeMs } : {}),
       createdAt: timestamp,
       lastUsedAt: options.markUsed ? timestamp : 0,
       usageCount: options.markUsed ? 1 : 0,

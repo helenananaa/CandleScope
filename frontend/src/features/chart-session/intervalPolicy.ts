@@ -71,46 +71,18 @@ export function canResolveIntervalForSeriesIdentity(
     && canResolveIntervalFromNativeValues(interval, nativeIntervalValues);
 }
 
-export interface ResolveSupportedIntervalOptions {
-  exchange: ExchangeId;
-  marketType?: MarketType;
-  interval: IntervalString;
-  exchangeCatalog: ExchangeCatalog | null;
-  savedCustomIntervals: readonly IntervalString[];
-  nativeIntervals: readonly NativeInterval[];
-  isNativeIntervalSupported: NativeIntervalSupport;
-  seriesIdentity?: KlineSeriesIdentityInput | null;
-}
-
-export function resolveSupportedInterval({
-  exchange,
-  marketType,
+/** Normalize a requested interval without replacing a valid but unavailable one.
+ * Capability checks gate data work separately. Favorites are presentation data,
+ * and must not change a restored or externally supplied series identity.
+ */
+export function resolveRequestedInterval({
   interval,
-  exchangeCatalog,
-  savedCustomIntervals,
   nativeIntervals,
-  isNativeIntervalSupported,
-  seriesIdentity,
-}: ResolveSupportedIntervalOptions): IntervalString {
-  const native = nativeIntervals.find((item) => intervalsSemanticallyEquivalent(item.value, interval));
-  if (native) return native.value;
-  if (isNativeIntervalSupported(exchange, interval, exchangeCatalog, marketType, "history")) {
-    return canonicalizeIntervalValue(interval) || interval;
-  }
-  const custom = savedCustomIntervals.find((item) => intervalsSemanticallyEquivalent(item, interval));
-  if (
-    custom
-    && canResolveIntervalForSeriesIdentity(
-      exchange,
-      custom,
-      nativeIntervals.map((item) => item.value),
-      seriesIdentity,
-    )
-  ) return canonicalizeIntervalValue(custom) || custom;
-  if (nativeIntervals.length === 0) {
-    return canonicalizeIntervalValue(interval) || interval;
-  }
-  return getFallbackNativeInterval(nativeIntervals, "1h");
+}: {
+  interval: IntervalString;
+  nativeIntervals: readonly NativeInterval[];
+}): IntervalString {
+  return canonicalizeIntervalValue(interval) || getFallbackNativeInterval(nativeIntervals);
 }
 
 export interface CustomIntervalRemoveFallbackOptions {

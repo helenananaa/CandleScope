@@ -249,6 +249,17 @@ class BackfillConfig:
             256 * 1024**2,
         ),
     )
+    # Only atomic, version-matched imports qualify for deletion. Older cache
+    # objects and advisory receipts keep the existing capacity-cache behavior.
+    history_archive_cleanup_policy: str = field(
+        default_factory=lambda: _env_str(
+            "HISTORY_ARCHIVE_CLEANUP_POLICY", "delete_after_import",
+        ),
+    )
+
+    history_archive_retain_seconds: int = field(
+        default_factory=lambda: _env_int("HISTORY_ARCHIVE_RETAIN_SECONDS", 86_400),
+    )
 
     # ── Reconciler ───────────────────────────────────────────
     # Deduplication strategy when writing to storage:
@@ -300,8 +311,26 @@ class BackfillConfig:
 
     # ── Methods ──────────────────────────────────────────────
 
+    def __post_init__(self) -> None:
+        self._validate_cleanup_policy(self.history_archive_cleanup_policy)
+        self._validate_retain_seconds(self.history_archive_retain_seconds)
+
+    @staticmethod
+    def _validate_cleanup_policy(value: str) -> None:
+        if value not in {"delete_after_import", "retain_for_duration", "bounded_cache"}:
+            raise ValueError(f"Unknown history archive cleanup policy: {value}")
+
+    @staticmethod
+    def _validate_retain_seconds(value: int) -> None:
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError("history_archive_retain_seconds must be a non-negative integer")
+
     def update(self, **kwargs) -> None:
         """Update config fields at runtime.  Only known fields are accepted."""
+        if "history_archive_cleanup_policy" in kwargs:
+            self._validate_cleanup_policy(kwargs["history_archive_cleanup_policy"])
+        if "history_archive_retain_seconds" in kwargs:
+            self._validate_retain_seconds(kwargs["history_archive_retain_seconds"])
         for key, value in kwargs.items():
             if not hasattr(self, key):
                 raise ValueError(f"Unknown config key: {key}")

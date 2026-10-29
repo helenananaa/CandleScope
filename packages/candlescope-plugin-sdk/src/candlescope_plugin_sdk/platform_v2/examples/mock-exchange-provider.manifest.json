@@ -71,7 +71,14 @@
             "maxBatch": 32,
             "pollIntervalMs": 50,
             "ratePerMinute": 600,
-            "maxConcurrent": 2
+            "maxConcurrent": 2,
+            "barBasis": {
+              "schemaVersion": 1,
+              "intervals": {
+                "1m": "1m",
+                "5m": "5m"
+              }
+            }
           },
           {
             "kind": "full_depth",

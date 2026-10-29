@@ -1,7 +1,11 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...intervalBasisMessages["pt-BR"],
+  "interval.historyOnly": "Somente histórico · tempo real indisponível",
+  "interval.unavailableHelp": "As configurações solicitadas do gráfico foram mantidas. Escolha outro intervalo ou altere a fonte no seletor de símbolos.",
   "account.trades": "Revisão de operações",
   "account.review.identity": "UID da conta {uid} · {margin} · ID da posição {position}",
   "account.review.fillIdentity": "ID da execução {fill} · ID da negociação {trade} · ID da ordem {order} · Contratos {contracts}",
@@ -1720,6 +1724,7 @@ export const ptBR = {
   "settings.proxy.address": "Endereço do proxy",
   "settings.proxy.egressGroup": "Grupo de saída",
   "settings.proxy.concurrency": "Requisições simultâneas",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "IDs das exchanges (separados por vírgula; vazio inclui todas)",
   "settings.proxy.enabled": "Ativada",
   "settings.proxy.makePrimary": "Definir como principal",

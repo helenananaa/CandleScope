@@ -1,0 +1,32 @@
+{
+  "kind": "development-browser-acceptance",
+  "runtime": "LOCAL_OFFLINE",
+  "dataset_source": "synthetic 720 hourly CSV rows; March 2024",
+  "utc_daily_last_bar": {
+    "open": 796,
+    "high": 822,
+    "low": 795,
+    "close": 821,
+    "volume": 24
+  },
+  "ny_daily_last_bar": {
+    "open": 776,
+    "high": 802,
+    "low": 775,
+    "close": 801,
+    "volume": 24
+  },
+  "actions": [
+    "enable calendar",
+    "select America/New_York",
+    "switch UTC and observe changed OHLC",
+    "switch New York",
+    "reload page",
+    "close data modal",
+    "observe retained New York selection and original OHLC"
+  ],
+  "passed": true,
+  "screenshot": "calendar-restored.png",
+  "desktop_packaging": "excluded by user",
+  "pine_ui_on_candidate": "not part of this browser probe; candidate execution tested through real native host"
+}

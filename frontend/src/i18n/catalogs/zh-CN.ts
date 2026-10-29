@@ -1,5 +1,9 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
+  ...intervalBasisMessages["zh-CN"],
+  "interval.historyOnly": "仅历史 · 实时不可用",
+  "interval.unavailableHelp": "已保留请求的图表设置。请选择其他周期，或在交易对选择器中更换来源。",
   "account.review.identity": "账户 UID {uid} · {margin} · 持仓 ID {position}",
   "account.review.fillIdentity": "成交 ID {fill} · 交易 ID {trade} · 订单 ID {order} · 张数 {contracts}",
 
@@ -1720,6 +1724,7 @@ export const zhCN = {
   "settings.proxy.address": "代理地址",
   "settings.proxy.egressGroup": "出口组",
   "settings.proxy.concurrency": "并发请求上限",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "交易所 ID（逗号分隔，留空表示全部）",
   "settings.proxy.enabled": "启用",
   "settings.proxy.makePrimary": "设为主线路",

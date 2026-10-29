@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "profile": "/var/folders/m3/7mjl333j70j6nhb5nrxrbx800000gn/T/ccxt-offline-sparse-g6rtblah",
+  "original_db_modified": false,
+  "source": "previously copied read-only legacy sample",
+  "open_times": [
+    1788828120000,
+    1791676800000
+  ],
+  "cli_results": [
+    {
+      "scanned": 2,
+      "matched": 2,
+      "revised": 0,
+      "unavailable": 0,
+      "already_evidenced": 0,
+      "evidence_origin": "historical_refetch",
+      "next_start_ms": 1791676800001
+    },
+    {
+      "scanned": 2,
+      "matched": 0,
+      "revised": 0,
+      "unavailable": 0,
+      "already_evidenced": 2,
+      "evidence_origin": "historical_refetch",
+      "next_start_ms": 1791676800001
+    }
+  ],
+  "pending_source_revisions": 0,
+  "rest_response_count": 4
+}

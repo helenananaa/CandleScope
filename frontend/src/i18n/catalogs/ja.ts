@@ -1,8 +1,12 @@
+import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ja = {
+  ...intervalBasisMessages["ja"],
+  "interval.historyOnly": "履歴のみ · リアルタイム配信なし",
+  "interval.unavailableHelp": "リクエストしたチャート設定は保持されています。別の時間足を選ぶか、銘柄選択からデータソースを変更してください。",
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時刻と先読み期間に未来の足が含まれています。開始時刻を早めるか期間を短くしてください。確定した過去の足のみ利用できます。",
   "research.external.copyCommand": "起動コマンドをコピー",
@@ -1547,6 +1551,7 @@ export const ja = {
   "settings.proxy.address": "Proxy address",
   "settings.proxy.egressGroup": "Exit group",
   "settings.proxy.concurrency": "Concurrent requests",
+  "settings.proxy.archiveConcurrency": "ZIP 同時実行数 ≤ {count}",
   "settings.proxy.exchanges": "Exchange IDs (comma separated; empty means all)",
   "settings.proxy.enabled": "Enabled",
   "settings.proxy.makePrimary": "Make primary",

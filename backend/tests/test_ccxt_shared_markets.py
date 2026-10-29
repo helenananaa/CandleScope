@@ -21,6 +21,8 @@ from app.exchanges.ccxt_ext.profiles import (
     BinanceUsdmCcxtProfile,
 )
 from app.exchanges.ccxt_ext.runtime import CcxtRuntimePool
+from app.exchanges.public_admission import PublicDemand, TrafficClass, current_demand, public_demand
+from app.exchanges.rate_limits import RateLimitDeferred
 
 
 def _spot(base: str, quote: str = "USDT") -> dict[str, Any]:
@@ -53,6 +55,7 @@ class _Catalog:
     def __init__(self, monkeypatch: Any, *markets: dict[str, Any]) -> None:
         self.markets = list(markets)
         self.loaders: list[Any] = []
+        self.demands: list[PublicDemand] = []
         self.failures: list[BaseException] = []
         self.gate: asyncio.Event | None = None
         catalog = self
@@ -60,6 +63,7 @@ class _Catalog:
         async def fetch_markets(exchange: Any, params: Any = None) -> list[Any]:
             del params
             catalog.loaders.append(exchange)
+            catalog.demands.append(current_demand())
             if catalog.gate is not None:
                 await catalog.gate.wait()
             if catalog.failures:
@@ -142,6 +146,36 @@ def test_market_rails_follow_venue_class_and_market_family() -> None:
     ) == 4
     # Test doubles and adapters keep loading their own markets.
     assert market_rail_key(object()) is None
+
+
+def test_deferred_foreground_promotes_existing_shared_metadata_then_cancellation_lowers_it(monkeypatch):
+    catalog = _Catalog(monkeypatch, _spot("BTC"))
+
+    async def run():
+        catalog.gate = asyncio.Event()
+        pool = _RestExchangePool(get_ccxt_catalog_entry("binance"), IngestionConfig(proxy_mode="none"))
+        background = PublicDemand(TrafficClass.BACKGROUND, defer=True)
+        alive = True
+        foreground = PublicDemand(TrafficClass.INTERACTIVE, defer=True, alive=lambda: alive)
+        try:
+            with public_demand(background), pytest.raises(RateLimitDeferred, match="metadata_pending"):
+                await _borrow(pool)
+            await _until(lambda: catalog.calls == 1)
+            dependency = catalog.demands[0]
+            assert dependency.priority() == TrafficClass.BACKGROUND
+            with public_demand(foreground), pytest.raises(RateLimitDeferred, match="metadata_pending"):
+                await _borrow(pool)
+            assert dependency.priority() == TrafficClass.INTERACTIVE
+            alive = False
+            assert dependency.priority() == TrafficClass.BACKGROUND
+            catalog.gate.set()
+            await asyncio.wait_for(_borrow(pool), 1)
+            assert catalog.calls == 1
+        finally:
+            catalog.gate.set()
+            await pool.close()
+
+    asyncio.run(run())
 
 
 def test_rest_pools_and_websocket_runtime_share_one_market_load(

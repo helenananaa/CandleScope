@@ -41,6 +41,7 @@ def test_runtime_shutdown_stops_manual_history_before_coordinator(monkeypatch) -
     runtime.gap_scan_task = None
     runtime.manual_history_service = service
     runtime.backfill_coordinator = coordinator
+    runtime.backfill_engine = None
     runtime.liquidation_service = None
     runtime.order_book_service = None
     runtime.full_order_book_service = None

@@ -1,0 +1,58 @@
+name: CCXT integration
+
+on:
+  pull_request:
+    paths: ["backend/**", "packages/**", ".github/workflows/ccxt-integration.yml"]
+  push:
+    branches: [main]
+    paths: ["backend/**", "packages/**", ".github/workflows/ccxt-integration.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ccxt-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pinned-fork:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATA_DIR: ${{ github.workspace }}/output/ccxt-integration/data
+      CANDLE_DATA_DIR: ${{ github.workspace }}/output/ccxt-integration/data
+      CANDLESCOPE_REQUIRE_CCXT_FORK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install isolated test dependencies
+        working-directory: backend
+        run: |
+          python -m venv ../.venv
+          ../.venv/bin/python -m pip install -r requirements.txt -r requirements-test.txt pytest-asyncio==0.23.8 pytest-timeout==2.4.0
+      - name: Build and verify immutable fork wheel
+        run: .venv/bin/python backend/scripts/install_ccxt_fork.py
+      - name: Verify combined source, boundary, archive and admission contracts
+        run: |
+          mkdir -p output/ccxt-integration
+          .venv/bin/python backend/scripts/ccxt_contracts/integration.py --timeout=90 --junitxml=../output/ccxt-integration/backend.xml
+      - name: Upload integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccxt-integration-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            output/ccxt-integration/backend.xml
+            backend/ccxt-fork.lock.json
+            backend/.cache/ccxt-fork/*/build.json
+          if-no-files-found: ignore

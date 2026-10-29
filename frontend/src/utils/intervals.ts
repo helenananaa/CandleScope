@@ -1,7 +1,11 @@
 import { t, type MessageKey } from "../i18n/index.js";
+import { calendarParts, type CalendarZone } from "./calendarBasis.js";
 
-// Shared interval parsing and display helpers.
-export const CUSTOM_INTERVAL_RE = /^(\d+)([smhdwM])$/;
+// Shared interval parsing and display helpers. Versioned ~a1~ anchors are
+// absolute UTC milliseconds on input and phase milliseconds after normalization.
+// Equal phases alias; zero phase retains the legacy key. Never strip a nonzero
+// phase from a series/cache/subscription key (formatIntervalLabel is UI-only).
+export const CUSTOM_INTERVAL_RE = /^(\d+)([smhdwM])(?:~a1~(-?\d+))?$/;
 export const MAX_CALENDAR_MONTH_INTERVAL = 12_000;
 
 export const INTERVAL_UNIT_SECONDS = {
@@ -15,7 +19,7 @@ export const INTERVAL_UNIT_SECONDS = {
 
 export type IntervalUnit = keyof typeof INTERVAL_UNIT_SECONDS;
 export type IntervalString = string;
-export type IntervalAlignment = "fixed-epoch" | "weekly-monday" | "calendar-month";
+export type IntervalAlignment = "fixed-epoch" | "weekly-monday" | "calendar-month" | "zoned-calendar";
 
 export interface IntervalParts {
   amount: number;
@@ -28,6 +32,8 @@ export interface IntervalSemanticSpec extends IntervalParts {
   widthSeconds: number | null;
   weekCount: number | null;
   monthCount: number | null;
+  phaseSeconds?: number;
+  timezone?: CalendarZone;
 }
 
 export interface IntervalUnitOption {
@@ -61,6 +67,8 @@ function isIntervalUnit(value: string): value is IntervalUnit {
 }
 
 export function parseIntervalParts(interval: unknown): IntervalParts | null {
+  const calendar = calendarParts(String(interval || ""));
+  if (calendar) return { amount: calendar.amount, unit: calendar.unit };
   const match = CUSTOM_INTERVAL_RE.exec(String(interval || "").trim());
   if (!match) return null;
   const amountToken = match[1];
@@ -69,6 +77,12 @@ export function parseIntervalParts(interval: unknown): IntervalParts | null {
   const amount = parseInt(amountToken, 10);
   if (!Number.isSafeInteger(amount) || amount <= 0 || !isIntervalUnit(unit)) return null;
   if (unit === "M" && amount > MAX_CALENDAR_MONTH_INTERVAL) return null;
+  if (match[3] !== undefined) {
+    const anchor = Number(match[3]);
+    const width = amount * INTERVAL_UNIT_SECONDS[unit];
+    if (unit === "w" || unit === "M" || width % 60 !== 0
+      || !Number.isSafeInteger(anchor) || anchor % 60_000 !== 0) return null;
+  }
   return { amount, unit };
 }
 
@@ -81,9 +95,11 @@ export function parseIntervalSeconds(interval: unknown): number | null {
 
 export function normalizeIntervalValue(interval: unknown): IntervalString | "" {
   const trimmed = String(interval || "").trim();
+  if (calendarParts(trimmed)) return trimmed;
   const parts = parseIntervalParts(trimmed);
   if (!parts) return "";
-  return `${parts.amount}${parts.unit}`;
+  const phase = getIntervalSemanticSpec(trimmed)?.phaseSeconds ?? 0;
+  return `${parts.amount}${parts.unit}${phase ? `~a1~${phase * 1000}` : ""}`;
 }
 
 function canonicalFixedInterval(widthSeconds: number): IntervalString {
@@ -100,6 +116,12 @@ function canonicalFixedInterval(widthSeconds: number): IntervalString {
 export function getIntervalSemanticSpec(interval: unknown): IntervalSemanticSpec | null {
   const parts = parseIntervalParts(interval);
   if (!parts) return null;
+  const calendar = calendarParts(String(interval));
+  if (calendar) return {
+    ...parts, alignment: "zoned-calendar", canonicalValue: `${calendar.amount}${calendar.unit}~c1~${calendar.zone}`,
+    widthSeconds: calendar.amount * INTERVAL_UNIT_SECONDS[calendar.unit], weekCount: null, monthCount: null,
+    timezone: calendar.zone,
+  };
 
   if (parts.unit === "M") {
     return {
@@ -126,13 +148,16 @@ export function getIntervalSemanticSpec(interval: unknown): IntervalSemanticSpec
 
   const widthSeconds = parts.amount * INTERVAL_UNIT_SECONDS[parts.unit];
   if (!Number.isSafeInteger(widthSeconds) || widthSeconds <= 0) return null;
+  const anchor = Number(CUSTOM_INTERVAL_RE.exec(String(interval).trim())?.[3] ?? 0) / 1000;
+  const phaseSeconds = ((anchor % widthSeconds) + widthSeconds) % widthSeconds;
   return {
     ...parts,
     alignment: "fixed-epoch",
-    canonicalValue: canonicalFixedInterval(widthSeconds),
+    canonicalValue: canonicalFixedInterval(widthSeconds) + (phaseSeconds ? `~a1~${phaseSeconds * 1000}` : ""),
     widthSeconds,
     weekCount: null,
     monthCount: null,
+    ...(phaseSeconds ? { phaseSeconds } : {}),
   };
 }
 
@@ -143,7 +168,8 @@ export function canonicalizeIntervalValue(interval: unknown): IntervalString | "
 export function intervalSemanticSignature(interval: unknown): string {
   const spec = getIntervalSemanticSpec(interval);
   if (!spec) return "";
-  if (spec.alignment === "fixed-epoch") return `${spec.alignment}:${spec.widthSeconds}`;
+  if (spec.timezone) return spec.canonicalValue;
+  if (spec.alignment === "fixed-epoch") return `${spec.alignment}:${spec.widthSeconds}${spec.phaseSeconds ? `:${spec.phaseSeconds}` : ""}`;
   if (spec.alignment === "weekly-monday") return `${spec.alignment}:${spec.weekCount}`;
   return `${spec.alignment}:${spec.monthCount}`;
 }
@@ -172,12 +198,20 @@ export function intervalTiles(source: unknown, target: unknown): boolean {
   const sourceSpec = getIntervalSemanticSpec(source);
   const targetSpec = getIntervalSemanticSpec(target);
   if (!sourceSpec || !targetSpec) return false;
+  if (targetSpec.timezone) {
+    if (sourceSpec.timezone) return sourceSpec.timezone === targetSpec.timezone
+      && sourceSpec.unit === targetSpec.unit && targetSpec.amount % sourceSpec.amount === 0;
+    return sourceSpec.alignment === "fixed-epoch" && !sourceSpec.phaseSeconds
+      && !!sourceSpec.widthSeconds && 3600 % sourceSpec.widthSeconds === 0;
+  }
+  if (sourceSpec.timezone) return false;
 
   if (sourceSpec.alignment !== targetSpec.alignment) {
     return sourceSpec.alignment === "fixed-epoch"
       && (targetSpec.alignment === "weekly-monday" || targetSpec.alignment === "calendar-month")
       && sourceSpec.widthSeconds != null
       && sourceSpec.widthSeconds <= INTERVAL_UNIT_SECONDS.d
+      && !sourceSpec.phaseSeconds
       && INTERVAL_UNIT_SECONDS.d % sourceSpec.widthSeconds === 0;
   }
   if (sourceSpec.alignment === "calendar-month") {
@@ -186,7 +220,22 @@ export function intervalTiles(source: unknown, target: unknown): boolean {
   if (sourceSpec.alignment === "weekly-monday") {
     return (targetSpec.weekCount || 0) % (sourceSpec.weekCount || 1) === 0;
   }
-  return (targetSpec.widthSeconds || 0) % (sourceSpec.widthSeconds || 1) === 0;
+  return (targetSpec.widthSeconds || 0) % (sourceSpec.widthSeconds || 1) === 0
+    && ((targetSpec.phaseSeconds ?? 0) - (sourceSpec.phaseSeconds ?? 0)) % (sourceSpec.widthSeconds || 1) === 0;
+}
+
+/** Absolute event time -> canonical fixed-minute grid, extending both ways. */
+export function intervalWithAnchor(interval: unknown, anchorMs: number): IntervalString | "" {
+  const spec = getIntervalSemanticSpec(interval);
+  if (!spec || spec.alignment !== "fixed-epoch" || !spec.widthSeconds
+    || spec.widthSeconds % 60 || !Number.isSafeInteger(anchorMs) || anchorMs % 60_000) return "";
+  return canonicalizeIntervalValue(`${canonicalFixedInterval(spec.widthSeconds)}~a1~${anchorMs}`);
+}
+
+export function formatIntervalLabel(interval: string): string {
+  const spec = getIntervalSemanticSpec(interval);
+  if (spec?.timezone) return `${spec.amount}${spec.unit} · ${spec.timezone}`;
+  return spec?.phaseSeconds ? `${interval.split("~")[0]} ↔ +${spec.phaseSeconds / 60}m` : interval;
 }
 
 /** Resolve a target from the purpose-specific native values supplied by capabilities. */

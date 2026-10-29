@@ -84,6 +84,7 @@ export interface ExchangeCatalogRuntime {
 export type GroupedAvailableIntervals = IntervalDurationGroup<AvailableInterval>[];
 
 export interface CustomIntervalRecord {
+  anchorTimeMs?: number;
   value: IntervalString;
   createdAt: number;
   lastUsedAt: number;
@@ -93,6 +94,7 @@ export interface CustomIntervalRecord {
 }
 
 export interface AddCustomIntervalOptions {
+  anchorTimeMs?: number;
   pinned?: boolean;
   markUsed?: boolean;
 }
@@ -198,7 +200,7 @@ export interface ChartSessionActions {
   saveCurrentVisibleRange(dataMeta?: unknown): void;
   handleVisibleRangeChange(range: unknown, dataMeta?: unknown): void;
   updateVisibleRangeDataMeta(dataMeta: unknown): void;
-  createCustomInterval(interval: IntervalString): CreateCustomIntervalResult;
+  createCustomInterval(interval: IntervalString, anchorTimeMs?: number): CreateCustomIntervalResult;
   removeCustomInterval(interval: IntervalString): void;
   restoreCustomInterval(): void;
   clearCustomIntervals(): void;
