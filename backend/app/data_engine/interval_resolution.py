@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, Protocol
 
 from app.data_engine.interval_policy import (
+    IntervalAlignment,
     IntervalSpec,
     interval_tiles,
     intervals_equivalent,
@@ -29,6 +30,7 @@ class IntervalPurpose(str, Enum):
 class IntervalRouteKind(str, Enum):
     NATIVE = "native"
     DERIVED = "derived"
+    TRADE = "trade"
 
 
 class IntervalResolutionErrorCode(str, Enum):
@@ -86,6 +88,8 @@ class IntervalRoute:
 
     @property
     def source_interval(self) -> str:
+        if self.kind is IntervalRouteKind.TRADE:
+            return self.canonical_interval
         source = (
             self.native_interval
             if self.kind is IntervalRouteKind.NATIVE
@@ -177,6 +181,13 @@ class IntervalResolver:
                 best_base = (native_interval, native_spec)
 
         if best_base is None:
+            from app.exchanges.trade_candles import supports_trade_candles
+            if spec.alignment is IntervalAlignment.FIXED_EPOCH and supports_trade_candles(normalized_exchange, normalized_market):
+                return IntervalRoute(
+                    exchange=normalized_exchange, market_type=normalized_market,
+                    requested_interval=requested_interval, canonical_interval=spec.canonical,
+                    purpose=normalized_purpose, kind=IntervalRouteKind.TRADE, spec=spec,
+                )
             raise self._error(
                 IntervalResolutionErrorCode.NO_EXACT_BASE,
                 (

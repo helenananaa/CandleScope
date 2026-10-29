@@ -42,6 +42,10 @@ def native_kline_calendar(exchange: str, market_type: str, interval: str, symbol
     if exchange == "upbit" and market_type == "spot" and interval == "1s" and symbol:
         from app.data_engine.storage.native_empty_seconds import make_calendar
         return make_calendar(symbol)
+    from app.exchanges.trade_candles import uses_trade_candles
+    if symbol and uses_trade_candles(exchange, market_type, interval):
+        from app.data_engine.storage.trade_empty_buckets import make_calendar
+        return make_calendar(exchange, market_type, symbol, interval)
     return None
 
 

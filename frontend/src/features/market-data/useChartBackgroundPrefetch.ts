@@ -43,6 +43,7 @@ export interface BackgroundPrefetchSkipInput {
   inFlight: boolean;
   interval: string;
   nativeIntervals?: readonly string[];
+  tradeCandlesAvailable?: boolean;
   sourceRowBudget?: number;
   targetBarLimit?: number;
 }
@@ -92,12 +93,14 @@ export function planBackgroundPrefetchRequest(
   nativeIntervals: readonly string[],
   targetBarLimit = PREFETCH_BAR_LIMIT,
   sourceRowBudget = PREFETCH_SOURCE_ROW_BUDGET,
+  tradeCandlesAvailable = false,
 ): TargetBarRequestPlan | null {
   return planTargetBarRequest({
     desiredTargetBars: targetBarLimit,
     interval,
     nativeIntervals,
     sourceRowBudget,
+    tradeCandlesAvailable,
   });
 }
 
@@ -171,6 +174,7 @@ export function shouldSkipChartBackgroundPrefetch({
   nativeIntervals = [],
   sourceRowBudget = PREFETCH_SOURCE_ROW_BUDGET,
   targetBarLimit = PREFETCH_BAR_LIMIT,
+  tradeCandlesAvailable = false,
 }: BackgroundPrefetchSkipInput): boolean {
   if (intervalsSemanticallyEquivalent(interval, activeInterval) || hasMemoryCache || inFlight) return true;
   if (fullCacheStatus === "loading") return true;
@@ -181,6 +185,7 @@ export function shouldSkipChartBackgroundPrefetch({
       nativeIntervals,
       targetBarLimit,
       sourceRowBudget,
+      tradeCandlesAvailable,
     );
     if (plan == null || plan.targetBars <= 0) return true;
   }
@@ -194,6 +199,7 @@ export function useChartBackgroundPrefetch({
   activeInterval,
   trackedIntervals,
   nativeIntervals,
+  tradeCandlesAvailable = false,
   hasCache,
   seriesDataFeed,
   enabled,
@@ -263,6 +269,7 @@ export function useChartBackgroundPrefetch({
           inFlight: inFlightRef.current.has(key),
           interval: canonicalInterval,
           nativeIntervals,
+          tradeCandlesAvailable,
         })) continue;
         const attemptClaim = attemptLedgerRef.current.claimInterval(canonicalInterval);
         if (!attemptClaim) continue;
@@ -280,6 +287,9 @@ export function useChartBackgroundPrefetch({
         const prefetchPlan = planBackgroundPrefetchRequest(
           canonicalInterval,
           nativeIntervals,
+          PREFETCH_BAR_LIMIT,
+          PREFETCH_SOURCE_ROW_BUDGET,
+          tradeCandlesAvailable,
         );
         const targetBarLimit = prefetchPlan?.targetBars ?? PREFETCH_BAR_LIMIT;
 
@@ -339,6 +349,7 @@ export function useChartBackgroundPrefetch({
     isForegroundBusy,
     marketType,
     nativeIntervals,
+    tradeCandlesAvailable,
     prefetchPriority,
     seriesDataFeed,
     schedulerOwner,

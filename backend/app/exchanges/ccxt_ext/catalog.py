@@ -570,6 +570,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
             "derivatives.ccxt_unified",
         ],
         limits={
+            "trade_candles.markets": ["spot"] if entry.exchange_id == "kraken" else [],
             "ccxt.version": SUPPORTED_CCXT_VERSION,
             "ccxt.pro": entry.pro,
             "ccxt.rate_limit_ms": entry.rate_limit_ms,

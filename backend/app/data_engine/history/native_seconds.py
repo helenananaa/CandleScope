@@ -20,15 +20,18 @@ def native_second_history_start(exchange: str, interval: str, now_ms: int) -> in
 
 
 class NativeSparseSecondsCalendar(AlwaysOpenCalendar):
-    """Exclude only REST-confirmed empty seconds; unknown gaps remain expected.
+    """Exclude only REST-confirmed empty buckets; unknown gaps remain expected.
 
     Instances are short-lived read snapshots. A day-sized cache keeps adjacent
-    calendar steps from issuing one SQLite query per second. Other intervals
+    calendar steps from issuing one SQLite query per bucket. Other intervals
     retain the ordinary UTC calendar.
     """
 
-    def __init__(self, symbol: str, lookup: Callable, revision: Callable = lambda: 0):
-        super().__init__(f"upbit.spot.native-seconds:{symbol}")
+    def __init__(self, symbol: str, lookup: Callable, revision: Callable = lambda: 0, *, interval="1s", calendar_id=None):
+        from app.data_engine.interval_policy import parse_interval_ms
+        super().__init__(calendar_id or f"upbit.spot.native-seconds:{symbol}")
+        self.interval = interval
+        self.width = parse_interval_ms(interval)
         self.symbol = symbol
         self._lookup = lookup
         self._revision = revision
@@ -36,7 +39,7 @@ class NativeSparseSecondsCalendar(AlwaysOpenCalendar):
         self._days: dict[int, tuple[list[int], list[tuple[int, int]]]] = {}
 
     def _skip(self, value: int | None, direction: int, interval: str) -> int | None:
-        if value is None or interval != "1s":
+        if value is None or interval != self.interval:
             return value
         revision = self._revision()
         if revision != self._observed_revision:
@@ -45,7 +48,7 @@ class NativeSparseSecondsCalendar(AlwaysOpenCalendar):
         while True:
             day = value // 86_400_000
             if day not in self._days:
-                spans = merge_ranges(self._lookup(self.symbol, day * 86_400_000, (day + 1) * 86_400_000 - 1))
+                spans = merge_ranges(self._lookup(self.symbol, day * 86_400_000, (day + 1) * 86_400_000 - 1), self.width)
                 if len(self._days) >= 8:
                     self._days.pop(next(iter(self._days)))
                 self._days[day] = ([a for a, _ in spans], spans)
@@ -54,7 +57,7 @@ class NativeSparseSecondsCalendar(AlwaysOpenCalendar):
             span = spans[index] if index >= 0 and spans[index][1] >= value else None
             if span is None:
                 return value
-            value = span[1] + 1000 if direction > 0 else span[0] - 1000
+            value = span[1] + self.width if direction > 0 else span[0] - self.width
 
     def first_expected_open(self, start_ms, end_ms, interval):
         value = self._skip(super().first_expected_open(start_ms, end_ms, interval), 1, interval)
@@ -77,21 +80,22 @@ class NativeSparseSecondsCalendar(AlwaysOpenCalendar):
             current = self.next_expected_open(current, interval)
 
     def count_expected(self, start_ms, end_ms, interval):
-        if interval != "1s":
+        if interval != self.interval:
             return super().count_expected(start_ms, end_ms, interval)
-        start = ((start_ms + 999) // 1000) * 1000
-        end = (end_ms // 1000) * 1000
+        width = self.width
+        start = ((start_ms + width - 1) // width) * width
+        end = (end_ms // width) * width
         if start > end:
             return 0
-        absent = sum((min(b, end) - max(a, start)) // 1000 + 1
-                     for a, b in merge_ranges(self._lookup(self.symbol, start, end)))
-        return (end - start) // 1000 + 1 - absent
+        absent = sum((min(b, end) - max(a, start)) // width + 1
+                     for a, b in merge_ranges(self._lookup(self.symbol, start, end), width))
+        return (end - start) // width + 1 - absent
 
 
-def merge_ranges(ranges):
+def merge_ranges(ranges, width=1000):
     merged = []
     for start, end in sorted(ranges):
-        if merged and start <= merged[-1][1] + 1000:
+        if merged and start <= merged[-1][1] + width:
             merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
         else:
             merged.append((start, end))

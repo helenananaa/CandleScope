@@ -112,3 +112,19 @@ test("an unknown derived route fails closed while native capabilities are unavai
     targetBars: 0,
   });
 });
+
+
+test("trade fallback is admitted explicitly and bounded without changing native priority", () => {
+  const input = { desiredTargetBars: 1_500, interval: "7s", nativeIntervals: ["1m"], sourceRowBudget: 20_000 };
+  assert.equal(planTargetBarRequest(input).targetBars, 0);
+  const plan = planTargetBarRequest({ ...input, tradeCandlesAvailable: true });
+  assert.equal(plan.targetBars, 85);
+  assert.equal(plan.blockedReason, null);
+  assert.equal(plan.budgetLimited, true);
+  assert.equal(planTargetBarRequest({ ...input, interval: "1s", tradeCandlesAvailable: true }).targetBars, 100);
+  assert.equal(planTargetBarRequest({ ...input, interval: "601s", tradeCandlesAvailable: true }).targetBars, 1);
+  assert.equal(planTargetBarRequest({ ...input, interval: "7w", nativeIntervals: [], tradeCandlesAvailable: true }).targetBars, 0);
+  assert.equal(planTargetBarRequest({ ...input, interval: "7M", nativeIntervals: [], tradeCandlesAvailable: true }).targetBars, 0);
+  assert.equal(planTargetBarRequest({ ...input, nativeIntervals: ["1s"], tradeCandlesAvailable: true }).baseInterval, "1s");
+  assert.equal(planTargetBarRequest({ ...input, interval: "1m", tradeCandlesAvailable: true }).targetBars, 1_500);
+});

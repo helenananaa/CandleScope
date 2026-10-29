@@ -193,9 +193,11 @@ export function intervalTiles(source: unknown, target: unknown): boolean {
 export function canResolveIntervalFromNativeValues(
   target: unknown,
   nativeValues: readonly unknown[],
+  tradeCandlesAvailable = false,
 ): boolean {
   const targetSpec = getIntervalSemanticSpec(target);
   if (!targetSpec) return false;
+  if (tradeCandlesAvailable && /^\d+[smhd]$/.test(String(target))) return true;
   const targetNominalSeconds = intervalNominalSeconds(targetSpec);
   return nativeValues.some((nativeValue) => {
     if (intervalsSemanticallyEquivalent(nativeValue, target)) return true;

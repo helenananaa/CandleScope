@@ -105,3 +105,75 @@ Upbit 单行适配缺陷与 Gate 已接收 journal 数据需等待收尾的验�
 - [OKX 历史 K 线](https://app.okx.com/docs-v5/en/#order-book-trading-market-data-get-candlesticks-history)
 - [Gate 现货 K 线](https://www.gate.com/docs/developers/apiv4/en/spot/#market-k-line-chart)、[WS 通道](https://www.gate.com/docs/developers/apiv4/ws/en/#candlesticks-channel)
 - [Upbit 秒 K 线](https://global-docs.upbit.com/reference/list-candles-seconds)、[原生实时秒 K 线](https://global-docs.upbit.com/reference/websocket-candle)
+
+
+## 成交聚合与自定义固定周期扩展
+
+在前述原生 1s 实现之后，新增按交易所和市场明确准入的成交聚合来源。
+路由顺序为：原生目标周期 → 可精确拼接的原生小周期 → 已准入的完整成交窗口。
+前端自定义周期、历史加载、向左分页、重连补数、自选订阅和请求预算共同使用该能力。
+原生周期目录不会因为成交聚合而虚增。周/月周期保留原有对齐语义；成交兜底只接受
+以 UTC epoch 对齐的整秒固定周期，且仅用于默认加密市场序列身份。
+
+首个成交来源为 **Kraken 现货**；支持 1s、7s、61s 等无法由其原生分钟线精确拼接的周期。
+Binance 等已有可组合原生来源继续优先使用原生 K 线。尚未准入的交易所不会仅因
+具备 recent-trades 接口而被宣称支持完整历史。后续来源需实现并验证自己的完整分页契约。
+
+Kraken 使用官方 `since` / `last` 游标遍历，不用时间戳加一跳页。按成交 ID 去重，
+用事件时间和 ID 排序，Decimal 汇总 OHLCV；冲突重复、缺少 ID、逆序、游标停滞、
+分页耗尽和中途错误均不能发布未验证的该窗口前缀。未闭合桶只作为 forming 更新。
+完整闭合窗口使用独立来源 `trade_history_verified`，经现有聚合器和 durable journal 落盘。
+实时采用 REST 轮询并复查重叠窗口；最后消费者释放后停止。
+
+无成交桶不生成虚假 K 线。经过完整分页证明的空桶范围单独保存在 SQLite，
+供查询、缺口扫描、下载封存共同使用；新到真实 K 线撤销冲突证据，删除与 GC 清理
+相应证据并保留保护边界旁的范围。空页只证明请求窗口，不被解释为全局历史耗尽。
+普通交互每次最多 100 桶 / 10 分钟（周期大于 10 分钟时允许一桶），手动下载继续分块；
+交易所适配器每窗口最多 100 页、每页 1000 笔，超限返回失败而非声称完整。
+这属于普通按需历史；未新增录制、常驻采集器或回放归档。
+
+### 真实链路与界面
+
+隔离生产后端连接 Kraken BTC/USD，手动下载 70 秒 / 7s 窗口：8 根真实 K 线，
+包含无成交桶，任务 `SUCCEEDED`、连续性验证通过。实时新增 3 根经验证收盘线，
+journal pending=0、failures=0；第二个消费者保留时流继续，最后消费者退出后流停止，
+收尾后两秒内行数稳定。新 Python 进程从 storage 读取同样 8 根，complete=true，
+SQLite quick_check=ok。
+
+浏览器连接 worktree 隔离服务，实际完成创建 7s、首屏出图、服务重启与页面刷新、
+7s → 原生 1m → 7s 切换、向左拖动加载更早历史、回到实时。历史范围最终返回
+80 根 / expected=80、history_state=ready、complete=true、missing_ranges=[]；
+向左加载后界面超过 220 根，加载状态正常结束。
+验证中发现并修复前端预算仍拒绝成交来源、缺口扫描缺少周期导致日历解析失败的问题。
+Kraken 盘口曾短时显示重同步，随后恢复；盘口链路未在本次改动。
+
+证据：`output/issue-131/trades/kraken-final-result.json`、`restart-final.log`、
+`ui-range-final.json`、`kraken-7s-ui.png`、`backend-ui-final.log`。
+复现脚本为同目录 `live_smoke.py` 和 `restart_read.py`；所有服务与数据库均为隔离测试环境。
+
+### 验证范围与限制
+
+自动回归覆盖原生优先、市场/身份限制、排序/去重/边界、分页停滞、分页预算、
+错误/取消不发布前缀、forming 最终性、空桶持久化与清理、缺口扫描、durable delivery，
+以及前端创建/恢复/订阅/各加载阶段的预算。完整结果见下列最终检查记录。
+
+本阶段验证了开发态真实浏览器 UI 和生产后端组件，未打包进行 macOS 桌面验收，
+未进行多币种长期压力、长历史及真实断网恢复测试。Kraken 的成交兜底是 REST 轮询，
+不承诺逐笔低延迟；高成交密度或很长的单桶可能达到分页上限并保持待修复。
+短时成功不代表所有市场与历史范围都已验收。
+
+接口依据：[Kraken Recent Trades](https://docs.kraken.com/api-reference/market-data/get-recent-trades)。
+
+
+最终自动检查记录：
+
+- 后端相关集合 230 passed，重启子进程用例首次因 20 秒冷导入超时失败；
+  将该耐久性用例的子进程启动上限改为 120 秒，保留所有数据断言，单独复跑 1 passed。
+  新增 GC 保护用例后成交来源集合 15 passed；去重后本阶段共 232 个相关用例通过。
+- 前端相关集合 127 passed；补全新增用例的交易所市场类型字段后，该文件 2 passed。
+- 全仓 typecheck（应用源码及测试/配置）通过；生产构建通过，保留既有大 chunk 提示。
+- 全仓 lint 完成，0 errors；唯一新增的多余 Hook 依赖警告已修复，并对该文件定向复查。
+
+日志：`backend-final.log`、`backend-recheck.log`、`restart-regression-final.log`、
+`frontend-regression.log`、`frontend-fixture-recheck.log`、`typecheck-final.log`、`lint-final.log`、`lint-hook-final.log`、`build.log`。
+首次失败日志保留，避免把冷启动超时当作未发生。真实新进程读取另有独立成功证据。

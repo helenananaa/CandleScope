@@ -219,6 +219,13 @@ class Reconciler:
             total_received = sum(len(bars) for bars in grouped.values())
             result.bars_received = total_received
             record_empty = getattr(self._storage, "record_native_empty_seconds", None)
+            record_trade_empty = getattr(self._storage, "record_trade_empty_buckets", None)
+            if callable(record_trade_empty):
+                for fetched in fetch_results:
+                    ranges = fetched.metadata.get("trade_empty_ranges", [])
+                    task = fetched.task
+                    if ranges:
+                        await record_trade_empty(task.exchange, task.market_type, task.symbol, task.interval, ranges)
             if callable(record_empty):
                 for fetched in fetch_results:
                     task = fetched.task

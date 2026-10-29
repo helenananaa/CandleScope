@@ -918,7 +918,11 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
                 market_type=selection,
             )
             rows: list[dict[str, Any]] = []
-            if descriptor.stream_type == StreamType.KLINE and self.id == "gate" and descriptor.interval == "1s":
+            from app.exchanges.trade_candles import uses_trade_candles
+            if descriptor.stream_type == StreamType.KLINE and uses_trade_candles(self.id, descriptor.market_type, descriptor.interval):
+                from .trade_candles import fetch_kraken_trade_candles
+                rows = await fetch_kraken_trade_candles(exchange, symbol, req, now_ms=int(time.time() * 1000))
+            elif descriptor.stream_type == StreamType.KLINE and self.id == "gate" and descriptor.interval == "1s":
                 if selection != "spot":
                     raise ValueError("Gate native 1s candles are supported only for spot")
                 limit = min(max(1, int(req.limit or 1)), 1000)

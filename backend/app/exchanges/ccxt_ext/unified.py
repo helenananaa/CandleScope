@@ -369,6 +369,7 @@ class CcxtUnifiedNormalizer:
                         open_time + interval_ms <= msg.received_at_ms,
                     )
                 ),
+                "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
             }
         except (TypeError, ValueError):
             return None

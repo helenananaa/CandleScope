@@ -218,7 +218,7 @@ class BackfillPlanner:
                 exchange=route.exchange,
                 market_type=route.market_type,
             )
-            if route.kind is IntervalRouteKind.NATIVE:
+            if route.kind in (IntervalRouteKind.NATIVE, IntervalRouteKind.TRADE):
                 # Exchange-native interval — direct fetch.
                 native_gap = replace(
                     canonical_gap,

@@ -182,6 +182,7 @@ export interface UseChartInitialLoadOptions {
   marketType: MarketType;
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   initialViewportCountBackCap?: number;
   getFromCache(symbol: SymbolCode, interval: IntervalString): KlineBar[];
   resolveInitialRows?: ResolveInitialRows | null;
@@ -264,11 +265,13 @@ export function canCommitInitialFeedResult({
 export function planInitialHistoryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): number {
   return planTargetBarRequest({
     desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
   })?.targetBars ?? INITIAL_HISTORY_COUNT_BACK;
 }
@@ -276,10 +279,11 @@ export function planInitialHistoryCountBack(
 export function planInitialViewportCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): number {
   return Math.min(
     INITIAL_VIEWPORT_COUNT_BACK,
-    planInitialHistoryCountBack(interval, nativeIntervalValues),
+    planInitialHistoryCountBack(interval, nativeIntervalValues, tradeCandlesAvailable),
   );
 }
 
@@ -352,6 +356,7 @@ export function useChartInitialLoad({
   marketType,
   seriesIdentity,
   nativeIntervalValues,
+  tradeCandlesAvailable = false,
   initialViewportCountBackCap,
   getFromCache,
   resolveInitialRows,
@@ -462,8 +467,8 @@ export function useChartInitialLoad({
       interval: intv,
       ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
     };
-    const initialHistoryCountBack = planInitialHistoryCountBack(intv, nativeIntervalValues);
-    const plannedViewportCountBack = planInitialViewportCountBack(intv, nativeIntervalValues);
+    const initialHistoryCountBack = planInitialHistoryCountBack(intv, nativeIntervalValues, tradeCandlesAvailable);
+    const plannedViewportCountBack = planInitialViewportCountBack(intv, nativeIntervalValues, tradeCandlesAvailable);
     const initialViewportCountBack = initialViewportCountBackCap == null
       ? plannedViewportCountBack
       : Math.min(
@@ -934,6 +939,7 @@ export function useChartInitialLoad({
     markChartDataTransition,
     marketType,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     initialViewportCountBackCap,
     pendingInitialHistoryRef,
     replaceChartData,

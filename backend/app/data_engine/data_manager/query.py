@@ -301,6 +301,13 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
+                "Trade candles require the default crypto series identity",
+                exchange=exchange, market_type=market_type, interval=interval,
+                purpose=IntervalPurpose.HISTORY,
+            )
 
         if route.kind is IntervalRouteKind.DERIVED and not _materialized_only:
             if not identity.is_legacy_default_for(exchange):
@@ -672,6 +679,13 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
+                "Trade candles require the default crypto series identity",
+                exchange=exchange, market_type=market_type, interval=interval,
+                purpose=IntervalPurpose.HISTORY,
+            )
         if route.kind is IntervalRouteKind.DERIVED and not _materialized_only:
             if not identity.is_legacy_default_for(exchange):
                 raise IntervalResolutionError(
@@ -1063,6 +1077,10 @@ class QueryEngine:
             )
 
     def _calendar_for(self, key: SeriesKey):
+        from app.exchanges.trade_candles import uses_trade_candles
+        if key.identity.is_legacy_default_for(key.exchange) and uses_trade_candles(key.exchange, key.market_type, key.interval):
+            from app.data_engine.storage.trade_empty_buckets import make_calendar
+            return make_calendar(key.exchange, key.market_type, key.symbol, key.interval)
         if key.exchange == "upbit" and key.market_type == "spot" and key.interval == "1s" and key.identity.is_legacy_default_for(key.exchange):
             from app.data_engine.storage.native_empty_seconds import make_calendar
             return make_calendar(key.symbol)

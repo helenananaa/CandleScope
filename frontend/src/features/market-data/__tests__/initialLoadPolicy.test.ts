@@ -423,3 +423,10 @@ test("pending ownership cannot start a second direct request for the same cursor
     before: 1_000,
   });
 });
+
+
+test("trade source capability reaches initial viewport and left pagination budgets", () => {
+  assert.equal(planInitialHistoryCountBack("7s", ["1m"], true), 85);
+  assert.equal(planInitialViewportCountBack("7s", ["1m"], true), 85);
+  assert.equal(planLoadMorePageSize("7s", ["1m"], true), 85);
+});

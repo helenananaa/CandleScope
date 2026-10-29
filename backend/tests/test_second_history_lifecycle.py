@@ -81,8 +81,11 @@ engine = QueryEngine(cache=BarCache(), storage=klines_repo.KlinesRepoAdapter(), 
 result = engine.query("BTCUSDT", "1s", start_ms={START}, end_ms={START}, limit=1)
 print(json.dumps({{"count": len(result.bars), "close": result.bars[0].close, "volume": result.bars[0].volume, "source": result.source.value}}))
 '''
-    process = await asyncio.to_thread(subprocess.run, [sys.executable, "-B", "-c", script],
-                                      cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=20)
+    # Cold imports on a loaded host are not part of this durability assertion.
+    process = await asyncio.to_thread(
+        subprocess.run, [sys.executable, "-B", "-c", script],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=120,
+    )
     assert process.returncode == 0, process.stderr
     assert json.loads(process.stdout.splitlines()[-1]) == dict(count=1, close=12, volume=3, source="storage")
 

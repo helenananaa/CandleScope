@@ -17,6 +17,7 @@ import { useIntervalNoticeRuntime } from "./intervalNoticeRuntime.js";
 import { loadInitialChartSession, updateUserPref } from "./chartSessionModel.js";
 import {
   canResolveIntervalForSeriesIdentity,
+  hasTradeCandleSource,
   getExchangeMarketTypes,
   getFallbackIntervalAfterCustomClear,
   getFallbackIntervalAfterCustomRemove,
@@ -133,6 +134,7 @@ export function useChartSession({
     () => nativeIntervals.map((item) => item.value),
     [nativeIntervals],
   );
+  const tradeCandlesAvailable = isLegacyKlineSeriesIdentity(exchange, seriesIdentity) && hasTradeCandleSource(exchangeCatalog, exchange, marketType);
   const derivedIntervalsAvailable = isLegacyKlineSeriesIdentity(exchange, seriesIdentity);
   const exchangeCapabilityAvailable = isExchangeIntervalCapabilityAvailable(
     exchangeCatalogStatus,
@@ -147,8 +149,9 @@ export function useChartSession({
         interval,
         nativeIntervalValues,
         seriesIdentity,
+      tradeCandlesAvailable,
       ),
-    [exchange, exchangeCapabilityAvailable, interval, nativeIntervalValues, seriesIdentity],
+    [exchange, exchangeCapabilityAvailable, interval, nativeIntervalValues, seriesIdentity, tradeCandlesAvailable],
   );
   const intervalGroups = useMemo(
     () => buildSortedIntervals(
@@ -170,16 +173,17 @@ export function useChartSession({
         interval,
         baseWsIntervals,
         seriesIdentity,
+      tradeCandlesAvailable,
       ),
-    [baseWsIntervals, exchange, exchangeCapabilityAvailable, interval, seriesIdentity],
+    [baseWsIntervals, exchange, exchangeCapabilityAvailable, interval, seriesIdentity, tradeCandlesAvailable],
   );
   const marketDataReady = exchangeCatalogStatus !== "loading" && historyIntervalAvailable;
   const webSocketReady = marketDataReady && realtimeIntervalAvailable;
   const trackedIntervals = useMemo(
     () => webSocketReady
-      ? buildRealtimeTrackedIntervals(interval, baseWsIntervals)
+      ? buildRealtimeTrackedIntervals(interval, baseWsIntervals, "1m", tradeCandlesAvailable)
       : [],
-    [baseWsIntervals, interval, webSocketReady],
+    [baseWsIntervals, interval, webSocketReady, tradeCandlesAvailable],
   );
   const prefetchIntervals = useMemo(
     () => Array.from(new Set([
@@ -190,6 +194,7 @@ export function useChartSession({
           candidate,
           nativeIntervalValues,
           seriesIdentity,
+      tradeCandlesAvailable,
         )
       )),
       ...(canResolveIntervalForSeriesIdentity(
@@ -197,9 +202,10 @@ export function useChartSession({
         interval,
         nativeIntervalValues,
         seriesIdentity,
+      tradeCandlesAvailable,
       ) ? [interval] : []),
     ])),
-    [exchange, interval, nativeIntervalValues, nativeIntervals, savedCustomIntervals, seriesIdentity],
+    [exchange, interval, nativeIntervalValues, nativeIntervals, savedCustomIntervals, seriesIdentity, tradeCandlesAvailable],
   );
   const trackedIntervalsRef = useRef(trackedIntervals);
   useEffect(() => {
@@ -424,6 +430,7 @@ export function useChartSession({
       canonicalInterval,
       nativeIntervalValues,
       seriesIdentity,
+      tradeCandlesAvailable,
     )) {
       showIntervalNotice({
         type: "error",
@@ -436,7 +443,7 @@ export function useChartSession({
     setInterval(canonicalInterval);
     markIntervalUsed(canonicalInterval);
     updateUserPref("lastInterval", canonicalInterval);
-  }, [exchange, exchangeCatalogStatus, interval, markIntervalUsed, marketType, nativeIntervalValues, publishTransition, saveCurrentVisibleRange, seriesIdentity, showIntervalNotice]);
+  }, [exchange, exchangeCatalogStatus, interval, markIntervalUsed, marketType, nativeIntervalValues, publishTransition, saveCurrentVisibleRange, seriesIdentity, showIntervalNotice, tradeCandlesAvailable]);
 
   const selectMarketType = useCallback((nextMarketType: MarketType): void => {
     if (!nextMarketType || nextMarketType === marketType) return;
@@ -518,6 +525,7 @@ export function useChartSession({
         interval,
         nativeIntervalValues,
         seriesIdentity,
+      tradeCandlesAvailable,
       )
     ) return undefined;
     const nextInterval = resolveSupportedInterval({
@@ -539,7 +547,7 @@ export function useChartSession({
       updateUserPref("lastInterval", nextInterval);
     }, 0);
     return () => clearTimeout(timer);
-  }, [exchange, exchangeCatalog, exchangeCatalogStatus, interval, marketType, nativeIntervalValues, nativeIntervals, publishTransition, savedCustomIntervals, seriesIdentity]);
+  }, [exchange, exchangeCatalog, exchangeCatalogStatus, interval, marketType, nativeIntervalValues, nativeIntervals, publishTransition, savedCustomIntervals, seriesIdentity, tradeCandlesAvailable]);
 
   const createCustomInterval = useCallback((
     nextInterval: IntervalString,
@@ -556,6 +564,7 @@ export function useChartSession({
       nextInterval,
       nativeIntervalValues,
       seriesIdentity,
+      tradeCandlesAvailable,
     )) {
       return {
         ok: false,
@@ -567,7 +576,7 @@ export function useChartSession({
     selectInterval(result.value);
     showIntervalNotice({ type: "success", text: t("interval.addedAndSwitched", { value: result.value }) });
     return { ok: true, added: result.added };
-  }, [addCustomInterval, exchange, exchangeCatalog, exchangeCatalogStatus, marketType, nativeIntervalValues, selectInterval, seriesIdentity, showIntervalNotice]);
+  }, [addCustomInterval, exchange, exchangeCatalog, exchangeCatalogStatus, marketType, nativeIntervalValues, selectInterval, seriesIdentity, showIntervalNotice, tradeCandlesAvailable]);
 
   const removeCustomIntervalAction = useCallback((removedInterval: IntervalString): void => {
     const removed = removeCustomInterval(removedInterval);
@@ -658,6 +667,7 @@ export function useChartSession({
       exchangeCatalogStatus,
       exchangeLimitations,
       exchangeCapabilityAvailable,
+      tradeCandlesAvailable,
       historyIntervalAvailable,
       realtimeIntervalAvailable,
       marketDataReady,

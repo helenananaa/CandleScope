@@ -126,3 +126,9 @@ test("unsubscribed current intervals wait for a new ACK and removed failures can
   });
   assert.equal(getKlineStreamIntervalStatus(unsubscribed, "1m"), "connecting");
 });
+
+
+test("trade recovery bounds the history pull", () => {
+  assert.equal(planKlineRecoveryCountBack("7s", ["1m"], 1500, true), 85);
+  assert.equal(planKlineRecoveryCountBack("7s", ["1m"], 50, true), 50);
+});

@@ -397,7 +397,7 @@ class ManualHistoryPlanner:
                     source_end = min(source_end, source_last_closed)
                 source_rows = max(0, ((source_end - aligned) // source_width) + 1)
         strategy = "REST"
-        if error is None and self._archive_enabled and (source_rows or 0) >= REST_PAGE_BARS * ARCHIVE_MIN_REST_PAGES:
+        if error is None and route.kind is not IntervalRouteKind.TRADE and self._archive_enabled and (source_rows or 0) >= REST_PAGE_BARS * ARCHIVE_MIN_REST_PAGES:
             strategy = "ARCHIVE_PREFERRED_WITH_REST_TAIL"
         elif not self._archive_enabled:
             strategy = "REST"
@@ -413,9 +413,7 @@ class ManualHistoryPlanner:
             symbol=symbol,
             requested_interval=interval,
             canonical_interval=route.canonical_interval,
-            route_kind=(
-                "NATIVE" if route.kind is IntervalRouteKind.NATIVE else "DERIVED"
-            ),
+            route_kind="NATIVE" if route.kind is IntervalRouteKind.NATIVE else "DERIVED",
             source_interval=route.source_interval,
             effective_start_ms=aligned,
             initial_end_open_ms=int(last_closed or aligned),

@@ -65,7 +65,7 @@ class IntervalWorkPlan:
 
 
 def _source_factor(route: IntervalRoute) -> int:
-    if route.kind is IntervalRouteKind.NATIVE:
+    if route.kind in (IntervalRouteKind.NATIVE, IntervalRouteKind.TRADE):
         return 1
 
     source_ms = parse_interval_ms(route.source_interval)
@@ -117,6 +117,11 @@ def build_interval_work_plan(
     else:
         maximum_target = max(0, budget // factor - padding)
         effective = min(requested, maximum_target)
+
+    if route.kind is IntervalRouteKind.TRADE:
+        # This bounds output buckets/time, not the unknown number of prints.
+        # The provider separately enforces its raw trade pagination budget.
+        effective = min(effective, 100, max(1, 600_000 // route.spec.nominal_ms))
 
     planned_source_rows = (
         (effective + padding) * factor
