@@ -121,6 +121,9 @@ def test_cancelled_caller_stops_its_loader_in_the_child(
                 await asyncio.sleep(0.01)
 
     async def run() -> None:
+        # Start/import the worker before measuring cancellation delivery. Cold
+        # CCXT imports have their own 90-second startup bound.
+        await worker._ready_generation(__name__)
         pending = asyncio.create_task(
             run_catalog_loader(_loader_until_cancelled, str(started), str(cancelled)),
         )
@@ -214,7 +217,8 @@ def test_list_symbol_rows_match_inline_symbols_and_carry_proxy(monkeypatch) -> N
     assert rows[0]["priceTickSize"] == "0.1"
     assert rows[0]["listedAtMs"] == 1_500_000_000_000
     assert loader_calls[0][0] == get_ccxt_catalog_entry("binance")
-    assert loader_calls[0][2:] == ("custom", "http://127.0.0.1:7890", True)
+    assert loader_calls[0][2:5] == ("custom", "http://127.0.0.1:7890", True)
+    assert loader_calls[0][5].http_proxy == "http://127.0.0.1:7890"
     assert {(config.proxy_mode, config.http_proxy) for config in configs} == {
         ("custom", "http://127.0.0.1:7890"),
     }

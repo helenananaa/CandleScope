@@ -374,6 +374,40 @@ def test_runtime_pool_shares_one_exchange_and_closes_at_last_release() -> None:
     asyncio.run(run())
 
 
+def test_runtime_pool_cancels_pending_bootstrap_only_after_last_waiter(monkeypatch) -> None:
+    async def run() -> None:
+        started, canceled = asyncio.Event(), asyncio.Event()
+
+        async def blocked_load(exchange) -> None:
+            from app.exchanges.public_admission import current_demand, TrafficClass
+            assert current_demand().priority() == TrafficClass.RECOVERY
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                canceled.set()
+
+        monkeypatch.setattr(_FakeExchange, "load_markets", blocked_load)
+        pool, profile, config = CcxtRuntimePool(), _FakeProfile(), IngestionConfig()
+        first = asyncio.create_task(pool.acquire(profile, config))
+        await asyncio.wait_for(started.wait(), 1)
+        second = asyncio.create_task(pool.acquire(profile, config))
+        await _wait_until(lambda: pool.snapshot()["runtimes"]["fake|futures"]["references"] == 2)
+        first.cancel()
+        result = await asyncio.wait_for(asyncio.gather(first, return_exceptions=True), 1)
+        assert isinstance(result[0], asyncio.CancelledError)
+        assert not canceled.is_set()
+        assert profile.exchange.close_calls == 0
+        second.cancel()
+        result = await asyncio.wait_for(asyncio.gather(second, return_exceptions=True), 1)
+        assert isinstance(result[0], asyncio.CancelledError)
+        assert canceled.is_set()
+        assert profile.exchange.close_calls == profile.close_calls == 1
+        assert pool.snapshot() == {"runtimes": {}}
+
+    asyncio.run(run())
+
+
 def test_runtime_pool_bounds_okx_kline_descriptors_per_shard(monkeypatch) -> None:
     async def run() -> None:
         from app.core import config as app_config

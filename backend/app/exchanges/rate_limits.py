@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import time
 import weakref
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
+
+
+_response_owner: contextvars.ContextVar[Any] = contextvars.ContextVar("quota_response_owner", default=None)
 
 
 def _unit_cost(_: HistoricalRequest) -> int:
@@ -106,11 +111,16 @@ class RateLimitReservation:
     request: HistoricalRequest
     settled: bool = False
     proxy_route: Any | None = None
+    owner_task: Any = field(default=None, repr=False)
 
     def record_response(self, **kwargs: Any) -> bool:
         if self.settled:
             return False
-        recorded = self.manager.record_response(self.rule, **kwargs)
+        token = _response_owner.set(self.owner_task)
+        try:
+            recorded = self.manager.record_response(self.rule, **kwargs)
+        finally:
+            _response_owner.reset(token)
         status_code = kwargs.get("status_code")
         body_code = kwargs.get("body_code")
         if (
@@ -178,6 +188,9 @@ class RateLimitDeferred(RuntimeError):
             f"retry in {self.retry_after_seconds:.3f}s"
         )
 
+    def __reduce__(self) -> Any:
+        return type(self), (self.admission,)
+
 
 @dataclass(slots=True)
 class _Bucket:
@@ -210,8 +223,15 @@ class _Bucket:
     last_probe_release_reason: str | None = None
     circuit_generation: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    window_costs: deque[tuple[float, int]] = field(default_factory=deque, repr=False)
 
     def refill(self, now: float) -> None:
+        if self.algorithm == "sliding_window":
+            while self.window_costs and self.window_costs[0][0] + self.refill_interval_seconds <= now:
+                self.window_costs.popleft()
+            self.tokens = max(0, self.capacity - sum(cost for _, cost in self.window_costs))
+            self.updated_at = now
+            return
         elapsed = max(0.0, now - self.updated_at)
         self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_second)
         self.updated_at = now
@@ -294,6 +314,8 @@ class RateLimitManager:
     ) -> None:
         self._buckets: dict[str, _Bucket] = {}
         self._circuits: dict[str, _Circuit] = {}
+        self._admission_lock = asyncio.Lock()
+        self._changed = asyncio.Event()
         self._conservative_cold_start = bool(conservative_cold_start)
         # Normal response accounting releases this lease immediately.  The
         # bound is only a fail-safe for a cancelled caller that never records
@@ -310,7 +332,8 @@ class RateLimitManager:
     ) -> RateLimitAdmission:
         """Return current admission state without consuming quota."""
 
-        return await self._admit(rule, request, consume=False)
+        async with self._admission_lock:
+            return await self._admit(rule, request, consume=False)
 
     async def acquire_nowait(
         self,
@@ -319,7 +342,8 @@ class RateLimitManager:
     ) -> RateLimitDecision:
         """Reserve quota immediately or raise :class:`RateLimitDeferred`."""
 
-        admission = await self._admit(rule, request, consume=True)
+        async with self._admission_lock:
+            admission = await self._admit(rule, request, consume=True)
         if not admission.allowed:
             bucket = self._bucket_for(rule)
             bucket.deferred_requests += 1
@@ -342,7 +366,8 @@ class RateLimitManager:
         total_wait_seconds = 0.0
 
         while True:
-            admission = await self._admit(rule, request, consume=True)
+            async with self._admission_lock:
+                admission = await self._admit(rule, request, consume=True)
             if admission.allowed:
                 bucket = self._bucket_for(rule)
                 bucket.last_wait_seconds = total_wait_seconds
@@ -355,7 +380,54 @@ class RateLimitManager:
                 )
             wait_seconds = max(0.001, admission.retry_after_seconds)
             total_wait_seconds += wait_seconds
-            await asyncio.sleep(wait_seconds)
+            await self.wait_for_change(wait_seconds)
+
+    def notify_change(self) -> None:
+        self._changed.set()
+        self._changed = asyncio.Event()
+
+    async def wait_for_change(self, timeout: float) -> None:
+        event = self._changed
+        try:
+            await asyncio.wait_for(event.wait(), max(0.001, timeout))
+        except TimeoutError:
+            pass
+
+    async def acquire_many_nowait(
+        self, rules: list[RateLimitRule], request: HistoricalRequest,
+    ) -> list[RateLimitReservation]:
+        """Atomically debit all distinct constraints of one physical attempt.
+
+        Every public admission uses the same lock. A failed check consumes
+        nothing; there is no partial reservation to refund or hold while waiting.
+        """
+        unique: dict[str, RateLimitRule] = {}
+        for rule in rules:
+            previous = unique.get(rule.bucket_key)
+            if previous is None or previous.request_cost(request) < rule.request_cost(request):
+                unique[rule.bucket_key] = rule
+        async with self._admission_lock:
+            for rule in unique.values():
+                admission = await self._admit(rule, request, consume=False)
+                if not admission.allowed:
+                    raise RateLimitDeferred(admission)
+            for rule in unique.values():
+                await self._admit(rule, request, consume=True)
+        return [RateLimitReservation(self, rule, request, owner_task=self._current_task())
+                for rule in unique.values()]
+
+    def available_capacity(self, rule: RateLimitRule) -> float:
+        """Local estimate only; feedback may reduce it and outside consumers are unknown."""
+        bucket = self._bucket_for(rule)
+        bucket.refill(time.monotonic())
+        return max(0.0, bucket.tokens)
+
+    def release_ephemeral_buckets(self, keys: set[str]) -> None:
+        """Retire closed-socket control windows after their senders are joined."""
+        for key in keys:
+            if ":ws_control:connection:" in key:
+                self._buckets.pop(key, None)
+        self.notify_change()
 
     async def deferred_error(
         self,
@@ -388,9 +460,16 @@ class RateLimitManager:
         if cooldown_until <= bucket.cooldown_until:
             return False
         bucket.cooldown_until = cooldown_until
+        self.notify_change()
         return True
 
-    def record_response(
+    def record_response(self, rule: RateLimitRule, **kwargs: Any) -> bool:
+        try:
+            return self._record_response(rule, **kwargs)
+        finally:
+            self.notify_change()
+
+    def _record_response(
         self,
         rule: RateLimitRule,
         *,
@@ -496,7 +575,9 @@ class RateLimitManager:
         consume: bool,
     ) -> RateLimitAdmission:
         bucket = self._bucket_for(rule)
-        cost = min(rule.request_cost(request), bucket.capacity)
+        cost = rule.request_cost(request)
+        if cost > bucket.capacity:
+            raise ValueError(f"request cost {cost} exceeds {rule.bucket_key} capacity {bucket.capacity}")
         async with bucket.lock:
             now = time.monotonic()
             now_ms = int(time.time() * 1000)
@@ -572,6 +653,13 @@ class RateLimitManager:
                     if bucket.refill_per_second > 0
                     else 1.0
                 )
+                if bucket.algorithm == "sliding_window" and bucket.window_costs:
+                    available = bucket.tokens
+                    for sent_at, sent_cost in bucket.window_costs:
+                        available += sent_cost
+                        if available >= cost:
+                            wait_seconds = max(0.001, sent_at + bucket.refill_interval_seconds - now)
+                            break
                 return self._deferred_admission(
                     rule,
                     bucket,
@@ -584,6 +672,8 @@ class RateLimitManager:
                 )
             if consume:
                 bucket.tokens -= cost
+                if bucket.algorithm == "sliding_window":
+                    bucket.window_costs.append((now, cost))
                 bucket.last_cost = cost
                 bucket.last_wait_seconds = 0.0
                 if bucket.cold_start_probe_pending or bucket.recovery_probe_pending:
@@ -614,6 +704,9 @@ class RateLimitManager:
 
     @staticmethod
     def _current_task() -> asyncio.Task[Any] | None:
+        owner = _response_owner.get()
+        if owner is not None:
+            return owner
         try:
             return asyncio.current_task()
         except RuntimeError:
@@ -773,7 +866,7 @@ class RateLimitManager:
             refill_per_second=refill_per_second,
             tokens=initial_tokens,
             updated_at=now,
-            cold_start_probe_pending=self._conservative_cold_start,
+            cold_start_probe_pending=self._conservative_cold_start and rule.algorithm != "sliding_window",
             circuit_generation=circuit_generation,
         )
         self._buckets[rule.bucket_key] = bucket

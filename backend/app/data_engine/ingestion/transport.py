@@ -226,8 +226,13 @@ class TransportLayer:
             },
             "metrics": self._metrics.snapshot(),
             "exchange_rate_limits": self._rate_limits.snapshot(),
+            "public_admission": self._public_admission_snapshot(),
             "provider_history_transports": self._provider_history_snapshots(),
         }
+
+    def _public_admission_snapshot(self) -> dict:
+        from app.exchanges.public_admission import get_public_admission
+        return get_public_admission(self._rate_limits).snapshot()
 
     def _provider_history_snapshots(self) -> dict[str, dict[str, Any]]:
         snapshots: dict[str, dict[str, Any]] = {}
@@ -304,6 +309,10 @@ class TransportLayer:
         logger.info("HTTP session restarted (proxy=%s)", proxy or "none")
 
     # ── Public: HTTP ─────────────────────────────────────────
+
+    def manages_physical_admission(self, req: TransportRequest) -> bool:
+        return bool(getattr(self._registry.get_plugin(req.descriptor.exchange),
+                            "manages_physical_admission", False))
 
     async def http_fetch(self, req: TransportRequest) -> list[RawMessage]:
         from app.core.proxy_pool import get_proxy_pool
@@ -385,7 +394,8 @@ class TransportLayer:
             provider_gate = None
             provider_gate_held = False
             try:
-                if req.proxy_route is not None and quota_reservation is None:
+                if (req.proxy_route is not None and quota_reservation is None
+                        and not self.manages_physical_admission(req)):
                     from app.exchanges.rate_limits import scope_rate_limit_rule
                     endpoint = plugin.provider_rate_limit_endpoint(req)
                     quota_request = HistoricalRequest(exchange=exchange, market_type=market_type,
@@ -401,7 +411,11 @@ class TransportLayer:
                     quota_reservation = RateLimitReservation(self._rate_limits, rule, quota_request,
                                                             proxy_route=req.proxy_route)
                 self._metrics.inc("plugin_requests_sent")
-                messages = await provider_fetch(req)
+                from dataclasses import replace
+                from app.exchanges.public_admission import current_demand, public_demand
+                demand = current_demand()
+                with public_demand(replace(demand, defer=req.defer_on_rate_limit or demand.defer)):
+                    messages = await provider_fetch(req)
                 if quota_reservation is not None:
                     # Raw providers preserve quota headers when available.
                     # An empty successful page still settles the probe lease.
@@ -567,16 +581,13 @@ class TransportLayer:
                     acquired_here = True
                 if needs_quota:
                     try:
-                        await active_manager.acquire_nowait(
-                            active_rule,
-                            active_request,
+                        from dataclasses import replace
+                        from app.exchanges.public_admission import get_public_admission, current_demand
+                        attempt_reservation = await get_public_admission(active_manager).acquire(
+                            [active_rule], active_request,
+                            demand=replace(current_demand(), defer=True),
                         )
-                        attempt_reservation = RateLimitReservation(
-                            manager=active_manager,
-                            rule=active_rule,
-                            request=active_request,
-                        )
-                    except RateLimitDeferred:
+                    except RateLimitDeferred as deferred:
                         if req.defer_on_rate_limit:
                             raise
                         # The circuit/budget changed while waiting for the
@@ -585,6 +596,7 @@ class TransportLayer:
                         if acquired_here:
                             active_semaphore.release()
                             acquired_here = False
+                        await active_manager.wait_for_change(deferred.retry_after_seconds)
                         continue
 
                 self._metrics.inc("http_requests_sent")
@@ -920,7 +932,10 @@ class TransportLayer:
                 connect_kwargs: dict[str, Any] = {
                     "open_timeout": self._cfg.ws_open_timeout,
                     "close_timeout": 2,
-                    "ping_interval": self._cfg.ws_ping_interval,
+                    # Binance supplies protocol pings. Let websockets reply
+                    # automatically, without a competing client ping stream;
+                    # the outgoing gate reserves a slot for those pongs.
+                    "ping_interval": None if exchange == "binance" else self._cfg.ws_ping_interval,
                     "ping_timeout": self._cfg.ws_ping_timeout,
                 }
                 # websockets ≥15 supports proxy natively.
@@ -935,7 +950,16 @@ class TransportLayer:
                 # else: proxy_mode == "system" with no proxy detected →
                 #        let websockets auto-detect (do NOT pass proxy kwarg)
 
-                conn = await websockets.connect(url, **connect_kwargs)
+                from app.exchanges.public_ws import admit_connection, AdmittedWebSocket
+                egress = route.egress_group if route else getattr(self._cfg, "proxy_egress_group", None)
+                permit = await admit_connection(exchange, market_type, egress)
+                try:
+                    conn = await websockets.connect(url, **connect_kwargs)
+                    permit.finish(status_code=200)
+                finally:
+                    if not permit.settled:
+                        permit.finish(response_unknown=True)
+                conn = AdmittedWebSocket(conn, exchange, market_type, egress, native=True)
 
                 self._metrics.inc("ws_connect_ok")
                 self._metrics.mark("ws_last_success_at")
@@ -947,6 +971,8 @@ class TransportLayer:
                     subscription=subscription,
                 )
 
+            except RateLimitDeferred:
+                raise
             except Exception as exc:
                 last_exc = exc
                 self._metrics.inc("ws_connect_failed")

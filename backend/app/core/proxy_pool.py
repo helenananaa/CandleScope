@@ -383,7 +383,12 @@ class ProxyPool:
             if getattr(config, "proxy_strategy", "failover") == "failover":
                 score = (wait > 0, wait, index)
             else:
-                score = (wait > 0, wait + delay, index)
+                # Prefer capacity that can support more of this work, while
+                # retaining measured latency/load and explicit failover order.
+                available = manager.available_capacity(scoped)
+                refill = scoped.capacity / max(scoped.refill_interval_seconds, 0.001)
+                scarcity = scoped.request_cost(request) / max(available + refill, 1.0)
+                score = (wait > 0, wait + delay + scarcity, index)
             choices.append((score, route))
         return min(choices, key=lambda item: item[0])[1]
 
@@ -440,6 +445,12 @@ class ProxyPool:
             return
         health = self.health(route, exchange, kind)
         status = getattr(error, "status_code", None)
+        body_code = getattr(error, "body_code", None)
+        if error is not None and status is None:
+            from app.exchanges.ccxt_ext.admission import quota_error_feedback
+            feedback = quota_error_feedback(error)
+            status = feedback.get("status_code")
+            body_code = body_code or feedback.get("body_code")
         health.last_status = status
         if error is None:
             health.successes += 1
@@ -449,7 +460,7 @@ class ProxyPool:
                 health.latency_ms = (health.latency_ms * 0.8 + elapsed * 1000 * 0.2
                                      if health.latency_samples else elapsed * 1000)
                 health.latency_samples += 1
-        elif status in {418, 429} or getattr(error, "body_code", None) in {"-1003", "50011"}:
+        elif status in {418, 429} or body_code in {"-1003", "50011"}:
             # Exchange quota is handled by RateLimitManager, never by health
             # failover or resetting a connection's budget.
             return

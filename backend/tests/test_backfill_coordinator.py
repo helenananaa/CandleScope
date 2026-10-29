@@ -2207,7 +2207,7 @@ def test_pending_background_waits_while_foreground_is_active() -> None:
     asyncio.run(_run())
 
 
-def test_pending_background_waits_while_foreground_is_rate_deferred() -> None:
+def test_independent_background_runs_while_foreground_is_rate_deferred() -> None:
     async def _run() -> None:
         class _Engine:
             def __init__(self) -> None:
@@ -2243,7 +2243,7 @@ def test_pending_background_waits_while_foreground_is_rate_deferred() -> None:
         await _wait_until(
             lambda: coordinator.snapshot()["deferred_chunks"] == 1,
         )
-        assert coordinator.has_foreground_work() is True
+        assert coordinator.has_foreground_work() is False
 
         background_request = _request(0, 0, request_id="background-during-defer")
         background_request.symbol = "ETHUSDT"
@@ -2252,11 +2252,11 @@ def test_pending_background_waits_while_foreground_is_rate_deferred() -> None:
         background = asyncio.create_task(
             coordinator.request_and_wait(background_request)
         )
-        await asyncio.sleep(0.03)
-        assert engine.calls == ["BTCUSDT"]
+        await _wait_until(lambda: "ETHUSDT" in engine.calls)
+        assert engine.calls[:2] == ["BTCUSDT", "ETHUSDT"]
 
         await asyncio.wait_for(asyncio.gather(foreground, background), timeout=1.0)
-        assert engine.calls == ["BTCUSDT", "BTCUSDT", "ETHUSDT"]
+        assert engine.calls == ["BTCUSDT", "ETHUSDT", "BTCUSDT"]
 
     asyncio.run(_run())
 

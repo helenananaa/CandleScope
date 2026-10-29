@@ -10,6 +10,7 @@ from ccxt.pro.okx import okx as CcxtOkx
 from .binance_usdm import SUPPORTED_CCXT_VERSION
 from .hooks import build_hooked_exchange_class
 from .tls import SharedSslContextMixin
+from .admission import PublicCcxtAdmissionMixin
 
 _HookedOkx = build_hooked_exchange_class(
     CcxtOkx,
@@ -25,7 +26,7 @@ _HookedOkxSpot = build_hooked_exchange_class(
 )
 
 
-class _OwnedOkxSession(SharedSslContextMixin):
+class _OwnedOkxSession(PublicCcxtAdmissionMixin, SharedSslContextMixin):
     def open(self) -> None:
         if sys.platform != "win32" or self.session is not None or not self.own_session:
             super().open()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..admission import bind_public_client
+
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 
@@ -51,12 +53,12 @@ class BinanceUsdmCcxtProfile:
             values["wssProxy"] = config.http_proxy
         from app.exchanges.plugins.binance.plugin import BinancePlugin
 
-        return CandleScopeBinanceUSDM(
+        return bind_public_client(CandleScopeBinanceUSDM(
             values,
             raw_event_sink=raw_event_sink,
             lifecycle_sink=lifecycle_sink,
             rate_limit_policy=BinancePlugin._rate_limit_policy(config),
-        )
+        ), config, self.market_type)
 
     def resolve_symbol(
         self,
