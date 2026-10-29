@@ -22,7 +22,7 @@ import {
   getFallbackIntervalAfterCustomClear,
   getFallbackIntervalAfterCustomRemove,
   isExchangeIntervalCapabilityAvailable,
-  resolveSupportedInterval,
+  resolveRequestedInterval,
 } from "./intervalPolicy.js";
 import {
   buildChartSessionKey,
@@ -373,15 +373,9 @@ export function useChartSession({
         === klineSeriesIdentityKey(exchange, seriesIdentity)
     ) return;
 
-    const nextInterval = resolveSupportedInterval({
-      exchange: nextExchange,
-      marketType: nextMarketType,
+    const nextInterval = resolveRequestedInterval({
       interval,
-      exchangeCatalog,
-      savedCustomIntervals,
       nativeIntervals: getNativeIntervals(nextExchange, exchangeCatalog, nextMarketType, "history"),
-      isNativeIntervalSupported,
-      seriesIdentity: nextSeriesIdentity,
     });
 
     updateUserPref("lastSymbol", nextSymbol);
@@ -408,7 +402,6 @@ export function useChartSession({
     interval,
     marketType,
     publishTransition,
-    savedCustomIntervals,
     seriesIdentity,
     symbol,
   ]);
@@ -420,7 +413,7 @@ export function useChartSession({
       showIntervalNotice({ type: "info", text: t("interval.capabilityLoading") });
       return;
     }
-    if (!canResolveIntervalForSeriesIdentity(
+    if (!exchangeCapabilityAvailable || !canResolveIntervalForSeriesIdentity(
       exchange,
       canonicalInterval,
       nativeIntervalValues,
@@ -437,7 +430,7 @@ export function useChartSession({
     setInterval(canonicalInterval);
     markIntervalUsed(canonicalInterval);
     updateUserPref("lastInterval", canonicalInterval);
-  }, [exchange, exchangeCatalogStatus, interval, markIntervalUsed, marketType, nativeIntervalValues, publishTransition, saveCurrentVisibleRange, seriesIdentity, showIntervalNotice]);
+  }, [exchange, exchangeCapabilityAvailable, exchangeCatalogStatus, interval, markIntervalUsed, marketType, nativeIntervalValues, publishTransition, saveCurrentVisibleRange, seriesIdentity, showIntervalNotice]);
 
   const selectMarketType = useCallback((nextMarketType: MarketType): void => {
     if (!nextMarketType || nextMarketType === marketType) return;
@@ -448,15 +441,9 @@ export function useChartSession({
       "history",
     );
     const nextSeriesIdentity = resolveKlineSeriesIdentity(exchange);
-    const nextInterval = resolveSupportedInterval({
-      exchange,
-      marketType: nextMarketType,
+    const nextInterval = resolveRequestedInterval({
       interval,
-      exchangeCatalog,
-      savedCustomIntervals,
       nativeIntervals: nextNativeIntervals,
-      isNativeIntervalSupported,
-      seriesIdentity: nextSeriesIdentity,
     });
     publishTransition(CHART_SESSION_TRANSITION_TYPES.MARKET_TYPE_CHANGE, {
       marketType: nextMarketType,
@@ -468,79 +455,10 @@ export function useChartSession({
     setSeriesIdentity(nextSeriesIdentity);
     updateUserPref("lastMarketType", nextMarketType);
     updateUserPref("lastInterval", nextInterval);
-  }, [exchange, exchangeCatalog, interval, marketType, publishTransition, savedCustomIntervals]);
+  }, [exchange, exchangeCatalog, interval, marketType, publishTransition]);
 
-  useEffect(() => {
-    if (exchangeCatalogStatus === "loading") return undefined;
-    if (exchangeMarketTypes.length === 0 || exchangeMarketTypes.includes(marketType)) return undefined;
-    const nextMarketType = exchangeMarketTypes[0] || "spot";
-    const nextNativeIntervals = getNativeIntervals(
-      exchange,
-      exchangeCatalog,
-      nextMarketType,
-      "history",
-    );
-    const nextSeriesIdentity = resolveKlineSeriesIdentity(exchange);
-    const nextInterval = resolveSupportedInterval({
-      exchange,
-      marketType: nextMarketType,
-      interval,
-      exchangeCatalog,
-      savedCustomIntervals,
-      nativeIntervals: nextNativeIntervals,
-      isNativeIntervalSupported,
-      seriesIdentity: nextSeriesIdentity,
-    });
-    const timer = setTimeout(() => {
-      publishTransition(CHART_SESSION_TRANSITION_TYPES.CAPABILITY_CORRECTION, {
-        marketType: nextMarketType,
-        interval: nextInterval,
-        ...nextSeriesIdentity,
-      });
-      setMarketType(nextMarketType);
-      setInterval(nextInterval);
-      setSeriesIdentity(nextSeriesIdentity);
-      updateUserPref("lastMarketType", nextMarketType);
-      updateUserPref("lastInterval", nextInterval);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [exchange, exchangeCatalog, exchangeCatalogStatus, exchangeMarketTypes, interval, marketType, publishTransition, savedCustomIntervals]);
-
-  useEffect(() => {
-    if (exchangeCatalogStatus === "loading") return undefined;
-    if (isNativeIntervalSupported(exchange, interval, exchangeCatalog, marketType, "history")) return undefined;
-    const savedCustom = savedCustomIntervals.some((candidate) => (
-      intervalsSemanticallyEquivalent(candidate, interval)
-    ));
-    if (
-      savedCustom
-      && canResolveIntervalForSeriesIdentity(
-        exchange,
-        interval,
-        nativeIntervalValues,
-        seriesIdentity,
-      )
-    ) return undefined;
-    const nextInterval = resolveSupportedInterval({
-      exchange,
-      marketType,
-      interval,
-      exchangeCatalog,
-      savedCustomIntervals,
-      nativeIntervals,
-      isNativeIntervalSupported,
-      seriesIdentity,
-    });
-    if (intervalsSemanticallyEquivalent(nextInterval, interval)) return undefined;
-    const timer = setTimeout(() => {
-      publishTransition(CHART_SESSION_TRANSITION_TYPES.CAPABILITY_CORRECTION, {
-        interval: nextInterval,
-      });
-      setInterval(nextInterval);
-      updateUserPref("lastInterval", nextInterval);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [exchange, exchangeCatalog, exchangeCatalogStatus, interval, marketType, nativeIntervalValues, nativeIntervals, publishTransition, savedCustomIntervals, seriesIdentity]);
+  // Keep restored/controlled identities intact when capabilities load or change.
+  // Readiness gates data work; the chart shows an explicit unavailable state.
 
   const createCustomInterval = useCallback((
     nextInterval: IntervalString,
@@ -548,6 +466,9 @@ export function useChartSession({
   ): CreateCustomIntervalResult => {
     if (exchangeCatalogStatus === "loading") {
       return { ok: false, message: t("interval.capabilityLoading") };
+    }
+    if (!exchangeCapabilityAvailable) {
+      return { ok: false, message: t("interval.noHistoryCapability") };
     }
     if (isNativeIntervalSupported(exchange, nextInterval, exchangeCatalog, marketType, "history")) {
       selectInterval(nextInterval);
@@ -569,7 +490,7 @@ export function useChartSession({
     selectInterval(result.value);
     showIntervalNotice({ type: "success", text: t("interval.addedAndSwitched", { value: formatIntervalLabel(result.value) }) });
     return { ok: true, added: result.added };
-  }, [addCustomInterval, exchange, exchangeCatalog, exchangeCatalogStatus, marketType, nativeIntervalValues, selectInterval, seriesIdentity, showIntervalNotice]);
+  }, [addCustomInterval, exchange, exchangeCapabilityAvailable, exchangeCatalog, exchangeCatalogStatus, marketType, nativeIntervalValues, selectInterval, seriesIdentity, showIntervalNotice]);
 
   const removeCustomIntervalAction = useCallback((removedInterval: IntervalString): void => {
     const removed = removeCustomInterval(removedInterval);

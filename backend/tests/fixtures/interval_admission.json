@@ -1,0 +1,844 @@
+{
+  "schema": 1,
+  "documents": [
+    {
+      "capability": {
+        "exchange": "minute",
+        "name": "minute",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1m"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "1m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "7s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "30s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "90s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "1s",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "7s",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "30s",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "90s",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "120s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "1m"
+        },
+        {
+          "target": "89m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "1m"
+        },
+        {
+          "target": "1w",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "1m"
+        },
+        {
+          "target": "1M",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "1m"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "multiple",
+        "name": "multiple",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "2m",
+                "3m"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "2m",
+          "3m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "9m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "3m"
+        },
+        {
+          "target": "2m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "native",
+          "source": "2m"
+        },
+        {
+          "target": "90s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "calendar",
+        "name": "calendar",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1w",
+                "1M"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "1w",
+          "1M"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "7d",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "30d",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        },
+        {
+          "target": "2M",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "derived",
+          "source": "1M"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "legacy",
+        "name": "legacy",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 1,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [],
+        "native_intervals": [
+          "60m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1h",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "native",
+          "source": "60m"
+        },
+        {
+          "target": "90m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "history-only",
+        "name": "history-only",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": false,
+            "history": true,
+            "realtime_transports": [],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1m"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": null,
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "1m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "native",
+          "source": "1m"
+        },
+        {
+          "target": "1m",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "purpose_unsupported"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "realtime-only",
+        "name": "realtime-only",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": true,
+            "history": false,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1m"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": null
+          }
+        ],
+        "native_intervals": [
+          "1m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1m",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "purpose_unsupported"
+        },
+        {
+          "target": "1m",
+          "purpose": "realtime",
+          "market": "spot",
+          "kind": "native",
+          "source": "1m"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "real-swap",
+        "name": "real-swap",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "swap",
+            "product_type": "swap",
+            "label": "swap",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          },
+          {
+            "market_type": "futures",
+            "product_type": "perpetual",
+            "label": "Futures",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "swap"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1m"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          },
+          {
+            "channel": "kline",
+            "market_types": [
+              "futures"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": [
+                "1h"
+              ]
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "1m"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1m",
+          "purpose": "history",
+          "market": "swap",
+          "kind": "native",
+          "source": "1m"
+        },
+        {
+          "target": "90m",
+          "purpose": "history",
+          "market": "swap",
+          "kind": "derived",
+          "source": "1m"
+        },
+        {
+          "target": "1m",
+          "purpose": "history",
+          "market": "futures",
+          "kind": "unavailable",
+          "code": "no_exact_base"
+        }
+      ]
+    },
+    {
+      "capability": {
+        "exchange": "modern-empty",
+        "name": "modern-empty",
+        "plugin_api_version": "1.0",
+        "capability_schema_version": 2,
+        "markets": [
+          {
+            "market_type": "spot",
+            "product_type": "spot",
+            "label": "spot",
+            "contract_family": null,
+            "calendar_id": null,
+            "timezone": null
+          }
+        ],
+        "channels": [
+          {
+            "channel": "kline",
+            "market_types": [
+              "spot"
+            ],
+            "realtime": true,
+            "history": true,
+            "realtime_transports": [
+              "websocket"
+            ],
+            "history_transports": [
+              "rest_history"
+            ],
+            "delivery": "latest",
+            "snapshot": false,
+            "delta": false,
+            "sequence": "none",
+            "checksum": false,
+            "resync": "none",
+            "params": {
+              "interval": []
+            },
+            "update_intervals_ms": [],
+            "available_fields": [
+              "open_time",
+              "open",
+              "high",
+              "low",
+              "close",
+              "volume"
+            ],
+            "unavailable_fields": [],
+            "derived_fields": [],
+            "connection_model": "path_per_stream",
+            "limits": {},
+            "known_limitations": [],
+            "history_policy": {
+              "cadence": "unknown",
+              "empty_page_semantics": "unknown",
+              "calendar_id": null,
+              "timezone": null,
+              "max_age_ms": null,
+              "max_window_ms": null,
+              "max_page_size": null,
+              "available_from_ms": null,
+              "available_to_ms": null
+            }
+          }
+        ],
+        "native_intervals": [
+          "1s"
+        ],
+        "supports_multi_symbol_ticker": false,
+        "supports_symbol_search": true,
+        "ws_connection_model": "path_per_stream",
+        "protocol_features": [],
+        "limits": {},
+        "known_limitations": []
+      },
+      "checks": [
+        {
+          "target": "1s",
+          "purpose": "history",
+          "market": "spot",
+          "kind": "unavailable",
+          "code": "no_native_intervals"
+        }
+      ]
+    }
+  ]
+}

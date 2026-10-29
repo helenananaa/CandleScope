@@ -257,10 +257,22 @@ class IntervalResolver:
         purpose: IntervalPurpose,
     ) -> tuple[str, ...]:
         schema_version = int(getattr(capabilities, "capability_schema_version", 1))
-        capability_market = {
-            "swap": "futures",
-            "perpetual": "futures",
-        }.get(market_type, market_type)
+        # A provider's declared market identity wins over legacy venue aliases.
+        # Generic CCXT plugins may expose a real "swap" market alongside spot.
+        declared_markets = {
+            str(
+                market.get("market_type", "")
+                if isinstance(market, dict)
+                else getattr(market, "market_type", "")
+            ).strip().lower()
+            for market in (getattr(capabilities, "markets", ()) or ())
+        }
+        capability_market = market_type
+        if market_type not in declared_markets:
+            capability_market = {
+                "swap": "futures",
+                "perpetual": "futures",
+            }.get(market_type, market_type)
         channel_resolver = getattr(capabilities, "channel_capability", None)
         channel = (
             channel_resolver(MarketChannel.KLINE, capability_market)

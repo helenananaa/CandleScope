@@ -2,6 +2,9 @@ import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
   ...intervalBasisMessages["zh-CN"],
+  "interval.historyOnly": "仅历史 · 实时不可用",
+  "interval.unavailableHelp": "已保留请求的图表设置。请选择其他周期，或在交易对选择器中更换来源。",
+
   "account.reconcile": "对账",
   "account.reconcileHelp": "仅核对已取得的记录；缺失的期初历史仍为未知，各币种不合并求和。",
   "account.check.matched": "在所列误差范围内一致",

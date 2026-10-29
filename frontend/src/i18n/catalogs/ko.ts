@@ -4,6 +4,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
   ...intervalBasisMessages["ko"],
+  "interval.historyOnly": "과거 데이터만 · 실시간 사용 불가",
+  "interval.unavailableHelp": "요청한 차트 설정은 유지됩니다. 다른 주기를 선택하거나 종목 선택에서 데이터 소스를 변경하세요.",
   "account.reconcile": "대사",
   "account.reconcileHelp": "확보한 기록만 대사합니다. 누락된 기초 이력은 알 수 없는 상태로 유지하며 통화를 합산하지 않습니다.",
   "account.check.matched": "표시된 허용 오차 내 일치",

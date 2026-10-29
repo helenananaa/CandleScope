@@ -4,6 +4,8 @@ import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
   ...intervalBasisMessages["pt-BR"],
+  "interval.historyOnly": "Somente histórico · tempo real indisponível",
+  "interval.unavailableHelp": "As configurações solicitadas do gráfico foram mantidas. Escolha outro intervalo ou altere a fonte no seletor de símbolos.",
   "account.reconcile": "Conciliação",
   "account.reconcileHelp": "A verificação abrange apenas os registros disponíveis. O histórico inicial ausente permanece desconhecido; moedas distintas não são somadas.",
   "account.check.matched": "Correspondência dentro da tolerância indicada",
