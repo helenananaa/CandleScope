@@ -144,27 +144,25 @@ def test_default_ccxt_entry_fetches_imports_and_cleans_zip(monkeypatch, tmp_path
     asyncio.run(run())
 
 
-def test_pool_mode_defers_archives_to_rest_without_using_first_route(tmp_path):
+def test_pool_mode_reuses_local_zip_even_without_usable_routes(tmp_path):
     async def run():
-        config, _, ref, _ = fixture_object(tmp_path)
-        ingestion = IngestionConfig(proxy_mode="pool", proxy_routes=[
-            {"id": "okx-only", "url": "http://127.0.0.1:51001", "enabled": True, "exchanges": ["okx"]},
-            {"id": "binance", "url": "http://127.0.0.1:51002", "enabled": True, "exchanges": ["binance"]},
-        ])
+        config, provider, ref, http = fixture_object(tmp_path)
+        cache = HistoricalArchiveCache(config.history_archive_cache_dir, max_bytes=10**7)
+        async with cache.materialize(ref, provider, http):
+            pass
+        ingestion = IngestionConfig(proxy_mode="pool", proxy_routes=[])
         transport = TransportLayer(ingestion)
         engine = BackfillEngine(config=config, transport=transport, ingestion_config=ingestion)
         router = engine.fetcher._source_router
-        plan = await router.prepare([BackfillTask(ref.symbol, ref.interval, ref.start_ms, ref.end_ms)])
-        assert not plan.futures
-        assert router.snapshot()["routing_unavailable_reason"] == "proxy_pool_archive_transport_unavailable"
-        with pytest.raises(ValueError, match="proxy_pool_archive_transport_unavailable"):
-            transport.resolve_archive_proxy()
-        # A settings change is checked again at the HTTP boundary.
-        ingestion.proxy_mode = "none"
-        assert transport.resolve_archive_proxy() is None
-        ingestion.proxy_mode = "pool"
-        with pytest.raises(ValueError):
-            router._http._proxy()
+        async def no_network(*args, **kwargs):
+            raise AssertionError("Warm ZIP must not make a network request")
+        router._http._request_runner = no_network
+        transport.http_fetch = no_network
+        result = await engine.fetcher.fetch([BackfillTask(ref.symbol, ref.interval, ref.start_ms,
+                                             ref.end_ms, market_type=ref.market_type)])
+        assert result[0].status == BackfillStatus.COMPLETED
+        assert len(result[0].bars) == 31
+        assert result[0].metadata["archive_cache_hits"] == 1
         await engine.close()
     asyncio.run(run())
 

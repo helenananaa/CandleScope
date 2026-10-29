@@ -101,7 +101,7 @@ class HistoricalSourceRouter:
         cache: HistoricalArchiveCache | None = None,
         http: AiohttpArchiveHttpClient | Any | None = None,
         proxy_resolver=None,
-        routing_unavailable_reason=None,
+        request_runner=None,
         import_proof_lookup: ImportProofLookup | None = None,
         deferred_prefetch_delay_seconds: float = 15.0,
     ) -> None:
@@ -116,8 +116,8 @@ class HistoricalSourceRouter:
         self._http = http or AiohttpArchiveHttpClient(
             timeout_seconds=timeout,
             proxy_resolver=proxy_resolver,
+            request_runner=request_runner,
         )
-        self._routing_unavailable_reason = routing_unavailable_reason
         self._cleanup = (
             ArchiveImportCleanup(config, self._cache, import_proof_lookup)
             if import_proof_lookup is not None else None
@@ -173,6 +173,7 @@ class HistoricalSourceRouter:
         self._providers: dict[str, HistoricalArchiveProvider] = {}
         self._disabled_providers: dict[str, str] = {}
         self._okx_probe_passed = False
+        self._okx_probe_retry_at = 0.0
         self._metrics = LayerMetrics("HistoricalSourceRouter")
 
     @property
@@ -185,8 +186,8 @@ class HistoricalSourceRouter:
             return {"okx": {"enabled": False, "reason": "history_archive_disabled"}}
         if not self._cfg.history_archive_okx_enabled:
             return {"okx": {"enabled": False, "reason": "feature_flag_disabled"}}
-        if reason := self.routing_unavailable_reason():
-            return {"okx": {"enabled": False, "reason": reason}}
+        if time.monotonic() < self._okx_probe_retry_at:
+            return {"okx": {"enabled": False, "reason": "probe_retry_deferred"}}
         exchange = "okx"
         try:
             bootstrap_default_adapters()
@@ -211,7 +212,7 @@ class HistoricalSourceRouter:
                 end_ms=now_ms - 4 * 86_400_000,
                 now_ms=now_ms,
             )
-            resolved = await provider.resolve_objects(candidates, self._http)
+            resolved = await provider.resolve_objects(candidates, self._http_for(exchange))
             if not resolved:
                 raise ArchiveCompatibilityError(
                     "OKX archive capability probe returned no object"
@@ -232,7 +233,10 @@ class HistoricalSourceRouter:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            self._disable_provider(exchange, exc)
+            if isinstance(exc, ArchiveCompatibilityError):
+                self._disable_provider(exchange, exc)
+            else:
+                self._okx_probe_retry_at = time.monotonic() + 60
             self._metrics.inc("archive_capability_probe_failures")
             return {
                 "okx": {
@@ -243,10 +247,6 @@ class HistoricalSourceRouter:
 
     async def prepare(self, tasks: list[BackfillTask]) -> ArchiveRoutePlan:
         if not self._cfg.history_archive_enabled or not tasks:
-            return ArchiveRoutePlan({}, {}, {})
-        if reason := self.routing_unavailable_reason():
-            self._metrics.inc("archive_transport_rest_fallbacks")
-            self._metrics.set("last_route_skip_reason", reason)
             return ArchiveRoutePlan({}, {}, {})
         bootstrap_default_adapters()
         registry = get_exchange_registry()
@@ -294,10 +294,6 @@ class HistoricalSourceRouter:
                 continue
             if exchange in self._disabled_providers:
                 continue
-            if exchange == "okx" and not self._okx_probe_passed:
-                probe = await self.probe_enabled_capabilities()
-                if not probe.get("okx", {}).get("enabled"):
-                    continue
             try:
                 plugin = registry.get_plugin(exchange)
             except KeyError:
@@ -336,8 +332,20 @@ class HistoricalSourceRouter:
                 )
                 if not candidates:
                     continue
+                # Local ZIPs are usable without contacting the resolver or
+                # acquiring any proxy route (even with no enabled routes).
+                cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
+                warm = [ref for ref in cached if ref is not None]
+                cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
+                if cold and exchange == "okx" and not self._okx_probe_passed:
+                    probe = await self.probe_enabled_capabilities()
+                    if not probe.get("okx", {}).get("enabled"):
+                        if exchange in self._disabled_providers:
+                            continue
+                        cold = []
                 try:
-                    resolved = await provider.resolve_objects(candidates, self._http)
+                    resolved = warm + (await provider.resolve_objects(cold, self._http_for(exchange))
+                                       if cold else [])
                 except ArchiveCompatibilityError as exc:
                     self._disable_provider(exchange, exc)
                     continue
@@ -350,7 +358,7 @@ class HistoricalSourceRouter:
                         symbol,
                         exc,
                     )
-                    continue
+                    resolved = warm
                 actual_start_ms = min(task.start_ms for task in run)
                 actual_end_ms = max(task.end_ms for task in run)
                 # Resolve from the complete parent demand, but only make the
@@ -556,10 +564,10 @@ class HistoricalSourceRouter:
             self._metrics.inc("archive_import_ack_evictions")
         self._metrics.inc("archive_import_acks", len(object_keys))
 
-    def routing_unavailable_reason(self) -> str | None:
-        if self._routing_unavailable_reason is not None:
-            return self._routing_unavailable_reason()
-        return None
+    def _http_for(self, exchange: str):
+        if isinstance(self._http, AiohttpArchiveHttpClient):
+            return self._http.for_exchange(exchange)
+        return self._http
 
     def request_cleanup(self) -> None:
         if self._cleanup is not None:
@@ -605,7 +613,6 @@ class HistoricalSourceRouter:
             "enabled": bool(self._cfg.history_archive_enabled),
             "okx_enabled": bool(self._cfg.history_archive_okx_enabled),
             "okx_probe_passed": self._okx_probe_passed,
-            "routing_unavailable_reason": self.routing_unavailable_reason(),
             "cleanup": (
                 self._cleanup.snapshot() if self._cleanup is not None else
                 {"policy": self._cfg.history_archive_cleanup_policy, "reason": "atomic_import_proof_lookup_unavailable"}
@@ -808,7 +815,7 @@ class HistoricalSourceRouter:
         download_started = time.monotonic()
         async with self._downloads:
             try:
-                async with self._cache.materialize(ref, provider, self._http) as cached:
+                async with self._cache.materialize(ref, provider, self._http_for(ref.exchange)) as cached:
                     cache_elapsed_ms = int(
                         (time.monotonic() - download_started) * 1_000
                     )

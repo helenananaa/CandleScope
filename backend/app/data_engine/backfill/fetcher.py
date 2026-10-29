@@ -110,8 +110,7 @@ class HistoricalFetcher:
         ):
             self._source_router = HistoricalSourceRouter(
                 config,
-                proxy_resolver=transport.resolve_archive_proxy,
-                routing_unavailable_reason=transport.archive_routing_unavailable_reason,
+                request_runner=transport.archive_http_request,
                 import_proof_lookup=import_proof_lookup,
             )
 

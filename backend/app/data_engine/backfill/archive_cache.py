@@ -12,7 +12,7 @@ import time
 import weakref
 from collections.abc import Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -62,119 +62,86 @@ class CachedArchiveObject:
 
 
 class AiohttpArchiveHttpClient:
-    """Small fail-closed binary client with proxy parity and host allowlists."""
+    """Bounded binary requests with immutable exchange context and route leases."""
 
     def __init__(
-        self,
-        *,
-        timeout_seconds: float = 60.0,
+        self, *, timeout_seconds: float = 60.0,
         proxy_resolver: Callable[[], str | None] | None = None,
+        request_runner=None, exchange: str = "",
     ) -> None:
         self._timeout_seconds = max(1.0, float(timeout_seconds))
         self._proxy_resolver = proxy_resolver
+        self._request_runner = request_runner
+        self._exchange = exchange
 
-    async def get_bytes(
-        self,
-        url: str,
-        *,
-        allowed_hosts: tuple[str, ...],
-        max_bytes: int,
-    ) -> ArchiveHttpResponse:
-        _validate_url(url, allowed_hosts)
-        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(
-                url,
-                proxy=self._proxy(),
-                allow_redirects=False,
-            ) as response:
-                body = await _read_bounded(response, max_bytes=max_bytes)
-                return _response(response, body)
+    def for_exchange(self, exchange: str) -> "AiohttpArchiveHttpClient":
+        # Concurrent Binance/OKX downloads never mutate a shared routing field.
+        return AiohttpArchiveHttpClient(
+            timeout_seconds=self._timeout_seconds, proxy_resolver=self._proxy_resolver,
+            request_runner=self._request_runner, exchange=exchange,
+        )
 
-    async def download(
-        self,
-        url: str,
-        destination: Path,
-        *,
-        allowed_hosts: tuple[str, ...],
-        max_bytes: int,
-    ) -> ArchiveHttpResponse:
+    async def get_bytes(self, url: str, *, allowed_hosts: tuple[str, ...],
+                        max_bytes: int) -> ArchiveHttpResponse:
+        return await self._request("GET", url, allowed_hosts=allowed_hosts, max_bytes=max_bytes)
+
+    async def download(self, url: str, destination: Path, *, allowed_hosts: tuple[str, ...],
+                       max_bytes: int) -> ArchiveHttpResponse:
+        return await self._request("GET", url, allowed_hosts=allowed_hosts,
+                                   max_bytes=max_bytes, destination=destination)
+
+    async def head(self, url: str, *, allowed_hosts: tuple[str, ...]) -> ArchiveHttpResponse:
+        return await self._request("HEAD", url, allowed_hosts=allowed_hosts, max_bytes=64 * 1024)
+
+    async def post_json(self, url: str, payload: dict[str, Any], *,
+                        allowed_hosts: tuple[str, ...], max_bytes: int) -> tuple[ArchiveHttpResponse, Any]:
+        response = await self._request("POST", url, allowed_hosts=allowed_hosts,
+                                       max_bytes=max_bytes, payload=payload)
+        try:
+            parsed = json.loads(response.body.decode("utf-8")) if response.body else None
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            parsed = None
+        return response, parsed
+
+    async def _request(self, method: str, url: str, *, allowed_hosts: tuple[str, ...],
+                       max_bytes: int, destination: Path | None = None,
+                       payload: dict[str, Any] | None = None) -> ArchiveHttpResponse:
         _validate_url(url, allowed_hosts)
-        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
-        total = 0
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(
-                url,
-                proxy=self._proxy(),
-                allow_redirects=False,
-            ) as response:
-                if 300 <= response.status < 400:
-                    location = response.headers.get("Location")
-                    if location:
-                        _validate_url(urljoin(url, location), allowed_hosts)
+        async def attempt(proxy: str | None, observe: Callable[[int], None]) -> ArchiveHttpResponse:
+            timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
+            async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
+                async with session.request(method, url, proxy=proxy, allow_redirects=False,
+                                           json=payload) as response:
+                    if 300 <= response.status < 400:
+                        location = response.headers.get("Location")
+                        if location:
+                            _validate_url(urljoin(url, location), allowed_hosts)
+                        return _response(response)
+                    if method == "HEAD":
+                        return _response(response)
+                    if destination is None or response.status != 200:
+                        body = await _read_bounded(response, max_bytes=(max_bytes if destination is None
+                                                   else 64 * 1024), observe=observe)
+                        return _response(response, body)
+                    length = response.headers.get("Content-Length")
+                    if length and int(length) > max_bytes:
+                        raise ArchiveDataError("archive download exceeds configured size limit")
+                    total = 0
+                    # Each route retry truncates the partial download. The cache
+                    # owns the temporary path and checksum/publication boundary.
+                    with destination.open("wb") as output:
+                        async for chunk in response.content.iter_chunked(1024 * 1024):
+                            observe(len(chunk))
+                            total += len(chunk)
+                            if total > max_bytes:
+                                raise ArchiveDataError("archive download exceeds configured size limit")
+                            output.write(chunk)
                     return _response(response)
-                if response.status != 200:
-                    body = await _read_bounded(response, max_bytes=64 * 1024)
-                    return _response(response, body)
-                content_length = response.headers.get("Content-Length")
-                if content_length and int(content_length) > max_bytes:
-                    raise ArchiveDataError("archive download exceeds configured size limit")
-                with destination.open("wb") as output:
-                    async for chunk in response.content.iter_chunked(1024 * 1024):
-                        total += len(chunk)
-                        if total > max_bytes:
-                            raise ArchiveDataError(
-                                "archive download exceeds configured size limit"
-                            )
-                        output.write(chunk)
-                return _response(response)
-
-    async def head(
-        self,
-        url: str,
-        *,
-        allowed_hosts: tuple[str, ...],
-    ) -> ArchiveHttpResponse:
-        _validate_url(url, allowed_hosts)
-        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.head(
-                url,
-                proxy=self._proxy(),
-                allow_redirects=False,
-            ) as response:
-                return _response(response)
-
-    async def post_json(
-        self,
-        url: str,
-        payload: dict[str, Any],
-        *,
-        allowed_hosts: tuple[str, ...],
-        max_bytes: int,
-    ) -> tuple[ArchiveHttpResponse, Any]:
-        _validate_url(url, allowed_hosts)
-        timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                url,
-                json=payload,
-                proxy=self._proxy(),
-                allow_redirects=False,
-            ) as response:
-                body = await _read_bounded(response, max_bytes=max_bytes)
-                parsed: Any = None
-                if body:
-                    try:
-                        parsed = json.loads(body.decode("utf-8"))
-                    except (UnicodeDecodeError, json.JSONDecodeError):
-                        parsed = None
-                return _response(response, body), parsed
-
-    def _proxy(self) -> str | None:
-        if self._proxy_resolver is None:
-            return None
-        return self._proxy_resolver()
+        if self._request_runner is not None:
+            return await self._request_runner(self._exchange, url, attempt,
+                                              timeout_seconds=self._timeout_seconds)
+        proxy = self._proxy_resolver() if self._proxy_resolver else None
+        return await attempt(proxy, lambda size: None)
 
 
 class HistoricalArchiveCache:
@@ -427,6 +394,14 @@ class HistoricalArchiveCache:
             _now_ms() - int(existing["validated_at_ms"])
             <= self.revalidate_ms
         )
+
+    async def resolve_fresh(self, ref: ArchiveObjectRef) -> ArchiveObjectRef | None:
+        """Recover a fresh object's URL locally, including OKX resolver refs."""
+        existing = await asyncio.to_thread(self._lookup, ref.object_key)
+        if (existing is None or not Path(existing["path"]).is_file()
+                or _now_ms() - int(existing["validated_at_ms"]) > self.revalidate_ms):
+            return None
+        return replace(ref, url=existing["source_url"], checksum_url=existing["checksum_url"])
 
     def snapshot(self) -> dict[str, Any]:
         with self._connect() as connection:
@@ -726,13 +701,15 @@ class HistoricalArchiveCache:
         return self.objects_dir / digest[:2] / f"{digest}.zip"
 
 
-async def _read_bounded(response: aiohttp.ClientResponse, *, max_bytes: int) -> bytes:
+async def _read_bounded(response: aiohttp.ClientResponse, *, max_bytes: int,
+                        observe: Callable[[int], None] = lambda size: None) -> bytes:
     content_length = response.headers.get("Content-Length")
     if content_length and int(content_length) > max_bytes:
         raise ArchiveDataError("archive HTTP response exceeds configured size limit")
     chunks: list[bytes] = []
     total = 0
     async for chunk in response.content.iter_chunked(64 * 1024):
+        observe(len(chunk))
         total += len(chunk)
         if total > max_bytes:
             raise ArchiveDataError("archive HTTP response exceeds configured size limit")

@@ -198,10 +198,26 @@ Bulk closed history is transparent to chart and indicator callers:
   unstable website download contract and disables the complete capability on
   incompatible URLs, schema, or `confirm` semantics.
 - The default CCXT entries retain Binance/OKX archive factories without creating
-  another realtime client. Proxy pool mode explicitly falls back to the existing
-  pool-aware REST lane with `proxy_pool_archive_transport_unavailable`. Archive
-  downloads never silently select the first enabled route. Host-scoped download
-  leases and multi-route archive scheduling remain a separate phase.
+  another realtime client. Pool mode routes checksums, HEAD validation, download
+  directories and ZIP streams through request-scoped proxy leases. Exchange
+  allowlists, enabled routes, failover/balanced strategy and shared REST/ZIP route
+  capacity apply to every physical attempt. CDN concurrency and 418/429 cooldown
+  are scoped by exchange, download host and egress group, independently of REST
+  API weights. Aliases of the same exit share those limits.
+- Network/5xx failures can try another eligible route, once per URL and within
+  one total request deadline including queue time. Every exit releases its lease;
+  retried streams truncate partial temporary files. Pool exhaustion leaves the
+  range to normal REST fallback, never silently to a direct archive connection.
+  Proxy diagnostics include archive request/byte counts and host-specific health.
+- Fresh local ZIPs are checked before network resolution, including OKX download
+  links. They work even when the pool has no usable route; stale objects retain
+  checksum/HEAD revalidation. Transient OKX probe failures retry after 60 seconds
+  without blocking valid local objects; incompatible contracts remain disabled.
+
+Pool integration tests use real loopback CONNECT proxies and a locally trusted
+TLS origin. They assert physical route selection, failover, stream/queue
+cancellation and zero-network warm-cache use. General internet reachability under
+TUN does not qualify application proxy routing or prove independent public exits.
 
 Cleanup checks at most 128 cache entries per page, on startup, import notification
 and periodic retry. `history_archive_import_commits` proofs are written only in
@@ -292,6 +308,7 @@ python -m pytest -q \
   tests/test_history_archive_routing.py \
   tests/test_history_archive_storage.py \
   tests/test_history_archive_import_cleanup.py \
+  tests/test_history_archive_proxy_pool.py \
   tests/test_transport_http_rate_limit_metadata.py \
   tests/test_okx_backfill_fetcher.py
 ```

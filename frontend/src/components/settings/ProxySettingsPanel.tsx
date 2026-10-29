@@ -181,7 +181,7 @@ export default function ProxySettingsPanel({
                                 </>}
                                 {!status?.observations.length ? t("settings.proxy.unobserved") : <>
                                     {status.observations.map((item) => <div key={`${item.exchange}:${item.kind}`}>
-                                        {item.exchange} · {item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
+                                        {item.exchange} · {item.kind.startsWith("archive:") ? `ZIP · ${item.kind.slice(8)}` : item.kind === "ws" ? "WS" : "REST"}{item.latency_ms !== null && <> · {t("settings.proxy.latency", { ms: Math.round(item.latency_ms) })}</>} · {t("settings.proxy.failures", { count: item.failures })}
                                     </div>)}
                                 </>}
                                 {cooldown > 0 && <div>{t("settings.proxy.cooldown", { seconds: Math.ceil(cooldown) })}</div>}

@@ -197,9 +197,21 @@ Planner 会把自定义周期拆成标准组件。例如：
 - OKX 默认关闭。显式开启后，启动阶段会探测其非稳定网页下载契约；URL、schema
   或 `confirm` 语义不兼容时会关闭整条 OKX 归档能力并回退 REST。
 - 默认 CCXT 入口保留 Binance/OKX 归档 factory，不实例化第二套实时连接。
-  多代理 pool 模式下，归档目前明确回退到已有的 REST 池调度，并报告
-  `proxy_pool_archive_transport_unavailable`；不会把第一条启用路线当作归档路由。
-  主机级下载租约、负载分配和完整多代理归档下载属于后续阶段。
+  pool 模式下，校验文件、HEAD 复核、下载目录和 ZIP 流均按请求申请代理租约，
+  遵守交易所白名单、启用状态、故障切换/均衡策略，以及 REST/ZIP 共用的路线并发上限。
+  CDN 并发及 418/429 冷却按交易所、下载主机和出口组管理，与 REST API 权重分离；
+  同一出口的不同代理地址共享这些限制。
+- 网络/5xx 失败可尝试其他可用路线，同一 URL 每次请求最多尝试一次；总超时包含排队。
+  成功、失败、超时和取消均释放租约，流式重试会截断临时文件中的残留内容。
+  代理耗尽后由历史管线回退 REST，不会静默直连下载 ZIP。代理诊断包含归档请求数、
+  实收字节和按主机记录的健康状态。
+- 新鲜本地 ZIP 优先于网络解析，包括 OKX 下载链接，即使没有可用代理也能读取。
+  过期对象仍需校验文件/HEAD 复核。OKX 探测的临时网络失败退避 60 秒后重试，
+  不阻止有效本地对象；契约不兼容仍关闭对应能力。
+
+代理集成测试使用真实回环 CONNECT 代理和仅测试信任的 TLS 服务，直接验证物理路线、
+失败切换、流式/排队取消和本地命中零网络请求。TUN 下普通联网成功不能证明应用内选路
+正确，也不能证明多个代理具有独立公网出口。
 
 清理每页最多检查 128 个对象，在启动、导入通知及周期检查时将缓存对象与
 `history_archive_import_commits` 核对。证明绑定对象键、内容哈希、导入版本和本次
@@ -284,6 +296,7 @@ python -m pytest -q \
   tests/test_history_archive_routing.py \
   tests/test_history_archive_storage.py \
   tests/test_history_archive_import_cleanup.py \
+  tests/test_history_archive_proxy_pool.py \
   tests/test_transport_http_rate_limit_metadata.py \
   tests/test_okx_backfill_fetcher.py
 ```
