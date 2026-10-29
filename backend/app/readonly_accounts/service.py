@@ -58,6 +58,8 @@ class ReadOnlyAccountService:
     def __init__(self, root: Path, *, client_factory=ReadOnlyOkx,
                  vault_factory=MacKeychainVault, network_options=None):
         self.repository = AccountRepository(root)
+        from .review import ReadOnlyReview
+        self.review = ReadOnlyReview(self.repository)
         self.root = root
         self.client_factory = client_factory
         self.vault_factory = vault_factory
@@ -107,6 +109,7 @@ class ReadOnlyAccountService:
         async with self._control:
             self._closed = True
             await self._stop()
+            self.review.store.close()
 
     async def connect(self, payload: dict) -> None:
         credentials = validate_credentials(payload)

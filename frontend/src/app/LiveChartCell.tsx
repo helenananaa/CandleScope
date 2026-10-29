@@ -983,7 +983,7 @@ function LiveChartCell({
           {quickReplay && (
             <Suspense fallback={null}>
               <QuickReplayOverlay
-                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.interval}`}
+                key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
                 request={quickReplay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}

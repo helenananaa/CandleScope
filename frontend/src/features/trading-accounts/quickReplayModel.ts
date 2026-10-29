@@ -20,7 +20,7 @@ export interface ReplayBar {
 }
 
 export interface ReplayEvent {
-  kind: "fill" | "note";
+  kind: "fill" | "note" | "funding";
   timeMs: number;
   id: string;
 }
@@ -30,6 +30,7 @@ export interface ReplayPosition {
   avgEntry: number | null;
   realized: number;
   fees: number;
+  funding: number;
   unrealized: number | null;
   mfe: number;
   mae: number;
@@ -83,7 +84,7 @@ export function legsBefore(legs: readonly TradeLeg[], cursorSec: number): TradeL
 
 /** Position, P&L and excursions as they stood at the cursor. */
 export function positionAt(
-  trade: Pick<Trade, "direction" | "legs">,
+  trade: Pick<Trade, "direction" | "legs" | "readonlySource">,
   bars: readonly ReplayBar[],
   cursorSec: number,
   intervalSec: number,
@@ -115,6 +116,12 @@ export function positionAt(
       qty -= legQty;
     }
   }
+  if (trade.readonlySource) {
+    realized = trade.readonlySource.fills.filter((fill) => fill.tsMs < cursorSec * 1000)
+      .reduce((sum, fill) => sum + Number(fill.realizedPnl), 0);
+  }
+  const funding = (trade.readonlySource?.fundingEvents ?? []).filter((event) => event.eventTimeMs < cursorSec * 1000)
+    .reduce((sum, event) => sum + Number(event.amount), 0);
   const last = bars.at(-1) ?? null;
   const lastPrice = last ? last.close : null;
   const avgEntry = qty > 1e-12 ? cost / qty : null;
@@ -134,11 +141,14 @@ export function positionAt(
       mae = Math.max(mae, adverse);
     }
   }
-  return { qty, avgEntry, realized, fees, unrealized, mfe, mae, lastPrice };
+  return { qty, avgEntry, realized, fees, funding, unrealized, mfe, mae, lastPrice };
 }
 
 export function replayEvents(trade: Trade, entries: readonly JournalEntry[]): ReplayEvent[] {
   const events: ReplayEvent[] = trade.legs.map((leg) => ({ kind: "fill", timeMs: leg.tsMs, id: leg.fillId }));
+  for (const event of trade.readonlySource?.fundingEvents ?? []) {
+    events.push({ kind: "funding", timeMs: event.eventTimeMs, id: event.billId });
+  }
   for (const entry of entries) {
     events.push({ kind: "note", timeMs: entry.marketTimeMs ?? entry.createdAtMs, id: entry.id });
     if (entry.marketTimeMs === null) {

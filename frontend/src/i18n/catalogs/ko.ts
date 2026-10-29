@@ -2,6 +2,24 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "account.trades": "거래 복기",
+  "account.review.identity": "계정 UID {uid} · {margin} · 포지션 ID {position}",
+  "account.review.fillIdentity": "체결 ID {fill} · 거래 ID {trade} · 주문 ID {order} · 계약 수 {contracts}",
+  "account.review.scope": "검증된 USDT 선형 무기한 계약의 전체 진입·청산 주기만 포함합니다. 코인 증거금, 불완전한 이력 및 미대사 기록은 제외됩니다. 합계는 표본의 손익이며 계정 전체 수익이 아닙니다.",
+  "account.review.sample": "검증된 거래 {count}건 · 수익 거래 {wins}건 · 과거 캐시 {cached}건",
+  "account.review.fees": "체결 수수료 (양수는 비용)",
+  "account.review.funding": "펀딩비 현금 변동",
+  "account.review.net": "순손익",
+  "account.review.noR": "검증된 진입 전 위험 기록이 없어 R 통계를 제공하지 않습니다. 미실현 손익과 MFE/MAE는 캔들 추정치입니다. 과거 도형과 지표 상태는 복원하지 않습니다.",
+  "account.review.cached": "이전에 검증된 버전을 포함합니다. 현재 동기화와 수집 범위로는 다시 검증할 수 없습니다. 열린 복기는 선택한 버전을 유지합니다.",
+  "account.review.coverage": "수집 이력 범위와 누락 구간",
+  "account.review.empty": "복기할 검증된 거래가 없습니다. 먼저 동기화하고 대사하세요.",
+  "account.review.verified": "버전 검증 시각: {time}",
+  "account.review.open": "상세 및 거래 일지",
+  "account.review.excluded": "이번 조회에서 제외된 포지션 주기 {count}건",
+  "account.review.costs": "체결 수수료 {fees} · 펀딩비 현금 변동 {funding} {currency}",
+  "account.review.source": "OKX 읽기 전용 · {instrument} · {currency} · 고정된 검증 버전",
+
   "account.reconcile": "대사",
   "account.reconcileHelp": "확보한 기록만 대사합니다. 누락된 기초 이력은 알 수 없는 상태로 유지하며 통화를 합산하지 않습니다.",
   "account.check.matched": "표시된 허용 오차 내 일치",

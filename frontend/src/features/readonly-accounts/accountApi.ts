@@ -76,7 +76,7 @@ export async function accountRequest(path: string, method = "GET", payload?: unk
   if (method === "POST") {
     headers["Content-Type"] = "application/json";
     headers["X-CandleScope-CSRF"] = session.csrfToken;
-    headers["X-CandleScope-User-Action"] = `account.${path.slice(1)}`;
+    headers["X-CandleScope-User-Action"] = path.startsWith("/review/") ? "account.review" : `account.${path.slice(1)}`;
   }
   let response: Response;
   try {
