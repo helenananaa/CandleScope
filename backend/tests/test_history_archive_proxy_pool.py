@@ -119,6 +119,9 @@ async def network(monkeypatch, tls, handler, modes=("good", "good")):
             super().__init__(**kwargs)
     with monkeypatch.context() as patch:
         patch.setattr(aiohttp.client, "TCPConnector", TrustedConnector)
+        # Windows transport owns an explicit connector for its OS DNS resolver.
+        # Trust the same local CA on that path without disabling verification.
+        patch.setattr(aiohttp, "TCPConnector", TrustedConnector)
         try:
             yield urls, connects, requests
         finally:

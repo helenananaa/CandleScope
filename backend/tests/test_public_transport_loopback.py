@@ -210,6 +210,8 @@ def test_ccxt_close_cancels_quota_wait_before_opening_socket():
 
 
 def test_ccxt_internal_retry_gets_a_new_physical_permit():
+    from app.exchanges.ccxt_ext.source_capture import REST_CAPTURE
+
     async def run():
         hits = []
         async def handle(request):
@@ -223,15 +225,85 @@ def test_ccxt_internal_retry_gets_a_new_physical_permit():
             market_type="spot", websocket=False)
         point_at_loopback(exchange, origin)
         exchange.options["maxRetriesOnFailure"] = 1
+        captured = []
+        capture_token = REST_CAPTURE.set(captured)
         try:
             assert await asyncio.wait_for(exchange.public_get_exchangeinfo(), 10) == {"symbols": []}
             snapshot = get_public_admission().snapshot()
             assert len(hits) == snapshot["counts"]["attempts"] == 2
             assert snapshot["in_flight"] == 0
             assert [attempt["status_code"] for attempt in snapshot["recent"]] == [503, 200]
+            # Source capture and physical admission must cooperate in the MRO:
+            # both attempts are charged, the successful decoded body is kept once.
+            assert len(captured) == 1
+            assert captured[0]["payload"] == {"symbols": []}
+            assert captured[0]["endpoint"] == origin + "/api/v3/exchangeInfo"
         finally:
+            REST_CAPTURE.reset(capture_token)
             await exchange.close()
             await runner.cleanup()
+    asyncio.run(run())
+
+
+def test_fork_history_keeps_source_evidence_with_admission_and_boundaries(monkeypatch, tmp_path):
+    from app.data_engine.ingestion.normalize import NormalizeLayer
+    from app.data_engine.storage import klines_repo, kline_sources
+    from tests.test_ccxt_fork_kline import fork_exchange
+
+    # Fails instead of skipping in the required-fork CI job.
+    fork_exchange()
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "bars.sqlite")
+    klines_repo.init_klines_storage()
+
+    async def run():
+        paths = []
+        row = [0, "1.00000000000000001", "2", "0.5", "1.5", "10",
+               59999, "15", 5, "2", "3", "0"]
+
+        async def handle(request):
+            paths.append(request.path)
+            if request.path.endswith("exchangeInfo"):
+                return web.json_response({"symbols": [{
+                    "symbol": "BTCUSDT", "status": "TRADING", "baseAsset": "BTC",
+                    "quoteAsset": "USDT", "baseAssetPrecision": 8, "quotePrecision": 8,
+                    "isSpotTradingAllowed": True, "isMarginTradingAllowed": False,
+                    "orderTypes": ["LIMIT", "MARKET"], "filters": [],
+                }]})
+            if request.path.endswith("time"):
+                return web.json_response({"serverTime": 120000})
+            return web.json_response([row])
+
+        runner, origin = await serve(handle)
+        original = generic._create_exchange
+
+        def create(*args, **kwargs):
+            exchange = original(*args, **kwargs)
+            point_at_loopback(exchange, origin)
+            return exchange
+
+        monkeypatch.setattr(generic, "_create_exchange", create)
+        config = IngestionConfig(proxy_mode="none", proxy_egress_group="fork-loopback",
+                                 ccxt_fork_kline_enabled=True)
+        transport = TransportLayer(config)
+        descriptor = StreamDescriptor("BTCUSDT", StreamType.KLINE, interval="1m", market_type="spot")
+        try:
+            messages = await transport.http_fetch(TransportRequest(descriptor, limit=1))
+            event = NormalizeLayer(config, descriptor).parse_raw(messages[0])
+            assert event.data["basis_qualification"] != "unknown"
+            assert event.data["is_closed"] is True
+            head = kline_sources.latest(descriptor, 0)
+            assert head and head["is_closed"]
+            assert "1.00000000000000001" in str(head)
+            snapshot = get_public_admission().snapshot()
+            assert len(paths) == snapshot["counts"]["attempts"] == 3
+            assert sorted(paths) == ["/api/v3/exchangeInfo", "/api/v3/klines", "/api/v3/time"]
+            assert snapshot["in_flight"] == 0
+            assert all(":egress=fork-loopback" in bucket
+                       for attempt in snapshot["recent"] for bucket in attempt["buckets"])
+        finally:
+            await transport.stop()
+            await runner.cleanup()
+
     asyncio.run(run())
 
 

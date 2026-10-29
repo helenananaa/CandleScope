@@ -393,7 +393,8 @@ def test_enrichment_batches_consecutive_rows_without_claiming_gaps(database):
     asyncio.run(run())
 
 
-def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeypatch):
+@pytest.mark.parametrize("legacy,previously_delivered", [(False, False), (True, False), (True, True)])
+def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeypatch, legacy, previously_delivered):
     from types import SimpleNamespace
     import app.exchanges
     from scripts.enrich_ccxt_sources import run
@@ -418,6 +419,25 @@ def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeyp
             desc.symbol, "1m", [original], exchange="binance", market_type="futures"
         )
 
+    if previously_delivered:
+        async def record_old_heads():
+            values = [message(stamp) for stamp in stamps]
+            await prepare_source_messages(values, desc, watermark=kline_sources.rest_watermark())
+            for value in values:
+                kline_sources.acknowledge(value.payload["_source_receipt"]["ref"])
+        asyncio.run(record_old_heads())
+
+    legacy_before = None
+    if legacy:
+        with closing(klines_repo._connect()) as conn, conn:
+            conn.execute("DROP TABLE bar_basis_migrations")
+            legacy_before = conn.execute("SELECT * FROM klines ORDER BY open_time").fetchall()
+        klines_repo.init_klines_storage()
+        assert not klines_repo.query_klines(desc.symbol, "1m", exchange="binance", market_type="futures")
+        assert len(source_enrichment.candidate_rows(
+            desc, start_ms=stamps[0], end_ms=stamps[-1], legacy=True,
+        )) == 2
+
     async def fetch_history(req, config):
         assert req.start_ms == req.end_ms and req.start_ms in stamps
         values = [message(req.start_ms)]
@@ -427,11 +447,27 @@ def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeyp
     app.exchanges.bootstrap_default_adapters()
     plugin = app.exchanges.get_exchange_registry().get_plugin("binance")
     monkeypatch.setattr(plugin, "fetch_history_with_config", fetch_history)
-    result = asyncio.run(run(SimpleNamespace(
+    args = SimpleNamespace(
         symbol=desc.symbol, interval="1m", exchange="binance", market="futures",
         start=stamps[0], end=stamps[-1], limit=300, apply=True,
-    )))
+        legacy=legacy, data_dir=klines_repo.KLINES_DB_PATH.parent,
+    )
+    args.apply = False
+    assert asyncio.run(run(args))["rows"] == 2
+    args.apply = True
+    if previously_delivered:
+        async def drop_delivery(self, message):
+            pass
+
+        with monkeypatch.context() as patch:
+            patch.setattr(NormalizeLayer, "ingest", drop_delivery)
+            with pytest.raises(RuntimeError, match="qualified enrichment projection is still missing"):
+                asyncio.run(run(args))
+    result = asyncio.run(run(args))
     assert result["revised"] == 2
+    if legacy:
+        with closing(klines_repo._connect()) as conn:
+            assert conn.execute("SELECT * FROM klines_legacy_basis_v1 ORDER BY open_time").fetchall() == legacy_before
     assert not kline_sources.pending(desc)
     with closing(klines_repo._connect()) as conn:
         audits = conn.execute("SELECT original_json,status FROM source_enrichment_audit").fetchall()
@@ -440,3 +476,4 @@ def test_offline_enrichment_cli_handles_sparse_binance_history(database, monkeyp
     stored = klines_repo.query_klines(desc.symbol, "1m", exchange="binance", market_type="futures")
     assert [row["open_time"] for row in stored] == stamps
     assert all(row["close"] == 102 for row in stored)
+    assert asyncio.run(run(args))["already_evidenced"] == 2

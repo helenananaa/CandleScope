@@ -41,7 +41,6 @@ from app.data_engine.interval_resolution import (
 from app.data_engine.storage import AsyncKlinesRepoAdapter, KlinesRepoAdapter
 from app.data_engine.storage import klines_repo
 from app.exchanges import (
-    RateLimitAdmission,
     bootstrap_default_adapters,
     get_exchange_registry,
 )
@@ -50,6 +49,7 @@ from app.plugin_core_v2.contracts import core_contributions
 from app.plugin_core_v2.runtime import CorePluginPlatform
 from app.plugin_installer_v2 import PlatformPluginInstaller
 from app.plugin_provider_v2 import PluginProviderRuntime
+from app.exchanges.rate_limits import RateLimitManager
 from tests.plugin_platform_bundle_testkit import build_mock_exchange_provider_bundle
 
 
@@ -117,32 +117,23 @@ class _MockSidecar:
         return result
 
 
-class _ProviderResponseAccounting:
+class _ProviderResponseAccounting(RateLimitManager):
     def __init__(self) -> None:
+        super().__init__()
         self.responses: list[dict[str, object]] = []
 
-    async def inspect(
-        self,
-        rule: object,
-        request: object,
-    ) -> RateLimitAdmission:
-        return RateLimitAdmission(
-            allowed=True,
-            bucket_key=str(getattr(rule, "bucket_key", "provider:test")),
-            cost=1,
-            reason=None,
-            retry_after_seconds=0,
-            retry_at_monotonic=None,
-            retry_at_ms=None,
-            rule_name=str(getattr(rule, "name", "provider_test")),
-        )
-
-    async def acquire_nowait(self, rule: object, request: object) -> None:
-        return None
+    async def inspect(self, rule, request):
+        # This fixture drives BackfillEngine directly. Emulate the coordinator's
+        # deferred scheduling while retaining real physical permit accounting.
+        while True:
+            admission = await super().inspect(rule, request)
+            if admission.allowed:
+                return admission
+            await asyncio.sleep(max(admission.retry_after_seconds, 0.001))
 
     def record_response(self, rule: object, **kwargs: object) -> bool:
         self.responses.append(dict(kwargs))
-        return False
+        return super().record_response(rule, **kwargs)
 
 
 def _contributions():

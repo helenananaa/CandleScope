@@ -36,18 +36,14 @@ async def run(args):
         market_type=args.market,
     )
     if not args.apply:
-        rows = klines_repo.query_klines(
-            args.symbol,
-            args.interval,
-            args.start,
-            args.end,
-            limit=args.limit,
-            exchange=args.exchange,
-            market_type=args.market,
+        rows = source_enrichment.candidate_rows(
+            desc, start_ms=args.start, end_ms=args.end, limit=args.limit,
+            legacy=getattr(args, "legacy", False),
         )
         return {
             "mode": "dry-run",
             "rows": len(rows),
+            "candidate_table": "klines_legacy_basis_v1" if getattr(args, "legacy", False) else "klines",
             "data_dir": str(args.data_dir),
             "first": rows[0]["open_time"] if rows else None,
             "last": rows[-1]["open_time"] if rows else None,
@@ -89,6 +85,7 @@ async def run(args):
             start_ms=args.start,
             end_ms=args.end,
             limit=args.limit,
+            legacy=getattr(args, "legacy", False),
         )
     finally:
         await delivery.close_all_subscribers()
@@ -110,6 +107,8 @@ def main():
     parser.add_argument("--end", type=int, required=True)
     parser.add_argument("--limit", type=int, default=300)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--legacy", action="store_true",
+                        help="re-fetch evidence for native rows isolated by the BarBasis migration; never relabel or modify the legacy table")
     args = parser.parse_args()
     if not args.data_dir.is_dir():
         parser.error("existing offline profile directory required")
