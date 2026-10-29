@@ -2515,7 +2515,9 @@ def test_query_endpoints_reject_derived_nonlegacy_identity_as_client_error() -> 
         response = client.get(path, params=params)
         assert response.status_code == 400, (path, response.text)
         detail = response.json()["detail"]
-        assert detail["code"] == "series_identity_unsupported"
+        # Provider-session bars cannot reconstruct a continuous custom range;
+        # the BarBasis gate rejects it before derived identity admission.
+        assert detail["code"] == "no_exact_base"
         assert detail["interval"] == "7m"
         assert detail["exchange"] == "twelvedata"
 

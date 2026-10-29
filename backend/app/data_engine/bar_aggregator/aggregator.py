@@ -70,7 +70,7 @@ import asyncio
 import logging
 import time
 from dataclasses import replace
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.interval_resolution import IntervalResolver
@@ -179,6 +179,7 @@ class BarAggregator:
         interval_resolver: IntervalResolver | None = None,
     ) -> None:
         self._cfg = config or BarAggregatorConfig()
+        self._source_component_reader: Callable[[str, int, int], Awaitable[list[dict]]] | None = None
 
         # L1: Event Router
         self._router = EventRouter(self._cfg, interval_resolver=interval_resolver)
@@ -796,6 +797,12 @@ class BarAggregator:
             },
         }
 
+    def set_source_component_reader(
+        self, reader: Callable[[str, int, int], Awaitable[list[dict]]],
+    ) -> None:
+        """Bind the owner's source readback without importing a storage backend."""
+        self._source_component_reader = reader
+
     # ── Internal: Core Processing ────────────────────────────
 
     async def _handle_bar_input(
@@ -830,12 +837,11 @@ class BarAggregator:
         ):
             # After restart/eviction a historical correction is only one
             # component. Restore its siblings before recalculating the bucket.
-            from app.core.executors import run_storage
-            from app.data_engine.storage.kline_sources import closed_components
-
+            if self._source_component_reader is None:
+                raise RuntimeError("source component readback is not configured")
             _, bucket_end_ms = pipeline.time_bucket.compute_bucket_range(bucket_start_ms)
-            components = await run_storage(
-                closed_components, bar_input.extra["source_ref"]["series"], bucket_start_ms, bucket_end_ms,
+            components = await self._source_component_reader(
+                bar_input.extra["source_ref"]["series"], bucket_start_ms, bucket_end_ms,
             )
             for component in components:
                 data = component["data"]

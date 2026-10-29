@@ -63,6 +63,7 @@ class Harness:
             mark_bar_received=lambda key: None,
             is_started=lambda: True,
         )
+        self.aggregator.set_source_component_reader(self.bridge.read_source_components)
         self.aggregator.publisher.on_bar_event(self.bridge.on_bar_event)
         for interval in intervals or ("1m",):
             self.aggregator.add_target("BTCUSDT", interval, market_type="futures")

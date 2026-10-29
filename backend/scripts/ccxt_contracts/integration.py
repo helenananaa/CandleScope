@@ -24,6 +24,7 @@ def main() -> int:
         "test_catalog_worker.py", "test_exchange_registry_plugins.py", "test_fixed_anchor.py",
         "test_ingestion_health_observer.py", "test_ingestion_session_types.py",
         "test_interval_resolution.py", "test_interval_admission_contract.py",
+        "test_data_engine_phase1_boundaries.py",
         "test_kline_series_identity.py", "test_kline_source_journal.py",
         "test_okx_utc_protocol.py", "test_plugin_provider_v2.py", "test_proxy_pool*.py",
         "test_public_admission.py", "test_public_transport_loopback.py", "test_source_revision_pipeline.py",

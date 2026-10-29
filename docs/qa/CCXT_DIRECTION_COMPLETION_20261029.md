@@ -132,10 +132,56 @@ CPU, queue, request and latency details are in the machine-readable receipt.
 - Complete generalized recovery/strict-book policy work and adjacent data
   governance issues #112/#132/#135 are not silently closed by provider unification.
 
-The PR remains a draft while these qualification limits are assessed. Code,
-release assets, measured behavior and unverified requirements are tracked
-separately; test counts are not summed across overlapping suites.
+The integration is eligible for its scoped merge after the current-head CI
+gates pass. The limitations above stay open in the linked issues; merging this
+foundation does not complete the broader acceptance matrix. Code, release
+assets, measured behavior and unverified requirements remain separate; test
+counts are not summed across overlapping suites.
 
 Machine-readable receipts are in [ccxt-integration-20261029](ccxt-integration-20261029):
 the controlled comparison, both venue live summaries, public ZIP accounting,
 OKX archive/REST parity and Windows packaged application/replay receipts.
+
+## Backend PR alignment follow-up
+
+The full #137 interval-admission history is now included, together with the
+common #148 fixes for OKX notices, socket interruption, stale observations and
+the last unclosed bar's repair range. The subscriber-specific strict/gap-aware
+feature remains in #148. #138's durable revision work stays independent.
+
+Requested unavailable intervals remain visible until the user explicitly
+selects a qualified interval. Capability fixtures now declare their BarBasis;
+an ordinary Binance USD-M source keeps its own identity and does not acquire
+continuous-contract or second-bar qualification by implication.
+
+Historical source-component recovery now uses a DataManager-injected reader.
+The aggregator cannot import the storage backend directly. The CCXT integration
+runner includes the architecture boundary regression to preserve this rule.
+
+The branch incorporates main through `ce07e1bf` (independent #133/#134/#136/#140
+and #110/#111), with these final local results:
+
+- **680 passed, 0 skipped** in the pinned-fork CCXT/architecture integration
+  run, 157.76s; one aiohttp deprecation. The earlier 620-test run is superseded.
+- **170 passed** in the API/lifecycle/source-recovery/aggregator follow-up.
+  It overlaps the integration run and is not added to its count.
+- Full `npm run check`: **4529 frontend tests passed, one platform skip**,
+  the separate performance test passed, and **123 desktop tests passed**;
+  architecture, translations, type checks, lint and build passed.
+- Chromium exercised all **six interval-admission scenarios** with no uncaught
+  exception or remaining worker. Its controlled seconds fixture was then made
+  type-correct; full TypeScript checks and its ESLint check passed again.
+
+Logs are retained locally under `output/ccxt-integration`:
+`owner-integration.log`/`.xml`, `owner-final.log`, `final-joint-frontend.log`,
+`final-interval-admission-browser-v2.log`, `owner-typecheck.log` and
+`owner-browser-lint.log`. The browser fixture uses controlled capabilities,
+not live market or native-package evidence. Earlier native/public-network
+receipts above retain their original scope and are not claimed as new runs.
+
+After #145 merges, #138 and #148 return to a main base. #147 requires the common
+provider and revision contracts; #144 additionally requires the public #130
+block contract and removal or convergence of its private-cache experiment.
+The Pine host stack #81/#128 must preserve the published runtime/lock contracts.
+Those branches retain their own Draft and acceptance boundaries. No new PR is
+needed for this integration.

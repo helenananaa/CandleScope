@@ -1484,6 +1484,10 @@ class KlinesRepoAdapter:
     storage_gc_delete_max_batch_rows = 1_000
     storage_gc_delete_deadline_ms = 50
 
+    def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
+        from .kline_sources import closed_components
+        return closed_components(series, start_ms, end_ms)
+
     def __init__(
         self,
         exchange: str = DEFAULT_EXCHANGE,
