@@ -17,33 +17,46 @@ async function turn(): Promise<void> {
   await Promise.resolve();
 }
 
-test("forming work is latest-only per frame while authoritative final commits immediately", () => {
+test("the default display budget serves both visible charts in the first frame", () => {
   const frames: Array<() => void> = [];
-  const commits: string[] = [];
-  const scheduler = new ChartWorkScheduler({
-    requestFrame: (callback) => {
-      frames.push(callback);
-      return frames.length;
-    },
-    cancelFrame: () => undefined,
-  });
-  scheduler.registerCell("cell-a", "focused");
+  const painted: string[] = [];
+  const scheduler = new ChartWorkScheduler({ requestFrame: cb => frames.push(cb), cancelFrame: () => {} });
+  scheduler.registerCell("a", "focused");
+  scheduler.registerCell("b", "visible-secondary");
+  for (const id of ["a", "b"]) scheduler.enqueueFrame(id, "candle-display", "bars", () => painted.push(id));
+  frames.shift()!();
+  assert.deepEqual(painted, ["a", "b"]);
+});
 
-  scheduler.enqueueFrame("cell-a", "kline-forming", "BTCUSDT@1m", () => commits.push("forming-1"));
-  scheduler.enqueueFrame("cell-a", "kline-forming", "BTCUSDT@1m", () => commits.push("forming-2"));
-  scheduler.commitAuthoritative(
-    "cell-a",
-    () => commits.push("final"),
-    { lane: "kline-forming", key: "BTCUSDT@1m" },
-  );
-  assert.deepEqual(commits, ["final"]);
+test("hidden display work resumes without requiring another market event", () => {
+  const frames: Array<() => void> = [];
+  const painted: number[] = [];
+  const scheduler = new ChartWorkScheduler({ requestFrame: cb => frames.push(cb), cancelFrame: () => {} });
+  scheduler.registerCell("a", "hidden");
+  scheduler.enqueueFrame("a", "candle-display", "bars", () => painted.push(1));
+  scheduler.enqueueFrame("a", "candle-display", "bars", () => painted.push(2));
+  assert.equal(frames.length, 0);
+  scheduler.setCellTier("a", "focused");
+  frames.shift()?.();
+  assert.deepEqual(painted, [2]);
+});
 
-  frames[0]?.();
-  assert.deepEqual(commits, ["final"]);
-  const cell = scheduler.diagnostics().cells[0];
-  assert.equal(cell?.replaced, 2);
-  assert.equal(cell?.dropped, 0);
-  assert.equal(cell?.lastLane, "authoritative-final");
+test("display precedes preview and an expensive frame yields without an empty frame or secondary starvation", () => {
+  let now = 0;
+  const frames: Array<() => void> = [], painted: string[] = [];
+  const scheduler = new ChartWorkScheduler({ now: () => now, requestFrame: cb => frames.push(cb), cancelFrame: () => {} });
+  scheduler.registerCell("a", "focused"); scheduler.registerCell("b", "visible-secondary");
+  scheduler.enqueueFrame("a", "indicator-preview", "rsi", () => painted.push("preview"));
+  scheduler.enqueueFrame("a", "candle-display", "bars", () => { painted.push("a"); now += 12; });
+  scheduler.enqueueFrame("b", "candle-display", "bars", () => painted.push("b"));
+  frames.shift()!();
+  assert.deepEqual(painted, ["a"]);
+  now = 40;
+  scheduler.enqueueFrame("a", "candle-display", "bars", () => painted.push("a-next"));
+  frames.shift()!();
+  assert.deepEqual(painted, ["a", "b", "a-next"]);
+  frames.shift()!();
+  assert.deepEqual(painted, ["a", "b", "a-next", "preview"]);
 });
 
 test("replaceable Canvas fan-out is staggered across bounded animation frames", () => {
@@ -61,7 +74,7 @@ test("replaceable Canvas fan-out is staggered across bounded animation frames", 
   for (let index = 1; index <= 5; index += 1) {
     const cellId = `cell-${index}`;
     scheduler.registerCell(cellId, "visible-secondary");
-    scheduler.enqueueFrame(cellId, "kline-forming", "BTCUSDT@1m", () => {
+    scheduler.enqueueFrame(cellId, "candle-display", "BTCUSDT@1m", () => {
       commits.push(cellId);
     });
   }
@@ -197,6 +210,7 @@ test("dispose rejects queued work and clears frame/tier state", async () => {
     disposed: true,
     pendingAsync: 0,
     pendingFrames: 0,
+    runnableFrames: 0,
     windowVisible: true,
   });
 });

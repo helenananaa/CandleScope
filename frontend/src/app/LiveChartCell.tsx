@@ -806,6 +806,7 @@ function LiveChartCell({
     chartProps: {
       ...model.chartWorkspace.chart.chartProps,
       ref: chartSurface.ref,
+      ...(workScheduler ? { displayScheduler: { scheduler: workScheduler, cellId: cell.id } } : {}),
       drawingKeyBase: drawingScopeBase,
       paneLayoutScope: cellStorageScope,
       onCrosshairMove: handleLinkedCrosshairMove,
@@ -813,6 +814,8 @@ function LiveChartCell({
       onUserViewportRangeChange: handleLinkedViewportRangeChange,
     },
   }), [
+    cell.id,
+    workScheduler,
     cellStorageScope,
     chartSurface.ref,
     drawingScopeBase,

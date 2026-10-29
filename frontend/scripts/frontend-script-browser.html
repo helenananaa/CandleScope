@@ -1,6 +1,13 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Frontend script integration</title></head><body>
+<button id="run-checks">Run worker and React integration checks</button><pre id="results">Ready</pre>
 <script type="module">
 import { checkFrontendScripts, checkFrontendScriptEditor } from "/src/test/frontendScript.browser.tsx";
 window.__frontendScriptCheck = checkFrontendScripts;
 window.__frontendScriptEditorCheck = checkFrontendScriptEditor;
+document.getElementById("run-checks").onclick = async () => {
+  const result = document.getElementById("results");
+  result.textContent = "Running";
+  try { result.textContent = JSON.stringify({ passed: true, checks: await checkFrontendScripts() }, null, 2); }
+  catch (error) { result.textContent = JSON.stringify({ passed: false, error: String(error) }, null, 2); }
+};
 </script></body></html>

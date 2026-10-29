@@ -26,6 +26,14 @@ function runArchitectureFixture(t, files) {
   });
 }
 
+test("data admission cannot reintroduce the display scheduler", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/features/market-data/useKlineStreamRuntime.ts": 'import { ChartWorkScheduler } from "./chartWorkScheduler.js";',
+    "src/features/market-data/chartWorkScheduler.ts": 'export class ChartWorkScheduler {}',
+  });
+  assert.equal(result.violations.some(v => v.rule === "admission-no-display-scheduler"), true);
+});
+
 test("architecture source discovery classifies every JavaScript and TypeScript module extension", () => {
   assert.equal(sourceFileKind("feature.ts"), "typescript");
   assert.equal(sourceFileKind("Component.tsx"), "typescript");

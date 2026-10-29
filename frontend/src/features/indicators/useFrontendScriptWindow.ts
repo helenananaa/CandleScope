@@ -1,3 +1,5 @@
+import { captureStableSeries } from "../market-data/window/stableSeriesSnapshot.js";
+import type { KlineBar } from "../market-data/marketDataTypes.js";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { INDICATOR_HISTORY_LIMIT } from "./indicatorComputeRuntime.js";
@@ -11,10 +13,14 @@ export function useFrontendScriptWindow(
   enabled: boolean,
   contextKey: string,
 ) {
-  const initial = useMemo(() => enabled && source ? {
-    source, contextKey, version: source.version,
-    rows: source.snapshot().slice(-INDICATOR_HISTORY_LIMIT),
-  } : null, [contextKey, enabled, source]);
+  const capture = useCallback(() => {
+    if (!source) return null;
+    const input = captureStableSeries(source, { limit: INDICATOR_HISTORY_LIMIT });
+    // Consumers only read this frozen array; retain the legacy mutable TS
+    // signature at the controller boundary, without retaining a live alias.
+    return { source, contextKey, version: input.version, input, rows: input.rows as KlineBar[] };
+  }, [contextKey, source]);
+  const initial = useMemo(() => enabled ? capture() : null, [capture, enabled]);
   const [sample, setSample] = useState(initial);
   const pending = useRef(0);
   const wake = useRef<(() => void) | null>(null);
@@ -30,10 +36,7 @@ export function useFrontendScriptWindow(
     const publish = () => {
       dirty = false;
       setSample(previous => previous?.source === source && previous.contextKey === contextKey
-        && previous.version === source.version ? previous : {
-          source, contextKey, version: source.version,
-          rows: source.snapshot().slice(-INDICATOR_HISTORY_LIMIT),
-        });
+        && previous.version === source.version ? previous : capture());
     };
     const schedule = () => {
       if (!dirty || timer !== undefined || pending.current) return;
@@ -44,7 +47,7 @@ export function useFrontendScriptWindow(
     };
     wake.current = schedule;
     const unsubscribe = source.subscribe(delta => {
-      if (delta.type === "tick" && delta.appended !== true) {
+      if (delta.type === "tick" && delta.appended !== true && delta.bar?.is_closed !== true) {
         dirty = true;
         schedule();
       } else {
@@ -61,8 +64,8 @@ export function useFrontendScriptWindow(
       if (timer !== undefined) clearTimeout(timer);
       if (wake.current === schedule) wake.current = null;
     };
-  }, [contextKey, enabled, source]);
+  }, [capture, contextKey, enabled, source]);
 
   const selected = sample?.source === source && sample.contextKey === contextKey ? sample : initial;
-  return { rows: enabled ? selected?.rows : undefined, onComputePendingChange };
+  return { rows: enabled ? selected?.rows : undefined, inputSnapshot: enabled ? selected?.input : undefined, onComputePendingChange };
 }

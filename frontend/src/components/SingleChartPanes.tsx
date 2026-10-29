@@ -1,3 +1,5 @@
+import { useChartDisplaySubscription } from "../features/market-data/useChartDisplaySubscription.js";
+import type { ChartDisplayScheduler } from "../features/market-data/chartDisplaySubscription.js";
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
@@ -279,6 +281,7 @@ import type { IntervalString } from "../utils/intervals.js";
 
 export interface SingleChartPanesProps {
   suspended?: boolean;
+  displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
   symbol: string;
   drawingKeyBase?: string;
@@ -798,6 +801,7 @@ function clearAuxiliaryChartState({
 
 const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(function SingleChartPanes({
   suspended = false,
+  displayScheduler,
   seriesStore = null,
   symbol,
   drawingKeyBase = "",
@@ -877,6 +881,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   onPriceScaleModeChange,
   onAddAlertAtPrice = null,
 }: SingleChartPanesProps, ref) {
+  const displaySubscription = useChartDisplaySubscription(seriesStore, suspended, displayScheduler);
   const extensionTheme = useSyncExternalStore(subscribeExtensions, () => getExtensionState().theme, () => null);
   const locale = useLocale();
   const drawingFontMetricRevision = useDrawingFontMetricRevision();
@@ -3984,7 +3989,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     notifyLinkedViewportReady();
     scheduleVisibleRangeSave();
 
-    const unsubscribe = store.subscribe((delta, currentStore) => {
+    const unsubscribe = (displaySubscription ?? store).subscribe((delta, currentStore) => {
       if (projectionGenerationRef.current !== generation
         || seriesStoreRef.current !== currentStore
         || delta?.type === "noop") return;
@@ -4216,7 +4221,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
     const rows = rowsFromStore(seriesStore);
@@ -5283,6 +5288,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         crosshairStore={paneCrosshairStore}
         lines={mainLegendLines}
         seriesStore={seriesStore}
+        displaySubscription={displaySubscription}
       />
 
       <IndicatorPaneLabels

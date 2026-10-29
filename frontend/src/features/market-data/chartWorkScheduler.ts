@@ -2,11 +2,10 @@ export type ChartWorkTier = "focused" | "hidden" | "minimized" | "visible-second
 
 export type ChartWorkLane =
   | "active-hydration"
-  | "authoritative-final"
   | "indicator-preview"
   | "indicator-range"
   | "initial-history"
-  | "kline-forming"
+  | "candle-display"
   | "load-more"
   | "prefetch";
 
@@ -19,6 +18,7 @@ export interface ChartWorkSchedulerOptions {
   maxConcurrent?: number;
   maxConcurrentHydration?: number;
   maxFrameTasksPerFrame?: number;
+  maxFrameWorkMs?: number;
   now?: () => number;
   requestFrame?: (callback: () => void) => number;
   yieldFrameBetweenTasks?: boolean;
@@ -44,6 +44,7 @@ export interface ChartWorkSchedulerDiagnostics {
   disposed: boolean;
   pendingAsync: number;
   pendingFrames: number;
+  runnableFrames: number;
   windowVisible: boolean;
 }
 
@@ -67,7 +68,7 @@ interface FrameTask {
   cellId: string;
   createdAt: number;
   key: string;
-  lane: Extract<ChartWorkLane, "indicator-preview" | "kline-forming">;
+  lane: Extract<ChartWorkLane, "indicator-preview" | "candle-display">;
   sequence: number;
 }
 
@@ -111,14 +112,15 @@ export class ChartWorkDroppedError extends Error {
 }
 
 /**
- * Per-window work arbiter. Forming/preview work is replaceable and frame
- * bounded; closed/amended commits bypass throttling. Async lanes use bounded
+ * Per-window display/acquisition arbiter. Data admission never enters this
+ * scheduler. Display work is replaceable and frame bounded. Async lanes use bounded
  * concurrency and round-robin selection between equal tier/lane Cells.
  */
 export class ChartWorkScheduler {
   private readonly maxConcurrent: number;
   private readonly maxConcurrentHydration: number;
   private readonly maxFrameTasksPerFrame: number;
+  private readonly maxFrameWorkMs: number;
   private readonly now: () => number;
   private readonly requestFrame: (callback: () => void) => number;
   private readonly cancelFrame: (handle: number) => void;
@@ -150,18 +152,17 @@ export class ChartWorkScheduler {
       1,
       Math.floor(options.maxConcurrentHydration ?? 1),
     );
-    // Canvas paint cost scales with visible Cell count. Stagger replaceable
-    // forming/preview commits across frames so a 16-Cell fan-out cannot turn a
-    // one-second market tick into one 250+ ms main-thread block. Authoritative
-    // final/amended commits bypass this queue and remain immediate.
+    // A normal dual layout shares one frame. Larger layouts remain bounded;
+    // no mandatory empty frame is inserted between batches.
     this.maxFrameTasksPerFrame = Math.max(
       1,
-      Math.floor(options.maxFrameTasksPerFrame ?? 1),
+      Math.floor(options.maxFrameTasksPerFrame ?? 2),
     );
+    this.maxFrameWorkMs = Math.max(1, options.maxFrameWorkMs ?? 8);
     this.now = options.now || Date.now;
     this.requestFrame = options.requestFrame || defaultRequestFrame;
     this.cancelFrame = options.cancelFrame || defaultCancelFrame;
-    this.yieldFrameBetweenTasks = options.yieldFrameBetweenTasks ?? true;
+    this.yieldFrameBetweenTasks = options.yieldFrameBetweenTasks ?? false;
     this.appBudget = options.appBudget ?? null;
   }
 
@@ -181,6 +182,7 @@ export class ChartWorkScheduler {
     if (state.diagnostics.tier === "hidden" || state.diagnostics.tier === "minimized") {
       this.dropReplaceableFrames(cellId);
     }
+    this.reconcileFrame();
     this.scheduleDrain();
   }
 
@@ -193,6 +195,7 @@ export class ChartWorkScheduler {
     if (!visible) {
       for (const cellId of this.cells.keys()) this.dropReplaceableFrames(cellId);
     }
+    this.reconcileFrame();
     this.scheduleDrain();
   }
 
@@ -200,24 +203,12 @@ export class ChartWorkScheduler {
     return this.ensureCell(cellId).diagnostics.tier;
   }
 
-  commitAuthoritative(
-    cellId: string,
-    callback: () => void,
-    supersede?: { key: string; lane: FrameTask["lane"] },
-  ): void {
-    if (this.disposed) return;
-    const state = this.ensureCell(cellId);
-    if (supersede) {
-      const taskKey = `${cellId}\u0000${supersede.lane}\u0000${supersede.key}`;
-      const pending = this.frameQueue.get(taskKey);
-      if (pending) {
-        this.frameQueue.delete(taskKey);
-        this.incrementPending(state, supersede.lane, -1);
-        state.diagnostics.replaced += 1;
-      }
-    }
-    callback();
-    this.recordCommit(state, "authoritative-final", 0);
+  cancelDisplay(cellId: string, key: string): void {
+    const taskKey = `${cellId}\u0000candle-display\u0000${key}`;
+    if (!this.frameQueue.delete(taskKey)) return;
+    const state = this.cells.get(cellId);
+    if (state) this.incrementPending(state, "candle-display", -1);
+    this.reconcileFrame();
   }
 
   enqueueFrame(
@@ -228,7 +219,7 @@ export class ChartWorkScheduler {
   ): boolean {
     if (this.disposed) return false;
     const state = this.ensureCell(cellId);
-    if (state.diagnostics.tier === "hidden" || state.diagnostics.tier === "minimized") {
+    if (lane !== "candle-display" && (state.diagnostics.tier === "hidden" || state.diagnostics.tier === "minimized")) {
       state.diagnostics.dropped += 1;
       return false;
     }
@@ -331,6 +322,7 @@ export class ChartWorkScheduler {
       disposed: this.disposed,
       pendingAsync: this.asyncQueue.length,
       pendingFrames: this.frameQueue.size,
+      runnableFrames: [...this.frameQueue.values()].filter(task => this.isDisplayEligible(task)).length,
       windowVisible: this.windowVisible,
     };
   }
@@ -338,7 +330,7 @@ export class ChartWorkScheduler {
   unregisterCell(cellId: string): void {
     const state = this.cells.get(cellId);
     if (!state) return;
-    this.dropReplaceableFrames(cellId);
+    this.dropReplaceableFrames(cellId, true);
     for (let index = this.asyncQueue.length - 1; index >= 0; index -= 1) {
       const task = this.asyncQueue[index];
       if (task?.cellId !== cellId) continue;
@@ -403,11 +395,11 @@ export class ChartWorkScheduler {
     state.diagnostics.maxQueueWaitMs = Math.max(state.diagnostics.maxQueueWaitMs, queueWaitMs);
   }
 
-  private dropReplaceableFrames(cellId: string): void {
+  private dropReplaceableFrames(cellId: string, all = false): void {
     const state = this.cells.get(cellId);
     if (!state) return;
     for (const [key, task] of this.frameQueue) {
-      if (task.cellId !== cellId) continue;
+      if (task.cellId !== cellId || (!all && task.lane === "candle-display")) continue;
       this.frameQueue.delete(key);
       state.diagnostics.dropped += 1;
       this.incrementPending(state, task.lane, -1);
@@ -419,8 +411,23 @@ export class ChartWorkScheduler {
     }
   }
 
+  private isDisplayEligible(task: FrameTask): boolean {
+    const state = this.cells.get(task.cellId);
+    return !!state && this.windowVisible && state.configuredTier !== "hidden";
+  }
+
+  private reconcileFrame(): void {
+    if (![...this.frameQueue.values()].some(task => this.isDisplayEligible(task)) && this.frameHandle !== null) {
+      this.cancelFrame(this.frameHandle);
+      this.frameHandle = null;
+      this.yieldNextFrame = false;
+    }
+    this.scheduleFrame();
+  }
+
   private scheduleFrame(): void {
-    if (this.frameHandle !== null || this.frameQueue.size === 0 || this.disposed) return;
+    if (this.frameHandle !== null || this.disposed
+      || ![...this.frameQueue.values()].some(task => this.isDisplayEligible(task))) return;
     this.frameHandle = this.requestFrame(() => {
       this.frameHandle = null;
       this.flushFrames();
@@ -433,16 +440,25 @@ export class ChartWorkScheduler {
       this.scheduleFrame();
       return;
     }
-    const tasks = [...this.frameQueue.values()].sort((left, right) => {
+    const sortTime = this.now();
+    const tasks = [...this.frameQueue.values()].filter(task => this.isDisplayEligible(task)).sort((left, right) => {
+      // Candle publication cannot be starved by a focused indicator preview.
+      const laneDelta = Number(left.lane !== "candle-display") - Number(right.lane !== "candle-display");
+      if (laneDelta) return laneDelta;
+      // A continuously busy focused chart must still let older secondary work run.
+      if (sortTime - Math.min(left.createdAt, right.createdAt) >= 32) return left.sequence - right.sequence;
       const tierDelta = TIER_ORDER[this.tier(left.cellId)] - TIER_ORDER[this.tier(right.cellId)];
       return tierDelta || left.sequence - right.sequence;
     });
     let committed = 0;
+    const started = this.now();
     for (const task of tasks) {
       if (committed >= this.maxFrameTasksPerFrame) break;
+      if (committed > 0 && this.now() - started >= this.maxFrameWorkMs) break;
       const taskKey = `${task.cellId}\u0000${task.lane}\u0000${task.key}`;
-      if (!this.frameQueue.delete(taskKey)) continue;
-      const state = this.ensureCell(task.cellId);
+      if (this.frameQueue.get(taskKey) !== task || !this.isDisplayEligible(task)) continue;
+      this.frameQueue.delete(taskKey);
+      const state = this.cells.get(task.cellId)!;
       this.incrementPending(state, task.lane, -1);
       if (state.diagnostics.tier === "hidden" || state.diagnostics.tier === "minimized") {
         state.diagnostics.dropped += 1;

@@ -3,6 +3,7 @@ import { preserveFinalRow, type KlineQualityEvidence } from "../quality/klineQua
 import type { SeriesWindowView, WindowCommitState } from "./seriesWindowView.js";
 import type { EpochSeconds, KlineBar, KlineBarInput } from "../marketDataTypes.js";
 import type { WindowDelta, WindowDeltaDetail } from "../klineContracts.js";
+import { createStableSeriesSnapshot, type SeriesCaptureOptions, type StableSeriesSnapshot } from "./stableSeriesSnapshot.js";
 import { SeriesWindowStore } from "./seriesWindowStore.js";
 import { createWindowDelta, WINDOW_DELTA_TYPES } from "./windowDeltas.js";
 
@@ -10,7 +11,7 @@ import { createWindowDelta, WINDOW_DELTA_TYPES } from "./windowDeltas.js";
 export type MarketWindowReader = SeriesWindowView & {
   readonly commitState: WindowCommitState;
   subscribe(listener: (delta: WindowDelta, reader: SeriesWindowView) => void): () => boolean;
-  capture(): { state: WindowCommitState; rows: readonly Readonly<KlineBar>[] };
+  capture(options?: SeriesCaptureOptions): StableSeriesSnapshot;
 };
 
 export type WindowCommand = (
@@ -226,7 +227,12 @@ export class MarketWindowSession {
           owned.listeners.add(listener);
           return () => owned.listeners.delete(listener);
         },
-        capture: () => ({ state: owned.state, rows: Object.freeze(store.snapshot().slice()) }),
+        capture: (options?: SeriesCaptureOptions) => {
+          const selection = this.#selection;
+          return createStableSeriesSnapshot(owned.reader, options,
+            () => !this.#closed && this.#selection === selection && selection !== null
+              && this.#entries.get(key) === owned, true);
+        },
       });
       entry = owned;
       this.#entries.set(key, entry);
@@ -246,6 +252,8 @@ export class MarketWindowSession {
     const entry = this.#entries.get(key);
     if (!entry) throw new Error(`Missing owned window: ${key}`);
     const { store } = entry;
+    const authoritativeEvent = command.type === "tick" && command.row.is_closed === true
+      && (command.source === "kline-ws" || command.source === "cache-tick");
     if (command.type !== "clear") {
       const incoming = command.type === "tick" ? [command.row] : command.rows;
       for (let index = 0; index < incoming.length; index += 1) {
@@ -284,6 +292,7 @@ export class MarketWindowSession {
       case "tick": delta = store.applyTick(command.row, detail); break;
       case "clear": delta = store.clear(detail); break;
     }
+    if (authoritativeEvent) this.#registry.recordAuthoritativeAdmission();
     if (delta.changed) {
       // Store replaces row objects; freezing only incoming retained rows is
       // O(1) for a tail tick and prevents mutation through first/getByTime too.
@@ -371,7 +380,7 @@ export class MarketWindowRegistry {
   #windows = new Set<MarketWindowSession>();
   #seeds = new Map<string, WindowSeed>();
   #options: WindowOptions;
-  #counts = { hydrations: 0, hydratedBars: 0, publishes: 0, publishErrors: 0 };
+  #counts = { hydrations: 0, hydratedBars: 0, publishes: 0, publishErrors: 0, authoritativeAdmissions: 0 };
   constructor(options: WindowOptions = {}) { this.#options = options; this.maxBars = options.maxBars ?? 10_000; }
   createWindow(label = "chart"): MarketWindowSession {
     return new MarketWindowSession(`${label}:${++nextWindowId}`, this);
@@ -380,6 +389,7 @@ export class MarketWindowRegistry {
   detach(session: MarketWindowSession): void { this.#windows.delete(session); }
   entries(): ReturnType<MarketWindowSession["entries"]> { return Array.from(this.#windows).flatMap((session) => session.entries()); }
   sharedSnapshotDiagnostics() { return { ...this.#counts }; }
+  recordAuthoritativeAdmission(): void { this.#counts.authoritativeAdmissions += 1; }
   readSeed(key: string): WindowSeed | null {
     const local = this.#seeds.get(key);
     const rows = local?.rows ?? this.#options.sharedSnapshot?.read(key) ?? [];

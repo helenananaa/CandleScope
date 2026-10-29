@@ -11,6 +11,7 @@ const UNSUPPORTED_TYPESCRIPT_EXTENSIONS = new Set([".mts", ".cts"]);
 const ALLOWED_NON_SOURCE_EXTENSIONS = new Set([".css", ".md", ".svg"]);
 
 const RULES = {
+  admissionNoDisplayScheduler: "admission-no-display-scheduler",
   liveWindowWriterBoundary: "live-window-writer-boundary",
   componentNoServiceImport: "component-no-service-import",
   componentNoLocalStorage: "component-no-local-storage",
@@ -345,6 +346,15 @@ function checkImports(absPath, filePath, content, projectDirectory) {
   for (const { specifier, line, typeOnly } of importSpecifiers(content)) {
     const target = resolveImportSpecifier(absPath, specifier, projectDirectory);
     const normalizedTarget = normalizeModulePath(target);
+    if (!isTestSourcePath(filePath)
+      && new Set([
+        "src/features/market-data/useKlineStreamRuntime.ts",
+        "src/features/market-data/window/marketWindowSession.ts",
+      ]).has(filePath)
+      && /\/chart(?:WorkScheduler|DisplaySubscription)$/.test(normalizedTarget)) {
+      addViolation({ rule: RULES.admissionNoDisplayScheduler, filePath, line, target: normalizedTarget,
+        message: "data admission must commit independently of display scheduling and visibility" });
+    }
     const liveWindowInternals = new Set([
       "src/features/market-data/window/seriesWindowStore",
       "src/features/market-data/window/windowRegistry",

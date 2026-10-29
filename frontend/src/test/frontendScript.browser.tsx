@@ -12,7 +12,7 @@ import { epochSeconds } from "./testHelpers.js";
 import IndicatorPanel from "../features/indicators/IndicatorPanel.js";
 import type { IndicatorDefinition } from "../features/indicators/indicatorTypes.js";
 import { useIndicatorRuntime } from "../features/indicators/useIndicatorRuntime.js";
-import { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";
+import { MarketWindowRegistry } from "../features/market-data/window/marketWindowSession.js";
 import type { MarketDataRuntime } from "../features/market-data/useMarketDataRuntime.js";
 import { structuralMock } from "./testHelpers.js";
 import { klineDependencyKey, registerCacheResource, unregisterCacheResource } from "../features/cache-gc/cacheRegistry.js";
@@ -77,8 +77,14 @@ async function checkLiveWindowTicks(): Promise<string[]> {
   // registered. Omitting it creates repeated unacknowledged attempts, which
   // can accidentally refresh a stale signature and conceal the native bug.
   registerCacheResource("chart-data-cache", "frontend-js-live-fixture", { type: "kline", dependencyKey: klineDependencyKey(context), bars: bars.length });
-  const store = new SeriesWindowStore({ seriesKey: "live-js-ticks" });
-  store.replace(bars);
+  const owner = new MarketWindowRegistry().createWindow("live-js");
+  const selection = owner.prepareSelection("live-js-ticks"); owner.activate(selection);
+  owner.transact(selection, () => {
+    owner.getOrCreate("live-js-ticks");
+    owner.apply("live-js-ticks", { type: "replace", rows: bars });
+  });
+  const store = owner.get("live-js-ticks")!;
+  const replace = (rows: typeof bars) => owner.transact(selection, () => owner.apply("live-js-ticks", { type: "replace", rows }));
   const stableSnapshot = store.snapshot();
   const storage = new Map<string, string>();
   const persistence = createActiveIndicatorPersistence("live-js", {
@@ -104,7 +110,7 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     return <span>{runtime.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value}</span>;
   }
   const value = () => latest?.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value;
-  const tick = (close: number) => store.applyTick({ ...bars.at(-1)!, close, high: close + 1, is_closed: false });
+  const tick = (close: number) => owner.transact(selection, () => owner.apply("live-js-ticks", { type: "tick", row: { ...bars.at(-1)!, close, high: close + 1, is_closed: false } }));
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
     throw new Error(`Live stable-window tick failed: ${host.textContent}`);
@@ -137,7 +143,7 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     flushSync(() => latest!.actions.updateIndicatorScript("live", 'const until=Date.now()+400; while(Date.now()<until) {} plot("close",bars.map(bar=>bar.close));', "frontend-js"));
     await new Promise(resolve => setTimeout(resolve, 100));
     registerCacheResource("chart-data-cache", "frontend-js-live-fixture", { type: "kline", dependencyKey: klineDependencyKey(context), bars: 5 });
-    store.replace(bars.slice(0, 5));
+    replace(bars.slice(0, 5));
     await until(() => value() === 5);
     assert(latest!.view.activeIndicators[0]?.lines?.every(line => line.data.every(point => point.time <= bars[4]!.time)), "busy sampling retained the replaced source's future rows");
     const cachedBeforeHide = getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context)?.contentVersion;
@@ -148,11 +154,21 @@ async function checkLiveWindowTicks(): Promise<string[]> {
       && getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context)?.contentVersion === cachedBeforeHide, "hidden script kept running on ticks");
     flushSync(() => latest!.actions.toggleVisibility("live"));
     await until(() => value() === 80);
+    flushSync(() => latest!.actions.updateIndicatorScript("live", 'const until=Date.now()+400; while(Date.now()<until) {} plot("stale-owner",bars.map(bar=>bar.close+1000));', "frontend-js"));
+    await until(() => document.querySelectorAll("iframe").length > 0);
+    // Deliberately leave the React context unchanged: lifecycle-only fencing
+    // cannot observe this same-reader ownership ABA before its next render.
+    owner.activate(owner.prepareSelection("other"));
+    owner.activate(owner.prepareSelection("live-js-ticks"));
+    await until(() => document.querySelectorAll("iframe").length === 0);
+    assert(value() !== 1080 && !getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context),
+      "an old owned input published or populated shared cache after selection ABA");
     return ["real live runtime follows stable-identity store ticks and makes progress during a continuous stream",
       "continuous ticks cannot starve timeout; failed program stays idle and corrected source recovers",
       "source replacement fences busy old work immediately and keeps only the new window's timestamps",
-      "hidden script stays idle and resumes from the latest source window when shown"];
-  } finally { flushSync(() => root.unmount()); host.remove(); globalThis.fetch = oldFetch; unregisterCacheResource("chart-data-cache", "frontend-js-live-fixture"); }
+      "hidden script stays idle and resumes from the latest source window when shown",
+      "owner ABA rejects the delayed result and cache write without a React context change"];
+  } finally { flushSync(() => root.unmount()); owner.close(); host.remove(); globalThis.fetch = oldFetch; unregisterCacheResource("chart-data-cache", "frontend-js-live-fixture"); }
 }
 
 async function checkReactReplayLifecycle(): Promise<string[]> {

@@ -1,5 +1,6 @@
 import type { SeriesWindowStore } from "./seriesWindowStore.js";
 import type { WindowDelta } from "../klineContracts.js";
+import type { SeriesCaptureOptions, StableSeriesSnapshot } from "./stableSeriesSnapshot.js";
 
 export interface WindowCommitState extends Readonly<Record<string, unknown>> {
   readonly windowId: string;
@@ -20,5 +21,6 @@ export type SeriesWindowView = Readonly<Pick<SeriesWindowStore,
   | "hasTime" | "getByTime" | "indexOfTime" | "first" | "last" | "coverage" | "describe" | "timeSet"
 >> & {
   readonly commitState?: WindowCommitState;
+  capture?(options?: SeriesCaptureOptions): StableSeriesSnapshot;
   subscribe(listener: (delta: WindowDelta, reader: SeriesWindowView) => void): () => boolean;
 };
