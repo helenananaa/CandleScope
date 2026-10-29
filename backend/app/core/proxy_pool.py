@@ -523,7 +523,9 @@ class ProxyPool:
                               if r.egress_group == route.egress_group and r.max_concurrency > 1))
             wait = max(0.0, health.retry_at - now, self._archive_cooldowns.get((host, route.egress_group), 0.0) - now)
             if busy or active >= route.max_concurrency - 1 or group_active >= group_limit:
-                wait = max(wait, 0.05)
+                # Resource release wakes all owning loops. This timer only
+                # detects external config changes and lost notifications.
+                wait = max(wait, 0.25)
             traffic = self._archive_traffic.get(route.url)
             speed = traffic.bytes_per_second if traffic else 0
             service = 1024 ** 2 / speed if speed > 0 else health.latency_ms / 1000
@@ -590,7 +592,6 @@ class ProxyPool:
                                             egress_group=route.egress_group)
                 resource = _ArchivePermitResource(self, config, exchange, host, exclude_urls,
                     priority, non_pool_proxy, route, token, source_id, object_key, scheduler, rule, request)
-                scheduler.forget(demand)
                 try:
                     permit = await scheduler.acquire([rule], request, demand=demand, resource=resource)
                 except RateLimitDeferred as exc:
@@ -600,7 +601,10 @@ class ProxyPool:
                         parent.bypasses = max(parent.bypasses, demand.bypasses)
                         raise
                     scheduler.protect(demand, rule.bucket_key, rules=[rule], request=request, resource=resource)
-                    await scheduler.manager.wait_for_change(exc.retry_after_seconds)
+                    # Config objects can be updated in place without a quota
+                    # notification. Bound that recheck to 4 Hz; resource and
+                    # response changes still wake immediately.
+                    await scheduler.manager.wait_for_change(min(0.25, exc.retry_after_seconds))
                     continue
                 lease = replace(permit.resource_lease, public_permit=permit)
                 return lease

@@ -1,0 +1,170 @@
+{
+  "lock": {
+    "repository": "https://github.com/helenananaa/ccxt.git",
+    "upstream_version": "4.5.60",
+    "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+    "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "release_tag": "candlescope-4.5.60.1",
+    "wheel_url": "https://github.com/helenananaa/ccxt/releases/download/candlescope-4.5.60.1/ccxt-4.5.60-py2.py3-none-any.whl",
+    "build_requirements": [
+      "setuptools==80.9.0",
+      "wheel==0.45.1"
+    ],
+    "schemas": [
+      "candlescope.binance.usdm.kline.v1",
+      "candlescope.binance.spot.kline.v1",
+      "candlescope.okx.kline.v1"
+    ]
+  },
+  "desktop_tested": false,
+  "rails": {
+    "okx-spot": {
+      "status": "passed",
+      "ws_frames": 11,
+      "rest_samples": 2,
+      "closed_at": 1793259360000,
+      "restart": true,
+      "pending": 0
+    },
+    "okx-futures": {
+      "status": "passed",
+      "ws_frames": 41,
+      "rest_samples": 2,
+      "closed_at": 1793259420000,
+      "restart": true,
+      "pending": 0
+    }
+  },
+  "channels": {
+    "okx-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 13
+      }
+    },
+    "okx-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 3
+      }
+    },
+    "okx-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 4
+      }
+    },
+    "okx-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 3,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 10
+      }
+    },
+    "okx-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 4,
+        "events": 5
+      }
+    },
+    "okx-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 3,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 3,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 6,
+        "events": 7
+      }
+    },
+    "okx-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "okx-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    }
+  },
+  "retention": {
+    "archived": 102,
+    "json_bytes": 7857471,
+    "compressed_bytes": 288198,
+    "cutoff": 1793345921282
+  },
+  "restart_readback": {
+    "restored": 110,
+    "pending": 0
+  }
+}

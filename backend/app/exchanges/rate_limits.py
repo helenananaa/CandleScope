@@ -622,13 +622,10 @@ class RateLimitManager:
             self._expire_probe_lease(bucket, now=now)
             if now < bucket.probe_lease_until:
                 # A consuming cold-start/429 probe owns the matching bucket
-                # until its physical response is accounted.  Recheck quickly
-                # so waiters resume soon after ``record_response`` releases
-                # the lease instead of sleeping for its full fail-safe bound.
-                wait_seconds = min(
-                    max(0.001, bucket.probe_lease_until - now),
-                    0.05,
-                )
+                # until its physical response is accounted. Completion
+                # notifies waiters; the timer is only
+                # the fail-safe lease expiry, not a periodic polling interval.
+                wait_seconds = max(0.001, bucket.probe_lease_until - now)
                 return self._deferred_admission(
                     rule,
                     bucket,

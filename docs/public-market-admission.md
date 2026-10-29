@@ -149,6 +149,13 @@ Quota and demand ownership still belong to the backend event loop; process-wide
 archive resource limits do not imply a distributed quota service. Storage,
 import proof, deletion and persistence contracts are unchanged.
 
+Failed non-blocking inspections and unchanged protection registrations do not
+broadcast resource changes. Probe completion wakes waiters; its deadline is a
+fail-safe expiry. Archive configuration is rechecked at most four times per
+second in the absence of notifications. A held-probe regression prevents peers
+from waking each other in a retry loop. Current integrated and live evidence is
+recorded in [the PR #145 completion report](qa/CCXT_DIRECTION_COMPLETION_20261029.md).
+
 ## Validation scope
 
 The added tests exercise atomic constraints, independent resources, critical

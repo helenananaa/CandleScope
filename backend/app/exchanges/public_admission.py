@@ -182,8 +182,11 @@ class PublicAdmission:
                 demand.wait_started = time.monotonic()
                 demand.wait_ticket = next(_fairness_tickets)
             keys = frozenset((bucket,)) | frozenset(resource.keys if resource else ())
+            previous = self._protected.get(demand)
             self._protected[demand] = _Intent(demand, keys, demand.wait_started, list(rules), request, resource)
-            self.manager.notify_change()
+            if (previous is None or previous.keys != keys or previous.rules != list(rules)
+                    or previous.request != request):
+                self.manager.notify_change()
 
     def _prune(self) -> None:
         for demand in tuple(self._protected):
@@ -258,6 +261,7 @@ class PublicAdmission:
             demand.wait_ticket = next(_fairness_tickets)
         current = _Intent(demand, keys, demand.wait_started, rules, request, resource)
         self._intents[intent_id] = current
+        granted = False
         try:
             while True:
                 async with self._lock:
@@ -302,6 +306,7 @@ class PublicAdmission:
                                                   time.monotonic(), demand.priority(),
                                                   resource=resource, resource_lease=lease)
                             self._active[permit.attempt_id] = permit
+                            granted = True
                             self._by_bucket.update(r.rule.bucket_key for r in reservations)
                             self._counts["attempts"] += 1
                             self._counts[f"class_{demand.priority().name.lower()}"] += 1
@@ -331,7 +336,10 @@ class PublicAdmission:
                 await self.manager.wait_for_change(error.retry_after_seconds)
         finally:
             self._intents.pop(intent_id, None)
-            self.manager.notify_change()
+            # A non-blocking failed inspection changes no resource. Waking all
+            # peers here lets deferred consumers wake each other indefinitely.
+            if granted or not demand.defer:
+                self.manager.notify_change()
 
     def _finish(self, permit: PublicPermit, feedback: dict[str, Any]) -> None:
         self._active.pop(permit.attempt_id, None)

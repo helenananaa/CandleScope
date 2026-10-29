@@ -18,6 +18,34 @@ async def queued(pool, count):
             await asyncio.sleep(0.005)
 
 
+def test_slow_archive_probe_waiters_do_not_wake_each_other_in_a_busy_loop():
+    from app.exchanges.public_admission import get_public_admission
+
+    async def run():
+        pool, cfg = ProxyPool(), config(["http://localhost:32501"])
+        held = await pool.acquire_archive(cfg, "binance", "slow-cdn", exclude_urls=set())
+        scheduler = get_public_admission()
+        waiting = [asyncio.create_task(pool.acquire_archive(cfg, "binance", "slow-cdn", exclude_urls=set()))
+                   for _ in range(3)]
+        try:
+            await queued(pool, 3)
+            # Nothing completes or changes capacity during this observation.
+            # Initial registration may wake peers once; repeated inspection is
+            # not a state change and must settle into event/timer waiting.
+            await asyncio.sleep(0.15)
+            deferred = sum(v for k, v in scheduler.snapshot()["counts"].items() if k.startswith("deferred_"))
+            assert deferred <= 20, scheduler.snapshot()["counts"]
+            assert len(pool._archive_leases) == 1 and all(not task.done() for task in waiting)
+        finally:
+            for task in waiting:
+                task.cancel()
+            await asyncio.gather(*waiting, return_exceptions=True)
+            pool.finish_archive(held, elapsed=0, received_bytes=0, cancelled=True)
+        assert not pool._archive_leases and not pool._http.waiters
+        assert scheduler.snapshot()["protected"] == 0
+    asyncio.run(run())
+
+
 def test_archive_shares_public_execution_and_settles_each_attempt_once():
     from app.exchanges.public_admission import PublicDemand, TrafficClass, get_public_admission, public_demand
     from app.exchanges.rate_limits import HistoricalRequest, RateLimitDeferred, RateLimitRule
