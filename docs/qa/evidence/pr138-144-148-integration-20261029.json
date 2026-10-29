@@ -6,7 +6,8 @@
     "pr138": "8299ad5fc25c1cd90299172833ec6385c5fbd64c",
     "pr144_code": "d9829fb93118a76d3f017f2d7b3a11e47f3050b9",
     "pr148": "2c0deb5f4bb785e261ff52eefeffe6cf7ef9a6e1",
-    "joint_tree": "c110ace7a89b5617c7a4dcc9091b3dead3c9efe3"
+    "joint_tree": "c110ace7a89b5617c7a4dcc9091b3dead3c9efe3",
+    "test_runner_fix": "f0844357f432a0bd11ae5a0e23fc44d9db8dbc74"
   },
   "pytest": {
     "full": {
@@ -319,11 +320,39 @@
     "browser-admission/result.json": {
       "path": "output/pr144-integration/browser-admission/result.json",
       "sha256": "4e848b256c676995d7527a22c3b8d60b162aa7fe296b1e42b03f0152b732ad21"
+    },
+    "frontend-full.log": {
+      "path": "output/pr144-integration/frontend-full.log",
+      "sha256": "5f0743699905212bed8cdb8adf50c0f17fea9de7d7463586bc7fab46b72df8ca"
+    },
+    "runner-tests.log": {
+      "path": "output/pr144-integration/runner-tests.log",
+      "sha256": "6d543533898d4b4092e77c742bf5215e70e87a63769ce0b9cc376eb5080e500e"
+    },
+    "runner-status.json": {
+      "path": "output/pr144-integration/runner-status.json",
+      "sha256": "bb6eb12b72abccb038d76aa8f1add9bbdde82cc1024691f6ea569bdb3b6c98b5"
+    },
+    "runner-lint.log": {
+      "path": "output/pr144-integration/runner-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
   "limitations": [
     "Reservation is a conservative Python allocation estimate, not an RSS ceiling.",
     "Browser fixtures use synthetic history and controlled capabilities; they do not qualify live venues or packaged desktop recovery.",
     "K130/B130, versioned H127 and R129 integration, full resource/latency matrix and long-running venue recovery remain open."
-  ]
+  ],
+  "frontend_full_before_runner_fix": {
+    "functional_passed": 4546,
+    "functional_failed": 1,
+    "functional_skipped": 1,
+    "isolated_performance_passed": 1,
+    "failure": "backend selection exceeded Windows command-length gate"
+  },
+  "runner_after_fix": {
+    "passed": 10,
+    "failed": 0,
+    "lint_exit": 0
+  }
 }
