@@ -21,10 +21,11 @@ from app.data_engine.backfill.config import BackfillConfig
 from app.data_engine.backfill.models import BackfillPlan, BackfillTask, FetchResult, FetchedBar
 from app.data_engine.backfill.reconciler import Reconciler
 from app.data_engine.data_manager import DataManager
-from app.data_engine.data_manager.models import BarData, DataEventType, SeriesKey
+from app.data_engine.data_manager.models import BarData, DataEventType
 from app.data_engine.ingestion import StreamPipeline
 from app.data_engine.ingestion.config import IngestionConfig
 from app.data_engine.ingestion.models import RawMessage, DataSource, StreamDescriptor, StreamType
+from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.storage import klines_repo
 from tests.test_alerts_runtime import _rule_payload
 from tests.test_recovery_delivery_integration import _until
@@ -89,6 +90,20 @@ async def _history_repair(dm, store, timestamp, price):
         bars=[BarData.from_storage_row(row, exchange="binance", market_type="futures") for row in rows],
         event_detail={"reason": "tail_gap", "requester": "ingestion_gap"}, **IDENTITY,
     )
+
+
+async def _committed_backfill(dm, store, bars, **identity):
+    """Notify only after the controlled authoritative rows have committed."""
+    spec = parse_interval_spec(identity["interval"])
+    assert spec is not None
+    rows = [dict(
+        open_time=bar.time_ms, close_time=spec.next_ms(bar.time_ms) - 1,
+        **{name: getattr(bar, name) for name in (
+            "open", "high", "low", "close", "volume", "quote_volume", "trades",
+            "taker_buy_base", "taker_buy_quote")},
+    ) for bar in bars]
+    assert store.upsert_bars(**identity, rows=rows, source="backfill_rest_verified") == len(rows)
+    await dm.on_bars_backfilled(**identity, bars=bars)
 
 
 _REOPEN = """
@@ -174,7 +189,9 @@ async def test_same_final_ohlcv_does_not_imply_same_alert_history(tmp_path, monk
                 await _until(lambda: any(e["type"] == "backfill.completed" for e in events))
         finally:
             await _close(dm, factory)
-        cache = dm.cache.get_latest(SeriesKey(**IDENTITY), 10)
+        # Revision-aware caches may evict prior entries after the repair.
+        # Public queries must still reconstruct the same canonical history.
+        cache = dm.query_latest(**IDENTITY, limit=10, auto_backfill=False).bars
         rows = _reopen(root)
         assert [bar.close for bar in cache] == [99, 150, 99]
         assert [row["close"] for row in rows] == [99, 150, 99]

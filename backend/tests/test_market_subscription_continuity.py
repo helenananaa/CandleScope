@@ -16,7 +16,7 @@ from app.data_engine.market_data.hub import MarketEventHub
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 from app.data_engine.storage import klines_repo
 from tests.test_subscription_continuity import capture, closed
-from tests.test_recovery_kline_consumers import T
+from tests.test_recovery_kline_consumers import T, _committed_backfill
 from tests.test_recovery_delivery_integration import _until
 from tests import test_trade_flow_service as trade
 from tests import test_full_order_book_service as book
@@ -76,7 +76,7 @@ async def test_kline_repair_includes_preview_whose_final_update_was_lost(tmp_pat
         await _until(lambda: len(closed(live)) == 2)
         assert requests[0][0][2:4] == (T + 60_000, T + 120_000)
         assert closed(strict) == [T // 1000]
-        await dm.on_bars_backfilled(**identity, bars=[BarData(
+        await _committed_backfill(dm, dm.query_engine.storage, **identity, bars=[BarData(
             (T + offset) // 1000, 100, 100, 100, 100, 1, source="backfill_rest_verified",
         ) for offset in (60_000, 120_000)])
         await _until(lambda: len(closed(strict)) == 4)
@@ -122,7 +122,7 @@ async def test_kline_policy_has_no_exchange_or_symbol_allowlist(tmp_path, monkey
         assert len(closed(strict)) == 1
         assert requests[0][0][:2] == (symbol, interval)
         assert requests[0][0][4:] == (exchange, market)
-        await dm.on_bars_backfilled(**identity, bars=[BarData(
+        await _committed_backfill(dm, dm.query_engine.storage, **identity, bars=[BarData(
             (first + width) // 1000, 100, 100, 100, 100, 1, source="backfill_rest_verified")])
         await _until(lambda: len(closed(strict)) == 3)
         assert errors == []

@@ -17,7 +17,7 @@ from app.data_engine.ingestion.models import StreamDescriptor, StreamType
 from app.data_engine.interval_policy import parse_interval_spec
 from app.data_engine.storage import klines_repo
 from tests.test_recovery_delivery_integration import _until
-from tests.test_recovery_kline_consumers import _Factory, _history_repair, _close, T, IDENTITY
+from tests.test_recovery_kline_consumers import _Factory, _history_repair, _committed_backfill, _close, T, IDENTITY
 
 
 class Factory(_Factory):
@@ -207,7 +207,7 @@ async def test_derived_gap_requires_verified_target_bars(tmp_path, monkeypatch):
         await _history_repair(dm, store, T + 60_000, 100)
         assert dm.source_gaps.pending(target) and closed(strict) == []
         opened = parse_interval_spec("7m").floor_ms(T + 60_000)
-        await dm.on_bars_backfilled(bars=[BarData(opened // 1000, 99, 101, 99, 100, 7,
+        await _committed_backfill(dm, store, bars=[BarData(opened // 1000, 99, 101, 99, 100, 7,
                                                  source="backfill_rest_verified")], **identity)
         await _until(lambda: len(closed(strict)) == 1)
         assert errors == []
