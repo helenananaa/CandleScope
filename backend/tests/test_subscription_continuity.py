@@ -497,9 +497,22 @@ async def test_source_tracking_overflow_is_explicit_for_both_modes(tmp_path, mon
 
 
 @pytest.mark.anyio
-async def test_deferred_prior_receipt_is_not_silently_dropped_after_repair(tmp_path, monkeypatch):
+@pytest.mark.parametrize("subscriber", ["callback", "iterator"])
+async def test_deferred_prior_receipt_is_not_silently_dropped_after_repair(tmp_path, monkeypatch, subscriber):
     dm, store, factory, _ = await manager(tmp_path, monkeypatch)
-    strict, errors, _ = capture(dm)
+    strict, errors = [], []
+    collector = None
+    if subscriber == "callback":
+        strict, errors, _ = capture(dm)
+    else:
+        async def collect():
+            try:
+                async for event in dm.subscribe_iter(**IDENTITY, event_types={DataEventType.BAR_CLOSED}):
+                    strict.append(event)
+            except ConsumerRecoveryRequired as error:
+                errors.append(error)
+        collector = asyncio.create_task(collect())
+        await _until(lambda: dm.event_bus.get_subscriber_count() == 1)
     delivery = dm.aggregator_bridge.delivery
     try:
         # Reproduce the durable dispatcher's admission-without-publication
@@ -511,9 +524,50 @@ async def test_deferred_prior_receipt_is_not_silently_dropped_after_repair(tmp_p
             await _until(lambda: bool(closed(strict)))
         await delivery.flush()
         await _until(lambda: bool(errors))
-        assert errors[0].reason == "source_delivery_reordered"
+        # With durable revision fencing the stale receipt never reaches the
+        # bus; without it, the continuity adapter detects the late close.
+        assert errors[0].reason in {"source_delivery_reordered", "source_revision_superseded"}
         assert closed(strict) == [T // 1000 + 60]
     finally:
+        if collector is not None:
+            collector.cancel()
+            await asyncio.gather(collector, return_exceptions=True)
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
+async def test_recovery_stops_remaining_gap_replay_after_inflight_callback(tmp_path, monkeypatch):
+    config = DataManagerConfig(event_bus=EventBusConfig(subscriber_queue_size=2, replay_capacity=3))
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch, config)
+    events, errors = [], []
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def receive(event):
+        events.append(event)
+        if event.detail.get("continuity_replayed"):
+            entered.set()
+            await release.wait()
+
+    async def recover(error):
+        errors.append(error)
+
+    dm.subscribe(receive, **IDENTITY, event_types={DataEventType.BAR_CLOSED}, on_recovery=recover)
+    try:
+        await factory.emit(T, 99)
+        await _until(lambda: len(events) == 1)
+        await factory.emit(T + 180_000, 102)
+        await _history_repair(dm, store, T + 60_000, 100)
+        await _history_repair(dm, store, T + 120_000, 101)
+        await asyncio.wait_for(entered.wait(), 3)
+        for minute in range(4, 15):
+            await factory.emit(T + minute * 60_000, 102)
+        await _until(lambda: bool(errors))
+        assert errors[0].reason == "replay_window_exhausted"
+        release.set()
+        await _until(lambda: all(task.done() for task in dm.event_bus._worker_tasks))
+        assert closed(events) == [T // 1000, T // 1000 + 60]
+    finally:
+        release.set()
         await _close(dm, factory)
 
 

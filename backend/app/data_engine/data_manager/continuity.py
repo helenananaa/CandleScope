@@ -212,6 +212,8 @@ class ContinuityConsumer:
             if gap.key not in self.replayed_through and len(self.replayed_through) >= self.registry.max_gaps:
                 raise ConsumerRecoveryRequired("source_gap_history_exhausted")
             for opened, bar in sorted(gap.repaired.items()):
+                if self.error is not None:
+                    raise self.error
                 if int(bar.time) <= self.replayed_through.get(gap.key, -1):
                     continue
                 replay = DataEvent(DataEventType.BAR_CLOSED, gap.key, deepcopy(bar), detail={

@@ -30,8 +30,22 @@ cache entries remain resident. Alert-history assertions are preserved.
 The complete standalone 252-test suite passed again in 54.62s; evidence is in
 `subscription-canonical.log` / `.xml` in the same output directory.
 
-This test migration does not fix the separate runtime integration gate:
+The original test migration did not fix the separate runtime integration gate:
 when the D126 revision fence rejects deferred receipts after a repair, strict
 consumers still need an explicit recovery/snapshot notification. Rejection
 must continue to prevent stale writes from resurrecting deleted data. The
 latest cross-draft trial and exact head identities are recorded in the PRs.
+
+## Revision-delivery recovery follow-up
+
+The follow-up in #138 supplies the durable rejection-to-consumer recovery handoff.
+This PR tests both callback and iterator behavior: either a delivered late close
+requires `source_delivery_reordered`, or a fenced receipt requires
+`source_revision_superseded`. Both paths must terminate explicitly, preserve the
+already-delivered repair prefix, and never publish the rejected receipt.
+An in-flight source-gap replay now checks terminal recovery state before every
+remaining bar, so consumer failure cannot be followed by more replay callbacks.
+The CI contract selector includes continuity, consumer and durable-delivery tests.
+See [joint recovery verification](PR138_148_RECOVERY_20261029.md) for the new
+standalone and composed receipts. The original live-network evidence and remaining
+Draft boundaries above retain their scope.
