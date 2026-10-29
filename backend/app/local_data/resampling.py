@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.data_engine.interval_policy import IntervalAlignment, IntervalSpec, parse_interval_spec
+from app.data_engine.interval_policy import IntervalAlignment, IntervalSpec, interval_tiles, parse_interval_spec
 
 
 MAX_LOCAL_RESAMPLE_FACTOR = 10_000
@@ -58,16 +58,21 @@ def resolve_local_resample_plan(
             f"Cannot derive {target.canonical} from {source.canonical}: "
             "derived local intervals currently support fixed second, minute, hour, and day grids only",
         )
-    if alignment_offset_ms != 0:
+    if alignment_offset_ms != source.phase_ms:
         raise LocalResamplingError(
             f"Cannot derive {target.canonical} from {source.canonical}: "
-            "source timestamps are not aligned to the UTC interval grid",
+            "source timestamps are not aligned to the declared interval grid",
             code="interval_alignment_incompatible",
         )
     if target.nominal_ms % source.nominal_ms != 0:
         raise LocalResamplingError(
             f"Cannot derive {target.canonical} from {source.canonical}: "
             f"{target.canonical} is not an integer multiple of {source.canonical}",
+        )
+    if not interval_tiles(source, target):
+        raise LocalResamplingError(
+            f"Cannot derive {target.canonical} from {source.canonical}: incompatible anchor phases",
+            code="interval_alignment_incompatible",
         )
     factor = target.nominal_ms // source.nominal_ms
     if factor > MAX_LOCAL_RESAMPLE_FACTOR:

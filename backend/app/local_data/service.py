@@ -1651,7 +1651,7 @@ class LocalDatasetService:
             connection.close()
         grouped: dict[int, list[sqlite3.Row]] = {}
         for row in source_rows:
-            bucket = (int(row["open_time_ms"]) // target_ms) * target_ms
+            bucket = plan.target.floor_ms(int(row["open_time_ms"]))
             grouped.setdefault(bucket, []).append(row)
         derived: list[dict[str, Any]] = []
         for bucket, members in grouped.items():
