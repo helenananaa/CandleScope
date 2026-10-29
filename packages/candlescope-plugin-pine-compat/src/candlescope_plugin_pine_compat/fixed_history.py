@@ -17,9 +17,10 @@ class FixedHistory:
         self.skip = self.session.initialize_history(engine_bars(plan), requested_history=request.get("requested_history"))
         self.count = 0
 
-    def advance(self, request, accounts, evaluations):
+    def advance(self, request, accounts, evaluations, *, output=True):
         bars = request["bars"]
-        if bars != self.plan[:len(bars)] or not self.count <= len(bars) <= len(self.plan):
+        # Earlier bars were checked when they arrived; a retained prefix only grows.
+        if not self.count <= len(bars) <= len(self.plan) or bars[self.count:] != self.plan[self.count:len(bars)]:
             raise ValueError("PINE_HISTORY_INVALID: observed bars differ from the frozen plan")
         if "execution_passes" in evaluations:
             raise ValueError("PINE_HISTORY_UNSUPPORTED: fill callbacks require the negotiated stream")
@@ -41,7 +42,12 @@ class FixedHistory:
             self.session.commit_bar(snapshot=False)
         self.count = len(bars)
         result = self.session.snapshot()
-        if self.skip:
+        if self.skip and not output:
+            # A compact reply reads only intents and diagnostics from this
+            # freshly built snapshot; its chart output is never returned.
+            for intent in result["intents"]:
+                intent["bar_index"] += self.skip
+        elif self.skip:
             result = deepcopy(result)
             for intent in result["intents"]:
                 intent["bar_index"] += self.skip

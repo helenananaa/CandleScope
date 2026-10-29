@@ -10,7 +10,7 @@ from .event_requests import run_with_event_requests
 from .host_inputs import chart_metadata, native_request_bars, normalize_native_request, require_price_grid, require_quote_currency
 from .libraries import library_sources
 from .prefix_transport import CONTRACT as PREFIX_CONTRACT
-from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, PrefixInput
+from .prefix_transport import PASSES_CONTRACT, CLOCKS_CONTRACT, REPLY_CONTRACT, PrefixInput, reply_base
 from .strategy_time import engine_bars
 from .entry_risk import options as risk_options, available as risk_available, STOP_CONTRACT
 from .execution_schedule import CONTRACT as SCHEDULE_CONTRACT, TICK_CONTRACT, capabilities as schedule_capabilities, execution_input
@@ -23,6 +23,7 @@ _prefix = PrefixInput()
 _session = None
 _session_count = 0
 _fixed_history = None
+_intent_count = None
 
 
 def describe():
@@ -50,6 +51,7 @@ def describe():
         "prefix_append": PREFIX_CONTRACT,
         "prefix_passes": PASSES_CONTRACT,
         "prefix_clocks": CLOCKS_CONTRACT,
+        "prefix_reply": REPLY_CONTRACT,
         "external_execution_times": getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) == 1,
         "external_incremental": callable(getattr(pine_compat.Program, "external_session", None)),
     }
@@ -83,8 +85,14 @@ def request_environment(request):
     return supplied
 
 def _execute(request):
-    global _session, _session_count, _fixed_history
+    global _session, _session_count, _fixed_history, _intent_count
     appending = request.get("operation") == "append_prefix"
+    reply = reply_base(request.pop("prefix_reply", None))
+    # Intents of the retained session that earlier replies already delivered.
+    known, _intent_count = (_intent_count if appending else None), None
+    # Rows of a retained prefix were validated when they arrived: any failure
+    # discards the prefix, so an append checks only its own rows.
+    checked = request.get("prefix_base") if appending else 0
     request = normalize_native_request(_prefix.decode(request))
     standalone_updates = validate_request_updates(request)
     if not appending:
@@ -144,7 +152,7 @@ def _execute(request):
         if getattr(pine_compat, "EXTERNAL_CLOCK_SCHEMA_VERSION", 0) != 1:
             raise ValueError("EXTERNAL_CLOCK_UNAVAILABLE: install a runtime with explicit external execution clocks")
         if (not isinstance(clocks, list) or len(clocks) != len(request["bars"])
-                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks)):
+                or any(type(value) is not int or not 0 <= value <= 9_007_199_254_740_991 for value in clocks[checked:])):
             raise ValueError("EXTERNAL_CLOCK_INVALID: one integer millisecond timestamp is required per bar")
     evaluations = closed_schedule(request, start) if standalone_updates else execution_input(request, start)
     accounts = [{**item, "time": item["time"] * 1000} for item in request["accounts"][start:]]
@@ -165,7 +173,8 @@ def _execute(request):
                     chart_symbol=request["context"]["symbol"],
                     chart_timeframe=request["context"]["timeframe"],
                     request_bars=supplied, **closing, **annotations, **risk))
-            result = _fixed_history.advance(request, accounts, evaluations)
+            result = _fixed_history.advance(request, accounts, evaluations, output=reply is None)
+            retained = True
         elif incremental:
             if _session is None:
                 _session = program.external_session(
@@ -179,15 +188,21 @@ def _execute(request):
                     **({"scheduled": True} if "execution_schedule" in evaluations else {}),
                 )
                 _session_count = 0
+            # A compact reply never reads the chart output, so a core that can
+            # return only this append's intents need not rebuild the history.
+            compact = reply is not None and getattr(pine_compat, "EXTERNAL_COMPACT_APPEND_SCHEMA_VERSION", 0) == 1
             result = _session.append(
                 engine_bars(request["bars"][start:]),
                 accounts,
                 **evaluations,
                 **({"execution_times": clocks[start:]} if clocks is not None else {}),
+                **({"snapshot": False} if compact else {}),
             )
             _session_count = len(request["bars"])
+            retained = True
         else:
             _session = None
+            retained = False
             result = run_with_event_requests(
                 lambda request_bars: program.run_external(
                     engine_bars(request["bars"]),
@@ -211,18 +226,32 @@ def _execute(request):
         _session = None
         _session_count = 0
         raise
-    if result["output"].get("diagnostics"):
-        raise ValueError(str(result["output"]["diagnostics"]))
+    diagnostics = result["output"].get("diagnostics") if "output" in result else _session.diagnostics()
+    if diagnostics:
+        raise ValueError(str(diagnostics))
+    intents = result["intents"]
+    # Only a compact core append leaves out the intents it emitted earlier.
+    emitted = result.get("intent_base", 0)
+    if emitted and not reply == known == emitted:
+        intents, emitted = _session.snapshot()["intents"], 0
+    # A retained session only appends intents. A Host that holds exactly the
+    # ones delivered so far needs only the new tail; any other count gets all.
+    total = emitted + len(intents)
+    base = reply if reply is not None and reply == known and total >= reply else 0
+    if base > emitted:
+        intents = intents[base - emitted:]
+    if retained:
+        _intent_count = total
     if standalone_updates:
         # Implicit close-only schedule preserves the public bar-only coordinates.
-        for intent in result["intents"]:
+        for intent in intents:
             intent.pop("pass_index", None)
     return {
         "contract": result["protocol"],
         "pyramiding": result.get("pyramiding", 1),
-        "intents": result["intents"],
-        "graphics": result["output"].get("plots", []),
-        "raw_output": result["output"],
+        "intents": intents,
+        **({"graphics": result["output"].get("plots", []), "raw_output": result["output"]} if reply is None
+           else {"prefix_reply": REPLY_CONTRACT, "intent_base": base}),
         **({"risk_rules": result["risk_rules"]} if "risk_rules" in result else {}),
         "execution_mode": "CANDLESCOPE",
         "account_authority": "candlescope",

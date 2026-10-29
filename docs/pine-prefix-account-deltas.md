@@ -35,3 +35,26 @@ The realtime event capability expansion exposed the same fixed-envelope cost:
 the retained managed full gate passed 1,001 cases before failing at 76,243 input
 bytes versus 244,420 full-prefix bytes. An actual Core 0.3.3 CI binary separately
 reproduces that failure. The original 30-percent budget remains in force.
+
+## Per-request cost
+
+The Host keeps the prefix it last sent by reference rather than as a deep copy.
+Rows still sent as the same objects are matched by identity, rows the caller
+rebuilt are compared by value, and the newest row of each list is kept as a
+detached snapshot. A caller corrects an earlier bar, frame or pass
+group by replacing it; an in-place change to the newest row is still detected.
+Either change resends the full prefix, as before.
+
+`candlescope.pine-prefix-reply/1` bounds the response. A request may carry
+`prefix_reply: {"contract": ..., "intent_base": n}` with the number of intents
+the Host already holds. The evaluator then omits `graphics` and `raw_output` and
+returns only the intents after `intent_base`, when its retained session vouches
+for exactly those `n` intents; otherwise it answers with `intent_base: 0` and
+every intent, and the Host's full causality check applies. The field belongs to
+one request and never enters the retained prefix. Workbench runs request it for
+every bar except the last, so published results, checkpoints and the replayed
+`last_request` remain complete. The chart strategy provider never reads chart
+output and requests it on every frame. With a Core exposing
+`EXTERNAL_COMPACT_APPEND_SCHEMA_VERSION == 1`, the evaluator also skips building
+the cumulative output and reads diagnostics directly; older Cores return the
+same replies at a higher Core cost.

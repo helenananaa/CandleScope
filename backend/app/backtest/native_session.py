@@ -18,6 +18,7 @@ REQUEST_UPDATE_CONTRACT = "candlescope.pine-request-updates/1"
 STREAM_CONTRACT = "candlescope.pine-external-stream/1"
 STREAM_CHAIN_CONTRACT = "candlescope.pine-external-stream-chain/1"
 SESSION_IDENTITY_CONTRACT = "candlescope.session-identity/1"
+PREFIX_REPLY_CONTRACT = "candlescope.pine-prefix-reply/1"
 
 if os.name == "nt":
     import ctypes
@@ -36,6 +37,69 @@ def _file_size(stream):
             raise ctypes.WinError(ctypes.get_last_error())
         return size.value
     return os.fstat(stream.fileno()).st_size
+
+
+_PREFIX_FIELDS = frozenset({"bars", "accounts", "execution_passes", "execution_times", "execution_schedule",
+                            "request_updates", "prefix_reply"})
+_PREFIX_ENVELOPE = ("prefix_reply",)
+
+
+def _open_groups(groups, *, schedule):
+    """Count pass groups whose last evaluation could still be followed by another."""
+    if groups is None:
+        return 0
+    if schedule:
+        return sum(not (group and group[-1].get("evaluation", {}).get("confirmed") is True) for group in groups)
+    return sum(not (group and group[-1].get("confirmed") is True) for group in groups)
+
+
+class _SentPrefix:
+    """The prefix one evaluator already holds, kept without copying its history.
+
+    Elements are held by reference, so a row sent again as the same object costs
+    one pointer comparison and nothing is copied. A caller changes an earlier
+    element by replacing it; a rebuilt but equal element still matches by value.
+    The newest element of each list is also kept as a detached snapshot, so an
+    in-place change to the current bar, account frame or pass group still forces
+    a full request.
+    """
+
+    __slots__ = ("static", "lists", "last", "open")
+
+    def __init__(self, static, lists):
+        self.static = static
+        self.lists = [None if value is None else list(value) for value in lists]
+        self.last = [deepcopy(value[-1]) if value else None for value in lists]
+        self.open = (_open_groups(lists[2], schedule=False), _open_groups(lists[4], schedule=True))
+
+    def extended_by(self, static, lists):
+        count = len(self.lists[0])
+        if static != self.static or len(lists[0]) <= count or self.open != (0, 0):
+            return False
+        if any((value is None) != (sent is None) for value, sent in zip(lists, self.lists, strict=True)):
+            return False
+        for value, sent, last in zip(lists, self.lists, self.last, strict=True):
+            if not sent:
+                continue
+            if value[count - 1] != last:
+                return False
+            # Compare equal-length lists instead of slicing the new one, so an
+            # unchanged row costs one pointer test and is never touched.
+            sent.extend(value[count:])
+            same = sent == value
+            del sent[count:]
+            if not same:
+                return False
+        return True
+
+    def advance(self, static, lists, count):
+        self.static = static
+        for value, sent in zip(lists, self.lists, strict=True):
+            if value is not None:
+                sent.extend(value[count:])
+        self.last = [deepcopy(value[-1]) if value else None for value in lists]
+        self.open = (_open_groups(lists[2][count:] if lists[2] is not None else None, schedule=False),
+                     _open_groups(lists[4][count:] if lists[4] is not None else None, schedule=True))
 
 
 def _json_container_copier(value):
@@ -328,41 +392,34 @@ class SessionWorker:
                     or not isinstance(updates, list) or len(updates) != len(bars)))):
             self._prefix_state = None
             return payload
-        static = {key: value for key, value in payload.items() if key not in {"bars", "accounts", "execution_passes", "execution_times", "execution_schedule", "request_updates"}}
+        static = {key: value for key, value in payload.items() if key not in _PREFIX_FIELDS}
+        # The reply shape belongs to this request only, never to the prefix.
+        envelope = {key: payload[key] for key in _PREFIX_ENVELOPE if key in payload}
+        lists = (bars, accounts, passes, clocks, schedule, updates)
         previous = self._prefix_state
-        self._prefix_state = deepcopy((static, bars, accounts, passes, clocks, schedule, updates))
-        if previous is not None:
-            old_static, old_bars, old_accounts, old_passes, old_clocks, old_schedule, old_updates = previous
-            count = len(old_bars)
-            stable_passes = passes is None and old_passes is None or (passes is not None and old_passes is not None
-                and passes[:count] == old_passes and all(group and group[-1].get("confirmed") is True for group in old_passes))
-            stable_clocks = clocks is None and old_clocks is None or (clocks is not None and old_clocks is not None
-                and clocks[:count] == old_clocks)
-            stable_schedule = schedule is None and old_schedule is None or (
-                schedule is not None and old_schedule is not None and schedule[:count] == old_schedule
-                and all(group and group[-1].get("evaluation", {}).get("confirmed") is True for group in old_schedule))
-            stable_updates = updates is None and old_updates is None or (
-                updates is not None and old_updates is not None and updates[:count] == old_updates)
-            if (static == old_static and len(bars) > count and bars[:count] == old_bars
-                    and accounts[:count] == old_accounts and stable_passes and stable_clocks and stable_schedule and stable_updates):
-                account_payload={"accounts":accounts[count:]}
-                fields={"time","position_size","position_avg_price","equity","initial_capital","netprofit","openprofit"}
-                if (self.identity.get("prefix_append")=="candlescope.pine-prefix/2" and old_accounts
-                        and all(isinstance(account,dict) and set(account)==fields for account in accounts[count-1:])):
-                    prior=old_accounts[-1]
-                    deltas=[]
-                    for account in accounts[count:]:
-                        deltas.append({key:value for key,value in account.items()
-                                       if type(value) is not type(prior[key]) or value!=prior[key]})
-                        prior=account
-                    account_payload={"account_deltas":deltas}
-                return {"operation": "append_prefix", "prefix_base": count,
-                        "bars": bars[count:], **account_payload,
-                        **({"execution_passes": passes[count:]} if passes is not None else {}),
-                        **({"execution_schedule": schedule[count:]} if schedule is not None else {}),
-                        **({"request_updates": updates[count:]} if updates is not None else {}),
-                        **({"execution_times": clocks[count:]} if clocks is not None else {})}
-        return payload
+        if previous is None or not previous.extended_by(static, lists):
+            self._prefix_state = _SentPrefix(static, lists)
+            return payload
+        count = len(previous.lists[0])
+        account_payload={"accounts":accounts[count:]}
+        fields={"time","position_size","position_avg_price","equity","initial_capital","netprofit","openprofit"}
+        if (self.identity.get("prefix_append")=="candlescope.pine-prefix/2" and count
+                and all(isinstance(account,dict) and set(account)==fields for account in accounts[count-1:])):
+            prior=previous.last[1]
+            deltas=[]
+            for account in accounts[count:]:
+                deltas.append({key:value for key,value in account.items()
+                               if type(value) is not type(prior[key]) or value!=prior[key]})
+                prior=account
+            account_payload={"account_deltas":deltas}
+        previous.advance(static, lists, count)
+        return {"operation": "append_prefix", "prefix_base": count,
+                "bars": bars[count:], **account_payload,
+                **({"execution_passes": passes[count:]} if passes is not None else {}),
+                **({"execution_schedule": schedule[count:]} if schedule is not None else {}),
+                **({"request_updates": updates[count:]} if updates is not None else {}),
+                **({"execution_times": clocks[count:]} if clocks is not None else {}),
+                **envelope}
 
     def close(self):
         # Cancellation can race with request()'s exception cleanup. Only one

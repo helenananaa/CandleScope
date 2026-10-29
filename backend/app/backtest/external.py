@@ -213,9 +213,17 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             last_request=None
             resume.clear()
 
-    def evaluate(plugin,request,**kwargs):
+    from .native_session import PREFIX_REPLY_CONTRACT
+    # A negotiated evaluator answers intermediate bars with only their new
+    # intents. The final bar, every checkpoint and every replayed
+    # ``last_request`` keep the complete evaluator result.
+    compact = wire["identity"].get("prefix_reply") == PREFIX_REPLY_CONTRACT
+
+    def evaluate(plugin,request,*,intent_base=None,**kwargs):
         nonlocal last_request
         last_request=request
+        if intent_base is not None:
+            request={**request,"prefix_reply":{"contract":PREFIX_REPLY_CONTRACT,"intent_base":intent_base}}
         return runner(plugin,request,**kwargs)
 
     from .pine_request_updates import from_wire as requested_feed_from_wire, validate_replay as validate_requested_replay
@@ -223,6 +231,13 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     request_groups = deepcopy((last_request or {}).get("request_updates", [])) if request_feed is not None else []
     if request_feed is not None and resume is not None:
         validate_requested_replay(request_feed, clock.get("request_feed"), request_groups)
+    # The frozen plan is the same for every bar; build it once so each request
+    # shares it instead of growing a new copy per bar.
+    fixed_history = (dict(planned_bars=wire["bars"], requested_history=[
+        {"symbol": item["symbol"], "timeframe": item["timeframe"],
+         "times_ms": [bar["time"] * 1000 for bar in item["bars"]]}
+        for item in wire.get("contexts", [])])
+        if wire.get("fixed_history_contract") == "candlescope.pine-fixed-history/1" else None)
 
     def strategy(_window, event):
         nonlocal latest
@@ -238,11 +253,8 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
                          "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
                          "netprofit": float(account_feedback_profit(account, kernel.initial_balance)), "openprofit": float(account.unrealized())})
         request = {**{key: value for key, value in wire.items() if key not in {"execution_events", "account_events", "account_provenance", "pine_v2_settings"}}, "bars": wire["bars"][:count], "accounts": accounts}
-        if wire.get("fixed_history_contract") == "candlescope.pine-fixed-history/1":
-            request.update(planned_bars=wire["bars"], requested_history=[
-                {"symbol": item["symbol"], "timeframe": item["timeframe"],
-                 "times_ms": [bar["time"] * 1000 for bar in item["bars"]]}
-                for item in wire.get("contexts", [])])
+        if fixed_history is not None:
+            request.update(fixed_history)
         if "execution_times" in wire:
             request["execution_times"] = wire["execution_times"][:count]
         boundary = interval.next_ms(wire["bars"][count - 1]["time"] * 1000)
@@ -251,16 +263,26 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
             request.update(contexts=request_feed.empty_contexts(), request_updates=request_groups)
         else:
             request["contexts"] = visible_contexts(wire, boundary)
-        latest = evaluate(plugin, request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
+        reply = compact and count < target
+        latest = evaluate(plugin, request, intent_base=len(history) if reply else None,
+                          cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
         if request_feed is not None:
             clock["request_feed"] = request_feed.snapshot()
         if latest.get("contract") != "external-broker/1" or latest.get("identity") != wire["identity"] or latest.get("account_authority") != "candlescope" or latest.get("execution_mode") != "CANDLESCOPE":
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "external runtime returned the wrong account contract")
         if latest.get("raw_output", {}).get("strategy"):
             raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "native account output is forbidden")
+        base = 0
+        if reply:
+            # The evaluator vouches that the intents before ``base`` are the
+            # ones this Host already holds; it returns base 0 when it cannot.
+            base = latest.get("intent_base")
+            if (latest.get("prefix_reply") != PREFIX_REPLY_CONTRACT or type(base) is not int
+                    or not 0 <= base <= len(history) or "raw_output" in latest or "graphics" in latest):
+                raise BacktestError("EXTERNAL_PROTOCOL_ERROR", "invalid compact Pine evaluator reply")
         emitted = latest["intents"]
         previous = [item for item in emitted if item["bar_index"] < count - 1]
-        if previous != history:
+        if previous != history[base:]:
             raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX", "script changed earlier decisions when history grew")
         current = [item for item in emitted if item["bar_index"] == count - 1]
         if len(current) > 64 or len(previous) + len(current) != len(emitted):
@@ -306,6 +328,13 @@ def _run_external_host(plugin, wire, runner, cancelled, *, resume=None, target=N
     else:
         from .external_market import run_print_clock
         clock=run_print_clock(kernel,wire,strategy,cancelled,state=clock,target=target)
+    if "prefix_reply" in latest:
+        # A clock that ended before its final bar still publishes, and may
+        # checkpoint, the complete result of the last evaluated prefix.
+        complete = evaluate(plugin, last_request, cancelled=cancelled, timeout=max(0.1, deadline - time.monotonic()))
+        if complete.get("identity") != wire["identity"] or "prefix_reply" in complete or complete.get("intents") != history:
+            raise BacktestError("EXTERNAL_NONCAUSAL_PREFIX", "complete evaluator result differs from its compact replies")
+        latest = complete
     if request_feed is not None:
         clock["request_feed"] = request_feed.snapshot()
     report = json.loads(json.dumps(asdict(kernel.result()), default=str))
