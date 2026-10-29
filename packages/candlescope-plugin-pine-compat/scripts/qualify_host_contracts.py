@@ -45,7 +45,8 @@ def main():
         "test_runtime.py", "test_native_sessions.py", "test_event_strategy.py",
         "test_host_completion.py", "test_host_boundary_inputs.py", "test_prefix_reply.py")]
     cases += [repo / "backend/tests" / name for name in (
-        "test_native_calendar_basis.py", "test_pine_prefix_reply.py", "test_pyne_removal.py")]
+        "test_native_calendar_basis.py", "test_native_fixed_anchor.py",
+        "test_pine_prefix_reply.py", "test_pyne_removal.py")]
     # Confirm every required file exists: a renamed gate must never silently disappear.
     for case in cases:
         if not case.is_file():
