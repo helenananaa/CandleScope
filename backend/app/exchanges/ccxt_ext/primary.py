@@ -176,6 +176,7 @@ class _VenueContractBundle:
     pagination_factory: Any
     realtime_policy_value: RealtimePolicy
     price_stream_type_value: StreamType
+    history_archive_provider_factory: Any
 
     def capabilities(self) -> ExchangeCapabilities:
         return self.capabilities_value
@@ -251,6 +252,7 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
             price_stream_type_factory=lambda market_type: legacy.price_stream_type(
                 market_type,
             ),
+            history_archive_provider_factory=legacy.history_archive_provider_factory,
         )
         self._rest_book_revision = 0
         self._rest_pools: dict[int, tuple[IngestionConfig, _RestExchangePool]] = {}
@@ -764,6 +766,7 @@ def _legacy_contract_plugin(venue: str) -> _VenueContractBundle:
             pagination_factory=BinancePlugin._pagination_policy,
             realtime_policy_value=RealtimePolicy(),
             price_stream_type_value=StreamType.MINI_TICKER,
+            history_archive_provider_factory=BinancePlugin._history_archive_provider,
         )
     from app.exchanges.plugins.okx.adapter import OkxExchangeAdapter
     from app.exchanges.plugins.okx.normalizer import OkxNormalizer
@@ -780,6 +783,7 @@ def _legacy_contract_plugin(venue: str) -> _VenueContractBundle:
             update_mode=RealtimeUpdateMode.BASE_INTERVAL_FANOUT,
         ),
         price_stream_type_value=StreamType.TICKER,
+        history_archive_provider_factory=OkxPlugin._history_archive_provider,
     )
 
 

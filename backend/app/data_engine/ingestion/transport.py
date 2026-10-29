@@ -135,6 +135,11 @@ class TransportLayer:
 
     # ── Public: Proxy resolution ─────────────────────────────
 
+    async def archive_http_request(self, exchange, url, attempt, *, timeout_seconds, context=None):
+        from .archive_transport import request_archive
+        return await request_archive(self._cfg, self._resolve_proxy, exchange, url, attempt,
+                                     timeout_seconds=timeout_seconds, context=context)
+
     def _resolve_proxy(self) -> str | None:
         """Resolve the effective proxy URL based on proxy_mode.
 

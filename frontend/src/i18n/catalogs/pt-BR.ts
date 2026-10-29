@@ -1704,6 +1704,7 @@ export const ptBR = {
   "settings.proxy.address": "Endereço do proxy",
   "settings.proxy.egressGroup": "Grupo de saída",
   "settings.proxy.concurrency": "Requisições simultâneas",
+  "settings.proxy.archiveConcurrency": "ZIP ≤ {count}",
   "settings.proxy.exchanges": "IDs das exchanges (separados por vírgula; vazio inclui todas)",
   "settings.proxy.enabled": "Ativada",
   "settings.proxy.makePrimary": "Definir como principal",

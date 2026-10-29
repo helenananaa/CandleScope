@@ -21,6 +21,10 @@ _indicator_executor = _pool("indicator", config.INDICATOR_THREAD_WORKERS, config
 _script_wait_executor = _pool("script_wait", config.SCRIPT_HTTP_THREAD_WORKERS, config.SCRIPT_HTTP_THREAD_PENDING)
 _storage_executor = _pool("storage", config.STORAGE_THREAD_WORKERS, config.STORAGE_THREAD_PENDING)
 _preparation_executor = _pool("preparation", config.PREPARATION_THREAD_WORKERS, config.PREPARATION_THREAD_PENDING)
+# Replay's synchronous history reader may itself occupy a storage worker.
+# Archive parsing/I/O must neither recursively wait on that pool nor displace
+# foreground queries. The pending budget includes bounded warm-cache batches.
+_archive_executor = _pool("archive", 2, 128)
 
 
 async def _run(
@@ -77,6 +81,10 @@ async def run_preparation(func: Callable[..., T], *args: Any, **kwargs: Any) -> 
     return await _run(_preparation_executor, func, *args, drain_on_cancel=True, **kwargs)
 
 
+async def run_archive(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    return await _run(_archive_executor, func, *args, drain_on_cancel=True, **kwargs)
+
+
 def executors_snapshot() -> dict[str, Any]:
     return {pool.name: pool.snapshot() for pool in
-            (_indicator_executor, _preparation_executor, _script_wait_executor, _storage_executor)}
+            (_indicator_executor, _preparation_executor, _script_wait_executor, _storage_executor, _archive_executor)}

@@ -87,6 +87,12 @@ class BinanceKlineArchiveProvider:
             packaging_timezone="UTC",
             rest_page_size=1_000,
             checksum_required=True,
+            venue="binance", format_version="binance-kline-csv-v1",
+            timestamp_unit="ms; spot from 2025-01-01 uses us (normalized to ms)",
+            volume_unit="base", earliest_period="2017-07", publication_lag_days=2,
+            enhanced_fields=("quote_volume", "trades", "taker_buy_base", "taker_buy_quote"),
+            validation_grade="provider-sha256", stability="official-public-archive",
+
         )
 
     def plan_objects(
