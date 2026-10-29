@@ -122,6 +122,8 @@ def test_calendar_history_stream_duplicates_and_late_repair(monkeypatch, start, 
         assert state.finality is BarFinality.PROVISIONAL
         await agg.on_market_event(replace(event(2), source=DataSource.HTTP_BACKFILL))
         await agg.on_market_event(replace(event(2), source=DataSource.HTTP_BACKFILL))
+        assert state.volume == hours - 1  # Keep the previously published snapshot.
+        state = next(b for b in agg.get_recent_bars("BTC-USDT", target, exchange="okx") if b.bucket_start_ms == begin)
         assert state.volume == hours
         assert state.bucket_end_ms == begin + hours * 3600000
         assert state.finality is BarFinality.AUTHORITATIVE
