@@ -1,0 +1,61 @@
+{
+  "schema": "candlescope.replay-desktop-open/1",
+  "executable": "<workspace>\\frontend\\desktop-dist\\win-unpacked\\CandleScope.exe",
+  "root": "<workspace>\\output\\playwright\\ccxt-145\\replay-shipped-final\\run-ptc58T",
+  "syntheticData": true,
+  "syntheticInstrumentCatalog": true,
+  "startedAt": "2026-10-29T08:10:01.132Z",
+  "appAsarSha256": "03f3706ef033d55bc905eddbd3b4a5c0a922fb4ebeeadf588f1c1f4f661119a5",
+  "phases": [
+    {
+      "name": "create-and-open-4h",
+      "evidence": {
+        "runId": "prepared-795674ea20484e039ff0b54c38a31998",
+        "identity": {
+          "packaged": true,
+          "userData": "<workspace>\\output\\playwright\\ccxt-145\\replay-shipped-final\\run-ptc58T\\profile"
+        }
+      }
+    },
+    {
+      "name": "delete-prepared-run",
+      "evidence": {
+        "runId": "prepared-795674ea20484e039ff0b54c38a31998"
+      }
+    },
+    {
+      "name": "recover-deleted-result-from-saved-draft",
+      "evidence": {
+        "firstRun": "prepared-795674ea20484e039ff0b54c38a31998",
+        "secondRun": "prepared-3ea62ef0242141d3858f373605421be6",
+        "submissions": 3
+      }
+    },
+    {
+      "name": "advance-and-reload",
+      "evidence": {
+        "runId": "prepared-3ea62ef0242141d3858f373605421be6"
+      }
+    },
+    {
+      "name": "return-to-hub-and-reopen",
+      "evidence": {
+        "runId": "prepared-3ea62ef0242141d3858f373605421be6"
+      }
+    },
+    {
+      "name": "restart-production-and-reopen",
+      "evidence": {
+        "runId": "prepared-3ea62ef0242141d3858f373605421be6"
+      }
+    },
+    {
+      "name": "switch-chart-to-4h",
+      "evidence": {
+        "runId": "prepared-3ea62ef0242141d3858f373605421be6"
+      }
+    }
+  ],
+  "exceptions": [],
+  "result": "passed"
+}

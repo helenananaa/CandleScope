@@ -10,8 +10,9 @@
         "sha256": "sha256:e7c7ec3a7e00d954d70a0da27e7ea6d0964618b8a74c51595260b1b925370411"
       },
       "bridge": "candlescope-plugin-pine-compat",
-      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/renko-event-rows-v1.patch",
-      "patchSha256": "sha256:a8f7fee79a35ee6dcd14fd5e66c220c4e65323d3c4bce77b254482eaf0bc62cf"
+      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v1.patch",
+      "patchSha256": "sha256:1484da89eede2500a136a6bd91fd8038df721df9404f2e6d5daf16a6ae06ea8f",
+      "version": "0.3.2+cs.1"
     }
   },
   "platforms": [

@@ -1,4 +1,15 @@
-"""Unified interval parsing and bucket policy for data_engine."""
+"""Unified interval parsing and bucket policy for data_engine.
+
+Fixed-minute event grids use ``<duration>~a1~<anchor_ms>`` on the wire.
+Canonicalization stores only ``anchor_ms % duration_ms`` (the phase); zero
+phase aliases the existing duration. Buckets are [A+nD, A+(n+1)D) for any
+integer n, including negative n. Equal phases share history/cache/subscription
+identity; different phases do not. The UI separately retains the event date
+for display. Existing unqualified series and stored rows keep their UTC grid.
+
+Version 1 rejects sub-minute anchors and calendar week/month anchors rather
+than rounding or silently splitting a source candle.
+"""
 from __future__ import annotations
 
 import calendar
@@ -121,9 +132,10 @@ _UNIT_SECONDS = {
     "w": 604800,
     "M": 2592000,
 }
-_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])$")
+_INTERVAL_RE = re.compile(r"^(\d+)([smhdwM])(?:~a1~(-?\d+))?$")
 _WEEKLY_RE = re.compile(r"^(\d+)w$")
 _MONTHLY_RE = re.compile(r"^(\d+)M$")
+_CALENDAR_RE = re.compile(r"^([1-9]\d*)([dwM])~c1~(UTC|Asia/Shanghai|America/New_York)$")
 _WEEK_EPOCH_OFFSET_S = 4 * 86400
 _WEEK_EPOCH_OFFSET_MS = 4 * 86400_000
 _BASE_INTERVALS_ORDERED = [
@@ -153,6 +165,7 @@ class IntervalAlignment(str, Enum):
     FIXED_EPOCH = "fixed_epoch"
     WEEKLY_MONDAY = "weekly_monday"
     CALENDAR_MONTH = "calendar_month"
+    ZONED_CALENDAR = "zoned_calendar"
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,16 +177,29 @@ class IntervalSpec:
     alignment: IntervalAlignment
     nominal_ms: int
     count: int
-    signature: tuple[str, int]
+    signature: tuple
+    phase_ms: int = 0
+    timezone: str | None = None
+    calendar_unit: str | None = None
+
+    @property
+    def maximum_ms(self) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_maximum_ms
+            return calendar_maximum_ms(self.count, self.calendar_unit)
+        return self.count * 31 * 86_400_000 if self.alignment is IntervalAlignment.CALENDAR_MONTH else self.nominal_ms
 
     def floor_ms(self, timestamp_ms: int) -> int:
         timestamp_ms = int(timestamp_ms)
+        if self.timezone:
+            from .calendar_basis import calendar_floor_ms
+            return calendar_floor_ms(timestamp_ms, self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _calendar_month_floor_ms(timestamp_ms, self.count)
         anchor_ms = (
             _WEEK_EPOCH_OFFSET_MS
             if self.alignment is IntervalAlignment.WEEKLY_MONDAY
-            else 0
+            else self.phase_ms
         )
         return (
             ((timestamp_ms - anchor_ms) // self.nominal_ms) * self.nominal_ms
@@ -181,11 +207,17 @@ class IntervalSpec:
         )
 
     def next_ms(self, open_ms: int) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_shift_ms
+            return calendar_shift_ms(open_ms, self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _shift_calendar_month_open_ms(int(open_ms), self.count)
         return int(open_ms) + self.nominal_ms
 
     def previous_ms(self, open_ms: int) -> int:
+        if self.timezone:
+            from .calendar_basis import calendar_shift_ms
+            return calendar_shift_ms(open_ms, -self.count, self.calendar_unit, self.timezone)
         if self.alignment is IntervalAlignment.CALENDAR_MONTH:
             return _shift_calendar_month_open_ms(int(open_ms), -self.count)
         return int(open_ms) - self.nominal_ms
@@ -230,11 +262,21 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
     # IntervalSpec is frozen. Repeated base-bar validation and bucket queries
     # can share it without reparsing the same interval hundreds of thousands
     # of times. Normalize outside the cache to retain the public input contract.
+    calendar_match = _CALENDAR_RE.fullmatch(requested)
+    if calendar_match:
+        count, unit, zone = int(calendar_match[1]), calendar_match[2], calendar_match[3]
+        if count > {"d": 366, "w": 52, "M": 12}[unit]:
+            return None
+        return IntervalSpec(requested, requested, IntervalAlignment.ZONED_CALENDAR,
+                            count * _UNIT_SECONDS[unit] * 1000, count,
+                            ("calendar-c1", count, unit, zone), timezone=zone, calendar_unit=unit)
     match = _INTERVAL_RE.fullmatch(requested)
     if match is None:
         return None
     raw_count = int(match.group(1))
     unit = match.group(2)
+    raw_anchor = match.group(3)
+    phase_ms = 0
     if raw_count <= 0:
         return None
 
@@ -245,7 +287,19 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         canonical, count, nominal_ms = _canonical_fixed_interval(raw_count, unit)
         alignment = IntervalAlignment.FIXED_EPOCH
         signature = (alignment.value, nominal_ms)
+        if raw_anchor is not None:
+            anchor_ms = int(raw_anchor)
+            # v1 accepts exact minute boundaries only. Never round an event
+            # timestamp or split an already aggregated source minute.
+            if nominal_ms % 60_000 or anchor_ms % 60_000 or abs(anchor_ms) > (1 << 53) - 1:
+                return None
+            phase_ms = anchor_ms % nominal_ms
+            if phase_ms:
+                canonical += f"~a1~{phase_ms}"
+                signature = (alignment.value, nominal_ms, phase_ms)
     elif unit == "w":
+        if raw_anchor is not None:
+            return None
         if raw_count > _MAX_INTERVAL_MS // (7 * 86_400_000):
             return None
         canonical = f"{raw_count}w"
@@ -254,6 +308,8 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         alignment = IntervalAlignment.WEEKLY_MONDAY
         signature = (alignment.value, count)
     else:
+        if raw_anchor is not None:
+            return None
         if raw_count > _MAX_CALENDAR_MONTH_COUNT:
             return None
         canonical = f"{raw_count}M"
@@ -269,6 +325,7 @@ def _parse_interval_spec(requested: str) -> IntervalSpec | None:
         nominal_ms=nominal_ms,
         count=count,
         signature=signature,
+        phase_ms=phase_ms,
     )
 
 
@@ -284,6 +341,16 @@ def intervals_equivalent(left: str, right: str) -> bool:
 
 def interval_tiles(source: IntervalSpec, target: IntervalSpec) -> bool:
     """Return whether source buckets exactly tile target bucket boundaries."""
+    if target.timezone:
+        if source.timezone:
+            return (source.timezone == target.timezone and source.calendar_unit == target.calendar_unit
+                    and target.count % source.count == 0)
+        # These c1 zones have whole-hour offsets throughout the declared range.
+        # Larger fixed bars cross local midnight or DST boundaries.
+        return (source.alignment is IntervalAlignment.FIXED_EPOCH
+                and 3_600_000 % source.nominal_ms == 0 and source.phase_ms == 0)
+    if source.timezone:
+        return False
     if source.alignment is not target.alignment:
         # UTC fixed bars no wider than one day can tile Monday-aligned weeks
         # and real calendar months exactly.  Multi-day fixed bars cannot: a
@@ -296,10 +363,14 @@ def interval_tiles(source: IntervalSpec, target: IntervalSpec) -> bool:
             }
             and source.nominal_ms <= 86_400_000
             and 86_400_000 % source.nominal_ms == 0
+            and source.phase_ms == 0
         )
     if source.alignment is IntervalAlignment.CALENDAR_MONTH:
         return target.count % source.count == 0
-    return target.nominal_ms % source.nominal_ms == 0
+    return (
+        target.nominal_ms % source.nominal_ms == 0
+        and (target.phase_ms - source.phase_ms) % source.nominal_ms == 0
+    )
 
 
 def parse_custom_interval(interval: str) -> int | None:
@@ -647,6 +718,9 @@ def find_best_base_interval(
     *,
     interval: str | None = None,
 ) -> tuple[str, int]:
+    spec = parse_interval_spec(interval) if interval is not None else None
+    if spec is not None and spec.timezone:
+        return "1h", (spec.maximum_ms + 3_599_999) // 3_600_000
     if interval is not None and is_monthly_interval(interval):
         month_count = parse_monthly_count(interval) or 1
         return "1d", month_count * 30

@@ -224,6 +224,9 @@ class DataEngineRuntime:
             self.backfill_coordinator.shutdown(),
             step_timeout,
         )
+        close_backfill = getattr(self.backfill_engine, "close", None)
+        if callable(close_backfill):
+            await self._shutdown_step("Backfill archives", close_backfill(), None)
 
         if self.liquidation_service is not None:
             await self._shutdown_step(
@@ -886,6 +889,7 @@ async def start_data_engine() -> DataEngineRuntime:
     dm: DataManager | None = None
     ingestion_factory: ExchangeIngestionFactory | None = None
     transport: TransportLayer | None = None
+    backfill_engine: BackfillEngine | None = None
     price_source: IngestionPriceSource | None = None
     market_data_service: MarketDataService | None = None
     trade_flow_service: PublicTradeService | None = None
@@ -1075,6 +1079,7 @@ async def start_data_engine() -> DataEngineRuntime:
             gap_audit_task=gap_audit_task,
             manual_history_service=manual_history_service,
         )
+        backfill_engine.start_archive_cleanup()
         return runtime
     except Exception:
         if runtime is not None:
@@ -1090,6 +1095,7 @@ async def start_data_engine() -> DataEngineRuntime:
                 liquidation_service=liquidation_service,
                 order_book_service=order_book_service,
                 full_order_book_service=full_order_book_service,
+                backfill_engine=backfill_engine,
             )
         raise
 
@@ -1274,7 +1280,11 @@ async def _cleanup_partial_start(
     liquidation_service: LiquidationService | None = None,
     order_book_service: OrderBookService | None = None,
     full_order_book_service: FullOrderBookService | None = None,
+    backfill_engine: BackfillEngine | None = None,
 ) -> None:
+    if backfill_engine is not None:
+        with suppress(Exception):
+            await backfill_engine.close()
     if price_source is not None:
         with suppress(Exception):
             await price_source.stop()

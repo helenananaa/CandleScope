@@ -311,6 +311,16 @@ class ExchangeCapabilities:
     # Keep this v2 addition last so v1 plugins using positional construction
     # retain the exact field order they were compiled against.
     channels: list[MarketChannelCapability] = field(default_factory=list)
+    # Explicit per-channel boundary declarations. Old plugins have unknown
+    # boundaries until they provide this contract; UTC metadata is not proof.
+    native_bar_specs: list[Any] = field(default_factory=list)
+
+    def bar_spec(self, market_type: str, interval: str, purpose: str):
+        from app.data_engine.bar_basis import native_bar_spec
+        for spec in self.native_bar_specs:
+            if (spec.market_type, spec.interval, spec.purpose) == (market_type, interval, purpose):
+                return spec
+        return native_bar_spec(self.exchange, market_type, interval, purpose)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +331,11 @@ class ExchangeCapabilities:
             "markets": [market.to_dict() for market in self.markets],
             "channels": [channel.to_dict() for channel in self.channels],
             "native_intervals": list(self.native_intervals),
+            "native_bar_specs": [self.bar_spec(market, interval, purpose).to_dict()
+                for channel in self.channels if channel.channel is MarketChannel.KLINE
+                for market in channel.market_types
+                for purpose, enabled in (("history", channel.history), ("realtime", channel.realtime)) if enabled
+                for interval in self.kline_intervals(market, history=purpose == "history")],
             "supports_multi_symbol_ticker": self.supports_multi_symbol_ticker,
             "supports_symbol_search": self.supports_symbol_search,
             "ws_connection_model": self.ws_connection_model,

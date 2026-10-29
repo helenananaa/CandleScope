@@ -83,6 +83,8 @@ class ExchangeRegistry:
 
     def __init__(self) -> None:
         self._plugins: dict[str, ExchangePlugin] = {}
+        self._providers: dict[str, Any] = {}
+        self._provider_venues: dict[str, str] = {}
         self._capabilities: dict[str, Any] = {}
         self._load_statuses: dict[str, ExchangePluginLoadStatus] = {}
         self._external_loader_fingerprints: set[str] = set()
@@ -113,7 +115,43 @@ class ExchangeRegistry:
         self._load_statuses[plugin.id] = status
 
     def has(self, exchange: str) -> bool:
-        return exchange.strip().lower() in self._plugins
+        key = exchange.strip().lower()
+        return key in self._plugins or key in self._provider_venues
+
+    def register_provider(self, provider: Any) -> int:
+        """Register one multi-venue connector; venue entries are route metadata.
+
+        Validate the complete catalog before publishing it. Existing external
+        plugins retain precedence and are never relabeled as CCXT datasets.
+        """
+        if provider.id in self._providers:
+            return 0
+        staged = {}
+        for venue in provider.venues():
+            if self.has(venue):
+                continue
+            binding = provider.bind(venue)
+            capabilities = _snapshot_capabilities(self._assert_compatible(binding))
+            status = self._status_for_plugin(binding, capabilities, source=f"connector:{provider.id}")
+            staged[venue] = (capabilities, status)
+        self._providers[provider.id] = provider
+        for venue, (capabilities, status) in staged.items():
+            self._provider_venues[venue] = provider.id
+            self._capabilities[venue] = capabilities
+            self._load_statuses[venue] = status
+        return len(staged)
+
+    def get_provider(self, connector_id: str) -> Any:
+        return self._providers[connector_id]
+
+    def provider_catalog(self) -> list[dict]:
+        result = [{"connector_id": provider.id, "venues": [
+            venue for venue, owner in sorted(self._provider_venues.items())
+            if owner == provider.id and venue not in self._plugins
+        ]} for provider in self._providers.values()]
+        result.extend({"connector_id": plugin.id, "venues": [plugin.id]}
+                      for plugin in sorted(self._plugins.values(), key=lambda p: p.id))
+        return result
 
     def unregister(
         self,
@@ -124,12 +162,13 @@ class ExchangeRegistry:
         """Remove only the expected dynamic plugin without disturbing replacements."""
 
         key = exchange.strip().lower()
-        current = self._plugins.get(key)
-        if current is None:
+        if not self.has(key):
             return False
+        current = self.get_plugin(key)
         if expected_plugin is not None and current is not expected_plugin:
             return False
         self._plugins.pop(key, None)
+        self._provider_venues.pop(key, None)
         self._capabilities.pop(key, None)
         self._load_statuses.pop(key, None)
         return True
@@ -139,9 +178,11 @@ class ExchangeRegistry:
 
     def get_plugin(self, exchange: str) -> ExchangePlugin:
         key = exchange.strip().lower()
-        if key not in self._plugins:
-            raise KeyError(f"Unknown exchange: {exchange}")
-        return self._plugins[key]
+        if key in self._plugins:
+            return self._plugins[key]
+        if key in self._provider_venues:
+            return self._providers[self._provider_venues[key]].bind(key)
+        raise KeyError(f"Unknown exchange: {exchange}")
 
     def get_capabilities(self, exchange: str) -> Any:
         """Return the capability document validated at registration time."""
@@ -155,7 +196,7 @@ class ExchangeRegistry:
         return [plugin.adapter() for plugin in self.list_plugins()]
 
     def list_plugins(self) -> list[ExchangePlugin]:
-        return sorted(self._plugins.values(), key=lambda plugin: plugin.id)
+        return [self.get_plugin(key) for key in sorted(self._plugins.keys() | self._provider_venues.keys())]
 
     def items(self) -> Iterable[tuple[str, ExchangeAdapter]]:
         return ((plugin.id, plugin.adapter()) for plugin in self.list_plugins())
@@ -170,6 +211,7 @@ class ExchangeRegistry:
             "supported_capability_schema_version": SUPPORTED_CAPABILITY_SCHEMA_VERSION,
             "count": len(statuses),
             "plugins": [status.to_dict() for status in statuses],
+            "connectors": [provider.diagnostics() for provider in self._providers.values()],
         }
 
     def record_load_error(self, plugin_id: str, *, source: str, error: Exception | str) -> None:
@@ -370,20 +412,6 @@ def _bootstrap_default_adapters_unlocked() -> ExchangeRegistry:
         _registry.register(
             create_twelve_data_plugin(),
             source="builtin:twelvedata:history-first",
-        )
-    if not _registry.has("binance"):
-        from .ccxt_ext.primary import create_binance_ccxt_plugin
-
-        _registry.register(
-            create_binance_ccxt_plugin(),
-            source="builtin:ccxt:binance:primary",
-        )
-    if not _registry.has("okx"):
-        from .ccxt_ext.primary import create_okx_ccxt_plugin
-
-        _registry.register(
-            create_okx_ccxt_plugin(),
-            source="builtin:ccxt:okx:primary",
         )
     from .ccxt_ext.binance_usdm import SUPPORTED_CCXT_VERSION
 

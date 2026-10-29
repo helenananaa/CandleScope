@@ -121,7 +121,12 @@ def test_legacy_schema_migrates_to_semantic_primary_key(monkeypatch, tmp_path) -
         assert connection.execute("PRAGMA quick_check").fetchone()[0] == "ok"
 
     assert primary_key == klines_repo._KLINES_PRIMARY_KEY
-    row = klines_repo.query_klines("BTCUSDT", "1m")[0]
+    # Schema migration preserves the semantic columns, while the subsequent
+    # basis migration isolates provenance that has no source-rule version.
+    assert klines_repo.query_klines("BTCUSDT", "1m") == []
+    with sqlite3.connect(database) as connection:
+        connection.row_factory = sqlite3.Row
+        row = dict(connection.execute("SELECT * FROM klines_legacy_basis_v1").fetchone())
     assert row["provider_id"] == "binance"
     assert row["venue"] == "binance"
     assert row["asset_class"] == "crypto"

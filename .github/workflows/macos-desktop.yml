@@ -77,6 +77,9 @@ jobs:
             tests/test_desktop_sidecar.py \
             tests/test_shared_market_inputs.py \
             tests/test_proxy_pool.py \
+            tests/test_history_archive_*.py \
+            tests/test_official_chart_archive.py \
+            tests/test_core_executors.py \
             tests/test_proxy_pool_traffic.py \
             tests/test_proxy_pool_ws.py \
             tests/test_trusted_extensions.py \

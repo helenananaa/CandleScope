@@ -1,0 +1,21 @@
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 74%]
+........................................................................ [ 89%]
+.....................................................                    [100%]
+=============================== warnings summary ===============================
+../.venv/lib/python3.12/site-packages/starlette/testclient.py:40
+  /Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/.venv/lib/python3.12/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_ccxt_binance_spot_extension.py: 1 warning
+tests/test_ccxt_okx_shadow.py: 1 warning
+tests/test_ccxt_owned_close.py: 3 warnings
+tests/test_ccxt_shared_tls.py: 10 warnings
+  /Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/.venv/lib/python3.12/site-packages/aiohttp/connector.py:993: DeprecationWarning: enable_cleanup_closed ignored because https://github.com/python/cpython/pull/118960 is fixed in Python version sys.version_info(major=3, minor=12, micro=15, releaselevel='final', serial=0)
+    super().__init__(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+485 passed, 16 warnings in 28.38s

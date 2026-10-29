@@ -42,6 +42,12 @@ class AggregatorBridge:
         self.delivery = DurableBarDelivery(storage_provider, self._publish,
                                            recovery_lookback_bars=recovery_lookback_bars)
 
+    async def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
+        reader = getattr(self._storage_provider(), "read_source_components", None)
+        if not callable(reader):
+            raise BarDeliveryUnavailable("storage cannot restore source components")
+        return await run_storage(reader, series, start_ms, end_ms)
+
     async def on_bar_event(self, event: BarEvent) -> str | None:
         """Convert an aggregator event into cache updates and DataEvents."""
         if not self._is_started():
@@ -214,6 +220,8 @@ class AggregatorBridge:
         finality = getattr(bar_state, "finality", None)
         if getattr(finality, "value", finality) != BarFinality.AUTHORITATIVE.value:
             return None
+        if bar_state.source_refs:
+            return "source_snapshot_verified"
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
         return {

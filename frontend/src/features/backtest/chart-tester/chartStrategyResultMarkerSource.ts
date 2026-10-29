@@ -7,7 +7,7 @@ import type {
 } from "../../../chart-adapter/externalMarkerSource.js";
 import type { ChartSurfaceVisibleRange } from "../../../chart-adapter/useChartSurfaceRuntime.js";
 import { parseIntervalSeconds } from "../../../utils/intervals.js";
-import type { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { BacktestChartData } from "../backtestTypes.js";
 import type { TradeExplanationV1 } from "../backtestTypes.js";
 import {
@@ -116,7 +116,7 @@ export function createChartStrategyResultMarkerSource({
   labels,
   onActivate,
 }: {
-  seriesStore: SeriesWindowStore;
+  seriesStore: SeriesWindowView;
   labels: BacktestMarkerLabels;
   onActivate?: (evidence: ChartStrategyMarkerEvidence) => void;
 }): ChartStrategyResultMarkerSource {

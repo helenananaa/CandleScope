@@ -445,6 +445,7 @@ class DataManager:
         self.query_engine.memory_budget = self.memory_budget
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
+        self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
         self.bar_aggregator.publisher.on_bar_event(self.aggregator_bridge.on_bar_event)
         self.query_engine.set_bar_aggregator(self.bar_aggregator)
 

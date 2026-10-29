@@ -26,6 +26,14 @@ function runArchitectureFixture(t, files) {
   });
 }
 
+test("data admission cannot reintroduce the display scheduler", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/features/market-data/useKlineStreamRuntime.ts": 'import { ChartWorkScheduler } from "./chartWorkScheduler.js";',
+    "src/features/market-data/chartWorkScheduler.ts": 'export class ChartWorkScheduler {}',
+  });
+  assert.equal(result.violations.some(v => v.rule === "admission-no-display-scheduler"), true);
+});
+
 test("architecture source discovery classifies every JavaScript and TypeScript module extension", () => {
   assert.equal(sourceFileKind("feature.ts"), "typescript");
   assert.equal(sourceFileKind("Component.tsx"), "typescript");
@@ -544,4 +552,18 @@ test("market chart platform permits source-neutral chart and market-data contrac
   });
 
   assert.deepEqual(result, { ok: true, violations: [] });
+});
+
+
+test("live chart consumers cannot import mutable stores or the window commit authority", (t) => {
+  const result = runArchitectureFixture(t, {
+    "src/components/BadChart.tsx": 'import type { SeriesWindowStore } from "../features/market-data/window/seriesWindowStore.js";',
+    "src/features/market-data/bypass.ts": 'import { SeriesWindowRegistry } from "./window/windowRegistry.js";',
+    "src/features/indicators/bypass.ts": 'import { MarketWindowSession } from "../market-data/window/marketWindowSession.js";',
+    "src/components/GoodChart.tsx": 'import type { SeriesWindowView } from "../features/market-data/window/seriesWindowView.js";',
+    "src/features/market-data/window/marketWindowSession.ts": 'import { SeriesWindowStore } from "./seriesWindowStore.js";',
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.violations.length, 3);
+  assert.ok(result.violations.every((violation) => violation.rule === "live-window-writer-boundary"));
 });

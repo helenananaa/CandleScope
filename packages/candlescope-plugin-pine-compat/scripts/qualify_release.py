@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import urllib.request
@@ -35,16 +36,25 @@ def main() -> None:
     manifest = json.loads(manifest_path.read_text())
     if manifest["commit"] != engine["releaseCommit"] or manifest["version"] != engine["version"]:
         raise ValueError("Engine release identity mismatch")
+    if engine.get("patchSha256") and manifest["downstreamSource"]["patchSha256"] != engine["patchSha256"]:
+        raise ValueError("Downstream engine patch mismatch")
     asset = next(item for item in manifest["assets"] if item["filename"] == engine["artifactFilename"])
     if asset["sha256"] != engine["sha256"].removeprefix("sha256:") or asset["size"] != engine["size"]:
         raise ValueError("Engine manifest asset mismatch")
     sdk = lock["wheels"]["candlescope-plugin-sdk"]
-    for record in (sdk, engine):
-        download(record["releaseUrl"], args.output / record["artifactFilename"], record["sha256"])
     bridge = lock["wheels"]["candlescope-plugin-pine-compat"]
+    for record in (bridge, sdk, engine):
+        if record.get("releaseUrl"):
+            download(record["releaseUrl"], args.output / record["artifactFilename"], record["sha256"])
     wheels = tuple(args.output / record["artifactFilename"] for record in (bridge, sdk, engine))
     bundle_path = args.output / f"candlescope-pine-compat-{lock['plugin']['version']}-cp312-{args.platform}.cspkg"
     bundle = build_locked_bundle(wheels, bundle_path, lock_path=args.lock)
+    if lock.get("bundle"):
+        published = lock["bundle"]
+        if bundle.sha256 != published["sha256"] or bundle.size != published["size"]:
+            raise ValueError("Reconstructed bundle differs from qualified release")
+        bundle_path = args.output / published["filename"]
+        download(published["url"], bundle_path, published["sha256"])
     root = args.output / "managed-test"
     repository = Path(__file__).resolve().parents[3]
     cli = repository / "backend" / "scripts" / "candlescope_plugin.py"
@@ -65,9 +75,17 @@ def main() -> None:
         (args.output / f"{name}-receipt.json").write_text(json.dumps(payload, indent=2) + "\n")
     subprocess.run([sys.executable, "-m", "pip", "install", "--force-reinstall", "--no-index", "--no-deps",
                     *map(str, wheels)], check=True)
+    env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "NATIVE_CALENDAR_TEST": "1",
+           "NATIVE_TEST_PYTHON": sys.executable, "PYTHONPATH": str(repository / "backend"),
+           "DATA_DIR": str(args.output.resolve() / "data"), "CANDLE_DATA_DIR": str(args.output.resolve() / "data")}
+    subprocess.run([sys.executable, "-c", "import pine_compat as p; assert p.BAR_BOUNDARY_SCHEMA == 'host-bar-boundaries/1'; assert p.EVENT_REQUEST_SERIES_CONTRACT == 'renko-event-rows/1'"], check=True)
     subprocess.run([sys.executable, "-m", "pytest", "-o", "pythonpath=", "-q",
+                    "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin", "-p", "pytest_timeout", "--timeout=120",
+                    f"--basetemp={args.output.resolve() / 'pytest-tmp'}", f"--junitxml={args.output.resolve() / 'published-host.xml'}",
                     str(repository / "packages/candlescope-plugin-pine-compat/tests/test_runtime.py"),
-                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_native_sessions.py")], check=True)
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_native_sessions.py"),
+                    str(repository / "packages/candlescope-plugin-pine-compat/tests/test_event_strategy.py"),
+                    str(repository / "backend/tests/test_native_calendar_basis.py")], env=env, check=True)
     print(f"Qualified {bundle_path.name}: {bundle.sha256}")
 
 

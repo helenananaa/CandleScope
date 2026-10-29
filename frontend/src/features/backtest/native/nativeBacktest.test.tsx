@@ -62,6 +62,11 @@ test("native timeframe conversion preserves minute/month distinctions", () => {
   assert.equal(nativeTimeframe("1M"), "1M");
   assert.equal(nativeTimeframe("4h"), "240");
   assert.equal(nativeTimeframe("30s"), "30S");
+  assert.equal(nativeTimeframe("7m~a1~360000"), "7");
+  assert.equal(nativeTimeframe("7m~a1~1793059320000"), "7");
+  assert.throws(() => nativeTimeframe("7m~a1~27000"));
+  assert.throws(() => nativeTimeframe("1w~a1~60000"));
+  assert.throws(() => nativeTimeframe("7m~a2~60000"));
   assert.throws(() => nativeTimeframe("unknown"));
   assert.ok(nativeTerminal("INTERRUPTED"));
   assert.ok(!nativeTerminal("RUNNING"));

@@ -1,0 +1,651 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index ccc3b02..add2cd2 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -322,7 +322,7 @@ version = "0.3.2"
+ 
+ [[package]]
+ name = "pine-python"
+-version = "0.3.2"
++version = "0.3.2+cs.1"
+ dependencies = [
+  "pine-host-support",
+  "pine-ir",
+diff --git a/crates/pine-python/Cargo.toml b/crates/pine-python/Cargo.toml
+index 1fc3fed..62f24c3 100644
+--- a/crates/pine-python/Cargo.toml
++++ b/crates/pine-python/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "pine-python"
+-version = "0.3.2"
++version = "0.3.2+cs.1"
+ description.workspace = true
+ edition.workspace = true
+ license.workspace = true
+diff --git a/crates/pine-python/src/lib.rs b/crates/pine-python/src/lib.rs
+index e6a067d..db73f1f 100644
+--- a/crates/pine-python/src/lib.rs
++++ b/crates/pine-python/src/lib.rs
+@@ -263,6 +263,8 @@ fn run_script(
+ #[pymodule]
+ fn pine_compat(module: &Bound<'_, PyModule>) -> PyResult<()> {
+     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
++    module.add("BAR_BOUNDARY_SCHEMA", "host-bar-boundaries/1")?;
++    module.add("EVENT_REQUEST_SERIES_CONTRACT", "renko-event-rows/1")?;
+     module.add("ANALYSIS_SCHEMA_VERSION", PUBLIC_ANALYSIS_SCHEMA_VERSION)?;
+     module.add("RUNTIME_SCHEMA_VERSION", PUBLIC_RUNTIME_SCHEMA_VERSION)?;
+     module.add("RENDER_METADATA_VERSION", PUBLIC_RENDER_METADATA_VERSION)?;
+@@ -335,21 +337,75 @@ fn parse_request_environment(
+         PyValueError::new_err("request_bars must be a dict mapping SYMBOL:TIMEFRAME to bars")
+     })?;
+     let mut streams = Vec::with_capacity(dict.len());
++    let mut boundary_timeframes = HashMap::new();
+     for (key, value) in dict {
+         let key: String = key.extract()?;
++        if key == "$boundaries" {
++            let definitions = value
++                .cast::<PyDict>()
++                .map_err(|_| PyValueError::new_err("$boundaries must be a dict"))?;
++            for (key, definition) in definitions {
++                let key = parse_request_key(&key.extract::<String>()?)?;
++                let definition = definition.cast::<PyDict>()?;
++                let id = definition
++                    .get_item("id")?
++                    .ok_or_else(|| PyValueError::new_err("boundary id missing"))?
++                    .extract::<String>()?;
++                let raw_windows = definition
++                    .get_item("windows")?
++                    .ok_or_else(|| PyValueError::new_err("boundary windows missing"))?;
++                for row in raw_windows.try_iter()? {
++                    for value in row?.try_iter()? {
++                        if value?.is_instance_of::<PyBool>() {
++                            return Err(PyValueError::new_err(
++                                "boundary timestamps must be integers, not booleans",
++                            ));
++                        }
++                    }
++                }
++                let windows = raw_windows.extract::<Vec<Vec<i64>>>()?;
++                let windows = windows
++                    .into_iter()
++                    .map(|row| {
++                        if row.len() != 2 {
++                            return Err(PyValueError::new_err(
++                                "boundary windows require open and end",
++                            ));
++                        }
++                        Ok((row[0], row[1]))
++                    })
++                    .collect::<PyResult<Vec<_>>>()?;
++                let timeframe = key
++                    .timeframe()
++                    .clone()
++                    .with_boundaries(id, windows)
++                    .map_err(PyValueError::new_err)?;
++                boundary_timeframes.insert(
++                    (key.symbol().to_owned(), key.timeframe().value().to_owned()),
++                    timeframe,
++                );
++            }
++            continue;
++        }
+         if key == "$chart" {
+             chart = chart_metadata::parse_chart_metadata(chart, &value)?;
+             continue;
+         }
+         let request_key = parse_request_key(&key)?;
+-        streams.push((request_key, parse_bars(&value)?));
++        // Provider validation owns the context-specific ordering contract.
++        // Renko event rows can share a source timestamp without inventing time.
++        let mut bars = Vec::new();
++        for item in value.try_iter()? {
++            bars.push(parse_bar(&item?)?);
++        }
++        streams.push((request_key, bars));
+     }
+     let provider = InMemoryRequestDataProvider::from_streams(streams)
+         .map_err(|err| PyValueError::new_err(err.to_string()))?;
+-    Ok(RequestEnvironment::new(
+-        chart,
+-        std::sync::Arc::new(provider),
+-    ))
++    Ok(
++        RequestEnvironment::new(chart, std::sync::Arc::new(provider))
++            .with_boundary_timeframes(boundary_timeframes),
++    )
+ }
+ 
+ fn parse_chart_context(
+diff --git a/crates/pine-runtime/src/builtins/requests.rs b/crates/pine-runtime/src/builtins/requests.rs
+index 6a26816..7132739 100644
+--- a/crates/pine-runtime/src/builtins/requests.rs
++++ b/crates/pine-runtime/src/builtins/requests.rs
+@@ -194,6 +194,9 @@ impl<'a> HistoricalRuntime<'a> {
+                 message: error.to_string(),
+             })?
+         };
++        let requested_timeframe = self
++            .request_environment
++            .bind_timeframe(&symbol, requested_timeframe);
+         if requested_timeframe.seconds() > chart_timeframe.seconds() {
+             return Err(RuntimeError {
+                 message: format!(
+@@ -445,6 +448,9 @@ impl<'a> HistoricalRuntime<'a> {
+             })?
+         };
+ 
++        let requested_timeframe = self
++            .request_environment
++            .bind_timeframe(&symbol, requested_timeframe);
+         if modern {
+             self.check_dynamic_request_context(
+                 "request.security",
+@@ -760,7 +766,7 @@ impl<'a> HistoricalRuntime<'a> {
+             .resolved_from(key, provider_bars, include_forming, start);
+         // External execution can receive a known stream with no closed bars yet.
+         // Missing keys still fail above; empty visible history aligns to na.
+-        if bars.is_empty() && self.external_execution.is_none() {
++        if bars.is_empty() && self.external_execution.is_none() && !key.is_event_chart() {
+             return Err(RuntimeError {
+                 message: RequestDataError::MissingData {
+                     symbol: key.symbol().to_owned(),
+@@ -1677,7 +1683,13 @@ fn align_requested_value(
+         if lo == available || stamp(lo) != target {
+             return RequestedValue::Scalar(PineValue::Na);
+         }
+-        lo
++        // A source event can confirm multiple synthetic rows. Gapped security
++        // returns the final row of that confirmation cohort, just as gaps-off.
++        let mut end = lo + 1;
++        while end < available && stamp(end) == target {
++            end += 1;
++        }
++        end - 1
+     } else {
+         let Some(index) = lo.checked_sub(1) else {
+             return RequestedValue::Scalar(PineValue::Na);
+diff --git a/crates/pine-runtime/src/builtins/time.rs b/crates/pine-runtime/src/builtins/time.rs
+index 0628450..371d79f 100644
+--- a/crates/pine-runtime/src/builtins/time.rs
++++ b/crates/pine-runtime/src/builtins/time.rs
+@@ -588,6 +588,34 @@ impl<'a> HistoricalRuntime<'a> {
+         let Some(current_time) = self.current_builtin_i64("time") else {
+             return Ok(PineValue::Na);
+         };
++        if chart_timeframe.explicit_boundaries() {
++            if session.is_some() {
++                return Err(RuntimeError { message: "E_BAR_BOUNDARIES_SESSION_UNSUPPORTED: host windows cannot be combined with a custom session".to_owned() });
++            }
++            let requested = self.request_environment.bind_timeframe(
++                self.request_environment.chart().symbol(),
++                RequestTimeframe::parse(timeframe).expect("validated timeframe"),
++            );
++            if !requested.explicit_boundaries() {
++                return Err(RuntimeError {
++                    message:
++                        "E_BAR_BOUNDARIES_MISSING: supply host windows for the requested timeframe"
++                            .to_owned(),
++                });
++            }
++            let missing = || {
++                RuntimeError { message: "E_BAR_BOUNDARIES_MISSING: requested timestamp or offset is outside host windows".to_owned() }
++            };
++            let base = chart_timeframe
++                .boundary_offset(current_time, args.bars_back)
++                .ok_or_else(missing)?
++                .0;
++            let requested_open = requested.containing_boundary(base).ok_or_else(missing)?.0;
++            let (open, end) = requested
++                .boundary_offset(requested_open, args.timeframe_bars_back)
++                .ok_or_else(missing)?;
++            return Ok(PineValue::Int(if close_time { end } else { open }));
++        }
+         let Some(base_time) = chart_timeframe_offset(
+             current_time,
+             chart_timeframe.value(),
+@@ -914,6 +942,28 @@ impl<'a> HistoricalRuntime<'a> {
+         let Some(previous_time) = self.previous_bar_time else {
+             return Ok(PineValue::Bool(false));
+         };
++        if self
++            .request_environment
++            .chart()
++            .timeframe()
++            .explicit_boundaries()
++        {
++            let requested = self.request_environment.bind_timeframe(
++                self.request_environment.chart().symbol(),
++                RequestTimeframe::parse(timeframe).expect("validated timeframe"),
++            );
++            let missing = || RuntimeError {
++                message: "E_BAR_BOUNDARIES_MISSING: supply host windows for timeframe.change"
++                    .to_owned(),
++            };
++            let current = requested
++                .containing_boundary(current_time)
++                .ok_or_else(missing)?;
++            let previous = requested
++                .containing_boundary(previous_time)
++                .ok_or_else(missing)?;
++            return Ok(PineValue::Bool(current.0 != previous.0));
++        }
+         let Some(current_bucket) = timeframe_change_bucket(current_time, timeframe, seconds) else {
+             return Err(RuntimeError {
+                 message: format!("timeframe.change unsupported timeframe `{timeframe}`"),
+diff --git a/crates/pine-runtime/src/request/provider.rs b/crates/pine-runtime/src/request/provider.rs
+index 399a534..21a80f7 100644
+--- a/crates/pine-runtime/src/request/provider.rs
++++ b/crates/pine-runtime/src/request/provider.rs
+@@ -30,6 +30,21 @@ impl RequestKey {
+     pub fn timeframe(&self) -> &RequestTimeframe {
+         &self.timeframe
+     }
++
++    /// Event chart rows are ordered by row ordinal; several confirmed bricks
++    /// may share one source timestamp. Ordinary time series remain unique.
++    #[must_use]
++    pub fn is_event_chart(&self) -> bool {
++        serde_json::from_str::<serde_json::Value>(&self.symbol)
++            .ok()
++            .is_some_and(|value| {
++                value.get("chart").and_then(serde_json::Value::as_str) == Some("renko")
++                    && value
++                        .get("symbol")
++                        .and_then(serde_json::Value::as_str)
++                        .is_some_and(|s| !s.is_empty())
++            })
++    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+@@ -126,7 +141,18 @@ impl InMemoryRequestDataProvider {
+     }
+ 
+     pub fn insert(&mut self, key: RequestKey, bars: Vec<Bar>) -> Result<(), RequestDataError> {
+-        validate_requested_bars(&bars)?;
++        if key.is_event_chart() {
++            for pair in bars.windows(2) {
++                if pair[1].time < pair[0].time {
++                    return Err(RequestDataError::UnsortedBars {
++                        previous_time: pair[0].time,
++                        time: pair[1].time,
++                    });
++                }
++            }
++        } else {
++            validate_requested_bars(&bars)?;
++        }
+         if self.streams.contains_key(&key) {
+             return Err(RequestDataError::DuplicateKey {
+                 symbol: key.symbol().to_owned(),
+@@ -151,7 +177,10 @@ impl InMemoryRequestDataProvider {
+ impl RequestDataProvider for InMemoryRequestDataProvider {
+     fn bars<'a>(&'a self, key: &RequestKey) -> Result<&'a [Bar], RequestDataError> {
+         self.streams
+-            .get(key)
++            .get(&RequestKey::new(
++                key.symbol(),
++                RequestTimeframe::parse(key.timeframe().value()).expect("validated timeframe"),
++            ))
+             .map(Vec::as_slice)
+             .ok_or_else(|| RequestDataError::MissingData {
+                 symbol: key.symbol().to_owned(),
+@@ -165,6 +194,7 @@ pub struct RequestEnvironment {
+     chart: ChartContext,
+     main_timeframe: RequestTimeframe,
+     provider: Arc<dyn RequestDataProvider>,
++    timeframes: Arc<HashMap<(String, String), RequestTimeframe>>,
+ }
+ 
+ impl RequestEnvironment {
+@@ -175,9 +205,39 @@ impl RequestEnvironment {
+             chart,
+             main_timeframe,
+             provider,
++            timeframes: Arc::new(HashMap::new()),
+         }
+     }
+ 
++    pub fn with_boundary_timeframes(
++        mut self,
++        timeframes: HashMap<(String, String), RequestTimeframe>,
++    ) -> Self {
++        self.timeframes = Arc::new(timeframes);
++        let bound = self.bind_timeframe(self.chart.symbol(), self.chart.timeframe().clone());
++        self.chart = self.chart.clone().with_timeframe(bound.clone());
++        self.main_timeframe = bound;
++        self
++    }
++
++    pub(crate) fn bind_timeframe(
++        &self,
++        symbol: &str,
++        timeframe: RequestTimeframe,
++    ) -> RequestTimeframe {
++        self.timeframes
++            .get(&(symbol.to_owned(), timeframe.value().to_owned()))
++            .or_else(|| {
++                self.timeframes
++                    .iter()
++                    .find_map(|((bound_symbol, _), bound)| {
++                        (symbol == bound_symbol && timeframe.same_period(bound)).then_some(bound)
++                    })
++            })
++            .cloned()
++            .unwrap_or(timeframe)
++    }
++
+     #[must_use]
+     pub fn chart(&self) -> &ChartContext {
+         &self.chart
+@@ -199,6 +259,7 @@ impl RequestEnvironment {
+             chart,
+             main_timeframe: self.main_timeframe.clone(),
+             provider: Arc::clone(&self.provider),
++            timeframes: Arc::clone(&self.timeframes),
+         }
+     }
+ }
+@@ -211,6 +272,7 @@ impl Default for RequestEnvironment {
+             chart,
+             main_timeframe,
+             provider: Arc::new(NoRequestDataProvider),
++            timeframes: Arc::new(HashMap::new()),
+         }
+     }
+ }
+diff --git a/crates/pine-runtime/src/request/timeframe.rs b/crates/pine-runtime/src/request/timeframe.rs
+index 7faf40f..dfb0ffb 100644
+--- a/crates/pine-runtime/src/request/timeframe.rs
++++ b/crates/pine-runtime/src/request/timeframe.rs
+@@ -1,4 +1,8 @@
+-use std::fmt;
++use std::{
++    fmt,
++    hash::{Hash, Hasher},
++    sync::Arc,
++};
+ 
+ use crate::{DEFAULT_CHART_TIMEFRAME, builtins::time::timeframe_seconds};
+ 
+@@ -20,10 +24,12 @@ impl fmt::Display for RequestTimeframeError {
+     }
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
++#[derive(Debug, Clone)]
+ pub struct RequestTimeframe {
+     value: String,
+     seconds: i64,
++    boundary_id: String,
++    windows: Arc<Vec<(i64, i64)>>,
+ }
+ 
+ impl RequestTimeframe {
+@@ -45,6 +51,8 @@ impl RequestTimeframe {
+         Ok(Self {
+             value: normalized.to_owned(),
+             seconds,
++            boundary_id: String::new(),
++            windows: Arc::new(Vec::new()),
+         })
+     }
+ 
+@@ -58,6 +66,64 @@ impl RequestTimeframe {
+         self.seconds
+     }
+ 
++    /// Immutable host-supplied actual windows. No timezone/database dependency.
++    pub fn with_boundaries(
++        mut self,
++        id: String,
++        windows: Vec<(i64, i64)>,
++    ) -> Result<Self, &'static str> {
++        if id.is_empty()
++            || windows.is_empty()
++            || windows.iter().any(|(open, end)| end <= open)
++            || windows.windows(2).any(|pair| pair[0].1 > pair[1].0)
++        {
++            return Err(
++                "E_BAR_BOUNDARIES_INVALID: expected nonoverlapping ordered windows and a stable id",
++            );
++        }
++        self.boundary_id = id;
++        self.windows = Arc::new(windows);
++        Ok(self)
++    }
++
++    pub(crate) fn explicit_boundaries(&self) -> bool {
++        !self.boundary_id.is_empty()
++    }
++
++    pub(crate) fn boundary(&self, open: i64) -> Option<(i64, i64)> {
++        self.windows
++            .binary_search_by_key(&open, |row| row.0)
++            .ok()
++            .map(|i| self.windows[i])
++    }
++
++    pub(crate) fn boundary_offset(&self, open: i64, offset: i64) -> Option<(i64, i64)> {
++        let index = self.windows.binary_search_by_key(&open, |row| row.0).ok()?;
++        let index = i64::try_from(index).ok()?.checked_sub(offset)?;
++        self.windows.get(usize::try_from(index).ok()?).copied()
++    }
++
++    pub(crate) fn containing_boundary(&self, timestamp: i64) -> Option<(i64, i64)> {
++        let index = self
++            .windows
++            .partition_point(|row| row.0 <= timestamp)
++            .checked_sub(1)?;
++        let row = self.windows[index];
++        (timestamp < row.1).then_some(row)
++    }
++
++    pub(crate) fn same_period(&self, other: &Self) -> bool {
++        self.seconds == other.seconds && self.value.ends_with('M') == other.value.ends_with('M')
++    }
++
++    pub(crate) fn chart_close(&self, open: i64) -> Option<i64> {
++        if self.explicit_boundaries() {
++            self.boundary(open).map(|row| row.1)
++        } else {
++            crate::builtins::time::chart_timeframe_close(open, self.value(), self.seconds())
++        }
++    }
++
+     pub(crate) fn supports_security_timeframe(&self, requested: &Self) -> bool {
+         requested.seconds() < self.seconds()
+             || requested.value().ends_with('M')
+@@ -66,6 +132,9 @@ impl RequestTimeframe {
+     }
+ 
+     pub(crate) fn nominal_close(&self, open_time: i64) -> i64 {
++        if self.explicit_boundaries() {
++            return self.boundary(open_time).map_or(i64::MAX, |row| row.1);
++        }
+         crate::builtins::time::calendar_timeframe_close(open_time, self.value(), self.seconds())
+             .unwrap_or_else(|| open_time.saturating_add(self.seconds().saturating_mul(1000)))
+     }
+@@ -76,3 +145,18 @@ impl Default for RequestTimeframe {
+         Self::parse(DEFAULT_CHART_TIMEFRAME).expect("default chart timeframe is supported")
+     }
+ }
++
++// Boundary data is shared, never rehashed on a request-cache lookup. The host
++// binds one immutable definition to each id for the lifetime of an environment.
++impl PartialEq for RequestTimeframe {
++    fn eq(&self, other: &Self) -> bool {
++        self.value == other.value && self.boundary_id == other.boundary_id
++    }
++}
++impl Eq for RequestTimeframe {}
++impl Hash for RequestTimeframe {
++    fn hash<H: Hasher>(&self, state: &mut H) {
++        self.value.hash(state);
++        self.boundary_id.hash(state);
++    }
++}
+diff --git a/crates/pine-runtime/src/runtime/context.rs b/crates/pine-runtime/src/runtime/context.rs
+index 142ae64..af3b2fc 100644
+--- a/crates/pine-runtime/src/runtime/context.rs
++++ b/crates/pine-runtime/src/runtime/context.rs
+@@ -3,9 +3,7 @@ use std::cmp::Ordering;
+ use chrono::{Datelike, Timelike};
+ use pine_ir::{SeriesId, SymbolId};
+ 
+-use crate::builtins::time::{
+-    chart_timeframe_close, dayofweek_value, timeframe_bucket, utc_datetime_from_millis,
+-};
++use crate::builtins::time::{dayofweek_value, timeframe_bucket, utc_datetime_from_millis};
+ use crate::*;
+ 
+ impl<'a> HistoricalRuntime<'a> {
+@@ -29,11 +27,14 @@ impl<'a> HistoricalRuntime<'a> {
+     ) -> Result<(), RuntimeError> {
+         let datetime = utc_datetime_from_millis(bar.time)?;
+         let chart_timeframe = self.request_environment.chart().timeframe();
+-        let time_close =
+-            chart_timeframe_close(bar.time, chart_timeframe.value(), chart_timeframe.seconds())
+-                .ok_or_else(|| RuntimeError {
+-                    message: format!("time_close timestamp is out of range: {}", bar.time),
+-                })?;
++        let time_close = chart_timeframe
++            .chart_close(bar.time)
++            .ok_or_else(|| RuntimeError {
++                message: format!(
++                    "E_BAR_BOUNDARIES_MISSING: time_close unavailable for {}",
++                    bar.time
++                ),
++            })?;
+         let millis_since_midnight = i64::from(datetime.num_seconds_from_midnight()) * 1000
+             + i64::from(datetime.timestamp_subsec_millis());
+         let time_tradingday =
+diff --git a/pyproject.toml b/pyproject.toml
+index e64b4f1..db32fd0 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "maturin"
+ 
+ [project]
+ name = "pine-compat-runtime"
+-version = "0.3.2"
++version = "0.3.2+cs.1"
+ description = "Clean-room Pine-compatible indicator runtime bindings"
+ requires-python = ">=3.10"
+ license = "MIT"
+diff --git a/python/tests/test_host_bar_boundaries.py b/python/tests/test_host_bar_boundaries.py
+new file mode 100644
+index 0000000..351dc9f
+--- /dev/null
++++ b/python/tests/test_host_bar_boundaries.py
+@@ -0,0 +1,56 @@
++"""Host-neutral boundary contract: no host timezone or service dependency."""
++import pytest
++import pine_compat
++
++DAY = 86400000
++# Irregular, contiguous windows model a DST transition.
++WINDOWS = [[0, DAY], [DAY, 2*DAY-3600000], [2*DAY-3600000, 3*DAY-3600000], [3*DAY-3600000, 4*DAY-3600000]]
++BARS = [dict(time=a, open=1, high=2, low=0, close=1, volume=1) for a, _ in WINDOWS]
++
++def options(windows=WINDOWS):
++    return dict(chart_symbol="TEST", chart_timeframe="1D", request_bars={
++        "TEST:1D": BARS,
++        "TEST:2D": [BARS[0], BARS[2]],
++        "$boundaries": {
++            "TEST:1D": dict(id="test-day/1", windows=windows),
++            "TEST:2D": dict(id="test-two-days/1", windows=[[0, WINDOWS[1][1]], [WINDOWS[2][0], WINDOWS[3][1]]]),
++        }})
++
++def test_aliases_close_cross_period_and_changes():
++    result = pine_compat.run_script('''//@version=6
++indicator("windows")
++plot(time_close)
++plot(time_close("D"))
++plot(time_close("2D"))
++plot(request.security(syminfo.tickerid, "D", time_close))
++plot(timeframe.change("2D") ? 1 : 0)
++''', BARS, **options())
++    assert [p["values"] for p in result["plots"]] == [
++        [b for _, b in WINDOWS], [b for _, b in WINDOWS],
++        [WINDOWS[1][1]]*2 + [WINDOWS[3][1]]*2,
++        [b for _, b in WINDOWS], [0, 0, 1, 0]]
++
++@pytest.mark.parametrize("windows", [[], [[1, 0]], [[0, 2], [1, 3]], [[False, DAY]], [[0, DAY, 1]]])
++def test_invalid_windows_fail(windows):
++    with pytest.raises((ValueError, TypeError)):
++        pine_compat.run_script('//@version=6\nindicator("bad")\nplot(time_close)', BARS, **options(windows))
++
++@pytest.mark.parametrize("expr", ['time_close("3D")', 'timeframe.change("3D") ? 1 : 0'])
++def test_unfrozen_timeframe_fails_instead_of_using_utc(expr):
++    with pytest.raises(ValueError, match="E_BAR_BOUNDARIES_MISSING"):
++        pine_compat.run_script('//@version=6\nindicator("missing")\nplot(' + expr + ')', BARS, **options())
++
++def test_missing_chart_window_fails():
++    with pytest.raises(ValueError, match="E_BAR_BOUNDARIES_MISSING"):
++        pine_compat.run_script('//@version=6\nindicator("missing")\nplot(time_close)', BARS, **options(WINDOWS[:2]))
++
++def test_realtime_replacement_and_confirmation_match_batch():
++    source = '//@version=6\nindicator("stream")\nplot(time_close)\nplot(ta.sma(close, 2))'
++    session = pine_compat.create_realtime_session(source, **options())
++    session.seed(BARS[:1])
++    session.update_forming({**BARS[1], "close": 2})
++    session.update_forming(BARS[1])
++    session.update_confirmed(BARS[1])
++    for bar in BARS[2:]:
++        session.update_confirmed(bar)
++    assert session.result()["plots"] == pine_compat.run_script(source, BARS, **options())["plots"]
+diff --git a/python/tests/test_renko_event_requests.py b/python/tests/test_renko_event_requests.py
+new file mode 100644
+index 0000000..916f791
+--- /dev/null
++++ b/python/tests/test_renko_event_requests.py
+@@ -0,0 +1,47 @@
++import json
++import pytest
++import pine_compat
++
++
++def row(time, value):
++    return dict(time=time, open=value-1, high=value, low=value-1, close=value, volume=1)
++
++
++def test_renko_same_source_time_retains_all_bricks_and_history():
++    source = '''//@version=6
++indicator("brick history")
++r = ticker.renko(syminfo.tickerid, "Traditional", 1)
++plot(request.security(r, timeframe.period, close))
++plot(request.security(r, timeframe.period, close[1]))
++plot(request.security(r, timeframe.period, close, gaps=barmerge.gaps_on))
++'''
++    symbol = '{"chart":"renko","style":"Traditional","param":1,"symbol":"BTC"}'
++    main = [row(i*60000, 100+i) for i in range(3)]
++    bricks = [row(0, 101), row(60000, 102), row(60000, 103), row(120000, 104)]
++    out = pine_compat.compile_script(source).run(main, chart_symbol="BTC", chart_timeframe="1",
++        request_bars={symbol+":1":bricks})
++    assert not out["diagnostics"]
++    values = [plot["values"] for plot in out["plots"]]
++    assert values == [[101,103,104], [None,102,103], [101,103,104]]
++    assert [item['time'] for item in bricks] == [0,60000,60000,120000]
++
++
++def test_empty_known_renko_stream_is_na_before_any_confirmed_brick():
++    source = '''//@version=6
++indicator("empty bricks")
++plot(request.security(ticker.renko(syminfo.tickerid, "Traditional", 1), timeframe.period, close))
++'''
++    symbol = '{"chart":"renko","style":"Traditional","param":1,"symbol":"BTC"}'
++    out = pine_compat.compile_script(source).run([row(0,100)], chart_symbol="BTC", chart_timeframe="1",
++        request_bars={symbol+":1":[]})
++    assert not out["diagnostics"]
++    assert out["plots"][0]["values"][0] is None
++
++
++def test_duplicate_standard_context_and_descending_event_rows_still_rejected():
++    program = pine_compat.compile_script('//@version=6\nindicator("ordinary")\nplot(close)')
++    with pytest.raises(ValueError, match="duplicate requested bar"):
++        program.run([row(0,100)], request_bars={"BTC:1":[row(0,100),row(0,101)]})
++    key = '{"chart":"renko","symbol":"BTC"}:1'
++    with pytest.raises(ValueError, match="not sorted"):
++        program.run([row(0,100)], request_bars={key:[row(60000,100),row(0,101)]})

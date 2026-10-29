@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "releaseStatus": "pinned-official-engine",
+  "releaseStatus": "pinned-downstream-engine",
   "plugin": {
     "id": "candlescope.pine-compat",
     "package": "candlescope-plugin-pine-compat",
-    "version": "0.3.2"
+    "version": "0.3.3"
   },
   "python": {
     "requires": ">=3.11,<3.14",
@@ -12,31 +12,35 @@
   },
   "wheels": {
     "candlescope-plugin-pine-compat": {
-      "version": "0.3.2",
-      "source": "local-release-build",
-      "artifactFilename": "candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl",
-      "sha256": "sha256:4e1c642b50eef2e1a76d4fca7f6debfa5cb75b34fa2c5bef1451b7483cb36907",
-      "size": 76891
+      "version": "0.3.3",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.3.3-py3-none-any.whl",
+      "sha256": "sha256:e99a955dab0affa3ac5efbdf4be0ab3760fd0ac6172fb5b878bc793693e0aeb3",
+      "size": 82612,
+      "source": "github-release",
+      "releaseTag": "candlescope-plugin-pine-compat-v0.3.3",
+      "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope_plugin_pine_compat-0.3.3-py3-none-any.whl"
     },
     "candlescope-plugin-sdk": {
       "version": "0.2.0",
-      "source": "local-release-build",
       "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
-      "sha256": "sha256:a6036881f0b3b1a77dc1460a13a79aefb8c2042d379003b33bedb3a22b86c4b0",
-      "size": 110326,
-      "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.1/candlescope_plugin_sdk-0.2.0-py3-none-any.whl"
+      "sha256": "sha256:0b1578efa4c02772d26c71c6735bd3c625247d0b6313fc80d7164bee36f1eed1",
+      "size": 464306,
+      "source": "github-release",
+      "releaseTag": "candlescope-plugin-pine-compat-v0.3.3",
+      "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope_plugin_sdk-0.2.0-py3-none-any.whl"
     },
     "pine-compat-runtime": {
-      "version": "0.3.2",
+      "version": "0.3.2+cs.1",
+      "artifactFilename": "pine_compat_runtime-0.3.2+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "sha256:e4f0afaca2cb4c1cc81e702b64253389205dc1432bcac2e61369d1240a861538",
+      "size": 3774283,
       "source": "github-release",
-      "artifactFilename": "pine_compat_runtime-0.3.2-cp310-abi3-macosx_11_0_arm64.whl",
-      "sha256": "sha256:bfc77026db28e74e8d98dc41b0462acec0c83672a9fe5daeab3218b8b5675ba7",
-      "size": 3805857,
-      "releaseTag": "v0.3.2",
-      "releaseUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/pine_compat_runtime-0.3.2-cp310-abi3-macosx_11_0_arm64.whl",
+      "releaseTag": "candlescope-plugin-pine-compat-v0.3.3",
+      "releaseUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/pine_compat_runtime-0.3.2+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
       "releaseCommit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
-      "manifestUrl": "https://github.com/helenananaa/pine-compat-runtime/releases/download/v0.3.2/manifest.json",
-      "manifestSha256": "sha256:4810a300f5309fddcb73f4d20f684dce11004edd273b0fa100d10477ce498efc"
+      "manifestUrl": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/engine-manifest.json",
+      "manifestSha256": "sha256:c557ecd9da113b79ad2854d39b0b9c999cd402920c143b1d7bb9151adb5e4fcb",
+      "patchSha256": "sha256:1484da89eede2500a136a6bd91fd8038df721df9404f2e6d5daf16a6ae06ea8f"
     }
   },
   "probe": {
@@ -71,5 +75,40 @@
     "options": {},
     "analysisSha256": "sha256:993bec84af0e0631ca6b07ce69e44733646f124d1ac3b4bb4551e83f9e797fa2",
     "executionSha256": "sha256:2ed443cb6b0d449eeb7d160f1899a176a213eb5b3c2b2c33d3dbe34365b5bea3"
+  },
+  "engineProvenance": {
+    "commit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
+    "archive": {
+      "filename": "pine-compat-runtime-28ecae3c645e9269e2099d27cc9abbb1f52ee9ea.tar.gz",
+      "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
+      "sha256": "sha256:e7c7ec3a7e00d954d70a0da27e7ea6d0964618b8a74c51595260b1b925370411"
+    },
+    "bridge": "candlescope-plugin-pine-compat",
+    "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v1.patch",
+    "patchSha256": "sha256:1484da89eede2500a136a6bd91fd8038df721df9404f2e6d5daf16a6ae06ea8f",
+    "version": "0.3.2+cs.1"
+  },
+  "bridgeSourceSha256": "sha256:b4808033bdba5519949bcbbdd3ec3d24ae356d244ca4c2c47126d8b5797c5a73",
+  "sdkSourceSha256": "sha256:6c226d82fc999f422af782eab19caf0f2df89e93f79f4ccd3e09b73858e2ff22",
+  "qualification": {
+    "head": "59f64ce6fcc31ff85ce64ca284ffaf79cf019eed",
+    "runUrl": "https://github.com/helenananaa/CandleScope/actions/runs/40835252471",
+    "tests": 87,
+    "platform": "macos-arm64"
+  },
+  "bundle": {
+    "runtimeId": "candlescope.pine-compat",
+    "package": "candlescope-plugin-pine-compat",
+    "version": "0.3.3",
+    "filename": "candlescope-plugin-pine-compat-0.3.3-Darwin-arm64.cspkg",
+    "sha256": "sha256:0b226c6250ba1fdcbfa576cef65231f45b697e6434f29ad2662a83e11ede4a2f",
+    "size": 4324065,
+    "platform": {
+      "system": "Darwin",
+      "machine": "arm64",
+      "implementation": "CPython",
+      "pythonVersion": "3.12"
+    },
+    "url": "https://github.com/helenananaa/CandleScope/releases/download/candlescope-plugin-pine-compat-v0.3.3/candlescope-plugin-pine-compat-0.3.3-Darwin-arm64.cspkg"
   }
 }

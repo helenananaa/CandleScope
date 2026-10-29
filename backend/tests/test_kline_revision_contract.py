@@ -327,6 +327,16 @@ def test_snapshot_clone_does_not_share_nested_proof_containers():
     assert original.metadata["proof"]["components"] == [1, 2]
 
 
+def test_builder_clone_detaches_source_revision_references():
+    from app.data_engine.bar_aggregator.models import BarState
+    state = BarState("BTCUSDT", "1m", START, START + STEP, 100, 100, 100, 100, 1)
+    state.source_refs["component"] = {"series": "fixture", "revision": 1, "proof": {"rows": [1]}}
+    clone = deepcopy(state)
+    clone.source_refs["component"]["proof"]["rows"].append(2)
+    clone.source_refs["component"]["revision"] = 2
+    assert state.source_refs["component"] == {"series": "fixture", "revision": 1, "proof": {"rows": [1]}}
+
+
 def test_restart_in_another_process_rejects_a_pre_delete_receipt(storage):
     storage.bar_delivery.enqueue("old", payload())
     storage.delete_bars("BTCUSDT", "1m")

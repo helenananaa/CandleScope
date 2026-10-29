@@ -25,9 +25,64 @@ import type {
   IndicatorRevision,
 } from "../indicatorTypes.js";
 import { malformedFixture, mustBeDefined, structuralMock } from "../../../test/testHelpers.js";
+import { MarketWindowRegistry } from "../../market-data/window/marketWindowSession.js";
 
 const flushMicrotask = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
 const flushTimer = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("asynchronous apply rechecks the revision after yielding and cannot settle superseded work as success", async () => {
+  const scheduler = createIndicatorRangeScheduler<{ key: string }, number>();
+  let release!: () => void, entered!: () => void;
+  const yielded = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const applied: number[] = [], settled: boolean[] = [];
+  scheduler.ensureCoverage({
+    sessionKey: "same", targets: [{ key: "ema" }], range: { start: 60, end: 120 },
+    revision: { correctionRevision: 1 }, getCoveredSegments: () => [], execute: async () => 1,
+    apply: async ({ result, isCurrent }) => {
+      entered(); await gate;
+      if (!isCurrent()) return false;
+      applied.push(result);
+    },
+    onSettled: ok => settled.push(ok),
+  });
+  await yielded;
+  scheduler.supersedeRevision({ sessionKey: "same", targetKeys: ["ema"], revision: { correctionRevision: 2 }, abortInFlight: false });
+  release(); await scheduler.drain();
+  assert.deepEqual(applied, []);
+  assert.deepEqual(settled, [false]);
+});
+
+test("a held result rejected by the owned input fence settles stale and remains retryable", async () => {
+  const owner = new MarketWindowRegistry().createWindow("a"), selection = owner.prepareSelection("btc");
+  owner.activate(selection);
+  const row = { time: 60, open: 1, high: 5, low: 0, close: 1, volume: 1, is_closed: true };
+  owner.transact(selection, () => { owner.getOrCreate("btc"); owner.apply("btc", { type: "replace", rows: [row] }); });
+  const input = owner.get("btc")!.capture();
+  const scheduler = createIndicatorRangeScheduler<{ key: string }, number>();
+  let release!: (result: number) => void;
+  let started!: () => void;
+  const executing = new Promise<void>(resolve => { started = resolve; });
+  const applied: number[] = [], settled: boolean[] = [];
+  const base = {
+    range: { start: 60, end: 60 }, sessionKey: "same", targets: [{ key: "ema" }],
+    getCoveredSegments: () => [], onSettled: (ok: boolean) => settled.push(ok),
+  };
+  scheduler.ensureCoverage({ ...base,
+    execute: () => { started(); return new Promise<number>(resolve => { release = resolve; }); },
+    apply: ({ result }) => { if (!input.isCurrent("range")) return false; applied.push(result); },
+  });
+  await executing;
+  owner.transact(selection, () => owner.apply("btc", { type: "replace", rows: [{ ...row, close: 4 }] }));
+  release(1);
+  await scheduler.drain();
+  assert.equal(applied.length, 0);
+  assert.deepEqual(settled, [false]);
+  scheduler.ensureCoverage({ ...base, execute: async () => 4, apply: ({ result }) => { applied.push(result); } });
+  await scheduler.drain();
+  assert.deepEqual(applied, [4]);
+  assert.deepEqual(settled, [false, true]);
+});
 
 test("coverage merges adjacent interval segments and subtracts only the missing tail", () => {
   const covered = mergeIndicatorRangeSegments([

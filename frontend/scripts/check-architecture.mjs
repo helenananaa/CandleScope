@@ -11,6 +11,8 @@ const UNSUPPORTED_TYPESCRIPT_EXTENSIONS = new Set([".mts", ".cts"]);
 const ALLOWED_NON_SOURCE_EXTENSIONS = new Set([".css", ".md", ".svg"]);
 
 const RULES = {
+  admissionNoDisplayScheduler: "admission-no-display-scheduler",
+  liveWindowWriterBoundary: "live-window-writer-boundary",
   componentNoServiceImport: "component-no-service-import",
   componentNoLocalStorage: "component-no-local-storage",
   sharedNoFeatureImport: "shared-no-feature-import",
@@ -344,6 +346,42 @@ function checkImports(absPath, filePath, content, projectDirectory) {
   for (const { specifier, line, typeOnly } of importSpecifiers(content)) {
     const target = resolveImportSpecifier(absPath, specifier, projectDirectory);
     const normalizedTarget = normalizeModulePath(target);
+    if (!isTestSourcePath(filePath)
+      && new Set([
+        "src/features/market-data/useKlineStreamRuntime.ts",
+        "src/features/market-data/window/marketWindowSession.ts",
+      ]).has(filePath)
+      && /\/chart(?:WorkScheduler|DisplaySubscription)$/.test(normalizedTarget)) {
+      addViolation({ rule: RULES.admissionNoDisplayScheduler, filePath, line, target: normalizedTarget,
+        message: "data admission must commit independently of display scheduling and visibility" });
+    }
+    const liveWindowInternals = new Set([
+      "src/features/market-data/window/seriesWindowStore",
+      "src/features/market-data/window/windowRegistry",
+    ]);
+    const liveWindowOwners = new Set([
+      "src/features/market-data/window/seriesWindowStore.ts",
+      "src/features/market-data/window/windowRegistry.ts",
+      "src/features/market-data/window/seriesWindowView.ts",
+      "src/features/market-data/window/marketWindowSession.ts",
+    ]);
+    const isLiveConsumer = isComponentOrAppPath(filePath)
+      || filePath.startsWith("src/features/market-data/");
+    if (!isTestSourcePath(filePath) && isLiveConsumer && liveWindowInternals.has(normalizedTarget)
+      && !liveWindowOwners.has(filePath)) {
+      addViolation({ rule: RULES.liveWindowWriterBoundary, filePath, line, target: normalizedTarget,
+        message: "live consumers must use SeriesWindowView; only MarketWindowSession owns mutable stores" });
+    }
+    if (!isTestSourcePath(filePath)
+      && normalizedTarget === "src/features/market-data/window/marketWindowSession"
+      && !new Set([
+        "src/features/market-data/useChartDataRuntime.ts",
+        "src/features/market-data/MarketDataWorkspaceProvider.tsx",
+        "src/features/market-data/marketDataWorkspaceContext.ts",
+      ]).has(filePath)) {
+      addViolation({ rule: RULES.liveWindowWriterBoundary, filePath, line, target: normalizedTarget,
+        message: "window commit authority is private to the live composition root and ingress adapter" });
+    }
     const lightweightChartsImport = isLightweightChartsImport(specifier);
     const drawingWorkerRuntimeImport = isDrawingWorkerModulePath(filePath)
       && (lightweightChartsImport || isChartAdapterModulePath(normalizedTarget));

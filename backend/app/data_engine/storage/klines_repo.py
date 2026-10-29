@@ -288,6 +288,9 @@ def init_klines_storage() -> None:
         # Step 2: Migrate old schema if needed (adds exchange/market_type columns)
         _migrate_kline_series_identity(conn)
 
+        from .basis_migration import migrate_basis_storage
+        migrate_basis_storage(conn, Path(KLINES_DB_PATH), _create_klines_table_sql("klines"))
+
         # Step 3: Create index (safe after migration)
         conn.executescript(
             """
@@ -320,6 +323,17 @@ def init_klines_storage() -> None:
             CREATE INDEX IF NOT EXISTS idx_history_archive_import_series
             ON history_archive_imports(
                 exchange, market_type, symbol, interval, start_ms, end_ms
+            );
+            -- Legacy/advisory receipts are deliberately not promoted. Only
+            -- the complete object's data transaction writes this proof.
+            CREATE TABLE IF NOT EXISTS history_archive_import_commits (
+                object_key TEXT NOT NULL,
+                content_sha256 TEXT NOT NULL,
+                import_version TEXT NOT NULL,
+                cache_generation TEXT NOT NULL,
+                row_count INTEGER NOT NULL,
+                imported_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (object_key, content_sha256, import_version, cache_generation)
             );
             """
         )
@@ -388,30 +402,7 @@ def upsert_klines(
 
     identity = _resolved_identity(exchange, series_identity)
     now_ms = int(time.time() * 1000)
-    payload = [
-        (
-            exchange,
-            market_type,
-            *identity.storage_values,
-            symbol,
-            interval,
-            r["open_time"],
-            r["close_time"],
-            r["open"],
-            r["high"],
-            r["low"],
-            r["close"],
-            r["volume"],
-            r["quote_volume"],
-            r["trades"],
-            r["taker_buy_base"],
-            r["taker_buy_quote"],
-            source,
-            now_ms,
-            now_ms,
-        )
-        for r in rows
-    ]
+
 
     write_guard = (
         _ARCHIVE_IMPORT_WRITE_LOCK
@@ -420,10 +411,41 @@ def upsert_klines(
     )
     with write_guard:
         with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
-            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
-                               commit=_connection is None):
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity), commit=_connection is None):
                 if source in {"backfill_aggregated", "data_manager_composite_closed", "settings_manual_repair", "repair_derived_verified", "manual_history_derived"}:
                     register_derived(conn, series_values(symbol, interval, exchange, market_type, identity))
+                from .kline_sources import filter_projection_rows
+
+                rows = filter_projection_rows(
+                    conn, rows, exchange=exchange, market_type=market_type, symbol=symbol,
+                    interval=interval, native_identity=identity.is_legacy_default_for(exchange),
+                )
+                if not rows:
+                    return 0
+                payload = [
+                    (
+                        exchange,
+                        market_type,
+                        *identity.storage_values,
+                        symbol,
+                        interval,
+                        r["open_time"],
+                        r["close_time"],
+                        r["open"],
+                        r["high"],
+                        r["low"],
+                        r["close"],
+                        r["volume"],
+                        r["quote_volume"],
+                        r["trades"],
+                        r["taker_buy_base"],
+                        r["taker_buy_quote"],
+                        "source_snapshot_verified" if r.get("_source_verified") else source,
+                        now_ms,
+                        now_ms,
+                    )
+                    for r in rows
+                ]
                 incoming_rank_sql = source_rank_sql("excluded.source")
                 stored_rank_sql = source_rank_sql("klines.source")
                 columns = {
@@ -489,6 +511,7 @@ def upsert_klines(
                     ]
                 affected = conn.executemany(sql, write_payload).rowcount
 
+
     return int(affected)
 
 
@@ -517,6 +540,7 @@ def import_history_archive(
     import_version = str(
         receipt.get("import_version") or "history-archive-import.v1"
     )
+    cache_generation = str(receipt.get("cache_generation") or "")
     if not object_key or len(content_sha256) != 64:
         raise ValueError("history archive receipt is missing its object digest")
     if (
@@ -589,7 +613,13 @@ def import_history_archive(
                             end_ms,
                         ),
                     ).fetchone()[0])
-                    if stored_count >= len(rows):
+                    committed = conn.execute(
+                        "SELECT 1 FROM history_archive_import_commits "
+                        "WHERE object_key = ? AND content_sha256 = ? AND import_version = ? "
+                        "AND cache_generation = ?",
+                        (object_key, content_sha256, import_version, cache_generation),
+                    ).fetchone()
+                    if stored_count >= len(rows) and committed is not None:
                         return {
                             "written": 0,
                             "imported": False,
@@ -607,7 +637,7 @@ def import_history_archive(
                 )
                 invalidated = 0
                 if revision_changed:
-                    cursor = conn.execute(
+                    deleted_cursor = conn.execute(
                         """
                         DELETE FROM klines
                         WHERE exchange = ? AND market_type = ? AND symbol = ?
@@ -627,7 +657,7 @@ def import_history_archive(
                             start_ms,
                         ),
                     )
-                    invalidated = cursor.rowcount
+                    invalidated = deleted_cursor.rowcount
 
                 incoming_rank_sql = source_rank_sql("excluded.source")
                 stored_rank_sql = source_rank_sql("klines.source")
@@ -709,6 +739,13 @@ def import_history_archive(
                         now_ms,
                     ),
                 )
+                conn.execute(
+                    "INSERT OR REPLACE INTO history_archive_import_commits "
+                    "(object_key, content_sha256, import_version, cache_generation, row_count, imported_at_ms) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (object_key, content_sha256, import_version, cache_generation, len(rows), now_ms),
+                )
+
 
     return {
         "written": int(written),
@@ -717,6 +754,42 @@ def import_history_archive(
         "invalidated": int(invalidated),
         "revision_changed": revision_changed,
     }
+
+
+def get_history_archive_import_proofs(
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Look up atomic imports for a bounded page of cached object versions.
+
+    This is an import fact, not a claim of gap-free range coverage. Advisory
+    receipts and old databases without the new proof table never authorize GC.
+    """
+    if not candidates:
+        return []
+    if len(candidates) > 128:
+        raise ValueError("archive cleanup lookup must be page-bounded")
+    parameters = [
+        value
+        for item in candidates
+        for value in (
+            str(item["object_key"]), str(item["content_sha256"]),
+            "history-archive-import.v1", str(item.get("cache_generation") or ""),
+        )
+    ]
+    with _connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'history_archive_import_commits'",
+        ).fetchone() is None:
+            return []
+        rows = conn.execute(
+            "SELECT object_key, content_sha256, import_version, cache_generation, imported_at_ms "
+            "FROM history_archive_import_commits "
+            "WHERE (object_key, content_sha256, import_version, cache_generation) IN ("
+            + ",".join("(?, ?, ?, ?)" for _ in candidates) + ")",
+            parameters,
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def record_history_archive_imports(receipts: list[dict[str, Any]]) -> int:
@@ -1410,6 +1483,10 @@ class KlinesRepoAdapter:
     storage_gc_delete_max_batch_rows = 1_000
     storage_gc_delete_deadline_ms = 50
 
+    def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
+        from .kline_sources import closed_components
+        return closed_components(series, start_ms, end_ms)
+
     def __init__(
         self,
         exchange: str = DEFAULT_EXCHANGE,
@@ -1979,6 +2056,12 @@ class AsyncKlinesRepoAdapter:
                 series_identity=series_identity,
             )
         return await run_storage(_sync)
+
+    async def get_history_archive_import_proofs(
+        self,
+        candidates: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return await run_storage(get_history_archive_import_proofs, candidates)
 
     async def record_history_archive_imports(
         self,

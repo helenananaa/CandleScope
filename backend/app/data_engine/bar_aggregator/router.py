@@ -54,7 +54,6 @@ from .models import (
     BarSourceMode,
     MergeMode,
     BarInputAdapter,
-    parse_interval_ms,
 )
 
 logger = logging.getLogger("bar_aggregator.L1_Router")
@@ -426,6 +425,10 @@ class EventRouter:
                     "Dispatch error (%s:%s:%s@%s): %s", exchange, market_type, symbol, interval,
                     exc, exc_info=True,
                 )
+                if bar_input.extra.get("source_ref"):
+                    # The durable source journal must not acknowledge a failed
+                    # projection. Retrying this revision also finishes fanout.
+                    raise
 
     @staticmethod
     def _realtime_policy(exchange: str):
@@ -488,7 +491,7 @@ class EventRouter:
         # Determine BarInputSource from MarketEvent source
         if source_str == "http_backfill":
             bar_source = BarInputSource.BACKFILL
-        elif source_str == "plugin" and bool(data.get("is_correction", False)):
+        elif (source_str == "plugin" or data.get("source_ref")) and bool(data.get("is_correction", False)):
             bar_source = BarInputSource.CORRECTION
         else:
             bar_source = BarInputSource.REALTIME
@@ -524,15 +527,16 @@ class EventRouter:
                 is_closed=bool(data.get("is_closed", False)),
                 market_type=market_type,
                 quote_volume=float(data.get("quote_volume", 0)),
-                trades=int(data.get("trades", 0)),
-                taker_buy_base=float(data.get("taker_buy_base", 0)),
-                taker_buy_quote=float(data.get("taker_buy_quote", 0)),
+                trades=int(data.get("trades") or 0),
+                taker_buy_base=float(data.get("taker_buy_base") or 0),
+                taker_buy_quote=float(data.get("taker_buy_quote") or 0),
                 enhanced_fields=declared_enhanced_fields(
                     exchange,
                     market_type,
                     data,
                 ),
                 sequence=sequence,
+                extra={"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {},
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("Failed to convert kline event: %s", exc)

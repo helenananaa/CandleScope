@@ -1,0 +1,316 @@
+{
+  "lock": {
+    "repository": "https://github.com/helenananaa/ccxt.git",
+    "upstream_version": "4.5.60",
+    "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+    "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+    "schema": "candlescope.binance.usdm.kline.v1",
+    "wheel_sha256": "8520ad4b0f9004f6340da3da49ec7f455fc7579d85cb375d145741f3806f625c",
+    "build_requirements": [
+      "setuptools==80.9.0",
+      "wheel==0.45.1"
+    ],
+    "schemas": [
+      "candlescope.binance.usdm.kline.v1",
+      "candlescope.binance.spot.kline.v1",
+      "candlescope.okx.kline.v1"
+    ]
+  },
+  "desktop_tested": false,
+  "rails": {
+    "binance-spot": {
+      "status": "passed",
+      "ws_frames": 14,
+      "rest_samples": 2,
+      "closed_at": 1793248680000,
+      "restart": true,
+      "pending": 0
+    },
+    "binance-futures": {
+      "status": "passed",
+      "ws_frames": 33,
+      "rest_samples": 4,
+      "closed_at": 1793248740000,
+      "restart": true,
+      "pending": 0
+    }
+  },
+  "channels": {
+    "binance-spot-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 2,
+        "events": 12
+      }
+    },
+    "binance-spot-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-spot-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-spot-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 7,
+        "events": 17
+      }
+    },
+    "binance-spot-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 0
+      }
+    },
+    "binance-spot-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-trade": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 6,
+        "events": 16
+      }
+    },
+    "binance-futures-ticker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-depth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 3,
+        "events": 1
+      }
+    },
+    "binance-futures-aggTrade": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-fullDepth": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 0
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 0
+      }
+    },
+    "binance-futures-miniTicker": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-markPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 2
+      }
+    },
+    "binance-futures-indexPrice": {
+      "rest": {
+        "status": "passed",
+        "responses": 2,
+        "events": 1
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 1
+      }
+    },
+    "binance-futures-fundingRate": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "passed",
+        "raw_frames": 1,
+        "events": 11
+      }
+    },
+    "binance-futures-openInterest": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 1
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-premiumIndex": {
+      "rest": {
+        "status": "passed",
+        "responses": 1,
+        "events": 10
+      },
+      "ws": {
+        "status": "unsupported"
+      }
+    },
+    "binance-futures-forceOrder": {
+      "rest": {
+        "status": "unsupported",
+        "reason": "binance does not support CCXT REST forceOrder"
+      },
+      "ws": {
+        "status": "no_event_in_window",
+        "snapshot": {
+          "layer": "L2_CcxtProvider",
+          "stream_key": "futures:BTCUSDT@forceOrder",
+          "provider": "ccxt",
+          "proxy_route_id": null,
+          "health": "connected",
+          "ccxt_symbol": "BTC/USDT:USDT",
+          "queue_size": 0,
+          "queue_capacity": 4096,
+          "overflowed": false,
+          "consecutive_failures": 0,
+          "last_message_time": 0.0,
+          "last_lifecycle": "connected",
+          "runtime": {
+            "exchange": "binance",
+            "proxy_route_id": null,
+            "proxy_egress_group": null,
+            "proxy_endpoint": "http://127.0.0.1:7897",
+            "market_type": "futures",
+            "started": true,
+            "closed": false,
+            "subscribers": 1,
+            "raw_events": 3,
+            "lifecycle_events": 1,
+            "websocket_recycles": 0,
+            "websocket_generation": 0,
+            "physical_websockets": 1
+          },
+          "metrics": {
+            "layer": "L2_CcxtProvider",
+            "counters": {
+              "lifecycle_connected": 1,
+              "watch_updates": 3
+            },
+            "gauges": {
+              "health": "connected"
+            },
+            "timestamps": {
+              "health_changed_at": 1793248851094
+            }
+          }
+        }
+      }
+    }
+  },
+  "legacy": [
+    {
+      "rail": "binance-spot",
+      "original_db_read_only": "/Users/ryanliang/CandleScope/backend/data/candlescope.db",
+      "result": {
+        "scanned": 3,
+        "matched": 3,
+        "revised": 0,
+        "unavailable": 0,
+        "already_evidenced": 0,
+        "evidence_origin": "historical_refetch",
+        "next_start_ms": 1791686580001
+      }
+    }
+  ],
+  "retention": {
+    "archived": 126,
+    "json_bytes": 63499917,
+    "compressed_bytes": 1009963,
+    "cutoff": 1793335275874
+  },
+  "restart_readback": {
+    "restored": 137,
+    "pending": 0
+  }
+}

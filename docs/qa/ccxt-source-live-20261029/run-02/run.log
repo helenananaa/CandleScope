@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_live.py", line 167, in <module>
+    main()
+  File "/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_live.py", line 157, in main
+    result = asyncio.run(validate(args.output.resolve(), args.timeout))
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.15_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.15_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.15_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/ryanliang/.codex/worktrees/issue-113-ccxt-fork/CandleScope/backend/scripts/validate_ccxt_source_live.py", line 114, in validate
+    assert any(event["event_type"] == "bar_closed" for event in events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

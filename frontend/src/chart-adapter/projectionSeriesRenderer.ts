@@ -323,7 +323,33 @@ export function renderMainSeriesProjectionPatch({
   }
 
   const tailMutationCount = patch.deleteCount + patch.insert.length;
-  const canMutateTail = (!preserveViewport || preservesTailTimeTopology(patch))
+  if (tailMutationCount <= MAX_INCREMENTAL_TAIL_MUTATIONS && preservesTailTimeTopology(patch)) {
+    // Removing and re-appending equal-time points still lets LWC rebase its
+    // visible range between calls. Correct existing rows without changing the
+    // axis, including when the user has stopped following the latest candle.
+    const anchor = preserveViewport
+      ? viewportController?.captureAnchor?.(previousDisplayRows) || null
+      : null;
+    try {
+      for (const point of patch.insert) series.update(point, true);
+    } catch {
+      const nextData = materializeMainSeriesProjectionPatch(patch);
+      series.setData(nextData);
+      if (anchor && typeof resolveDisplayAnchorIndex === "function") {
+        try { viewportController?.applyAnchorShift?.(anchor, resolveDisplayAnchorIndex); }
+        catch { /* Data committed; viewport compensation is best-effort. */ }
+      }
+      record(recordPerfEvent, "chart.candleSeries.setData", {
+        paneId, points: patch.nextLength, reason: "projection-historical-update-fallback",
+      });
+      return renderResult("setData", nextData);
+    }
+    record(recordPerfEvent, "chart.candleSeries.update", {
+      paneId, points: patch.insert.length, reason: "projection-historical-update", totalPoints: patch.nextLength,
+    });
+    return renderResult("update", commitMainSeriesProjectionPatch(patch));
+  }
+  const canMutateTail = !preserveViewport
     && patch.fromOutputIndex > 0
     && patch.deleteCount > 0
     && tailMutationCount <= MAX_INCREMENTAL_TAIL_MUTATIONS

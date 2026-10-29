@@ -11,7 +11,10 @@ import json
 import logging
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any
+
+from .public_admission import current_demand, get_public_admission, TrafficClass
 
 import aiohttp
 
@@ -119,6 +122,7 @@ async def fetch_catalog_json(
             started = time.monotonic()
             response_headers_accounted = False
             response_completed = False
+            permit = None
             try:
                 admission = await manager.inspect(rule, request)
                 if not admission.allowed:
@@ -131,7 +135,11 @@ async def fetch_catalog_json(
                 acquired = True
                 # Recheck after the semaphore: another in-flight endpoint may
                 # have opened a bucket cooldown or an exchange-wide circuit.
-                await manager.acquire_nowait(rule, request)
+                demand = current_demand()
+                permit = await get_public_admission(manager).acquire([rule], request,
+                    demand=replace(demand, defer=True, purpose="symbol_catalog",
+                        traffic_class=(TrafficClass.BACKGROUND if demand.traffic_class == TrafficClass.NORMAL
+                                       else demand.traffic_class)))
 
                 async with session.get(
                     url,
@@ -164,8 +172,7 @@ async def fetch_catalog_json(
                                 response_headers.get("Retry-After")
                             ),
                         )
-                        manager.record_response(
-                            rule,
+                        permit.record_response(
                             status_code=error.status_code,
                             headers=error.headers,
                             body_code=error.body_code,
@@ -181,8 +188,7 @@ async def fetch_catalog_json(
                     # Account response headers before parsing.  A truncated or
                     # malformed JSON body must not erase the exchange's
                     # authoritative used-weight observation.
-                    manager.record_response(
-                        rule,
+                    permit.record_response(
                         status_code=response.status,
                         headers=response_headers,
                         fallback_cooldown_seconds=rule.cooldown_seconds,
@@ -191,8 +197,7 @@ async def fetch_catalog_json(
                     response_headers_accounted = True
                     payload = await response.json()
                     body_code = _extract_body_code(payload)
-                    manager.record_response(
-                        rule,
+                    permit.record_response(
                         status_code=response.status,
                         headers=response_headers,
                         body_code=body_code,
@@ -219,7 +224,7 @@ async def fetch_catalog_json(
             except Exception as exc:
                 pool.record(route, exchange, error=exc)
                 if response_headers_accounted and not response_completed:
-                    manager.record_response(rule, response_unknown=True)
+                    permit.record_response(response_unknown=True)
                 last_error = exc
                 logger.warning(
                     "Catalog fetch failed (%s): [%s] %s",
@@ -228,6 +233,8 @@ async def fetch_catalog_json(
                     exc,
                 )
             finally:
+                if permit is not None and not permit.settled:
+                    permit.finish(response_unknown=True)
                 if acquired:
                     semaphore.release()
                 if route_entered:

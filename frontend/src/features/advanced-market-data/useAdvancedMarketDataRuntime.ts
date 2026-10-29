@@ -11,9 +11,9 @@ import { t, type LocaleId } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
-import { buildSeriesWindowKey } from "../market-data/window/windowRegistry.js";
+import { buildSeriesWindowKey } from "../market-data/window/seriesWindowKey.js";
 import {
   fetchAdvancedMarketHistory,
   fetchAdvancedMarketSnapshot,
@@ -51,7 +51,7 @@ import { useLiquidationRuntime } from "../liquidations/useLiquidationRuntime.js"
 interface UseAdvancedMarketDataRuntimeOptions {
   session: ChartSessionRuntime;
   dataMeta: ChartDataCommitMeta;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
 }
 
 interface ActiveRuntimeContext {

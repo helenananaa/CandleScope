@@ -4,29 +4,12 @@ from typing import Any
 
 from app.exchanges.protocol import RestRequestSpec, WsConnectionSpec
 from app.exchanges.ws_protocol import WsSubscriptionMode, WsSubscriptionSpec
+from app.exchanges.okx_intervals import OKX_UTC_INTERVALS as _OKX_INTERVALS
 
 
 OKX_REST_BASE_URLS = [
     "https://www.okx.com",
 ]
-
-_OKX_INTERVALS = {
-    "1s": "1s",
-    "1m": "1m",
-    "3m": "3m",
-    "5m": "5m",
-    "15m": "15m",
-    "30m": "30m",
-    "1h": "1H",
-    "2h": "2H",
-    "4h": "4H",
-    "6h": "6Hutc",
-    "12h": "12Hutc",
-    "1d": "1Dutc",
-    "3d": "3Dutc",
-    "1w": "1Wutc",
-    "1M": "1Mutc",
-}
 
 _REST_PATH: dict[str, dict[str, str]] = {
     "spot": {

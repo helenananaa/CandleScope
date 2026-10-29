@@ -256,8 +256,9 @@ def _aggregate_fixed_bars_to_interval(
     custom_interval_seconds: int,
     *,
     source_interval_seconds: int | None,
+    phase_seconds: int = 0,
 ) -> list[BarData]:
-    """Aggregate epoch-aligned ``BarData`` in one ordered pass.
+    """Aggregate fixed-grid ``BarData`` in one ordered pass.
 
     ``_aggregate_rows_to_interval`` remains the canonical compatibility path
     for calendar/session-aware callers.  Query results, however, are already
@@ -371,8 +372,8 @@ def _aggregate_fixed_bars_to_interval(
             taker_buy_quote,
         ) = bar.normalized_aggregation_values()
         row_bucket = (
-            row_time // custom_interval_seconds
-        ) * custom_interval_seconds
+            (row_time - phase_seconds) // custom_interval_seconds
+        ) * custom_interval_seconds + phase_seconds
 
         if bucket_start != row_bucket:
             append_bucket()
@@ -437,6 +438,10 @@ def _base_capacity_factor(
     calendar buckets can contain 31 days per component month.  Capacity must
     use the maximum calendar width or long 2M/3M pagination can stop early.
     """
+    target_spec = parse_interval_spec(target_interval)
+    if target_spec is not None and target_spec.timezone:
+        base_ms = parse_interval_ms(base_interval) or 60_000
+        return max(1, (target_spec.maximum_ms + base_ms - 1) // base_ms)
     months = parse_monthly_count(target_interval)
     base_ms = parse_interval_ms(base_interval)
     if months is None or base_ms is None or base_ms <= 0:
@@ -462,7 +467,7 @@ def _resolved_base(
     base_ms = parse_interval_ms(route.base_interval)
     if base_ms is None or base_ms <= 0:
         raise ValueError(f"invalid resolved base interval: {route.base_interval!r}")
-    return route.base_interval, max(1, route.spec.nominal_ms // base_ms)
+    return route.base_interval, max(1, (route.spec.maximum_ms + base_ms - 1) // base_ms)
 
 
 class CustomIntervalQueryService:
@@ -2225,6 +2230,7 @@ class CustomIntervalQueryService:
                 base_bars,
                 custom_seconds,
                 source_interval_seconds=source_interval_seconds,
+                phase_seconds=interval_spec.phase_ms // 1000,
             )
         # Calendar source components (especially 1M) do not have a fixed
         # 30-day width. Use their actual opens and target end for completeness.

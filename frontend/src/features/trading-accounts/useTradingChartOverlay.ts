@@ -7,7 +7,7 @@ import {
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
-import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
 import { liveFillLegs, positionPriceLines, type PositionLineKind } from "./liveChartOverlay.js";
 import { createReplayMarkerSource } from "./replayMarkerSource.js";
 import { tradingAccountsStore } from "./tradingAccountsStore.js";
@@ -19,7 +19,7 @@ export interface TradingChartOverlayInput {
   marketType: string;
   symbol: string;
   interval: string;
-  seriesStore: SeriesWindowStore | null;
+  seriesStore: SeriesWindowView | null;
   upColor: string;
   downColor: string;
   /** Changes when the theme does, so token colors are read again. */
@@ -34,7 +34,7 @@ export interface TradingChartOverlay {
 type LoadedRange = { firstSec: number; lastSec: number } | null;
 
 /** First and last loaded bar; changes only when a bar is added or the window moves. */
-function useLoadedRange(seriesStore: SeriesWindowStore | null): LoadedRange {
+function useLoadedRange(seriesStore: SeriesWindowView | null): LoadedRange {
   const [range, setRange] = useState<LoadedRange>(null);
   useEffect(() => {
     if (!seriesStore) {

@@ -181,6 +181,7 @@ class BackfillEngine:
                 )
             self._fetcher = HistoricalFetcher(
                 self._cfg, self._transport, self._ingestion_cfg,
+                import_proof_lookup=getattr(self._storage, "get_history_archive_import_proofs", None),
             )
         return self._fetcher
 
@@ -223,6 +224,13 @@ class BackfillEngine:
         }
 
     # ── Public: Run ──────────────────────────────────────────
+
+    def start_archive_cleanup(self) -> None:
+        self.fetcher.request_archive_cleanup()
+
+    async def close(self) -> None:
+        if self._fetcher is not None:
+            await self._fetcher.close()
 
     @fenced_acquisition
     @budgeted_work
@@ -391,6 +399,13 @@ class BackfillEngine:
                 reconcile_result = await self.reconciler.reconcile(
                     fetch_results, plan,
                 )
+                # Successful object transactions remain eligible even if a
+                # different task/derived calculation failed. The worker reads
+                # durable proofs; fetch metadata and whole-run status grant
+                # no deletion authority.
+                request_cleanup = getattr(self.fetcher, "request_archive_cleanup", None)
+                if callable(request_cleanup):
+                    request_cleanup()
 
                 if not reconcile_result.errors:
                     # Do not suppress a parent archive object until its base

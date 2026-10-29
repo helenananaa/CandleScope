@@ -2,6 +2,8 @@ import { t } from "../../i18n/index.js";
 import {
   getIntervalSemanticSpec,
   intervalsSemanticallyEquivalent,
+  intervalTiles,
+  formatIntervalLabel,
 } from "../../utils/intervals.js";
 
 import type { LocalDatasetManifest } from "./localDataTypes.js";
@@ -60,7 +62,7 @@ export function resolveLocalIntervalSupport(
   }
   const sourceWidth = sourceSpec.widthSeconds;
   const targetWidth = targetSpec.widthSeconds;
-  if (sourceWidth === null || targetWidth === null) {
+  if (sourceWidth === null || targetWidth === null || sourceSpec.timezone) {
     return unsupported(
       source,
       target,
@@ -80,7 +82,7 @@ export function resolveLocalIntervalSupport(
     ?? (manifest.first_open_ms === undefined
       ? -1
       : manifest.first_open_ms % (sourceWidth * 1_000));
-  if (alignmentOffsetMs !== 0) {
+  if (alignmentOffsetMs !== (sourceSpec.phaseSeconds ?? 0) * 1000) {
     return unsupported(
       source,
       target,
@@ -88,7 +90,7 @@ export function resolveLocalIntervalSupport(
       t("local.int.notUtc", { source }),
     );
   }
-  if (targetWidth % sourceWidth !== 0) {
+  if ((!targetSpec.timezone && targetWidth % sourceWidth !== 0) || !intervalTiles(source, target)) {
     return unsupported(
       source,
       target,
@@ -96,13 +98,15 @@ export function resolveLocalIntervalSupport(
       t("local.int.notMultiple", { target, source }),
     );
   }
-  const factor = targetWidth / sourceWidth;
-  if (factor > MAX_LOCAL_RESAMPLE_FACTOR) {
+  const maximumWidth = targetSpec.timezone ? targetSpec.amount * ({ d: 1, w: 7, M: 31 }[targetSpec.unit as "d" | "w" | "M"]) * 86400 + 7200 : targetWidth;
+  const factor = Math.ceil(maximumWidth / sourceWidth);
+  const factorLimit = targetSpec.timezone ? 600_000 : MAX_LOCAL_RESAMPLE_FACTOR;
+  if (factor > factorLimit) {
     return unsupported(
       source,
       target,
       "interval_resample_factor_too_large",
-      t("local.int.factorTooBig", { factor, source, limit: MAX_LOCAL_RESAMPLE_FACTOR }),
+      t("local.int.factorTooBig", { factor, source, limit: factorLimit }),
     );
   }
   return {
@@ -112,7 +116,7 @@ export function resolveLocalIntervalSupport(
     factor,
     derived: true,
     code: null,
-    message: t("local.int.compose", { factor, source, target }),
+    message: targetSpec.timezone ? t("interval.calendarHelp") : t("local.int.compose", { factor, source: formatIntervalLabel(source), target: formatIntervalLabel(target) }),
   };
 }
 

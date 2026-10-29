@@ -243,6 +243,7 @@ class BarState:
     finality: BarFinality = BarFinality.PROVISIONAL
     close_reason: str | None = None
     source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=dict)
+    source_refs: dict[str, dict[str, Any]] = field(default_factory=dict)
     status: BarStatus = BarStatus.FORMING
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -256,7 +257,7 @@ class BarState:
         result = replace(self, source_snapshots={
             key: value if isinstance(value, ReadonlyFields) else deepcopy(value, memo)
             for key, value in self.source_snapshots.items()
-        })
+        }, source_refs=deepcopy(self.source_refs, memo))
         memo[id(self)] = result
         return result
 
@@ -331,6 +332,7 @@ class BarState:
     def to_storage_dict(self) -> dict:
         """Full dict for database storage."""
         return {
+            **({"source_refs": [dict(ref) for ref in self.source_refs.values()]} if self.source_refs else {}),
             "open_time": self.bucket_start_ms,
             "close_time": self.bucket_end_ms - 1,  # inclusive end
             "open": self.open,

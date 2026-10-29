@@ -165,3 +165,66 @@ async def save_journal(request: Request):
             {"text":text,"tags":tags,"kind":kind},event_ms=event,fill_id=fill_id)
     except Exception as exc:
         return failure(exc)
+
+
+async def review_call(request, operation):
+    from app.trading_accounts.models import TradingAccountError
+    owner = await service(request)
+    try:
+        return await asyncio.to_thread(operation, owner.review)
+    except TradingAccountError as exc:
+        return JSONResponse(status_code=exc.status, content={"error": {"code": exc.code}})
+    except Exception as exc:
+        return failure(exc)
+
+
+@router.get("/review/trades")
+async def review_trades(request: Request):
+    return await review_call(request, lambda review: review.refresh())
+
+
+@router.get("/review/accounts/{account_id}/trades/{trade_id}")
+async def review_trade(request: Request, account_id: str, trade_id: str, version: str | None = None):
+    return await review_call(request, lambda review: review.trade_detail(account_id, trade_id, version))
+
+
+async def review_mutation(request, operation, maximum=128*1024):
+    await service(request)
+    try:
+        value = await body(request, maximum)
+    except AccountDataError as exc:
+        return failure(exc)
+    return await review_call(request, lambda review: operation(review, value))
+
+
+@router.post("/review/accounts/{account_id}/journal")
+async def review_create(request: Request, account_id: str):
+    return await review_mutation(request, lambda review, value: review.create_entry(account_id, value))
+
+
+@router.get("/review/journal/{entry_id}")
+async def review_entry(request: Request, entry_id: str):
+    return await review_call(request, lambda review: review.entry_detail(entry_id))
+
+
+@router.post("/review/journal/{entry_id}")
+async def review_save(request: Request, entry_id: str):
+    return await review_mutation(request, lambda review, value: review.save_entry(entry_id, value))
+
+
+@router.post("/review/journal/{entry_id}/link")
+async def review_link(request: Request, entry_id: str):
+    return await review_mutation(request, lambda review, value: review.link_entry(entry_id, value.get('tradeId')))
+
+
+@router.post("/review/journal/{entry_id}/snapshots")
+async def review_snapshot(request: Request, entry_id: str):
+    return await review_mutation(request, lambda review, value: review.add_snapshot(entry_id, value), 9*1024*1024)
+
+
+@router.get("/review/snapshots/{snapshot_id}/image")
+async def review_image(request: Request, snapshot_id: str):
+    import base64
+    # JSON over the guarded fetch transport; no session tokens in img URLs.
+    return await review_call(request, lambda review: {'image': 'data:image/png;base64,' +
+        base64.b64encode(review.snapshot_image_path(snapshot_id).read_bytes()).decode('ascii')})
