@@ -38,23 +38,25 @@ publication are complete. A passing unit test is not native acceptance.
 
 ## Implementation sequence and status
 
-1. **Implemented; broader validation pending:** shared immutable range-cache admission with HTTP/WS fences,
+1. **Implemented:** shared immutable range-cache admission with HTTP/WS fences,
    bounded retention, range proof, versioned reads and regressions.
-2. **Implemented; actual acceptance pending:** framework-independent MarketDataManager around existing shared
+2. **Implemented:** framework-independent MarketDataManager around existing shared
    transports; route production chart history, real-time and repair inputs
    through it; preserve private bounded window commits and recovery contracts.
-3. **Implemented; integration acceptance pending:** unify consumer demand ownership with watchlist K-line warming;
+3. **Implemented:** unify consumer demand ownership with watchlist K-line warming;
    keep quote/indicator protocols and business ownership explicit. Migrate
    duplicate candle storage/acceptance rather than adding another writer.
-4. **Implemented; actual acceptance pending:** per-chart switch handoff, bounded
+4. **Implemented:** per-chart switch handoff, bounded
    hover/frequent warming and explicit cache-first historical navigation.
-5. **Implemented; actual acceptance pending:** full semantic and workspace input
+5. **Implemented:** full semantic and workspace input
    identity, prefix/range versions, provided-input origin keys, async fences and
    shared-prefix correction notification; architecture checks and documentation.
-6. **Pending:** full checks and fixed-corpus baseline/candidate measurement;
-   actual dual-chart independent navigation, switch races, corrections,
-   hidden/minimized reconnect, and bounded-memory observation. Publish a PR and
-   issue evidence with remaining gaps separately identified.
+6. **Acceptance:** full local checks, actual independent navigation, delayed
+   switching, native minimized recovery, local async indicators and bounded-cache
+   pressure have been exercised. See the current acceptance report below;
+   historical checkpoints retain the coverage limits at their own revision.
+   Final-head package/restart checks and publication are tracked on the PR and
+   issue, rather than inferred from renderer acceptance.
 
 ## Required regressions / acceptance
 
@@ -192,3 +194,33 @@ Indicator / navigation / retention checkpoint:
   Log: `/tmp/issue-123-input-nav-check.log`. Existing warnings remain. Actual UI,
   native lifecycle, comparative performance and sustained heap evidence are
   still pending for this candidate.
+
+## Current acceptance and a runtime-discovered fix
+
+The implementation head is `8e7d13fb`; the fixed-input baseline is `ce07e1bf`.
+The immediately preceding `0addb792` observations cover the unchanged shared
+cache, window binding, recovery and indicator implementation. `8e7d13fb` changes
+warm-request matching/backoff and their regressions only. Final native indicator
+and foreground-handoff cases ran against `8e7d13fb` itself.
+
+Actual acceptance found an integration gap that the direct `getHistory` test
+missed: the production `getBars` planner supplies a derived days fallback even
+with `countBack`. The old handoff condition required null days and issued a new
+viewport request. The new regression failed with two physical reads, then passed
+after matching the server contract where `count_back` overrides days. A native
+5-second delayed warm request was promoted and completed with one 500-bar HTTP
+request and no duplicate scoped viewport request. Repeated foreground preemption
+now backs off from 1 second to 30 seconds instead of restarting each poll; source
+row budgets still count aborted attempts.
+
+`npm run check` passes 4,524 frontend functional tests, the isolated performance
+gate, 123 desktop tests, architecture/plugin/i18n checks, both TypeScript projects,
+ESLint and the production build. Existing SingleChartPanes cleanup and bundle
+size warnings remain.
+
+Current reproducible observations and limitations are in
+[the acceptance report](issue-123-market-manager/README.md). The external fixture
+and observer only inject market input/read existing state; user actions were
+performed through the actual Chrome/native UI. No product store or navigation
+state was directly mutated by the harness. Native evidence uses an isolated
+Electron QA host and production renderer, not an installed release package.
