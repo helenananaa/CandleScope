@@ -2,7 +2,7 @@
 
 日期：2026-10-29。分支：`codex/issue-124-archive-import-cleanup`。对照基线：`b84b5e3d514e43fca556613fe107e29d12f7a329`（本次重新 fetch 后的 `origin/main`）。范围为历史归档，不改变交易执行、实时聚合或已退役 Pyne 的契约。
 
-状态：代码及受控集成回归已完成；原生回放资格和真实多公网出口资格尚未取得。此记录不关闭 #124 的全部验收项。
+状态：代码及受控集成回归已完成；后续已补齐隔离原生回放的播放、保存与重启恢复，详见[失败恢复复核](issue-124-native-replay-recovery-20261029.md)。发行包、真实多公网出口及性能资格尚未取得。此记录不关闭 #124 的全部验收项。
 
 ## 已实现的数据流
 
@@ -78,11 +78,13 @@ macOS CI 的 bundled Python 回归已加入全部 `test_history_archive_*.py`、
 
 ## 原生观察与仍未取得的资格
 
+以下失败是本轮修复前的历史观察。后续查明：补齐目录后商品身份已能正确加载，仍返回旧错误是因为前端沿用幂等键读取 FAILED 任务，却没有调用 retry。此缺口已修复，原生播放、主动保存、整应用重启恢复和恢复后步进已通过；详见[后续记录与退出限制](issue-124-native-replay-recovery-20261029.md)。
+
 在当前工作树构建的 Vite 产物上运行 Electron 开发壳，使用独立 profile、600 根合成 BTCUSDT 1m 数据和测试专用不可达代理；未修改本机 TUN 或真实 profile。它不是发行包验收。
 
 - 成功启动到主页面，打开回放大厅与创建表单，历史源显示 1 个候选商品。手动 UTC 起点为 2023-11-15 02:00。
-- 创建训练返回 `INSTRUMENT_METADATA_UNAVAILABLE`。只有 K 线和本地 catalog 记录仍不足以建立当前准备流程要求的商品身份；本次未绕过该检查。截图：`completion/native/preparation-seeded-metadata-unavailable.png`；sidecar 日志：`completion/native/profile/logs/backend-sidecar.log`。
-- 没有进入训练，因此渲染 K 线、播放/步进、保存和原生重启恢复均未通过。前一次隔离启动退出还记录了未关闭 aiohttp session 和 sidecar 退出期限日志，未在此归档改动中将其归因或宣告修复。
-- 仍需具备完整商品元数据的隔离原生环境完成训练与重启；完成同文件/同机器的首屏、事件循环、CPU/内存/磁盘及导入耗时比较；用可证明的两条独立公网出口做吞吐/故障切换资格；复验 OKX 在线合同，并按来源逐一取得真实数据资格。
+- 初次创建训练返回 `INSTRUMENT_METADATA_UNAVAILABLE`，首次输入确实缺少商品身份；补齐目录后看到的同一错误后来证实来自旧 FAILED 任务，不能继续据此判断目录不足。历史截图：`completion/native/preparation-seeded-metadata-unavailable.png`。
+- 当时没有进入训练，所以当时未取得渲染、播放、保存和恢复证据；后续已补完。隔离退出记录的未关闭 aiohttp session 和 sidecar 退出期限问题没有在本次归档/重试修复中宣告解决。
+- 仍需取得发行包及默认冷启动资格；完成同文件/同机器的首屏、事件循环、CPU/内存/磁盘及导入耗时比较；用可证明的两条独立公网出口做吞吐/故障切换资格；复验 OKX 在线合同，并按来源逐一取得真实数据资格。
 
 本机 CONNECT 测试无需关闭 TUN，证明的是应用选路和资源管理。真实联网成功不能证明 TUN 后具有独立出口。本 PR 应保持 draft，直到上述与发布有关的边界经过明确评估。
