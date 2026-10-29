@@ -18,6 +18,9 @@ from app.data_engine.interval_policy import parse_interval_ms
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalResolver
 from app.data_engine.interval_work_plan import IntervalWorkPlan, resolve_interval_work_plan
 from app.data_engine.kline_quality import repair_requires_trusted_finality
+from app.exchanges.public_admission import (
+    PublicDemand, TrafficClass, get_public_admission, public_demand,
+)
 from app.exchanges.rate_limits import RateLimitDeferred
 from .backfill_contracts import (
     RepairOutcome,
@@ -78,6 +81,7 @@ class _FetchChunk:
     defer_reason: str | None = None
     rate_limit_bucket: str | None = None
     defer_count: int = 0
+    public_demand: PublicDemand | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -690,6 +694,7 @@ class BackfillScheduler:
         self._requests.clear()
         self._series.clear()
         self._tasks.clear()
+        get_public_admission().refresh()
 
     def snapshot(self) -> dict[str, Any]:
         active: list[dict[str, Any]] = []
@@ -954,6 +959,7 @@ class BackfillScheduler:
         )
 
     def _drain(self) -> None:
+        get_public_admission().refresh()
         if self._shutdown:
             return
         skipped: list[tuple[int, int, int, str]] = []
@@ -1161,7 +1167,8 @@ class BackfillScheduler:
             return True
         for item in (*self._ready, *tuple(extra)):
             chunk = self._chunks.get(item[3])
-            if chunk is None or self._is_background(chunk.request):
+            if (chunk is None or self._is_background(chunk.request)
+                    or chunk.eligible_at_monotonic > time.monotonic()):
                 continue
             state = self._requests.get(chunk.parent_id)
             if state is not None and not state.stale and state.failed is None:
@@ -1169,11 +1176,10 @@ class BackfillScheduler:
         return False
 
     def has_foreground_work(self) -> bool:
-        """Return whether unresolved user-visible work owns the scheduler.
+        """Return whether runnable/active foreground work needs execution capacity.
 
-        Rate-deferred foreground chunks still count: speculative warmup must
-        not consume another exchange or worker budget merely because the
-        visible request is waiting for its exact Retry-After deadline.
+        Quota-deferred work protects only its shared resource through public
+        admission; independent background resources remain usable.
         """
 
         return self._has_foreground_work()
@@ -1190,7 +1196,7 @@ class BackfillScheduler:
             return True
         for item in self._ready:
             chunk = self._chunks.get(item[3])
-            if chunk is None:
+            if chunk is None or chunk.eligible_at_monotonic > time.monotonic():
                 continue
             state = self._requests.get(chunk.parent_id)
             if state is not None and not state.stale and state.failed is None:
@@ -1249,12 +1255,24 @@ class BackfillScheduler:
             self._active_background_chunks.add(chunk.chunk_id)
         try:
             try:
-                outcome = await self._execute(chunk.request)
+                if chunk.public_demand is None:
+                    chunk.public_demand = PublicDemand(
+                        TrafficClass.INTERACTIVE if foreground_chunk else TrafficClass.BACKGROUND,
+                        owner=chunk.parent_id, purpose=chunk.request.reason, defer=True,
+                        alive=lambda: (chunk.chunk_id in self._chunks
+                            and (state := self._requests.get(chunk.parent_id)) is not None
+                            and not state.stale and not state.cancel_requested and state.failed is None),
+                    )
+                get_public_admission().forget(chunk.public_demand)
+                with public_demand(chunk.public_demand):
+                    outcome = await self._execute(chunk.request)
             except RepairRetryDeferred as exc:
                 chunk.request._retry_attempt = exc.attempt + 1
                 await self._defer_chunk(chunk, exc)
                 return
             except RateLimitDeferred as exc:
+                if chunk.public_demand is not None:
+                    get_public_admission().protect(chunk.public_demand, exc.bucket_key)
                 await self._defer_chunk(chunk, exc)
                 return
             except asyncio.CancelledError:
@@ -1277,6 +1295,8 @@ class BackfillScheduler:
             self._active_foreground_chunks.discard(chunk.chunk_id)
             self._active_background_chunks.discard(chunk.chunk_id)
             self._tasks.pop(chunk.chunk_id, None)
+            if chunk.public_demand is not None and not chunk.public_demand.alive():
+                get_public_admission().forget(chunk.public_demand)
             self._drain()
 
     async def _defer_chunk(

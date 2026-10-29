@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from typing import Any
 
@@ -254,13 +255,23 @@ class CcxtProviderSession:
                     exc,
                 )
                 await self._rebuild_runtime_after_failure(watch_generation)
-                await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
+                await asyncio.sleep(random.uniform(0.5, 1.0) * min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
             except RateLimitDeferred as exc:
                 await self._set_health(SessionHealth.RECONNECTING, exc.reason)
                 await asyncio.sleep(max(0.05, min(exc.retry_after_seconds,
                                                 max(1, self._cfg.ws_reconnect_delay_max))))
             except Exception as exc:  # noqa: BLE001 - CCXT exchange/network errors
+                from .admission import quota_error_feedback
+                feedback = quota_error_feedback(exc)
+                if feedback.get("status_code") in {418, 429} or feedback.get("body_code") in {"-1003", "50011"}:
+                    # Implicit REST (e.g. a depth snapshot) may reject a watch.
+                    # Its physical hook has already updated the exact bucket.
+                    # Do not turn quota pressure into proxy failure/migration.
+                    self._metrics.inc("quota_deferrals")
+                    await self._set_health(SessionHealth.RECONNECTING, "exchange_quota")
+                    await asyncio.sleep(max(1.0, min(60.0, self._cfg.ws_reconnect_delay_max)))
+                    continue
                 if self._proxy_route is not None and not isinstance(exc, CcxtRawQueueOverflow):
                     from app.core.proxy_pool import get_proxy_pool
                     get_proxy_pool().record(self._proxy_route, self._descriptor.exchange, error=exc, kind="ws")
@@ -288,7 +299,7 @@ class CcxtProviderSession:
                         self._queue.get_nowait()
                         self._queue.task_done()
                 await self._rebuild_runtime_after_failure(watch_generation)
-                await asyncio.sleep(min(delay, self._cfg.ws_reconnect_delay_max))
+                await asyncio.sleep(random.uniform(0.5, 1.0) * min(delay, self._cfg.ws_reconnect_delay_max))
                 delay = min(delay * 2, self._cfg.ws_reconnect_delay_max)
 
     async def _rebuild_runtime_after_failure(

@@ -7,7 +7,7 @@ import logging
 import sys
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from typing import Any
@@ -33,8 +33,12 @@ from app.exchanges.catalog_worker import (
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
 from app.exchanges.pagination import ReverseTimePaginationPolicy
 from app.exchanges.plugin import BuiltinExchangePlugin
-from app.exchanges.rate_limits import RateLimitPolicy
+from app.exchanges.public_admission import (
+    PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
+)
+from app.exchanges.rate_limits import RateLimitAdmission, RateLimitDeferred, RateLimitPolicy
 
+from .admission import PublicCcxtAdmissionMixin, bind_public_client
 from .catalog import (
     CcxtCatalogEntry,
     assert_supported_ccxt_version,
@@ -109,7 +113,7 @@ def _owned_exchange_class(exchange_class: type, *, windows: bool) -> type:
     mixin = _OwnedThreadedResolverMixin
     return type(
         f"CandleScopeOwned{exchange_class.__name__}",
-        (RestSourceCaptureMixin, mixin, exchange_class),
+        (RestSourceCaptureMixin, PublicCcxtAdmissionMixin, mixin, exchange_class),
         {"__module__": __name__},
     )
 
@@ -129,6 +133,7 @@ class _RestExchangeEntry:
     load_task: asyncio.Task[Any]
     borrowers: int
     idle: asyncio.Event
+    demand: PublicDemand = field(default_factory=PublicDemand)
     reload_task: asyncio.Task[Any] | None = None
     # Successful symbol resolutions for ``resolved_markets``.  A catalog reload
     # replaces ``exchange.markets``, which invalidates every cached answer.
@@ -205,7 +210,10 @@ class _RestExchangePool:
                     market_type=selection,
                     websocket=False,
                 )
-                load_task = asyncio.create_task(self._load_markets(exchange))
+                dependency = PublicDemand(TrafficClass.BACKGROUND, purpose="market_metadata")
+                dependency.inherit(current_demand())
+                with public_demand(dependency):
+                    load_task = asyncio.create_task(self._load_markets(exchange))
                 load_task.add_done_callback(_consume_task_outcome)
                 idle = asyncio.Event()
                 idle.set()
@@ -214,12 +222,27 @@ class _RestExchangePool:
                     load_task=load_task,
                     borrowers=0,
                     idle=idle,
+                    demand=dependency,
                 )
                 self._entries[selection] = current
                 self._created += 1
             else:
                 self._reused += 1
 
+        if not current.load_task.done():
+            current.demand.inherit(current_demand())
+            get_public_admission().manager.notify_change()
+        else:
+            current.demand.dependencies.clear()
+        if current_demand().defer and not current.load_task.done():
+            # The shared dependency owns its wait. Return the business worker
+            # to its queue without cancelling the loader or creating another.
+            now = time.monotonic()
+            raise RateLimitDeferred(RateLimitAdmission(
+                False, f"{self._catalog_entry.exchange_id}:metadata:{selection}", 1,
+                "metadata_pending", 0.1, now + 0.1, int((time.time() + 0.1) * 1000),
+                "ccxt_shared_metadata",
+            ))
         try:
             await asyncio.shield(current.load_task)
         except asyncio.CancelledError:
@@ -560,9 +583,28 @@ class CcxtUnifiedAdapter:
         return await load_ccxt_symbols(
             self.entry,
             market_type,
-            IngestionConfig(),
+            await self._catalog_config(market_type),
             native_ids=self.native_symbol_ids,
         )
+
+    async def _catalog_config(self, market_type: str) -> IngestionConfig:
+        config = IngestionConfig()
+        if config.proxy_mode != "pool":
+            return config
+        from app.core.proxy_pool import get_proxy_pool
+        from app.exchanges.rate_limits import HistoricalRequest, get_shared_rate_limit_manager
+        from app.exchanges.registry import get_exchange_registry
+        selection = resolve_market_selection(self.entry, market_type) if market_type else self.entry.market_types[0]
+        base, subtype = market_selection_parts(selection)
+        native_type = "spot" if base == "spot" else "futures"
+        endpoint = "/api/v5/public/instruments" if self.id == "okx" else "load_markets"
+        if self.id == "binance":
+            endpoint = ("/api/v3/exchangeInfo" if base == "spot" else
+                        "/dapi/v1/exchangeInfo" if subtype == "inverse" else "/fapi/v1/exchangeInfo")
+        request = HistoricalRequest(self.id, native_type, endpoint, "*")
+        rule = get_exchange_registry().get_plugin(self.id).rate_limit_policy(config).rule_for(request)
+        route = await get_proxy_pool().select_rest(config, request, rule, get_shared_rate_limit_manager())
+        return route.bind(config) if route is not None else config
 
     async def list_symbol_rows(self, market_type: str = "") -> list[dict[str, Any]]:
         """``list_symbols`` as catalog rows, parsed off the event loop.
@@ -572,13 +614,14 @@ class CcxtUnifiedAdapter:
         process runs it and returns only the rows.
         """
 
-        config = IngestionConfig()
+        config = await self._catalog_config(market_type)
         args = (
             self.entry,
             market_type,
             config.proxy_mode,
             config.http_proxy,
             self.native_symbol_ids,
+            config,
         )
         if catalog_worker_enabled():
             try:
@@ -779,6 +822,8 @@ class CcxtUnifiedProfile:
 
 class CcxtUnifiedPlugin(BuiltinExchangePlugin):
     """One registry plugin generated from a pinned CCXT exchange class."""
+
+    manages_physical_admission = True
 
     def __init__(self, entry: CcxtCatalogEntry) -> None:
         self.entry = entry
@@ -1152,8 +1197,16 @@ async def load_ccxt_symbols(
         websocket=False,
     )
     try:
-        await exchange.load_markets()
-        selections = (resolved_selection,) if resolved_selection else entry.market_types
+        demand = current_demand()
+        with public_demand(replace(
+            demand, purpose="symbol_catalog",
+            traffic_class=(TrafficClass.BACKGROUND if demand.traffic_class == TrafficClass.NORMAL
+                           else demand.traffic_class),
+        )):
+            await exchange.load_markets()
+        selections = (
+            (resolved_selection,) if resolved_selection else entry.market_types
+        )
         symbols: list[SymbolInfo] = []
         for market in exchange.markets.values():
             if market.get("active") is False:
@@ -1208,10 +1261,11 @@ async def load_ccxt_symbol_rows(
     proxy_mode: str,
     http_proxy: str | None,
     native_ids: bool,
+    network_config: IngestionConfig | None = None,
 ) -> list[dict[str, Any]]:
     """Catalog rows for ``symbol_catalog``; normally runs in the catalog worker."""
 
-    config = IngestionConfig(proxy_mode=proxy_mode, http_proxy=http_proxy)
+    config = network_config or IngestionConfig(proxy_mode=proxy_mode, http_proxy=http_proxy)
     symbols = await load_ccxt_symbols(
         entry,
         market_type,
@@ -1299,13 +1353,13 @@ def _create_exchange(
                     replace(event, payload={RAW_ONLY: True, "raw": event.payload})
                 )
 
-        return exchange_class(
+        return bind_public_client(exchange_class(
             values,
             raw_event_sink=capture,
             lifecycle_sink=lifecycle_sink,
             fork_kline_enabled=True,
-        )
-    return exchange_class(values)
+        ), config, market_type)
+    return bind_public_client(exchange_class(values), config, market_type)
 
 
 def _product_type(market_type: str) -> str:
