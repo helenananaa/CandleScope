@@ -9,6 +9,7 @@ import os
 import sqlite3
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -31,6 +32,19 @@ from app.exchanges.archive import (
 logger = logging.getLogger("backfill.ArchiveCache")
 
 
+class _CacheLeases:
+    """Shared by cache instances/worker loops owning the same profile root."""
+
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.objects: dict[str, int] = {}
+        self.paths: dict[Path, int] = {}
+
+
+_ROOT_LEASES: weakref.WeakValueDictionary[str, _CacheLeases] = weakref.WeakValueDictionary()
+_ROOT_LEASES_LOCK = threading.Lock()
+
+
 @dataclass(frozen=True, slots=True)
 class CachedArchiveObject:
     ref: ArchiveObjectRef
@@ -44,6 +58,7 @@ class CachedArchiveObject:
     last_modified: str | None = None
     download_elapsed_ms: int = 0
     verify_elapsed_ms: int = 0
+    cache_generation: str = ""
 
 
 class AiohttpArchiveHttpClient:
@@ -180,8 +195,10 @@ class HistoricalArchiveCache:
         self.max_bytes = max(1, int(max_bytes))
         self.revalidate_ms = max(0, int(revalidate_seconds)) * 1_000
         self.max_download_bytes = max(1, int(max_download_bytes))
-        self._lock = threading.RLock()
-        self._active: set[str] = set()
+        with _ROOT_LEASES_LOCK:
+            self._leases = _ROOT_LEASES.setdefault(str(self.root), _CacheLeases())
+        self._lock = self._leases.lock
+        self._active = self._leases.objects
         self.metrics = LayerMetrics("HistoricalArchiveCache")
         self.objects_dir.mkdir(parents=True, exist_ok=True)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -194,18 +211,25 @@ class HistoricalArchiveCache:
         provider: HistoricalArchiveProvider,
         http,
     ):
+        path: Path | None = None
         with self._lock:
-            self._active.add(ref.object_key)
+            self._active[ref.object_key] = self._active.get(ref.object_key, 0) + 1
         try:
             value = await self._materialize(ref, provider, http)
+            path = value.path.resolve()
+            with self._lock:
+                self._leases.paths[path] = self._leases.paths.get(path, 0) + 1
             yield value
         finally:
             with self._lock:
-                self._active.discard(ref.object_key)
+                _release_count(self._active, ref.object_key)
+                if path is not None:
+                    _release_count(self._leases.paths, path)
             # A download may temporarily exceed the budget while every
             # candidate is leased.  Re-run eviction after releasing a lease
             # so the persistent cache converges to its configured bound.
             await asyncio.to_thread(self._evict)
+            await asyncio.to_thread(self._drain_blob_cleanup)
 
     async def _materialize(
         self,
@@ -223,7 +247,7 @@ class HistoricalArchiveCache:
             existing = None
 
         if existing is not None and now_ms - int(existing["validated_at_ms"]) <= self.revalidate_ms:
-            await asyncio.to_thread(self._touch, ref.object_key, now_ms, now_ms)
+            await asyncio.to_thread(self._touch, ref.object_key, None, now_ms)
             self.metrics.inc("archive_cache_hits")
             self.metrics.mark("last_cache_hit_at")
             logger.info("archive_cache_hit object=%s", ref.object_key)
@@ -308,12 +332,7 @@ class HistoricalArchiveCache:
                 (time.monotonic() - digest_started) * 1_000
             )
             destination = self._content_path(content_sha256)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if destination.exists():
-                temporary.unlink(missing_ok=True)
-            else:
-                os.replace(temporary, destination)
-            size_bytes = destination.stat().st_size
+            size_bytes = temporary.stat().st_size
             revision_changed = bool(
                 existing is not None
                 and existing["content_sha256"] != content_sha256
@@ -340,8 +359,13 @@ class HistoricalArchiveCache:
                 "validated_at_ms": now_ms,
                 "last_access_ms": now_ms,
                 "state": "ready",
+                "cache_generation": uuid4().hex,
+                "cleanup_pending": 0,
+                "cleanup_attempts": 0,
+                "cleanup_retry_at_ms": 0,
+                "cleanup_error": None,
             }
-            await asyncio.to_thread(self._upsert, record)
+            await asyncio.to_thread(self._publish_download, temporary, destination, record)
             if (
                 existing is not None
                 and existing.get("content_sha256") != content_sha256
@@ -371,6 +395,7 @@ class HistoricalArchiveCache:
                 last_modified=record["last_modified"],
                 download_elapsed_ms=download_elapsed_ms,
                 verify_elapsed_ms=verify_elapsed_ms,
+                cache_generation=record["cache_generation"],
             )
         except BaseException:
             self.metrics.inc("archive_download_errors")
@@ -409,14 +434,27 @@ class HistoricalArchiveCache:
                 "SELECT COUNT(*) AS object_count, COALESCE(SUM(size_bytes), 0) AS bytes "
                 "FROM archive_objects WHERE state = 'ready'"
             ).fetchone()
+            cleanup = connection.execute(
+                "SELECT COALESCE(SUM(cleanup_pending), 0) AS pending, "
+                "COALESCE(SUM(pinned), 0) AS pinned, "
+                "COALESCE(SUM(cleanup_error IS NOT NULL), 0) AS errors "
+                "FROM archive_objects"
+            ).fetchone()
+            pending_blobs = connection.execute(
+                "SELECT COUNT(*) FROM archive_blob_cleanup"
+            ).fetchone()[0]
         with self._lock:
-            active = len(self._active)
+            active = sum(self._active.values())
         return {
             "root": str(self.root),
             "max_bytes": self.max_bytes,
             "object_count": int(row["object_count"] if row else 0),
             "bytes": int(row["bytes"] if row else 0),
             "active_leases": active,
+            "cleanup_pending_objects": int(cleanup["pending"]),
+            "cleanup_errors": int(cleanup["errors"]),
+            "pinned_objects": int(cleanup["pinned"]),
+            "pending_blob_deletions": int(pending_blobs),
             "revalidate_ms": self.revalidate_ms,
             "metrics": self.metrics.snapshot(),
         }
@@ -427,7 +465,7 @@ class HistoricalArchiveCache:
         return connection
 
     def _init_index(self) -> None:
-        with self._connect() as connection:
+        with self._lock, self._connect() as connection:
             connection.executescript(
                 """
                 PRAGMA journal_mode=WAL;
@@ -456,8 +494,91 @@ class HistoricalArchiveCache:
                 );
                 CREATE INDEX IF NOT EXISTS idx_archive_objects_lru
                 ON archive_objects(state, last_access_ms);
+                CREATE TABLE IF NOT EXISTS archive_blob_cleanup (
+                    content_sha256 TEXT PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    last_error TEXT
+                );
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(archive_objects)")}
+            for name, definition in (
+                ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+                ("cleanup_pending", "INTEGER NOT NULL DEFAULT 0"),
+                ("cleanup_attempts", "INTEGER NOT NULL DEFAULT 0"),
+                ("cleanup_retry_at_ms", "INTEGER NOT NULL DEFAULT 0"),
+                ("cleanup_error", "TEXT"),
+                ("cache_generation", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE archive_objects ADD COLUMN {name} {definition}")
+
+    async def set_pinned(self, object_key: str, pinned: bool) -> None:
+        """Protect an explicitly retained object from both import cleanup and LRU."""
+        def update() -> None:
+            with self._lock, self._connect() as connection:
+                connection.execute(
+                    "UPDATE archive_objects SET pinned = ? WHERE object_key = ?",
+                    (int(pinned), object_key),
+                )
+        await asyncio.to_thread(update)
+
+    async def cleanup_candidates(self, after: str = "", limit: int = 128) -> list[dict[str, Any]]:
+        def read() -> list[dict[str, Any]]:
+            with self._lock, self._connect() as connection:
+                return [dict(row) for row in connection.execute(
+                    "SELECT object_key, content_sha256, cache_generation FROM archive_objects "
+                    "WHERE state = 'ready' AND object_key > ? ORDER BY object_key LIMIT ?",
+                    (after, min(128, max(1, limit))),
+                )]
+        return await asyncio.to_thread(read)
+
+    async def cleanup_imported(self, proofs: list[dict[str, Any]]) -> int:
+        """Retire only the exact cached versions confirmed by the storage owner."""
+        return await asyncio.to_thread(self._cleanup_imported, proofs)
+
+    def _cleanup_imported(self, proofs: list[dict[str, Any]]) -> int:
+        retired = 0
+        for proof in proofs:
+            object_key, digest = str(proof["object_key"]), str(proof["content_sha256"])
+            with self._lock, self._connect() as connection:
+                row = connection.execute(
+                    "SELECT * FROM archive_objects WHERE object_key = ? AND content_sha256 = ? "
+                    "AND cache_generation = ?",
+                    (object_key, digest, str(proof.get("cache_generation") or "")),
+                ).fetchone()
+                if row is None:
+                    continue  # Already evicted, or a newer revision now owns this key.
+                connection.execute(
+                    "UPDATE archive_objects SET cleanup_pending = 1 WHERE object_key = ?",
+                    (object_key,),
+                )
+                if (
+                    row["pinned"] or self._active.get(object_key, 0)
+                    or self._leases.paths.get(Path(row["path"]).resolve(), 0)
+                    or int(row["cleanup_retry_at_ms"]) > _now_ms()
+                ):
+                    continue
+                try:
+                    connection.execute("DELETE FROM archive_objects WHERE object_key = ?", (object_key,))
+                    self._delete_unreferenced_path(connection, row["path"], digest, strict=True)
+                except OSError as exc:
+                    # Keep the index/path for retry. Never turn a committed
+                    # import into a download failure because unlink failed.
+                    connection.rollback()
+                    attempts = int(row["cleanup_attempts"]) + 1
+                    delay_ms = min(300_000, 1_000 * 2 ** min(attempts, 8))
+                    connection.execute(
+                        "UPDATE archive_objects SET cleanup_pending = 1, cleanup_attempts = ?, "
+                        "cleanup_retry_at_ms = ?, cleanup_error = ? "
+                        "WHERE object_key = ? AND content_sha256 = ?",
+                        (attempts, _now_ms() + delay_ms, str(exc)[:500], object_key, digest),
+                    )
+                    self.metrics.inc("archive_cleanup_errors")
+                    continue
+                retired += 1
+                self.metrics.inc("archive_objects_cleaned_after_import")
+        return retired
 
     def _lookup(self, object_key: str) -> dict[str, Any] | None:
         with self._lock, self._connect() as connection:
@@ -482,10 +603,21 @@ class HistoricalArchiveCache:
             )
             connection.commit()
 
-    def _touch(self, object_key: str, validated_at_ms: int, access_ms: int) -> None:
+    def _publish_download(self, temporary: Path, destination: Path, record: dict[str, Any]) -> None:
+        # A cleanup of another key sharing this hash must not unlink the blob
+        # between publication and registration of its new index reference.
+        with self._lock:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                temporary.unlink(missing_ok=True)
+            else:
+                os.replace(temporary, destination)
+            self._upsert(record)
+
+    def _touch(self, object_key: str, validated_at_ms: int | None, access_ms: int) -> None:
         with self._lock, self._connect() as connection:
             connection.execute(
-                "UPDATE archive_objects SET validated_at_ms = ?, last_access_ms = ? "
+                "UPDATE archive_objects SET validated_at_ms = COALESCE(?, validated_at_ms), last_access_ms = ? "
                 "WHERE object_key = ?",
                 (validated_at_ms, access_ms, object_key),
             )
@@ -525,13 +657,13 @@ class HistoricalArchiveCache:
             if total <= self.max_bytes:
                 return
             rows = connection.execute(
-                "SELECT object_key, path, content_sha256, size_bytes FROM archive_objects "
+                "SELECT object_key, path, content_sha256, size_bytes, pinned FROM archive_objects "
                 "WHERE state = 'ready' ORDER BY last_access_ms ASC"
             ).fetchall()
             for row in rows:
                 if total <= self.max_bytes:
                     break
-                if row["object_key"] in self._active:
+                if row["object_key"] in self._active or row["pinned"]:
                     continue
                 connection.execute(
                     "DELETE FROM archive_objects WHERE object_key = ?",
@@ -551,6 +683,8 @@ class HistoricalArchiveCache:
         connection: sqlite3.Connection,
         raw_path: str,
         content_sha256: str,
+        *,
+        strict: bool = False,
     ) -> None:
         remaining = connection.execute(
             "SELECT 1 FROM archive_objects WHERE content_sha256 = ? LIMIT 1",
@@ -561,7 +695,32 @@ class HistoricalArchiveCache:
         candidate = Path(raw_path).resolve()
         root = self.objects_dir.resolve()
         if candidate != root and root in candidate.parents:
-            candidate.unlink(missing_ok=True)
+            if self._leases.paths.get(candidate, 0):
+                connection.execute(
+                    "INSERT OR IGNORE INTO archive_blob_cleanup (content_sha256, path) VALUES (?, ?)",
+                    (content_sha256, str(candidate)),
+                )
+                return
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError as exc:
+                if strict:
+                    raise
+                connection.execute(
+                    "INSERT OR REPLACE INTO archive_blob_cleanup (content_sha256, path, last_error) "
+                    "VALUES (?, ?, ?)", (content_sha256, str(candidate), str(exc)[:500]),
+                )
+                self.metrics.inc("archive_blob_cleanup_errors")
+                return
+            connection.execute(
+                "DELETE FROM archive_blob_cleanup WHERE content_sha256 = ?", (content_sha256,),
+            )
+
+    def _drain_blob_cleanup(self) -> None:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute("SELECT * FROM archive_blob_cleanup LIMIT 128").fetchall()
+            for row in rows:
+                self._delete_unreferenced_path(connection, row["path"], row["content_sha256"])
 
     def _content_path(self, digest: str) -> Path:
         return self.objects_dir / digest[:2] / f"{digest}.zip"
@@ -638,7 +797,16 @@ def _cached_object(
         etag=record.get("etag"),
         last_modified=record.get("last_modified"),
         verify_elapsed_ms=verify_elapsed_ms,
+        cache_generation=str(record.get("cache_generation") or ""),
     )
+
+
+def _release_count(counts: dict, key: Any) -> None:
+    remaining = counts.get(key, 0) - 1
+    if remaining > 0:
+        counts[key] = remaining
+    else:
+        counts.pop(key, None)
 
 
 def _now_ms() -> int:

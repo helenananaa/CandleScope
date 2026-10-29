@@ -188,16 +188,40 @@ Planner 会把自定义周期拆成标准组件。例如：
 - 当前日、部分包周期、形成中 K 线、包内缺口、对象不存在、校验/ZIP/schema
   失败和超时都走 REST。
 - 归档 404 或空包绝不作为历史边界证据；只有 REST 权威空页可以关闭 gap ledger。
-- ZIP 以内容寻址方式持久化在 `DATA_DIR/history_archives`，删除 K 线库后仍可本地
-  重建，并按 LRU 限额回收。网络下载并发固定为 2；归档 SQLite 写入串行，且
-  每个对象一个事务。
+- ZIP 位于 `DATA_DIR/history_archives`。默认 `delete_after_import`：整包有效行及
+  原子导入证明提交后，由后台清理释放 ZIP；来源、哈希和导入回执留在行情库。
+  后续读取直接使用行情库，需要原包时重新下载。`bounded_cache` 可保留旧的容量
+  缓存行为，仍受 LRU 限额约束。网络下载并发默认 2，每个归档对象一个 SQLite 事务。
 - Binance `.CHECKSUM` 每 24 小时按需复核；发现修订时先失效重叠的派生自定义 K 线，
   再重新物化。
 - OKX 默认关闭。显式开启后，启动阶段会探测其非稳定网页下载契约；URL、schema
   或 `confirm` 语义不兼容时会关闭整条 OKX 归档能力并回退 REST。
+- 默认 CCXT 入口保留 Binance/OKX 归档 factory，不实例化第二套实时连接。
+  多代理 pool 模式下，归档目前明确回退到已有的 REST 池调度，并报告
+  `proxy_pool_archive_transport_unavailable`；不会把第一条启用路线当作归档路由。
+  主机级下载租约、负载分配和完整多代理归档下载属于后续阶段。
+
+清理每页最多检查 128 个对象，在启动、导入通知及周期检查时将缓存对象与
+`history_archive_import_commits` 核对。证明绑定对象键、内容哈希、导入版本和本次
+缓存生成标识；旧版本成功记录不会授权删除新下载的 ZIP。只在 `import_history_archive`
+的行情事务内产生证明，普通说明性回执、失败/部分对象和旧缓存迁移不自动获得删除资格。
+“整包已处理”不等于整个请求区间无缺口，缺口仍由历史管线修复。
+
+解析/读取租约、同哈希的其他引用和显式 pin 均阻止相应物理文件删除。
+`HistoricalArchiveCache.set_pinned()` 同时保护导入清理和 LRU。删除失败保留缓存索引、
+错误及退避时间，后台重试，不改变已经成功的行情事务。重启不依赖进程内 acknowledge；
+提交后通知前中断、删除后索引提交前中断均可幂等恢复。失败输入仍属于容量缓存，
+不承诺离线永久保留；必要时允许重下载。同一缓存根目录由单个应用进程拥有。
+
+迁移只增加表/列，不追溯删除只有旧说明性回执的包。设置
+`HISTORY_ARCHIVE_CLEANUP_POLICY=bounded_cache` 可停止后续导入清理，恢复容量缓存策略；
+已在执行的清理会完成，已删除文件需要重下载。关闭归档来源可使用
+`HISTORY_ARCHIVE_ENABLED=0`，OKX 开关保持独立。行情库和回放各自的归档目录保持独立，
+本策略不清理回放持久对象、用户原始文件或 QA 证据。
 
 Fetcher diagnostics 会暴露选中来源、cache/object 数、下载字节、下载/解析耗时、
 REST tail/fallback 次数和 singleflight 等待数。
+缓存快照还包括清理策略、待清理对象、失败数、pin 数和活动租约数。
 
 ## 去重策略
 
@@ -238,6 +262,7 @@ REST tail/fallback 次数和 singleflight 等待数。
 | `HISTORY_ARCHIVE_ENABLED` | 是否启用官方归档路由，默认 `1` |
 | `HISTORY_ARCHIVE_CACHE_DIR` | 持久 ZIP cache，默认 `DATA_DIR/history_archives` |
 | `HISTORY_ARCHIVE_CACHE_MAX_BYTES` | 归档 cache LRU 上限，默认 `10737418240`（10 GiB） |
+| `HISTORY_ARCHIVE_CLEANUP_POLICY` | `delete_after_import`（默认）或 `bounded_cache` |
 | `OKX_HISTORY_ARCHIVE_ENABLED` | 是否启用受保护的 OKX 探测/路由，默认 `0` |
 | `BACKFILL_RECONCILE_DEDUP_STRATEGY` | 写入冲突策略 |
 | `BACKFILL_RECONCILE_WRITE_BATCH_SIZE` | storage 写入批大小 |
@@ -258,6 +283,7 @@ python -m pytest -q \
   tests/test_history_archive_cache.py \
   tests/test_history_archive_routing.py \
   tests/test_history_archive_storage.py \
+  tests/test_history_archive_import_cleanup.py \
   tests/test_transport_http_rate_limit_metadata.py \
   tests/test_okx_backfill_fetcher.py
 ```

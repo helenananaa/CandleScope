@@ -91,6 +91,7 @@ class HistoricalFetcher:
         ingestion_config: IngestionConfig | None = None,
         *,
         source_router: HistoricalSourceRouter | None = None,
+        import_proof_lookup=None,
     ) -> None:
         self._cfg = config
         self._transport = transport
@@ -107,10 +108,11 @@ class HistoricalFetcher:
             and self._cfg.history_archive_enabled
             and isinstance(transport, TransportLayer)
         ):
-            proxy_resolver = getattr(transport, "_resolve_proxy", None)
             self._source_router = HistoricalSourceRouter(
                 config,
-                proxy_resolver=proxy_resolver if callable(proxy_resolver) else None,
+                proxy_resolver=transport.resolve_archive_proxy,
+                routing_unavailable_reason=transport.archive_routing_unavailable_reason,
+                import_proof_lookup=import_proof_lookup,
             )
 
         # Extension points
@@ -157,6 +159,14 @@ class HistoricalFetcher:
         if self._source_router is None:
             return {"enabled": False, "reason": "archive_router_unavailable"}
         return await self._source_router.probe_enabled_capabilities()
+
+    def request_archive_cleanup(self) -> None:
+        if self._source_router is not None:
+            self._source_router.request_cleanup()
+
+    async def close(self) -> None:
+        if self._source_router is not None:
+            await self._source_router.close()
 
     def acknowledge_archive_imports(
         self,

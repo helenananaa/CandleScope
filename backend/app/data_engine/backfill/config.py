@@ -249,6 +249,13 @@ class BackfillConfig:
             256 * 1024**2,
         ),
     )
+    # Only atomic, version-matched imports qualify for deletion. Older cache
+    # objects and advisory receipts keep the existing capacity-cache behavior.
+    history_archive_cleanup_policy: str = field(
+        default_factory=lambda: _env_str(
+            "HISTORY_ARCHIVE_CLEANUP_POLICY", "delete_after_import",
+        ),
+    )
 
     # ── Reconciler ───────────────────────────────────────────
     # Deduplication strategy when writing to storage:
@@ -300,8 +307,18 @@ class BackfillConfig:
 
     # ── Methods ──────────────────────────────────────────────
 
+    def __post_init__(self) -> None:
+        self._validate_cleanup_policy(self.history_archive_cleanup_policy)
+
+    @staticmethod
+    def _validate_cleanup_policy(value: str) -> None:
+        if value not in {"delete_after_import", "bounded_cache"}:
+            raise ValueError(f"Unknown history archive cleanup policy: {value}")
+
     def update(self, **kwargs) -> None:
         """Update config fields at runtime.  Only known fields are accepted."""
+        if "history_archive_cleanup_policy" in kwargs:
+            self._validate_cleanup_policy(kwargs["history_archive_cleanup_policy"])
         for key, value in kwargs.items():
             if not hasattr(self, key):
                 raise ValueError(f"Unknown config key: {key}")

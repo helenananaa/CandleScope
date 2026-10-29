@@ -319,6 +319,17 @@ def init_klines_storage() -> None:
             ON history_archive_imports(
                 exchange, market_type, symbol, interval, start_ms, end_ms
             );
+            -- Legacy/advisory receipts are deliberately not promoted. Only
+            -- the complete object's data transaction writes this proof.
+            CREATE TABLE IF NOT EXISTS history_archive_import_commits (
+                object_key TEXT NOT NULL,
+                content_sha256 TEXT NOT NULL,
+                import_version TEXT NOT NULL,
+                cache_generation TEXT NOT NULL,
+                row_count INTEGER NOT NULL,
+                imported_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (object_key, content_sha256, import_version, cache_generation)
+            );
             """
         )
         receipt_columns = {
@@ -514,6 +525,7 @@ def import_history_archive(
     import_version = str(
         receipt.get("import_version") or "history-archive-import.v1"
     )
+    cache_generation = str(receipt.get("cache_generation") or "")
     if not object_key or len(content_sha256) != 64:
         raise ValueError("history archive receipt is missing its object digest")
     if (
@@ -585,7 +597,13 @@ def import_history_archive(
                         end_ms,
                     ),
                 ).fetchone()[0])
-                if stored_count >= len(rows):
+                committed = conn.execute(
+                    "SELECT 1 FROM history_archive_import_commits "
+                    "WHERE object_key = ? AND content_sha256 = ? AND import_version = ? "
+                    "AND cache_generation = ?",
+                    (object_key, content_sha256, import_version, cache_generation),
+                ).fetchone()
+                if stored_count >= len(rows) and committed is not None:
                     return {
                         "written": 0,
                         "imported": False,
@@ -707,6 +725,12 @@ def import_history_archive(
                     now_ms,
                 ),
             )
+            conn.execute(
+                "INSERT OR REPLACE INTO history_archive_import_commits "
+                "(object_key, content_sha256, import_version, cache_generation, row_count, imported_at_ms) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (object_key, content_sha256, import_version, cache_generation, len(rows), now_ms),
+            )
             conn.commit()
 
     return {
@@ -716,6 +740,42 @@ def import_history_archive(
         "invalidated": int(invalidated),
         "revision_changed": revision_changed,
     }
+
+
+def get_history_archive_import_proofs(
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Look up atomic imports for a bounded page of cached object versions.
+
+    This is an import fact, not a claim of gap-free range coverage. Advisory
+    receipts and old databases without the new proof table never authorize GC.
+    """
+    if not candidates:
+        return []
+    if len(candidates) > 128:
+        raise ValueError("archive cleanup lookup must be page-bounded")
+    parameters = [
+        value
+        for item in candidates
+        for value in (
+            str(item["object_key"]), str(item["content_sha256"]),
+            "history-archive-import.v1", str(item.get("cache_generation") or ""),
+        )
+    ]
+    with _connect() as conn:
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'history_archive_import_commits'",
+        ).fetchone() is None:
+            return []
+        rows = conn.execute(
+            "SELECT object_key, content_sha256, import_version, cache_generation "
+            "FROM history_archive_import_commits "
+            "WHERE (object_key, content_sha256, import_version, cache_generation) IN ("
+            + ",".join("(?, ?, ?, ?)" for _ in candidates) + ")",
+            parameters,
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def record_history_archive_imports(receipts: list[dict[str, Any]]) -> int:
@@ -1952,6 +2012,12 @@ class AsyncKlinesRepoAdapter:
                 series_identity=series_identity,
             )
         return await run_storage(_sync)
+
+    async def get_history_archive_import_proofs(
+        self,
+        candidates: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return await run_storage(get_history_archive_import_proofs, candidates)
 
     async def record_history_archive_imports(
         self,

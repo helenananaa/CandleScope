@@ -135,6 +135,21 @@ class TransportLayer:
 
     # ── Public: Proxy resolution ─────────────────────────────
 
+    def archive_routing_unavailable_reason(self) -> str | None:
+        # The binary client has no request-scoped pool lease yet. In pool mode
+        # let history use the quota-aware REST lane rather than silently use
+        # the first URL (which may even be scoped to another exchange).
+        if getattr(self._cfg, "proxy_mode", "system") == "pool":
+            return "proxy_pool_archive_transport_unavailable"
+        return None
+
+    def resolve_archive_proxy(self) -> str | None:
+        # Recheck at the physical request too: settings may change after the
+        # router planned or parked this object for background download.
+        if reason := self.archive_routing_unavailable_reason():
+            raise ValueError(reason)
+        return self._resolve_proxy()
+
     def _resolve_proxy(self) -> str | None:
         """Resolve the effective proxy URL based on proxy_mode.
 
