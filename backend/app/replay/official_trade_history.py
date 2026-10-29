@@ -333,7 +333,7 @@ class OfficialTradeHistoryRepository:
 
     def _tape_context_selections(
         self, revision, symbol, interval, *, start_ms, end_ms,
-        exchange=None, market_type=None, cancelled,
+        exchange=None, market_type=None, cancelled, prepare=True,
     ):
         """One immutable day/month selection for display and indicator readers."""
         payload = self._load(revision, symbol, interval, exchange, market_type)
@@ -365,6 +365,8 @@ class OfficialTradeHistoryRepository:
             binding = self.root / "bindings" / revision[7:] / (day + ".json")
             selected = self._archives.day_binding(binding, day)
             if selected is None:
+                if not prepare:
+                    return None
                 # The normal source selection owns validation/publication. A
                 # one-row request binds only this day, never future day pins.
                 self.query_bars_at_revision(
@@ -396,9 +398,12 @@ class OfficialTradeHistoryRepository:
                 selections.append((root, pin, first, last))
         return selections
 
+    def local_tape_indicator_closes_at_revision(self, *args, **kwargs):
+        return self.tape_indicator_closes_at_revision(*args, **kwargs, prepare=False)
+
     def tape_indicator_closes_at_revision(
         self, revision, symbol, interval, *, start_ms, end_ms, close_times,
-        exchange=None, market_type=None, cancelled,
+        exchange=None, market_type=None, cancelled, prepare=True,
     ):
         from .indicator_market_columns import read_pinned_closes
 
@@ -409,6 +414,7 @@ class OfficialTradeHistoryRepository:
         selections = self._tape_context_selections(
             revision, symbol, interval, start_ms=start_ms, end_ms=end_ms,
             exchange=exchange, market_type=market_type, cancelled=cancelled,
+            prepare=prepare,
         )
         if selections is None:
             return None
@@ -498,6 +504,11 @@ class TradeHistoryRouter:
         if not self.official.owns(revision):
             return None
         return self.official.tape_indicator_closes_at_revision(revision, *args, **kwargs)
+
+    def local_tape_indicator_closes_at_revision(self, revision, *args, **kwargs):
+        if not self.official.owns(revision):
+            return None
+        return self.official.local_tape_indicator_closes_at_revision(revision, *args, **kwargs)
 
     def tape_context_market_at_revision(self, revision, *args, **kwargs):
         if not self.official.owns(revision):

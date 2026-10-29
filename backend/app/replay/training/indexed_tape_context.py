@@ -13,8 +13,9 @@ from .errors import TrainingRunError
 MAX_CONTEXT_MINUTES = 32_768
 
 
-def select_indexed_closes(history, start, stop, times, cancelled):
-    reader = getattr(history.arguments["repository"], "tape_indicator_closes_at_revision", None)
+def select_indexed_closes(history, start, stop, times, cancelled, *, local_only=False):
+    reader = getattr(history.arguments["repository"],
+        "local_tape_indicator_closes_at_revision" if local_only else "tape_indicator_closes_at_revision", None)
     snapshot, config = history.snapshot, history.config
     delta = int(history.arguments["binding"]["history_policy"]["actual_replay_start_ms"]) - snapshot.replay_start_ms
     if (not callable(reader) or config.base_interval != "1m"
