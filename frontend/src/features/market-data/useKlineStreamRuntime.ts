@@ -41,11 +41,13 @@ export function planKlineRecoveryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   desiredCountBack = WS_RECOVERY_COUNT_BACK,
+  tradeCandlesAvailable = false,
 ): number {
   return planTargetBarRequest({
     desiredTargetBars: desiredCountBack,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: WS_RECOVERY_SOURCE_ROW_BUDGET,
   })?.targetBars ?? desiredCountBack;
 }
@@ -176,6 +178,7 @@ export interface UseKlineStreamRuntimeOptions {
   exchange: ExchangeId;
   marketType: MarketType;
   nativeIntervalValues: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   trackedIntervals: readonly IntervalString[];
   intervalRef: MutableRefObject<IntervalString>;
   seriesDataFeed: SeriesDataFeed;
@@ -202,6 +205,7 @@ export function useKlineStreamRuntime({
   exchange,
   marketType,
   nativeIntervalValues,
+  tradeCandlesAvailable = false,
   trackedIntervals,
   intervalRef,
   seriesDataFeed,
@@ -404,6 +408,8 @@ export function useKlineStreamRuntime({
                 const recoveryCountBack = planKlineRecoveryCountBack(
                   currentIntv,
                   nativeIntervalValues,
+                  WS_RECOVERY_COUNT_BACK,
+                  tradeCandlesAvailable,
                 );
                 console.log(`[WS-Recovery] Reconnected, reloading recent bars for ${symbol}@${currentIntv}`);
                 if (recoveryCountBack <= 0) {
@@ -644,6 +650,7 @@ export function useKlineStreamRuntime({
     intervalRef,
     marketType,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     patchCacheTick,
     seriesDataFeed,
     setWsStatus,
@@ -685,6 +692,7 @@ export function useKlineStreamRuntime({
         currentIntv,
         nativeIntervalValues,
         desiredCountBack,
+        tradeCandlesAvailable,
       );
       if (countBack <= 0) {
         console.warn(`[TabRecovery] Skipped ${currentIntv}; source-history budget exceeded`);
@@ -725,5 +733,5 @@ export function useKlineStreamRuntime({
       active = false;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [enabled, exchange, intervalRef, marketType, nativeIntervalValues, seriesDataFeed, symbol, updateLastPrice]);
+  }, [enabled, exchange, intervalRef, marketType, nativeIntervalValues, tradeCandlesAvailable, seriesDataFeed, symbol, updateLastPrice]);
 }

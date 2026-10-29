@@ -18,6 +18,7 @@ from app.data_engine.bar_aggregator import BarEvent, BarEventType, BarFinality, 
 from app.data_engine.bar_aggregator.config import BarAggregatorConfig
 from app.data_engine.bar_aggregator.publisher import BarAggregatorPublisher
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+from app.data_engine.interval_policy import parse_interval_ms
 from app.data_engine.data_manager.aggregator_bridge import AggregatorBridge
 from app.data_engine.data_manager.bar_delivery import source_recovery_handler
 from app.data_engine.data_manager.cache import BarCache
@@ -50,10 +51,11 @@ def bridge(storage, bus=None):
     return instance, bus
 
 
-def closed(close=2):
-    start = int(time.time() * 1000) // 60_000 * 60_000 - 60_000
-    return BarEvent(BarEventType.CLOSED, BarState(symbol="BTCUSDT", interval="1m",
-        bucket_start_ms=start, bucket_end_ms=start + 60_000, open=1, high=4, low=1,
+def closed(close=2, interval="1m"):
+    width = parse_interval_ms(interval)
+    start = int(time.time() * 1000) // width * width - width
+    return BarEvent(BarEventType.CLOSED, BarState(symbol="BTCUSDT", interval=interval,
+        bucket_start_ms=start, bucket_end_ms=start + width, open=1, high=4, low=1,
         close=close, volume=10, finality=BarFinality.AUTHORITATIVE, close_reason="source_close"))
 
 
@@ -66,7 +68,8 @@ async def wait_for(predicate):
 
 @async_test
 @pytest.mark.parametrize("error", [OSError("disk failure"), sqlite3.OperationalError("database is locked"), ExecutorBusyError("storage")])
-async def test_failed_canonical_write_stays_durable_and_retries_without_exposing_uncommitted_bar(storage, monkeypatch, error):
+@pytest.mark.parametrize("interval", ["1s", "1m"])
+async def test_failed_canonical_write_stays_durable_and_retries_without_exposing_uncommitted_bar(storage, monkeypatch, error, interval):
     instance, bus = bridge(storage)
     delivered = []
     async def receive(event):
@@ -76,11 +79,11 @@ async def test_failed_canonical_write_stays_durable_and_retries_without_exposing
     def fail(*args, **kwargs):
         raise error
     monkeypatch.setattr(storage.bar_delivery, "_write", fail)
-    event = closed()
+    event = closed(interval=interval)
     try:
         assert await instance.on_bar_event(event) == "accepted"
         assert storage.bar_delivery.pending()[0]["phase"] == "pending"
-        assert not instance._cache.get_latest(SeriesKey("BTCUSDT", "1m"), 1)
+        assert not instance._cache.get_latest(SeriesKey("BTCUSDT", interval), 1)
         assert not delivered
         assert instance.delivery.snapshot()["degraded"]
         monkeypatch.setattr(storage.bar_delivery, "_write", original)
@@ -124,13 +127,17 @@ async def test_ack_failure_retries_publication_without_duplicate_subscriber_deli
 
 @async_test
 @pytest.mark.parametrize("commit_before_exit", [False, True])
-async def test_process_exit_is_recovered_without_another_ingestion_event(storage, commit_before_exit):
+@pytest.mark.parametrize("interval", ["1s", "1m"])
+async def test_process_exit_is_recovered_without_another_ingestion_event(storage, commit_before_exit, interval):
     path = str(klines_repo.KLINES_DB_PATH)
+    event_payload = payload()
+    event_payload["interval"] = interval
+    event_payload["storage_row"]["close_time"] = 60_000 + parse_interval_ms(interval) - 1
     script = "\n".join([
         "import os", "from app.data_engine.storage import klines_repo as repo",
         "repo.KLINES_DB_PATH = " + repr(path),
         "journal = repo.KlinesRepoAdapter().bar_delivery",
-        "journal.enqueue('crash-event', " + repr(payload()) + ")",
+        "journal.enqueue('crash-event', " + repr(event_payload) + ")",
         "journal.commit('crash-event')" if commit_before_exit else "pass", "os._exit(17)",
     ])
     result = await asyncio.to_thread(subprocess.run, [sys.executable, "-B", "-c", script],
@@ -153,10 +160,11 @@ async def test_process_exit_is_recovered_without_another_ingestion_event(storage
 
 
 @async_test
-async def test_receipt_failure_propagates_and_protected_range_survives_until_verified_repair(storage, monkeypatch):
+@pytest.mark.parametrize("interval", ["1s", "1m"])
+async def test_receipt_failure_propagates_and_protected_range_survives_until_verified_repair(storage, monkeypatch, interval):
     instance, bus = bridge(storage)
-    event = closed()
-    key = SeriesKey("BTCUSDT", "1m")
+    event = closed(interval=interval)
+    key = SeriesKey("BTCUSDT", interval)
     await instance.delivery.prepare_series(key)
     enqueue = storage.bar_delivery.enqueue
     monkeypatch.setattr(storage.bar_delivery, "enqueue", lambda *args: (_ for _ in ()).throw(OSError("no receipt")))

@@ -84,6 +84,8 @@ class BinanceUsdmCcxtProfile:
         ccxt_symbol: str,
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
+            if descriptor.interval == "1s":
+                return await exchange.watch_perpetual_second_ohlcv(ccxt_symbol)
             return await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
         if descriptor.stream_type == StreamType.AGG_TRADE:
             return await exchange.watch_trades(

@@ -579,6 +579,8 @@ class BarStateEngine:
         # next-bucket/timeout policy because they have no source-close flag.
         if merge_mode in (MergeMode.SNAPSHOT, MergeMode.PRICE_ONLY):
             state.requires_authoritative_close = True
+        if merge_mode == MergeMode.SNAPSHOT:
+            state.quality_source = "trade_history_verified" if bar_input.extra.get("trade_coverage_verified") is True else ""
 
     # ── Public: State Queries ────────────────────────────────
 

@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from app.core import market as core_market
 from app.data_engine import interval_policy
 from app.data_engine.bar_aggregator import (
@@ -768,7 +770,8 @@ def test_data_manager_failed_start_rolls_back_all_targets_before_best_effort_sto
     asyncio.run(_run())
 
 
-def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None:
+@pytest.mark.parametrize("interval,width_ms", [("1s", 1000), ("1m", 60_000)])
+def test_data_manager_stream_leases_reuse_upstream_until_last_consumer(interval, width_ms) -> None:
     async def _run() -> None:
         active_during_physical_stop: list[bool] = []
 
@@ -780,7 +783,7 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
                 active_during_physical_stop.append(bool(
                     dm.bar_aggregator.get_active_bars(
                         "BTC-USDT",
-                        "1m",
+                        interval,
                         exchange="okx",
                         market_type="spot",
                     )
@@ -813,20 +816,20 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
 
         await dm.ensure_stream(
             "BTC-USDT",
-            "1m",
+            interval,
             exchange="okx",
             market_type="spot",
             consumer_id="watchlist:a",
         )
         await dm.ensure_stream(
             "BTC-USDT",
-            "1m",
+            interval,
             exchange="okx",
             market_type="spot",
             consumer_id="chart:b",
         )
 
-        key = ("okx", "spot", "BTC-USDT", "1m")
+        key = ("okx", "spot", "BTC-USDT", interval)
         assert factory.starts == [key]
         closed_events = []
 
@@ -835,21 +838,21 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
 
         dm.bar_aggregator.publisher.on_bar_closed(_capture_closed)
         bucket_start_ms = dm.bar_aggregator.compute_bucket(
-            "1m", int(time.time() * 1000),
+            interval, int(time.time() * 1000),
         )
         assert bucket_start_ms is not None
         await dm.bar_aggregator.ingest_bar_input(
             "okx",
             "spot",
             "BTC-USDT",
-            "1m",
+            interval,
             BarInput(
                 symbol="BTC-USDT",
-                source_interval="1m",
+                source_interval=interval,
                 exchange="okx",
                 market_type="spot",
                 open_time_ms=bucket_start_ms,
-                close_time_ms=bucket_start_ms + 59_999,
+                close_time_ms=bucket_start_ms + width_ms - 1,
                 open=10,
                 high=11,
                 low=9,
@@ -862,20 +865,20 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
 
         await dm.release_stream(
             "BTC-USDT",
-            "1m",
+            interval,
             exchange="okx",
             market_type="spot",
             consumer_id="watchlist:a",
         )
 
         assert (
-            dm.get_stream_info("BTC-USDT", "1m", exchange="okx", market_type="spot")
+            dm.get_stream_info("BTC-USDT", interval, exchange="okx", market_type="spot")
             is not None
         )
         assert factory.handles[key].stopped == 0
         assert dm.bar_aggregator.get_bucket_state(
             "BTC-USDT",
-            "1m",
+            interval,
             bucket_start_ms,
             exchange="okx",
             market_type="spot",
@@ -883,7 +886,7 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
 
         await dm.release_stream(
             "BTC-USDT",
-            "1m",
+            interval,
             exchange="okx",
             market_type="spot",
             consumer_id="chart:b",
@@ -891,12 +894,12 @@ def test_data_manager_stream_leases_reuse_upstream_until_last_consumer() -> None
 
         assert factory.handles[key].stopped == 1
         assert (
-            dm.get_stream_info("BTC-USDT", "1m", exchange="okx", market_type="spot")
+            dm.get_stream_info("BTC-USDT", interval, exchange="okx", market_type="spot")
             is None
         )
         assert dm.bar_aggregator.get_bucket_state(
             "BTC-USDT",
-            "1m",
+            interval,
             bucket_start_ms,
             exchange="okx",
             market_type="spot",

@@ -82,7 +82,7 @@ def _indicator_refresh_limit(
                 interval=interval,
                 purpose=IntervalPurpose.HISTORY,
             )
-            if route.kind is IntervalRouteKind.NATIVE:
+            if route.kind in (IntervalRouteKind.NATIVE, IntervalRouteKind.TRADE):
                 return required or _INDICATOR_REFRESH_TARGET_LIMIT
             base_interval = route.base_interval
         except Exception:

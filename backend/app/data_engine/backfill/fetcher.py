@@ -336,6 +336,8 @@ class HistoricalFetcher:
         pages_fetched = 0
         source_complete = False
         empty_reason: str | None = None
+        native_empty_ranges: list[list[int]] = []
+        trade_empty_ranges: list[list[int]] = []
 
         interval_ms = parse_interval_ms(task.interval)
         if interval_ms is None:
@@ -390,6 +392,8 @@ class HistoricalFetcher:
 
             # Fetch with retry
             page_bars: list[FetchedBar] = []
+            native_page = None
+            trade_page = None
             retry_count = 0
             success = False
             max_attempts = max_retries + 1
@@ -472,6 +476,19 @@ class HistoricalFetcher:
                     self._metrics.inc("http_pages_fetched")
 
                     for msg in raw_messages:
+                        if isinstance(msg.payload, dict) and msg.payload.get("trade_candle_page") == f"{task.exchange}.{task.market_type}":
+                            from app.exchanges.trade_candles import uses_trade_candles
+                            if not uses_trade_candles(task.exchange, task.market_type, task.interval) or msg.payload.get("interval") != task.interval:
+                                raise ValueError("Unexpected trade candle coverage marker")
+                            trade_page = msg.payload
+                            continue
+                        if (
+                            task.exchange == "upbit" and task.market_type == "spot" and task.interval == "1s"
+                            and isinstance(msg.payload, dict)
+                            and msg.payload.get("native_second_page") == "upbit.spot"
+                        ):
+                            native_page = msg.payload
+                            continue
                         msg.source = DataSource.HTTP_BACKFILL
                         event = normalizer.parse_raw(msg)
                         if event is None:
@@ -505,6 +522,34 @@ class HistoricalFetcher:
                 break
 
             pages_fetched += 1
+
+            if trade_page is not None:
+                page_end = int(trade_page["end_ms"])
+                if req.start_ms is not None and page_end < req.start_ms:
+                    errors.append("Trade candle page did not advance")
+                    break
+                trade_empty_ranges.extend(trade_page["empty_ranges"])
+                all_bars.extend(page_bars)
+                current_request = (
+                    TransportRequest(descriptor=req.descriptor, limit=batch_size,
+                                     start_ms=page_end + interval_ms, end_ms=req.end_ms)
+                    if req.end_ms is not None and page_end + interval_ms <= req.end_ms else None
+                )
+                await self._fire_progress(task, len(all_bars), estimated_total)
+                continue
+
+            if native_page is not None:
+                native_empty_ranges.extend(native_page["empty_ranges"])
+                all_bars.extend(page_bars)
+                page_end = int(native_page["end_ms"])
+                current_request = (
+                    TransportRequest(descriptor=req.descriptor, limit=batch_size,
+                                     start_ms=page_end + 1000, end_ms=req.end_ms)
+                    if req.end_ms is not None and page_end < req.end_ms // 1000 * 1000
+                    else None
+                )
+                await self._fire_progress(task, len(all_bars), estimated_total)
+                continue
 
             if not page_bars and not raw_messages:
                 # Preserve a successful empty-page signal separately from
@@ -577,6 +622,8 @@ class HistoricalFetcher:
                 ),
                 "history_lane": task.metadata.get("history_lane", "rest"),
                 "rest_pages": pages_fetched,
+                "native_empty_ranges": native_empty_ranges,
+                "trade_empty_ranges": trade_empty_ranges,
             },
         )
         self._last_history_diagnostics = {
@@ -918,7 +965,7 @@ class HistoricalFetcher:
                 trades=int(data.get("trades", 0)),
                 taker_buy_base=float(data.get("taker_buy_base", 0)),
                 taker_buy_quote=float(data.get("taker_buy_quote", 0)),
-                source="backfill",
+                source="trade_history_verified" if data.get("trade_coverage_verified") is True else "backfill",
                 enhanced_fields=enhanced_fields,
                 series_identity=identity_from_metadata(
                     task.exchange,

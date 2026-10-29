@@ -34,6 +34,8 @@ class SourceQuality:
 # deliberately replaceable so a later revision from the same authority can
 # amend values without requiring another schema column.
 SOURCE_QUALITY: dict[str, SourceQuality] = {
+    # Complete provider trade windows reduced deterministically into candles.
+    "trade_history_verified": SourceQuality(60, FinalityTrust.TRUSTED_FINAL),
     # Legacy timeout/teardown CLOSED rows did not prove an exchange close.
     "data_manager_closed": SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Explicit exchange close (for example Binance kline x=true).

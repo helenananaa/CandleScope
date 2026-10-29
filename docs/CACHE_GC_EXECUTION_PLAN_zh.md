@@ -1,5 +1,8 @@
 # Cache GC 与存储清理实施计划
 
+> #131 更新：下文早期阶段的“1s 仅内存 / 不可从存储恢复”描述已被替代。
+> 当前行为见 `backend/app/data_engine/data_manager/README_zh.md` 的“秒级历史”。
+
 > 目标：把 CandleScope 的前端内存缓存、后端 DataManager 内存缓存、指标运行时缓存和 SQLite K 线存储清理，逐步升级成可观测、可预估、可分层执行的 GC 系统。本文是实施计划，不代表当前行为已经全部具备。
 
 ## 核心结论

@@ -60,6 +60,7 @@ export function canResolveIntervalForSeriesIdentity(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   seriesIdentity: KlineSeriesIdentityInput | null | undefined,
+  tradeCandlesAvailable = false,
 ): boolean {
   // Derived history is currently keyed only by the legacy exchange identity.
   // Keep semantic vendor/venue/session series on provider-native intervals so
@@ -68,7 +69,12 @@ export function canResolveIntervalForSeriesIdentity(
     intervalsSemanticallyEquivalent(nativeInterval, interval)
   ))) return true;
   return isLegacyKlineSeriesIdentity(exchange, seriesIdentity)
-    && canResolveIntervalFromNativeValues(interval, nativeIntervalValues);
+    && canResolveIntervalFromNativeValues(interval, nativeIntervalValues, tradeCandlesAvailable);
+}
+
+export function hasTradeCandleSource(exchangeCatalog: ExchangeCatalog | null, exchange: ExchangeId, marketType: MarketType = "spot"): boolean {
+  const markets = exchangeCatalog?.[String(exchange).toLowerCase()]?.limits["trade_candles.markets"];
+  return Array.isArray(markets) && markets.includes(marketType);
 }
 
 export interface ResolveSupportedIntervalOptions {
@@ -105,6 +111,7 @@ export function resolveSupportedInterval({
       custom,
       nativeIntervals.map((item) => item.value),
       seriesIdentity,
+      hasTradeCandleSource(exchangeCatalog, exchange, marketType),
     )
   ) return canonicalizeIntervalValue(custom) || custom;
   if (nativeIntervals.length === 0) {
@@ -155,6 +162,7 @@ export function getFallbackIntervalAfterCustomRemove({
         record.value,
         nativeValues,
         seriesIdentity,
+        hasTradeCandleSource(exchangeCatalog, exchange, marketType),
       )
     ))
     .sort((left, right) => (right.lastUsedAt || 0) - (left.lastUsedAt || 0))[0];

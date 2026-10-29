@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 from app.core.executors import run_storage
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
-from app.data_engine.interval_policy import is_ephemeral_interval
 
 from ..bar_aggregator import BarEvent, BarEventType, BarFinality, BarState
 from .cache import BarCache
@@ -109,7 +108,7 @@ class AggregatorBridge:
         dm_event = DataEvent(dm_event_type, key, bar_data, timestamp_ms=event.timestamp_ms)
         if event.previous_bar is not None:
             dm_event.previous_bar = BarData.from_bar_state(event.previous_bar)
-        if storage_source is not None and not is_ephemeral_interval(key.interval) and self.delivery.journal is not None:
+        if storage_source is not None and self.delivery.journal is not None:
             # Snapshot mutable aggregator state before any thread/await boundary.
             fields = ("time", "open", "high", "low", "close", "volume", "is_closed", "source",
                       "quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
@@ -148,9 +147,6 @@ class AggregatorBridge:
         was not applicable or the legacy backend did not expose a row count.
         Storage failures propagate; they are never quality rejections.
         """
-        if is_ephemeral_interval(bar_state.interval):
-            return None
-
         storage = self._storage_provider()
         if storage is None:
             return None
@@ -200,6 +196,8 @@ class AggregatorBridge:
         finality = getattr(bar_state, "finality", None)
         if getattr(finality, "value", finality) != BarFinality.AUTHORITATIVE.value:
             return None
+        if bar_state.quality_source == "trade_history_verified":
+            return "trade_history_verified"
         if event_type == DataEventType.BAR_AMENDED:
             return "data_manager_amended"
         return {

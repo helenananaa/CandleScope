@@ -204,6 +204,7 @@ test("settings normalization validates Line Break runtime options", () => {
 
 test("settings storage and GC limits fail closed on malformed values", () => {
   assert.deepEqual(parseStoredSettings("{broken").cacheLimits, {
+    seconds: 86400,
     minutes: 200000,
     hours: 50000,
     daily: 0,
@@ -231,6 +232,7 @@ test("settings storage and GC limits fail closed on malformed values", () => {
     sqliteStorageBudgetBytes: true,
   });
   assert.deepEqual(coercionTraps.cacheLimits, {
+    seconds: 86400,
     minutes: 200000,
     hours: 50000,
     daily: 0,
@@ -238,4 +240,14 @@ test("settings storage and GC limits fail closed on malformed values", () => {
   assert.equal(coercionTraps.ephemeralCacheBars, 86400);
   assert.equal(coercionTraps.frontendCacheBudgetBytes, 64 * 1024 * 1024);
   assert.equal(coercionTraps.sqliteStorageBudgetBytes, null);
+});
+
+
+test("stored settings gain a seconds tier without changing unlimited retention", () => {
+  const older = normalizeSettings({ cacheLimits: { minutes: 100, hours: 20, daily: 0 } });
+  assert.equal(older.cacheLimits.seconds, 86400);
+  assert.equal(older.cacheLimits.minutes, 100);
+  assert.equal(normalizeSettings({ cachePreset: "unlimited" }).cacheLimits.seconds, 0);
+  assert.equal(normalizeSettings({ cacheLimits: { seconds: 3600 } }).cacheLimits.seconds, 3600);
+  assert.equal(normalizeSettings({ cacheLimits: { seconds: -1 } }).cacheLimits.seconds, 86400);
 });

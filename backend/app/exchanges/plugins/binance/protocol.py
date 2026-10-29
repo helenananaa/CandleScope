@@ -99,6 +99,8 @@ class BinanceExchangeProtocol:
             desc.market_type,
             history=bool(getattr(req, "history", False)),
         )
+        if desc.market_type == "futures" and desc.stream_type.value == "kline" and desc.interval == "1s":
+            path = "/fapi/v1/continuousKlines"
         if path is None:
             return None
         return RestRequestSpec(
@@ -170,6 +172,9 @@ class BinanceExchangeProtocol:
         }
 
         if desc.stream_type.value == "kline":
+            if desc.market_type == "futures" and desc.interval == "1s":
+                params["pair"] = params.pop("symbol")
+                params["contractType"] = "PERPETUAL"
             params["interval"] = desc.interval
             params["limit"] = min(max(int(req.limit or 1), 1), 1000)
             if req.start_ms is not None:
@@ -242,6 +247,8 @@ class BinanceExchangeProtocol:
             market_type=descriptor.market_type,
         ).lower()
         if descriptor.stream_type.value == "kline":
+            if descriptor.market_type == "futures" and descriptor.interval == "1s":
+                return f"{symbol}_perpetual@continuousKline_1s"
             return f"{symbol}@kline_{descriptor.interval}"
         if descriptor.stream_type.value == "depth":
             levels, update_interval_ms = self._partial_depth_stream_params(descriptor)

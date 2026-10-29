@@ -14,7 +14,7 @@ export const chartSettingsPatch = object({
 });
 const appearancePatch = object({ theme: optional(choice(["dark", "light", "system", "custom"])), customBg: optional(text(64)),
   upColor: optional(text(64)), downColor: optional(text(64)), timezone: optional(text(128)), locale: optional(choice(LOCALES)) });
-const cachePatch = object({ cachePreset: optional(text(64)), cacheLimits: optional(object({ minutes: number(0, 100_000_000, true), hours: number(0, 100_000_000, true), daily: number(0, 100_000_000, true) })),
+const cachePatch = object({ cachePreset: optional(text(64)), cacheLimits: optional(object({ seconds: optional(number(0, 100_000_000, true)), minutes: number(0, 100_000_000, true), hours: number(0, 100_000_000, true), daily: number(0, 100_000_000, true) })),
   ephemeralCacheBars: optional(number(1, 10_000_000, true)), frontendCacheBudgetBytes: optional(number(1, 1e12, true)),
   sqliteStorageBudgetBytes: optional(nullable(number(1, 1e15, true))), storageRowLimitsEnabled: optional(bool) });
 

@@ -54,6 +54,7 @@ export interface TargetBarRequestPlanInput {
   nativeIntervals: readonly IntervalString[];
   sourcePaddingBars?: number;
   sourceRowBudget: number;
+  tradeCandlesAvailable?: boolean;
 }
 
 /**
@@ -66,6 +67,7 @@ export function planTargetBarRequest({
   nativeIntervals,
   sourcePaddingBars = DERIVED_INTERVAL_SOURCE_PADDING_BARS,
   sourceRowBudget,
+  tradeCandlesAvailable = false,
 }: TargetBarRequestPlanInput): TargetBarRequestPlan {
   const desired = Math.floor(desiredTargetBars);
   const budget = Math.floor(sourceRowBudget);
@@ -124,6 +126,13 @@ export function planTargetBarRequest({
     baseSeconds = candidateSeconds;
   }
   if (!baseInterval || baseSeconds <= 0) {
+    if (tradeCandlesAvailable && getIntervalSemanticSpec(interval)?.alignment === "fixed-epoch") {
+      // Trade count is not proportional to candle count. Bound each interactive
+      // request to ten minutes / 100 buckets; explicit downloads paginate.
+      const targetBars = Math.min(desired, budget, 100, Math.max(1, Math.floor(600 / targetSeconds)));
+      return { baseInterval: interval, blockedReason: null, budgetLimited: targetBars < desired,
+        derived: true, estimatedSourceRows: targetBars, sourceFactor: 1, targetBars };
+    }
     return {
       baseInterval: null,
       blockedReason: "unresolved-source",

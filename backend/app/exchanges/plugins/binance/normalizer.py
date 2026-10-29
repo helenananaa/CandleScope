@@ -140,11 +140,20 @@ class BinanceNormalizer:
         )
 
     def _parse_ws_kline(self, payload: dict, msg: RawMessage) -> MarketEvent | None:
-        if payload.get("e") != "kline":
-            return None
-
         kline = payload.get("k")
         if not isinstance(kline, dict):
+            return None
+        continuous = payload.get("e") == "continuous_kline"
+        if continuous:
+            if (
+                self._descriptor.market_type != "futures"
+                or self._descriptor.interval != "1s"
+                or payload.get("ct") != "PERPETUAL"
+                or str(payload.get("ps", "")).upper() != self._descriptor.symbol.upper()
+                or kline.get("i") != "1s"
+            ):
+                return None
+        elif payload.get("e") != "kline":
             return None
 
         data = {

@@ -17,6 +17,7 @@ export interface WatchlistGroup {
 export type IntervalCandidate = IntervalString | { value?: unknown };
 
 export interface FullSubscriptionOptions {
+  tradeCandlesAvailable?: boolean;
   nativeIntervals?: IntervalCandidate[];
   customIntervalRecords?: IntervalCandidate[];
 }

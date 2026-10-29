@@ -284,7 +284,10 @@ class GapDetector:
             logger.warning("Cannot parse interval '%s', skipping", interval)
             return []
 
-        calendar = self._resolve_calendar(exchange, market_type, symbol)
+        from app.data_engine.history.exchange_policy import native_kline_calendar
+        calendar = native_kline_calendar(exchange, market_type, interval, symbol)
+        if calendar is None:
+            calendar = self._resolve_calendar(exchange, market_type, symbol)
         if calendar is None:
             self._metrics.inc("calendar_resolution_failures")
             return []

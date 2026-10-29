@@ -16,6 +16,7 @@ export type ChartTheme = "dark" | "light" | "system" | "custom";
 export type PriceBoxSizeMode = "atr" | "traditional";
 
 export interface CacheRowLimits {
+  seconds: number;
   minutes: number;
   hours: number;
   daily: number;
@@ -66,7 +67,7 @@ export const DEFAULT_SETTINGS: ChartSettings = {
   kagiReversalAmount: 1,
   lineBreakNumberOfLines: 3,
   cachePreset: "standard",
-  cacheLimits: { minutes: 200000, hours: 50000, daily: 0 },
+  cacheLimits: { seconds: 86400, minutes: 200000, hours: 50000, daily: 0 },
   ephemeralCacheBars: 86400,
   frontendCacheBudgetBytes: 64 * 1024 * 1024,
   sqliteStorageBudgetBytes: null,
@@ -151,6 +152,7 @@ export function normalizeSettings(settings: unknown = {}): ChartSettings {
     : DEFAULT_SETTINGS.lineBreakNumberOfLines;
   const cacheLimits = isRecord(source.cacheLimits) ? source.cacheLimits : {};
   normalized.cacheLimits = {
+    seconds: boundedInteger(cacheLimits.seconds, source.cachePreset === "unlimited" ? 0 : DEFAULT_SETTINGS.cacheLimits.seconds, 0, 100_000_000),
     minutes: boundedInteger(cacheLimits.minutes, DEFAULT_SETTINGS.cacheLimits.minutes, 0, 100_000_000),
     hours: boundedInteger(cacheLimits.hours, DEFAULT_SETTINGS.cacheLimits.hours, 0, 100_000_000),
     daily: boundedInteger(cacheLimits.daily, DEFAULT_SETTINGS.cacheLimits.daily, 0, 100_000_000),

@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, replace
 from typing import Any
 
-from app.data_engine.interval_policy import is_ephemeral_interval
+from app.data_engine.interval_policy import is_one_second_interval
 
 from .models import SeriesKey, StreamStatus
 
@@ -315,7 +315,8 @@ def _cache_entries(
             "revision": int(snapshot.get("revision", 0) or 0),
             "access_revision": int(snapshot.get("access_revision", 0) or 0),
             "idle_ms": idle_ms,
-            "ephemeral": is_ephemeral_interval(key.interval),
+            "ephemeral": False,
+            "second_cache": is_one_second_interval(key.interval),
             "active": active,
             "subscribed": subscribed,
             "subscriber_count": subscriber_count,
@@ -342,10 +343,8 @@ def _candidate_action(
         or pressure.get("over_series")
         or pressure.get("runtime_hard_pressure")
     )
-    if entry["ephemeral"]:
-        keep_bars = int(policy.ephemeral_keep_bars or 0)
-        if keep_bars <= 0 or entry["bars"] <= keep_bars:
-            return None
+    keep_bars = int(policy.ephemeral_keep_bars or 0)
+    if entry["second_cache"] and 0 < keep_bars < entry["bars"]:
         if not idle_enough and not under_pressure:
             return None
         would_free = entry["bars"] - keep_bars
@@ -431,14 +430,10 @@ def _intent_rank(intent: dict[str, Any]) -> int:
 
 
 def _restore_cost(entry: dict[str, Any], matched_intents: list[dict[str, Any]]) -> tuple[float, str]:
-    if entry.get("ephemeral"):
-        return 70.0, "ephemeral-not-storage-backed"
     if any(intent.get("stream_required") for intent in matched_intents):
         return 65.0, "active-stream-or-workflow-intent"
     if any("alert" in str(intent.get("source", "")) for intent in matched_intents):
         return 80.0, "alert-workflow"
-    if entry.get("interval") and is_ephemeral_interval(str(entry.get("interval"))):
-        return 70.0, "ephemeral-interval"
     return 20.0, "sqlite-reload"
 
 

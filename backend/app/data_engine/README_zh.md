@@ -203,7 +203,7 @@ cache merge + BACKFILL_COMPLETED / BACKFILL_FAILED
 - `POST /api/v1/settings/storage/repair`：从权威 base interval 重建 custom interval storage。
 - `POST /api/v1/settings/storage/gap-scan`：扫描已存标准周期缺口并提交 backfill。
 - `GET /api/v1/settings/storage/health`：查看 gap ledger、audit series 和 backfill coordinator 状态。
-- `POST /api/v1/settings/cache-limits`：更新保留策略和 ephemeral series 限制。
+- `POST /api/v1/settings/cache-limits`：更新SQLite 保留策略和 1s 内存缓存限制。
 
 ## 目录索引
 

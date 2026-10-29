@@ -132,7 +132,10 @@ class ManualHistoryPlanner:
             normalized_market = "spot"
         else:
             normalized_market = market_value
-            blocking.append(PlanErrorCode.INVALID_SELECTION)
+            # Generic providers expose settlement-specific market families.
+            # The interval resolver below validates the venue capability too.
+            if market_value not in {"swap", "swap.linear", "swap.inverse", "future", "future.linear", "future.inverse", "option"}:
+                blocking.append(PlanErrorCode.INVALID_SELECTION)
 
         normalized_symbols = self._normalize_symbols(
             symbols, exchange=normalized_exchange, market_type=normalized_market
@@ -357,6 +360,17 @@ class ManualHistoryPlanner:
             )
 
         width_ms = parse_interval_ms(route.canonical_interval) or 0
+        from app.data_engine.history.native_seconds import native_second_history_start
+        history_start = native_second_history_start(exchange, route.source_interval, captured_at_ms)
+        if route.kind is IntervalRouteKind.TRADE:
+            from app.exchanges.trade_candles import trade_candle_profile
+            profile = trade_candle_profile(exchange, market_type)
+            if profile is not None and profile.retention_ms is not None:
+                history_start = captured_at_ms - profile.retention_ms
+        boundary_reason = None
+        if history_start is not None and requested_start_ms < history_start:
+            requested_start_ms = history_start
+            boundary_reason = "provider_retention"
         spec = parse_interval_spec(route.canonical_interval)
         if spec is not None:
             aligned = spec.floor_ms(int(requested_start_ms))
@@ -391,7 +405,7 @@ class ManualHistoryPlanner:
                     source_end = min(source_end, source_last_closed)
                 source_rows = max(0, ((source_end - aligned) // source_width) + 1)
         strategy = "REST"
-        if error is None and self._archive_enabled and (source_rows or 0) >= REST_PAGE_BARS * ARCHIVE_MIN_REST_PAGES:
+        if error is None and route.kind is not IntervalRouteKind.TRADE and self._archive_enabled and (source_rows or 0) >= REST_PAGE_BARS * ARCHIVE_MIN_REST_PAGES:
             strategy = "ARCHIVE_PREFERRED_WITH_REST_TAIL"
         elif not self._archive_enabled:
             strategy = "REST"
@@ -407,9 +421,7 @@ class ManualHistoryPlanner:
             symbol=symbol,
             requested_interval=interval,
             canonical_interval=route.canonical_interval,
-            route_kind=(
-                "NATIVE" if route.kind is IntervalRouteKind.NATIVE else "DERIVED"
-            ),
+            route_kind="NATIVE" if route.kind is IntervalRouteKind.NATIVE else "DERIVED",
             source_interval=route.source_interval,
             effective_start_ms=aligned,
             initial_end_open_ms=int(last_closed or aligned),
@@ -418,6 +430,7 @@ class ManualHistoryPlanner:
             estimated_source_rows=source_rows,
             existing_coverage=coverage,
             error=error,
+            boundary_reason=boundary_reason,
         )
 
     def _existing_coverage(

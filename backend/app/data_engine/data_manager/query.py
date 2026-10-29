@@ -35,7 +35,6 @@ from app.data_engine.interval_policy import (
     IntervalAlignment,
     compute_bucket_end_ms,
     compute_bucket_start_ms,
-    is_ephemeral_interval,
     latest_eligible_bar_open_ms,
     parse_custom_interval,
     parse_interval_ms,
@@ -284,8 +283,7 @@ class QueryEngine:
             2. Storage (if cache miss or partial)
             3. Backfill trigger (if storage also missing)
 
-        Ephemeral intervals (e.g. 1s) use a cache-only fast path:
-        no storage reads, no backfill triggers.
+        Native 1s intervals use the same storage and backfill lifecycle.
         """
         t0 = time.monotonic()
         io_metrics = _QueryIOMetrics()
@@ -303,6 +301,13 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
+                "Trade candles require the default crypto series identity",
+                exchange=exchange, market_type=market_type, interval=interval,
+                purpose=IntervalPurpose.HISTORY,
+            )
 
         if route.kind is IntervalRouteKind.DERIVED and not _materialized_only:
             if not identity.is_legacy_default_for(exchange):
@@ -347,18 +352,6 @@ class QueryEngine:
                 )
             )
 
-        # Ephemeral intervals are cache-only — skip storage and backfill
-        if is_ephemeral_interval(interval):
-            effective_limit = min(
-                limit or self._cfg.default_limit,
-                self._cfg.max_limit,
-            )
-            start_s = start_ms // 1000 if start_ms else None
-            end_s = end_ms // 1000 if end_ms else None
-            return self._attach_io_metrics(
-                self._query_cache_only(key, start_s, end_s, effective_limit, t0),
-                io_metrics,
-            )
         effective_limit = min(
             limit or self._cfg.default_limit,
             self._cfg.max_limit,
@@ -686,6 +679,13 @@ class QueryEngine:
         market_type = route.market_type
         interval = route.canonical_interval
         identity = resolve_kline_series_identity(exchange, series_identity)
+        if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(exchange):
+            raise IntervalResolutionError(
+                IntervalResolutionErrorCode.SERIES_IDENTITY_UNSUPPORTED,
+                "Trade candles require the default crypto series identity",
+                exchange=exchange, market_type=market_type, interval=interval,
+                purpose=IntervalPurpose.HISTORY,
+            )
         if route.kind is IntervalRouteKind.DERIVED and not _materialized_only:
             if not identity.is_legacy_default_for(exchange):
                 raise IntervalResolutionError(
@@ -747,24 +747,6 @@ class QueryEngine:
         expected_closed_through_s = (
             eligible_end_ms // 1000 if eligible_end_ms is not None else None
         )
-
-        # Ephemeral intervals are cache-only — skip storage and backfill
-        if is_ephemeral_interval(interval):
-            cached = self._cache.get_before(key, before_s, effective_limit)
-            return self._attach_io_metrics(self._apply_history_contract(QueryResult(
-                bars=cached,
-                symbol=key.symbol,
-                interval=key.interval,
-                exchange=key.exchange,
-                market_type=key.market_type,
-                **key.identity.to_dict(),
-                source=QuerySource.CACHE,
-                total=len(cached),
-                has_more=self._cache.series_count(key) > len(cached),
-                cache_hit=bool(cached),
-                backfill_triggered=False,
-                metadata={"ephemeral": True},
-            ), planned, expected_closed_through_s=expected_closed_through_s), io_metrics)
 
         # Try cache first
         cached = self._cache.get_before(key, before_s, effective_limit)
@@ -1095,6 +1077,13 @@ class QueryEngine:
             )
 
     def _calendar_for(self, key: SeriesKey):
+        from app.exchanges.trade_candles import uses_trade_candles
+        if key.identity.is_legacy_default_for(key.exchange) and uses_trade_candles(key.exchange, key.market_type, key.interval):
+            from app.data_engine.storage.trade_empty_buckets import make_calendar
+            return make_calendar(key.exchange, key.market_type, key.symbol, key.interval)
+        if key.exchange == "upbit" and key.market_type == "spot" and key.interval == "1s" and key.identity.is_legacy_default_for(key.exchange):
+            from app.data_engine.storage.native_empty_seconds import make_calendar
+            return make_calendar(key.symbol)
         if self._history_policy is None:
             return None
         try:
@@ -1958,54 +1947,6 @@ class QueryEngine:
                 missing_ranges.append(missing_range)
         return bars
 
-    def _query_cache_only(
-        self,
-        key: SeriesKey,
-        start_s: int | None,
-        end_s: int | None,
-        limit: int,
-        started_at: float,
-    ) -> QueryResult:
-        """Ephemeral interval query — cache only, no storage, no backfill.
-
-        Used for intervals like 1s where data is never persisted to DB.
-        Returns whatever is currently in the in-memory cache.
-        """
-        if start_s is not None or end_s is not None:
-            bars = self._cache.query(key, start_s, end_s, limit)
-        else:
-            bars = self._cache.get_latest(key, limit)
-
-        if bars:
-            with self._metrics_lock:
-                self._cache_hits += 1
-        elapsed = time.monotonic() - started_at
-        result = QueryResult(
-            bars=bars,
-            symbol=key.symbol,
-            interval=key.interval,
-            exchange=key.exchange,
-            market_type=key.market_type,
-            **key.identity.to_dict(),
-            source=QuerySource.CACHE,
-            total=len(bars),
-            has_more=self._cache.series_count(key) > len(bars),
-            cache_hit=bool(bars),
-            backfill_triggered=False,
-            metadata={"elapsed_ms": round(elapsed * 1000, 2), "ephemeral": True},
-        )
-        eligible_end_ms = self._latest_eligible_open_ms(
-            key,
-            now_ms=int(time.time() * 1000),
-            requested_end_ms=(end_s * 1000 if end_s is not None else None),
-        )
-        return self._apply_finality_contract(
-            result,
-            expected_closed_through_s=(
-                eligible_end_ms // 1000 if eligible_end_ms is not None else None
-            ),
-        )
-
     def _is_complete(
         self,
         bars: list[BarData],
@@ -2248,6 +2189,10 @@ class QueryEngine:
                 effective_start,
                 effective_end,
             )
+            return None
+
+        calendar = self._calendar_for(key)
+        if calendar is not None and calendar.first_expected_open(effective_start, effective_end, key.interval) is None:
             return None
 
         planned = self._plan_history_range(key, effective_start, effective_end)

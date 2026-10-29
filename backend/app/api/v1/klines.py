@@ -268,15 +268,11 @@ def _resolve_interval(
         interval=interval,
         purpose=purpose,
     )
-    base_interval = (
-        route.native_interval
-        if route.kind is IntervalRouteKind.NATIVE
-        else route.base_interval
-    )
+    base_interval = route.source_interval
     base_ms = parse_interval_ms(base_interval or "") or route.spec.nominal_ms
     factor = max(1, route.spec.nominal_ms // base_ms)
     return {
-        "is_custom": route.kind is IntervalRouteKind.DERIVED,
+        "is_custom": route.kind is not IntervalRouteKind.NATIVE,
         "custom_seconds": route.spec.nominal_ms // 1000,
         "base_interval": base_interval,
         "factor": factor,

@@ -11,7 +11,7 @@ from typing import Any
 from app.data_engine.interval_policy import (
     get_tier_for_interval,
     is_custom_interval,
-    is_ephemeral_interval,
+    is_one_second_interval,
     parse_interval_ms,
 )
 
@@ -30,7 +30,7 @@ STORAGE_PLAN_TTL_MS = 30_000
 
 
 class RetentionService:
-    """Owns persistent and ephemeral retention maintenance."""
+    """Owns persistent history and memory-cache retention maintenance."""
 
     def __init__(
         self,
@@ -45,10 +45,13 @@ class RetentionService:
         self._cache = cache
         self._event_bus = event_bus
         self._storage_provider = storage_provider
-        self.db_limits: dict[str, int] = db_limits or {
-            "minutes": 200_000,
-            "hours": 50_000,
-            "daily": 0,
+        self.db_limits: dict[str, int] = {
+            "seconds": 86_400,
+            **(db_limits or {
+                "minutes": 200_000,
+                "hours": 50_000,
+                "daily": 0,
+            }),
         }
         self.sqlite_budget_bytes = _optional_positive_int(sqlite_budget_bytes)
         self.storage_row_limits_enabled = bool(storage_row_limits_enabled)
@@ -61,13 +64,13 @@ class RetentionService:
         sqlite_budget_bytes: int | None = None,
         storage_row_limits_enabled: bool | None = None,
     ) -> None:
-        """Update DB and ephemeral cache retention limits."""
+        """Update SQLite retention and the separate 1s memory-cache capacity."""
         if db_limits is not None:
             self.db_limits.update(db_limits)
             logger.info("DB retention limits updated: %s", self.db_limits)
         if ephemeral_bars is not None:
             self._cache.set_ephemeral_limit(ephemeral_bars)
-            logger.info("Ephemeral cache limit updated: %d bars", ephemeral_bars)
+            logger.info("1s memory cache limit updated: %d bars", ephemeral_bars)
         if sqlite_budget_bytes is not None:
             self.sqlite_budget_bytes = _optional_positive_int(sqlite_budget_bytes)
             logger.info("SQLite storage budget updated: %s bytes", self.sqlite_budget_bytes)
@@ -216,7 +219,7 @@ class RetentionService:
             symbol = str(item.get("symbol") or "").strip().upper()
             exchange = str(item.get("exchange") or "binance").strip().lower()
             market_type = str(item.get("market_type") or "spot").strip().lower()
-            if not symbol or not interval or is_ephemeral_interval(interval):
+            if not symbol or not interval:
                 continue
 
             tier = get_tier_for_interval(interval)
@@ -624,7 +627,7 @@ class RetentionService:
         )
 
     async def ephemeral_trim_loop(self) -> None:
-        """Background loop: trim ephemeral cache series every 30 minutes."""
+        """Background loop: trim 1s memory cache every 30 minutes."""
         try:
             while True:
                 await asyncio.sleep(30 * 60)
@@ -633,13 +636,13 @@ class RetentionService:
             pass
 
     async def run_ephemeral_trim(self) -> None:
-        """One pass of ephemeral cache trimming."""
+        """One pass of 1s memory-cache trimming."""
         limit = self._cache.get_ephemeral_limit()
         trimmed_total = 0
         skipped = 0
 
         for key in self._cache.get_all_keys():
-            if not is_ephemeral_interval(key.interval):
+            if not is_one_second_interval(key.interval):
                 continue
 
             if self._event_bus.get_direct_subscriber_count(key) > 0:
@@ -650,7 +653,7 @@ class RetentionService:
 
         if trimmed_total > 0 or skipped > 0:
             logger.info(
-                "Ephemeral trim: %d bars trimmed, %d series skipped (active)",
+                "1s memory cache trim: %d bars trimmed, %d series skipped (active)",
                 trimmed_total,
                 skipped,
             )

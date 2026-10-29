@@ -146,6 +146,36 @@ class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
         self._emit_raw("kline", message)
         return super().handle_ohlcv(client, message)
 
+    async def watch_perpetual_second_ohlcv(self, symbol: str) -> Any:
+        """Native continuous-contract 1s feed, on CCXT's pooled socket."""
+        await self.load_markets()
+        market = self.market(symbol)
+        if not (market.get("swap") and market.get("linear")):
+            raise ValueError("1s continuous candles require a linear perpetual market")
+        url = self.get_ws_url("future", "market") + "/" + self.stream("future", "multipleOHLCV")
+        message_hash = "ohlcv::" + market["symbol"] + "::1s"
+        request_id = self.request_id(url)
+        return await self.watch_multiple(
+            url, [message_hash],
+            {"method": "SUBSCRIBE", "params": [
+                str(market["id"]).lower() + "_perpetual@continuousKline_1s",
+            ], "id": request_id},
+            [message_hash], {"id": request_id},
+        )
+
+    def handle_message(self, client: Any, message: Any) -> Any:
+        payload = message.get("data", message) if isinstance(message, dict) else message
+        if isinstance(payload, dict) and payload.get("e") == "continuous_kline":
+            kline = payload.get("k")
+            if payload.get("ct") != "PERPETUAL" or not payload.get("ps") or not isinstance(kline, dict) or kline.get("i") != "1s":
+                return None
+            self._emit_raw("kline", payload)
+            # Preserve the original payload for CandleScope. Supply the symbol
+            # only to CCXT's cache projector, which predates continuous klines.
+            projected = {**payload, "e": "kline", "k": {**kline, "s": payload["ps"]}}
+            return super().handle_ohlcv(client, projected)
+        return super().handle_message(client, message)
+
     def handle_trade(self, client: Any, message: Any) -> Any:
         channel = (
             str(message.get("e") or "trade") if isinstance(message, dict) else "trade"

@@ -1,3 +1,4 @@
+import { canResolveIntervalFromNativeValues } from "../../utils/intervals.js";
 import type { IntervalSelectorProps } from "../../components/IntervalSelector.js";
 import type { AppShellViewModelContext } from "../appShellContracts.js";
 
@@ -30,5 +31,6 @@ export function buildIntervalSelectorViewModel({
     onTogglePinCustomInterval: sessionActions.togglePinCustomInterval,
     onClearCustomIntervals: sessionActions.clearCustomIntervals,
     intervalNotice,
+    intervalAvailability: (value) => canResolveIntervalFromNativeValues(value, nativeIntervals.map((item) => item.value), sessionStatus.tradeCandlesAvailable),
   };
 }

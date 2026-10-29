@@ -123,6 +123,7 @@ export interface UseChartBackgroundPrefetchOptions
   activeInterval: IntervalString;
   trackedIntervals: readonly IntervalString[];
   nativeIntervals: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   hasCache: HasMarketCache;
   seriesDataFeed: SeriesDataFeed;
   enabled: boolean;

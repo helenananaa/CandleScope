@@ -55,7 +55,7 @@ ingestion -> bar_aggregator -> DataManager -> API / WS / Indicator
 | `get_subscription_service()` | 获取 subscription tier manager |
 | `repair_custom_storage()` | 重建自定义周期 rows |
 | `scan_and_fill_storage_gaps()` | 手动 gap scan + repair |
-| `update_retention_limits()` | 更新 DB/ephemeral retention 设置 |
+| `update_retention_limits()` | 更新 SQLite 保留策略和 1s 内存缓存设置 |
 | `snapshot()` | 完整诊断快照 |
 | `market_data_control_snapshot()` | 通道 owner、强类型命名空间、就绪状态和 coverage 边界 |
 
@@ -244,3 +244,15 @@ python -m pytest -q \
   tests/test_maintenance_facade.py \
   tests/test_price_subscription_services.py
 ```
+
+## 秒级历史
+
+`1s` 与其他受支持的原生周期共用权威收盘写入日志、SQLite 查询、回补协调器和
+手动下载任务。未收盘或未获权威确认的 K 线不会写成正式历史。交易所能力检查
+保持生效，本次不新增 Binance 合约 1s 路由。
+
+现有 `ephemeral_bars` 设置字段继续表示 1s **内存**容量，与落库独立。SQLite
+保留设置增加 `seconds` 档，启用条数清理时默认每序列保留 86,400 条。条数清理
+仍需显式开启，统一 GC 遵守活跃订阅和手动下载集合的保护范围。冷的 1s 缓存
+可以清除后从 SQLite 读回。没有录制开关、持续采集器或 1s 回放归档。全量自选
+订阅、自定义秒周期仍可能持有 1s 流；最后一个消费者释放后停止上游订阅。
