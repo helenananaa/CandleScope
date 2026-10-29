@@ -75,6 +75,7 @@ class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
         rate_limit_manager: RateLimitManager | None = None,
         rate_limit_policy: RateLimitPolicy | None = None,
         enforce_version: bool = True,
+        fork_kline_enabled: bool = False,
     ) -> None:
         if enforce_version and ccxt.__version__ != SUPPORTED_CCXT_VERSION:
             raise CcxtCompatibilityError(
@@ -82,6 +83,11 @@ class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
                 f"ccxt=={SUPPORTED_CCXT_VERSION}, found {ccxt.__version__}",
             )
         super().__init__(dict(config or {}))
+        self._candlescope_fork_kline_enabled = fork_kline_enabled
+        if fork_kline_enabled:
+            from .fork_kline import require_fork
+
+            require_fork(self)
         self._candlescope_raw_event_sink = raw_event_sink
         self._candlescope_lifecycle_sink = lifecycle_sink
         self._candlescope_closing = False
@@ -143,7 +149,12 @@ class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
         self._candlescope_lifecycle_sink = sink
 
     def handle_ohlcv(self, client: Any, message: Any) -> Any:
-        self._emit_raw("kline", message)
+        payload = (
+            self.parse_candlescope_ws_kline(message)
+            if self._candlescope_fork_kline_enabled
+            else message
+        )
+        self._emit_raw("kline", payload)
         return super().handle_ohlcv(client, message)
 
     def handle_trade(self, client: Any, message: Any) -> Any:
@@ -302,7 +313,10 @@ class CandleScopeBinanceUSDM(SharedSslContextMixin, CcxtBinanceUSDM):
         if sink is None or not isinstance(message, dict):
             return
         nested_kline = message.get("k") if isinstance(message.get("k"), dict) else {}
-        symbol = message.get("s") or message.get("ps") or nested_kline.get("s")
+        symbol = (
+            message.get("s") or message.get("ps")
+            or nested_kline.get("s") or message.get("marketId")
+        )
         result = sink(
             CcxtRawMarketEvent(
                 channel=channel,

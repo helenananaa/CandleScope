@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/helenananaa/ccxt.git",
+  "upstream_version": "4.5.60",
+  "upstream_commit": "72fd71026c8cfc0d9a470a834fcc7ad611be5765",
+  "source_commit": "cc319944cdbab79070965f361bb8a69015c25263",
+  "schema": "candlescope.binance.usdm.kline.v1",
+  "wheel_sha256": "d6bf360bfef5601b02cc13ed6709a1564b0a919137ee40cccdd94d133bf9d0d2",
+  "build_requirements": ["setuptools==80.9.0", "wheel==0.45.1"]
+}

@@ -270,6 +270,10 @@ class IngestionConfig:
             True,
         ),
     )
+    # Opt-in fixed-source CCXT fork; only Binance USD-M trade klines are qualified.
+    ccxt_fork_kline_enabled: bool = field(
+        default_factory=lambda: _env_bool("INGESTION_CCXT_FORK_KLINE_ENABLED", False),
+    )
     # Raw hooks run synchronously in CCXT's websocket reader.  Overflow is a
     # hard health failure rather than a silent data drop.
     ccxt_raw_queue_size: int = field(

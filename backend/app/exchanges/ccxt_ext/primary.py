@@ -208,9 +208,16 @@ class CcxtPrimaryNormalizer:
     ) -> None:
         self._unified = CcxtUnifiedNormalizer(descriptor)
         self._native = native_normalizer
+        self._descriptor = descriptor
 
     def parse(self, message: RawMessage) -> Any:
         payload = message.payload
+        if isinstance(payload, dict) and str(payload.get("schema", "")).startswith(
+            "candlescope.binance.usdm.kline."
+        ):
+            from .fork_kline import normalize_fork_kline
+
+            return normalize_fork_kline(message, self._descriptor)
         if isinstance(payload, dict) and payload.get("schema") == CCXT_UNIFIED_MARKER:
             return self._unified.parse(message)
         return self._native.parse(message)
@@ -412,6 +419,26 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                 "limit": max(1, int(req.limit or 1)),
             }
             futures = descriptor.market_type == "futures"
+            if (
+                descriptor.stream_type == StreamType.KLINE
+                and futures
+                and config.ccxt_fork_kline_enabled
+            ):
+                from .fork_kline import require_fork
+
+                require_fork(exchange)
+                limit = min(params["limit"], 1500)
+                fork_params = {"until": int(req.end_ms)} if req.end_ms is not None else {}
+                values = await exchange.fetch_candlescope_klines(
+                    symbol, descriptor.interval, req.start_ms, limit, fork_params,
+                )
+                return _raw_messages(
+                    descriptor,
+                    values,
+                    "/fapi/v1/klines",
+                    request_limit=limit,
+                    headers=exchange.last_response_headers,
+                )
             if descriptor.stream_type == StreamType.KLINE:
                 params["interval"] = descriptor.interval
                 if req.start_ms is not None:
