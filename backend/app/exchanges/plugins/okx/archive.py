@@ -63,6 +63,12 @@ class OkxKlineArchiveProvider:
             packaging_timezone="UTC+08:00",
             rest_page_size=300,
             checksum_required=False,
+            venue="okx", format_version="okx-candlesticks-10-column-v1",
+            timestamp_unit="ms", volume_unit="base; derivatives contract volume converted by vol_ccy",
+            earliest_period="2023-07", publication_lag_days=2,
+            enhanced_fields=("quote_volume",), validation_grade="local-sha256-and-schema",
+            stability="unstable-website-contract", probe_symbol="BTC-USDT",
+
         )
 
     def plan_objects(

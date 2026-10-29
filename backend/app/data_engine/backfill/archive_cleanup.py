@@ -6,6 +6,8 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from app.core.executors import run_archive
+
 from .archive_cache import HistoricalArchiveCache
 from .config import BackfillConfig
 
@@ -49,8 +51,8 @@ class ArchiveImportCleanup:
         """Process at most 128 objects; return whether another page may remain."""
         # Deferred LRU/invalidated blobs are independent of import policy and
         # must make progress even when non-imported cache entries remain.
-        await asyncio.to_thread(self._cache._drain_blob_cleanup)
-        if self._config.history_archive_cleanup_policy != "delete_after_import":
+        await run_archive(self._cache._drain_blob_cleanup)
+        if self._config.history_archive_cleanup_policy == "bounded_cache":
             self._cursor = ""
             return False
         candidates = await self._cache.cleanup_candidates(self._cursor)
@@ -60,8 +62,12 @@ class ArchiveImportCleanup:
             return False
         proofs = await self._lookup(candidates)
         # Configuration may have changed while storage was busy.
-        if self._config.history_archive_cleanup_policy == "delete_after_import":
-            await self._cache.cleanup_imported(proofs)
+        policy = self._config.history_archive_cleanup_policy
+        if policy != "bounded_cache":
+            await self._cache.cleanup_imported(
+                proofs, retain_seconds=(self._config.history_archive_retain_seconds
+                                        if policy == "retain_for_duration" else 0),
+            )
         self._cursor = str(candidates[-1]["object_key"])
         more = len(candidates) == 128
         if not more:
@@ -99,6 +105,7 @@ class ArchiveImportCleanup:
     def snapshot(self) -> dict[str, Any]:
         return {
             "policy": self._config.history_archive_cleanup_policy,
+            "retain_seconds": self._config.history_archive_retain_seconds,
             "running": self._task is not None and not self._task.done(),
             "last_error": self.last_error,
         }

@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from app.core.executors import run_storage
+from app.core.executors import run_archive
 from app.data_engine.ingestion.metrics import LayerMetrics
 from app.data_engine.interval_policy import parse_interval_ms
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
@@ -18,8 +18,11 @@ from app.exchanges.archive import (
     ArchiveDataError,
     ArchiveGranularity,
     ArchiveObjectRef,
+    ArchiveRequestContext,
     HistoricalArchiveProvider,
 )
+
+from app.exchanges.archive_sources import ArchiveSourceRegistry
 
 from .archive_cache import (
     AiohttpArchiveHttpClient,
@@ -104,8 +107,13 @@ class HistoricalSourceRouter:
         request_runner=None,
         import_proof_lookup: ImportProofLookup | None = None,
         deferred_prefetch_delay_seconds: float = 15.0,
+        sources: ArchiveSourceRegistry | None = None,
     ) -> None:
         self._cfg = config
+        self._sources = sources or ArchiveSourceRegistry()
+        self._source_reasons: dict[str, str] = {}
+        self._probe_passed: set[str] = set()
+        self._probe_retry_at: dict[str, float] = {}
         self._cache = cache or HistoricalArchiveCache(
             config.history_archive_cache_dir,
             max_bytes=config.history_archive_cache_max_bytes,
@@ -172,84 +180,75 @@ class HistoricalSourceRouter:
         )
         self._providers: dict[str, HistoricalArchiveProvider] = {}
         self._disabled_providers: dict[str, str] = {}
-        self._okx_probe_passed = False
-        self._okx_probe_retry_at = 0.0
         self._metrics = LayerMetrics("HistoricalSourceRouter")
 
     @property
     def metrics(self) -> LayerMetrics:
         return self._metrics
 
+    def _provider(self, exchange: str):
+        reason = self._sources.disabled_reason(exchange, self._cfg)
+        if reason:
+            self._source_reasons[exchange] = reason
+            return None
+        if exchange in self._providers:
+            return self._providers[exchange]
+        provider, reason = self._sources.resolve(exchange, self._cfg, get_exchange_registry())
+        self._source_reasons[exchange] = reason
+        if provider is not None:
+            self._providers[exchange] = provider
+        return provider
+
     async def probe_enabled_capabilities(self) -> dict[str, Any]:
-        """Fail closed on the explicitly enabled unstable OKX web contract."""
-        if not self._cfg.history_archive_enabled:
-            return {"okx": {"enabled": False, "reason": "history_archive_disabled"}}
-        if not self._cfg.history_archive_okx_enabled:
-            return {"okx": {"enabled": False, "reason": "feature_flag_disabled"}}
-        if time.monotonic() < self._okx_probe_retry_at:
-            return {"okx": {"enabled": False, "reason": "probe_retry_deferred"}}
-        exchange = "okx"
-        try:
-            bootstrap_default_adapters()
-            plugin = get_exchange_registry().get_plugin(exchange)
-            factory = getattr(plugin, "history_archive_provider", None)
-            provider = self._providers.get(exchange)
-            if provider is None and callable(factory):
-                provider = factory(self._cfg)
-                if provider is not None:
-                    self._providers[exchange] = provider
+        bootstrap_default_adapters()
+        result = {}
+        for exchange in self._sources.probe_venues():
+            if not self._cfg.history_archive_enabled:
+                result[exchange] = {"enabled": False, "reason": "history_archive_disabled"}
+                continue
+            provider = self._provider(exchange)
             if provider is None:
-                raise ArchiveCompatibilityError("OKX archive provider is unavailable")
+                result[exchange] = {"enabled": False, "reason": self._source_reasons[exchange]}
+                continue
+            result[exchange] = await self._probe_provider(exchange, provider)
+        return result
+
+    async def _probe_provider(self, exchange, provider):
+        if exchange in self._disabled_providers:
+            return {"enabled": False, "reason": self._disabled_providers[exchange]}
+        if time.monotonic() < self._probe_retry_at.get(provider.id, 0):
+            return {"enabled": False, "reason": "probe_retry_deferred"}
+        capabilities = provider.capabilities("spot")
+        if not capabilities.probe_symbol or provider.id in self._probe_passed:
+            return {"enabled": True, "provider_id": provider.id}
+        try:
             now_ms = int(time.time() * 1_000)
-            # OKX publishes a closed daily package two days later.  Probe a
-            # conservative four-to-seven-day-old window and parse one real
-            # object before admitting the capability to request routing.
             candidates = provider.plan_objects(
-                market_type="spot",
-                symbol="BTC-USDT",
-                interval="1m",
-                start_ms=now_ms - 7 * 86_400_000,
-                end_ms=now_ms - 4 * 86_400_000,
-                now_ms=now_ms,
+                market_type=capabilities.probe_market_type,
+                symbol=capabilities.probe_symbol, interval=capabilities.intervals[0],
+                start_ms=now_ms - 7 * 86_400_000, end_ms=now_ms - 4 * 86_400_000, now_ms=now_ms,
             )
             resolved = await provider.resolve_objects(candidates, self._http_for(exchange))
             if not resolved:
-                raise ArchiveCompatibilityError(
-                    "OKX archive capability probe returned no object"
-                )
-            value = await self._load_object(
-                provider,
-                max(resolved, key=lambda item: item.start_ms),
-            )
+                raise ArchiveCompatibilityError("archive capability probe returned no object")
+            value = await self._load_object(provider, max(resolved, key=lambda item: item.start_ms))
             self._metrics.inc("archive_capability_probe_success")
-            self._okx_probe_passed = True
-            return {
-                "okx": {
-                    "enabled": True,
-                    "provider_id": provider.id,
-                    "sample_rows": len(value.bars),
-                },
-            }
+            self._probe_passed.add(provider.id)
+            return {"enabled": True, "provider_id": provider.id, "sample_rows": len(value.bars)}
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             if isinstance(exc, ArchiveCompatibilityError):
                 self._disable_provider(exchange, exc)
             else:
-                self._okx_probe_retry_at = time.monotonic() + 60
+                self._probe_retry_at[provider.id] = time.monotonic() + 60
             self._metrics.inc("archive_capability_probe_failures")
-            return {
-                "okx": {
-                    "enabled": False,
-                    "reason": str(exc)[:500],
-                },
-            }
+            return {"enabled": False, "reason": str(exc)[:500]}
 
     async def prepare(self, tasks: list[BackfillTask]) -> ArchiveRoutePlan:
         if not self._cfg.history_archive_enabled or not tasks:
             return ArchiveRoutePlan({}, {}, {})
         bootstrap_default_adapters()
-        registry = get_exchange_registry()
         refs_by_task: dict[str, list[ArchiveObjectRef]] = {}
         futures: dict[str, asyncio.Task[ArchiveObjectResult]] = {}
         owner_task_by_object: dict[str, str] = {}
@@ -290,22 +289,11 @@ class HistoricalSourceRouter:
             ).append(task)
 
         for (exchange, market_type, symbol, interval), group in groups.items():
-            if exchange == "okx" and not self._cfg.history_archive_okx_enabled:
-                continue
             if exchange in self._disabled_providers:
                 continue
-            try:
-                plugin = registry.get_plugin(exchange)
-            except KeyError:
-                continue
-            provider_factory = getattr(plugin, "history_archive_provider", None)
-            provider = self._providers.get(exchange)
-            if provider is None and callable(provider_factory):
-                provider = provider_factory(self._cfg)
-                if provider is not None:
-                    self._providers[exchange] = provider
+            provider = self._provider(exchange)
             if provider is None:
-                self._metrics.set("last_route_skip_reason", f"provider_unavailable:{exchange}")
+                self._metrics.set("last_route_skip_reason", f"{self._source_reasons[exchange]}:{exchange}")
                 continue
             capabilities = provider.capabilities(market_type)
             if not capabilities.supports(market_type=market_type, interval=interval):
@@ -337,9 +325,9 @@ class HistoricalSourceRouter:
                 cached = await asyncio.gather(*(self._cache.resolve_fresh(ref) for ref in candidates))
                 warm = [ref for ref in cached if ref is not None]
                 cold = [ref for ref, hit in zip(candidates, cached) if hit is None]
-                if cold and exchange == "okx" and not self._okx_probe_passed:
-                    probe = await self.probe_enabled_capabilities()
-                    if not probe.get("okx", {}).get("enabled"):
+                if cold and capabilities.probe_symbol and provider.id not in self._probe_passed:
+                    probe = await self._probe_provider(exchange, provider)
+                    if not probe.get("enabled"):
                         if exchange in self._disabled_providers:
                             continue
                         cold = []
@@ -564,9 +552,12 @@ class HistoricalSourceRouter:
             self._metrics.inc("archive_import_ack_evictions")
         self._metrics.inc("archive_import_acks", len(object_keys))
 
-    def _http_for(self, exchange: str):
+    def _http_for(self, exchange: str, ref: ArchiveObjectRef | None = None):
         if isinstance(self._http, AiohttpArchiveHttpClient):
-            return self._http.for_exchange(exchange)
+            return self._http.for_exchange(exchange, context=ArchiveRequestContext(
+                ref.provider_id if ref else getattr(self._providers.get(exchange), "id", exchange),
+                ref.object_key if ref else "discovery",
+            ))
         return self._http
 
     def request_cleanup(self) -> None:
@@ -602,17 +593,27 @@ class HistoricalSourceRouter:
     ) -> set[str]:
         async with self._singleflight_lock:
             for provider, ref in values:
+                if len(self._deferred_objects) >= 64:
+                    self._metrics.inc("archive_deferred_queue_full")
+                    break
                 self._deferred_objects.setdefault(
                     ref.object_key,
                     (provider, ref),
                 )
             return set(self._deferred_objects)
 
+    def _capability_snapshot(self):
+        from dataclasses import asdict
+        return {exchange: asdict(provider.capabilities("spot"))
+                for exchange, provider in self._providers.items()}
+
     def snapshot(self) -> dict[str, Any]:
         return {
             "enabled": bool(self._cfg.history_archive_enabled),
             "okx_enabled": bool(self._cfg.history_archive_okx_enabled),
-            "okx_probe_passed": self._okx_probe_passed,
+            "okx_probe_passed": "okx-public-kline-page-v1" in self._probe_passed,
+            "source_capabilities": self._capability_snapshot(),
+            "source_reasons": dict(self._source_reasons),
             "cleanup": (
                 self._cleanup.snapshot() if self._cleanup is not None else
                 {"policy": self._cfg.history_archive_cleanup_policy, "reason": "atomic_import_proof_lookup_unavailable"}
@@ -698,6 +699,8 @@ class HistoricalSourceRouter:
                         self._raise_cached_failure(failed[1]),
                         name=f"archive-negative-cache:{ref.object_key}",
                     )
+            if len(self._inflight) >= 64:
+                return asyncio.create_task(self._raise_cached_failure("archive object queue full"))
             task = asyncio.create_task(
                 self._load_and_remember(provider, ref),
                 name=f"archive:{ref.exchange}:{ref.symbol}:{ref.period}",
@@ -815,13 +818,13 @@ class HistoricalSourceRouter:
         download_started = time.monotonic()
         async with self._downloads:
             try:
-                async with self._cache.materialize(ref, provider, self._http_for(ref.exchange)) as cached:
+                async with self._cache.materialize(ref, provider, self._http_for(ref.exchange, ref)) as cached:
                     cache_elapsed_ms = int(
                         (time.monotonic() - download_started) * 1_000
                     )
                     parse_started = time.monotonic()
                     try:
-                        archive_bars = await run_storage(
+                        archive_bars = await run_archive(
                             provider.parse_bars,
                             Path(cached.path),
                             ref,
@@ -949,7 +952,7 @@ def _filter_daily_candidates(
     monthly_candidates = [
         item
         for item in candidates
-        if item.granularity is ArchiveGranularity.MONTHLY
+        if item.granularity is not ArchiveGranularity.DAILY
     ]
     daily = [item for item in candidates if item.granularity is ArchiveGranularity.DAILY]
     interval_ms = parse_interval_ms(interval)

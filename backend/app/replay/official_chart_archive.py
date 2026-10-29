@@ -12,12 +12,14 @@ from time import monotonic
 
 import aiohttp
 
+from app.core.executors import run_archive
 from app.data_engine.backfill.archive_cache import (
     AiohttpArchiveHttpClient,
     HistoricalArchiveCache,
 )
 from app.exchanges.archive import (
     ArchiveGranularity,
+    ArchiveRequestContext,
     ArchiveHttpStatusError,
     ArchiveTransportError,
 )
@@ -183,13 +185,22 @@ class OfficialChartArchive:
 
         async def materialize():
             provider = BinanceKlineArchiveProvider()
-            http = AiohttpArchiveHttpClient(timeout_seconds=self.timeout_seconds)
+            # Load current persisted routing in this worker; shared HTTP admission
+            # spans its temporary event loop and live backfill transports.
+            from app.data_engine.ingestion.config import IngestionConfig
+            from app.data_engine.ingestion.transport import TransportLayer
+            transport = TransportLayer(IngestionConfig())
+            http = AiohttpArchiveHttpClient(
+                timeout_seconds=self.timeout_seconds,
+                request_runner=transport.archive_http_request, exchange=ref.exchange,
+                context=ArchiveRequestContext(ref.provider_id, ref.object_key, "foreground"),
+            )
             async with cache.materialize(ref, provider, http) as cached:
                 if cached.provider_checksum is None:
                     raise ReplayHistoryArchiveError(
                         "official K-lines require checksum verification"
                     )
-                parsed = await asyncio.to_thread(
+                parsed = await run_archive(
                     provider.parse_bars_for_replay, cached.path, ref
                 )
                 # Store the complete verified object once, with its original
@@ -209,7 +220,7 @@ class OfficialChartArchive:
                     source_filter_policy="binance_checksum_utc_grid_v2",
                     source_rejection_reasons=parsed.rejection_reasons,
                 )
-                await asyncio.to_thread(
+                await run_archive(
                     # Display context/close seeds need no account extrema
                     # tree. Account range queries build it lazily if requested.
                     ReplayHistoryArchiveWriter(root, precompute_market_ranges=False).import_batches,

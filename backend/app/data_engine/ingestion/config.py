@@ -132,6 +132,10 @@ class IngestionConfig:
     Grouped by layer so it's easy to find what you're looking for.
     """
 
+    archive_downloads_enabled: bool = field(default_factory=lambda: _env_bool(
+        "INGESTION_ARCHIVE_DOWNLOADS_ENABLED", True,
+    ))
+
     # ── L1: Transport ──────────────────────────────────────────
     # HTTP endpoints (ordered by preference)
     http_base_urls: list[str] = field(default_factory=lambda: _env_str_list(

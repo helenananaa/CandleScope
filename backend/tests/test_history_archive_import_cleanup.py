@@ -121,8 +121,8 @@ def test_default_ccxt_entry_fetches_imports_and_cleans_zip(monkeypatch, tmp_path
 
             cleaned = asyncio.Event()
             original = router._cache.cleanup_imported
-            async def observe(proofs):
-                count = await original(proofs)
+            async def observe(proofs, **kwargs):
+                count = await original(proofs, **kwargs)
                 if count:
                     cleaned.set()
                 return count
@@ -469,3 +469,45 @@ def test_legacy_cache_migration_preserves_objects_without_granting_cleanup(monke
         await cleanup.sweep_page()
         assert not path.exists()
     asyncio.run(run())
+
+
+def test_retention_uses_durable_commit_time_and_survives_cache_restart(monkeypatch, tmp_path):
+    async def run():
+        config, provider, ref, http = fixture_object(tmp_path)
+        config.update(history_archive_cleanup_policy="retain_for_duration", history_archive_retain_seconds=600)
+        storage = storage_at(monkeypatch, tmp_path)
+        router = HistoricalSourceRouter(config, http=http)
+        value = await router._load_object(provider, ref)
+        import_object(value)
+        proof = (await storage.get_history_archive_import_proofs([value.receipt()]))[0]
+        committed = proof["imported_at_ms"]
+        cache = router._cache
+        path = Path(cache._lookup(ref.object_key)["path"])
+        monkeypatch.setattr("app.data_engine.backfill.archive_cache._now_ms", lambda: committed + 1)
+        cleanup = ArchiveImportCleanup(config, cache, storage.get_history_archive_import_proofs)
+        await cleanup.sweep_page()
+        assert cache._lookup(ref.object_key)["retain_until_ms"] == committed + 600_000
+        # Both LRU and a new cache owner respect the durable retention deadline.
+        restarted = HistoricalArchiveCache(config.history_archive_cache_dir, max_bytes=0)
+        await asyncio.to_thread(restarted._evict)
+        assert path.exists()
+        cleanup = ArchiveImportCleanup(config, restarted, storage.get_history_archive_import_proofs)
+        monkeypatch.setattr("app.data_engine.backfill.archive_cache._now_ms", lambda: committed + 600_001)
+        await restarted.set_pinned(ref.object_key, True)
+        await cleanup.sweep_page()
+        assert path.exists()
+        await restarted.set_pinned(ref.object_key, False)
+        await cleanup.sweep_page()
+        assert not path.exists()
+        assert len(klines_repo.query_klines(ref.symbol, ref.interval, exchange=ref.exchange,
+                                          market_type=ref.market_type)) == 31
+        await router.close()
+    asyncio.run(run())
+
+
+def test_retention_configuration_rejects_invalid_updates():
+    config = BackfillConfig(history_archive_cleanup_policy="retain_for_duration")
+    for value in [-1, True, 1.5, "60"]:
+        with pytest.raises(ValueError):
+            config.update(history_archive_retain_seconds=value)
+    assert config.history_archive_retain_seconds == 86400

@@ -65,5 +65,6 @@ test("pool controls show exit grouping and cooldown without inventing websocket 
     assert.ok(html.includes("Last received payload: 4 s ago"));
     assert.ok(html.includes("Payload bytes exclude network overhead"));
     assert.ok(html.includes("ZIP · data.binance.vision"));
+    assert.ok(html.includes("ZIP ≤ 3"));
   } finally { setLocale(previous); }
 });

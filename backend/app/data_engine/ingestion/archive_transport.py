@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 import aiohttp
 
 from app.core.proxy_pool import get_proxy_pool
-from app.exchanges.archive import ArchiveDataError, ArchiveHttpResponse, ArchiveTransportError
+from app.exchanges.archive import ArchiveDataError, ArchiveHttpResponse, ArchiveRequestContext, ArchiveTransportError
 
 ArchiveAttempt = Callable[[str | None, Callable[[int], None]], Awaitable[ArchiveHttpResponse]]
 
@@ -33,9 +33,12 @@ def _retry_after(value: str | None) -> float:
 
 async def request_archive(
     config: Any, proxy_resolver: Callable[[], str | None], exchange: str, url: str,
-    attempt: ArchiveAttempt, *, timeout_seconds: float,
+    attempt: ArchiveAttempt, *, timeout_seconds: float, context: ArchiveRequestContext | None = None,
 ) -> ArchiveHttpResponse:
     """Retry each eligible route at most once within one total time budget."""
+    if not getattr(config, "archive_downloads_enabled", True):
+        raise ArchiveTransportError("archive network downloads disabled")
+    context = context or ArchiveRequestContext()
     host = (urlsplit(url).hostname or "").lower()
     pool = get_proxy_pool()
     tried: set[str] = set()
@@ -43,19 +46,20 @@ async def request_archive(
     try:
         async with asyncio.timeout(timeout_seconds) as deadline:
             for _ in range(16):
-                lease = None
-                if config.proxy_mode == "pool":
-                    if not exchange:
-                        raise ArchiveTransportError("archive request is missing exchange context")
-                    try:
-                        lease = await pool.acquire_archive(config, exchange, host, exclude_urls=tried)
-                    except ValueError:
-                        if last_response is not None:
-                            return last_response
-                        raise ArchiveTransportError("no usable archive proxy route") from None
+                if config.proxy_mode == "pool" and not exchange:
+                    raise ArchiveTransportError("archive request is missing exchange context")
+                try:
+                    lease = await pool.acquire_archive(
+                        config, exchange, host, exclude_urls=tried,
+                        source_id=context.source_id, object_key=context.object_key, priority=context.priority,
+                        non_pool_proxy=proxy_resolver() if config.proxy_mode != "pool" else None,
+                    )
+                except ValueError:
+                    if last_response is not None:
+                        return last_response
+                    raise ArchiveTransportError("no usable archive route or admission capacity") from None
                 if lease is None:
-                    # Only explicit non-pool settings may use system/custom/direct.
-                    return await attempt(proxy_resolver(), lambda size: None)
+                    continue
                 tried.add(lease.route.url)
                 started, received = time.monotonic(), 0
                 response = None
@@ -65,7 +69,7 @@ async def request_archive(
                     nonlocal received
                     received += size
                 try:
-                    response = await attempt(lease.route.url, observe)
+                    response = await attempt(lease.route.url or None, observe)
                     status = response.status
                     last_response = response
                     failed = status in {407, 408, 425} or status >= 500

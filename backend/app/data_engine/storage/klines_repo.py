@@ -769,7 +769,7 @@ def get_history_archive_import_proofs(
         ).fetchone() is None:
             return []
         rows = conn.execute(
-            "SELECT object_key, content_sha256, import_version, cache_generation "
+            "SELECT object_key, content_sha256, import_version, cache_generation, imported_at_ms "
             "FROM history_archive_import_commits "
             "WHERE (object_key, content_sha256, import_version, cache_generation) IN ("
             + ",".join("(?, ?, ?, ?)" for _ in candidates) + ")",

@@ -20,12 +20,14 @@ from uuid import uuid4
 
 import aiohttp
 
+from app.core.executors import run_archive
 from app.data_engine.ingestion.metrics import LayerMetrics
 from app.exchanges.archive import (
     ArchiveDataError,
     ArchiveHttpResponse,
     ArchiveHttpStatusError,
     ArchiveObjectRef,
+    ArchiveRequestContext,
     HistoricalArchiveProvider,
 )
 
@@ -67,18 +69,19 @@ class AiohttpArchiveHttpClient:
     def __init__(
         self, *, timeout_seconds: float = 60.0,
         proxy_resolver: Callable[[], str | None] | None = None,
-        request_runner=None, exchange: str = "",
+        request_runner=None, exchange: str = "", context: ArchiveRequestContext | None = None,
     ) -> None:
         self._timeout_seconds = max(1.0, float(timeout_seconds))
         self._proxy_resolver = proxy_resolver
         self._request_runner = request_runner
         self._exchange = exchange
+        self._context = context or ArchiveRequestContext()
 
-    def for_exchange(self, exchange: str) -> "AiohttpArchiveHttpClient":
+    def for_exchange(self, exchange: str, *, context: ArchiveRequestContext | None = None) -> "AiohttpArchiveHttpClient":
         # Concurrent Binance/OKX downloads never mutate a shared routing field.
         return AiohttpArchiveHttpClient(
             timeout_seconds=self._timeout_seconds, proxy_resolver=self._proxy_resolver,
-            request_runner=self._request_runner, exchange=exchange,
+            request_runner=self._request_runner, exchange=exchange, context=context or self._context,
         )
 
     async def get_bytes(self, url: str, *, allowed_hosts: tuple[str, ...],
@@ -129,17 +132,17 @@ class AiohttpArchiveHttpClient:
                     total = 0
                     # Each route retry truncates the partial download. The cache
                     # owns the temporary path and checksum/publication boundary.
-                    with destination.open("wb") as output:
+                    with destination.open("wb", buffering=0) as output:
                         async for chunk in response.content.iter_chunked(1024 * 1024):
                             observe(len(chunk))
                             total += len(chunk)
                             if total > max_bytes:
                                 raise ArchiveDataError("archive download exceeds configured size limit")
-                            output.write(chunk)
+                            await run_archive(output.write, chunk)
                     return _response(response)
         if self._request_runner is not None:
             return await self._request_runner(self._exchange, url, attempt,
-                                              timeout_seconds=self._timeout_seconds)
+                                              timeout_seconds=self._timeout_seconds, context=self._context)
         proxy = self._proxy_resolver() if self._proxy_resolver else None
         return await attempt(proxy, lambda size: None)
 
@@ -195,8 +198,8 @@ class HistoricalArchiveCache:
             # A download may temporarily exceed the budget while every
             # candidate is leased.  Re-run eviction after releasing a lease
             # so the persistent cache converges to its configured bound.
-            await asyncio.to_thread(self._evict)
-            await asyncio.to_thread(self._drain_blob_cleanup)
+            await run_archive(self._evict)
+            await run_archive(self._drain_blob_cleanup)
 
     async def _materialize(
         self,
@@ -208,13 +211,13 @@ class HistoricalArchiveCache:
             raise ArchiveDataError("archive object has no resolved download URL")
         now_ms = _now_ms()
         validation_started = time.monotonic()
-        existing = await asyncio.to_thread(self._lookup, ref.object_key)
+        existing = await run_archive(self._lookup, ref.object_key)
         if existing is not None and not Path(existing["path"]).is_file():
-            await asyncio.to_thread(self._remove_record, ref.object_key)
+            await run_archive(self._remove_record, ref.object_key)
             existing = None
 
         if existing is not None and now_ms - int(existing["validated_at_ms"]) <= self.revalidate_ms:
-            await asyncio.to_thread(self._touch, ref.object_key, None, now_ms)
+            await run_archive(self._touch, ref.object_key, None, now_ms)
             self.metrics.inc("archive_cache_hits")
             self.metrics.mark("last_cache_hit_at")
             logger.info("archive_cache_hit object=%s", ref.object_key)
@@ -240,7 +243,7 @@ class HistoricalArchiveCache:
                 existing is not None
                 and provider_checksum == existing["provider_checksum"]
             ):
-                await asyncio.to_thread(self._touch, ref.object_key, now_ms, now_ms)
+                await run_archive(self._touch, ref.object_key, now_ms, now_ms)
                 self.metrics.inc("archive_cache_revalidated_hits")
                 logger.info("archive_cache_hit object=%s revalidated=checksum", ref.object_key)
                 verify_elapsed_ms = int(
@@ -257,7 +260,7 @@ class HistoricalArchiveCache:
         elif existing is not None:
             head = await http.head(ref.url, allowed_hosts=ref.allowed_hosts)
             if head.status == 200 and _metadata_matches(existing, head.headers):
-                await asyncio.to_thread(self._touch, ref.object_key, now_ms, now_ms)
+                await run_archive(self._touch, ref.object_key, now_ms, now_ms)
                 self.metrics.inc("archive_cache_revalidated_hits")
                 logger.info("archive_cache_hit object=%s revalidated=metadata", ref.object_key)
                 verify_elapsed_ms = int(
@@ -292,7 +295,7 @@ class HistoricalArchiveCache:
                 (time.monotonic() - download_started) * 1_000
             )
             digest_started = time.monotonic()
-            content_sha256 = await asyncio.to_thread(_file_sha256, temporary)
+            content_sha256 = await run_archive(_file_sha256, temporary)
             if provider_checksum is not None and content_sha256 != provider_checksum:
                 raise ArchiveDataError("archive SHA-256 does not match provider checksum")
             verify_elapsed_ms = preflight_elapsed_ms + int(
@@ -327,18 +330,19 @@ class HistoricalArchiveCache:
                 "last_access_ms": now_ms,
                 "state": "ready",
                 "cache_generation": uuid4().hex,
+                "retain_until_ms": 0,
                 "cleanup_pending": 0,
                 "cleanup_attempts": 0,
                 "cleanup_retry_at_ms": 0,
                 "cleanup_error": None,
             }
-            await asyncio.to_thread(self._publish_download, temporary, destination, record)
+            await run_archive(self._publish_download, temporary, destination, record)
             if (
                 existing is not None
                 and existing.get("content_sha256") != content_sha256
             ):
-                await asyncio.to_thread(self._discard_superseded_blob, existing)
-            await asyncio.to_thread(self._evict)
+                await run_archive(self._discard_superseded_blob, existing)
+            await run_archive(self._evict)
             self.metrics.inc("archive_cold_downloads")
             self.metrics.inc("archive_download_bytes", size_bytes)
             self.metrics.set("last_download_elapsed_ms", download_elapsed_ms)
@@ -372,7 +376,7 @@ class HistoricalArchiveCache:
             temporary.unlink(missing_ok=True)
 
     async def invalidate(self, object_key: str) -> None:
-        await asyncio.to_thread(self._invalidate_sync, object_key)
+        await run_archive(self._invalidate_sync, object_key)
         self.metrics.inc("archive_invalidations")
 
     async def has_fresh(self, ref: ArchiveObjectRef) -> bool:
@@ -384,11 +388,11 @@ class HistoricalArchiveCache:
         A stale or missing file deliberately returns ``False``; the normal
         materialization path remains responsible for revalidation and repair.
         """
-        existing = await asyncio.to_thread(self._lookup, ref.object_key)
+        existing = await run_archive(self._lookup, ref.object_key)
         if existing is None:
             return False
         if not Path(existing["path"]).is_file():
-            await asyncio.to_thread(self._remove_record, ref.object_key)
+            await run_archive(self._remove_record, ref.object_key)
             return False
         return (
             _now_ms() - int(existing["validated_at_ms"])
@@ -397,7 +401,7 @@ class HistoricalArchiveCache:
 
     async def resolve_fresh(self, ref: ArchiveObjectRef) -> ArchiveObjectRef | None:
         """Recover a fresh object's URL locally, including OKX resolver refs."""
-        existing = await asyncio.to_thread(self._lookup, ref.object_key)
+        existing = await run_archive(self._lookup, ref.object_key)
         if (existing is None or not Path(existing["path"]).is_file()
                 or _now_ms() - int(existing["validated_at_ms"]) > self.revalidate_ms):
             return None
@@ -479,6 +483,7 @@ class HistoricalArchiveCache:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(archive_objects)")}
             for name, definition in (
                 ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+                ("retain_until_ms", "INTEGER NOT NULL DEFAULT 0"),
                 ("cleanup_pending", "INTEGER NOT NULL DEFAULT 0"),
                 ("cleanup_attempts", "INTEGER NOT NULL DEFAULT 0"),
                 ("cleanup_retry_at_ms", "INTEGER NOT NULL DEFAULT 0"),
@@ -496,7 +501,7 @@ class HistoricalArchiveCache:
                     "UPDATE archive_objects SET pinned = ? WHERE object_key = ?",
                     (int(pinned), object_key),
                 )
-        await asyncio.to_thread(update)
+        await run_archive(update)
 
     async def cleanup_candidates(self, after: str = "", limit: int = 128) -> list[dict[str, Any]]:
         def read() -> list[dict[str, Any]]:
@@ -506,13 +511,13 @@ class HistoricalArchiveCache:
                     "WHERE state = 'ready' AND object_key > ? ORDER BY object_key LIMIT ?",
                     (after, min(128, max(1, limit))),
                 )]
-        return await asyncio.to_thread(read)
+        return await run_archive(read)
 
-    async def cleanup_imported(self, proofs: list[dict[str, Any]]) -> int:
+    async def cleanup_imported(self, proofs: list[dict[str, Any]], *, retain_seconds: int = 0) -> int:
         """Retire only the exact cached versions confirmed by the storage owner."""
-        return await asyncio.to_thread(self._cleanup_imported, proofs)
+        return await run_archive(self._cleanup_imported, proofs, retain_seconds=retain_seconds)
 
-    def _cleanup_imported(self, proofs: list[dict[str, Any]]) -> int:
+    def _cleanup_imported(self, proofs: list[dict[str, Any]], *, retain_seconds: int = 0) -> int:
         retired = 0
         for proof in proofs:
             object_key, digest = str(proof["object_key"]), str(proof["content_sha256"])
@@ -524,12 +529,15 @@ class HistoricalArchiveCache:
                 ).fetchone()
                 if row is None:
                     continue  # Already evicted, or a newer revision now owns this key.
+                if retain_seconds and not proof.get("imported_at_ms"):
+                    continue  # No stable retention origin: never substitute wall-clock now.
+                retain_until = int(proof.get("imported_at_ms") or 0) + retain_seconds * 1000 if retain_seconds else 0
                 connection.execute(
-                    "UPDATE archive_objects SET cleanup_pending = 1 WHERE object_key = ?",
-                    (object_key,),
+                    "UPDATE archive_objects SET cleanup_pending = 1, retain_until_ms = ? WHERE object_key = ?",
+                    (retain_until, object_key),
                 )
                 if (
-                    row["pinned"] or self._active.get(object_key, 0)
+                    retain_until > _now_ms() or row["pinned"] or self._active.get(object_key, 0)
                     or self._leases.paths.get(Path(row["path"]).resolve(), 0)
                     or int(row["cleanup_retry_at_ms"]) > _now_ms()
                 ):
@@ -632,13 +640,13 @@ class HistoricalArchiveCache:
             if total <= self.max_bytes:
                 return
             rows = connection.execute(
-                "SELECT object_key, path, content_sha256, size_bytes, pinned FROM archive_objects "
+                "SELECT object_key, path, content_sha256, size_bytes, pinned, retain_until_ms FROM archive_objects "
                 "WHERE state = 'ready' ORDER BY last_access_ms ASC"
             ).fetchall()
             for row in rows:
                 if total <= self.max_bytes:
                     break
-                if row["object_key"] in self._active or row["pinned"]:
+                if row["object_key"] in self._active or row["pinned"] or int(row["retain_until_ms"]) > _now_ms():
                     continue
                 connection.execute(
                     "DELETE FROM archive_objects WHERE object_key = ?",

@@ -135,7 +135,7 @@ def config(urls, *, strategy="failover", groups=None):
     return IngestionConfig(proxy_mode="pool", proxy_strategy=strategy, proxy_routes=[
         {"id": f"route-{i}", "name": f"route-{i}", "url": url, "enabled": True,
          "exchanges": ["binance", "okx"], "egress_group": groups[i] if groups else f"exit-{i}",
-         "max_concurrency": 1}
+         "max_concurrency": 2}
         for i, url in enumerate(urls)
     ])
 
@@ -278,12 +278,16 @@ def test_host_throttle_respects_exit_aliases_without_blocking_rest_or_other_host
             assert (await http.get_bytes("https://archive.invalid/file", allowed_hosts=("archive.invalid",), max_bytes=100)).status == 200
             assert [len(items) for items in connects] == [1, 0, 1]
             pool = get_proxy_pool()
-            assert pool._archive_cooldowns[("binance", "archive.invalid", "shared")] > time.monotonic() + 100
+            assert pool._archive_cooldowns[("archive.invalid", "shared")] > time.monotonic() + 100
             route = pool.routes(cfg, "binance")[0]
             pool.begin(route, "binance")  # API policy has a distinct owner.
             pool.end(route)
+            # One CDN's throttle also covers a different venue using the same exit.
+            await client(cfg, exchange="okx").get_bytes("https://archive.invalid/file",
+                allowed_hosts=("archive.invalid",), max_bytes=100)
+            assert [len(items) for items in connects] == [1, 0, 2]
             await http.get_bytes("https://other.invalid/file", allowed_hosts=("other.invalid",), max_bytes=100)
-            assert [len(items) for items in connects] == [2, 0, 1]
+            assert [len(items) for items in connects] == [2, 0, 2]
     asyncio.run(run())
 
 
@@ -474,7 +478,7 @@ def test_okx_warm_zip_skips_resolver_probe_and_proxy_acquisition(monkeypatch, tm
             assert results[0].status == BackfillStatus.COMPLETED
             assert len(results[0].bars) == 1440
             assert results[0].metadata["archive_cache_hits"] == 1
-            assert not router._okx_probe_passed
+            assert not router.snapshot()["okx_probe_passed"]
         finally:
             await engine.close()
     asyncio.run(run())
