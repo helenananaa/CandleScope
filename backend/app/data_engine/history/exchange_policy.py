@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, replace
 from typing import Any, Callable
 
 from app.data_engine.history.calendar import TradingCalendar
@@ -33,11 +34,14 @@ from app.exchanges import (
 SymbolMetadataLookup = Callable[[str, str, str], dict[str, Any] | None]
 
 
-def native_kline_calendar(exchange: str, market_type: str, interval: str):
+def native_kline_calendar(exchange: str, market_type: str, interval: str, symbol: str = ""):
     """Resolve provider-native exceptions without changing synthetic intervals."""
     if exchange == "binance" and market_type == "futures" and interval == "3d":
         from app.exchanges.plugins.binance.calendar import BinanceFuturesCalendar
         return BinanceFuturesCalendar()
+    if exchange == "upbit" and market_type == "spot" and interval == "1s" and symbol:
+        from app.data_engine.storage.native_empty_seconds import make_calendar
+        return make_calendar(symbol)
     return None
 
 
@@ -87,12 +91,18 @@ class ExchangeHistoryPolicyResolver:
             params=params,
         )
 
-    def resolve(self, key: HistorySeriesKey) -> ResolvedHistoryContext:
+    def resolve(self, key: HistorySeriesKey, *, now_ms: int | None = None) -> ResolvedHistoryContext:
         bootstrap_default_adapters()
         registry = get_exchange_registry()
         capabilities = registry.get_capabilities(key.exchange)
         channel = capabilities.channel_capability(key.channel, key.market_type)
         policy = channel.history_policy if channel is not None and channel.history else None
+        from app.data_engine.history.native_seconds import native_second_history_start
+        cutoff = native_second_history_start(key.exchange, key.variant, int(time.time() * 1000) if now_ms is None else now_ms)
+        if policy is not None and cutoff is not None:
+            # Keep the revision stable; a moving cutoff is availability, not
+            # a new provider contract on every request.
+            policy = replace(policy, max_page_size=min(policy.max_page_size or 300, 200 if key.exchange == "upbit" else 300))
         market = next(
             (
                 item
@@ -108,7 +118,7 @@ class ExchangeHistoryPolicyResolver:
             or getattr(market, "calendar_id", None)
         )
         native_calendar = (
-            native_kline_calendar(key.exchange, key.market_type, key.variant)
+            native_kline_calendar(key.exchange, key.market_type, key.variant, key.symbol)
             if key.channel == "kline" else None
         )
         if native_calendar is not None:
@@ -149,11 +159,11 @@ class ExchangeHistoryPolicyResolver:
             ),
             upstream_start=(
                 TimeBound(
-                    policy.available_from_ms,
-                    BoundaryReason.UPSTREAM_START,
+                    max(policy.available_from_ms or 0, cutoff or 0),
+                    BoundaryReason.PROVIDER_RETENTION if cutoff is not None and cutoff >= (policy.available_from_ms or 0) else BoundaryReason.UPSTREAM_START,
                     revision=revision,
                 )
-                if policy is not None and policy.available_from_ms is not None
+                if policy is not None and (policy.available_from_ms is not None or cutoff is not None)
                 else None
             ),
             upstream_end=(
@@ -189,7 +199,7 @@ class ExchangeHistoryPolicyResolver:
         *,
         now_ms: int | None = None,
     ) -> tuple[HistoryPlan, ResolvedHistoryContext]:
-        context = self.resolve(request.series)
+        context = self.resolve(request.series, now_ms=now_ms)
         plan = self.service.plan(
             request,
             context.availability,

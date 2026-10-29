@@ -111,7 +111,7 @@ def test_seconds_history_pages_and_gaps_use_storage_and_normal_backfill(storage)
     assert older.source in (QuerySource.STORAGE, QuerySource.MIXED)
     assert older.metadata["storage_reads"] >= 1
     with pytest.raises(IntervalResolutionError):
-        engine.query(KEY.symbol, "1s", exchange="binance", market_type="futures")
+        engine.query(KEY.symbol, "1s", exchange="bybit", market_type="spot")
 
 
 @pytest.mark.anyio

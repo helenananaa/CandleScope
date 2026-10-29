@@ -11,7 +11,7 @@
 - 统一 SQLite 清理支持 `seconds` 档；默认值 86,400 **条/序列**，不是固定保存 24 小时。条数清理仍默认关闭，自动 GC 的原有启用条件保持不变。
 - 设置预设的秒级条数：紧凑 3,600、标准 86,400、宽裕 604,800、不限 0。旧的不限设置迁移后秒级仍为不限。
 - 1s 的独立内存容量继续生效，与持久化分开；冷缓存可以清除并从 SQLite 恢复。
-- 交易所能力检查保持生效，不增加 Binance 合约 1s 路由。没有持续采集器或 1s 回放归档；回放目录仍排除 1s。
+- 交易所能力检查保持生效；原生来源扩展见下文。没有持续采集器或 1s 回放归档；回放目录仍排除 1s。
 - 原有订阅所有权保持生效：全量自选订阅和自定义秒周期仍可能需要 1s；最后一个消费者释放后停止上游流。
 
 ## 自动验证
@@ -55,6 +55,53 @@
 
 ## 验证边界
 
-本次完成代码、集成回归和真实 Binance 后端链路验证；没有进行打包后的 macOS UI
-验收、长时间多币种压力测试，或其他交易所的实际连接测试。短时实时样本和
-两秒停流观察不代表长期吞吐、磁盘增长或断网稳定性结论。
+首阶段完成代码、集成回归和 Binance 现货后端链路验证。后续原生来源扩展及其验证见下文。
+没有进行打包后的 macOS UI 验收或长时间多币种压力测试；短时样本和两秒停流观察
+不代表长期吞吐、磁盘增长或断网稳定性结论。
+
+
+## 原生 1s 来源扩展（本次追加）
+
+本次只接入交易所原生秒 K 线，复用原有图表、下载任务、SQLite、回补和清理。
+没有逐笔成交合成秒 K 线，也没有录制、独立下载入口或 1s 回放归档。
+
+| 来源 | 历史 | 实时 | 真实 60 秒窗口下载 / 新进程读取 |
+| --- | --- | --- | --- |
+| Binance USD-M 永续 | continuousKlines，PERPETUAL | continuousKline_1s，保留原始收盘标记及成交字段 | 60 / 60，complete=true |
+| OKX 现货 | 现有原生 1s 历史接口 | 现有原生 candle1s | 60 / 60，complete=true |
+| OKX 永续 | 现有原生 1s 历史接口 | 现有原生 candle1s | 60 / 60，complete=true |
+| Gate 现货 | spot/candlesticks，保留结束标记 | REST 轮询；实测 WS 拒绝 1s | 60 / 60，complete=true |
+| Upbit 现货（韩国端点，BTC/KRW） | 原生 seconds，按最多 200 秒的完整窗口请求 | 原生 candle.1s，适配 CCXT 的单行返回值 | 38 / 38，complete=true |
+
+五条生产后端链路均观察到实时收盘数据经 durable journal 落盘，释放最后消费者后
+stream 停止；已接收数据的 journal 收尾完成后，观察两秒行数不再增长。
+全部 pending=0、delivery failures=0，独立 Python 进程读取普通历史均完整，SQLite quick_check=ok。
+Binance 原有分钟接口保持原路由；Gate 衍生品不因现货能力而开放 1s。
+独立 CCXT binanceusdm/binancecoinm 插件没有本次连续合约适配，不再误报 1s；
+使用 CandleScope 的 Binance / futures 市场入口。
+
+Upbit 不为没有成交的秒生成 K 线。实现单独持久化经过有界 REST 页证实的空秒范围，
+查询、向前分页、缺口扫描、下载封存和补数验证共用这些证据。不插入虚拟 OHLCV。
+空页不会提前结束后续窗口；异常/无效页面不会形成空秒证据；删除一根真实 K 线仍会
+产生待修复缺口。晚到的真实 K 线会撤销冲突证据，用户删除及条数清理同时清除相关证据。
+普通分钟周期的日历行为保持原样。
+
+OKX/Upbit 的 1s 上游历史保留约三个月：历史规划限制上游获取范围，现有下载计划展示
+受保留期限制后的有效起点及 provider_retention 原因。保留期边界在运行期间会继续移动；
+本次真实下载验证为近期窗口，未验证三个月边界或超大范围下载。
+
+本次相关后端回归 **479 passed**（4 条原有 FastAPI lifespan 提示）；随后对存储、
+稀疏证据和分页的修订回归 **151 passed**，最后的删除/保护范围修订回归 **156 passed**。
+见本地 `test-final-storage.log`、`test-final-cleanup.log`；这些集合有重叠，不相加计算独立用例。
+未改前端代码；首阶段前端检查结果见上文。本次未进行打包后的 macOS UI 验收。
+
+本地证据目录：`output/issue-131/native/`。成功报告为 `binance-result.json`、
+`okx-result.json`、`okx-swap-result.json`、`gate2-result.json`、`upbit-final-result.json`；
+`live_smoke.py` 为可参数化的生产链路验证脚本。首次失败日志保留用于说明发现的
+Upbit 单行适配缺陷与 Gate 已接收 journal 数据需等待收尾的验证修正。
+
+接口依据：
+- [Binance USD-M 连续合约历史](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data#continuous-contract-klinecandlestick-data)
+- [OKX 历史 K 线](https://app.okx.com/docs-v5/en/#order-book-trading-market-data-get-candlesticks-history)
+- [Gate 现货 K 线](https://www.gate.com/docs/developers/apiv4/en/spot/#market-k-line-chart)、[WS 通道](https://www.gate.com/docs/developers/apiv4/ws/en/#candlesticks-channel)
+- [Upbit 秒 K 线](https://global-docs.upbit.com/reference/list-candles-seconds)、[原生实时秒 K 线](https://global-docs.upbit.com/reference/websocket-candle)

@@ -81,8 +81,8 @@ def test_kline_intervals_are_market_and_purpose_scoped() -> None:
     capabilities = get_exchange_registry().get_capabilities("binance")
 
     assert "1s" in capabilities.kline_intervals("spot", history=True)
-    assert "1s" not in capabilities.kline_intervals("futures", history=True)
-    assert "1s" not in capabilities.kline_intervals("futures", history=False)
+    assert "1s" in capabilities.kline_intervals("futures", history=True)
+    assert "1s" in capabilities.kline_intervals("futures", history=False)
 
 
 @dataclass

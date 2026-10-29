@@ -283,8 +283,7 @@ class QueryEngine:
             2. Storage (if cache miss or partial)
             3. Backfill trigger (if storage also missing)
 
-        Ephemeral intervals (e.g. 1s) use a cache-only fast path:
-        no storage reads, no backfill triggers.
+        Native 1s intervals use the same storage and backfill lifecycle.
         """
         t0 = time.monotonic()
         io_metrics = _QueryIOMetrics()
@@ -1064,6 +1063,9 @@ class QueryEngine:
             )
 
     def _calendar_for(self, key: SeriesKey):
+        if key.exchange == "upbit" and key.market_type == "spot" and key.interval == "1s" and key.identity.is_legacy_default_for(key.exchange):
+            from app.data_engine.storage.native_empty_seconds import make_calendar
+            return make_calendar(key.symbol)
         if self._history_policy is None:
             return None
         try:
@@ -2169,6 +2171,10 @@ class QueryEngine:
                 effective_start,
                 effective_end,
             )
+            return None
+
+        calendar = self._calendar_for(key)
+        if calendar is not None and calendar.first_expected_open(effective_start, effective_end, key.interval) is None:
             return None
 
         planned = self._plan_history_range(key, effective_start, effective_end)

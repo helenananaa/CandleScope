@@ -357,6 +357,12 @@ class ManualHistoryPlanner:
             )
 
         width_ms = parse_interval_ms(route.canonical_interval) or 0
+        from app.data_engine.history.native_seconds import native_second_history_start
+        history_start = native_second_history_start(exchange, route.source_interval, captured_at_ms)
+        boundary_reason = None
+        if history_start is not None and requested_start_ms < history_start:
+            requested_start_ms = history_start
+            boundary_reason = "provider_retention"
         spec = parse_interval_spec(route.canonical_interval)
         if spec is not None:
             aligned = spec.floor_ms(int(requested_start_ms))
@@ -418,6 +424,7 @@ class ManualHistoryPlanner:
             estimated_source_rows=source_rows,
             existing_coverage=coverage,
             error=error,
+            boundary_reason=boundary_reason,
         )
 
     def _existing_coverage(

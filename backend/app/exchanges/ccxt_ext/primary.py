@@ -424,6 +424,10 @@ class CcxtPrimaryPlugin(CcxtUnifiedPlugin):
                     if futures
                     else exchange.public_get_klines
                 )
+                if futures and descriptor.interval == "1s":
+                    params["pair"] = params.pop("symbol")
+                    params["contractType"] = "PERPETUAL"
+                    method = exchange.fapipublic_get_continuousklines
                 values = await method(params)
             elif descriptor.stream_type == StreamType.PREMIUM_INDEX:
                 params["interval"] = descriptor.interval or "1m"

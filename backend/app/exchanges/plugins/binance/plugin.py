@@ -151,6 +151,18 @@ class BinancePlugin(BuiltinExchangePlugin):
                     cooldown_seconds=backoff,
                 ),
                 RateLimitRule(
+                    name="binance_futures_continuous_klines",
+                    bucket_key="binance:futures:request_weight:ip",
+                    endpoint="/fapi/v1/continuousKlines",
+                    market_types=("futures",),
+                    algorithm="header_weight",
+                    capacity=futures_capacity,
+                    refill_interval_seconds=60.0,
+                    cost=_futures_kline_cost,
+                    max_concurrency=futures_concurrency,
+                    cooldown_seconds=backoff,
+                ),
+                RateLimitRule(
                     name="binance_futures_klines",
                     bucket_key="binance:futures:request_weight:ip",
                     endpoint="/fapi/v1/klines",

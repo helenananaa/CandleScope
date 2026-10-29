@@ -336,6 +336,7 @@ class HistoricalFetcher:
         pages_fetched = 0
         source_complete = False
         empty_reason: str | None = None
+        native_empty_ranges: list[list[int]] = []
 
         interval_ms = parse_interval_ms(task.interval)
         if interval_ms is None:
@@ -390,6 +391,7 @@ class HistoricalFetcher:
 
             # Fetch with retry
             page_bars: list[FetchedBar] = []
+            native_page = None
             retry_count = 0
             success = False
             max_attempts = max_retries + 1
@@ -472,6 +474,13 @@ class HistoricalFetcher:
                     self._metrics.inc("http_pages_fetched")
 
                     for msg in raw_messages:
+                        if (
+                            task.exchange == "upbit" and task.market_type == "spot" and task.interval == "1s"
+                            and isinstance(msg.payload, dict)
+                            and msg.payload.get("native_second_page") == "upbit.spot"
+                        ):
+                            native_page = msg.payload
+                            continue
                         msg.source = DataSource.HTTP_BACKFILL
                         event = normalizer.parse_raw(msg)
                         if event is None:
@@ -505,6 +514,19 @@ class HistoricalFetcher:
                 break
 
             pages_fetched += 1
+
+            if native_page is not None:
+                native_empty_ranges.extend(native_page["empty_ranges"])
+                all_bars.extend(page_bars)
+                page_end = int(native_page["end_ms"])
+                current_request = (
+                    TransportRequest(descriptor=req.descriptor, limit=batch_size,
+                                     start_ms=page_end + 1000, end_ms=req.end_ms)
+                    if req.end_ms is not None and page_end < req.end_ms // 1000 * 1000
+                    else None
+                )
+                await self._fire_progress(task, len(all_bars), estimated_total)
+                continue
 
             if not page_bars and not raw_messages:
                 # Preserve a successful empty-page signal separately from
@@ -577,6 +599,7 @@ class HistoricalFetcher:
                 ),
                 "history_lane": task.metadata.get("history_lane", "rest"),
                 "rest_pages": pages_fetched,
+                "native_empty_ranges": native_empty_ranges,
             },
         )
         self._last_history_diagnostics = {

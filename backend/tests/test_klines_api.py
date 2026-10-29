@@ -2453,8 +2453,8 @@ def test_query_endpoints_map_interval_capability_errors_to_client_error() -> Non
     common = {
         "symbol": "BTCUSDT",
         "interval": "2s",
-        "exchange": "binance",
-        "market_type": "futures",
+        "exchange": "bybit",
+        "market_type": "spot",
     }
     cases = [
         ("/api/v1/klines/latest", {**common, "limit": 1}),

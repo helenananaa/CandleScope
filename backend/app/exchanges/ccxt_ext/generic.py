@@ -9,6 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -724,7 +725,9 @@ class CcxtUnifiedProfile:
         ccxt_symbol: str,
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
-            return await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            # Pinned Upbit returns one OHLCV row, not a list of rows.
+            return [value] if self.exchange_id == "upbit" and descriptor.interval == "1s" else value
         if descriptor.stream_type == StreamType.TRADE:
             return await exchange.watch_trades(ccxt_symbol)
         if descriptor.stream_type == StreamType.DEPTH:
@@ -915,7 +918,92 @@ class CcxtUnifiedPlugin(BuiltinExchangePlugin):
                 market_type=selection,
             )
             rows: list[dict[str, Any]] = []
-            if descriptor.stream_type == StreamType.KLINE:
+            if descriptor.stream_type == StreamType.KLINE and self.id == "gate" and descriptor.interval == "1s":
+                if selection != "spot":
+                    raise ValueError("Gate native 1s candles are supported only for spot")
+                limit = min(max(1, int(req.limit or 1)), 1000)
+                params: dict[str, Any] = {
+                    "currency_pair": exchange.market(symbol)["id"], "interval": "1s",
+                }
+                if req.start_ms is not None:
+                    start_s = (int(req.start_ms) + 999) // 1000
+                    params["from"] = start_s
+                    params["to"] = min(
+                        start_s + limit - 1,
+                        int(req.end_ms) // 1000 if req.end_ms is not None else int(time.time()),
+                    )
+                elif req.end_ms is not None:
+                    params["to"] = int(req.end_ms) // 1000
+                    params["from"] = max(0, params["to"] - limit + 1)
+                else:
+                    # The latest few Gate rows can remain unconfirmed. Fetch
+                    # an overlap so a two-second poll still sees final bars.
+                    params["limit"] = max(limit, 10)
+                values = await exchange.publicSpotGetCandlesticks(params)
+                for row in values:
+                    if not isinstance(row, (list, tuple)) or len(row) != 8:
+                        raise ValueError("Unexpected Gate spot candle schema")
+                    open_ms = int(row[0]) * 1000
+                    rows.append(make_unified_payload(
+                        "kline", [open_ms, row[5], row[3], row[4], row[2], row[6]],
+                        is_closed=str(row[7]).lower() == "true",
+                    ))
+            elif descriptor.stream_type == StreamType.KLINE and self.id == "upbit" and descriptor.interval == "1s":
+                if selection != "spot":
+                    raise ValueError("Upbit native 1s candles require spot")
+                limit = min(max(1, int(req.limit or 1)), 200)
+                params = {"market": exchange.market(symbol)["id"], "count": limit}
+                page_start = None
+                page_end = None
+                if req.start_ms is not None:
+                    from app.data_engine.history.native_seconds import native_second_history_start
+                    now_ms = int(time.time() * 1000)
+                    cutoff = native_second_history_start("upbit", "1s", now_ms)
+                    page_start = ((max(int(req.start_ms), cutoff or 0) + 999) // 1000) * 1000
+                    page_end = min(
+                        page_start + (limit - 1) * 1000,
+                        int(req.end_ms) if req.end_ms is not None else now_ms - 1000,
+                        (now_ms // 1000 - 1) * 1000,
+                    ) // 1000 * 1000
+                    if page_end < page_start:
+                        raise ValueError("Upbit requested range is outside available closed 1s history")
+                    # At most count seconds: the reverse API cannot truncate
+                    # this window, including when it returns older candles.
+                    params["to"] = datetime.fromtimestamp((page_end + 1000) / 1000, timezone.utc).isoformat()
+                elif req.end_ms is not None:
+                    params["to"] = datetime.fromtimestamp((int(req.end_ms) // 1000 + 1), timezone.utc).isoformat()
+                values = await exchange.public_get_candles_seconds(params)
+                if not isinstance(values, list) or len(values) > limit:
+                    raise ValueError("Unexpected Upbit candle page size")
+                now_ms = int(time.time() * 1000)
+                opens = set()
+                observed_opens = set()
+                for value in values:
+                    if value.get("market") != params["market"]:
+                        raise ValueError("Unexpected Upbit candle market")
+                    open_ms = int(datetime.fromisoformat(value["candle_date_time_utc"]).replace(tzinfo=timezone.utc).timestamp() * 1000)
+                    if open_ms % 1000:
+                        raise ValueError("Unexpected Upbit second candle timestamp")
+                    if open_ms in observed_opens or (page_end is not None and open_ms > page_end):
+                        raise ValueError("Unexpected Upbit candle page boundary or duplicate")
+                    observed_opens.add(open_ms)
+                    if page_start is not None and not page_start <= open_ms <= page_end:
+                        continue
+                    opens.add(open_ms)
+                    rows.append(make_unified_payload("kline", [
+                        open_ms, value["opening_price"], value["high_price"], value["low_price"],
+                        value["trade_price"], value["candle_acc_trade_volume"],
+                    ], is_closed=open_ms + 1000 <= now_ms))
+                if page_start is not None:
+                    empty_ranges = []
+                    cursor = page_start
+                    for opened in sorted(opens) + [page_end + 1000]:
+                        if cursor < opened:
+                            empty_ranges.append([cursor, opened - 1000])
+                        cursor = opened + 1000
+                    rows.append({"native_second_page": "upbit.spot", "start_ms": page_start,
+                                 "end_ms": page_end, "empty_ranges": empty_ranges})
+            elif descriptor.stream_type == StreamType.KLINE:
                 limit = min(max(1, int(req.limit or 1)), self.entry.history_limit)
                 values = await exchange.fetch_ohlcv(
                     symbol,
