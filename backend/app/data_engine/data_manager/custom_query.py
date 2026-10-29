@@ -39,6 +39,7 @@ from app.data_engine.kline_quality import incoming_source_can_replace, source_ra
 from .cache import BarCache, HistoryCapacityReservation
 from .config import QueryConfig
 from .models import BarData, MissingRange, QueryResult, QuerySource, SeriesKey
+from .history_stream import FixedHistoryStream, StreamingOrderError
 
 BaseQuery = Callable[..., QueryResult]
 BaseQueryBefore = Callable[..., QueryResult]
@@ -557,8 +558,8 @@ class CustomIntervalQueryService:
                 self._derived_queries += 1
             base_window_join = metadata.get("base_window_flight_role") == "join"
             if not base_window_join:
-                self._base_pages += int(metadata.get("base_page_count") or 0)
-                self._base_rows += int(metadata.get("base_rows_fetched") or 0)
+                self._base_pages += int(metadata.get("base_physical_page_count", metadata.get("base_page_count")) or 0)
+                self._base_rows += int(metadata.get("base_physical_rows_fetched", metadata.get("base_rows_fetched")) or 0)
                 self._base_overfetch_rows += int(
                     metadata.get("base_page_overfetch_rows") or 0
                 )
@@ -653,6 +654,7 @@ class CustomIntervalQueryService:
         requested_auto_backfill: bool | None,
         compute: Callable[[], QueryResult],
         slice_result: bool = True,
+        exact_window: bool = False,
     ) -> QueryResult:
         """Share a covering base read while keeping repair work out of queries.
 
@@ -667,6 +669,7 @@ class CustomIntervalQueryService:
                 if flight.series == series
                 and flight.start_ms <= start_ms
                 and flight.end_ms >= end_ms
+                and (not exact_window or (flight.start_ms == start_ms and flight.end_ms == end_ms))
             ]
             flight = min(
                 candidates,
@@ -922,6 +925,7 @@ class CustomIntervalQueryService:
         interval: str,
         source_interval: str,
         calendar: Any | None,
+        boundary_components: list[BarData] | None = None,
     ) -> list[BarData]:
         """Trust complete buckets, including a proven pre-listing prefix.
 
@@ -946,7 +950,9 @@ class CustomIntervalQueryService:
                     for item in base_result.excluded_ranges
                 ):
                     continue
-                components = [row for row in base_result.bars if earliest <= row.time_ms < end]
+                components = [row for row in (
+                    base_result.bars if boundary_components is None else boundary_components
+                ) if earliest <= row.time_ms < end]
                 expected = list(source_calendar.expected_opens(earliest, end - 1, source_interval))
                 if not expected or [row.time_ms for row in components] != expected or not all(
                     row.trusted_final for row in components
@@ -1311,6 +1317,7 @@ class CustomIntervalQueryService:
         market_type: str,
         auto_backfill: bool | None,
         initial_result: QueryResult | None = None,
+        page_budget: int | None = None,
     ) -> QueryResult:
         """Read enough base rows across the per-query limit, newest to oldest."""
         if self._base_query_before is None:
@@ -1350,7 +1357,7 @@ class CustomIntervalQueryService:
             2,
             (page_capacity + self._cfg.max_limit - 1) // self._cfg.max_limit + 4,
         )
-        max_pages = min(requested_max_pages, _MAX_CUSTOM_BASE_PAGES)
+        max_pages = min(requested_max_pages, _MAX_CUSTOM_BASE_PAGES if page_budget is None else page_budget)
         while len(results) < max_pages:
             reached_lower_bound = bool(
                 lower_bound_ms is not None
@@ -1463,6 +1470,182 @@ class CustomIntervalQueryService:
             merged.metadata["base_pagination_capped"] = True
             merged.metadata["base_page_limit"] = max_pages
         return merged
+
+    def _can_stream_history(self, interval: str, calendar: Any | None, *, source_interval: str) -> bool:
+        spec = parse_interval_spec(interval)
+        source_spec = parse_interval_spec(source_interval)
+        return bool(
+            self._cfg.stream_custom_history
+            and self._base_query_before is not None
+            and (calendar is None or isinstance(calendar, AlwaysOpenCalendar))
+            and spec is not None
+            and spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and source_spec is not None
+            and source_spec.alignment is IntervalAlignment.FIXED_EPOCH
+            and spec.nominal_ms % source_spec.nominal_ms == 0
+        )
+
+    def _stream_base_history(
+        self,
+        *,
+        symbol: str,
+        interval: str,
+        target_interval: str,
+        before_ms: int,
+        target_limit: int,
+        lower_bound_ms: int | None,
+        aggregation_lower_bound_ms: int | None,
+        exchange: str,
+        market_type: str,
+        requested_auto_backfill: bool | None,
+        initial_read: Callable[[], QueryResult] | None = None,
+    ) -> tuple[QueryResult, list[BarData], list[BarData]]:
+        """Pull one source page at a time, retaining only quality summaries.
+
+        Page flights still share source reads across target intervals, but a
+        flight never retains the whole expanded window. Exact page windows
+        avoid treating a count-limited page with source gaps as covering a
+        smaller time window. Single-page queries retain their covering flight.
+        """
+        source_ms = parse_interval_ms(interval)
+        target_seconds = parse_custom_interval(target_interval)
+        assert source_ms and target_seconds and self._base_query_before is not None
+        stream = FixedHistoryStream(
+            target_seconds,
+            lambda rows: _aggregate_fixed_bars_to_interval(
+                rows, target_seconds, source_interval_seconds=source_ms // 1000,
+            ),
+            lower_bound_ms=aggregation_lower_bound_ms,
+            upper_bound_ms=before_ms - 1,
+        )
+        summaries: list[QueryResult] = []
+        fetched_rows = 0
+        owned_pages = 0
+        owned_rows = 0
+        aggregation_seconds = 0.0
+        first_reduced_ms: float | None = None
+        started_at = time.monotonic()
+        cursor_ms = before_ms
+        page_capacity = max(1, target_limit)
+        if lower_bound_ms is not None:
+            page_capacity = max(page_capacity, (max(0, before_ms - lower_bound_ms) + source_ms - 1) // source_ms)
+        requested_max_pages = max(2, (page_capacity + self._cfg.max_limit - 1) // self._cfg.max_limit + 4)
+        max_pages = min(requested_max_pages, _MAX_CUSTOM_BASE_PAGES)
+        while len(summaries) < max_pages:
+            if lower_bound_ms is not None:
+                if stream.oldest_ms is not None and stream.oldest_ms <= lower_bound_ms:
+                    break
+            elif stream.unique_rows >= target_limit:
+                break
+            if summaries:
+                previous = summaries[-1]
+                if not previous.has_more and not previous.retryable and not previous.missing_ranges:
+                    break
+            page_limit = min(self._cfg.max_limit, max(1, target_limit - stream.unique_rows))
+            if lower_bound_ms is not None:
+                remaining_span = max(1, (max(0, cursor_ms - lower_bound_ms) + source_ms - 1) // source_ms)
+                page_limit = min(page_limit, remaining_span)
+            is_seed = not summaries and initial_read is not None
+            # The range seed keeps its existing limit; later reads obey the
+            # remaining span. Each read must finish and be reduced before the
+            # next read is admitted (synchronous pull/backpressure).
+            if is_seed:
+                page_limit = min(self._cfg.max_limit, target_limit)
+            page = self._run_base_window_flight(
+                series=(exchange.strip().lower(), market_type.strip().lower(), symbol.strip().upper(), interval),
+                start_ms=cursor_ms - page_limit * source_ms,
+                end_ms=cursor_ms - 1,
+                target_limit=page_limit,
+                requested_auto_backfill=requested_auto_backfill,
+                compute=initial_read if is_seed else lambda: self._base_query_before(
+                    symbol, interval, cursor_ms, page_limit,
+                    exchange=exchange, market_type=market_type, auto_backfill=False,
+                ),
+                slice_result=False,
+                exact_window=True,
+            )
+            fetched_rows += len(page.bars)
+            if page.metadata.get("base_window_flight_role") != "join":
+                owned_pages += 1
+                owned_rows += len(page.bars)
+            # Metadata and history disposition remain available through EOF;
+            # completed page bars must not remain reachable from this list.
+            summaries.append(replace(page, bars=[], metadata=dict(page.metadata)))
+            if not page.bars:
+                break
+            next_cursor = min(bar.time_ms for bar in page.bars)
+            aggregation_started = time.monotonic()
+            try:
+                stream.push(page.bars)
+            except StreamingOrderError as exc:
+                exc.read_metrics = {
+                    name: sum(self._metric_value(item, name) for item in summaries)
+                    for name in (*_IO_COUNT_FIELDS, *_IO_TIME_FIELDS)
+                }
+                exc.read_metrics.update(
+                    base_page_count=len(summaries), base_rows_fetched=fetched_rows,
+                    base_physical_page_count=owned_pages, base_physical_rows_fetched=owned_rows,
+                )
+                raise
+            aggregation_seconds += time.monotonic() - aggregation_started
+            if first_reduced_ms is None and stream.targets_desc:
+                first_reduced_ms = (time.monotonic() - started_at) * 1000
+            del page
+            if next_cursor >= cursor_ms:
+                break
+            cursor_ms = next_cursor
+
+        aggregation_started = time.monotonic()
+        targets, boundary = stream.finish()
+        aggregation_seconds += time.monotonic() - aggregation_started
+        merged = self._merge_base_page_results(summaries, [])
+        merged.total = stream.aggregated_rows
+        for name in _IO_COUNT_FIELDS:
+            merged.metadata[name] = sum(int(self._metric_value(page, name)) for page in summaries)
+        for name in _IO_TIME_FIELDS:
+            merged.metadata[name] = round(sum(float(self._metric_value(page, name)) for page in summaries), 2)
+        merged.metadata.update({
+            "base_page_count": len(summaries),
+            "base_rows_fetched": fetched_rows,
+            "base_rows_unique": stream.unique_rows,
+            "base_rows_returned": stream.aggregated_rows,
+            "base_page_overfetch_rows": stream.unique_rows - stream.aggregated_rows,
+            "base_physical_page_count": owned_pages,
+            "base_physical_rows_fetched": owned_rows,
+            "base_window_flight_role": "join" if owned_pages == 0 else "owner",
+            "base_streaming": True,
+            "base_stream_peak_buffered_rows": stream.peak_buffered_rows,
+            "base_stream_boundary_rows": len(boundary),
+            "base_stream_aggregation_ms": aggregation_seconds * 1000,
+            "base_first_reduced_ms": first_reduced_ms,
+        })
+        still_needs_rows = (
+            (stream.oldest_ms is None or stream.oldest_ms > lower_bound_ms)
+            if lower_bound_ms is not None else stream.unique_rows < target_limit
+        )
+        if (
+            requested_max_pages > max_pages and len(summaries) >= max_pages
+            and still_needs_rows and summaries
+            and (summaries[-1].has_more or summaries[-1].retryable or summaries[-1].missing_ranges)
+        ):
+            # Budget exhaustion is a continuation, never a synthetic source gap.
+            merged.has_more = True
+            merged.metadata.update(base_pagination_capped=True, base_page_limit=max_pages)
+        return merged, targets, boundary
+
+    @staticmethod
+    def _record_stream_fallback(result: QueryResult, error: StreamingOrderError) -> None:
+        """Include abandoned reads in diagnostics instead of hiding retry cost."""
+        joined = result.metadata.get("base_window_flight_role") == "join"
+        for physical, logical in (("base_physical_page_count", "base_page_count"),
+                                  ("base_physical_rows_fetched", "base_rows_fetched")):
+            result.metadata[physical] = 0 if joined else result.metadata.get(logical, 0)
+        for name, value in error.read_metrics.items():
+            result.metadata[name] = result.metadata.get(name, 0) + value
+        result.metadata["base_stream_fallback_reason"] = str(error)
+        result.metadata["base_stream_fallback_page_count"] = error.read_metrics["base_page_count"]
+        if result.metadata["base_physical_page_count"]:
+            result.metadata["base_window_flight_role"] = "owner"
 
     def query_from_base(
         self,
@@ -1695,37 +1878,76 @@ class CustomIntervalQueryService:
                     market_type=market_type,
                     auto_backfill=False,
                     initial_result=result,
+                    page_budget=(
+                        _MAX_CUSTOM_BASE_PAGES - int(fallback_reason.read_metrics["base_page_count"])
+                        if fallback_reason is not None else None
+                    ),
                 )
             return result
 
+        def read_legacy() -> QueryResult:
+            return self._run_base_window_flight(
+                series=(
+                    exchange.strip().lower(),
+                    market_type.strip().lower(),
+                    symbol.strip().upper(),
+                    base_interval,
+                ),
+                start_ms=window_start_ms,
+                end_ms=window_end_ms,
+                target_limit=base_limit,
+                requested_auto_backfill=auto_backfill,
+                compute=_read_base_range,
+                slice_result=not open_ended_latest,
+            )
+
         base_started_at = time.monotonic()
-        base_result = self._run_base_window_flight(
-            series=(
-                exchange.strip().lower(),
-                market_type.strip().lower(),
-                symbol.strip().upper(),
-                base_interval,
-            ),
-            start_ms=window_start_ms,
-            end_ms=window_end_ms,
-            target_limit=base_limit,
-            requested_auto_backfill=auto_backfill,
-            compute=_read_base_range,
-            slice_result=not open_ended_latest,
-        )
+        streamed = None
+        fallback_reason = None
+        if base_limit > self._cfg.max_limit and self._can_stream_history(interval, calendar, source_interval=base_interval):
+            try:
+                streamed = self._stream_base_history(
+                    symbol=symbol, interval=base_interval, target_interval=interval,
+                    before_ms=read_before_ms, target_limit=base_limit,
+                    lower_bound_ms=aligned_start_ms,
+                    aggregation_lower_bound_ms=None if open_ended_latest else window_start_ms,
+                    exchange=exchange, market_type=market_type,
+                    requested_auto_backfill=auto_backfill,
+                    initial_read=lambda: self._base_query(
+                        symbol, base_interval, start_ms=seed_start_ms,
+                        end_ms=base_end_ms, limit=seed_limit, exchange=exchange,
+                        market_type=market_type, auto_backfill=False,
+                    ),
+                )
+            except StreamingOrderError as exc:
+                # No targets have been written or cached. A non-directional
+                # adapter can safely replay through the bounded batch path.
+                if exc.read_metrics["base_page_count"] >= _MAX_CUSTOM_BASE_PAGES:
+                    raise
+                # Retain counters, not a traceback holding abandoned pages.
+                fallback_reason = exc.with_traceback(None)
+        boundary_components = None
+        if streamed is None:
+            base_result = read_legacy()
+        else:
+            base_result, derived_bars, boundary_components = streamed
+        if fallback_reason:
+            self._record_stream_fallback(base_result, fallback_reason)
         self._annotate_single_base_page(base_result)
-        base_query_ms = (time.monotonic() - base_started_at) * 1000
+        streamed_aggregation_ms = float(base_result.metadata.get("base_stream_aggregation_ms") or 0)
+        base_query_ms = (time.monotonic() - base_started_at) * 1000 - streamed_aggregation_ms
         aggregation_started_at = time.monotonic()
-        derived_bars = self.aggregate_custom_bars(
-            base_result.bars,
-            symbol=symbol,
-            interval=interval,
-            source_interval=base_interval,
-            start_ms=start_ms,
-            end_ms=end_ms,
-            exchange=exchange,
-            market_type=market_type,
-        )
+        if streamed is None:
+            derived_bars = self.aggregate_custom_bars(
+                base_result.bars, symbol=symbol, interval=interval,
+                source_interval=base_interval, start_ms=start_ms, end_ms=end_ms,
+                exchange=exchange, market_type=market_type,
+            )
+        else:
+            derived_bars = [bar for bar in derived_bars if (
+                (start_ms is None or bar.time_ms >= start_ms)
+                and (end_ms is None or bar.time_ms <= end_ms)
+            )]
         derived_bars, omitted_incomplete = self._omit_bars_overlapping_base_gaps(
             derived_bars,
             base_result.missing_ranges,
@@ -1733,7 +1955,8 @@ class CustomIntervalQueryService:
             calendar=calendar,
         )
         derived_bars = self._promote_rebuilt_finality(derived_bars, base_result,
-            interval=interval, source_interval=base_interval, calendar=calendar)
+            interval=interval, source_interval=base_interval, calendar=calendar,
+            boundary_components=boundary_components)
         (
             target_materialized_written,
             target_materialization_role,
@@ -1745,7 +1968,7 @@ class CustomIntervalQueryService:
             exchange=exchange,
             market_type=market_type,
         )
-        aggregation_ms = (time.monotonic() - aggregation_started_at) * 1000
+        aggregation_ms = streamed_aggregation_ms + (time.monotonic() - aggregation_started_at) * 1000
         if materialized_bars:
             # The materialized target was unable to satisfy the finalized
             # fast-path contract, so a just-rebuilt base aggregate is the
@@ -1775,7 +1998,7 @@ class CustomIntervalQueryService:
         )
         result_source = (
             QuerySource.MIXED
-            if materialized_bars and base_result.bars
+            if materialized_bars and (base_result.bars or base_result.total)
             else materialized_result.source
             if materialized_bars and materialized_result is not None
             else base_result.source
@@ -1980,41 +2203,67 @@ class CustomIntervalQueryService:
         window_end_ms = int(base_end_ms)
         window_start_ms = window_end_ms + 1 - base_limit * source_interval_ms
 
-        base_started_at = time.monotonic()
-        base_result = self._run_base_window_flight(
-            series=(
-                exchange.strip().lower(),
-                market_type.strip().lower(),
-                symbol.strip().upper(),
-                base_interval,
-            ),
-            start_ms=window_start_ms,
-            end_ms=window_end_ms,
-            target_limit=base_limit,
-            requested_auto_backfill=auto_backfill,
-            compute=lambda: self._page_base_history(
-                symbol=symbol,
-                interval=base_interval,
-                before_ms=base_end_ms + 1,
+        def read_legacy() -> QueryResult:
+            return self._run_base_window_flight(
+                series=(
+                    exchange.strip().lower(),
+                    market_type.strip().lower(),
+                    symbol.strip().upper(),
+                    base_interval,
+                ),
+                start_ms=window_start_ms,
+                end_ms=window_end_ms,
                 target_limit=base_limit,
-                lower_bound_ms=None,
-                exchange=exchange,
-                market_type=market_type,
-                auto_backfill=False,
-            ),
-        )
+                requested_auto_backfill=auto_backfill,
+                compute=lambda: self._page_base_history(
+                    symbol=symbol,
+                    interval=base_interval,
+                    before_ms=base_end_ms + 1,
+                    target_limit=base_limit,
+                    lower_bound_ms=None,
+                    exchange=exchange,
+                    market_type=market_type,
+                    auto_backfill=False,
+                    page_budget=(
+                        _MAX_CUSTOM_BASE_PAGES - int(fallback_reason.read_metrics["base_page_count"])
+                        if fallback_reason is not None else None
+                    ),
+                ),
+            )
+
+        base_started_at = time.monotonic()
+        streamed = None
+        fallback_reason = None
+        if base_limit > self._cfg.max_limit and self._can_stream_history(interval, calendar, source_interval=base_interval):
+            try:
+                streamed = self._stream_base_history(
+                    symbol=symbol, interval=base_interval, target_interval=interval,
+                    before_ms=base_end_ms + 1, target_limit=base_limit,
+                    lower_bound_ms=None, aggregation_lower_bound_ms=window_start_ms,
+                    exchange=exchange, market_type=market_type,
+                    requested_auto_backfill=auto_backfill,
+                )
+            except StreamingOrderError as exc:
+                if exc.read_metrics["base_page_count"] >= _MAX_CUSTOM_BASE_PAGES:
+                    raise
+                fallback_reason = exc.with_traceback(None)
+        boundary_components = None
+        if streamed is None:
+            base_result = read_legacy()
+        else:
+            base_result, derived_bars, boundary_components = streamed
+        if fallback_reason:
+            self._record_stream_fallback(base_result, fallback_reason)
         self._annotate_single_base_page(base_result)
-        base_query_ms = (time.monotonic() - base_started_at) * 1000
+        streamed_aggregation_ms = float(base_result.metadata.get("base_stream_aggregation_ms") or 0)
+        base_query_ms = (time.monotonic() - base_started_at) * 1000 - streamed_aggregation_ms
         aggregation_started_at = time.monotonic()
-        derived_bars = self.aggregate_custom_bars(
-            base_result.bars,
-            symbol=symbol,
-            interval=interval,
-            source_interval=base_interval,
-            end_ms=base_end_ms,
-            exchange=exchange,
-            market_type=market_type,
-        )
+        if streamed is None:
+            derived_bars = self.aggregate_custom_bars(
+                base_result.bars, symbol=symbol, interval=interval,
+                source_interval=base_interval, end_ms=base_end_ms,
+                exchange=exchange, market_type=market_type,
+            )
         derived_bars, omitted_incomplete = self._omit_bars_overlapping_base_gaps(
             derived_bars,
             base_result.missing_ranges,
@@ -2022,8 +2271,9 @@ class CustomIntervalQueryService:
             calendar=calendar,
         )
         derived_bars = self._promote_rebuilt_finality(derived_bars, base_result,
-            interval=interval, source_interval=base_interval, calendar=calendar)
-        aggregation_ms = (time.monotonic() - aggregation_started_at) * 1000
+            interval=interval, source_interval=base_interval, calendar=calendar,
+            boundary_components=boundary_components)
+        aggregation_ms = streamed_aggregation_ms + (time.monotonic() - aggregation_started_at) * 1000
         derived_bars = [bar for bar in derived_bars if bar.time_ms < before_ms]
         (
             target_materialized_written,
@@ -2062,7 +2312,7 @@ class CustomIntervalQueryService:
         )
         result_source = (
             QuerySource.MIXED
-            if materialized_bars and base_result.bars
+            if materialized_bars and (base_result.bars or base_result.total)
             else materialized_result.source
             if materialized_bars and materialized_result is not None
             else base_result.source
