@@ -189,7 +189,10 @@ Bulk closed history is transparent to chart and indicator callers:
 - ZIPs are content-addressed under `DATA_DIR/history_archives`. The default
   `delete_after_import` policy releases them after an atomic whole-object import;
   source/hash/import receipts remain in the K-line database. Reads use that
-  database, and missing original ZIPs can be downloaded again. `bounded_cache`
+  database, and missing original ZIPs can be downloaded again. `retain_for_duration`
+  protects cached imports until the durable import time plus the configured
+  duration, once cleanup has registered the proof. It does not resurrect inputs
+  evicted before import; pin inputs that must survive that phase. `bounded_cache`
   preserves the previous LRU capacity-cache policy. Download concurrency defaults
   to two; each archive object imports in one SQLite transaction.
 - Binance checksum sidecars are revalidated every 24 hours. A revision
@@ -202,7 +205,7 @@ Bulk closed history is transparent to chart and indicator callers:
   directories and ZIP streams through request-scoped proxy leases. Exchange
   allowlists, enabled routes, failover/balanced strategy and shared REST/ZIP route
   capacity apply to every physical attempt. CDN concurrency and 418/429 cooldown
-  are scoped by exchange, download host and egress group, independently of REST
+  are scoped by download host and egress group, independently of REST
   API weights. Aliases of the same exit share those limits.
 - Network/5xx failures can try another eligible route, once per URL and within
   one total request deadline including queue time. Every exit releases its lease;
@@ -213,6 +216,13 @@ Bulk closed history is transparent to chart and indicator callers:
   links. They work even when the pool has no usable route; stale objects retain
   checksum/HEAD revalidation. Transient OKX probe failures retry after 60 seconds
   without blocking valid local objects; incompatible contracts remain disabled.
+- Replay and backfill share process-wide archive admission across worker loops:
+  four total requests, at most three background requests, two per host/egress,
+  and a 64-entry priority queue. Each pool route reserves one slot for REST;
+  a route with concurrency one is REST-only. Archive file work uses a separate
+  bounded executor and cancellation drains active writes before releasing leases.
+  See the [qualification record](../../../../docs/qa/issue-124-archive-completion-20261029.md)
+  for source registration, support plans and remaining native/network checks.
 
 Pool integration tests use real loopback CONNECT proxies and a locally trusted
 TLS origin. They assert physical route selection, failover, stream/queue
@@ -242,6 +252,8 @@ in-flight cleanup finishes and deleted ZIPs require redownload. Source routing
 can separately be disabled with `HISTORY_ARCHIVE_ENABLED=0`; OKX keeps its own
 flag. Replay's persistent objects, user originals and QA evidence are outside
 this policy and retain their separate roots and owners.
+`INGESTION_ARCHIVE_DOWNLOADS_ENABLED=0` separately disables new archive network
+admission (including queued requests); warm verified ZIPs remain usable.
 
 Fetcher diagnostics expose the selected source, cache/object counts, bytes,
 download/parse timing, REST tail/fallback counts, and singleflight waiters.
@@ -286,7 +298,9 @@ Write failures are surfaced through `ReconcileResult.write_errors` and `failed_b
 | `HISTORY_ARCHIVE_ENABLED` | enable official archive routing; default `1` |
 | `HISTORY_ARCHIVE_CACHE_DIR` | persistent ZIP cache; default `DATA_DIR/history_archives` |
 | `HISTORY_ARCHIVE_CACHE_MAX_BYTES` | archive cache LRU cap; default `10737418240` (10 GiB) |
-| `HISTORY_ARCHIVE_CLEANUP_POLICY` | `delete_after_import` (default) or `bounded_cache` |
+| `HISTORY_ARCHIVE_CLEANUP_POLICY` | `delete_after_import` (default), `retain_for_duration` or `bounded_cache` |
+| `HISTORY_ARCHIVE_RETAIN_SECONDS` | duration after durable import; default `86400` |
+| `INGESTION_ARCHIVE_DOWNLOADS_ENABLED` | admit archive network requests; default `1` |
 | `OKX_HISTORY_ARCHIVE_ENABLED` | enable guarded OKX archive probe/routing; default `0` |
 | `BACKFILL_RECONCILE_DEDUP_STRATEGY` | write conflict policy |
 | `BACKFILL_RECONCILE_WRITE_BATCH_SIZE` | storage write batch size |
@@ -309,6 +323,8 @@ python -m pytest -q \
   tests/test_history_archive_storage.py \
   tests/test_history_archive_import_cleanup.py \
   tests/test_history_archive_proxy_pool.py \
+  tests/test_history_archive_admission.py \
+  tests/test_history_archive_sources.py \
   tests/test_transport_http_rate_limit_metadata.py \
   tests/test_okx_backfill_fetcher.py
 ```
