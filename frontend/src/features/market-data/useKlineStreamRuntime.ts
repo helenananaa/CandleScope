@@ -4,7 +4,6 @@ import { markPerfOnce, recordPerfEvent } from "../../runtime/performance/perfMar
 import {
   canonicalizeIntervalValue,
   intervalsSemanticallyEquivalent,
-  parseIntervalSeconds,
 } from "../../utils/intervals.js";
 import type { IntervalString } from "../../utils/intervals.js";
 import type { ExchangeId, MarketType, SymbolCode } from "../../utils/symbolKey.js";
@@ -15,6 +14,7 @@ import type {
   KlineStreamController,
   PatchCacheTick,
 } from "./klineContracts.js";
+import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
 import type { KlineBar } from "./marketDataTypes.js";
 import { KlineConsumerRecovery } from "./feed/klineConsumerRecovery.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
@@ -35,7 +35,6 @@ const PENDING_REPAIR_POLL_INTERVAL_MS = 500;
 const HELD_WINDOW_GAP_SCAN_INTERVAL_MS = 15_000;
 const WS_RECOVERY_COUNT_BACK = 1_500;
 export const WS_RECOVERY_SOURCE_ROW_BUDGET = 20_000;
-const TAB_RECOVERY_MIN_HIDDEN_MS = 15_000;
 
 export function planKlineRecoveryCountBack(
   interval: IntervalString,
@@ -233,9 +232,12 @@ export function useKlineStreamRuntime({
     let active = true;
     const consumerRecovery = new KlineConsumerRecovery();
     let nextConsumerRecoveryAt = 0;
+    let windowVisible = true;
+    let suspendedAt: number | null = null;
+    const suspendedTails = new Map<string, readonly KlineBar[]>();
     const setTransportStatus: typeof setWsStatus = (status) => setWsStatus((previous) => {
       const next = typeof status === "function" ? status(previous) : status;
-      return consumerRecovery.requiredFor(intervalRef.current) ? "reconnecting" : next;
+      return !windowVisible || consumerRecovery.requiredFor(intervalRef.current) ? "reconnecting" : next;
     });
     let subscription: KlineStreamController | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -339,6 +341,24 @@ export function useKlineStreamRuntime({
       }
       startPolling();
       setTransportStatus(status);
+    };
+
+    const recoverConsumer = () => {
+      if (!active || !consumerRecovery.required || Date.now() < nextConsumerRecoveryAt) return;
+      nextConsumerRecoveryAt = Date.now() + 10_000;
+      void consumerRecovery.recover(seriesDataFeed, (candidate) => {
+        const status = getKlineStreamIntervalStatus(acknowledgementState, candidate);
+        // ACK permits a readback. Only observed current data establishes live.
+        return !webSocketEnabled || status === "loading" || status === "live";
+      }).then((resumed) => {
+        if (!active) return;
+        for (const result of resumed) {
+          if (intervalsSemanticallyEquivalent(result.series.interval, intervalRef.current)) {
+            updateLastPrice(result.latest, result.series.interval);
+          }
+        }
+        setTransportStatus(getKlineStreamIntervalStatus(acknowledgementState, intervalRef.current));
+      });
     };
 
     const reconcileTrackedIntervals = (intervals: readonly IntervalString[]) => {
@@ -461,11 +481,16 @@ export function useKlineStreamRuntime({
             },
             onControlMessage: (message) => {
               if (!active) return;
+              const previousIntervals = acknowledgementState.activeIntervals;
               acknowledgementState = reduceKlineStreamControlMessage(
                 acknowledgementState,
                 message,
               );
               applyAcknowledgedStatus();
+              if (acknowledgementState.activeIntervals.some((interval) => !previousIntervals.includes(interval))) {
+                nextConsumerRecoveryAt = 0;
+              }
+              recoverConsumer();
             },
             onBackfillCompleted: (msg) => {
               if (!active) return false;
@@ -572,14 +597,7 @@ export function useKlineStreamRuntime({
     // known to be pending; this never rescans or reloads the whole window.
     pendingRepairInterval = setInterval(() => {
       if (!active || pendingRepairPollingInFlight) return;
-      if (consumerRecovery.required && Date.now() >= nextConsumerRecoveryAt) {
-        nextConsumerRecoveryAt = Date.now() + 10_000;
-        void consumerRecovery.recover(seriesDataFeed, (candidate) => (
-          getKlineStreamIntervalStatus(acknowledgementState, candidate) === "live"
-        )).then(() => {
-          if (active) setTransportStatus(getKlineStreamIntervalStatus(acknowledgementState, intervalRef.current));
-        });
-      }
+      recoverConsumer();
       const currentIntv = intervalRef.current;
       const series = { exchange, marketType, symbol, interval: currentIntv };
       if (seriesDataFeed.pendingRepairCount(series) === 0) return;
@@ -601,6 +619,36 @@ export function useKlineStreamRuntime({
       });
     }, HELD_WINDOW_GAP_SCAN_INTERVAL_MS);
 
+    const stopObservingVisibility = observeMarketWindowVisibility((visible) => {
+      if (!active || windowVisible === visible) return;
+      windowVisible = visible;
+      if (!visible) {
+        suspendedAt = Date.now();
+        for (const interval of trackedIntervalsRef.current) {
+          const series = { exchange, marketType, symbol, interval };
+          suspendedTails.set(interval, getCacheRows(series).slice(-1));
+        }
+        setTransportStatus("reconnecting");
+        return;
+      }
+      // Retain the pre-suspension row even if closed ticks advanced the Store.
+      // Restore must catch up without requiring another WS tick or a 15s hide.
+      for (const interval of trackedIntervalsRef.current) {
+        const series = { exchange, marketType, symbol, interval };
+        consumerRecovery.capture(seriesDataFeed, series,
+          suspendedTails.get(interval) ?? getCacheRows(series).slice(-1),
+          { discoverTail: true });
+      }
+      recordPerfEvent("ws.kline.visibilityRecovery", {
+        symbol, marketType, exchange, hiddenMs: suspendedAt === null ? 0 : Date.now() - suspendedAt,
+      });
+      suspendedAt = null;
+      suspendedTails.clear();
+      setTransportStatus("reconnecting");
+      nextConsumerRecoveryAt = 0;
+      recoverConsumer();
+    });
+
     const initialFallbackTimer = webSocketEnabled ? setTimeout(() => {
       if (
         active
@@ -616,6 +664,8 @@ export function useKlineStreamRuntime({
 
     return () => {
       active = false;
+      stopObservingVisibility();
+      consumerRecovery.close();
       if (initialFallbackTimer) clearTimeout(initialFallbackTimer);
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
@@ -659,71 +709,4 @@ export function useKlineStreamRuntime({
     reconcileTrackedIntervalsRef.current?.(trackedIntervals);
     subscriptionRef.current?.updateIntervals(trackedIntervals);
   }, [trackedIntervals]);
-
-  useEffect(() => {
-    if (!enabled || typeof document === "undefined") return undefined;
-    let active = true;
-    let hiddenAt: number | null = null;
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAt = Date.now();
-        return;
-      }
-      const hiddenMs = hiddenAt ? Date.now() - hiddenAt : 0;
-      hiddenAt = null;
-      if (hiddenMs < TAB_RECOVERY_MIN_HIDDEN_MS) return;
-
-      // Browsers throttle or drop WS ticks for hidden tabs while the backend
-      // keeps ingesting, so the tail hole exists only client-side and no
-      // backfill event will ever repair it. Pull the newest bars to catch up.
-      const currentIntv = intervalRef.current;
-      const intervalSecs = parseIntervalSeconds(currentIntv) || 60;
-      const missedBars = Math.ceil(hiddenMs / 1000 / intervalSecs) + 5;
-      const desiredCountBack = Math.max(50, Math.min(WS_RECOVERY_COUNT_BACK, missedBars));
-      const countBack = planKlineRecoveryCountBack(
-        currentIntv,
-        nativeIntervalValues,
-        desiredCountBack,
-      );
-      if (countBack <= 0) {
-        console.warn(`[TabRecovery] Skipped ${currentIntv}; source-history budget exceeded`);
-        return;
-      }
-      recordPerfEvent("ws.kline.tabRecovery", { symbol, marketType, exchange, interval: currentIntv, hiddenMs, countBack });
-      seriesDataFeed.getBars(
-        { exchange, marketType, symbol, interval: currentIntv },
-        { countBack, source: "tab-visibility-recovery" },
-      )
-        .then((result) => {
-          if (
-            !active
-            || result.stale
-            || result.active === false
-            || !result?.data?.length
-          ) return;
-          const latest = result.data.at(-1);
-          if (latest) updateLastPrice(latest, currentIntv);
-          void seriesDataFeed.repairVisibleGaps(
-            { exchange, marketType, symbol, interval: currentIntv },
-            result.data,
-            null,
-            { source: "tab-recovery-gap-planner" },
-          );
-          void seriesDataFeed.pollPendingRepairs(
-            { exchange, marketType, symbol, interval: currentIntv },
-            { force: true },
-          );
-        })
-        .catch((err) => {
-          console.warn("[TabRecovery] Tail catch-up failed:", err);
-        });
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      active = false;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [enabled, exchange, intervalRef, marketType, nativeIntervalValues, seriesDataFeed, symbol, updateLastPrice]);
 }

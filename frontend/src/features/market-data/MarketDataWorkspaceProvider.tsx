@@ -25,6 +25,7 @@ import { MarketDataWorkspaceEffectGuard } from "./marketDataWorkspaceLifecycle.j
 import { desktopWindowManager } from "../../desktop/desktopWindowManager.js";
 import { CHART_WORKSPACE_FEATURE_FLAGS } from "../chart-workspace/chartWorkspaceCapacity.js";
 import { defaultWorkspaceBus } from "../chart-workspace/workspaceBus.js";
+import { observeMarketWindowVisibility } from "./marketWindowVisibility.js";
 
 export interface MarketDataWorkspaceProviderProps extends PropsWithChildren {
   brokerEnabled?: boolean;
@@ -95,20 +96,8 @@ export function MarketDataWorkspaceProvider({
 
   useEffect(() => {
     const scheduler = resources.workScheduler;
-    if (!scheduler || typeof document === "undefined") return undefined;
-    const syncVisibility = () => scheduler.setWindowVisible(document.visibilityState !== "hidden");
-    syncVisibility();
-    document.addEventListener("visibilitychange", syncVisibility);
-    return () => document.removeEventListener("visibilitychange", syncVisibility);
-  }, [resources]);
-
-  useEffect(() => {
-    const scheduler = resources.workScheduler;
     if (!scheduler) return undefined;
-    return desktopWindowManager.onLifecycle((event) => {
-      if (event.windowId !== desktopWindowManager.windowId) return;
-      scheduler.setWindowVisible(event.visible && !event.minimized && event.state !== "hidden");
-    });
+    return observeMarketWindowVisibility((visible) => scheduler.setWindowVisible(visible));
   }, [resources]);
 
   useEffect(() => {
