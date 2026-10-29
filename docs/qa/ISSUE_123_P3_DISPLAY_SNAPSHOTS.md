@@ -80,8 +80,8 @@ Keep P0/P1/P2 evidence and the retired-Pyne rejection checks intact.
 
 ## Acceptance status
 
-The scoped results below separate observed correctness/performance from the
-known remaining viewport defect and broader acceptance gaps.
+The scoped results below separate observed correctness/performance, the initial
+viewport findings and their follow-up fixes, and broader acceptance gaps.
 
 ### Measured candidate (2026-10-29)
 
@@ -176,10 +176,33 @@ share one physical WS. Follow-up evidence is recorded under
 `output/issue-123-p3-followup-20261029` and linked from the issue/PR. The initial P3
 archive remains historical evidence rather than being overwritten.
 
-Repeated native drag/horizontal-scroll attempts did not produce a confirmed pan
-in this run. Independent zoom, live return, hidden restoration and owner isolation
-are observed; the full 10000-row A-history/B-live navigation scenario from P1 was
-not freshly revalidated on this candidate. Do not label those attempts passed.
+Follow-up browser gestures reached the 10000-row trim boundary with A holding
+history and B retaining its independent live window. Seven new bars changed only
+B; amendments in each window preserved both visible ranges. Hidden A accepted a
+historical correction while its display stayed frozen, then restored without a
+new tick: all 10000 A rows and 1510 B rows matched the authoritative OHLCV/finality
+and their displayed OHLC. This is real Chrome UI evidence, not native pan proof:
+the native tool delivered no pressed mouse-move events during drag and zero
+horizontal wheel deltas. Native zoom, correction and minimization evidence is
+recorded separately.
+
+That deeper browser run found a second defect: returning A to the latest window
+replaced its source with 1500 rows but left the view at [-842, 1], showing almost
+no data. Waiting one RAF after admission did not guarantee that the display
+queue had committed the replacement. The follow-up replaces that timing guess
+with a bounded projection-commit gate. It applies navigation only after a
+successful render of the requested owner/version, retires intents on a new
+gesture or surface reset, and fences late restore promises by their owner and
+interaction generation. It does not flush the data writer or bypass scheduling.
+
+The final browser run repeated the 10000-row trim and one-click latest return;
+the latest bar became visible and B's data version, contents and range stayed
+unchanged (ordinary polling metadata may still advance). A separate 8-second
+HTTP response completed while A was hidden: its source held 1500 rows while its
+display retained 10000. Visibility restoration committed the projection and
+positioned the latest bar without another tick. Deterministic regressions also
+cover a frame consumed by another chart, hidden work without spinning frames,
+older/other-owner receipts, cancellation and same-owner surface remounts.
 
 Also unverified: full installed/notarized app interaction; native indicator/plugin
 creation and every hosted provider; export/replay workflows beyond the tested

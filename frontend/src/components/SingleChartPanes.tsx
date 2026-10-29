@@ -1,4 +1,5 @@
 import { useChartDisplaySubscription } from "../features/market-data/useChartDisplaySubscription.js";
+import { createProjectionCommitGate } from "../chart-adapter/projectionCommitGate.js";
 import type { ChartDisplayScheduler } from "../features/market-data/chartDisplaySubscription.js";
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
@@ -1047,7 +1048,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     datasetKey: string;
     promise: Promise<boolean>;
   } | null>(null);
-  const rightWindowRestoreScrollFrameRef = useRef<number | null>(null);
+  const latestWindowScrollGateRef = useRef(createProjectionCommitGate<SeriesWindowView>());
   const explicitLatestWindowRestoreRef = useRef<Promise<boolean> | null>(null);
   const datasetKeyRef = useRef(datasetKey);
   const surfaceConfigKeyRef = useRef<string | null>(null);
@@ -2065,6 +2066,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   }, [datasetViewportTransfer, settleDatasetViewportTransfer]);
 
   const issueHistoryInteractionTicket = useCallback(() => {
+    latestWindowScrollGateRef.current.cancel();
     markViewportRangeInteracted();
     leftHistoryInteractionGenerationRef.current += 1;
   }, [markViewportRangeInteracted]);
@@ -2148,13 +2150,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
   }, [settleDatasetViewportTransfer]);
 
-  const scheduleLatestWindowScroll = useCallback((requestedDatasetKey: string) => {
-    if (rightWindowRestoreScrollFrameRef.current != null) {
-      cancelAnimationFrame(rightWindowRestoreScrollFrameRef.current);
-    }
-    rightWindowRestoreScrollFrameRef.current = requestAnimationFrame(() => {
-      rightWindowRestoreScrollFrameRef.current = null;
-      if (datasetKeyRef.current !== requestedDatasetKey) return;
+  const scheduleLatestWindowScroll = useCallback((requestedDatasetKey: string, store: SeriesWindowView) => {
+    const interactionGeneration = leftHistoryInteractionGenerationRef.current;
+    latestWindowScrollGateRef.current.request(store, store.version, () => {
+      if (datasetKeyRef.current !== requestedDatasetKey || seriesStoreRef.current !== store
+        || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return;
       if (followLatestRef.current && displayRowsRef.current.length > 0) {
         jumpToLatest();
       } else {
@@ -2205,8 +2205,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const promise = Promise.resolve()
       .then(() => restore())
       .then((restored) => {
-        if (!restored || datasetKeyRef.current !== requestedDatasetKey) return false;
-        if (edgeRequestRestoresLatest) scheduleLatestWindowScroll(requestedDatasetKey);
+        if (!restored || datasetKeyRef.current !== requestedDatasetKey
+          || rightWindowRestoreRef.current !== owner || seriesStoreRef.current !== store
+          || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return false;
+        if (edgeRequestRestoresLatest && store) scheduleLatestWindowScroll(requestedDatasetKey, store);
         return true;
       })
       .catch((error) => {
@@ -2230,12 +2232,16 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     ) return;
 
     const requestedDatasetKey = datasetKeyRef.current;
+    const store = seriesStoreRef.current;
+    const interactionGeneration = leftHistoryInteractionGenerationRef.current;
     setLatestWindowRestorePending(true);
     const promise = Promise.resolve()
       .then(() => restore())
       .then((restored) => {
-        if (!restored || datasetKeyRef.current !== requestedDatasetKey) return false;
-        scheduleLatestWindowScroll(requestedDatasetKey);
+        if (!restored || !store || datasetKeyRef.current !== requestedDatasetKey
+          || explicitLatestWindowRestoreRef.current !== promise || seriesStoreRef.current !== store
+          || leftHistoryInteractionGenerationRef.current !== interactionGeneration) return false;
+        scheduleLatestWindowScroll(requestedDatasetKey, store);
         return true;
       })
       .catch((error) => {
@@ -2881,10 +2887,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         cancelAnimationFrame(transferredHistoryFrameRef.current);
         transferredHistoryFrameRef.current = null;
       }
-      if (rightWindowRestoreScrollFrameRef.current != null) {
-        cancelAnimationFrame(rightWindowRestoreScrollFrameRef.current);
-        rightWindowRestoreScrollFrameRef.current = null;
-      }
+      latestWindowScrollGateRef.current.reset();
+      explicitLatestWindowRestoreRef.current = null;
       rightWindowRestoreRef.current = null;
       // Stop exposing the old chart before touching the underlying LWC
       // instance.  During interval/session transitions its API object can
@@ -3713,10 +3717,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       cancelAnimationFrame(leftHistoryFlushFrameRef.current);
       leftHistoryFlushFrameRef.current = null;
     }
-    if (rightWindowRestoreScrollFrameRef.current != null) {
-      cancelAnimationFrame(rightWindowRestoreScrollFrameRef.current);
-      rightWindowRestoreScrollFrameRef.current = null;
-    }
+    latestWindowScrollGateRef.current.reset();
+    explicitLatestWindowRestoreRef.current = null;
+    setLatestWindowRestorePending(false);
     if (pendingViewport !== null) {
       // displayRowsRef still belongs to the outgoing dataset in this effect.
       // Keep the transfer pending until the target store has committed; an
@@ -3982,6 +3985,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         hasRestoredRangeRef.current = true;
         lastViewportRestoreSourceRef.current = "follow-latest";
       }
+      if (projectionRendered) latestWindowScrollGateRef.current.didCommit(store, store.version);
     } finally {
       isSyncingRef.current = false;
     }
@@ -4213,6 +4217,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
         }
+        if (projectionRendered) latestWindowScrollGateRef.current.didCommit(currentStore, currentStore.version);
       } finally {
         isSyncingRef.current = false;
       }
