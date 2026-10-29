@@ -134,6 +134,29 @@ never share an entry. The write boundary deep-copies and freezes owned data.
 Within one `contentVersion`, payload and metadata reads return stable read-only
 views without cloning; a real mutation publishes a new version and view.
 
+The workspace supplies an `indicatorInputBinding` source. Cache keys include
+full provider/venue/session/adjustment identity and the market pool's scope.
+Hosted results retain the existing server revision/segment contract and also
+capture the locally observed input prefix through the output boundary. A
+changed earlier row invalidates recursive outputs; an unrelated right append
+can leave a bounded result reusable. Stamps retain revisions, not copied input
+arrays. Eviction, pool recreation and disconnect revoke dependencies. Invalid
+entries cannot be read, resumed, rebased or merged into a fresh suffix.
+
+Explicit-local results additionally key the exact bounded OHLCV input, including
+its starting time and count. They must match the pool at dispatch and still
+match on cache publication. Different windows recompute; this does not invent a
+recursive checkpoint or claim equivalence with a full-history calculation.
+Existing backend hosted warmup/revision handling remains authoritative outside
+the locally observed prefix. Async completion checks both private-window and
+shared-input ownership. Forming previews may display under the existing stable
+closed-prefix policy, but changed forming input cannot certify a cached result.
+
+Earlier facts learned by another chart enter the existing indicator correction
+queue. This does not expand the receiving chart's window or add a second repair
+scheduler. Hydration resolves dependencies again at React publication time;
+ordinary input samples change result identity without resetting the pane UI.
+
 At a hydration ownership change, a layout effect synchronously resets old
 auxiliary outputs and publishes cache-owned line/schema references. A cache miss
 clears stale line data but preserves an explicit-local terminal error. A later

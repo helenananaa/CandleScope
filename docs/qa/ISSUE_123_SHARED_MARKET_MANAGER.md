@@ -40,17 +40,17 @@ publication are complete. A passing unit test is not native acceptance.
 
 1. **Implemented; broader validation pending:** shared immutable range-cache admission with HTTP/WS fences,
    bounded retention, range proof, versioned reads and regressions.
-2. **In progress:** framework-independent MarketDataManager around existing shared
+2. **Implemented; actual acceptance pending:** framework-independent MarketDataManager around existing shared
    transports; route production chart history, real-time and repair inputs
    through it; preserve private bounded window commits and recovery contracts.
 3. **Implemented; integration acceptance pending:** unify consumer demand ownership with watchlist K-line warming;
    keep quote/indicator protocols and business ownership explicit. Migrate
    duplicate candle storage/acceptance rather than adding another writer.
-4. **In progress:** chart switch orchestration and budgeted hover/frequent-interval
-   warming with promotion/cancellation are implemented; production cache-first
-   navigation range acquisition and actual UI acceptance remain pending.
-5. **Pending:** indicator dependency/range revisions and async output fencing;
-   architecture enforcement and documentation.
+4. **Implemented; actual acceptance pending:** per-chart switch handoff, bounded
+   hover/frequent warming and explicit cache-first historical navigation.
+5. **Implemented; actual acceptance pending:** full semantic and workspace input
+   identity, prefix/range versions, provided-input origin keys, async fences and
+   shared-prefix correction notification; architecture checks and documentation.
 6. **Pending:** full checks and fixed-corpus baseline/candidate measurement;
    actual dual-chart independent navigation, switch races, corrections,
    hidden/minimized reconnect, and bounded-memory observation. Publish a PR and
@@ -160,3 +160,35 @@ Unified warming and switch checkpoint (development evidence):
   both TypeScript projects, ESLint and production build. Log:
   `/tmp/issue-123-hover-check.log`. Existing SingleChartPanes cleanup and bundle
   size warnings remain. No native or comparative-performance claim yet.
+
+
+Indicator / navigation / retention checkpoint:
+
+- Indicator cache availability now uses full semantic identity. Production cache
+  entries are scoped to their workspace pool; hosted input stamps observe the
+  held recursive prefix, while local results include the exact bounded input
+  origin/count/content and are admitted only against a matching current input.
+  Earlier corrections revoke dependencies; unrelated right appends can preserve
+  results. Invalid old output cannot be merged into a fresh suffix or resume.
+- Existing server revisions and hosted warmup remain in force. Local scripts
+  recompute from their explicit bounded input when it changes; no synthesized
+  recursive checkpoint or full-history-equivalence claim is introduced.
+- Cross-chart changes before a private window enter the existing indicator
+  correction queue. Async work checks both private and shared input; hydration
+  rereads current dependencies inside its React publication. A new input sample
+  does not reset the entire indicator pane context.
+- Production before-page navigation opts into proven cache coverage. The proof
+  must reach the requested boundary, not merely cover the selected old rows.
+  Right-page navigation uses a proven range and retains strict repair fallback.
+  Fresh recovery remains network-only; a new backfill completion revokes prior
+  instrument coverage before consumer recovery callbacks.
+- Active window ranges are soft-retained and tracked via constant-time bounds.
+  Retention never overrides hard capacity. Active series cannot be silently
+  replaced by speculative entry allocation; surplus realtime is rejected with
+  diagnostics rather than throwing into the transport callback.
+- 763 focused market/indicator/cache/watchlist tests passed. Full `npm run check`
+  passed 4,522 frontend functional tests, one isolated performance gate and 123
+  desktop tests, plus architecture/plugin/i18n, TypeScript, ESLint and build.
+  Log: `/tmp/issue-123-input-nav-check.log`. Existing warnings remain. Actual UI,
+  native lifecycle, comparative performance and sustained heap evidence are
+  still pending for this candidate.

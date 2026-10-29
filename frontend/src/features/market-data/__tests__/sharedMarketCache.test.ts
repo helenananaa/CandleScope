@@ -51,6 +51,28 @@ test("invalid HTTP batch is atomic and cannot certify a range", () => {
   assert.equal(cache.read(series, { from: 60, to: 120 }).complete, false);
 });
 
+test("a before-page proof covers the requested boundary, not only the last retained row", () => {
+  const cache = new SharedMarketCache();
+  admit(cache, [row(60), row(120)]);
+  assert.equal(cache.read(series, { before: 180, limit: 2 }).complete, false);
+  admit(cache, [row(60), row(120), row(180)]);
+  assert.equal(cache.read(series, { before: 180, limit: 2 }).complete, true);
+  assert.equal(cache.read(series, { before: 240, limit: 2 }).complete, false);
+});
+
+test("cache capacity preserves active consumers and rejects surplus realtime without throwing", () => {
+  const cache = new SharedMarketCache({ maxSeries: 1 });
+  admit(cache, [row(60)]);
+  const release = cache.subscribe(series, () => {});
+  const other = { ...series, symbol: "ETHUSDT" };
+  assert.equal(cache.admitRealtime(other, row(60)).accepted, false);
+  assert.equal(cache.diagnostics().capacityRejects, 1);
+  assert.equal(cache.read(series).rows.length, 1);
+  release();
+  assert.equal(cache.admitRealtime(other, row(60)).accepted, true);
+  assert.equal(cache.diagnostics().series, 1);
+});
+
 test("shared request fence protects concurrent close and amendment, then permits a later repair", () => {
   const cache = new SharedMarketCache();
   admit(cache, [row(60)]);

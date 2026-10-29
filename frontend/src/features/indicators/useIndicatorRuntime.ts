@@ -1,3 +1,5 @@
+import { bindSharedIndicatorPrefix, createIndicatorCacheInputSource } from "./indicatorInputBinding.js";
+import { buildIndicatorOhlcvSignature } from "./indicatorComputeRuntime.js";
 import { captureStableSeries } from "../market-data/window/stableSeriesSnapshot.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeriesIdentity, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -628,6 +630,19 @@ export function useIndicatorRuntime(
       : { persistence: options.indicatorPersistence }),
   });
 
+  const frontendWindow = useFrontendScriptWindow(
+    options.marketData?.view.seriesStore ?? null,
+    options.realtimeEnabled !== false && activeIndicators.some(indicator => (isFrontendScript(indicator) || indicator.executionTarget === "local") && indicator.visible !== false),
+    sessionKey,
+  );
+  const computeChartData = frontendWindow.rows ?? chartData;
+  const computeChartDataRef = useLatestRef(computeChartData);
+  const inputSource = useMemo(() => marketWorkspaceResources
+    ? createIndicatorCacheInputSource(marketWorkspaceResources.dataManager.cache) : undefined, [marketWorkspaceResources]);
+  const localInputKey = useMemo(() => activeIndicators.some(indicator => isFrontendScript(indicator) || indicator.executionTarget === "local")
+    ? buildIndicatorOhlcvSignature(computeChartData) : undefined, [activeIndicators, computeChartData]);
+  const localInputKeyRef = useLatestRef(localInputKey);
+
   const [outputState, outputDispatch] = useReducer(
     indicatorOutputReducer,
     undefined,
@@ -821,6 +836,8 @@ export function useIndicatorRuntime(
   const chartDataReady = Boolean(chartData?.length && chartDataStatus === "ready");
   const indicatorCacheHydrationSignature = useMemo(() => (
     buildIndicatorCacheHydrationSignature(activeIndicators, {
+      inputSource,
+      localInputKey,
       candleDownColor,
       candleUpColor,
       exchange,
@@ -831,6 +848,8 @@ export function useIndicatorRuntime(
     })
   ), [
     activeIndicators,
+    inputSource,
+    localInputKey,
     candleDownColor,
     candleUpColor,
     exchange,
@@ -852,6 +871,8 @@ export function useIndicatorRuntime(
   const currentStreamLifecycleKeyRef = useLatestRef(currentStreamLifecycleKey);
   const currentInitialHydrationSignature = useMemo(() => {
     const cacheContext = buildIndicatorCacheContext({
+      inputSource,
+      localInputKey,
       candleDownColor,
       candleUpColor,
       exchange,
@@ -870,6 +891,8 @@ export function useIndicatorRuntime(
     });
   }, [
     activeIndicators,
+    inputSource,
+    localInputKey,
     candleDownColor,
     candleUpColor,
     exchange,
@@ -947,6 +970,8 @@ export function useIndicatorRuntime(
   useLayoutEffect(() => acquireActiveIndicatorCacheLeases(
     activeIndicatorsRef.current,
     {
+      inputSource,
+      localInputKey,
       candleDownColor,
       candleUpColor,
       exchange,
@@ -963,6 +988,8 @@ export function useIndicatorRuntime(
     exchange,
     indicatorCacheHydrationSignature,
     indicatorCacheRuntimeLeaseId,
+    inputSource,
+    localInputKey,
     seriesIdentity,
     interval,
     marketType,
@@ -1011,6 +1038,8 @@ export function useIndicatorRuntime(
   const getIndicatorCacheContext = useCallback(() => {
     const requestContext = runtimeContextRef.current;
     return buildIndicatorCacheContext({
+      inputSource,
+      localInputKey: localInputKeyRef.current,
       candleDownColor: candleDownColorRef.current,
       candleUpColor: candleUpColorRef.current,
       exchange: requestContext.exchange,
@@ -1019,7 +1048,7 @@ export function useIndicatorRuntime(
       marketType: requestContext.marketType,
       symbol: requestContext.symbol,
     });
-  }, [candleDownColorRef, candleUpColorRef, runtimeContextRef]);
+  }, [candleDownColorRef, candleUpColorRef, runtimeContextRef, inputSource, localInputKeyRef]);
 
   const markHostedSubscriptionReady = useCallback((indicatorId: string) => {
     hostedPendingResumePatchIdsRef.current.delete(String(indicatorId));
@@ -1579,7 +1608,10 @@ export function useIndicatorRuntime(
         const input = sourceAtDispatch ? captureStableSeries(sourceAtDispatch, {
           to: Math.min(range.end, last ? Number(last.time) - (last.is_closed === true ? 0 : 1) : range.end),
         }) : null;
-        const inputCurrent = () => seriesStoreRef.current === sourceAtDispatch && (input?.isCurrent("range") ?? true);
+        const sharedInput = inputSource?.capture({ ...requestContext.seriesIdentity, ...requestContext },
+          Math.min(range.end, last ? Number(last.time) - (last.is_closed === true ? 0 : 1) : range.end));
+        const inputCurrent = () => seriesStoreRef.current === sourceAtDispatch && (input?.isCurrent("range") ?? true)
+          && (sharedInput?.isCurrent() ?? true);
         const afterEventId = latestIndicatorRangeEventId(indicatorRangeRequestsRef.current);
         const revisionAtDispatch = seriesRevisionRef.current || normalizeIndicatorRevision(revision);
         const message = target.message;
@@ -1729,6 +1761,7 @@ export function useIndicatorRuntime(
     indicatorRangeBatcher,
     indicatorRangeRequestsRef,
     indicatorRangeScheduler,
+    inputSource,
     realtimeEnabled,
     requestDemandRef,
     runtimeContextRef,
@@ -2132,6 +2165,28 @@ export function useIndicatorRuntime(
   useLayoutEffect(() => {
     flushIndicatorCorrectionsRef.current = flushIndicatorCorrections;
   }, [flushIndicatorCorrections]);
+
+  useLayoutEffect(() => {
+    if (!marketWorkspaceResources || !realtimeEnabled) return;
+    const series = { ...seriesIdentity, exchange, marketType, symbol, interval };
+    return bindSharedIndicatorPrefix(marketWorkspaceResources.dataManager.cache, series,
+      () => seriesStoreRef.current?.first()?.time,
+      dirtyRange => {
+        const context = runtimeContextRef.current;
+        const seriesKey = [context.sessionKey, context.exchange, context.marketType, context.symbol, context.interval].join("|");
+        const cacheContext = getIndicatorCacheContext();
+        // A local admission has no server revision. A previous success for the
+        // same range cannot certify this new input; reuse the existing queue.
+        completedIndicatorRangeRequestsRef.current.clear();
+        for (const indicator of getVisibleHostedIndicators(activeIndicatorsRef.current)) {
+          queueIndicatorCorrection({ dirtyRange, indicatorId: indicator.id, revision: null, seriesKey,
+            targetKey: buildIndicatorResultCacheKey(indicator, cacheContext) });
+        }
+        if (!historyWindowPendingRef.current) scheduleIndicatorCorrectionFlush();
+      });
+  }, [activeIndicatorsRef, exchange, getIndicatorCacheContext, historyWindowPendingRef, interval,
+    marketType, marketWorkspaceResources, queueIndicatorCorrection, realtimeEnabled, runtimeContextRef,
+    scheduleIndicatorCorrectionFlush, seriesIdentity, seriesStoreRef, symbol]);
 
   const handleIndicatorRecomputed = useCallback((
     indicatorId: string,
@@ -3050,14 +3105,9 @@ export function useIndicatorRuntime(
     symbol,
   ]);
 
-  const frontendWindow = useFrontendScriptWindow(
-    options.marketData?.view.seriesStore ?? null,
-    options.realtimeEnabled !== false && activeIndicators.some(indicator => (isFrontendScript(indicator) || indicator.executionTarget === "local") && indicator.visible !== false),
-    sessionKey,
-  );
-  const computeChartData = frontendWindow.rows ?? chartData;
-  const computeChartDataRef = useLatestRef(computeChartData);
   const { computeAll, computing, recompute } = useIndicatorComputeController({
+    seriesIdentity,
+    inputSource,
     activeIndicators,
     activeIndicatorsRef,
     candleDownColor,
@@ -3095,13 +3145,9 @@ export function useIndicatorRuntime(
     // retain outputs from the previous product/config. Warm line arrays are
     // cheap stable cache views, so publish them now without cloning.
     outputDispatch({ type: "reset-context" });
-    const cachedEntries = resolveCachedIndicatorResults(
-      activeIndicatorsRef.current,
-      getIndicatorCacheContext(),
-    );
     setActiveIndicators((previous) => hydrateIndicatorDefinitionsFromCache(
       previous,
-      cachedEntries,
+      resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
       {
         clearMissing: true,
         reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(
@@ -3158,7 +3204,7 @@ export function useIndicatorRuntime(
           ) return previous;
           return hydrateIndicatorDefinitionsFromCache(
             previous,
-            cachedEntries,
+            resolveCachedIndicatorResults(previous, getIndicatorCacheContext()),
             {
               clearMissing: false,
               reconcileLines: (indicator, lines) => reapplyProvisionalIndicatorPreview(

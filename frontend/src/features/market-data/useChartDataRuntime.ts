@@ -393,12 +393,12 @@ export function useChartDataRuntime({
 
   const dependencyKeyFor = useCallback(
     (sym: SymbolCode, intv: IntervalString, mt = marketType, ex = exchange) => klineDependencyKey({
-      exchange: ex,
-      marketType: mt,
-      symbol: sym,
-      interval: intv,
+      exchange: ex, marketType: mt, symbol: sym, interval: intv,
+      ...(ex === exchange && mt === marketType && sym === symbol
+        ? { providerId, venue, assetClass, seriesVariant, priceAdjustment, sessionVariant, volumeSemantics }
+        : {}),
     }),
-    [exchange, marketType],
+    [exchange, marketType, symbol, providerId, venue, assetClass, seriesVariant, priceAdjustment, sessionVariant, volumeSemantics],
   );
 
   const describeRows = useCallback((rows: readonly KlineBar[] | null | undefined) => {

@@ -190,3 +190,49 @@ test("Feed backfill readback with repair=none still reaches the backend", async 
   assert.equal(result.rows[0]!.close, 20);
   manager.closeAll();
 });
+
+test("navigation before pages use proven shared coverage; recovery and an unproven right boundary still read network", async t => {
+  let beforeCalls = 0, rangeCalls = 0;
+  const { manager } = setup({
+    fetchKlinesBefore: async () => { beforeCalls += 1; return proof([row(60), row(120)]); },
+    fetchKlinesRange: async () => { rangeCalls += 1; return proof([row(60), row(120), row(180), row(240)]); },
+  });
+  t.after(() => manager.closeAll());
+  const token = manager.cache.beginRead(series);
+  manager.cache.admitResponse(token, { ...proof([row(60), row(120)]), endpoint: "history" }); token.release();
+  const feed = new SeriesDataFeed({ api: manager, getActiveSeries: () => series });
+  await feed.getBars(series, { to: 180, countBack: 2, cacheMode: "prefer-cache", commit: "none" });
+  assert.equal(beforeCalls, 1, "two old rows do not prove the absence of bars up to the requested boundary");
+  await feed.getRange(series, { start: 60, end: 240, commit: "none" });
+  const cached = await feed.requestBeforePage(series, { before: 180 as EpochSeconds, bars: 2, commit: "none", cooldownMs: 0 });
+  assert.equal(cached.source, "shared-market-cache");
+  assert.deepEqual(cached.data?.map(item => item.time), [60, 120]);
+  assert.equal(cached.has_more, true, "a retained page never invents global exhaustion");
+  assert.equal(beforeCalls, 1);
+  await feed.getBefore(series, { before: 180 as EpochSeconds, bars: 2, source: "backfill-completed", commit: "none" });
+  assert.equal(beforeCalls, 2, "the default remains fresh readback");
+  const rangeHit = await feed.getRange(series, { start: 60, end: 120, repair: "none", cacheMode: "prefer-cache", commit: "none" });
+  assert.equal(rangeHit.source, "shared-market-cache");
+  assert.equal(rangeCalls, 1);
+  await feed.getRange(series, { start: 60, end: 120, repair: "wait", strict: true, cacheMode: "prefer-cache", commit: "none" });
+  assert.equal(rangeCalls, 2, "strict repair cannot take the navigation shortcut");
+});
+
+test("new backfill completion revokes earlier shared proof before consumers validate it", async t => {
+  let calls = 0, observedComplete = true;
+  const { manager, streams } = setup({ fetchKlinesRange: async () => { calls += 1; return proof([row(60), row(120)]); } });
+  t.after(() => manager.closeAll());
+  await manager.fetchKlinesRange("BTCUSDT", "1m", 60 as EpochSeconds, 120 as EpochSeconds, "spot", "binance", {});
+  manager.subscribe(series, { intervals: ["1m"], onBackfillCompleted: () => {
+    observedComplete = manager.read(series, { from: 60, to: 120 }).complete;
+    return true;
+  } });
+  await turn();
+  const stream = streams[0]!;
+  stream.options.onBackfillCompleted?.({ type: "backfill_completed", interval: "1m", detail: {
+    request_id: "new-correction", request_start_ms: 60_000, request_end_ms: 120_000,
+  } }, stream.controller);
+  assert.equal(observedComplete, false);
+  await manager.fetchKlinesRange("BTCUSDT", "1m", 60 as EpochSeconds, 120 as EpochSeconds, "spot", "binance", { clientContext: { cacheMode: "prefer-cache" } });
+  assert.equal(calls, 2);
+});

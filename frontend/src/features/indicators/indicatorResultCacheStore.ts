@@ -1,3 +1,5 @@
+import type { MarketInputVersion } from "../market-data/manager/sharedMarketCache.js";
+import { isFrontendScript } from "./frontendScriptContract.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeriesIdentity, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import {
   getBuiltinIndicatorName,
@@ -68,9 +70,10 @@ type IndicatorContextInput = Partial<IndicatorCacheContext>;
 type IndicatorCacheEntryPatch = Omit<
   IndicatorCacheEntry,
   "key" | "contentVersion" | "dependencyKey" | "lastUpdatedMs" | "lastAccessMs"
->;
+> & { inputVersion?: MarketInputVersion };
 
 interface InternalIndicatorCacheEntry extends IndicatorCacheEntry {
+  inputVersion?: MarketInputVersion;
   metadataView: IndicatorCacheResultMetadata;
   resultView: IndicatorCacheResult;
 }
@@ -158,6 +161,8 @@ function normalizeContext(
   context: IndicatorContextInput = {},
 ): IndicatorCacheContext {
   return {
+    ...(context.inputSource ? { inputSource: context.inputSource } : {}),
+    ...(context.localInputKey === undefined ? {} : { localInputKey: context.localInputKey }),
     ...(isLegacyKlineSeriesIdentity(context.exchange ?? "binance", context.seriesIdentity) ? {} : { seriesIdentity: resolveKlineSeriesIdentity(context.exchange, context.seriesIdentity) }),
     exchange: normalizeSeriesPart(context.exchange, "binance").toLowerCase(),
     marketType: normalizeSeriesPart(context.marketType, "spot").toLowerCase(),
@@ -595,6 +600,12 @@ function putEntry(
   if (!dependencyAvailable(dependencyKey)) {
     return null;
   }
+  const through = Math.max(patch.outputCoverage?.lastTime ?? -Infinity,
+    ...patch.computedSegments.map(segment => segment.end));
+  const inputVersion = patch.inputVersion ?? (patch.context.inputSource && Number.isFinite(through)
+    ? patch.context.inputSource.capture({ ...patch.context.seriesIdentity, ...patch.context }, through) : undefined);
+  if (inputVersion && !inputVersion.isCurrent()) return null;
+  if (patch.context.inputSource && !inputVersion) return null;
   nextContentVersion += 1;
   const context = freezeOwned(patch.context);
   const normalized = freezeOwned(patch.normalized);
@@ -645,6 +656,7 @@ function putEntry(
   });
   const next: InternalIndicatorCacheEntry = {
     ...base,
+    ...(inputVersion ? { inputVersion } : {}),
     metadataView,
     resultView,
   };
@@ -679,6 +691,9 @@ export function buildIndicatorResultCacheKey(
     normalizedContext.symbol,
     normalizedContext.interval,
     ...(isLegacyKlineSeriesIdentity(normalizedContext.exchange, normalizedContext.seriesIdentity) ? [] : [klineSeriesIdentityKey(normalizedContext.exchange, normalizedContext.seriesIdentity)]),
+    ...(normalizedContext.inputSource ? [normalizedContext.inputSource.scope] : []),
+    ...((indicator.executionTarget === "local" || isFrontendScript(indicator)) && normalizedContext.localInputKey !== undefined
+      ? [`provided:${normalizedContext.localInputKey}`] : []),
     indicatorIdentity(indicator, normalizedContext),
   ].join("::");
 }
@@ -688,7 +703,9 @@ export function buildIndicatorCacheHydrationSignature(
   context: IndicatorContextInput = {},
 ): string {
   return (indicators || [])
-    .map((indicator) => buildIndicatorResultCacheKey(indicator, context))
+    // Input versions select cache entries at read time; they are not a new UI
+    // context. Resetting every indicator pane on each forming sample flickers.
+    .map((indicator) => buildIndicatorResultCacheKey(indicator, { ...context, localInputKey: undefined }))
     .join("\n");
 }
 
@@ -733,8 +750,10 @@ export function cacheIndicatorSnapshot(
   metadata: IndicatorCacheMetadata = {},
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
+  if (context.inputSource && (indicator.executionTarget === "local" || isFrontendScript(indicator))
+    && (!metadata.inputVersion || !context.localInputKey)) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   const normalizedContext = normalizeContext(context);
   const payload = normalizeCachedPayload(normalized, indicator.id);
   const revision = normalizeIndicatorRevision(
@@ -748,6 +767,7 @@ export function cacheIndicatorSnapshot(
   );
   const coverage = freezeOwned(buildOutputCoverage(payload));
   return putEntry(key, {
+    ...(metadata.inputVersion ? { inputVersion: metadata.inputVersion } : {}),
     indicatorId: indicator.id,
     context: normalizedContext,
     normalized: payload,
@@ -772,7 +792,7 @@ export function patchCachedIndicatorResult(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   const incoming = normalizeCachedPayload(normalized, indicator.id);
   const base = current?.normalized || emptyNormalized();
   const nextNormalized: NormalizedIndicatorPayload = freezeOwned({
@@ -823,7 +843,7 @@ export function replaceCachedIndicatorRange(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   const incoming = normalizeCachedPayload(normalized, indicator.id);
   const base = current?.normalized || emptyNormalized();
   const nextNormalized: NormalizedIndicatorPayload = freezeOwned({
@@ -870,7 +890,7 @@ export function updateCachedIndicatorLines(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   const baseNormalized = current?.normalized || emptyNormalized();
   const nextNormalized = freezeOwned({
     ...baseNormalized,
@@ -899,7 +919,7 @@ export function upsertCachedIndicatorLinePoint(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id || !values || !barTime) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   if (!current) return null;
 
   const baseNormalized = current.normalized || emptyNormalized();
@@ -968,12 +988,23 @@ export function upsertCachedIndicatorLinePoint(
   });
 }
 
+function currentEntry(key: string): InternalIndicatorCacheEntry | undefined {
+  const entry = entries.get(key);
+  if (entry?.inputVersion && !entry.inputVersion.isCurrent()) {
+    entries.delete(key);
+    forgetEntryGeneration(key);
+    unregisterCacheResource("indicator-result-cache", key);
+    return undefined;
+  }
+  return entry;
+}
+
 function resolveCachedEntry(
   indicator: IndicatorDefinition | null | undefined,
   context: IndicatorContextInput,
 ): InternalIndicatorCacheEntry | null {
   if (!indicator?.id) return null;
-  const entry = entries.get(buildIndicatorResultCacheKey(indicator, context));
+  const entry = currentEntry(buildIndicatorResultCacheKey(indicator, context));
   if (!entry) return null;
   if (
     !dependencyAvailable(
@@ -1032,7 +1063,7 @@ export function getCachedIndicatorComputedSegments(
   revision: IndicatorRevision | null = null,
 ): IndicatorRangeSegment[] {
   if (!indicator?.id) return [];
-  const entry = entries.get(buildIndicatorResultCacheKey(indicator, context));
+  const entry = currentEntry(buildIndicatorResultCacheKey(indicator, context));
   if (
     !entry ||
     !dependencyAvailable(
@@ -1055,7 +1086,7 @@ export function getCachedIndicatorResumeState(
   correctionRevision?: string;
 } | null {
   if (!indicator?.id) return null;
-  const entry = entries.get(buildIndicatorResultCacheKey(indicator, context));
+  const entry = currentEntry(buildIndicatorResultCacheKey(indicator, context));
   if (
     !entry ||
     !dependencyAvailable(
@@ -1086,7 +1117,7 @@ export function invalidateCachedIndicatorRange(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   if (!current) return null;
   const revision = normalizeIndicatorRevision(
     options.revision || options.dataRevision || options,
@@ -1129,7 +1160,7 @@ export function rebaseCachedIndicatorRevision(
 ): IndicatorCacheEntry | null {
   if (!indicator?.id) return null;
   const key = buildIndicatorResultCacheKey(indicator, context);
-  const current = entries.get(key);
+  const current = currentEntry(key);
   const revision = normalizeIndicatorRevision(revisionInput);
   if (!current || !revision) return current ? snapshotCacheEntry(current) : null;
   if (
@@ -1248,7 +1279,7 @@ export function trimIndicatorResultCacheEntries(
   const removed = [];
   const skipped: Array<{ key: string; reason: string }> = [];
   for (const [key, victim] of byKey.entries()) {
-    const entry = entries.get(key);
+    const entry = currentEntry(key);
     if (!entry) continue;
     if (hasCacheLease("indicator-result-cache", key)) {
       skipped.push({ key, reason: "active-lease" });

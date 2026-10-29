@@ -4,6 +4,7 @@ import type {
   CacheResource,
 } from "./cacheGcTypes.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
+import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 
 const resources = new Map<string, CacheResource>();
 const dependencies = new Map<string, Set<string>>();
@@ -28,17 +29,19 @@ export function klineDependencyKey({
   marketType = "spot",
   symbol = "",
   interval = "",
+  ...identity
 }: {
   exchange?: unknown;
   marketType?: unknown;
   symbol?: unknown;
   interval?: unknown;
-} = {}): string {
+} & KlineSeriesIdentityInput = {}): string {
   return [
     normalizePart(exchange, "binance").toLowerCase(),
     normalizePart(marketType, "spot").toLowerCase(),
     normalizePart(symbol).toUpperCase(),
     canonicalizeIntervalValue(interval) || normalizePart(interval),
+    ...(isLegacyKlineSeriesIdentity(exchange, identity) ? [] : [klineSeriesIdentityKey(exchange, identity)]),
   ].join(":");
 }
 

@@ -1,10 +1,12 @@
 import { klineRowsEqual } from "../chartDataRuntime.js";
 import type { KlineBar, MarketSeries } from "../marketDataTypes.js";
 import { assessKlineQuality, type KlineQualityEvidence } from "../quality/klineQualityPolicy.js";
-import type { SharedMarketCache } from "./sharedMarketCache.js";
+import { MarketCacheCapacityError, type SharedMarketCache } from "./sharedMarketCache.js";
 
 export interface SharedWindowConsumer {
   read(): readonly KlineBar[];
+  bounds?(): { from: number | undefined; to: number | undefined };
+  subscribeWindow?(listener: () => void): () => void;
   /** Must use the window's current selection transaction, never a raw Store. */
   commit(rows: KlineBar[], quality: KlineQualityEvidence): void;
 }
@@ -14,7 +16,24 @@ export interface SharedWindowConsumer {
  * range expansion. WS delivery keeps the existing per-consumer recovery/quote
  * callback, after shared admission, so amendment readback sees the old row. */
 export function bindSharedWindow(cache: SharedMarketCache, series: MarketSeries, consumer: SharedWindowConsumer): () => void {
-  return cache.subscribe(series, change => {
+  let retention: ReturnType<SharedMarketCache["retain"]> | undefined;
+  let retainedFrom: number | undefined, retainedTo: number | undefined;
+  const refreshRetention = () => {
+    const bounds = consumer.bounds?.();
+    const current = bounds ? undefined : consumer.read();
+    const first = bounds ? bounds.from : current?.[0]?.time;
+    const last = bounds ? bounds.to : current?.at(-1)?.time;
+    if (retention?.isCurrent() && first === retainedFrom && last === retainedTo) return;
+    retention?.release(); retention = undefined;
+    retainedFrom = first; retainedTo = last;
+    if (first === undefined || last === undefined) return;
+    try { retention = cache.retain(series, { from: first, to: last }); }
+    catch (error) { if (!(error instanceof MarketCacheCapacityError)) throw error; }
+  };
+  refreshRetention();
+  const releaseWindow = consumer.subscribeWindow?.(refreshRetention);
+  const releaseCache = cache.subscribe(series, change => {
+    refreshRetention();
     if (change.source !== "http" || !change.rows.length) return;
     const current = consumer.read();
     const first = current[0]?.time, last = current.at(-1)?.time;
@@ -31,4 +50,5 @@ export function bindSharedWindow(cache: SharedMarketCache, series: MarketSeries,
       has_tail_gap: false, truncated: false, missing_ranges: [] }, "range");
     consumer.commit(rows, quality);
   });
+  return () => { releaseWindow?.(); releaseCache(); retention?.release(); };
 }

@@ -67,3 +67,27 @@ test("shared WS admission leaves per-consumer amendment recovery its pre-update 
   assert.equal(cache.read(series).rows[0]!.close, 20);
   release();
 });
+
+test("window retention follows navigation without materializing history on forming ticks", () => {
+  const cache = new SharedMarketCache({ maxBarsPerSeries: 5 });
+  const token = cache.beginRead(series);
+  cache.admitResponse(token, { data: [60, 120, 180, 240, 300].map(time => row(time)) }); token.release();
+  let from = 60, to = 120, reads = 0;
+  let changed: (() => void) | undefined;
+  const release = bindSharedWindow(cache, series, {
+    read: () => { reads += 1; return [row(from), row(to)]; },
+    bounds: () => ({ from, to }),
+    subscribeWindow: listener => { changed = listener; return () => { changed = undefined; }; },
+    commit: () => {},
+  });
+  for (let index = 0; index < 100; index += 1) {
+    cache.admitRealtime(series, { ...row(360, 11 + index % 10), is_closed: false }, "bar.updated");
+  }
+  assert.equal(reads, 0, "ordinary ticks only read O(1) window bounds");
+  assert.deepEqual(cache.read(series).rows.map(item => item.time), [60, 120, 240, 300, 360]);
+  from = 300; to = 360; changed?.();
+  cache.admitRealtime(series, row(420), "bar.closed");
+  assert.deepEqual(cache.read(series).rows.map(item => item.time), [120, 240, 300, 360, 420]);
+  assert.equal(cache.diagnostics().retainedRanges, 1);
+  release(); assert.equal(cache.diagnostics().retainedRanges, 0); assert.equal(changed, undefined);
+});

@@ -84,6 +84,7 @@ interface RequestBeforePageOptions {
 }
 
 interface GetBarsOptions {
+  cacheMode?: KlineRequestContext["cacheMode"];
   from?: unknown;
   to?: unknown;
   countBack?: unknown;
@@ -116,6 +117,7 @@ interface GetHistoryOptions {
 }
 
 interface GetBeforeOptions {
+  cacheMode?: KlineRequestContext["cacheMode"];
   before?: EpochSeconds;
   bars?: number;
   source?: string;
@@ -128,6 +130,7 @@ interface GetBeforeOptions {
 }
 
 interface GetRangeOptions {
+  cacheMode?: KlineRequestContext["cacheMode"];
   start?: unknown;
   end?: unknown;
   startSec?: unknown;
@@ -2277,6 +2280,7 @@ export class SeriesDataFeed {
       const result = await this.getBars(series, {
         ...(before === undefined ? {} : { to: before }),
         countBack: bars,
+        cacheMode: "prefer-cache",
         source,
         ...(linkedSignal.signal === undefined ? {} : { signal: linkedSignal.signal }),
         commit,
@@ -2358,6 +2362,7 @@ export class SeriesDataFeed {
       requestScope,
       indicatorWindowOwner,
       priority = "foreground",
+      cacheMode = "network-only",
     }: GetBarsOptions = {},
   ): Promise<FeedResult> {
     const plan = planBarsFetch({
@@ -2382,6 +2387,7 @@ export class SeriesDataFeed {
         ...(requestScope === undefined ? {} : { requestScope }),
         ...(indicatorWindowOwner === undefined ? {} : { indicatorWindowOwner }),
         priority,
+        cacheMode,
       });
       return { ...result, plan };
     }
@@ -2397,6 +2403,7 @@ export class SeriesDataFeed {
         ...(maxWaitMs === undefined ? {} : { maxWaitMs }),
         ...(indicatorWindowOwner === undefined ? {} : { indicatorWindowOwner }),
         priority,
+        cacheMode,
       });
       return { ...result, plan };
     }
@@ -2493,6 +2500,7 @@ export class SeriesDataFeed {
       maxWaitMs,
       indicatorWindowOwner: requestedIndicatorWindowOwner,
       priority = "foreground",
+      cacheMode = "network-only",
     }: GetBeforeOptions = {},
   ): Promise<AppliedKlineResult> {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
@@ -2505,6 +2513,7 @@ export class SeriesDataFeed {
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-before:${source}`);
+    clientContext.cacheMode = cacheMode;
     const realtimeFence = this.beginRealtimeRequest(series);
     return this.runLogicalRequest(
       priority,
@@ -2563,6 +2572,7 @@ export class SeriesDataFeed {
       requestScope,
       indicatorWindowOwner: requestedIndicatorWindowOwner,
       priority = "foreground",
+      cacheMode = "network-only",
     }: GetRangeOptions = {},
   ): Promise<FeedResult> {
     const range = normalizeRangeSec({ start, end, startSec, endSec });
@@ -2580,6 +2590,7 @@ export class SeriesDataFeed {
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-range:${source}`);
+    clientContext.cacheMode = cacheMode;
     const realtimeFence = this.beginRealtimeRequest(series);
     return this.runLogicalRequest(
       priority,

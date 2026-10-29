@@ -1,4 +1,7 @@
+import { klineSeriesIdentityKey } from "../market-data/klineSeriesIdentity.js";
 import type { StableSeriesSnapshot } from "../market-data/window/stableSeriesSnapshot.js";
+import type { KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
+import type { IndicatorCacheInputSource } from "./indicatorInputBinding.js";
 import {
   startTransition,
   useCallback,
@@ -18,6 +21,7 @@ import {
   buildIndicatorComputeParams,
   buildIndicatorOhlcv,
   buildIndicatorOhlcvSignature,
+  limitIndicatorHistory,
   chunkIndicatorComputeJobs,
   collectIndicatorComputeResults,
   resolveIndicatorComputeDelay,
@@ -68,6 +72,8 @@ export interface UseIndicatorComputeControllerOptions {
   chartDataRef: MutableRefObject<KlineBar[]>;
   datasetKey: string;
   exchange: string;
+  seriesIdentity?: KlineSeriesIdentityInput;
+  inputSource?: IndicatorCacheInputSource | undefined;
   computeBatch?: IndicatorComputeBatchExecutor;
   inputSnapshot?: StableSeriesSnapshot;
   onComputePendingChange?(delta: 1 | -1): void;
@@ -151,6 +157,8 @@ export function useIndicatorComputeController({
   chartDataRef,
   datasetKey,
   exchange,
+  seriesIdentity,
+  inputSource,
   computeBatch = computeIndicatorBatch,
   onComputePendingChange,
   inputSnapshot,
@@ -186,7 +194,7 @@ export function useIndicatorComputeController({
     candleDownColor,
   ), [activeIndicators, candleDownColor, candleUpColor]);
   const desiredLifecycleKey = buildIndicatorComputeLifecycleKey({
-    dataSignature: JSON.stringify([desiredDataSignature, desiredPlanSignature]),
+    dataSignature: JSON.stringify([desiredDataSignature, desiredPlanSignature, klineSeriesIdentityKey(exchange, seriesIdentity), inputSource?.scope]),
     datasetKey,
     exchange,
     interval,
@@ -194,7 +202,7 @@ export function useIndicatorComputeController({
     symbol,
   });
   const committedRuntimeRef = useRef({
-    context: { datasetKey, exchange, interval, marketType, symbol },
+    context: { datasetKey, exchange, interval, marketType, symbol, seriesIdentity, inputSource },
     lifecycleKey: desiredLifecycleKey,
     builtinChartData,
     inputSnapshot,
@@ -210,7 +218,14 @@ export function useIndicatorComputeController({
     const lifecycleKey = committedRuntime.lifecycleKey;
     // React may not have committed the new lifecycle when a source changes.
     // Fence directly against the captured owner/input before any publication.
-    const inputIsCurrent = () => committedRuntime.inputSnapshot?.isCurrent("forming-preview") ?? true;
+    const providedRows = limitIndicatorHistory(currentChartData, historyLimit);
+    const inputSeries = { ...context.seriesIdentity, ...context };
+    const inputVersion = context.inputSource?.captureProvided(inputSeries, providedRows);
+    const last = providedRows.at(-1);
+    const closedInput = last ? context.inputSource?.capture(inputSeries,
+      Number(last.time) - (last.is_closed === true ? 0 : 1), Number(providedRows[0]!.time)) : null;
+    const inputIsCurrent = () => (committedRuntime.inputSnapshot?.isCurrent("forming-preview") ?? true)
+      && (closedInput?.isCurrent() ?? true);
     if (!inputIsCurrent()) return;
 
     if (!currentChartData || currentChartData.length === 0) {
@@ -290,6 +305,9 @@ export function useIndicatorComputeController({
     const jobs = Array.from(targetByJobKey.values()).map((target) => target.job);
     const cacheContext = resultCacheMode === "shared"
       ? buildIndicatorCacheContext({
+          inputSource: context.inputSource,
+          localInputKey: buildIndicatorOhlcvSignature(providedRows, { limit: providedRows.length }),
+          seriesIdentity: context.seriesIdentity,
           candleDownColor: candleDownColorRef.current,
           candleUpColor: candleUpColorRef.current,
           exchange: context.exchange,
@@ -359,6 +377,7 @@ export function useIndicatorComputeController({
           cacheContext,
           normalized,
           newParamSchemas[id],
+          inputVersion ? { inputVersion } : {},
         );
         const jobKey = acceptedJobKeyById.get(id);
         if (cached && jobKey) cachedJobKeys.push(jobKey);
@@ -562,7 +581,7 @@ export function useIndicatorComputeController({
 
   useLayoutEffect(() => {
     committedRuntimeRef.current = {
-      context: { datasetKey, exchange, interval, marketType, symbol },
+      context: { datasetKey, exchange, interval, marketType, symbol, seriesIdentity, inputSource },
       lifecycleKey: desiredLifecycleKey,
       builtinChartData,
       inputSnapshot,
@@ -574,6 +593,8 @@ export function useIndicatorComputeController({
     inputSnapshot,
     desiredLifecycleKey,
     exchange,
+    seriesIdentity,
+    inputSource,
     interval,
     jobCoordinator,
     marketType,

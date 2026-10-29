@@ -53,6 +53,17 @@ releases another consumer's lease. Up to three available favorite/frequently
 used intervals are ranked from bounded local usage metadata. Hovering never
 changes selection, watchlist tiers or usage history.
 
+Historical navigation explicitly permits cache reads. A before-page hit requires
+verified closed coverage through the requested right boundary as well as the
+requested row count; old rows alone cannot prove the gap. Right navigation uses
+an already proven range, falling back to its existing strict repair read if the
+proof is lost. Feed defaults, backfill/reconnect readback and strict repair still
+require network. A new backfill completion revokes earlier instrument proofs.
+Active windows retain their current ranges with O(1) bound observations; hard
+pool limits win over retention. Capacity protects active series, rejects surplus
+realtime admission without throwing into transport, and exposes the rejection
+counter. Window rows remain privately owned throughout.
+
 Cold activation is split into two contracts. The visible `viewport` request
 asks for at most 500 bars (or the smaller derived-interval source budget) and
 waits at most 1.5 seconds. Once that range is settled, an

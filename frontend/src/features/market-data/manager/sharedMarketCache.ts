@@ -8,6 +8,9 @@ import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
 
 export interface MarketRange { from?: number; to?: number; before?: number; limit?: number }
 export interface MarketCacheOptions { maxSeries?: number; maxBars?: number; maxBarsPerSeries?: number }
+export class MarketCacheCapacityError extends Error {
+  constructor() { super("Market cache series capacity is in use"); this.name = "MarketCacheCapacityError"; }
+}
 export interface MarketCacheChange {
   readonly key: string;
   readonly version: number;
@@ -25,6 +28,14 @@ export interface MarketCacheSnapshot {
   isCurrent(): boolean;
 }
 export interface MarketReadToken { readonly key: string; release(): void }
+/** A dependency stamp retains no row arrays and owns no cache lease. */
+export interface MarketInputVersion {
+  readonly key: string;
+  readonly version: number;
+  readonly from: number | undefined;
+  readonly to: number | undefined;
+  isCurrent(): boolean;
+}
 interface Mutation { row: KlineBar; version: number; authoritative: boolean }
 interface Proof { from: number; to: number }
 interface Entry {
@@ -35,6 +46,8 @@ interface Entry {
   key: string;
   series: MarketSeries;
   rows: Map<number, KlineBar>;
+  rowVersions: Map<number, number>;
+  inputInvalidation: number;
   times: number[];
   version: number;
   commitRevision: number;
@@ -95,6 +108,7 @@ export class SharedMarketCache {
   private generation = 0;
   private publishing = false;
   private listenerErrors = 0;
+  private capacityRejects = 0;
   private readonly pendingRealtime: Array<() => void> = [];
 
   constructor(options: MarketCacheOptions = {}) {
@@ -158,7 +172,9 @@ export class SharedMarketCache {
     }
     const issue = validateKlineDomain(row);
     if (issue) return { accepted: false };
-    const entry = this.entry(series);
+    let entry: Entry;
+    try { entry = this.entry(series); }
+    catch (error) { if (error instanceof MarketCacheCapacityError) { this.capacityRejects += 1; return { accepted: false }; } throw error; }
     const effect = assessRealtimeEffect(row, eventType, entry.rows.get(row.time), entry.times.at(-1) ?? null);
     if (!effect.accepted) return { accepted: false };
     const changed = this.merge(entry, [row]);
@@ -182,8 +198,9 @@ export class SharedMarketCache {
     const rows = Object.freeze(times.map(time => entry.rows.get(time)!));
     const version = entry.version;
     const from = range.from ?? times[0], to = range.to ?? times.at(-1);
+    const proofTo = range.before ?? to;
     const covered = from !== undefined && to !== undefined && rows.length > 0
-      && entry.proofs.some(proof => proof.from <= from && proof.to >= to);
+      && entry.proofs.some(proof => proof.from <= from && proof.to >= proofTo!);
     // A proof spanning an evicted hole cannot survive: eviction removes any
     // proof containing that timestamp. Unknown intervals require no arithmetic.
     const complete = covered && rows.every(row => row.is_closed === true)
@@ -191,7 +208,7 @@ export class SharedMarketCache {
     return Object.freeze({ key, version, commitRevision: entry.commitRevision, rows, complete,
       isCurrent: () => {
         if (this.entries.get(key) !== entry) return false;
-        if (complete && !entry.proofs.some(proof => proof.from <= from! && proof.to >= to!)) return false;
+        if (complete && !entry.proofs.some(proof => proof.from <= from! && proof.to >= proofTo!)) return false;
         if (range.to === undefined && range.before === undefined) return entry.version === version;
         const current = selectedTimes(entry, range);
         return current.length === times.length && current.every((time, index) => time === times[index] && entry.rows.get(time) === rows[index]);
@@ -199,11 +216,32 @@ export class SharedMarketCache {
     });
   }
 
-  retain(series: MarketSeries, range: MarketRange): { release(): void } {
+  captureVersion(series: MarketSeries, range: Pick<MarketRange, "from" | "to"> = {}): MarketInputVersion {
+    const key = String(buildSeriesWindowKey(series));
+    const { from, to } = range;
+    const entry = this.entries.get(key);
+    const version = entry?.version ?? 0, invalidation = entry?.inputInvalidation, generation = entry?.generation;
+    let checkedVersion = version, valid = Boolean(entry);
+    return Object.freeze({ key, version, from, to, isCurrent: () => {
+      const current = this.entries.get(key);
+      if (!valid || !current || current.generation !== generation || current.inputInvalidation !== invalidation) return false;
+      if (current.version === checkedVersion) return true;
+      const start = from === undefined ? 0 : lowerBound(current.times, from);
+      const end = to === undefined ? current.times.length : lowerBound(current.times, to + 1);
+      for (let index = start; index < end; index += 1) {
+        if ((current.rowVersions.get(current.times[index]!) ?? 0) > version) { valid = false; return false; }
+      }
+      checkedVersion = current.version;
+      return true;
+    } });
+  }
+
+  /** Retention prioritizes active ranges; hard memory limits still win. */
+  retain(series: MarketSeries, range: MarketRange): { release(): void; isCurrent(): boolean } {
     const entry = this.entry(series), id = Symbol(entry.key);
     entry.leases.set(id, { ...range });
     this.touch(entry);
-    return { release: () => { entry.leases.delete(id); } };
+    return { release: () => { entry.leases.delete(id); }, isCurrent: () => this.entries.get(entry.key) === entry && entry.leases.has(id) };
   }
 
   subscribe(series: MarketSeries, listener: (change: MarketCacheChange) => void): () => void {
@@ -230,6 +268,7 @@ export class SharedMarketCache {
         || entry.series.marketType.toLowerCase() !== instrument.marketType.toLowerCase()
         || entry.series.symbol.toUpperCase() !== instrument.symbol.toUpperCase()) continue;
       entry.proofs = [];
+      entry.inputInvalidation += 1;
       entry.metaRevision = ++this.metadataRevision;
       entry.commitRevision = ++this.revision;
     }
@@ -243,7 +282,7 @@ export class SharedMarketCache {
 
   diagnostics() {
     return { series: this.entries.size, bars: this.bars, maxSeries: this.maxSeries, maxBars: this.maxBars,
-      listenerErrors: this.listenerErrors,
+      listenerErrors: this.listenerErrors, capacityRejects: this.capacityRejects,
       requests: Array.from(this.entries.values()).reduce((sum, entry) => sum + entry.reads.size, 0),
       retainedRanges: Array.from(this.entries.values()).reduce((sum, entry) => sum + entry.leases.size, 0) };
   }
@@ -270,12 +309,12 @@ export class SharedMarketCache {
     let entry = this.entries.get(key);
     if (!entry) {
       if (this.entries.size >= this.maxSeries) {
-        const victim = [...this.entries.values()].find(item => !item.reads.size && !item.leases.size);
-        if (!victim) throw new Error("Market cache series capacity is in use");
+        const victim = [...this.entries.values()].find(item => !item.reads.size && !item.leases.size && !this.listeners.get(item.key)?.size);
+        if (!victim) throw new MarketCacheCapacityError();
         this.remove(victim);
       }
       entry = { key, series: { ...series }, generation: ++this.generation, metaRevision: 0, lastAccessMs: 0, lastUpdatedMs: 0,
-        rows: new Map(), times: [], version: 0, commitRevision: 0, realtimeVersion: 0,
+        rows: new Map(), rowVersions: new Map(), inputInvalidation: 0, times: [], version: 0, commitRevision: 0, realtimeVersion: 0,
         mutations: new Map(), reads: new Set(), leases: new Map(), proofs: [] };
       this.entries.set(key, entry);
     }
@@ -337,6 +376,7 @@ export class SharedMarketCache {
     entry.metaRevision = ++this.metadataRevision;
     entry.lastUpdatedMs = Date.now();
     if (changed.length) entry.version = ++this.revision;
+    for (const row of changed) entry.rowVersions.set(row.time, entry.version);
     entry.commitRevision = ++this.revision;
     this.trim(entry);
     const event: MarketCacheChange = Object.freeze({ key: entry.key, version: entry.version,
@@ -366,7 +406,7 @@ export class SharedMarketCache {
     if (this.bars > this.maxBars) {
       for (const candidate of this.entries.values()) {
         if (this.bars <= this.maxBars) break;
-        if (candidate === entry || candidate.reads.size || candidate.leases.size) continue;
+        if (candidate === entry || candidate.reads.size || candidate.leases.size || this.listeners.get(candidate.key)?.size) continue;
         this.remove(candidate);
       }
       if (this.bars > this.maxBars) this.dropTimes(entry, new Set(entry.times.slice(0, this.bars - this.maxBars)));
@@ -387,7 +427,11 @@ export class SharedMarketCache {
       }
       if (from !== undefined && to !== undefined) retainedProofs.push({ from, to });
     }
-    for (const time of times) { if (entry.rows.delete(time)) this.bars -= 1; }
+    entry.inputInvalidation += 1;
+    for (const time of times) {
+      if (entry.rows.delete(time)) this.bars -= 1;
+      entry.rowVersions.delete(time);
+    }
     entry.times = entry.times.filter(time => !times.has(time));
     entry.proofs = retainedProofs.slice(-128);
   }

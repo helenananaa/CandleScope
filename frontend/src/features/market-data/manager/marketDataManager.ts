@@ -47,6 +47,7 @@ export class MarketDataManager implements MarketDataService {
   private closed = false;
   private rejectedRealtime = 0;
   private rangeHits = 0;
+  private beforeHits = 0;
 
   constructor(options: MarketDataManagerOptions) {
     this.api = options.api;
@@ -98,7 +99,12 @@ export class MarketDataManager implements MarketDataService {
         onOpen: controller => { if (current()) streamOptions.onOpen?.(controller); },
         onStreamStatus: (event, controller) => { if (current()) streamOptions.onStreamStatus?.(event, controller); },
         onControlMessage: (event, controller) => { if (current()) streamOptions.onControlMessage?.(event, controller); },
-        onBackfillCompleted: (event, controller) => current() && (streamOptions.onBackfillCompleted?.(event, controller) ?? false),
+        onBackfillCompleted: (event, controller) => {
+          if (!current()) return false;
+          // A new backend completion is not validated by an earlier cache proof.
+          this.cache.markDisconnected(series);
+          return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
+        },
         onParseError: (error, event, controller) => { if (current()) streamOptions.onParseError?.(error, event, controller); },
         onKline: (event, controller) => {
           if (!current()) return;
@@ -142,7 +148,20 @@ export class MarketDataManager implements MarketDataService {
     }
     return this.requestCoordinator.fetchKlinesHistory(...args);
   };
-  readonly fetchKlinesBefore: KlineApi["fetchKlinesBefore"] = (...args) => this.requestCoordinator.fetchKlinesBefore(...args);
+  readonly fetchKlinesBefore: KlineApi["fetchKlinesBefore"] = async (...args) => {
+    const [symbol, interval, before, bars, marketType, exchange, options] = args;
+    if (this.closed || options.signal?.aborted) throw aborted();
+    if (before !== undefined && Number.isFinite(before) && options.clientContext?.cacheMode === "prefer-cache") {
+      const snapshot = this.cache.read(identity(symbol, interval, marketType, exchange, options), { before, limit: bars });
+      if (snapshot.complete) {
+        this.beforeHits += 1;
+        return { data: [...snapshot.rows], endpoint: "before", source: "shared-market-cache", cacheRevision: snapshot.version,
+          all_rows_final: true, complete: true, retryable: false, history_state: "ready", verified_contiguous: true,
+          missing_ranges: [], has_tail_gap: false, truncated: false, has_more: true };
+      }
+    }
+    return this.requestCoordinator.fetchKlinesBefore(...args);
+  };
   readonly fetchLatestKlines: KlineApi["fetchLatestKlines"] = (...args) => this.requestCoordinator.fetchLatestKlines(...args);
   readonly getMultiStreamUrl: KlineApi["getMultiStreamUrl"] = (...args) => this.api.getMultiStreamUrl(...args);
 
@@ -190,7 +209,7 @@ export class MarketDataManager implements MarketDataService {
   diagnostics() {
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
-      sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits,
+      sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits,
       cache: this.cache.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 

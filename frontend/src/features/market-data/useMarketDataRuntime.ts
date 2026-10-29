@@ -55,6 +55,7 @@ import {
   type KlineSeriesIdentityInput,
 } from "./klineSeriesIdentity.js";
 import { useMarketDataWorkspaceResources } from "./marketDataWorkspaceContext.js";
+import { buildSeriesWindowKey } from "./window/seriesWindowKey.js";
 import { resolveSharedInitialRows } from "./manager/initialMarketRows.js";
 import {
   planRightWindowPage,
@@ -527,11 +528,15 @@ export function useMarketDataRuntime({
   useLayoutEffect(() => {
     const cache = workspaceResources?.dataManager.cache;
     if (!cache) return undefined;
+    const key = buildSeriesWindowKey({ exchange, marketType, symbol, interval, ...seriesIdentity });
     return bindSharedWindow(cache, { exchange, marketType, symbol, interval, ...seriesIdentity }, {
+      bounds: () => activeSeriesStore?.seriesKey === key
+        ? { from: activeSeriesStore.first()?.time, to: activeSeriesStore.last()?.time } : { from: undefined, to: undefined },
       read: () => getCache(symbol, interval, { marketType, exchange }) ?? [],
+      ...(activeSeriesStore ? { subscribeWindow: (listener: () => void) => activeSeriesStore.subscribe(listener) } : {}),
       commit: (rows, quality) => commitPatchedChartData(symbol, interval, rows, { source: "shared-market-range", quality }),
     });
-  }, [commitPatchedChartData, exchange, getCache, interval, marketType, seriesIdentity, symbol, workspaceResources]);
+  }, [activeSeriesStore, commitPatchedChartData, exchange, getCache, interval, marketType, seriesIdentity, symbol, workspaceResources]);
 
   const resolveInitialRows = useCallback(
     (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => {
@@ -700,17 +705,20 @@ export function useMarketDataRuntime({
 
     const promise = (async () => {
       try {
-        const result = await seriesDataFeed.getRange(series, {
-          start: plan.start,
-          end: plan.end,
-          repair: "wait",
-          waitMs: 1_500,
-          strict: true,
-          source: "right-window-page",
-          signal: controller.signal,
-          commit: "none",
-          maxPages: 1,
+        const rangeOptions = { start: plan.start, end: plan.end, source: "right-window-page",
+          signal: controller.signal, commit: "none" as const, maxPages: 1 };
+        const hasCachedRange = workspaceResources?.dataManager.read(series, { from: plan.start, to: plan.end }).complete === true;
+        let result = await seriesDataFeed.getRange(series, {
+          ...rangeOptions, repair: hasCachedRange ? "none" : "wait", waitMs: hasCachedRange ? 0 : 1_500,
+          strict: !hasCachedRange, cacheMode: hasCachedRange ? "prefer-cache" : "network-only",
         });
+        // Eviction/correction can race the asynchronous Feed boundary. A lost
+        // cache proof returns to the original strict repair contract.
+        if (hasCachedRange && ownsRequest() && (isKlineResultRepairPending(result) || !hasVerifiedCoverage(result, "range"))) {
+          result = await seriesDataFeed.getRange(series, {
+            ...rangeOptions, repair: "wait", waitMs: 1_500, strict: true, cacheMode: "network-only",
+          });
+        }
         const reachedLatest = rightWindowPageReachedLatest(result, plan);
         const rows = result.data || [];
         const settledEmptyTail = reachedLatest
@@ -771,6 +779,7 @@ export function useMarketDataRuntime({
     setHasMoreLeft,
     setLoadingMoreRight,
     symbol,
+    workspaceResources,
   ]);
 
   const restoreLatestWindow = useCallback((): Promise<boolean> => {
