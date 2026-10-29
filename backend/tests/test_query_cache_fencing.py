@@ -229,6 +229,9 @@ def test_gap_fill_uses_the_same_fence_as_the_initial_page(tmp_path, monkeypatch,
             return rows
 
     manager, adapter = _manager(tmp_path, monkeypatch, GapStorage)
+    # Exercise the local gap fence alone. Durable revision fencing now detects
+    # the synthetic initial-page mutation before this gap branch is reached.
+    manager.cache.revision_consumer = None
     if gap_kind == "interior":
         klines_repo.delete_klines("BTCUSDT", "1m", start_ms=START + STEP)
         klines_repo.upsert_klines("BTCUSDT", "1m", [_row(START + 2 * STEP)], source=SOURCE)

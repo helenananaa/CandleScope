@@ -27,6 +27,8 @@ from app.data_engine.series_identity import (
     resolve_kline_series_identity,
 )
 
+from .revisions import (RevisionStore, guarded_write, init_revision_storage,
+                        mark_deleted, series_values, register_derived, current_revision)
 from .sqlite_runtime import SQLiteConnectionPolicy, open_sqlite
 
 # Valid market types
@@ -338,6 +340,7 @@ def init_klines_storage() -> None:
         init_manual_history_storage(conn)
         from .bar_delivery import init_bar_delivery_storage
         init_bar_delivery_storage(conn)
+        init_revision_storage(conn)
 
 
 def dataframe_to_rows(df: Any) -> list[dict]:
@@ -417,74 +420,74 @@ def upsert_klines(
     )
     with write_guard:
         with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
-            incoming_rank_sql = source_rank_sql("excluded.source")
-            stored_rank_sql = source_rank_sql("klines.source")
-            changes_before = conn.total_changes
-            columns = {
-                str(row[1]) for row in conn.execute("PRAGMA table_info(klines)")
-            }
-            semantic_schema = set(_SERIES_IDENTITY_COLUMNS) <= columns
-            if not semantic_schema and not identity.is_legacy_default_for(exchange):
-                raise RuntimeError(
-                    "non-default series identity requires K-line schema version 2"
-                )
-            if semantic_schema:
-                sql = f"""
-                INSERT INTO klines (
-                    exchange, market_type, provider_id, venue, asset_class,
-                    series_variant, price_adjustment, session_variant,
-                    volume_semantics, symbol, interval, open_time,
-                    close_time, open, high, low, close, volume, quote_volume,
-                    trades, taker_buy_base, taker_buy_quote,
-                    source, created_at, updated_at
-                ) VALUES ({', '.join('?' for _ in range(25))})
-                ON CONFLICT({_KLINES_CONFLICT_TARGET_SQL}) DO UPDATE SET
-                    close_time = excluded.close_time,
-                    open = excluded.open,
-                    high = excluded.high,
-                    low = excluded.low,
-                    close = excluded.close,
-                    volume = excluded.volume,
-                    quote_volume = excluded.quote_volume,
-                    trades = excluded.trades,
-                    taker_buy_base = excluded.taker_buy_base,
-                    taker_buy_quote = excluded.taker_buy_quote,
-                    source = excluded.source,
-                    updated_at = excluded.updated_at
-                WHERE {incoming_rank_sql} >= {stored_rank_sql}
-                """
-                write_payload = payload
-            else:
-                sql = f"""
-                INSERT INTO klines (
-                    exchange, market_type, symbol, interval, open_time,
-                    close_time, open, high, low, close, volume, quote_volume,
-                    trades, taker_buy_base, taker_buy_quote,
-                    source, created_at, updated_at
-                ) VALUES ({', '.join('?' for _ in range(18))})
-                ON CONFLICT(exchange, market_type, symbol, interval, open_time) DO UPDATE SET
-                    close_time = excluded.close_time,
-                    open = excluded.open,
-                    high = excluded.high,
-                    low = excluded.low,
-                    close = excluded.close,
-                    volume = excluded.volume,
-                    quote_volume = excluded.quote_volume,
-                    trades = excluded.trades,
-                    taker_buy_base = excluded.taker_buy_base,
-                    taker_buy_quote = excluded.taker_buy_quote,
-                    source = excluded.source,
-                    updated_at = excluded.updated_at
-                WHERE {incoming_rank_sql} >= {stored_rank_sql}
-                """
-                write_payload = [
-                    (item[0], item[1], *item[9:])
-                    for item in payload
-                ]
-            conn.executemany(sql, write_payload)
-            affected = conn.total_changes - changes_before
-            if _connection is None:
-                conn.commit()
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
+                               commit=_connection is None):
+                if source in {"backfill_aggregated", "data_manager_composite_closed", "settings_manual_repair", "repair_derived_verified", "manual_history_derived"}:
+                    register_derived(conn, series_values(symbol, interval, exchange, market_type, identity))
+                incoming_rank_sql = source_rank_sql("excluded.source")
+                stored_rank_sql = source_rank_sql("klines.source")
+                columns = {
+                    str(row[1]) for row in conn.execute("PRAGMA table_info(klines)")
+                }
+                semantic_schema = set(_SERIES_IDENTITY_COLUMNS) <= columns
+                if not semantic_schema and not identity.is_legacy_default_for(exchange):
+                    raise RuntimeError(
+                        "non-default series identity requires K-line schema version 2"
+                    )
+                if semantic_schema:
+                    sql = f"""
+                    INSERT INTO klines (
+                        exchange, market_type, provider_id, venue, asset_class,
+                        series_variant, price_adjustment, session_variant,
+                        volume_semantics, symbol, interval, open_time,
+                        close_time, open, high, low, close, volume, quote_volume,
+                        trades, taker_buy_base, taker_buy_quote,
+                        source, created_at, updated_at
+                    ) VALUES ({', '.join('?' for _ in range(25))})
+                    ON CONFLICT({_KLINES_CONFLICT_TARGET_SQL}) DO UPDATE SET
+                        close_time = excluded.close_time,
+                        open = excluded.open,
+                        high = excluded.high,
+                        low = excluded.low,
+                        close = excluded.close,
+                        volume = excluded.volume,
+                        quote_volume = excluded.quote_volume,
+                        trades = excluded.trades,
+                        taker_buy_base = excluded.taker_buy_base,
+                        taker_buy_quote = excluded.taker_buy_quote,
+                        source = excluded.source,
+                        updated_at = excluded.updated_at
+                    WHERE {incoming_rank_sql} >= {stored_rank_sql}
+                    """
+                    write_payload = payload
+                else:
+                    sql = f"""
+                    INSERT INTO klines (
+                        exchange, market_type, symbol, interval, open_time,
+                        close_time, open, high, low, close, volume, quote_volume,
+                        trades, taker_buy_base, taker_buy_quote,
+                        source, created_at, updated_at
+                    ) VALUES ({', '.join('?' for _ in range(18))})
+                    ON CONFLICT(exchange, market_type, symbol, interval, open_time) DO UPDATE SET
+                        close_time = excluded.close_time,
+                        open = excluded.open,
+                        high = excluded.high,
+                        low = excluded.low,
+                        close = excluded.close,
+                        volume = excluded.volume,
+                        quote_volume = excluded.quote_volume,
+                        trades = excluded.trades,
+                        taker_buy_base = excluded.taker_buy_base,
+                        taker_buy_quote = excluded.taker_buy_quote,
+                        source = excluded.source,
+                        updated_at = excluded.updated_at
+                    WHERE {incoming_rank_sql} >= {stored_rank_sql}
+                    """
+                    write_payload = [
+                        (item[0], item[1], *item[9:])
+                        for item in payload
+                    ]
+                affected = conn.executemany(sql, write_payload).rowcount
 
     return int(affected)
 
@@ -559,155 +562,153 @@ def import_history_archive(
 
     with _ARCHIVE_IMPORT_WRITE_LOCK:
         with _connect() as conn:
-            existing = conn.execute(
-                "SELECT content_sha256, import_version, row_count "
-                "FROM history_archive_imports WHERE object_key = ?",
-                (object_key,),
-            ).fetchone()
-            if (
-                existing is not None
-                and str(existing["content_sha256"]).lower() == content_sha256
-                and str(existing["import_version"]) == import_version
-                and int(existing["row_count"]) == len(rows)
-            ):
-                stored_count = int(conn.execute(
-                    "SELECT COUNT(*) FROM klines "
-                    "WHERE exchange = ? AND market_type = ? AND symbol = ? "
-                    "AND interval = ? AND " + _SERIES_IDENTITY_PREDICATE_SQL +
-                    " AND open_time >= ? AND open_time <= ?",
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity)):
+                existing = conn.execute(
+                    "SELECT content_sha256, import_version, row_count "
+                    "FROM history_archive_imports WHERE object_key = ?",
+                    (object_key,),
+                ).fetchone()
+                if (
+                    existing is not None
+                    and str(existing["content_sha256"]).lower() == content_sha256
+                    and str(existing["import_version"]) == import_version
+                    and int(existing["row_count"]) == len(rows)
+                ):
+                    stored_count = int(conn.execute(
+                        "SELECT COUNT(*) FROM klines "
+                        "WHERE exchange = ? AND market_type = ? AND symbol = ? "
+                        "AND interval = ? AND " + _SERIES_IDENTITY_PREDICATE_SQL +
+                        " AND open_time >= ? AND open_time <= ?",
+                        (
+                            exchange,
+                            market_type,
+                            symbol,
+                            interval,
+                            *identity.storage_values,
+                            start_ms,
+                            end_ms,
+                        ),
+                    ).fetchone()[0])
+                    if stored_count >= len(rows):
+                        return {
+                            "written": 0,
+                            "imported": False,
+                            "skipped": True,
+                            "invalidated": 0,
+                            "revision_changed": False,
+                        }
+
+                digest_changed = bool(
+                    existing is not None
+                    and str(existing["content_sha256"]).lower() != content_sha256
+                )
+                revision_changed = digest_changed or bool(
+                    receipt.get("revision_changed")
+                )
+                invalidated = 0
+                if revision_changed:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM klines
+                        WHERE exchange = ? AND market_type = ? AND symbol = ?
+                          AND provider_id = ? AND venue = ? AND asset_class = ?
+                          AND series_variant = ? AND price_adjustment = ?
+                          AND session_variant = ? AND volume_semantics = ?
+                          AND source = 'backfill_aggregated'
+                          AND open_time <= ?
+                          AND COALESCE(close_time, open_time) >= ?
+                        """,
+                        (
+                            exchange,
+                            market_type,
+                            symbol,
+                            *identity.storage_values,
+                            end_ms,
+                            start_ms,
+                        ),
+                    )
+                    invalidated = cursor.rowcount
+
+                incoming_rank_sql = source_rank_sql("excluded.source")
+                stored_rank_sql = source_rank_sql("klines.source")
+                cursor = conn.executemany(
+                    f"""
+                    INSERT INTO klines (
+                        exchange, market_type, provider_id, venue, asset_class,
+                        series_variant, price_adjustment, session_variant,
+                        volume_semantics, symbol, interval, open_time,
+                        close_time, open, high, low, close, volume, quote_volume,
+                        trades, taker_buy_base, taker_buy_quote,
+                        source, created_at, updated_at
+                    ) VALUES ({', '.join('?' for _ in range(25))})
+                    ON CONFLICT({_KLINES_CONFLICT_TARGET_SQL}) DO UPDATE SET
+                        close_time = excluded.close_time,
+                        open = excluded.open,
+                        high = excluded.high,
+                        low = excluded.low,
+                        close = excluded.close,
+                        volume = excluded.volume,
+                        quote_volume = excluded.quote_volume,
+                        trades = excluded.trades,
+                        taker_buy_base = excluded.taker_buy_base,
+                        taker_buy_quote = excluded.taker_buy_quote,
+                        source = excluded.source,
+                        updated_at = excluded.updated_at
+                    WHERE {incoming_rank_sql} >= {stored_rank_sql}
+                    """,
+                    payload,
+                )
+                written = cursor.rowcount
+                conn.execute(
+                    """
+                    INSERT INTO history_archive_imports (
+                        object_key, provider_id, exchange, market_type, symbol,
+                        interval, granularity, period, start_ms, end_ms,
+                        content_sha256, provider_checksum, source_url, row_count,
+                        revision_changed, import_version, imported_at_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(object_key) DO UPDATE SET
+                        provider_id = excluded.provider_id,
+                        exchange = excluded.exchange,
+                        market_type = excluded.market_type,
+                        symbol = excluded.symbol,
+                        interval = excluded.interval,
+                        granularity = excluded.granularity,
+                        period = excluded.period,
+                        start_ms = excluded.start_ms,
+                        end_ms = excluded.end_ms,
+                        content_sha256 = excluded.content_sha256,
+                        provider_checksum = excluded.provider_checksum,
+                        source_url = excluded.source_url,
+                        row_count = excluded.row_count,
+                        revision_changed = excluded.revision_changed,
+                        import_version = excluded.import_version,
+                        imported_at_ms = excluded.imported_at_ms
+                    """,
                     (
+                        object_key,
+                        str(receipt["provider_id"]),
                         exchange,
                         market_type,
                         symbol,
                         interval,
-                        *identity.storage_values,
+                        str(receipt["granularity"]),
+                        str(receipt["period"]),
                         start_ms,
                         end_ms,
-                    ),
-                ).fetchone()[0])
-                if stored_count >= len(rows):
-                    return {
-                        "written": 0,
-                        "imported": False,
-                        "skipped": True,
-                        "invalidated": 0,
-                        "revision_changed": False,
-                    }
-
-            digest_changed = bool(
-                existing is not None
-                and str(existing["content_sha256"]).lower() != content_sha256
-            )
-            revision_changed = digest_changed or bool(
-                receipt.get("revision_changed")
-            )
-            invalidated = 0
-            if revision_changed:
-                changes_before = conn.total_changes
-                conn.execute(
-                    """
-                    DELETE FROM klines
-                    WHERE exchange = ? AND market_type = ? AND symbol = ?
-                      AND provider_id = ? AND venue = ? AND asset_class = ?
-                      AND series_variant = ? AND price_adjustment = ?
-                      AND session_variant = ? AND volume_semantics = ?
-                      AND source = 'backfill_aggregated'
-                      AND open_time <= ?
-                      AND COALESCE(close_time, open_time) >= ?
-                    """,
-                    (
-                        exchange,
-                        market_type,
-                        symbol,
-                        *identity.storage_values,
-                        end_ms,
-                        start_ms,
+                        content_sha256,
+                        (
+                            str(receipt["provider_checksum"])
+                            if receipt.get("provider_checksum")
+                            else None
+                        ),
+                        str(receipt["source_url"]),
+                        len(rows),
+                        1 if revision_changed else 0,
+                        import_version,
+                        now_ms,
                     ),
                 )
-                invalidated = conn.total_changes - changes_before
-
-            incoming_rank_sql = source_rank_sql("excluded.source")
-            stored_rank_sql = source_rank_sql("klines.source")
-            changes_before = conn.total_changes
-            conn.executemany(
-                f"""
-                INSERT INTO klines (
-                    exchange, market_type, provider_id, venue, asset_class,
-                    series_variant, price_adjustment, session_variant,
-                    volume_semantics, symbol, interval, open_time,
-                    close_time, open, high, low, close, volume, quote_volume,
-                    trades, taker_buy_base, taker_buy_quote,
-                    source, created_at, updated_at
-                ) VALUES ({', '.join('?' for _ in range(25))})
-                ON CONFLICT({_KLINES_CONFLICT_TARGET_SQL}) DO UPDATE SET
-                    close_time = excluded.close_time,
-                    open = excluded.open,
-                    high = excluded.high,
-                    low = excluded.low,
-                    close = excluded.close,
-                    volume = excluded.volume,
-                    quote_volume = excluded.quote_volume,
-                    trades = excluded.trades,
-                    taker_buy_base = excluded.taker_buy_base,
-                    taker_buy_quote = excluded.taker_buy_quote,
-                    source = excluded.source,
-                    updated_at = excluded.updated_at
-                WHERE {incoming_rank_sql} >= {stored_rank_sql}
-                """,
-                payload,
-            )
-            written = conn.total_changes - changes_before
-            conn.execute(
-                """
-                INSERT INTO history_archive_imports (
-                    object_key, provider_id, exchange, market_type, symbol,
-                    interval, granularity, period, start_ms, end_ms,
-                    content_sha256, provider_checksum, source_url, row_count,
-                    revision_changed, import_version, imported_at_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(object_key) DO UPDATE SET
-                    provider_id = excluded.provider_id,
-                    exchange = excluded.exchange,
-                    market_type = excluded.market_type,
-                    symbol = excluded.symbol,
-                    interval = excluded.interval,
-                    granularity = excluded.granularity,
-                    period = excluded.period,
-                    start_ms = excluded.start_ms,
-                    end_ms = excluded.end_ms,
-                    content_sha256 = excluded.content_sha256,
-                    provider_checksum = excluded.provider_checksum,
-                    source_url = excluded.source_url,
-                    row_count = excluded.row_count,
-                    revision_changed = excluded.revision_changed,
-                    import_version = excluded.import_version,
-                    imported_at_ms = excluded.imported_at_ms
-                """,
-                (
-                    object_key,
-                    str(receipt["provider_id"]),
-                    exchange,
-                    market_type,
-                    symbol,
-                    interval,
-                    str(receipt["granularity"]),
-                    str(receipt["period"]),
-                    start_ms,
-                    end_ms,
-                    content_sha256,
-                    (
-                        str(receipt["provider_checksum"])
-                        if receipt.get("provider_checksum")
-                        else None
-                    ),
-                    str(receipt["source_url"]),
-                    len(rows),
-                    1 if revision_changed else 0,
-                    import_version,
-                    now_ms,
-                ),
-            )
-            conn.commit()
 
     return {
         "written": int(written),
@@ -792,8 +793,7 @@ def invalidate_archive_dependents(receipts: list[dict[str, Any]]) -> int:
         for item in revised:
             exchange = str(item["exchange"])
             identity = KlineSeriesIdentity.for_exchange(exchange)
-            before = conn.total_changes
-            conn.execute(
+            cursor = conn.execute(
                 """
                 DELETE FROM klines
                 WHERE exchange = ? AND market_type = ? AND symbol = ?
@@ -813,7 +813,7 @@ def invalidate_archive_dependents(receipts: list[dict[str, Any]]) -> int:
                     int(item["start_ms"]),
                 ),
             )
-            deleted += conn.total_changes - before
+            deleted += cursor.rowcount
         conn.commit()
     return int(deleted)
 
@@ -1424,6 +1424,7 @@ class KlinesRepoAdapter:
         self._series_identity = series_identity
         self._calendar_resolver = calendar_resolver
         self._calendar_registry = calendar_registry
+        self.revision_store = RevisionStore(lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
         from .bar_delivery import BarDeliveryJournal
         self.bar_delivery = BarDeliveryJournal(
             lambda: _connect(timeout_seconds=1.0, configure_journal_mode=False), upsert_klines)
@@ -1509,6 +1510,28 @@ class KlinesRepoAdapter:
             market_type=market_type or self._market_type,
             series_identity=series_identity or self._series_identity,
         )
+
+    def replace_bars(self, symbol, interval, rows, *, start_ms, end_ms,
+                     expected_revision, source="settings_manual_repair", exchange=None,
+                     market_type=None, series_identity=None):
+        """Atomic, revision-checked repair. Failure rolls back deletion too."""
+        from .revisions import Acquisition, acquisition_scope
+        exchange, market_type = exchange or self._exchange, market_type or self._market_type
+        identity = series_identity or self._series_identity or KlineSeriesIdentity.for_exchange(exchange)
+        values = series_values(symbol, interval, exchange, market_type, identity)
+        with _connect() as conn, acquisition_scope(Acquisition(expected_revision)):
+            with guarded_write(conn, values):
+                where, params, _ = _series_where(exchange=exchange, market_type=market_type,
+                    symbol=symbol, interval=interval, series_identity=identity)
+                deleted = conn.execute("DELETE FROM klines WHERE " + " AND ".join(where) +
+                    " AND open_time>=? AND open_time<=?", (*params, start_ms, end_ms)).rowcount
+                mark_deleted(conn, values, start_ms, end_ms)
+                # The outer writer already validated the complete read view.
+                with acquisition_scope(None):
+                    written = upsert_klines(symbol, interval, rows, source, exchange=exchange,
+                        market_type=market_type, series_identity=identity, _connection=conn)
+                committed_revision = current_revision(conn)
+            return {"deleted": deleted, "written": written, "revision": committed_revision}
 
     def get_bounds(
         self,
@@ -1877,6 +1900,10 @@ class AsyncKlinesRepoAdapter:
         self._exchange = exchange
         self._market_type = market_type
 
+    @property
+    def revision_store(self):
+        return RevisionStore(lambda: _connect(timeout_seconds=0.1, configure_journal_mode=False))
+
     async def get_latest_time(
         self,
         symbol: str,
@@ -2099,7 +2126,9 @@ def delete_klines(
 
     sql = f"DELETE FROM klines WHERE {' AND '.join(where)}"
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute(sql, params)
+        mark_deleted(conn, series_values(symbol, interval, exchange, market_type, series_identity), start_ms, end_ms)
         conn.commit()
         return cur.rowcount
 
@@ -2154,12 +2183,16 @@ def delete_oldest_klines(
 
         cutoff_ms = cutoff_row["open_time"]
 
+        # Retention removes a stored prefix, not the truth of independent
+        # materializations. Never cascade into another protected series.
+        conn.execute("UPDATE kline_mutation_context SET mode='retention' WHERE singleton=1")
         # Delete everything at or before the cutoff
         cur = conn.execute(
             "DELETE FROM klines WHERE " + predicate + " "
             "AND open_time <= ?",
             (*params, cutoff_ms),
         )
+        conn.execute("UPDATE kline_mutation_context SET mode='' WHERE singleton=1")
         conn.commit()
         return cur.rowcount
 
@@ -2246,6 +2279,7 @@ def delete_oldest_klines_batch(
         if to_delete <= 0:
             return 0
 
+        conn.execute("UPDATE kline_mutation_context SET mode='retention' WHERE singleton=1")
         if ceiling_ms is None:
             cur = conn.execute(
                 f"""
@@ -2276,6 +2310,7 @@ def delete_oldest_klines_batch(
                     to_delete,
                 ),
             )
+        conn.execute("UPDATE kline_mutation_context SET mode='' WHERE singleton=1")
         conn.commit()
         return cur.rowcount
 

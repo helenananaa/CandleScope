@@ -325,6 +325,8 @@ class DataManager:
         self._started = False
         self._ttl_task: asyncio.Task | None = None
         self._cleanup_task: asyncio.Task | None = None
+        self._revision_task: asyncio.Task | None = None
+        self._revision_loop_error: str | None = None
         self._auto_gc_task: asyncio.Task | None = None
         self._cache_access_loop: asyncio.AbstractEventLoop | None = None
         self._cache_access_writer_task: asyncio.Task | None = None
@@ -428,6 +430,20 @@ class DataManager:
         }
         self._auto_gc_policy = AutoGcPolicy.from_env()
 
+        from app.data_engine.memory_budget import MemoryBudget
+        self.memory_budget = MemoryBudget(self._cfg.memory_budget_bytes)
+        for owner, service, limit in (("bar-cache", self.cache, 128 * 1024 * 1024),
+                                      ("realtime-state", self.bar_aggregator, 128 * 1024 * 1024),
+                                      ("event-delivery", self.event_bus, 32 * 1024 * 1024),
+                                      ("durable-delivery", self.aggregator_bridge.delivery, 16 * 1024 * 1024)):
+            self.memory_budget.register(owner, limit_bytes=self._cfg.memory_owner_budgets.get(owner, limit), usage=service.memory_usage,
+                                        roots=service._memory_roots)
+        self.memory_budget.register("history-query", limit_bytes=self._cfg.memory_owner_budgets.get("history-query", 64 * 1024 * 1024),
+                                    usage=lambda: {"estimated_bytes": 0})
+        self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 64 * 1024 * 1024),
+                                    usage=lambda: {"estimated_bytes": 0})
+        self.query_engine.memory_budget = self.memory_budget
+
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.publisher.on_bar_event(self.aggregator_bridge.on_bar_event)
         self.query_engine.set_bar_aggregator(self.bar_aggregator)
@@ -468,6 +484,14 @@ class DataManager:
         """
         self.query_engine.set_storage(storage)
         self.coordinator.set_storage(storage)
+        store = getattr(storage, "revision_store", None)
+        if store is not None:
+            # Startup establishes the cheap lower-bound used by aggregation
+            # and queued repair admission; ticks do not read SQLite.
+            self.cache.revision_consumer.sync(force=True)
+            self.bar_aggregator.acquisition_revision_provider = lambda: store.observed_revision
+        else:
+            self.bar_aggregator.acquisition_revision_provider = None
 
     def set_history_policy(self, history_policy: Any | None) -> None:
         """Inject the shared history availability/calendar resolver."""
@@ -785,6 +809,9 @@ class DataManager:
         # Start background tasks
         await self.coordinator.start_reaper()
 
+        if self.cache.revision_consumer is not None:
+            self._revision_task = asyncio.create_task(self._revision_loop(), name="kline-revision-adoption")
+
         # TTL eviction task
         if self._cfg.cache.ttl_seconds > 0:
             self._ttl_task = asyncio.create_task(self._ttl_loop())
@@ -818,6 +845,11 @@ class DataManager:
         cancel_related_warmup = getattr(related_warmup_scheduler, "cancel", None)
         if callable(cancel_related_warmup):
             cancel_related_warmup()
+
+        if self._revision_task is not None:
+            self._revision_task.cancel()
+            await asyncio.gather(self._revision_task, return_exceptions=True)
+            self._revision_task = None
 
         # Stop TTL task
         if self._ttl_task is not None:
@@ -892,6 +924,7 @@ class DataManager:
         backfill_requester: str = "query",
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Query K-line bars.
 
@@ -928,6 +961,7 @@ class DataManager:
             market_type=market_type,
             series_identity=series_identity,
             auto_backfill=auto_backfill,
+            **({"min_revision": min_revision} if min_revision is not None else {}),
         )
         return self._submit_missing_ranges(
             result,
@@ -953,6 +987,7 @@ class DataManager:
         backfill_requester: str = "query_latest",
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Get the latest N bars.  Shorthand for ``query(limit=N)``."""
         market_type = self._normalize_market_type(market_type)
@@ -972,6 +1007,7 @@ class DataManager:
             market_type=market_type,
             series_identity=series_identity,
             auto_backfill=auto_backfill,
+            **({"min_revision": min_revision} if min_revision is not None else {}),
         )
         return self._submit_missing_ranges(
             result,
@@ -994,6 +1030,7 @@ class DataManager:
         auto_backfill: bool | None = None,
         backfill_metadata: dict[str, Any] | None = None,
         series_identity: KlineSeriesIdentity | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Get bars before a timestamp (for pagination / load-more)."""
         market_type = self._normalize_market_type(market_type)
@@ -1014,6 +1051,7 @@ class DataManager:
             market_type=market_type,
             series_identity=series_identity,
             auto_backfill=auto_backfill,
+            **({"min_revision": min_revision} if min_revision is not None else {}),
         )
         return self._submit_missing_ranges(
             result,
@@ -2368,6 +2406,9 @@ class DataManager:
             **identity.to_dict(),
         ))
 
+        if self.cache.revision_consumer is not None:
+            self.cache.revision_consumer.sync(force=True)
+
     def cache_clear(self) -> None:
         """Clear all cached data."""
         self.cache.clear()
@@ -3039,7 +3080,16 @@ class DataManager:
             market_type=market_type,
             **identity_kwargs,
         )
-        self.cache.bulk_load(key, bars)
+        consumer = self.cache.revision_consumer
+        if consumer is not None:
+            storage = self.query_engine.storage
+            bars = await run_storage(consumer.adopt, key, lambda: storage.query_bars(
+                symbol, interval, start_ms=bars[0].time_ms, end_ms=bars[-1].time_ms,
+                exchange=exchange, market_type=market_type, series_identity=key.identity))
+            if not bars:
+                return
+        else:
+            self.cache.bulk_load(key, bars)
 
         detail = {
             "bars_count": len(bars),
@@ -3169,6 +3219,10 @@ class DataManager:
             "market_catalog": self.market_catalog.snapshot(),
             "market_data_control": self.market_data_control_snapshot(),
             "auto_gc": self.auto_gc_snapshot(),
+            "memory_budget": self.memory_budget.snapshot(),
+            "storage_revisions": self.cache.revision_consumer.snapshot() if self.cache.revision_consumer else None,
+            "revision_adoption": {"task_alive": self._revision_task is not None and not self._revision_task.done(),
+                                  "last_error": self._revision_loop_error},
             "memory_gc": self._memory_gc_last_report or {
                 "mode": "not-run",
                 "owner": "data-manager-memory",
@@ -3586,6 +3640,19 @@ class DataManager:
     # ═══════════════════════════════════════════════════════════
     #  Internal
     # ═══════════════════════════════════════════════════════════
+
+    async def _revision_loop(self):
+        while True:
+            consumer = self.cache.revision_consumer
+            if consumer is not None:
+                try:
+                    await run_storage(consumer.sync)
+                    self._revision_loop_error = None
+                except Exception as exc:
+                    # Retain the cursor; reads refuse stale revision promises
+                    # and this loop retries durable adoption without data loss.
+                    self._revision_loop_error = f"{type(exc).__name__}: {exc}"
+            await asyncio.sleep(0.05)
 
     async def _ttl_loop(self) -> None:
         """Background loop for TTL-based cache eviction."""

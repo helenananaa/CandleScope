@@ -1921,6 +1921,7 @@ async def get_klines(
     limit: int = Query(500, ge=1, le=1000, description="Number of rows"),
     exchange: str = Query(DEFAULT_EXCHANGE, description="Exchange, e.g. binance"),
     market_type: str = Query(DEFAULT_MARKET_TYPE, description="Market type: spot, futures, swap"),
+    min_revision: int | None = Query(None, ge=0, description="Minimum committed storage revision"),
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get the latest K-line bars for a symbol/interval pair.
@@ -1960,6 +1961,7 @@ async def get_klines(
             exchange,
             market_type=market_type,
             **identity_kwargs,
+            **({"min_revision": min_revision} if isinstance(min_revision, int) else {}),
         )
     except Exception as exc:
         raise _query_http_exception(exc, "DataManager query failed") from exc

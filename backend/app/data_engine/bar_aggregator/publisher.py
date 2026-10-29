@@ -26,6 +26,8 @@ Usage::
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import asyncio
 import logging
 import time
@@ -205,6 +207,9 @@ class BarAggregatorPublisher:
                 self._events_throttled += 1
                 return
 
+        # Snapshot the single emitted state before the first await. Later
+        # ticks may mutate its builder while callbacks are suspended.
+        event = deepcopy(event)
         self._events_emitted += 1
 
         # Fire type-specific callbacks
@@ -331,7 +336,7 @@ class BarAggregatorPublisher:
         # Fire type-specific + all-events callbacks
         for cb in specific + self._all_callbacks:
             try:
-                await cb(event)
+                await cb(deepcopy(event))
             except BarDeliveryUnavailable:
                 self._callback_errors += 1
                 raise
@@ -351,7 +356,7 @@ class BarAggregatorPublisher:
             if event_filter is not None and not event_filter.matches(event):
                 continue
             try:
-                queue.put_nowait(event)
+                queue.put_nowait(deepcopy(event))
             except asyncio.QueueFull:
                 if event.event_type == BarEventType.UPDATED:
                     self._preview_drops += 1

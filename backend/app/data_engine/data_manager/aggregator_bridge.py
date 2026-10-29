@@ -118,6 +118,9 @@ class AggregatorBridge:
             if dm_event.previous_bar is not None:
                 payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
             payload["storage_row"] = bar_state.to_storage_dict()
+            payload["derived"] = bool(bar_state.source_snapshots)
+            if bar_state.acquisition_revision is not None:
+                payload["acquisition_revision"] = bar_state.acquisition_revision
             return await self.delivery.submit(event.delivery_id, payload, key)
 
         durable_accepted = await self._persist_bar_event(bar_state, dm_event_type, storage_source)
@@ -127,6 +130,17 @@ class AggregatorBridge:
         return "accepted"
 
     async def _publish(self, event: DataEvent) -> None:
+        consumer = self._cache.revision_consumer
+        if consumer is not None and event.detail.get("storage_revision") is not None:
+            storage = self._storage_provider()
+            key = event.key
+            bars = await run_storage(consumer.adopt, key, lambda: storage.query_bars(
+                key.symbol, key.interval, start_ms=event.bar.time_ms, end_ms=event.bar.time_ms,
+                exchange=key.exchange, market_type=key.market_type, series_identity=key.identity))
+            if not bars:
+                return
+            event.bar = bars[0]
+            event.detail = {**event.detail, "storage_revision": consumer.revision}
         if event.event_type in (DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
                                DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED):
             accepted, _canonical = self._cache.upsert_if_accepted(event.key, event.bar)

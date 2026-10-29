@@ -46,6 +46,9 @@ Usage::
 """
 from __future__ import annotations
 
+from app.data_engine.storage.revisions import fenced_acquisition
+from app.data_engine.memory_budget import budgeted_work, reserve_work
+
 import logging
 import time
 from typing import Any
@@ -221,6 +224,8 @@ class BackfillEngine:
 
     # ── Public: Run ──────────────────────────────────────────
 
+    @fenced_acquisition
+    @budgeted_work
     async def run(
         self,
         symbol: str,
@@ -328,6 +333,8 @@ class BackfillEngine:
                 await self.publisher.publish(report)
                 return report
 
+            reserve_work(getattr(self, "memory_budget", None), "history-backfill",
+                         max(1, plan.estimated_bars) * 2048)
             # ── Phase 3: Fetch ──
             # Set market_type on all tasks so the fetcher routes correctly
             for task in plan.tasks:

@@ -419,6 +419,7 @@ class BarCache:
     """
 
     def __init__(self, config: CacheConfig | None = None) -> None:
+        self.revision_consumer = None
         self._cfg = config or CacheConfig()
         self._lock = threading.Lock()
         # OrderedDict for LRU tracking — most recently used at the end
@@ -536,9 +537,11 @@ class BarCache:
 
         No lock is held during I/O. Unrelated series and reads do not invalidate
         this token; normal writes retain the existing mutation revision rules.
-        This is process-local fencing, not a persistent database revision: a
-        storage writer must still adopt or invalidate through this cache owner.
+        This token is process-local; an attached revision consumer synchronizes
+        durable changes before capture and adoption through the same owner.
         """
+        if self.revision_consumer is not None:
+            self.revision_consumer.sync()
         with self._lock:
             series = self._series.get(key)
             token = CacheReadToken(
@@ -570,6 +573,8 @@ class BarCache:
         drift. Closed, foreign, invalidated or stale tokens fail closed.
         """
         evicted: list[BarData] = []
+        if self.revision_consumer is not None:
+            self.revision_consumer.sync(force=True)
         with self._lock:
             series = self._series.get(key)
             if (
@@ -956,6 +961,38 @@ class BarCache:
                     for key, series in self._series.items()
                 },
             }
+
+    def invalidate_dependents(self, key):
+        """Conservative family invalidation for derived projections/tokens.
+
+        The dependency/block owner may narrow this later. Cache-only ephemeral
+        streams are not durable materializations and retain their own lifetime.
+        """
+        from app.data_engine.interval_policy import is_ephemeral_interval
+        with self._lock:
+            keys = set(self._series) | set(self._read_tokens)
+            for candidate in keys:
+                if (candidate != key and not is_ephemeral_interval(candidate.interval)
+                        and candidate.exchange == key.exchange and candidate.market_type == key.market_type
+                        and candidate.symbol == key.symbol and candidate.identity == key.identity):
+                    self._invalidate_read_tokens(candidate)
+                    self._series.pop(candidate, None)
+                    self._history_capacities.pop(candidate, None)
+
+    def memory_usage(self):
+        from .gc import BAR_ESTIMATED_BYTES
+        with self._lock:
+            count = sum(series.count for series in self._series.values())
+            return {"bars": count, "series": len(self._series),
+                    "estimated_bytes": count * BAR_ESTIMATED_BYTES,
+                    "estimate_basis": "record, scalar referents and list slots; conservative"}
+
+    def _memory_roots(self):
+        with self._lock:
+            # Copy containers, share immutable records. No caller can mutate
+            # cache storage through diagnostic roots.
+            return [(key, list(series._bars), list(series._time_index))
+                    for key, series in self._series.items()]
 
     def health_snapshot(self) -> dict[str, int]:
         """Return the constant-size counters needed by ``/health``."""

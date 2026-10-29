@@ -71,6 +71,7 @@ from app.data_engine.history import (
 from app.exchanges import HistoryEmptyPageSemantics, supports_history_identity
 
 from .cache import BarCache, CacheReadToken
+from .revisions import CacheRevisionConsumer, revision_checked_query
 from .config import QueryConfig
 from .custom_query import CustomIntervalQueryService
 from .models import (
@@ -157,6 +158,8 @@ class QueryEngine:
     ) -> None:
         self._cache = cache
         self._storage = storage
+        store = getattr(storage, "revision_store", None)
+        self._cache.revision_consumer = CacheRevisionConsumer(self._cache, store) if store is not None else None
         self._cfg = config or QueryConfig()
         self._backfill_trigger = backfill_trigger
         self._history_policy = history_policy
@@ -201,6 +204,8 @@ class QueryEngine:
     def set_storage(self, storage: StorageBackend | None) -> None:
         """Set or clear the storage backend used by query operations."""
         self._storage = storage
+        store = getattr(storage, "revision_store", None)
+        self._cache.revision_consumer = CacheRevisionConsumer(self._cache, store) if store is not None else None
 
     @property
     def backfill_trigger(self) -> BackfillTrigger | None:
@@ -255,6 +260,7 @@ class QueryEngine:
 
     # ── Public: Main Query ───────────────────────────────────
 
+    @revision_checked_query
     def query(
         self,
         symbol: str,
@@ -671,6 +677,7 @@ class QueryEngine:
         market_type: str = "spot",
         series_identity: KlineSeriesIdentity | None = None,
         auto_backfill: bool | None = None,
+        min_revision: int | None = None,
     ) -> QueryResult:
         """Shorthand for getting the latest N bars."""
         return self.query(
@@ -681,8 +688,10 @@ class QueryEngine:
             market_type=market_type,
             series_identity=series_identity,
             auto_backfill=auto_backfill,
+            **({"min_revision": min_revision} if min_revision is not None else {}),
         )
 
+    @revision_checked_query
     def query_before(
         self,
         symbol: str,

@@ -196,9 +196,19 @@ class DataManagerConfig:
     event_bus: EventBusConfig = field(default_factory=EventBusConfig)
     coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
 
+    memory_budget_bytes: int = 256 * 1024 * 1024
+    memory_owner_budgets: dict[str, int] = field(default_factory=lambda: {
+        "bar-cache": 128 * 1024 * 1024, "realtime-state": 128 * 1024 * 1024,
+        "event-delivery": 32 * 1024 * 1024, "history-query": 64 * 1024 * 1024,
+        "history-backfill": 64 * 1024 * 1024,
+        "durable-delivery": 16 * 1024 * 1024,
+    })
+
     def snapshot(self) -> dict:
         """JSON-serializable representation of all settings."""
         return {
+            "memory_budget_bytes": self.memory_budget_bytes,
+            "memory_owner_budgets": dict(self.memory_owner_budgets),
             "cache": {
                 "max_bars_per_series": self.cache.max_bars_per_series,
                 "max_series": self.cache.max_series,

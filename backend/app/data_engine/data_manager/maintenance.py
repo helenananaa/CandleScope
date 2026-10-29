@@ -386,6 +386,8 @@ class MaintenanceService:
                     results.append(result)
                     continue
 
+                revision_store = getattr(storage, "revision_store", None)
+                repair_revision = await run_storage(revision_store.head) if revision_store is not None else None
                 base_rows = await run_storage(
                     storage.query_bars,
                     symbol=symbol,
@@ -434,27 +436,33 @@ class MaintenanceService:
                     results.append(result)
                     continue
 
-                deleted = await run_storage(
-                    storage.delete_bars,
-                    symbol=symbol,
-                    interval=interval,
-                    start_ms=earliest_open,
-                    end_ms=latest_open,
-                    exchange=exchange,
-                    market_type=market_type,
-                )
-                written = 0
-                if rebuilt_rows:
-                    written = await run_storage(
-                        storage.upsert_bars,
+                atomic_replace = getattr(storage, "replace_bars", None)
+                if callable(atomic_replace) and repair_revision is not None:
+                    outcome = await run_storage(atomic_replace, symbol, interval, rebuilt_rows,
+                        start_ms=earliest_open, end_ms=latest_open, expected_revision=repair_revision,
+                        source="settings_manual_repair", exchange=exchange, market_type=market_type)
+                    deleted, written = outcome["deleted"], outcome["written"]
+                else:
+                    deleted = await run_storage(
+                        storage.delete_bars,
                         symbol=symbol,
                         interval=interval,
-                        rows=rebuilt_rows,
-                        source="settings_manual_repair",
+                        start_ms=earliest_open,
+                        end_ms=latest_open,
                         exchange=exchange,
                         market_type=market_type,
                     )
-
+                    written = 0
+                    if rebuilt_rows:
+                        written = await run_storage(
+                            storage.upsert_bars,
+                            symbol=symbol,
+                            interval=interval,
+                            rows=rebuilt_rows,
+                            source="settings_manual_repair",
+                            exchange=exchange,
+                            market_type=market_type,
+                        )
                 total_deleted_rows += deleted
                 total_written_rows += written
                 total_stale_rows_removed += len(stale_existing)

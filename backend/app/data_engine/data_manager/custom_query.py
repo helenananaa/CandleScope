@@ -1,6 +1,8 @@
 """Custom interval query service for QueryEngine."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 import time
 import logging
 import threading
@@ -599,8 +601,8 @@ class CustomIntervalQueryService:
             result,
             bars=list(result.bars),
             missing_ranges=[replace(item) for item in result.missing_ranges],
-            metadata=dict(result.metadata),
-            excluded_ranges=[dict(item) for item in result.excluded_ranges],
+            metadata=deepcopy(result.metadata),
+            excluded_ranges=deepcopy(result.excluded_ranges),
         )
 
     @classmethod
