@@ -4,7 +4,7 @@
 
 This implementation follows the user's 2026-10-29 approval of a shared market
 data pool, independent chart windows, unified consumer demands and bounded
-speculative warming. The implementation baseline is main `ce07e1bf`; P1–P3,
+speculative warming. The initial implementation baseline is main `ce07e1bf`; P1–P3,
 including PR #140, have merged. Earlier issue text saying P3 is unmerged is
 historical. No changes to exchange collection, trading, or retired Pyne support
 are in scope.
@@ -195,9 +195,9 @@ Indicator / navigation / retention checkpoint:
   native lifecycle, comparative performance and sustained heap evidence are
   still pending for this candidate.
 
-## Current acceptance and a runtime-discovered fix
+## Pre-integration acceptance and a runtime-discovered fix
 
-The implementation head is `8e7d13fb`; the fixed-input baseline is `ce07e1bf`.
+This checkpoint's implementation head is `8e7d13fb`; the fixed-input baseline is `ce07e1bf`.
 The immediately preceding `0addb792` observations cover the unchanged shared
 cache, window binding, recovery and indicator implementation. `8e7d13fb` changes
 warm-request matching/backoff and their regressions only. Final native indicator
@@ -224,3 +224,18 @@ and observer only inject market input/read existing state; user actions were
 performed through the actual Chrome/native UI. No product store or navigation
 state was directly mutated by the harness. Native evidence uses an isolated
 Electron QA host and production renderer, not an installed release package.
+
+## Mainline integration and final recovery follow-up
+
+PR #159 integrates main `56d07af8`. Implementation `83def156` preserves the new
+period/anchor and Pine drawing contracts, skips unavailable-period warming and
+fixes an actual native indicator-first recovery viewport failure. The regression
+reproduced the observed 997-row double compensation before the fix; actual
+minimize/disconnect/restore now displays both charts without a new tick, with all
+1,500 candle rows and all 1,500 asynchronous JS indicator values verified. Full
+checks pass 4,593 frontend tests, one performance gate and 123 desktop tests.
+
+See [the integration report](issue-123-market-manager/POST_INTEGRATION.md) for the
+latest matched-pair performance, revision-labelled receipts and remaining limits.
+Earlier sections preserve their own historical checkpoints and do not qualify
+newer source revisions. PR/issue publication records final-head package checks.

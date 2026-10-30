@@ -1,0 +1,177 @@
+{
+  "implementation": "83def15695bd0cc3f650720b4add617fe72a38d7",
+  "mainBaseline": "56d07af822c665556d3dd280bf5d6a2a2107043c",
+  "nativeHost": "Electron 43.3.0, isolated profile, production renderer, loopback market fixture",
+  "recovery": {
+    "cell-1": {
+      "rows": 1500,
+      "displayRows": 1500,
+      "dataMismatches": [],
+      "displayMismatches": [],
+      "viewport": {
+        "cellId": "cell-1",
+        "logical": {
+          "from": 1443,
+          "to": 1501
+        },
+        "visible": {
+          "from": 1793273220,
+          "to": 1793276700
+        }
+      },
+      "indicatorPoints": 1500,
+      "indicatorMismatches": []
+    },
+    "cell-2": {
+      "rows": 1500,
+      "displayRows": 1500,
+      "dataMismatches": [],
+      "displayMismatches": [],
+      "viewport": {
+        "cellId": "cell-2",
+        "logical": {
+          "from": 1436.25,
+          "to": 1498
+        },
+        "visible": {
+          "from": 1793272800,
+          "to": 1793276520
+        }
+      }
+    },
+    "hidden": {
+      "lifecycle": {
+        "windowId": "main-window",
+        "state": "visible-secondary",
+        "focused": false,
+        "visible": false,
+        "minimized": true
+      },
+      "runnableFrames": 0,
+      "displayCounts": [
+        500,
+        500
+      ],
+      "indicatorCounts": [
+        1500
+      ]
+    }
+  },
+  "warming": {
+    "implementation": "57b6af170e4e6cf035c7257f0c138b9f02fd3874",
+    "warmingBefore": {
+      "queued": 0,
+      "active": 0,
+      "inflightBytes": 0,
+      "completed": 0,
+      "promoted": 0,
+      "rejected": 0
+    },
+    "warmingAfter": {
+      "queued": 0,
+      "active": 0,
+      "inflightBytes": 0,
+      "completed": 1,
+      "promoted": 1,
+      "rejected": 0
+    },
+    "requests": [
+      {
+        "at": 1793285468.0457962,
+        "kind": "http_start",
+        "path": "/api/v1/klines/history",
+        "query": {
+          "symbol": "BTCUSDT",
+          "interval": "5m",
+          "count_back": "500",
+          "exchange": "binance",
+          "market_type": "spot",
+          "max_wait_ms": "0",
+          "intent": "viewport"
+        },
+        "delay_ms": 5000
+      },
+      {
+        "at": 1793285473.077132,
+        "kind": "http",
+        "path": "/api/v1/klines/history",
+        "query": {
+          "symbol": "BTCUSDT",
+          "interval": "5m",
+          "count_back": "500",
+          "exchange": "binance",
+          "market_type": "spot",
+          "max_wait_ms": "0",
+          "intent": "viewport"
+        },
+        "status": 200
+      }
+    ]
+  },
+  "navigation": {
+    "implementation": "57b6af17",
+    "before": {
+      "cell-1": {
+        "cellId": "cell-1",
+        "logical": {
+          "from": 442.25,
+          "to": 504
+        },
+        "visible": {
+          "from": 1793273040,
+          "to": 1793276760
+        }
+      },
+      "cell-2": {
+        "cellId": "cell-2",
+        "logical": {
+          "from": 442.25,
+          "to": 504
+        },
+        "visible": {
+          "from": 1793273040,
+          "to": 1793276760
+        }
+      }
+    },
+    "after": {
+      "cell-1": {
+        "cellId": "cell-1",
+        "logical": {
+          "from": 389.75,
+          "to": 451.5
+        },
+        "visible": {
+          "from": 1793269860,
+          "to": 1793273640
+        }
+      },
+      "cell-2": {
+        "cellId": "cell-2",
+        "logical": {
+          "from": 442.25,
+          "to": 504
+        },
+        "visible": {
+          "from": 1793273040,
+          "to": 1793276760
+        }
+      }
+    },
+    "secondaryRowsUnchanged": true,
+    "scope": "native pan inside a 500-row window; earlier deep-pagination receipts remain separately revision-labelled"
+  },
+  "finalSwitch": {
+    "implementation": "83def15695bd0cc3f650720b4add617fe72a38d7",
+    "delayMs": 1800,
+    "sequence": [
+      "1m",
+      "5m",
+      "15m"
+    ],
+    "primarySeries": "binance-spot-BTCUSDT-15m",
+    "primaryRows": 500,
+    "mismatches": [],
+    "secondaryRowsAndViewportUnchanged": true
+  }
+}

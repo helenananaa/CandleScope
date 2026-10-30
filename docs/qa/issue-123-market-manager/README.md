@@ -1,6 +1,8 @@
 # Shared market manager acceptance — 2026-10-29
 
-This report qualifies the implementation at `8e7d13fb` against baseline
+Latest integrated implementation and recovery follow-up: [2026-10-30 report](POST_INTEGRATION.md).
+
+This historical report qualifies the implementation at `8e7d13fb` against baseline
 `ce07e1bf`. It does not qualify subsequent mainline integration or a packaged
 release. Earlier unchanged-path cases identify `0addb792` in their JSON receipts.
 The original baseline and candidate assets have SHA-256 manifests in the local
