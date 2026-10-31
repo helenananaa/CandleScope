@@ -424,5 +424,29 @@ def filter_projection_rows(
             if not head["is_closed"] or any(row.get(k) != data[k] for k in _VALUES):
                 continue
             refs = [_ref(head)]
-        result.append(dict(row, _source_verified=bool(refs)))
+        verified = dict(row, _source_verified=bool(refs))
+        if (
+            head is not None
+            and head["source"] in {DataSource.HTTP.value, DataSource.HTTP_BACKFILL.value}
+            and _ref(head) in row.get("source_refs", [])
+        ):
+            verified["_history_source_ref"] = _ref(head)
+        result.append(verified)
     return result
+
+
+def acknowledge_history_projection(conn, rows: list[dict]) -> None:
+    """Consume REST history only inside its accepted native write transaction.
+
+    History is delivered through backfill completion, not the realtime startup
+    replay. A rollback must leave both the projection and receipt uncommitted.
+    Derived writes and websocket receipts retain their market-delivery ack.
+    """
+    for row in rows:
+        ref = row.get("_history_source_ref")
+        if ref is not None:
+            conn.execute(
+                "UPDATE kline_source_heads SET delivered_revision=? "
+                "WHERE series=? AND open_time=? AND revision=?",
+                (ref["revision"], ref["series"], ref["open_time"], ref["revision"]),
+            )

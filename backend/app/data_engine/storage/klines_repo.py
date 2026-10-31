@@ -510,6 +510,10 @@ def upsert_klines(
                         for item in payload
                     ]
                 affected = conn.executemany(sql, write_payload).rowcount
+                if source == "backfill" and affected == len(rows):
+                    from .kline_sources import acknowledge_history_projection
+
+                    acknowledge_history_projection(conn, rows)
 
 
     return int(affected)
