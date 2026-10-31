@@ -3125,6 +3125,7 @@ export const he = {
   "chart.lineBreakDetail": "שבירת {count} קווים",
   "chart.fixedBrick": "לבנה קבועה {size}",
   "settings.diag.chartCache": "מטמון נרות גרף ראשי",
+  "settings.diag.sharedMarketCache": "מטמון משותף לנתוני שוק",
   "settings.diag.watchlistFullCache": "מטמון רקע מלא של רשימת מעקב",
   "settings.diag.indicatorCache": "מטמון תוצאות אינדיקטור",
   "workbench.kicker": "בדיקת מלאי והורדות היסטוריה",

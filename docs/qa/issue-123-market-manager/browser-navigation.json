@@ -1,0 +1,65 @@
+{
+  "candidate": "0addb792a81160b7d3c3b27b3dfc6d583c17bf62",
+  "surface": "Chrome, controlled fixture",
+  "cachePage": {
+    "leftRowsBefore": 500,
+    "leftRowsAfter": 1000,
+    "beforeHits": 1,
+    "rightRowsUnchanged": true,
+    "rightViewportUnchanged": true
+  },
+  "deepNavigation": {
+    "leftRows": 10000,
+    "rightRowsUnchanged": true,
+    "rightViewportUnchanged": true,
+    "physicalStreams": 1
+  },
+  "correction": [
+    {
+      "cell": "cell-1",
+      "rows": 2000,
+      "mismatches": [],
+      "amended": [
+        {
+          "time": 1793270400,
+          "open": 80048.06,
+          "high": 80060.06,
+          "low": 77777.25,
+          "close": 77777.25,
+          "volume": 1234.5,
+          "is_closed": true
+        }
+      ]
+    },
+    {
+      "cell": "cell-2",
+      "rows": 1500,
+      "mismatches": [],
+      "amended": [
+        {
+          "time": 1793270400,
+          "open": 80048.06,
+          "high": 80060.06,
+          "low": 77777.25,
+          "close": 77777.25,
+          "volume": 1234.5,
+          "is_closed": true
+        }
+      ]
+    }
+  ],
+  "delayedSwitch": [
+    {
+      "cell": "cell-1",
+      "key": "binance-spot-BTCUSDT-15m",
+      "rows": 500,
+      "mismatches": []
+    },
+    {
+      "cell": "cell-2",
+      "key": "binance-spot-BTCUSDT-1m",
+      "rows": 1500,
+      "mismatches": []
+    }
+  ]
+}

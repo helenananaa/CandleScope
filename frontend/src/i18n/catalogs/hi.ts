@@ -3125,6 +3125,7 @@ export const hi = {
   "chart.lineBreakDetail": "{count}-रेखा ब्रेक",
   "chart.fixedBrick": "निश्चित ईंट {size}",
   "settings.diag.chartCache": "मुख्य-चार्ट कैंडल कैश",
+  "settings.diag.sharedMarketCache": "साझा बाज़ार डेटा कैश",
   "settings.diag.watchlistFullCache": "वॉचलिस्ट Full पृष्ठभूमि कैश",
   "settings.diag.indicatorCache": "इंडिकेटर परिणाम कैश",
   "workbench.kicker": "इन्वेंटरी निरीक्षण और इतिहास डाउनलोड",

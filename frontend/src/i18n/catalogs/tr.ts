@@ -3125,6 +3125,7 @@ export const tr = {
   "chart.lineBreakDetail": "{count}-çizgi kırılımı",
   "chart.fixedBrick": "Sabit tuğla {size}",
   "settings.diag.chartCache": "Ana grafik mum önbelleği",
+  "settings.diag.sharedMarketCache": "Paylaşılan piyasa verisi önbelleği",
   "settings.diag.watchlistFullCache": "İzleme listesi Tam arka plan önbelleği",
   "settings.diag.indicatorCache": "Gösterge sonuç önbelleği",
   "workbench.kicker": "Canlı çalışma zamanı verisi · salt okunur anlık görüntü",

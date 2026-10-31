@@ -58,6 +58,7 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
     selectExchange,
     toggleFavorite,
     selectSymbol,
+    previewSymbol,
     openContextMenu,
     addContextSymbolToWatchlist,
     getSymbolWatchlists,
@@ -226,7 +227,8 @@ export default function SymbolSearchModal(props: SymbolSearchModalProps) {
                       className={`sym-modal-row sym-discovery-row ${symbol.groupStart ? "sym-discovery-group-start" : ""} ${isHighlighted ? "highlighted" : ""} ${isCurrent ? "current" : ""}`}
                       style={{ height: virtualRows.rowHeight }}
                       onClick={() => selectSymbol(symbol)}
-                      onMouseEnter={() => setHighlightIndex(realIndex)}
+                      onMouseEnter={() => { setHighlightIndex(realIndex); previewSymbol(symbol); }}
+                      onMouseLeave={props.onCancelPreview}
                       onContextMenu={(event) => openContextMenu(event, symbol.symbol, symbol._key)}
                     >
 

@@ -1,6 +1,6 @@
 import { t } from "../../i18n/index.js";
 import { snapshotIndicatorResultCacheDiagnostics } from "../indicators/indicatorResultCacheStore.js";
-import { snapshotWatchlistFullCacheDiagnostics } from "../watchlist-full-cache/watchlistFullCacheStore.js";
+import { snapshotSharedMarketCacheDiagnostics } from "./sharedMarketCacheOwner.js";
 import { snapshotCacheRegistry } from "./cacheRegistry.js";
 import { collectBrowserRuntimePressure } from "./browserPressure.js";
 import { snapshotFrontendAutoGcScheduler } from "./frontendAutoGcScheduler.js";
@@ -73,12 +73,12 @@ function normalizeChartSnapshot(snapshotValue: unknown = {}) {
   };
 }
 
-function normalizeWatchlistSnapshot(snapshotValue: unknown = {}) {
+function normalizeMarketSnapshot(snapshotValue: unknown = {}) {
   const snapshot = snapshotRecord(snapshotValue);
   const totalBars = Number(snapshot.totalBars || 0);
   return {
-    owner: "watchlist-full-cache",
-    label: t("settings.diag.watchlistFullCache"),
+    owner: "shared-market-cache",
+    label: t("settings.diag.sharedMarketCache"),
     seriesCount: Number(snapshot.seriesCount || 0),
     totalBars,
     estimatedBytes: finiteNonNegative(snapshot.estimatedBytes, estimateKlineBytes(totalBars)),
@@ -112,9 +112,9 @@ export function collectFrontendCacheDiagnostics({
   const chart = normalizeChartSnapshot(
     isSnapshotProvider(chartDataCache) ? chartDataCache() : chartDataCache,
   );
-  const watchlist = normalizeWatchlistSnapshot(snapshotWatchlistFullCacheDiagnostics());
+  const market = normalizeMarketSnapshot(snapshotSharedMarketCacheDiagnostics());
   const indicators = normalizeIndicatorSnapshot(snapshotIndicatorResultCacheDiagnostics());
-  const estimatedBytes = chart.estimatedBytes + watchlist.estimatedBytes + indicators.estimatedBytes;
+  const estimatedBytes = chart.estimatedBytes + market.estimatedBytes + indicators.estimatedBytes;
 
   return {
     generatedAtMs: Date.now(),
@@ -131,14 +131,14 @@ export function collectFrontendCacheDiagnostics({
         source: "not-collected-sync",
       },
     },
-    klineBars: chart.totalBars + watchlist.totalBars,
+    klineBars: chart.totalBars + market.totalBars,
     indicatorPoints: indicators.totalPoints,
     autoGcRuntime: snapshotFrontendAutoGcScheduler(),
     registry: snapshotCacheRegistry(),
     pendingAccessEvents: snapshotFrontendCacheAccessEvents(),
     owners: {
       chart,
-      watchlist,
+      market,
       indicators,
     },
   };

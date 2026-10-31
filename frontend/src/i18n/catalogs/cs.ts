@@ -3125,6 +3125,7 @@ export const cs = {
   "chart.lineBreakDetail": "Line break {count} čar",
   "chart.fixedBrick": "Pevná cihla {size}",
   "settings.diag.chartCache": "Mezipaměť svíček hlavního grafu",
+  "settings.diag.sharedMarketCache": "Sdílená mezipaměť tržních dat",
   "settings.diag.watchlistFullCache": "Mezipaměť Full watchlistu na pozadí",
   "settings.diag.indicatorCache": "Mezipaměť výsledků indikátorů",
   "workbench.kicker": "Kontrola inventáře a stahování historie",

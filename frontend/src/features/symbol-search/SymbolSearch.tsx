@@ -22,6 +22,8 @@ export default function SymbolSearch({
   currentMarketType,
   currentExchange = "binance",
   onSelect,
+  onPreview,
+  onCancelPreview,
   exchangeCatalog,
   watchlists,
   onAddToWatchlist,
@@ -39,9 +41,10 @@ export default function SymbolSearch({
   }, []);
 
   const handleClose = useCallback(() => {
+    onCancelPreview?.();
     opening.current = false;
     setOpen(false);
-  }, []);
+  }, [onCancelPreview]);
 
   const handleSelect = useCallback((symbol: SymbolSelection) => {
     onSelect(symbol);
@@ -121,6 +124,8 @@ export default function SymbolSearch({
             currentSymbol={currentSymbol}
             currentExchange={currentExchange}
             onSelect={handleSelect}
+            {...(onPreview ? { onPreview } : {})}
+            {...(onCancelPreview ? { onCancelPreview } : {})}
             {...(currentMarketType === undefined ? {} : { currentMarketType })}
             {...(exchangeCatalog === undefined ? {} : { exchangeCatalog })}
             {...(watchlists === undefined ? {} : { watchlists })}

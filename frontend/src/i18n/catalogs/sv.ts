@@ -3125,6 +3125,7 @@ export const sv = {
   "chart.lineBreakDetail": "{count}-linjers Line Break",
   "chart.fixedBrick": "Fast tegel {size}",
   "settings.diag.chartCache": "Huvuddiagrammets ljuscache",
+  "settings.diag.sharedMarketCache": "Delad cache för marknadsdata",
   "settings.diag.watchlistFullCache": "Bakgrundscache för bevakningslista Full",
   "settings.diag.indicatorCache": "Indikatorresultatcache",
   "workbench.kicker": "Inventeringsgranskning och historiknedladdningar",

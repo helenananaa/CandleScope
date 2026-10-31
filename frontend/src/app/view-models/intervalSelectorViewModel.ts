@@ -34,6 +34,8 @@ export function buildIntervalSelectorViewModel({
     customIntervalRecords,
     savedCustomIntervals,
     onSelectInterval: sessionActions.selectInterval,
+    ...(sessionActions.previewInterval ? { onPreviewInterval: sessionActions.previewInterval } : {}),
+    ...(sessionActions.cancelPreview ? { onCancelPreview: sessionActions.cancelPreview } : {}),
     onCreateCustomInterval: sessionActions.createCustomInterval,
     onRemoveCustomInterval: sessionActions.removeCustomInterval,
     onRestoreCustomInterval: sessionActions.restoreCustomInterval,

@@ -36,14 +36,33 @@ Session switches are optimistic: old bars may remain rendered while `meta.status
 is `loading`; the first warm-cache or REST result swaps the active store, while a
 slow empty load may clear after the configured timeout.
 
-The app composition root owns one `ForegroundPreloadGate` and shares it with
-the active chart and the watchlist full-cache preloader. Physical
-`SeriesDataFeed` history/before/range/latest requests are foreground by default;
-speculative callers must opt in with `priority: "preload"` and hold a preload
-lease. Foreground requests and longer-lived chart busy owners synchronously
-abort speculative work, then require a complete quiet dwell before one globally
-serialized preload may resume. The watchlist full-cache transport remains the
-only direct K-line REST exception, and it participates in the same shared gate.
+The workspace `MarketDataManager` owns one `ForegroundPreloadGate`. Chart
+foreground requests and busy owners use this same gate. Its `MarketWarmQueue`
+accepts watchlist, hovered-product/interval and frequent-interval demand leases;
+these consumers do not own candle arrays or independent network budgets. Normal
+warming waits for the quiet dwell. A deliberate hover/focus after 150 ms can
+skip that dwell, but cannot preempt foreground or active hydration. Speculative
+work is cancellable, deduplicated by full series and target count, and limited
+by pending jobs, source-row cost, estimated in-flight bytes and cooldown.
+
+Each chart's `ChartMarketController` promotes an already running warm request
+before the selection becomes busy, then releases its own hover lease. The
+foreground viewport joins only matching work; hydration, repair and different
+count/wait requirements keep their own contracts. Cancelling one chart never
+releases another consumer's lease. Up to three available favorite/frequently
+used intervals are ranked from bounded local usage metadata. Hovering never
+changes selection, watchlist tiers or usage history.
+
+Historical navigation explicitly permits cache reads. A before-page hit requires
+verified closed coverage through the requested right boundary as well as the
+requested row count; old rows alone cannot prove the gap. Right navigation uses
+an already proven range, falling back to its existing strict repair read if the
+proof is lost. Feed defaults, backfill/reconnect readback and strict repair still
+require network. A new backfill completion revokes earlier instrument proofs.
+Active windows retain their current ranges with O(1) bound observations; hard
+pool limits win over retention. Capacity protects active series, rejects surplus
+realtime admission without throwing into transport, and exposes the rejection
+counter. Window rows remain privately owned throughout.
 
 Cold activation is split into two contracts. The visible `viewport` request
 asks for at most 500 bars (or the smaller derived-interval source budget) and
@@ -64,9 +83,10 @@ active session is complete or changes.
   error, and visible-data state for the active session.
 - May use internal chart data and stream helpers from this feature directory.
 - May call backend K-line services through `feed/SeriesDataFeed`.
-- May read `features/watchlist-full-cache` through its resolver during initial
-  symbol/interval load, before falling back to the market-data memory cache or
-  backend queries.
+- `MarketDataManager` owns shared K-line transport leases and immutable range
+  cache admission. Charts and watchlist warming consume its service port.
+- `manager/initialMarketRows` seeds a missing chart with bounded provisional
+  shared rows. An existing chart window keeps its own navigation boundary.
 - May publish indicator range request events when `prepend` or `mid-merge`
   expands the active window; indicators own the actual range request side
   effects.
@@ -80,8 +100,8 @@ active session is complete or changes.
 - Do not call K-line REST services directly outside `feed/`.
 - Do not own drawing, export, watchlist, settings, or alert UI state.
 - Do not expose raw Lightweight Charts objects in the public contract.
-- Do not mutate watchlist full-cache rows; market-data may consume a resolved
-  warm array and then continue its own chart reconciliation.
+- Do not introduce feature-owned candle arrays or bypass shared admission for
+  watchlist/hover warming. The watchlist owns demand policy, not candle storage.
 
 ## Live window ownership (issue #123 P1)
 

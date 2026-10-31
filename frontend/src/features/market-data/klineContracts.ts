@@ -118,6 +118,8 @@ export interface BeforePageAvailability {
 
 /** Client-only read boundary and scheduling; never serialized to the server. */
 export interface KlineRequestContext {
+  /** Recovery/readback must not be answered by previously accepted local data. */
+  cacheMode?: "prefer-cache" | "network-only";
   epoch?: number;
   realtimeVersion?: number;
   scope?: string;
@@ -181,6 +183,8 @@ export interface KlineRangeRequestOptions extends KlineRequestOptions {
 }
 
 export interface KlineApi {
+  /** This adapter already owns consumer leases; do not wrap a second broker. */
+  readonly ownsRequestLeases?: true;
   fetchKlinesHistory(
     symbol: string,
     interval: IntervalString,

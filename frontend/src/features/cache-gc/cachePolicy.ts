@@ -90,24 +90,17 @@ function flattenDiagnostics(
 ): NormalizedGcEntry[] {
   const owners = diagnostics.owners || {};
   const chartEntries = owners.chart?.entries || [];
-  const watchlistEntries = owners.watchlist?.entries || [];
+  const marketEntries = owners.market?.entries || [];
   const indicatorEntries = owners.indicators?.entries || [];
 
   return [
+    ...marketEntries.map((entry): NormalizedGcEntry => ({
+      ...entry, owner: "shared-market-cache", key: String(entry.key || ""), category: "kline",
+      tier: inferTier(entry, nowMs), bars: nonNegative(entry.bars), estimatedBytes: nonNegative(entry.estimatedBytes), points: 0, items: 0,
+    })),
     ...chartEntries.map((entry): NormalizedGcEntry => ({
       ...entry,
       owner: entry.owner || "chart-data-cache",
-      key: String(entry.key || ""),
-      category: "kline" as const,
-      tier: inferTier(entry, nowMs),
-      bars: nonNegative(entry.bars),
-      estimatedBytes: nonNegative(entry.estimatedBytes),
-      points: 0,
-      items: 0,
-    })),
-    ...watchlistEntries.map((entry): NormalizedGcEntry => ({
-      ...entry,
-      owner: entry.owner || "watchlist-full-cache",
       key: String(entry.key || ""),
       category: "kline" as const,
       tier: inferTier(entry, nowMs),
@@ -162,7 +155,6 @@ function shouldProtect(entry: NormalizedGcEntry, policy: GcPolicy): string {
   if (
     policy.preserveSubscribed
     && entry.tier === "subscribed"
-    && !(entry.owner === "watchlist-full-cache" && exactTrimRelief(entry))
   ) return "protected-subscribed";
   return "";
 }
@@ -204,16 +196,13 @@ function pressureScore(pressure: GcPressure): number {
 
 function restoreCost(entry: NormalizedGcEntry): { score: number; reason: string } {
   if (entry.orphan) return { score: 0, reason: "orphan" };
-  if (entry.owner === "watchlist-full-cache" && exactTrimRelief(entry)) {
-    return { score: 25, reason: "watchlist-safe-tail-trim" };
-  }
   if (entry.category === "indicator") {
     if (exactTrimRelief(entry)) {
       return { score: 45, reason: "indicator-safe-range-trim" };
     }
     return { score: 75, reason: "indicator-recompute" };
   }
-  if (entry.owner === "watchlist-full-cache") return { score: 50, reason: "watchlist-full-refetch" };
+  if (entry.owner === "shared-market-cache") return { score: 50, reason: "shared-market-refetch" };
   return { score: 20, reason: "memory-or-sqlite-reload" };
 }
 
@@ -260,19 +249,12 @@ function exactTrimRelief(
 ): { keepStart: number | null; relief: GcRelief } | null {
   if (!candidate.trimSafety?.safeRangeTrim || !candidate.trimPlan) return null;
   const keepStart = number(candidate.trimPlan.keepStart);
-  const bars = nonNegative(candidate.trimPlan.removedBars);
   const indicatorPoints = nonNegative(candidate.trimPlan.removedPoints);
   const indicatorItems = nonNegative(candidate.trimPlan.removedItems);
   const estimatedBytes = nonNegative(candidate.trimPlan.removedEstimatedBytes);
   if (estimatedBytes <= 0) return null;
-  if (candidate.category === "kline") {
-    if (candidate.owner !== "watchlist-full-cache" || bars <= 0 || bars > candidate.bars) return null;
-    if (estimatedBytes > candidate.estimatedBytes) return null;
-    return {
-      keepStart: keepStart > 0 ? keepStart : null,
-      relief: { bars, indicatorPoints: 0, indicatorItems: 0, estimatedBytes },
-    };
-  }
+  // K-line retention is owned by the range cache; GC may only evict idle entries.
+  if (candidate.category === "kline") return null;
   if (keepStart <= 0 || indicatorPoints + indicatorItems <= 0) return null;
   if (
     indicatorPoints > candidate.points

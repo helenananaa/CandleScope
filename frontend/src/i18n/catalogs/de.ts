@@ -3125,6 +3125,7 @@ export const de = {
   "chart.lineBreakDetail": "{count}-Linien-Break",
   "chart.fixedBrick": "Fester Ziegel {size}",
   "settings.diag.chartCache": "Hauptchart-Kerzencache",
+  "settings.diag.sharedMarketCache": "Gemeinsamer Marktdaten-Cache",
   "settings.diag.watchlistFullCache": "Hintergrundcache Beobachtungsliste Full",
   "settings.diag.indicatorCache": "Indikatorergebnis-Cache",
   "workbench.kicker": "Live-Laufzeitdaten · schreibgeschützter Snapshot",
