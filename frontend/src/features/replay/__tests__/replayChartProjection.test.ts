@@ -5,10 +5,12 @@ import { buildReplayViewerSeriesKey } from "../replayViewerProjection.js";
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import type { ReplayRuntimeLifecycle } from "../useReplayRuntime.js";
 import type { ReplayDisplayProjectionResponse } from "../replayDisplayProjection.js";
+import { createReplayMarketDataManager } from "../replayDataContext.js";
 
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
 test("same-market cells keep independent history windows while following one source", async () => {
+  const manager = createReplayMarketDataManager();
   const listeners = new Set<() => void>();
   const bar = (time: number) => ({ time, open: 10, high: 12, low: 9, close: 11, volume: 1 });
   const source = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-test" });
@@ -18,8 +20,8 @@ test("same-market cells keep independent history windows while following one sou
   const lifecycle = { store: { seriesStore: source }, getSnapshot: () => ({ store }),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   } as unknown as ReplayRuntimeLifecycle;
-  const past = new ReplayChartProjection(lifecycle, "track-1", "1m");
-  const latest = new ReplayChartProjection(lifecycle, "track-1", "1m");
+  const past = new ReplayChartProjection(lifecycle, "track-1", "1m", undefined, undefined, manager.replay, "run-a");
+  const latest = new ReplayChartProjection(lifecycle, "track-1", "1m", undefined, undefined, manager.replay, "run-b");
   assert.equal(past.seriesStore.seriesKey, buildReplayViewerSeriesKey(source, "1m"),
     "target identity exists before first render/retain so viewport hand-off is not superseded");
   const coarse = new ReplayChartProjection(lifecycle, "track-1", "5m");
@@ -27,6 +29,8 @@ test("same-market cells keep independent history windows while following one sou
   assert.notEqual(coarse.seriesStore.seriesKey, past.seriesStore.seriesKey);
   const releasePast = past.retain();
   const releaseLatest = latest.retain();
+  assert.equal(manager.diagnostics().replay.activeSequences, 2);
+  assert.deepEqual(manager.diagnostics().replay.sequences.map(item => item.identity?.runId), ["run-a", "run-b"]);
   past.seriesStore.maxBars = 2;
   past.seriesStore.applyRange([bar(300), bar(360)]);
   assert.equal(past.seriesStore.rightTruncated, true);
@@ -36,7 +40,15 @@ test("same-market cells keep independent history windows while following one sou
   listeners.forEach((notify) => notify()); await settle();
   assert.deepEqual(past.seriesStore.snapshot(), historical);
   assert.equal(latest.seriesStore.snapshot().at(-1)?.time, 720);
+  const frozen = latest.seriesStore.snapshot();
+  manager.closeAll();
+  source.applyRange([bar(780)]);
+  listeners.forEach(notify => notify()); await settle();
+  assert.deepEqual(latest.seriesStore.snapshot(), frozen, "manager shutdown also fences local projection updates");
   releasePast(); releaseLatest();
+  assert.equal(manager.diagnostics().replay.activeSequences, 0);
+  assert.equal(store.virtualTimeMs, 780_000, "display reads must not advance the replay clock");
+  manager.closeAll();
 });
 
 test("shared coarse charts serialize requests, invalidate old epochs and release independently", async () => {

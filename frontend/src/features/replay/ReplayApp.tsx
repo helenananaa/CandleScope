@@ -12,7 +12,8 @@ import {
 } from "../settings/chartAppearanceSettings.js";
 import type { ReplayEntry } from "./replayEntry.js";
 import type { TrainingRunCard } from "./replayV2Types.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
+import { useReplayOperations } from "./useReplayOperations.js";
+import { useReplayDataManager } from "./replayDataContext.js";
 import { getReplayControllerClientInstanceId } from "./replayControllerIdentity.js";
 import ReplayInitialMarketPicker from "./components/ReplayInitialMarketPicker.js";
 import TrainingHubDialog from "./components/TrainingHubDialog.js";
@@ -25,6 +26,7 @@ import { useControlCommands, usePageControlBridge } from "../app-control/useCont
 import { replayCommands } from "../app-control/replayCommands.js";
 import { settingsCommands } from "../app-control/settingsCommands.js";
 import { trainingHubCommands } from "../app-control/trainingHubCommands.js";
+import { ReplayDataProvider } from "./ReplayDataProvider.js";
 
 export { default as ReplayInitialMarketPicker } from "./components/ReplayInitialMarketPicker.js";
 
@@ -83,9 +85,12 @@ function ReplayInitializedRun({
   runId: string;
   sessionId: string;
 }) {
-  const [pool] = useState(() => createReplayChartRuntimePool(getReplayControllerClientInstanceId(runId)));
+  const manager = useReplayDataManager();
+  const [pool] = useState(() => createReplayChartRuntimePool(getReplayControllerClientInstanceId(runId), {
+    ...(manager ? { dataManager: manager.replay } : {}), runId,
+  }));
   const replay = useSharedReplayChartRuntime(pool, sessionId, true);
-  const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true });
+  const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true, runId });
   useControlCommands(() => replayCommands(runId, viewer));
   const [initialSession, setInitialSession] = useState<ChartSession | null>(null);
   useEffect(() => {
@@ -106,6 +111,7 @@ function ReplayTrainingRunApp({
   chartSettingsRuntime: ChartSettingsRuntime;
   runId: string;
 }) {
+  const { api } = useReplayOperations(runId, "run-entry");
   const [run, setRun] = useState<TrainingRunCard | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,9 +119,9 @@ function ReplayTrainingRunApp({
 
   useEffect(() => {
     const controller = new AbortController();
-    void defaultReplayV2Api.getRun(runId, controller.signal).then(async ({ run: loaded }) => {
+    void api.getRun(runId, controller.signal).then(async ({ run: loaded }) => {
       if (loaded.adapter_session_id !== null && loaded.state === "PAUSED") {
-        await defaultReplayV2Api.prepareIndex(runId, controller.signal, getReplayControllerClientInstanceId(runId));
+        await api.prepareIndex(runId, controller.signal, getReplayControllerClientInstanceId(runId));
       }
       if (controller.signal.aborted) return;
       setRun(loaded);
@@ -124,7 +130,7 @@ function ReplayTrainingRunApp({
       setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
     });
     return () => controller.abort();
-  }, [attempt, runId]);
+  }, [api, attempt, runId]);
 
   if (error !== null) {
     return <ReplayStatusSurface title={t("replay.openFailed")} message={error} retry={() => {
@@ -139,7 +145,7 @@ function ReplayTrainingRunApp({
   if (run.state === "AWAITING_MARKET" || run.resume_action === "SELECT_MARKET") {
     return <AppPageShell source="replay"><ReplayInitialMarketPicker run={run} onInitialized={(initialized) => {
       setRun(null);
-      void defaultReplayV2Api.prepareIndex(runId, undefined, getReplayControllerClientInstanceId(runId)).then(() => setRun(initialized)).catch((reason: unknown) => {
+      void api.prepareIndex(runId, undefined, getReplayControllerClientInstanceId(runId)).then(() => setRun(initialized)).catch((reason: unknown) => {
         setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.runLoadFailed"));
       });
     }} /></AppPageShell>;
@@ -166,7 +172,7 @@ export default function ReplayApp({ entry }: ReplayAppProps) {
   useControlCommands(() => settingsCommands(chartSettingsRuntime));
   return (
     <PageSettingsContext.Provider value={chartSettingsRuntime}>
-      <ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} />
+      <ReplayDataProvider><ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} /></ReplayDataProvider>
     </PageSettingsContext.Provider>
   );
 }

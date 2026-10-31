@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
+import { ReplayDataManager, type ReplaySequenceLease } from "./replayDataManager.js";
+import { useReplayDataManager } from "./replayDataContext.js";
 import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
   buildReplayViewerSeriesKey,
@@ -20,7 +21,9 @@ interface ProjectionState {
 
 /** A cell owns its paged window; an old response can never replace a new dataset. */
 export class ReplayChartProjection {
-  readonly seriesStore = new SeriesWindowStore();
+  readonly seriesStore;
+  private readonly data: ReplaySequenceLease;
+  private releaseData: (() => void) | null = null;
   private state: ProjectionState = { loading: true, error: null, boundaryMs: null };
   private listeners = new Set<() => void>();
   private unsubscribe: (() => void) | null = null;
@@ -37,7 +40,11 @@ export class ReplayChartProjection {
     private readonly interval: string,
     private readonly api: Pick<typeof defaultReplayV2Api, "displayProjectionBySession"> = defaultReplayV2Api,
     private readonly fetcher?: typeof fetch,
+    dataManager: ReplayDataManager = new ReplayDataManager(),
+    private readonly runId = "standalone",
   ) {
+    this.data = dataManager.createSequence();
+    this.seriesStore = this.data.store;
     // A period change renders the new, initially empty store before retain()
     // starts its fetch. Publish its real identity immediately so the chart
     // transfer never binds to an intermediate "uninitialized" dataset.
@@ -60,6 +67,7 @@ export class ReplayChartProjection {
 
   retain = () => {
     if (this.leases++ === 0) {
+      this.releaseData = this.data.retain();
       this.unsubscribe = this.lifecycle.subscribe(this.schedule);
       this.refresh();
     }
@@ -76,6 +84,8 @@ export class ReplayChartProjection {
       this.request = null;
       this.tape?.dispose();
       this.tape = null;
+      this.releaseData?.();
+      this.releaseData = null;
     };
   };
 
@@ -85,12 +95,14 @@ export class ReplayChartProjection {
   };
 
   private refresh = () => {
-    if (this.leases === 0) return;
+    if (this.leases === 0 || !this.data.active) return;
     const { store } = this.lifecycle.getSnapshot();
     const config = store.sessionConfig;
     const boundary = store.virtualTimeMs;
     const epoch = store.dataEpoch;
     const sessionId = store.sessionId;
+    if (sessionId !== null && epoch !== null) this.data.bind({ runId: this.runId,
+      trackId: this.trackId, sessionId, dataEpoch: epoch, generation: store.generation, interval: this.interval });
     const authorityKey = JSON.stringify([sessionId, epoch, store.generation]);
     if (this.authorityKey !== authorityKey || (boundary !== null && this.state.boundaryMs !== null && boundary < this.state.boundaryMs)) {
       this.authorityKey = authorityKey;
@@ -121,7 +133,8 @@ export class ReplayChartProjection {
           boundaryMs: tapeObservation?.virtualTimeMs ?? null }),
         loading: loading => this.publish({ ...this.state, loading: loading && this.seriesStore.isEmpty() }),
         error: error => this.publish({ ...this.state, error: error?.message ?? null }),
-        ...(this.fetcher ? { fetcher: this.fetcher } : {}),
+        fetcher: (input, init) => this.data.request(signal => (this.fetcher ?? globalThis.fetch)(input,
+          { ...init, signal }), init?.signal ?? undefined),
       });
       this.tape.update();
       return;
@@ -154,10 +167,10 @@ export class ReplayChartProjection {
     const request = new AbortController();
     this.request = request;
     this.publish({ ...this.state, loading: this.state.boundaryMs === null });
-    void this.api.displayProjectionBySession(sessionId, {
+    void this.data.request(signal => this.api.displayProjectionBySession(sessionId, {
       trackId: this.trackId, displayInterval: this.interval,
       revealedBoundaryMs: boundary, dataEpoch: epoch,
-    }, request.signal).then((response) => {
+    }, signal), request.signal).then((response) => {
       if (request.signal.aborted || this.request !== request) return;
       const current = this.lifecycle.getSnapshot().store;
       if (current.dataEpoch !== epoch || current.generation !== store.generation
@@ -175,7 +188,7 @@ export class ReplayChartProjection {
       this.publish({ loading: false, error: null, boundaryMs: boundary,
         historyBootstrapBeforeMs: response.history_before_ms ?? null });
     }).catch((error: unknown) => {
-      if (request.signal.aborted) return;
+      if (request.signal.aborted || !this.data.active) return;
       this.seriesStore.clear({ source: "replay-cell-projection-error" });
       this.publish({ loading: false, error: error instanceof Error ? error.message : String(error), boundaryMs: null });
     }).finally(() => {
@@ -194,11 +207,12 @@ export class ReplayChartProjection {
   restoreLatest = () => this.tape?.restoreLatest() ?? Promise.resolve(false);
 }
 
-export function useReplayChartProjection(runtime: ReplayRuntime, trackId: string, interval: string) {
+export function useReplayChartProjection(runtime: ReplayRuntime, trackId: string, interval: string, runId = "standalone") {
+  const dataManager = useReplayDataManager();
   // Only the source connection is pooled. Sharing a mutable paged SeriesWindowStore
   // would let one chart scrolling into history replace another chart's live edge.
-  const projection = useMemo(() => new ReplayChartProjection(runtime.lifecycle, trackId, interval),
-    [runtime.lifecycle, trackId, interval]);
+  const projection = useMemo(() => new ReplayChartProjection(runtime.lifecycle, trackId, interval,
+    undefined, undefined, dataManager?.replay, runId), [runtime.lifecycle, trackId, interval, dataManager, runId]);
   useEffect(() => projection.retain(), [projection]);
   const state = useSyncExternalStore(projection.subscribe, projection.getSnapshot, projection.getSnapshot);
   const subscribeSeries = useCallback((notify: () => void) => {

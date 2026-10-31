@@ -1,0 +1,138 @@
+{
+  "passed": true,
+  "scope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "checks": [
+    {
+      "name": "run operations survive chart selection and fence StrictMode/run change/unmount",
+      "status": "PASS",
+      "cancellations": 2,
+      "stopped": 3,
+      "publications": 1,
+      "requests": 3
+    },
+    {
+      "name": "real provided-bars React lifecycle prioritizes pan/zoom while preserving script input",
+      "status": "PASS"
+    },
+    {
+      "name": "real chart viewport callback drives bounded indicators through zoom and continuous drag",
+      "status": "PASS"
+    },
+    {
+      "name": "canonical indicator transport with real React training/review lifecycles",
+      "status": "PASS",
+      "cancellations": 2
+    },
+    {
+      "name": "canonical price/gap correction preserves real chart viewport",
+      "status": "PASS"
+    },
+    {
+      "name": "BAR review selected-period paging, retry and fixed real chart viewport",
+      "status": "PASS",
+      "requests": 3
+    },
+    {
+      "name": "AGG_TRADE review selected-period paging, retry and fixed real chart viewport",
+      "status": "PASS",
+      "requests": 3
+    },
+    {
+      "name": "playing indicator time and same-ms tape sequence are sampled together",
+      "status": "PASS",
+      "requestCount": 2
+    },
+    {
+      "manager": {
+        "sequences": [
+          {
+            "owner": "replay-window-1",
+            "identity": {
+              "runId": "run",
+              "trackId": "track-1",
+              "sessionId": "adapter",
+              "dataEpoch": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "generation": 1,
+              "interval": "1m"
+            },
+            "consumers": 1,
+            "bars": 3,
+            "requests": 0,
+            "totalRequests": 29,
+            "streams": 0,
+            "cleanupErrors": 0
+          }
+        ],
+        "operations": [],
+        "activeSequences": 1,
+        "activeOperations": 0,
+        "requests": 0,
+        "streams": 0,
+        "bars": 3
+      },
+      "name": "production multi-chart tape hook initializes indicators during continuous trades",
+      "status": "PASS",
+      "gets": 28,
+      "posts": 3,
+      "firstResultAt": 1494.8000000044703,
+      "cancellations": 6,
+      "displayedSequence": 149,
+      "sourceSequence": 157
+    },
+    {
+      "manager": {
+        "sequences": [
+          {
+            "owner": "replay-window-1",
+            "identity": {
+              "runId": "run",
+              "trackId": "track-1",
+              "sessionId": "adapter",
+              "dataEpoch": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "generation": 2,
+              "interval": "1m"
+            },
+            "consumers": 1,
+            "bars": 3,
+            "requests": 0,
+            "totalRequests": 30,
+            "streams": 0,
+            "cleanupErrors": 0
+          }
+        ],
+        "operations": [],
+        "activeSequences": 1,
+        "activeOperations": 0,
+        "requests": 0,
+        "streams": 0,
+        "bars": 3
+      },
+      "name": "production multi-chart tape hook initializes indicators during continuous trades after rewind cancels the old seed",
+      "status": "PASS",
+      "gets": 28,
+      "posts": 2,
+      "firstResultAt": 1876.8999999985099,
+      "cancellations": 7,
+      "displayedSequence": 100,
+      "sourceSequence": 108
+    },
+    {
+      "name": "four controlled replay cells restore early builtin results during an unfinished batch",
+      "status": "PASS",
+      "requestCount": 108
+    }
+  ],
+  "remainingWorkers": [],
+  "exceptions": [],
+  "driverStartupWaitMs": 60000,
+  "driverAdjustment": "Temporary copy changed only browser startup polling from 100 to 600 iterations, retaining the prior local allowance. Product and fixture assertions unchanged; temporary script removed.",
+  "fullCheck": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "frontendTests": 4677,
+    "isolatedPerformanceTests": 1,
+    "desktopTests": 124
+  },
+  "nativePackageQualified": false
+}
