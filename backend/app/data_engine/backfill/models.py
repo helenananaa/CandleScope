@@ -292,6 +292,8 @@ class FetchedBar:
     # wire shape; the durable receipt owns the object-level metadata.
     archive_object_key: str | None = None
     series_identity: KlineSeriesIdentity | None = None
+    # Selected REST revision; consumed atomically with its native projection.
+    source_ref: dict | None = None
 
     def __post_init__(self) -> None:
         values = {
@@ -339,6 +341,7 @@ class FetchedBar:
     def to_storage_dict(self) -> dict:
         """Format for StorageBackend.upsert_bars()."""
         return {
+            **({"source_refs": [dict(self.source_ref)]} if self.source_ref else {}),
             "open_time": self.open_time,
             "close_time": self.close_time,
             "open": self.open,

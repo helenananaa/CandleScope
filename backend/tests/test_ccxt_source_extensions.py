@@ -158,6 +158,14 @@ def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spo
         assert rows[0]["volume"] == (100 if spot else 1)
         assert rows[0]["quote_volume"] == 101
         assert all(rows[0][name] is None for name in ("trades", "taker_buy_base", "taker_buy_quote"))
+        assert not kline_sources.pending(desc)
+        replayed = []
+        replay = NormalizeLayer(IngestionConfig(ccxt_fork_kline_enabled=True), desc)
+        async def receive(event):
+            replayed.append(event)
+        replay.on_event(receive)
+        await replay.replay_source_pending()
+        assert replayed == []
 
     asyncio.run(run())
 

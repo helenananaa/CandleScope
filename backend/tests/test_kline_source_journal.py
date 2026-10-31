@@ -127,3 +127,88 @@ def test_batch_failure_rolls_back_source_head_and_observations(database, monkeyp
         kline_sources.record_batch([event(), event(quote="1009")], DESCRIPTOR, None)
     assert not kline_sources.observations(DESCRIPTOR, ROW[0])
     assert kline_sources.latest(DESCRIPTOR, ROW[0]) is None
+
+
+def fetched_rest_bar():
+    from app.data_engine.backfill.fetcher import HistoricalFetcher
+    from app.data_engine.backfill.models import BackfillTask
+
+    payload = fork_exchange().parse_candlescope_kline(ROW, MARKET, "1M")
+    raw = RawMessage(payload, DataSource.HTTP_BACKFILL, DESCRIPTOR.stream_type, 1772323200100)
+    normalized = normalize_fork_kline(raw, DESCRIPTOR)
+    receipt = record(normalized, kline_sources.rest_watermark())
+    raw.payload = dict(payload, _source_receipt=receipt)
+    task = BackfillTask(symbol=DESCRIPTOR.symbol, interval="1M", start_ms=ROW[0],
+                        end_ms=ROW[0], estimated_bars=1, market_type="futures")
+    return HistoricalFetcher._event_to_bar(normalize_fork_kline(raw, DESCRIPTOR), task)
+
+
+def write_history(bar, **kwargs):
+    return klines_repo.upsert_klines(DESCRIPTOR.symbol, "1M", [bar.to_storage_dict()],
+                                    source="backfill", market_type="futures", **kwargs)
+
+
+def test_durable_rest_history_is_not_replayed_as_realtime_after_restart(database):
+    bar = fetched_rest_bar()
+    assert len(kline_sources.pending(DESCRIPTOR)) == 1
+    assert write_history(bar) == 1
+    # pending opens another connection, as the next pipeline startup does.
+    assert not kline_sources.pending(DESCRIPTOR)
+    assert kline_sources.latest(DESCRIPTOR, ROW[0])["delivered_revision"] == 1
+
+
+def test_history_receipt_and_projection_roll_back_together(database):
+    bar = fetched_rest_bar()
+    with klines_repo._connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        assert write_history(bar, _connection=conn) == 1
+        assert conn.execute("SELECT delivered_revision FROM kline_source_heads").fetchone()[0] == 1
+        conn.rollback()
+    assert len(kline_sources.pending(DESCRIPTOR)) == 1
+    with klines_repo._connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM klines").fetchone()[0] == 0
+
+
+def test_superseded_rest_history_cannot_acknowledge_new_source_head(database):
+    bar = fetched_rest_bar()
+    raw = list(ROW)
+    raw[7] = "1008"
+    payload = fork_exchange().parse_candlescope_kline(raw, MARKET, "1M")
+    newer = normalize_fork_kline(RawMessage(payload, DataSource.HTTP_BACKFILL,
+                                          DESCRIPTOR.stream_type, 1772323200200), DESCRIPTOR)
+    record(newer, kline_sources.rest_watermark())
+    assert write_history(bar) == 0
+    assert kline_sources.latest(DESCRIPTOR, ROW[0])["delivered_revision"] == 0
+    assert kline_sources.pending(DESCRIPTOR)[0].payload["_source_receipt"]["ref"]["revision"] == 2
+
+
+def test_realtime_projection_still_waits_for_market_delivery_ack(database):
+    bar = fetched_rest_bar()
+    assert klines_repo.upsert_klines(DESCRIPTOR.symbol, "1M", [bar.to_storage_dict()],
+                                   source="data_manager_exchange_closed", market_type="futures") == 1
+    assert len(kline_sources.pending(DESCRIPTOR)) == 1
+
+
+def test_backfill_cannot_acknowledge_a_websocket_head(database):
+    from app.data_engine.backfill.fetcher import HistoricalFetcher
+    from app.data_engine.backfill.models import BackfillTask
+
+    value = event()
+    value.data["source_ref"] = record(value)["ref"]
+    task = BackfillTask(symbol=DESCRIPTOR.symbol, interval="1M", start_ms=ROW[0],
+                        end_ms=ROW[0], market_type="futures")
+    bar = HistoricalFetcher._event_to_bar(value, task)
+    assert write_history(bar) == 1
+    assert len(kline_sources.pending(DESCRIPTOR)) == 1
+
+
+def test_failed_history_write_keeps_receipt_pending(database):
+    import sqlite3
+
+    bar = fetched_rest_bar()
+    with klines_repo._connect() as conn:
+        conn.execute("CREATE TRIGGER reject_history BEFORE INSERT ON klines "
+                     "BEGIN SELECT RAISE(ABORT, 'injected disk failure'); END")
+    with pytest.raises(sqlite3.IntegrityError, match="injected disk failure"):
+        write_history(bar)
+    assert len(kline_sources.pending(DESCRIPTOR)) == 1

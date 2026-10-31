@@ -952,6 +952,7 @@ class HistoricalFetcher:
                 taker_buy_base=float(data["taker_buy_base"]) if data.get("taker_buy_base") is not None else 0.0,
                 taker_buy_quote=float(data["taker_buy_quote"]) if data.get("taker_buy_quote") is not None else 0.0,
                 source="backfill",
+                source_ref=dict(data["source_ref"]) if data.get("source_ref") else None,
                 enhanced_fields=enhanced_fields,
                 series_identity=identity_from_metadata(
                     task.exchange,
