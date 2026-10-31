@@ -19,12 +19,13 @@ def run(shared):
             width=factor*86400,phase_seconds=0,acquired_at=None,fallback=fallback) if shared else fallback(source))
     return outputs
 run(True)
-timing={}
-for shared in (False,True):
-    trials=[]
-    for _ in range(5):
-        start=time.perf_counter(); outputs=run(shared); trials.append((time.perf_counter()-start)*1000)
-    timing['shared' if shared else 'baseline']={'ms':trials,'median_ms':statistics.median(trials)}
+timing={'baseline':{'ms':[]},'shared':{'ms':[]}}
+run(False)
+for index in range(7):
+    for shared in ((False,True) if index%2==0 else (True,False)):
+        start=time.perf_counter(); outputs=run(shared)
+        timing['shared' if shared else 'baseline']['ms'].append((time.perf_counter()-start)*1000)
+for value in timing.values(): value['median_ms']=statistics.median(value['ms'])
 expected,actual=run(False),run(True)
 maximum=0
 for aa,bb in zip(actual,expected):
@@ -52,4 +53,4 @@ stress.close(); gc.collect()
 end={'blocks':stress.snapshot(),'budget':stress.budget.snapshot(),'traced_current':tracemalloc.get_traced_memory()[0]}
 assert end['blocks']['estimated_bytes']==end['blocks']['views']==end['blocks']['leases']==end['blocks']['inflight']==0
 assert end['budget']['reserved_bytes']==0
-print(json.dumps({'timing':timing,'scope':'384 immutable daily bars -> 2d/4d/5d/7d; 5 warm trials; synthetic revision source; no I/O timings','max_absolute_error':maximum,'qualified':qualified,'stress_samples':samples,'after_close':end},indent=2))
+print(json.dumps({'timing':timing,'scope':'384 immutable daily bars -> 2d/4d/5d/7d; 7 alternating warm trials; synthetic revision source; no I/O timings','max_absolute_error':maximum,'qualified':qualified,'stress_samples':samples,'after_close':end},indent=2))

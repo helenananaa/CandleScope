@@ -1,0 +1,49 @@
+{
+  "source": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+  "backend": {
+    "run": 41203764479,
+    "job": 124544589752,
+    "url": "https://github.com/helenananaa/CandleScope/actions/runs/41203764479",
+    "conclusion": "success",
+    "passed": 1218,
+    "skipped": 0,
+    "seconds": 130.34,
+    "head_verified": true
+  },
+  "macos": {
+    "run": 41203764480,
+    "url": "https://github.com/helenananaa/CandleScope/actions/runs/41203764480",
+    "pending": false,
+    "arm64": {
+      "job": 124544976406,
+      "conclusion": "success",
+      "frontend_tests": 4648,
+      "frontend_extra_gate": 1,
+      "desktop_host_tests": 124,
+      "control_tests": 6,
+      "bundled_python": {
+        "passed": 1058,
+        "skipped": 1,
+        "seconds": 303.45
+      },
+      "relocated_restart": "passed",
+      "artifact_id": 13044467613
+    },
+    "conclusion": "success",
+    "x64": {
+      "job": 124544976595,
+      "conclusion": "success",
+      "frontend_tests": 4648,
+      "frontend_extra_gate": 1,
+      "desktop_host_tests": 124,
+      "control_tests": 6,
+      "bundled_python": {
+        "passed": 1058,
+        "skipped": 1,
+        "seconds": 661.32
+      },
+      "relocated_restart": "passed",
+      "artifact_id": 13045325476
+    }
+  }
+}

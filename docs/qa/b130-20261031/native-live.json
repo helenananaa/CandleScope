@@ -1,0 +1,201 @@
+{
+  "scope": "Actual packaged macOS app, bundled Python/backend, live public market data, isolated profile; no response stubs",
+  "phases": [
+    {
+      "name": "live-reopen-launch",
+      "at": "2026-10-31T13:09:21.702Z",
+      "value": {
+        "pid": 68759,
+        "instanceId": "c7ee18de26bbe1a064da93c5b37f99f1",
+        "browser": "Chrome/150.0.7871.212"
+      }
+    },
+    {
+      "name": "book-first",
+      "at": "2026-10-31T13:09:41.813Z",
+      "value": {
+        "live": true,
+        "title": "正在等待第一份有效盘口\n最后有效接收 2026/10/31 21:09:41",
+        "levels": 10,
+        "mid": "77452.55"
+      }
+    },
+    {
+      "name": "live-first",
+      "at": "2026-10-31T13:09:41.828Z",
+      "value": [
+        {
+          "interval": "5d",
+          "bar": {
+            "time": 1793232000,
+            "open": 81310,
+            "high": 81944.4,
+            "low": 76260,
+            "close": 77286.8,
+            "volume": 263325.8573,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "90m",
+          "bar": {
+            "time": 1793448000,
+            "open": 77561.9,
+            "high": 77696,
+            "low": 77433.5,
+            "close": 77452.5,
+            "volume": 1632.1844,
+            "is_closed": false,
+            "quote_volume": 126579334.34944999,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "2d",
+          "bar": {
+            "time": 1793318400,
+            "open": 77966.8,
+            "high": 78767,
+            "low": 76260,
+            "close": 77286.8,
+            "volume": 130692.8126,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "3d",
+          "bar": {
+            "time": 1793404800,
+            "open": 77485.4,
+            "high": 77485.5,
+            "low": 77452.5,
+            "close": 77452.5,
+            "volume": 0,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "live-updated",
+      "at": "2026-10-31T13:10:23.623Z",
+      "value": [
+        {
+          "interval": "5d",
+          "bar": {
+            "time": 1793232000,
+            "open": 81310,
+            "high": 81944.4,
+            "low": 76260,
+            "close": 77455.6,
+            "volume": 263325.8573,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "90m",
+          "bar": {
+            "time": 1793448000,
+            "open": 77561.9,
+            "high": 77696,
+            "low": 77433.5,
+            "close": 77455.6,
+            "volume": 1686.9192,
+            "is_closed": false,
+            "quote_volume": 130819256.53517,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "2d",
+          "bar": {
+            "time": 1793318400,
+            "open": 77966.8,
+            "high": 78767,
+            "low": 76260,
+            "close": 77455.6,
+            "volume": 130692.8126,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        },
+        {
+          "interval": "3d",
+          "bar": {
+            "time": 1793404800,
+            "open": 77485.4,
+            "high": 77485.5,
+            "low": 77447.9,
+            "close": 77455.6,
+            "volume": 0,
+            "is_closed": false,
+            "quote_volume": null,
+            "trades": null,
+            "taker_buy_base": null,
+            "taker_buy_quote": null,
+            "order_flow": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "book-updated",
+      "at": "2026-10-31T13:10:23.627Z",
+      "value": {
+        "live": true,
+        "title": "正在等待第一份有效盘口\n最后有效接收 2026/10/31 21:10:22",
+        "levels": 10,
+        "mid": "77455.55"
+      }
+    },
+    {
+      "name": "live-restored-full-exit",
+      "at": "2026-10-31T13:10:44.051Z",
+      "value": {
+        "pids": [
+          68759,
+          68760,
+          68761,
+          68762,
+          68773,
+          68769,
+          68778,
+          68779
+        ],
+        "remaining": []
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

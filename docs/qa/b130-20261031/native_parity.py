@@ -17,7 +17,8 @@ parser.add_argument('native',type=Path)
 parser.add_argument('--replay',action='store_true')
 args=parser.parse_args()
 plans={'45m':('15m',900000,2700000),'90m':('30m',1800000,5400000),
-       '2d':('1d',86400000,172800000),'5d':('1d',86400000,432000000)}
+       '2d':('1d',86400000,172800000),'5d':('1d',86400000,432000000),
+       '6d':('1d',86400000,518400000),'8d':('1d',86400000,691200000)}
 fields=('open','high','low','close','volume','quote_volume','trades','taker_buy_base','taker_buy_quote')
 archive=args.native/'parity-inputs.json.gz'
 if args.replay:
@@ -26,12 +27,13 @@ else:
     conn=sqlite3.connect(f'file:{args.native}/data/candlescope.db?mode=ro',uri=True)
     conn.row_factory=sqlite3.Row
     cases=[]
-    for capture in sorted(args.native.glob('*bars-*.json')):
-        interval=capture.stem.split('bars-',1)[1]
+    for capture in sorted([*args.native.glob('*bars-*.json'), *args.native.glob('shared-range-*.json')]):
+        interval=capture.stem.rsplit('-',1)[1]
         if interval not in plans:
             continue  # Native 3d authority is not replaced by daily reconstruction.
         base,width,target=plans[interval]
-        for value in json.loads(capture.read_text()):
+        captured=json.loads(capture.read_text())
+        for value in (captured['data'] if capture.name.startswith('shared-range-') else captured):
             if not value.get('is_closed'):
                 continue
             start=int(value['time'])*1000
@@ -79,7 +81,8 @@ for case in cases:
                                                actual=actual,expected=str(wanted)))
     stats['compared']+=1
 receipt['passed']=bool(receipt['groups'] and not receipt['mismatches']
-                       and all(g['compared']>=10 for g in receipt['groups'].values()))
+                       and all(g['compared']>=(6 if name.startswith('shared-range-') else 10)
+                               and g['not_covered']==0 for name,g in receipt['groups'].items()))
 (args.native/'parity.json').write_text(json.dumps(receipt,indent=2)+'\n')
 print(json.dumps(receipt,indent=2))
 if not receipt['passed']:

@@ -1,0 +1,56 @@
+{
+  "oracle": "Decimal sums of individually normalized source quantities; no application reducer",
+  "source_input_sha256": "d4d2ce046528df5fded3cfa2f685b1d2d8b4719d68092685fcfb9ed1a09733e9",
+  "groups": {
+    "cold-bars-2d.json": {
+      "compared": 128,
+      "not_covered": 0
+    },
+    "cold-bars-45m.json": {
+      "compared": 128,
+      "not_covered": 0
+    },
+    "cold-bars-90m.json": {
+      "compared": 128,
+      "not_covered": 0
+    },
+    "restored-bars-2d.json": {
+      "compared": 128,
+      "not_covered": 0
+    },
+    "restored-bars-5d.json": {
+      "compared": 419,
+      "not_covered": 0
+    },
+    "restored-bars-90m.json": {
+      "compared": 128,
+      "not_covered": 0
+    },
+    "shared-range-6d.json": {
+      "compared": 13,
+      "not_covered": 0
+    },
+    "shared-range-8d.json": {
+      "compared": 9,
+      "not_covered": 0
+    }
+  },
+  "mismatches": [],
+  "max_absolute_error": {
+    "open": 0,
+    "high": 0,
+    "low": 0,
+    "close": 0,
+    "volume": 0,
+    "quote_volume": 7.62939453125e-06
+  },
+  "max_relative_error": {
+    "open": 0,
+    "high": 0,
+    "low": 0,
+    "close": 0,
+    "volume": 0,
+    "quote_volume": 2.1870402575984093e-16
+  },
+  "passed": true
+}

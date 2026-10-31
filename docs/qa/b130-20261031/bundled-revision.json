@@ -1,0 +1,574 @@
+{
+  "python": "/Users/ryanliang/.codex/worktrees/issue-130-b130/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+  "module": "/Users/ryanliang/.codex/worktrees/issue-130-b130/CandleScope/frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/Resources/backend/app/data_engine/aggregation/blocks.py",
+  "module_sha256": "1f2e67be5e42a020a8ec6881775cd4879e6ac217354ff0c56153e2a768078596",
+  "scope": "Packaged Python/backend, isolated deterministic SQLite; no user or native profile database mutation",
+  "phases": [
+    {
+      "name": "2d-built",
+      "blocks": {
+        "estimated_bytes": 37692,
+        "entries": 12,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 0,
+        "builds": 12,
+        "joins": 0,
+        "evictions": 0,
+        "invalidations": 0,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 1,
+        "last_error": null,
+        "generation": 1,
+        "closed": false,
+        "limits": {
+          "bytes": 16777216,
+          "entries": 1024,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 268435456,
+        "estimated_bytes": 37692,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "bar-cache": {
+            "bars": 0,
+            "series": 0,
+            "estimated_bytes": 0,
+            "estimate_basis": "record, scalar referents and list slots; conservative",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "realtime-state": {
+            "active_bars": 0,
+            "closed_bars": 0,
+            "components": 0,
+            "queued_snapshots": 0,
+            "queued_components": 0,
+            "estimated_bytes": 0,
+            "protection": "active and correction state owned by realtime executor",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "event-delivery": {
+            "journal_events": 0,
+            "queued_events": 0,
+            "estimated_bytes": 0,
+            "protection": "durable recovery is stored separately in SQLite",
+            "limit_bytes": 33554432,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 56,
+            "unique_objects": 1
+          },
+          "durable-delivery": {
+            "submission_payloads": 0,
+            "dispatch_records": 0,
+            "estimated_bytes": 0,
+            "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 112,
+            "unique_objects": 2
+          },
+          "history-query": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "history-backfill": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "aggregation-blocks": {
+            "estimated_bytes": 37692,
+            "entries": 12,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 13403,
+            "unique_objects": 282
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "name": "4d-shared",
+      "blocks": {
+        "estimated_bytes": 37692,
+        "entries": 12,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 12,
+        "builds": 12,
+        "joins": 0,
+        "evictions": 0,
+        "invalidations": 0,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 1,
+        "last_error": null,
+        "generation": 1,
+        "closed": false,
+        "limits": {
+          "bytes": 16777216,
+          "entries": 1024,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 268435456,
+        "estimated_bytes": 37692,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "bar-cache": {
+            "bars": 0,
+            "series": 0,
+            "estimated_bytes": 0,
+            "estimate_basis": "record, scalar referents and list slots; conservative",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "realtime-state": {
+            "active_bars": 0,
+            "closed_bars": 0,
+            "components": 0,
+            "queued_snapshots": 0,
+            "queued_components": 0,
+            "estimated_bytes": 0,
+            "protection": "active and correction state owned by realtime executor",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "event-delivery": {
+            "journal_events": 0,
+            "queued_events": 0,
+            "estimated_bytes": 0,
+            "protection": "durable recovery is stored separately in SQLite",
+            "limit_bytes": 33554432,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 56,
+            "unique_objects": 1
+          },
+          "durable-delivery": {
+            "submission_payloads": 0,
+            "dispatch_records": 0,
+            "estimated_bytes": 0,
+            "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 112,
+            "unique_objects": 2
+          },
+          "history-query": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "history-backfill": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "aggregation-blocks": {
+            "estimated_bytes": 37692,
+            "entries": 12,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 13403,
+            "unique_objects": 282
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "name": "external-amendment-rebuilt",
+      "blocks": {
+        "estimated_bytes": 37692,
+        "entries": 12,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 12,
+        "builds": 24,
+        "joins": 0,
+        "evictions": 0,
+        "invalidations": 12,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 1,
+        "last_error": null,
+        "generation": 1,
+        "closed": false,
+        "limits": {
+          "bytes": 16777216,
+          "entries": 1024,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 268435456,
+        "estimated_bytes": 37692,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "bar-cache": {
+            "bars": 0,
+            "series": 0,
+            "estimated_bytes": 0,
+            "estimate_basis": "record, scalar referents and list slots; conservative",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "realtime-state": {
+            "active_bars": 0,
+            "closed_bars": 0,
+            "components": 0,
+            "queued_snapshots": 0,
+            "queued_components": 0,
+            "estimated_bytes": 0,
+            "protection": "active and correction state owned by realtime executor",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "event-delivery": {
+            "journal_events": 0,
+            "queued_events": 0,
+            "estimated_bytes": 0,
+            "protection": "durable recovery is stored separately in SQLite",
+            "limit_bytes": 33554432,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 56,
+            "unique_objects": 1
+          },
+          "durable-delivery": {
+            "submission_payloads": 0,
+            "dispatch_records": 0,
+            "estimated_bytes": 0,
+            "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 112,
+            "unique_objects": 2
+          },
+          "history-query": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "history-backfill": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "aggregation-blocks": {
+            "estimated_bytes": 37692,
+            "entries": 12,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 13431,
+            "unique_objects": 283
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "name": "delete-and-old-view-rejection",
+      "blocks": {
+        "estimated_bytes": 0,
+        "entries": 0,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 12,
+        "builds": 24,
+        "joins": 0,
+        "evictions": 0,
+        "invalidations": 24,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 1,
+        "last_error": null,
+        "generation": 1,
+        "closed": false,
+        "limits": {
+          "bytes": 16777216,
+          "entries": 1024,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 268435456,
+        "estimated_bytes": 0,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "bar-cache": {
+            "bars": 0,
+            "series": 0,
+            "estimated_bytes": 0,
+            "estimate_basis": "record, scalar referents and list slots; conservative",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "realtime-state": {
+            "active_bars": 0,
+            "closed_bars": 0,
+            "components": 0,
+            "queued_snapshots": 0,
+            "queued_components": 0,
+            "estimated_bytes": 0,
+            "protection": "active and correction state owned by realtime executor",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "event-delivery": {
+            "journal_events": 0,
+            "queued_events": 0,
+            "estimated_bytes": 0,
+            "protection": "durable recovery is stored separately in SQLite",
+            "limit_bytes": 33554432,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 56,
+            "unique_objects": 1
+          },
+          "durable-delivery": {
+            "submission_payloads": 0,
+            "dispatch_records": 0,
+            "estimated_bytes": 0,
+            "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 112,
+            "unique_objects": 2
+          },
+          "history-query": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "history-backfill": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "aggregation-blocks": {
+            "estimated_bytes": 0,
+            "entries": 0,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 40,
+            "unique_objects": 1
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "name": "closed",
+      "blocks": {
+        "estimated_bytes": 0,
+        "entries": 0,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 12,
+        "builds": 24,
+        "joins": 0,
+        "evictions": 0,
+        "invalidations": 24,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 2,
+        "last_error": null,
+        "generation": 2,
+        "closed": true,
+        "limits": {
+          "bytes": 16777216,
+          "entries": 1024,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 268435456,
+        "estimated_bytes": 0,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "bar-cache": {
+            "bars": 0,
+            "series": 0,
+            "estimated_bytes": 0,
+            "estimate_basis": "record, scalar referents and list slots; conservative",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "realtime-state": {
+            "active_bars": 0,
+            "closed_bars": 0,
+            "components": 0,
+            "queued_snapshots": 0,
+            "queued_components": 0,
+            "estimated_bytes": 0,
+            "protection": "active and correction state owned by realtime executor",
+            "limit_bytes": 134217728,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 0,
+            "unique_objects": 0
+          },
+          "event-delivery": {
+            "journal_events": 0,
+            "queued_events": 0,
+            "estimated_bytes": 0,
+            "protection": "durable recovery is stored separately in SQLite",
+            "limit_bytes": 33554432,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 56,
+            "unique_objects": 1
+          },
+          "durable-delivery": {
+            "submission_payloads": 0,
+            "dispatch_records": 0,
+            "estimated_bytes": 0,
+            "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 112,
+            "unique_objects": 2
+          },
+          "history-query": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "history-backfill": {
+            "estimated_bytes": 0,
+            "limit_bytes": 67108864,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0
+          },
+          "aggregation-blocks": {
+            "estimated_bytes": 0,
+            "entries": 0,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 16777216,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 40,
+            "unique_objects": 1
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,336 @@
+{
+  "timing": {
+    "baseline": {
+      "ms": [
+        11.382500000763685,
+        12.345374998403713,
+        12.066374998539686,
+        19.8972079961095,
+        12.90829099889379,
+        12.409292001393624,
+        12.308167002629489
+      ],
+      "median_ms": 12.345374998403713
+    },
+    "shared": {
+      "ms": [
+        34.88429099525092,
+        37.57329199288506,
+        36.08220800379058,
+        36.4430830013589,
+        37.7897079961258,
+        37.83462499995949,
+        36.965375002182554
+      ],
+      "median_ms": 36.965375002182554
+    }
+  },
+  "scope": "384 immutable daily bars -> 2d/4d/5d/7d; 7 alternating warm trials; synthetic revision source; no I/O timings",
+  "max_absolute_error": 5.960464477539063e-08,
+  "qualified": {
+    "estimated_bytes": 609024,
+    "entries": 192,
+    "retired_entries": 0,
+    "leases": 0,
+    "views": 0,
+    "inflight": 0,
+    "hits": 6090,
+    "builds": 192,
+    "joins": 0,
+    "evictions": 0,
+    "invalidations": 0,
+    "stale_builds": 0,
+    "failures": 0,
+    "resets": 0,
+    "last_error": null,
+    "generation": 0,
+    "closed": false,
+    "limits": {
+      "bytes": 4194304,
+      "entries": 1024,
+      "flights": 8,
+      "views": 64,
+      "leases": 256,
+      "dependencies": 16,
+      "ranges": 128
+    }
+  },
+  "stress_samples": [
+    {
+      "operations": 500,
+      "traced_current": 43152,
+      "traced_peak": 328664,
+      "blocks": {
+        "estimated_bytes": 95676,
+        "entries": 32,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 0,
+        "builds": 500,
+        "joins": 0,
+        "evictions": 468,
+        "invalidations": 0,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 0,
+        "last_error": null,
+        "generation": 0,
+        "closed": false,
+        "limits": {
+          "bytes": 262144,
+          "entries": 32,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 262144,
+        "estimated_bytes": 95676,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "aggregation-blocks": {
+            "estimated_bytes": 95676,
+            "entries": 32,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 262144,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 30302,
+            "unique_objects": 599
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "operations": 1000,
+      "traced_current": 49043,
+      "traced_peak": 625835,
+      "blocks": {
+        "estimated_bytes": 95676,
+        "entries": 32,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 0,
+        "builds": 1000,
+        "joins": 0,
+        "evictions": 968,
+        "invalidations": 0,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 0,
+        "last_error": null,
+        "generation": 0,
+        "closed": false,
+        "limits": {
+          "bytes": 262144,
+          "entries": 32,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 262144,
+        "estimated_bytes": 95676,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "aggregation-blocks": {
+            "estimated_bytes": 95676,
+            "entries": 32,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 262144,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 30302,
+            "unique_objects": 599
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "operations": 1500,
+      "traced_current": 48419,
+      "traced_peak": 626271,
+      "blocks": {
+        "estimated_bytes": 93682,
+        "entries": 31,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 0,
+        "builds": 1500,
+        "joins": 0,
+        "evictions": 1309,
+        "invalidations": 160,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 0,
+        "last_error": null,
+        "generation": 0,
+        "closed": false,
+        "limits": {
+          "bytes": 262144,
+          "entries": 32,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 262144,
+        "estimated_bytes": 93682,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "aggregation-blocks": {
+            "estimated_bytes": 93682,
+            "entries": 31,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 262144,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 29546,
+            "unique_objects": 583
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    },
+    {
+      "operations": 2000,
+      "traced_current": 51715,
+      "traced_peak": 629715,
+      "blocks": {
+        "estimated_bytes": 96704,
+        "entries": 32,
+        "retired_entries": 0,
+        "leases": 0,
+        "views": 0,
+        "inflight": 0,
+        "hits": 0,
+        "builds": 2000,
+        "joins": 0,
+        "evictions": 1680,
+        "invalidations": 288,
+        "stale_builds": 0,
+        "failures": 0,
+        "resets": 0,
+        "last_error": null,
+        "generation": 0,
+        "closed": false,
+        "limits": {
+          "bytes": 262144,
+          "entries": 32,
+          "flights": 8,
+          "views": 64,
+          "leases": 256,
+          "dependencies": 16,
+          "ranges": 128
+        }
+      },
+      "budget": {
+        "limit_bytes": 262144,
+        "estimated_bytes": 96704,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "admission_rejections": 0,
+        "owners": {
+          "aggregation-blocks": {
+            "estimated_bytes": 96704,
+            "entries": 32,
+            "retired_entries": 0,
+            "leases": 0,
+            "views": 0,
+            "inflight": 0,
+            "limit_bytes": 262144,
+            "reserved_bytes": 0,
+            "over_budget_bytes": 0,
+            "unique_retained_bytes": 30462,
+            "unique_objects": 601
+          }
+        },
+        "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+      }
+    }
+  ],
+  "after_close": {
+    "blocks": {
+      "estimated_bytes": 0,
+      "entries": 0,
+      "retired_entries": 0,
+      "leases": 0,
+      "views": 0,
+      "inflight": 0,
+      "hits": 0,
+      "builds": 2000,
+      "joins": 0,
+      "evictions": 1680,
+      "invalidations": 288,
+      "stale_builds": 0,
+      "failures": 0,
+      "resets": 1,
+      "last_error": null,
+      "generation": 1,
+      "closed": true,
+      "limits": {
+        "bytes": 262144,
+        "entries": 32,
+        "flights": 8,
+        "views": 64,
+        "leases": 256,
+        "dependencies": 16,
+        "ranges": 128
+      }
+    },
+    "budget": {
+      "limit_bytes": 262144,
+      "estimated_bytes": 0,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "aggregation-blocks": {
+          "estimated_bytes": 0,
+          "entries": 0,
+          "retired_entries": 0,
+          "leases": 0,
+          "views": 0,
+          "inflight": 0,
+          "limit_bytes": 262144,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "traced_current": 20591
+  }
+}

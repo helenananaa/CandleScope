@@ -1,0 +1,25 @@
+{
+  "scope": "Short native process-tree RSS samples, not a long-run leak or fixed RSS guarantee",
+  "phases": {
+    "cold": {
+      "samples": 28,
+      "total_rss_max": 1611546624,
+      "total_rss_last": 1115652096
+    },
+    "final-restart": {
+      "samples": 1,
+      "total_rss_max": 1311113216,
+      "total_rss_last": 1311113216
+    },
+    "live-reopen": {
+      "samples": 31,
+      "total_rss_max": 1590689792,
+      "total_rss_last": 1238155264
+    },
+    "restart": {
+      "samples": 8,
+      "total_rss_max": 1411678208,
+      "total_rss_last": 1161674752
+    }
+  }
+}

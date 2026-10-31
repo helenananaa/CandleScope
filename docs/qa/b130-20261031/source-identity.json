@@ -1,0 +1,8 @@
+{
+  "product_source": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+  "base_main": "0b490d4e1b3c5883b20f271b57d8f51c09315a7c",
+  "pr173_merge": "d85bcf392503140ab46500cfdd45f2de62799d44",
+  "qualification": "B130 minimal shared block base with bounded coarse fixed-history consumer; H127/R129/J remain separate",
+  "app_installed": false,
+  "raw_output": "/Users/ryanliang/.codex/worktrees/issue-130-b130/CandleScope/output/b130-20261031"
+}

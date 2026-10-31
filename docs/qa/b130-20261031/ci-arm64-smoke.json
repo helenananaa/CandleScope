@@ -1,0 +1,55 @@
+{
+  "result": "passed",
+  "executable": "/Users/runner/work/_temp/CandleScope Relocated/CandleScope.app/Contents/MacOS/CandleScope",
+  "platform": "darwin",
+  "arch": "arm64",
+  "launches": [
+    {
+      "identity": {
+        "packaged": true,
+        "userData": "/Users/runner/work/CandleScope/CandleScope/output/macos-package-smoke/profile",
+        "resources": "/Users/runner/work/_temp/CandleScope Relocated/CandleScope.app/Contents/Resources"
+      },
+      "python": "/Users/runner/work/_temp/CandleScope Relocated/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+      "health": "passed",
+      "pages": [
+        {
+          "entry": "index.html",
+          "title": "\u884c\u60c5\u770b\u76d8 \u00b7 CandleScope"
+        },
+        {
+          "entry": "replay.html",
+          "title": "\u56de\u653e\u8bad\u7ec3 \u00b7 CandleScope"
+        },
+        {
+          "entry": "strategy.html",
+          "title": "\u7b56\u7565\u7814\u7a76 \u00b7 CandleScope"
+        }
+      ]
+    },
+    {
+      "identity": {
+        "packaged": true,
+        "userData": "/Users/runner/work/CandleScope/CandleScope/output/macos-package-smoke/profile",
+        "resources": "/Users/runner/work/_temp/CandleScope Relocated/CandleScope.app/Contents/Resources"
+      },
+      "python": "/Users/runner/work/_temp/CandleScope Relocated/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+      "health": "passed",
+      "pages": [
+        {
+          "entry": "index.html",
+          "title": "\u884c\u60c5\u770b\u76d8 \u00b7 CandleScope"
+        },
+        {
+          "entry": "replay.html",
+          "title": "\u56de\u653e\u8bad\u7ec3 \u00b7 CandleScope"
+        },
+        {
+          "entry": "strategy.html",
+          "title": "\u7b56\u7565\u7814\u7a76 \u00b7 CandleScope"
+        }
+      ]
+    }
+  ],
+  "phase": "graceful-close"
+}

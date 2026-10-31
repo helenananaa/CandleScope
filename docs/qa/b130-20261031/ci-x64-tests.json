@@ -1,0 +1,22 @@
+{
+  "source": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+  "run": 41203764480,
+  "job": 124544976595,
+  "artifact_id": 13045325476,
+  "artifact_name": "macOS-evidence-x64-1",
+  "archive_sha256": "d49e700a25497fa3edddac569ab7da5621bc372ddf90706325487bd41ef2e20c",
+  "github_digest": "sha256:d49e700a25497fa3edddac569ab7da5621bc372ddf90706325487bd41ef2e20c",
+  "junit_sha256": "ec5e09885782488c596f365fdadb9da603716e85a06139cd442949fbaa38d8b7",
+  "tests": 1059,
+  "passed": 1058,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 1,
+  "seconds": 661.24,
+  "skip_details": [
+    {
+      "name": "test_parent_monitor_does_not_block_numpy_dll_initialization",
+      "reason": "Windows CRT descriptor lock regression"
+    }
+  ]
+}
