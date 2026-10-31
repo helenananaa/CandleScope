@@ -52,6 +52,11 @@ Unannounced out-of-process changes are not magically observed by this clock.
 5. Recover through a fresh backend read. No proof from the previous connection
    may validate that recovery read. There is no claim of replay/resume support.
 
+A snapshot whose barrier is newer than the last accepted stream/snapshot cursor
+may cross a correction the client never received. It revokes older coverage and
+indicator input stamps globally, then proves only the returned range. Unreturned
+rows remain available as provisional display data.
+
 K-line events carry `affected_range` in milliseconds and `previous_open_ms` from
 the backend calendar. A continuous authoritative close can extend a retained
 proof only when that predecessor equals the proof's right edge. A jumped forming
