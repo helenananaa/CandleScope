@@ -442,6 +442,7 @@ class CustomIntervalQueryService:
         calendar_provider: CalendarProvider | None = None,
         bar_aggregator: Any | None = None,
         memory_budget_provider: Callable[[], Any] | None = None,
+        block_manager_provider: Callable[[], Any] | None = None,
     ) -> None:
         self._cache = cache
         self._cfg = config
@@ -453,6 +454,7 @@ class CustomIntervalQueryService:
         self._calendar_provider = calendar_provider
         self._bar_aggregator = bar_aggregator
         self._memory_budget_provider = memory_budget_provider
+        self._block_manager_provider = block_manager_provider
         self._flight_lock = threading.Lock()
         self._flights: dict[tuple[Any, ...], Future[QueryResult]] = {}
         self._base_window_flight_lock = threading.Lock()
@@ -2394,10 +2396,38 @@ class CustomIntervalQueryService:
         self, bars: list[BarData], width: int, *, source_interval_seconds: int,
         source_key: SeriesKey, phase_seconds: int = 0,
     ) -> list[BarData]:
-        return _aggregate_fixed_bars_to_interval(
-            bars, width, source_interval_seconds=source_interval_seconds,
-            phase_seconds=phase_seconds,
-        )
+        def fallback(rows):
+            return _aggregate_fixed_bars_to_interval(
+                rows, width, source_interval_seconds=source_interval_seconds,
+                phase_seconds=phase_seconds,
+            )
+        manager = self._block_manager_provider() if self._block_manager_provider else None
+        # Initial production qualification: bounded coarse fixed buckets. The
+        # public B130 API also accepts calendar summaries; H127/R129 own broader
+        # consumption and source planning, rather than this adapter inventing it.
+        if (manager is not None and manager.source is not None and bars
+                and source_interval_seconds >= 3600 and width % source_interval_seconds == 0
+                and 2 <= width // source_interval_seconds <= 64):
+            from app.data_engine.storage.revisions import acquisition_revision, StaleAcquisition
+            from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
+            from app.data_engine.aggregation.history_blocks import aggregate_closed_history
+            from app.data_engine.memory_budget import MemoryBudgetExceeded
+            from .revisions import RevisionUnavailable
+            acquired_at = acquisition_revision()
+            if acquired_at is not None:
+                try:
+                    return aggregate_closed_history(manager, bars, source_key=source_key,
+                        source_seconds=source_interval_seconds, width=width,
+                        phase_seconds=phase_seconds, acquired_at=acquired_at, fallback=fallback)
+                except MemoryBudgetExceeded:
+                    # Capacity affects reuse only. The already-bounded pure
+                    # history reducer remains protected by the outer D126 fence.
+                    pass
+                except BlockRevisionChanged as exc:
+                    raise StaleAcquisition("shared history block view changed") from exc
+                except BlockUnavailable as exc:
+                    raise RevisionUnavailable("shared history block source unavailable") from exc
+        return fallback(bars)
 
     @staticmethod
     def _omit_bars_overlapping_base_gaps(

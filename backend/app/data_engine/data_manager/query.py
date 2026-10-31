@@ -193,6 +193,7 @@ class QueryEngine:
             target_writer=self._write_materialized_target,
             calendar_provider=self._calendar_for,
             memory_budget_provider=lambda: getattr(self, "memory_budget", None),
+            block_manager_provider=lambda: getattr(self, "shared_blocks", None),
         )
 
     # ── Public: Dependency Access ────────────────────────────
@@ -207,6 +208,10 @@ class QueryEngine:
         self._storage = storage
         store = getattr(storage, "revision_store", None)
         self._cache.revision_consumer = CacheRevisionConsumer(self._cache, store) if store is not None else None
+        blocks = getattr(self, "shared_blocks", None)
+        if blocks is not None:
+            from app.data_engine.aggregation.revisions import DurableBlockRevisions
+            blocks.bind_source(DurableBlockRevisions(store) if store is not None else None)
 
     @property
     def backfill_trigger(self) -> BackfillTrigger | None:
@@ -1143,6 +1148,8 @@ class QueryEngine:
         return {
             **metrics,
             "custom_intervals": self.custom_intervals.snapshot(),
+            "shared_aggregation_blocks": (self.shared_blocks.snapshot()
+                                          if getattr(self, "shared_blocks", None) is not None else None),
             "config": {
                 "default_limit": self._cfg.default_limit,
                 "max_limit": self._cfg.max_limit,

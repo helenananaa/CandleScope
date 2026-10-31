@@ -99,6 +99,8 @@ def _merge_revisions(parts: Iterable[Iterable[InputRevision]]) -> tuple[InputRev
             if previous is not None and previous.version != revision.version:
                 raise ValueError("cannot combine different acquisition views of one source")
             by_domain[key] = revision
+    if len(by_domain) <= 1:
+        return tuple(by_domain.values())
     return tuple(sorted(by_domain.values(), key=lambda item: (item.series.topic, item.domain)))
 
 
