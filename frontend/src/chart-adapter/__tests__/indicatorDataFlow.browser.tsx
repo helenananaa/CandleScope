@@ -9,6 +9,9 @@ import { ForegroundPreloadGate } from "../../features/market-data/foregroundPrel
 import { MarketWindowRegistry } from "../../features/market-data/window/marketWindowSession.js";
 import { MarketDataWorkspaceContext, type MarketDataWorkspaceResources } from "../../features/market-data/marketDataWorkspaceContext.js";
 import { IndicatorDataManager } from "../../features/indicators/indicatorDataManager.js";
+import { SharedIndicatorStreamCoordinator } from "../../features/indicators/sharedIndicatorStreamCoordinator.js";
+import type { IndicatorStreamSocket } from "../../features/indicators/indicatorStreamConnection.js";
+import type { IndicatorSubscribeMessage } from "../../features/indicators/indicatorTypes.js";
 import { useIndicatorRuntime } from "../../features/indicators/useIndicatorRuntime.js";
 import { createActiveIndicatorPersistence } from "../../features/indicators/activeIndicatorStore.js";
 import { computeFrontendScript } from "../../features/indicators/frontendScriptRuntime.js";
@@ -67,7 +70,38 @@ export async function checkIndicatorDataFlow() {
   let browserExecutions = 0, hostedExecutions = 0;
   let backendAvailable = false, backendFailures = 0;
   let cancelNextBrowser = false;
-  const indicators = new IndicatorDataManager({ cache: market.cache, gate, coalesceMs: 40,
+  const sockets: ControlledSocket[] = [];
+  class ControlledSocket implements IndicatorStreamSocket {
+    readonly OPEN = 1;
+    readyState = 0;
+    onopen: ((event: Event) => unknown) | null = null;
+    onmessage: ((event: MessageEvent<unknown>) => unknown) | null = null;
+    onerror: ((event: Event) => unknown) | null = null;
+    onclose: ((event: CloseEvent) => unknown) | null = null;
+    subscriptions = new Map<string, IndicatorSubscribeMessage>();
+    subscribeCount = 0;
+    constructor() { sockets.push(this); queueMicrotask(() => { this.readyState = 1; this.onopen?.(new Event("open")); }); }
+    close() { this.readyState = 3; this.subscriptions.clear(); }
+    serverClose() { this.readyState = 3; this.subscriptions.clear(); this.onclose?.({ code: 1013 } as CloseEvent); }
+    send(raw: string) {
+      const message = JSON.parse(raw) as IndicatorSubscribeMessage | { action: "unsubscribe"; clientId: string };
+      if (message.action === "unsubscribe") { this.subscriptions.delete(message.clientId); return; }
+      this.subscriptions.set(message.clientId, message); this.subscribeCount += 1;
+      queueMicrotask(() => {
+        if (!this.subscriptions.has(message.clientId)) return;
+        this.onmessage?.({ data: JSON.stringify({ type: "indicator.subscribed", clientId: message.clientId, ok: true,
+          resumeStatus: "history_required", dataRevision: { serverEpoch: "shared-browser", correctionRevision: "0", closedThrough: start + 499 * 60 } }) } as MessageEvent);
+        this.preview(message.clientId, Number(message.params.period));
+      });
+    }
+    preview(clientId: string, value: number) {
+      this.onmessage?.({ data: JSON.stringify({ type: "indicator.preview", clientId, values: { ema: value },
+        barTime: start + 500 * 60, bar: { ...corpus.get("BTCUSDT")!.at(-1)!, time: start + 500 * 60, is_closed: false } }) } as MessageEvent);
+    }
+  }
+  const streams = new SharedIndicatorStreamCoordinator({ url: "ws://controlled-hosted", maxSubscriptions: 50,
+    socketFactory: () => new ControlledSocket() });
+  const indicators = new IndicatorDataManager({ cache: market.cache, gate, streams, coalesceMs: 40,
     compute: input => routeIndicatorComputeBatch(input, async ({ jobs }) => {
       if (!backendAvailable) { backendFailures += 1; throw new Error("controlled backend offline"); }
       return { ok: true, results: jobs.map(job => ({ clientId: job.clientId, jobKey: job.jobKey,
@@ -86,7 +120,7 @@ export async function checkIndicatorDataFlow() {
   const dataFlow = new ChartDataFlowManager(market, indicators);
   const resources: MarketDataWorkspaceResources = { brokerEnabled: true, dataManager: market, indicatorDataManager: indicators, dataFlow,
     klineApi: market, streamCoordinator: market, requestCoordinator: market.requestCoordinator,
-    indicatorStreamCoordinator: null, workScheduler: null, windowRegistry: new MarketWindowRegistry() };
+    indicatorStreamCoordinator: streams, workScheduler: null, windowRegistry: new MarketWindowRegistry() };
   const hosts = ["left", "right"].map(id => {
     const element = document.createElement("div"); element.style.cssText = "width:600px;height:240px"; document.body.append(element);
     const chart = createChart(element, { width: 600, height: 240 });
@@ -105,6 +139,7 @@ export async function checkIndicatorDataFlow() {
   const controller = new ChartMarketController({ owner: "chart:left", data: dataFlow.forChart("chart:left"), hoverDwellMs: 0 });
   function Cell({ index, symbol, revision }: { index: number; symbol: string; revision: number }) {
     const host = hosts[index]!;
+    const streamIdentity = useMemo(() => ({ cellId: host.id, workspaceId: "flow", windowId: "browser" }), [host.id]);
     const rows = useMemo(() => {
       void revision; // Explicit fixture publication boundary after source admission.
       return [...market.cache.read(identity(symbol), { limit: 2000 }).rows];
@@ -112,14 +147,14 @@ export async function checkIndicatorDataFlow() {
     const meta = useMemo(() => ({ status: "ready" as const, version: revision, source: "fixture", committedAt: 1 }), [revision]);
     const runtime = useIndicatorRuntime({ chartData: rows, chartDataMeta: meta, ...identity(symbol), datasetKey: symbol, sessionKey: symbol,
       autoAddVolume: false, indicatorPersistence: persistence[index]!, candleUpColor: "#0f0", candleDownColor: "#f00",
-      streamIdentity: { cellId: host.id, workspaceId: "flow", windowId: "browser" } });
+      streamIdentity });
     useLayoutEffect(() => { latest.set(host.id, runtime); });
     useEffect(() => { host.candle.setData(rows.map(row => ({ time: Number(row.time) as UTCTimestamp, open: row.open!, high: row.high!, low: row.low!, close: row.close! }))); }, [host, rows]);
     useEffect(() => { host.line.setData((runtime.view.activeIndicators[0]?.lines?.[0]?.data || []).map(point => ({ time: Number(point.time) as UTCTimestamp, value: Number(point.value) }))); }, [host, runtime.view.activeIndicators]);
     return <output>{runtime.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value}</output>;
   }
-  const render = (symbol = "BTCUSDT", revision = 1) => flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={resources}>
-    <Cell index={0} symbol={symbol} revision={revision} /><Cell index={1} symbol="BTCUSDT" revision={1} />
+  const render = (symbol = "BTCUSDT", revision = 1, rightRevision = 1) => flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={resources}>
+    <Cell index={0} symbol={symbol} revision={revision} /><Cell index={1} symbol="BTCUSDT" revision={rightRevision} />
   </MarketDataWorkspaceContext.Provider>));
   const value = (id: string) => latest.get(id)?.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value;
   try {
@@ -143,7 +178,7 @@ export async function checkIndicatorDataFlow() {
       candleUpColor: "#0f0", candleDownColor: "#f00" });
     const hostedWarm = dataFlow.forChart("hosted-preview").warm(identity("ETHUSDT"), { owner: "hosted-preview", reason: "hover", nativeIntervals: ["1m"] });
     await until(() => dataFlow.diagnostics().warmed === 2, "hosted indicator did not prewarm through range transport");
-    assert(hostedExecutions === 1 && browserExecutions === before, "hosted warm used browser execution or duplicated requests");
+    assert(hostedExecutions === 1 && browserExecutions === before && sockets.length === 0, "hosted warm used browser execution, live subscriptions or duplicated requests");
     hostedWarm.release(); hostedPlan();
     checks.push("hosted prewarm uses the bounded HTTP range route without starting an indicator WebSocket");
     const a = new AbortController(), b = new AbortController();
@@ -184,10 +219,63 @@ export async function checkIndicatorDataFlow() {
     await until(() => latest.get("left")?.view.activeIndicators[0]?.lines?.[0]?.data[0]?.value === 88,
       "fresh source did not automatically compute after cancellation");
     checks.push("superseded input cancellation is not a script failure and fresh demand still computes");
-    return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics() };
+    render("BTCUSDT", 4);
+    await until(() => value("left") === 10, "left did not return to shared source");
+    const hosted = (id: string) => latest.get(id)?.view.activeIndicators.find(item => item.id === "shared-" + id);
+    const hostedValue = (id: string) => hosted(id)?.lines?.[0]?.data.at(-1)?.value;
+    const addHosted = (id: string) => flushSync(() => latest.get(id)!.actions.addIndicator({ id: "shared-" + id,
+      name: "Shared EMA", engineName: "EMA", executionTarget: "hosted", params: { period: 20 }, visible: true }));
+    addHosted("left");
+    await until(() => hostedValue("left") === 20, "first hosted runtime did not receive real controller preview");
+    const firstHistory = hosted("left")!.lines![0]!.data[0]!.time;
+    addHosted("right");
+    await until(() => streams.diagnostics().logicalSubscriptions === 2 && hostedValue("right") === 20, "late hosted runtime did not join");
+    let socket = sockets[0]!;
+    assert(Number(sockets.length) === 1 && socket.subscriptions.size === 1 && streams.diagnostics().subscriptions === 1,
+      `equal hosted runtimes retained duplicate wire subscriptions: ${JSON.stringify({ diagnostics: streams.diagnostics(), sockets: sockets.map(item => ({ readyState: item.readyState, active: [...item.subscriptions.values()] })) })}`);
+    assert(hostedValue("left") === 20 && hosted("left")!.lines![0]!.data[0]!.time === firstHistory,
+      "late join discarded the first chart's historical output");
+    assert(JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "late join moved the independent viewport");
+    checks.push("two real hosted React runtimes share one wire; late join receives a fresh ACK and preserves prior history/viewport");
+    socket.serverClose();
+    await until(() => sockets.length === 2 && sockets[1]!.subscriptions.size === 1, "shared overload reconnect did not restore one subscription");
+    socket = sockets[1]!;
+    const recoveredWire = [...socket.subscriptions.keys()][0]!;
+    assert(socket.subscriptions.get(recoveredWire)!.resumeFrom === undefined, "overload reconnect reused an unsafe resume cursor");
+    socket.preview(recoveredWire, 73);
+    await until(() => hostedValue("left") === 73 && hostedValue("right") === 73, "reconnected preview did not fan out to both React runtimes");
+    assert(hosted("left")!.lines![0]!.data[0]!.time === firstHistory
+      && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "reconnect discarded history or moved the other viewport");
+    checks.push("overload disconnect restores one cold shared subscription and both real runtimes resume without losing private history");
+    const beforeGrowth = socket.subscribeCount;
+    sequence.set("BTCUSDT", 2);
+    market.cache.admitRealtime(identity("BTCUSDT"), { ...corpus.get("BTCUSDT")!.at(-1)!,
+      time: (start + 501 * 60) as EpochSeconds, is_closed: false }, "bar.created", wire("BTCUSDT"), null);
+    render("BTCUSDT", 5, 2);
+    await delay(200);
+    assert(socket.subscribeCount === beforeGrowth && socket.subscriptions.size === 1,
+      "a normal new candle restarted the shared hosted subscription");
+    checks.push("normal chart history growth preserves the live shared subscription without another subscribe");
+    const sharedWire = [...socket.subscriptions.keys()][0]!;
+    flushSync(() => latest.get("left")!.actions.updateIndicatorParams("shared-left", { period: 35 }));
+    await until(() => socket.subscriptions.size === 2 && hostedValue("left") === 35, "parameter change did not split the wire");
+    assert(socket.subscriptions.has(sharedWire) && hostedValue("right") === 73, "parameter edit reset the other chart's stream");
+    flushSync(() => latest.get("left")!.actions.updateIndicatorParams("shared-left", { period: 20 }));
+    await until(() => socket.subscriptions.size === 1 && hostedValue("left") === 20, "equal parameters did not rejoin");
+    const beforeRelease = socket.subscribeCount;
+    flushSync(() => latest.get("left")!.actions.removeIndicator("shared-left"));
+    await until(() => streams.diagnostics().logicalSubscriptions === 1, "removed chart retained a stream consumer");
+    assert(socket.subscribeCount === beforeRelease && socket.subscriptions.size === 1, "partial release reset the surviving stream");
+    socket.preview([...socket.subscriptions.keys()][0]!, 61);
+    await until(() => hostedValue("right") === 61, "surviving chart stopped receiving updates");
+    assert(!hosted("left") && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "release changed another chart");
+    flushSync(() => latest.get("right")!.actions.removeIndicator("shared-right"));
+    await until(() => streams.diagnostics().subscriptions === 0 && socket.readyState === 3, "final release leaked a transport");
+    checks.push("parameter divergence splits only the affected demand; rejoin shares again and final release closes the transport");
+    return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics(), streams: streams.diagnostics() };
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();
-    dataFlow.dispose(); market.closeAll(); gate.dispose(); unregister();
+    dataFlow.dispose(); streams.closeAll(); market.closeAll(); gate.dispose(); unregister();
     hosts.forEach(host => { host.chart.remove(); host.element.remove(); });
   }
 }
