@@ -10,7 +10,6 @@ from collections.abc import Mapping, Sequence
 
 from app.data_engine.market_data.kline_metrics import (
     KLINE_ENHANCED_FIELDS, normalize_kline_aggregation_fields,
-    serialize_kline_enhancements,
 )
 
 from .semantics import ClosePolicy, Coverage, CoverageStatus, FieldSummary, summarize_fields
@@ -19,14 +18,14 @@ from .semantics import ClosePolicy, Coverage, CoverageStatus, FieldSummary, summ
 def chart_field_summary(rows: Sequence[Mapping]) -> FieldSummary:
     values = []
     for row in rows:
-        enhanced = serialize_kline_enhancements(
+        enhanced = normalize_kline_aggregation_fields(
             volume=row.get("volume"), quote_volume=row.get("quote_volume"),
             trades=row.get("trades"), taker_buy_base=row.get("taker_buy_base"),
             taker_buy_quote=row.get("taker_buy_quote"),
         )
         values.append((
-            *(float(row[name]) for name in ("open", "high", "low", "close", "volume")),
-            *(enhanced[name] for name in KLINE_ENHANCED_FIELDS),
+            *(round(float(row[name]), 8) for name in ("open", "high", "low", "close", "volume")),
+            *enhanced,
         ))
     return summarize_fields(values)
 

@@ -304,6 +304,21 @@ def test_calendar_source_closed_rebuild_uses_actual_month_ends():
     assert queried[0].volume == summary.values.volume == rebuilt[0]["volume"]
 
 
+def test_raw_rebuild_and_compact_decode_share_per_component_precision():
+    # Summing raw sub-precision quantities then rounding differed from the
+    # query/live paths, which normalize each accepted leaf first.
+    rows = [dict(open_time=i * 60_000, close_time=(i + 1) * 60_000 - 1,
+                 open=1.000000001, high=2.000000001, low=1.0, close=1.1,
+                 volume=0.000000001, is_closed=True, source="backfill") for i in range(100)]
+    bars = [BarData.from_storage_row(row) for row in rows]
+    rebuilt = aggregate_kline_rows(rows, target_interval="100m", source_interval="1m", now_ms=6_000_000)[0]
+    queried = _aggregate_fixed_bars_to_interval(bars, 6000, source_interval_seconds=60)[0]
+    summary = summarize(accepted(bars), target=replace(TARGET, interval="100m"))
+    assert rebuilt["volume"] == queried.volume == summary.values.volume == 0
+    assert rebuilt["open"] == queried.open == summary.values.open == 1
+    assert rebuilt["high"] == queried.high == summary.values.high == 2
+
+
 def test_semantics_import_and_evaluation_do_not_load_runtime_or_read_wall_clock():
     code = '''
 import sys, time

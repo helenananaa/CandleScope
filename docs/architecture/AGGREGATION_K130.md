@@ -55,7 +55,10 @@ size to D126 and bound fragmentation before storing it.
   statistics, retaining unknown as `None`. Known zero remains a valid value.
 - Enhanced fields continue through `kline_metrics` capability and validity
   rules; a masked placeholder cannot become a reported zero.
-- A final projection uses eight decimal places. Partial summaries keep
+- Accepted leaf values use the existing eight-decimal query normalization;
+  raw-row reconstruction now applies the same boundary before summing, so
+  sub-precision quantities cannot differ solely because of the decoder path.
+  A final projection also uses eight decimal places. Partial summaries keep
   unrounded totals and combine with `math.fsum`; trade counts use exact ints.
   Same accepted inputs and chronological order reproduce the same projection
   in the tested cases. Arbitrary grouping is compared with absolute tolerance
