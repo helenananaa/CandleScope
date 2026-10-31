@@ -1,0 +1,1310 @@
+{
+  "scope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/backend-joint-20261031/CandleScope/output/backend-joint-main-bab-20261031/replay-viewport",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": [
+        {
+          "name": "real provided-bars React lifecycle prioritizes pan/zoom while preserving script input",
+          "status": "PASS",
+          "calls": [
+            {
+              "mode": "builtin",
+              "first": 1800551400,
+              "last": 1800599940,
+              "bars": 810
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            },
+            {
+              "mode": "builtin",
+              "first": 1800172800,
+              "last": 1800192000,
+              "bars": 321
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            },
+            {
+              "mode": "builtin",
+              "first": 1800175800,
+              "last": 1800186000,
+              "bars": 171
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            },
+            {
+              "mode": "builtin",
+              "first": 1800502800,
+              "last": 1800519000,
+              "bars": 271
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            },
+            {
+              "mode": "builtin",
+              "first": 1800172800,
+              "last": 1800192000,
+              "bars": 321
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            },
+            {
+              "mode": "builtin",
+              "first": 1800000000,
+              "last": 1800360000,
+              "bars": 6001
+            },
+            {
+              "mode": "script",
+              "first": 1800000000,
+              "last": 1800599940,
+              "bars": 10000
+            }
+          ]
+        },
+        {
+          "name": "real chart viewport callback drives bounded indicators through zoom and continuous drag",
+          "status": "PASS",
+          "before": {
+            "barSpacing": 3.084577114427861,
+            "rightOffset": -6799,
+            "time": {
+              "from": 1800180000,
+              "to": 1800192000
+            },
+            "rightmostTime": 1800192000,
+            "logical": {
+              "from": 3000,
+              "to": 3200
+            }
+          },
+          "after": {
+            "barSpacing": 3.084577114427861,
+            "rightOffset": -6828.177419354839,
+            "time": {
+              "from": 1800178249.3548386,
+              "to": 1800190249.3548386
+            },
+            "rightmostTime": 1800190249.3548386,
+            "logical": {
+              "from": 2970.822580645161,
+              "to": 3170.822580645161
+            }
+          },
+          "calls": [
+            {
+              "first": 1800588480,
+              "last": 1800599940,
+              "bars": 192
+            },
+            {
+              "first": 1800172800,
+              "last": 1800192000,
+              "bars": 321
+            },
+            {
+              "first": 1800175800,
+              "last": 1800186000,
+              "bars": 171
+            },
+            {
+              "first": 1800000060,
+              "last": 1800360000,
+              "bars": 6000
+            },
+            {
+              "first": 1800172800,
+              "last": 1800192000,
+              "bars": 321
+            },
+            {
+              "first": 1800171060,
+              "last": 1800190200,
+              "bars": 320
+            }
+          ]
+        },
+        {
+          "name": "canonical indicator transport with real React training/review lifecycles",
+          "status": "PASS",
+          "samples": [
+            {
+              "label": "old epoch reload",
+              "posts": 2,
+              "gets": 1,
+              "points": 3,
+              "last": {
+                "time": 1700002940,
+                "value": 51.48038839
+              }
+            },
+            {
+              "label": "forward append uses shared display anchors",
+              "posts": 3,
+              "gets": 1,
+              "points": 81,
+              "last": {
+                "time": 1700007620,
+                "value": 52.77488802
+              }
+            },
+            {
+              "label": "short independent window",
+              "posts": 4,
+              "gets": 1,
+              "points": 18,
+              "last": {
+                "time": 1700007620,
+                "value": 52.77488802
+              }
+            },
+            {
+              "label": "review canonical reload",
+              "posts": 5,
+              "gets": 2,
+              "points": 18,
+              "last": {
+                "time": 1700007620,
+                "value": 52.77488802
+              }
+            },
+            {
+              "label": "earlier review event",
+              "posts": 6,
+              "gets": 3,
+              "points": 18,
+              "last": {
+                "time": 1700001860,
+                "value": 62.3589317
+              }
+            },
+            {
+              "label": "review preparation visible",
+              "id": "separate-rsi",
+              "status": "计算中..."
+            },
+            {
+              "label": "review retry preserves pane identity",
+              "posts": 8,
+              "gets": 5,
+              "points": 18,
+              "last": {
+                "time": 1700001860,
+                "value": 62.3589317
+              }
+            }
+          ],
+          "cancellations": 2
+        },
+        {
+          "name": "canonical price/gap correction preserves real chart viewport",
+          "status": "PASS",
+          "before": 269,
+          "after": 269
+        },
+        {
+          "name": "BAR review selected-period paging, retry and fixed real chart viewport",
+          "status": "PASS",
+          "firstPage": 500,
+          "finalBars": 700,
+          "requests": 3,
+          "before": 269,
+          "after": 269
+        },
+        {
+          "name": "AGG_TRADE review selected-period paging, retry and fixed real chart viewport",
+          "status": "PASS",
+          "firstPage": 500,
+          "finalBars": 700,
+          "requests": 3,
+          "before": 269,
+          "after": 269
+        },
+        {
+          "name": "playing indicator time and same-ms tape sequence are sampled together",
+          "status": "PASS",
+          "requests": [
+            {
+              "sequence": 7,
+              "time": 1700002940123
+            },
+            {
+              "sequence": 8,
+              "time": 1700002940123
+            }
+          ],
+          "cancelled": 2
+        },
+        {
+          "name": "production multi-chart tape hook initializes indicators during continuous trades",
+          "status": "PASS",
+          "gets": 29,
+          "posts": 3,
+          "firstResultAt": 1495.5,
+          "cancellations": 4,
+          "projectionDelayMs": 650,
+          "indicatorDelayMs": 800,
+          "ticks": 150,
+          "displayedSequence": 151,
+          "sourceSequence": 157
+        },
+        {
+          "name": "production multi-chart tape hook initializes indicators during continuous trades after rewind cancels the old seed",
+          "status": "PASS",
+          "gets": 29,
+          "posts": 2,
+          "firstResultAt": 1897.699999999255,
+          "cancellations": 6,
+          "projectionDelayMs": 650,
+          "indicatorDelayMs": 800,
+          "ticks": 150,
+          "displayedSequence": 102,
+          "sourceSequence": 108
+        },
+        {
+          "name": "four controlled replay cells restore early builtin results during an unfinished batch",
+          "status": "PASS",
+          "samples": [
+            {
+              "label": "metadata restored after builtin partial results",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "close and restore",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "period 1",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "period 2",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "period 3",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "period 4",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "period 5",
+              "state": [
+                {
+                  "id": "cell-1",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-2",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-3",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                },
+                {
+                  "id": "cell-4",
+                  "computing": false,
+                  "lines": [
+                    [
+                      "ma",
+                      1,
+                      null
+                    ],
+                    [
+                      "rsi",
+                      1,
+                      null
+                    ]
+                  ],
+                  "panes": [
+                    null
+                  ]
+                }
+              ]
+            }
+          ],
+          "requests": [
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "MA"
+            },
+            {
+              "path": "/api/v1/replay/runs/session/adapter/indicator-compute",
+              "name": "RSI"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "editor": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "replay regression suite"
+      }
+    }
+  },
+  "passed": true,
+  "browserExitCode": 0
+}

@@ -1,0 +1,468 @@
+{
+  "scope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/backend-joint-20261031/CandleScope/output/backend-joint-main-bab-20261031/synthetic-viewport",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": [
+        {
+          "name": "live synthetic session initialization and ticks",
+          "status": "PASS",
+          "samples": [
+            {
+              "auxiliary": true,
+              "stage": "memory-cache-hit",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800348450,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 46.75,
+                  "to": 121
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "initial-history",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800348450,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 245.75,
+                  "to": 320
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "tick 0",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "tick 1",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800259800,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 96.75,
+                  "to": 171
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "tick 2",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "tick 3",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800259800,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 96.75,
+                  "to": 171
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "tick 4",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "reopen",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "linked ownership through tick",
+              "before": {
+                "barSpacing": 26.68965517241379,
+                "rightOffset": -59.44444444444444,
+                "time": {
+                  "from": 1800240000,
+                  "to": 1800300000
+                },
+                "rightmostTime": 1800300000,
+                "logical": {
+                  "from": 88,
+                  "to": 109.55555555555556
+                }
+              },
+              "after": {
+                "barSpacing": 38.11275248718721,
+                "rightOffset": -38.3,
+                "time": {
+                  "from": 1800240000,
+                  "to": 1800300000
+                },
+                "rightmostTime": 1800300000,
+                "logical": {
+                  "from": 61.904761904761905,
+                  "to": 76.7
+                }
+              }
+            },
+            {
+              "auxiliary": true,
+              "stage": "return-to-live through recalibration",
+              "returned": {
+                "barSpacing": 38.112752487187194,
+                "rightOffset": 7.3976190476190595,
+                "time": {
+                  "from": 1800419172.142857,
+                  "to": 1800452219.2857144
+                },
+                "rightmostTime": 1800452219.2857144,
+                "logical": {
+                  "from": 107.60238095238095,
+                  "to": 122.39761904761906
+                }
+              },
+              "advanced": {
+                "barSpacing": 38.11275248718721,
+                "rightOffset": 7.3976190476190595,
+                "time": {
+                  "from": 1800390317.857143,
+                  "to": 1800452219.2857144
+                },
+                "rightmostTime": 1800452219.2857144,
+                "logical": {
+                  "from": 54.60238095238096,
+                  "to": 69.39761904761906
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "memory-cache-hit",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800348450,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 46.75,
+                  "to": 121
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "initial-history",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800348450,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 245.75,
+                  "to": 320
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "tick 0",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "tick 1",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800259800,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 96.75,
+                  "to": 171
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "tick 2",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "tick 3",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800259800,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 96.75,
+                  "to": 171
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "tick 4",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "reopen",
+              "view": {
+                "barSpacing": 8,
+                "rightOffset": 4,
+                "time": {
+                  "from": 1800262575,
+                  "to": 1800451200
+                },
+                "rightmostTime": 1800451200,
+                "logical": {
+                  "from": 98.75,
+                  "to": 173
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "linked ownership through tick",
+              "before": {
+                "barSpacing": 26.68965517241379,
+                "rightOffset": -59.44444444444444,
+                "time": {
+                  "from": 1800240000,
+                  "to": 1800300000
+                },
+                "rightmostTime": 1800300000,
+                "logical": {
+                  "from": 88,
+                  "to": 109.55555555555556
+                }
+              },
+              "after": {
+                "barSpacing": 38.11275248718721,
+                "rightOffset": -38.3,
+                "time": {
+                  "from": 1800240000,
+                  "to": 1800300000
+                },
+                "rightmostTime": 1800300000,
+                "logical": {
+                  "from": 61.904761904761905,
+                  "to": 76.7
+                }
+              }
+            },
+            {
+              "auxiliary": false,
+              "stage": "return-to-live through recalibration",
+              "returned": {
+                "barSpacing": 38.112752487187194,
+                "rightOffset": 7.3976190476190595,
+                "time": {
+                  "from": 1800419172.142857,
+                  "to": 1800452219.2857144
+                },
+                "rightmostTime": 1800452219.2857144,
+                "logical": {
+                  "from": 107.60238095238095,
+                  "to": 122.39761904761906
+                }
+              },
+              "advanced": {
+                "barSpacing": 38.11275248718721,
+                "rightOffset": 7.3976190476190595,
+                "time": {
+                  "from": 1800390317.857143,
+                  "to": 1800452219.2857144
+                },
+                "rightmostTime": 1800452219.2857144,
+                "logical": {
+                  "from": 54.60238095238096,
+                  "to": 69.39761904761906
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "semantic market-tail persistence with hidden future carriers",
+          "status": "PASS",
+          "samples": [
+            {
+              "count": 6,
+              "legacy": {
+                "from": 61,
+                "to": 69
+              },
+              "reopened": {
+                "from": -3.6875,
+                "to": 5
+              },
+              "saved": {
+                "barSpacing": 64,
+                "rightOffset": 0
+              },
+              "reset": {
+                "from": 1.3125,
+                "to": 10
+              }
+            },
+            {
+              "count": 600,
+              "legacy": {
+                "from": 655,
+                "to": 663
+              },
+              "reopened": {
+                "from": 590.3125,
+                "to": 599
+              },
+              "saved": {
+                "barSpacing": 64,
+                "rightOffset": 0
+              },
+              "reset": {
+                "from": 595.3125,
+                "to": 604
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "editor": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "existing live synthetic and semantic viewport regressions"
+      }
+    }
+  },
+  "passed": true,
+  "browserExitCode": 0
+}

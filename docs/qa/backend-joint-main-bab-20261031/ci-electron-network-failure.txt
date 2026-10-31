@@ -1,0 +1,25 @@
+2026-10-31T08:54:26.6306440Z   • electron-builder  version=26.15.3 os=24.6.0
+2026-10-31T08:54:26.6382780Z   • loaded configuration  file=package.json ("build" field)
+2026-10-31T08:54:27.5899380Z   • executing @electron/rebuild  electronVersion=43.3.0 arch=x64 buildFromSource=false workspaceRoot=/Users/runner/work/CandleScope/CandleScope/frontend projectDir=./ appDir=./
+2026-10-31T08:54:27.5901240Z   • installing native dependencies  arch=x64
+2026-10-31T08:54:27.8290830Z   • completed installing native dependencies
+2026-10-31T08:54:27.8336520Z   • packaging       platform=darwin arch=x64 electron=43.3.0 appOutDir=desktop-dist/mac
+2026-10-31T08:54:27.9724660Z   ⨯ connect EHOSTUNREACH 20.29.134.23:443  failedTask=build stackTrace=RequestError: connect EHOSTUNREACH 20.29.134.23:443
+2026-10-31T08:54:27.9726980Z     at ClientRequest.<anonymous> (/Users/runner/work/CandleScope/CandleScope/frontend/node_modules/got/dist/source/core/index.js:970:111)
+2026-10-31T08:54:27.9728440Z     at Object.onceWrapper (node:events:631:26)
+2026-10-31T08:54:27.9729150Z     at ClientRequest.emit (node:events:521:24)
+2026-10-31T08:54:27.9730790Z     at ClientRequest.origin.emit (/Users/runner/work/CandleScope/CandleScope/frontend/node_modules/@szmarczak/http-timer/dist/source/index.js:43:20)
+2026-10-31T08:54:27.9740960Z     at emitErrorEvent (node:_http_client:112:11)
+2026-10-31T08:54:27.9741830Z     at TLSSocket.socketErrorListener (node:_http_client:745:5)
+2026-10-31T08:54:27.9742620Z     at TLSSocket.emit (node:events:509:28)
+2026-10-31T08:54:27.9743360Z     at emitErrorNT (node:internal/streams/destroy:170:8)
+2026-10-31T08:54:27.9744240Z     at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+2026-10-31T08:54:27.9745270Z     at processTicksAndRejections (node:internal/process/task_queues:90:21)
+2026-10-31T08:54:27.9746370Z     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1864:16)
+2026-10-31T08:54:57.8769050Z ##[error]Process completed with exit code 1.
+2026-10-31T08:54:57.8902730Z ##[group]Run actions/upload-artifact@v4
+2026-10-31T08:54:57.8903230Z with:
+2026-10-31T08:54:57.8903550Z   name: macOS-evidence-x64-1
+2026-10-31T08:54:57.8904480Z   path: output/macos-package-smoke/**
+output/replay-range-regression.xml
+frontend/desktop-dist/builder-debug.yml

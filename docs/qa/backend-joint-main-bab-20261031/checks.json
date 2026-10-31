@@ -32,5 +32,18 @@
   "native_automated_before_viewport_fix_passed": true,
   "visual_viewport_before_fix_passed": false,
   "viewport_browser_after_fix_passed": true,
-  "native_visual_after_fix_passed": true
+  "native_visual_after_fix_passed": true,
+  "synthetic_viewport_browser_passed": true,
+  "replay_viewport_browser_passed": true,
+  "pr148_stacked_contracts": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "947",
+    "time": "97.677",
+    "timestamp": "2026-10-31T17:14:19.207592",
+    "hostname": "Ryans-MacBook-Air.local",
+    "source": "21ba546148965b3668c02963056bb055bf9042c0"
+  }
 }

@@ -1,6 +1,6 @@
 {
-  "scope": "Latest-main bab26747 joint round; exact PR heads, not earlier baseline runs",
-  "checked_at": "2026-10-31T08:55:25.680Z",
+  "scope": "Latest-main bab26747 joint round; current PR heads including #148 stacked on #138",
+  "checked_at": "2026-10-31T09:17:20.349Z",
   "runs": [
     {
       "id": 41183637641,
@@ -8,6 +8,7 @@
       "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
       "status": "completed",
       "conclusion": "success",
+      "attempt": 1,
       "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183637641"
     },
     {
@@ -16,23 +17,26 @@
       "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
       "status": "in_progress",
       "conclusion": null,
+      "attempt": 2,
       "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183637651"
     },
     {
-      "id": 41183274663,
+      "id": 41187882439,
       "name": "CCXT integration",
-      "head": "c0f4b5f12ebcba626abfa81c2e6e3697f3e4c8b3",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183274663"
+      "head": "21ba546148965b3668c02963056bb055bf9042c0",
+      "status": "in_progress",
+      "conclusion": null,
+      "attempt": 1,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41187882439"
     },
     {
-      "id": 41183274655,
+      "id": 41187882429,
       "name": "macOS desktop",
-      "head": "c0f4b5f12ebcba626abfa81c2e6e3697f3e4c8b3",
-      "status": "completed",
-      "conclusion": "success",
-      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183274655"
+      "head": "21ba546148965b3668c02963056bb055bf9042c0",
+      "status": "in_progress",
+      "conclusion": null,
+      "attempt": 1,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41187882429"
     },
     {
       "id": 41186077288,
@@ -40,6 +44,7 @@
       "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
       "status": "completed",
       "conclusion": "success",
+      "attempt": 1,
       "url": "https://github.com/helenananaa/CandleScope/actions/runs/41186077288"
     },
     {
@@ -48,6 +53,7 @@
       "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
       "status": "in_progress",
       "conclusion": null,
+      "attempt": 1,
       "url": "https://github.com/helenananaa/CandleScope/actions/runs/41186077290"
     }
   ]

@@ -17,6 +17,18 @@ node frontend/scripts/frontend-script-integration.mjs --market-health \
   --out output/backend-joint-main-bab-reproduction/browser-health
 ```
 
+Also run the existing live Renko/semantic-axis regressions and replay navigation checks:
+
+```sh
+node docs/qa/backend-joint-main-bab-20261031/run_surface_browser.mjs
+node frontend/scripts/frontend-script-integration.mjs --replay-visible \
+  --out output/backend-joint-main-bab-reproduction/replay-viewport
+```
+
+These twelve checks use real Chromium and development React `act`; they are separate
+from the production React staged-history fixture and native-package evidence. The
+surface runner creates its two exclusive temporary fixture files and removes them on exit.
+
 The history fixture includes six custom intervals with staged 128/500/1500 admission,
 and the real `SingleChartPanes` component with a deliberately held shared display frame.
 Its six viewport cases cover empty/one-row/128-row incoming caches with and without a
