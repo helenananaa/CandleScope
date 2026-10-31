@@ -22,9 +22,11 @@
     "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
     "failure": "EHOSTUNREACH while electron-builder downloaded Electron on x64 after frontend/desktop/control tests passed",
     "excerpt": "ci-electron-network-failure.txt",
-    "rerun": "single x64 job rerun accepted after arm64 completed successfully; no source changes",
+    "rerun": "single x64 job rerun succeeded; arm64 success retained; no source changes",
     "rerun_job": 124496241845,
-    "attempt": 2
+    "attempt": 2,
+    "resolved": true,
+    "rerun_conclusion": "success"
   },
   "cross_pr_merge": {
     "before": "Direct merge of #144 and #148 conflicted in klines_repo.py and the integration test selector",

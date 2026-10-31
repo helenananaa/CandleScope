@@ -1,0 +1,42 @@
+{
+  "checked_at": "2026-10-31T10:13:24.245Z",
+  "main": {
+    "sha": "bab267477c2c834fd98c1cd77e5d774a4d69b6ea",
+    "checked_at": "2026-10-31T10:12:46.561Z"
+  },
+  "pull_requests": [
+    {
+      "number": 138,
+      "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
+      "base": "main",
+      "draft": false,
+      "state": "open",
+      "merged": false,
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "url": "https://github.com/helenananaa/CandleScope/pull/138"
+    },
+    {
+      "number": 148,
+      "head": "21ba546148965b3668c02963056bb055bf9042c0",
+      "base": "codex/issue126-query-fencing",
+      "draft": false,
+      "state": "open",
+      "merged": false,
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "url": "https://github.com/helenananaa/CandleScope/pull/148"
+    },
+    {
+      "number": 144,
+      "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
+      "base": "codex/issue126-query-fencing",
+      "draft": false,
+      "state": "open",
+      "merged": false,
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "url": "https://github.com/helenananaa/CandleScope/pull/144"
+    }
+  ]
+}

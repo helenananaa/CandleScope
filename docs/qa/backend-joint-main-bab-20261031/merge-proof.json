@@ -9,5 +9,8 @@
     "packages",
     ".github"
   ],
-  "conflicts": []
+  "conflicts": [],
+  "all_non_qa_tracked_files_identical": true,
+  "only_differences": "joint acceptance reports and evidence under docs/qa",
+  "merge_strategy": "three-way merge preserving #138 ancestry (merge commit)"
 }

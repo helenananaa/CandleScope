@@ -29,5 +29,7 @@
   "browser_history_viewport_tested_code": "696b164077caf4b826aec703513ce04263efb945",
   "live_backend_tested_code": "ec189fb9371f61b70dcf394108636f698e63cc6c",
   "merge_proof": "merge-proof.json",
-  "prior_joint_code": "01e062ccde830f55354818a6ebc173eb871f1e03"
+  "prior_joint_code": "01e062ccde830f55354818a6ebc173eb871f1e03",
+  "main_verified_at": "2026-10-31T10:12:46.561Z",
+  "final_pr_state": "pr-state.json"
 }
