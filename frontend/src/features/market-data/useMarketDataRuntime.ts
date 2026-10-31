@@ -580,6 +580,7 @@ export function useMarketDataRuntime({
   }, [chartDataMeta?.trimmedLeft, setHasMoreLeft]);
 
   const loadData = useChartInitialLoad({
+    sharedCacheOwnsHealth: Boolean(workspaceResources?.dataManager),
     enabled: marketDataReady,
     exchange,
     marketType,

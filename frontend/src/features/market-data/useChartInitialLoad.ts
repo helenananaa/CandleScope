@@ -173,6 +173,7 @@ export interface UseChartInitialLoadOptions {
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
   initialViewportCountBackCap?: number;
+  sharedCacheOwnsHealth?: boolean;
   getFromCache(symbol: SymbolCode, interval: IntervalString): KlineBar[];
   resolveInitialRows?: ResolveInitialRows | null;
   seriesDataFeed: SeriesDataFeed;
@@ -338,6 +339,7 @@ export function releasePendingInitialIndicatorWindow(
 }
 
 export function useChartInitialLoad({
+  sharedCacheOwnsHealth = false,
   enabled,
   exchange,
   marketType,
@@ -469,7 +471,7 @@ export function useChartInitialLoad({
       trackedInitialRepairRange = null;
       setInitialHistoryPending(false);
     }, { once: true });
-    if (canUseWarmCacheWithoutImmediateRevalidation(
+    if (!sharedCacheOwnsHealth && canUseWarmCacheWithoutImmediateRevalidation(
       warmActivation,
       initialHistoryCountBack,
     )) {
@@ -857,6 +859,7 @@ export function useChartInitialLoad({
         maxWaitMs: INITIAL_VIEWPORT_PROBE_WAIT_MS,
         intent: "viewport",
         source: "initial-history",
+        cacheMode: "prefer-cache",
         signal: controller.signal,
       });
       markPerf("chart.initialLoad.history.response", {
@@ -919,6 +922,7 @@ export function useChartInitialLoad({
       setLoading(false);
     }
   }, [
+    sharedCacheOwnsHealth,
     activateCachedChartData,
     commitMergedChartData,
     commitPatchedChartData,

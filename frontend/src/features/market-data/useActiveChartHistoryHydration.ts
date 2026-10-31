@@ -116,6 +116,7 @@ export async function runActiveHistoryHydration({
           maxWaitMs: 0,
           intent: "active_hydration",
           source: "active-history-hydration",
+          cacheMode: "prefer-cache",
           // Probe against backend storage without publishing partial ranges to
           // the active SeriesWindowStore. The complete proof below owns the
           // one atomic prepend and keeps chart rows, indicators, and metadata
