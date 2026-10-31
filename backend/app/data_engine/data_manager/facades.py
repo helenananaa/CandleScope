@@ -94,11 +94,14 @@ class MarketStateFacade:
         *,
         max_pending: int = 64,
         replay: bool = True,
+        continuity=None,
     ) -> Any:
+        options = {} if continuity is None else {"continuity": continuity}
         return self._service().subscribe(
             keys,
             max_pending=max_pending,
             replay=replay,
+            **options,
         )
 
     def diagnostics(self) -> dict[str, Any]:

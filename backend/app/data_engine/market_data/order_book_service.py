@@ -247,9 +247,13 @@ class OrderBookService:
                         _on_event,
                     )
                 else:
+                    from .continuity import health_callback, ingestion_options
                     handle = await self._factory.start_market(
                         descriptor,
                         _on_event,
+                        **ingestion_options(self._factory, on_health=health_callback(
+                            self.hub, lambda: (validated,)
+                            if self._physical.get(validated) is reservation else ())),
                     )
             except BaseException:
                 await drain_cancellation_safe_cleanup(
@@ -403,6 +407,7 @@ class OrderBookService:
         *,
         max_pending: int | None = None,
         max_age_ms: int | None = None,
+        continuity=None,
     ) -> OrderBookAttachment:
         """Atomically subscribe before reading replaceable current state."""
 
@@ -417,6 +422,7 @@ class OrderBookService:
             requested,
             max_pending=max_pending,
             replay=False,
+            continuity=continuity,
         )
         current = {
             key: record
@@ -556,6 +562,7 @@ class OrderBookService:
                 events = await self._factory.fetch_market(descriptor, limit=1)
                 if not events:
                     self._metrics["rest_poll_empty"] += 1
+                    self.hub.mark_source_gap([key], reason="source_snapshot_empty")
                 for event in events:
                     await callback(event)
                     self._metrics["rest_poll_events"] += 1
@@ -571,6 +578,7 @@ class OrderBookService:
             except Exception as exc:
                 consecutive_failures += 1
                 self._metrics["rest_poll_failures"] += 1
+                self.hub.mark_source_gap([key], reason="source_snapshot_failed")
                 self._metrics["last_rest_poll_error"] = (
                     f"{key.topic}: {type(exc).__name__}: {exc}"
                 )

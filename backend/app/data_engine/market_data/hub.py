@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Iterable
 
@@ -26,6 +27,7 @@ class MarketHubSubscription:
         self._pending: OrderedDict[MarketStreamKey, HubRecord] = OrderedDict()
         self._ready = asyncio.Event()
         self._closed = False
+        self._continuity_observer = None
 
     @property
     def keys(self) -> frozenset[MarketStreamKey]:
@@ -71,6 +73,8 @@ class MarketHubSubscription:
         self._closed = True
         self._hub._remove_subscription(self)
         self._ready.set()
+        if self._continuity_observer is not None:
+            self._continuity_observer.source_closed()
 
     def __aiter__(self) -> AsyncIterator[HubRecord]:
         return self._iterate()
@@ -90,6 +94,8 @@ class MarketHubSubscription:
             return False, False
 
         key = record.event.key
+        if self._continuity_observer is not None:
+            self._continuity_observer.offer(record)
         coalesced = key in self._pending
         dropped = False
         if coalesced:
@@ -106,6 +112,8 @@ class MarketHubSubscription:
     def _close_from_hub(self) -> None:
         self._closed = True
         self._ready.set()
+        if self._continuity_observer is not None:
+            self._continuity_observer.source_closed()
 
 
 class MarketEventHub:
@@ -115,6 +123,8 @@ class MarketEventHub:
         self._max_states = max(1, int(max_states))
         self._default_max_pending = max(1, int(default_max_pending))
         self._latest: OrderedDict[MarketStreamKey, HubRecord] = OrderedDict()
+        self._source_gaps: OrderedDict[MarketStreamKey, tuple[str, float]] = OrderedDict()
+        self._source_tracking_exhausted = False
         self._revisions: dict[MarketStreamKey, int] = {}
         self._subscriptions: set[MarketHubSubscription] = set()
         self._closed = False
@@ -148,6 +158,11 @@ class MarketEventHub:
         self._latest.move_to_end(event.key)
         self._revisions[event.key] = revision
         self._metrics["published"] += 1
+        from .continuity import source_broken
+        if source_broken(record):
+            self.mark_source_gap([event.key], reason=str(event.data.get("stale_reason") or "source_state_invalid"))
+        else:
+            self._source_gaps.pop(event.key, None)
 
         for subscription in tuple(self._subscriptions):
             coalesced, dropped = subscription._offer(record)
@@ -179,9 +194,13 @@ class MarketEventHub:
         *,
         max_pending: int | None = None,
         replay: bool = True,
+        continuity=None,
     ) -> MarketHubSubscription:
         if self._closed:
             raise RuntimeError("market event hub is closed")
+        if continuity is not None:
+            from app.data_engine.continuity_policy import ContinuityPolicy
+            continuity = ContinuityPolicy.resolve(continuity)
         subscription = MarketHubSubscription(
             self,
             keys,
@@ -192,7 +211,24 @@ class MarketEventHub:
         if replay:
             for record in self.snapshot(subscription.keys):
                 subscription._offer(record)
+        if continuity is not None:
+            from .continuity import StateContinuitySubscription
+            return StateContinuitySubscription(subscription, continuity)
         return subscription
+
+    def mark_source_gap(self, keys, *, reason: str) -> None:
+        for key in keys:
+            if key not in self._source_gaps:
+                self._source_gaps[key] = (reason, time.monotonic())
+            while len(self._source_gaps) > self._max_states:
+                self._source_gaps.popitem(last=False)
+                self._source_tracking_exhausted = True
+            for subscription in tuple(self._subscriptions):
+                observer = subscription._continuity_observer
+                if observer is not None:
+                    if self._source_tracking_exhausted:
+                        observer.source_closed()  # Wake the bounded wait to report lost evidence.
+                    observer.gap(key, reason, self._source_gaps[key][1])
 
     async def close(self) -> None:
         if self._closed:
