@@ -92,3 +92,18 @@ treats cancellation as a non-error outcome. The actual React/browser-worker
 fixture failed before this guard; afterward a fresh source amendment computes
 the new value automatically without a manual reset or script edit. All seven
 data-flow cases finish with no outstanding demands or retained workers.
+
+## Painted viewport hydration
+
+The next native run found a hosted Pine historical gap after programmatic
+viewport navigation. LWC applies the requested range on its next draw, but
+data consumers had received only the old immediate capture. The settled
+viewport notification now reaches indicator and advanced-data hydration as
+well as persistence. Chart/dataset guards reject obsolete delayed callbacks.
+
+The real chart browser test now wires only `onViewportRangeChange`, matching
+the live workspace (its extra persistence callback previously masked the bug).
+It fails before the fix and passes afterward across programmatic navigation,
+zoom and continuous drag. All ten cases in [the viewport/replay suite](viewport-chromium.json)
+pass, with no retained workers or renderer exceptions. Native qualification
+must be repeated using the rebuilt artifact; the previous ZIP is not accepted.

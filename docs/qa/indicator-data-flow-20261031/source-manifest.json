@@ -30,6 +30,8 @@
     "frontend/desktop/control-window-lifecycle.mjs": "7a2bd0bc6cdcb248a3ad82de307d955fb55f353fee7840197943b01803a73222",
     "frontend/desktop/main.mjs": "1c7146b46a02343154962722a533dc969cf6a4eedd4e1d09c32f7347027ff3e5",
     "frontend/src/features/indicators/indicatorComputeSettlement.ts": "7c40b54cce8340ca1a303fe090b0d22af3c6c91620d0b944d4c2b4fecf758374",
-    "frontend/src/features/indicators/frontendScriptBatch.ts": "2ab610150383220dfd04802ea63a7333ad51a9ccfc7b18c4513b4c76a41b0945"
+    "frontend/src/features/indicators/frontendScriptBatch.ts": "2ab610150383220dfd04802ea63a7333ad51a9ccfc7b18c4513b4c76a41b0945",
+    "frontend/src/components/SingleChartPanes.tsx": "4c8a9c05f485dfa6117f39478f43a261d00d52885491726c76981bd0d122b9ed",
+    "frontend/src/chart-adapter/__tests__/providedBarsViewport.browser.tsx": "388ac3bf240107f16289a7ed175d55496613c88eb251c390a9837cebf6c3e97d"
   }
 }

@@ -2396,7 +2396,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       // though the next painted frame shows the requested source-time range.
       if (chartRef.current !== chart || datasetKeyRef.current !== key) return;
       const settled = captureVisibleRange();
-      if (settled) onVisibleRangeChangeRef.current?.(settled);
+      if (settled) {
+        // Programmatic navigation publishes before LWC's next draw. Notify
+        // data consumers again with the painted range: persistence alone does
+        // not hydrate indicators at the newly selected historical viewport.
+        onViewportRangeChangeRef.current?.(settled);
+        onVisibleRangeChangeRef.current?.(settled);
+      }
     }, VISIBLE_RANGE_SAVE_DEBOUNCE_MS);
   }, [captureVisibleRange]);
 
