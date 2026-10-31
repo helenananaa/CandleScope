@@ -324,6 +324,7 @@ def _bars(fixture: dict[str, Any]) -> list[BarData]:
 def test_sidecar_routes_http_compute_without_legacy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("app.indicator.pine_host_inputs.time.time", lambda: 1_700_000_300.0)
     fixture = _fixture()
     service, host = _service("sidecar")
     app = FastAPI()
@@ -349,7 +350,9 @@ def test_sidecar_routes_http_compute_without_legacy(
     }
     assert payload["scriptHash"] == fixture["identity"]["scriptHash"]
     assert host.requests[0].context.symbol == "BTCUSDT"
-    assert host.requests[0].options == {"securityMode": "safe"}
+    assert host.requests[0].options == {
+        "securityMode": "safe", "pineExecutionTimeMs": 1_700_000_300_000,
+    }
 
 
 def test_community_language_can_use_sidecar_without_a_private_adapter(
