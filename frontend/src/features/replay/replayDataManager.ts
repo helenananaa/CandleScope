@@ -11,25 +11,38 @@ export interface ReplaySequenceIdentity {
 
 const abortError = () => new DOMException("Replay demand released or superseded", "AbortError");
 
+export interface ReplayOperationIdentity {
+  readonly runId: string;
+  readonly sessionId?: string;
+  readonly purpose: "run-entry" | "viewer" | "adapter";
+}
+type ReplayDemandIdentity = ReplaySequenceIdentity | ReplayOperationIdentity;
+
 /** A replay-only namespace. Its mutable display windows never enter the live
  * market cache, and equal markets/periods never imply shared navigation state. */
 export class ReplayDataManager {
-  private readonly active = new Set<ReplaySequenceLease>();
+  private readonly active = new Set<ReplayDemandLease>();
   private closed = false;
   private nextOwner = 0;
   createSequence(): ReplaySequenceLease {
     if (this.closed) throw new Error("Replay data manager closed");
     return new ReplaySequenceLease(`replay-window-${++this.nextOwner}`, this);
   }
-  activate(lease: ReplaySequenceLease): void {
+  createOperations(identity: ReplayOperationIdentity): ReplayOperationLease {
+    if (this.closed) throw new Error("Replay data manager closed");
+    return new ReplayOperationLease(`replay-operation-${++this.nextOwner}`, this, identity);
+  }
+  activate(lease: ReplayDemandLease): void {
     if (this.closed) throw new Error("Replay data manager closed");
     this.active.add(lease);
   }
-  deactivate(lease: ReplaySequenceLease): void { this.active.delete(lease); }
+  deactivate(lease: ReplayDemandLease): void { this.active.delete(lease); }
   diagnostics() {
-    const sequences = [...this.active].map(lease => lease.diagnostics());
-    return { sequences, activeSequences: sequences.length,
-      requests: sequences.reduce((sum, item) => sum + item.requests, 0),
+    const sequences = [...this.active].filter(lease => lease.kind === "sequence").map(lease => lease.diagnostics());
+    const operations = [...this.active].filter(lease => lease.kind === "operation").map(lease => lease.diagnostics());
+    return { sequences, operations, activeSequences: sequences.length, activeOperations: operations.length,
+      requests: [...sequences, ...operations].reduce((sum, item) => sum + item.requests, 0),
+      streams: operations.reduce((sum, item) => sum + item.streams, 0),
       bars: sequences.reduce((sum, item) => sum + item.bars, 0) };
   }
   dispose(): void {
@@ -39,26 +52,26 @@ export class ReplayDataManager {
 }
 
 /** Construction is inert so an abandoned React render cannot retain resources. */
-export class ReplaySequenceLease {
-  readonly store = new SeriesWindowStore();
-  private identity: Readonly<ReplaySequenceIdentity> | null = null;
+class ReplayDemandLease {
+  private identity: Readonly<ReplayDemandIdentity> | null = null;
   private identityKey = "";
   private epoch = 0;
   private consumers = 0;
   private totalRequests = 0;
   private retentionEpoch = 0;
   private readonly requests = new Set<AbortController>();
-  constructor(readonly owner: string, private readonly manager: ReplayDataManager) {}
+  private readonly resources = new Set<() => void>();
+  private cleanupErrors = 0;
+  constructor(readonly owner: string, private readonly manager: ReplayDataManager,
+    readonly kind: "sequence" | "operation") {}
   get active(): boolean { return this.consumers > 0; }
 
-  bind(identity: ReplaySequenceIdentity): void {
-    const key = JSON.stringify([identity.runId, identity.trackId, identity.sessionId,
-      identity.dataEpoch, identity.generation, identity.interval]);
-    if (key === this.identityKey) return;
+  protected bindIdentity(identity: ReplayDemandIdentity, key: string): boolean {
+    if (key === this.identityKey) return false;
     this.cancel();
     this.identity = Object.freeze({ ...identity });
     this.identityKey = key;
-    this.store.clear({ source: "replay-manager-identity-change" });
+    return true;
   }
   retain(): () => void {
     this.manager.activate(this);
@@ -78,9 +91,11 @@ export class ReplaySequenceLease {
     const cancel = () => controller.abort();
     signal?.addEventListener("abort", cancel, { once: true });
     this.requests.add(controller);
+    let removeAbortListener = () => {};
     return new Promise<T>((resolve, reject) => {
       const aborted = () => reject(abortError());
       controller.signal.addEventListener("abort", aborted, { once: true });
+      removeAbortListener = () => controller.signal.removeEventListener("abort", aborted);
       let pending: Promise<T>;
       try { pending = load(controller.signal); } catch (error) {
         pending = Promise.reject(error instanceof Error ? error : new Error(String(error)));
@@ -88,11 +103,30 @@ export class ReplaySequenceLease {
       pending.then(value => {
         if (!this.consumers || epoch !== this.epoch || controller.signal.aborted) reject(abortError());
         else resolve(value);
-      }, reject).finally(() => controller.signal.removeEventListener("abort", aborted));
+      }, reject);
     }).finally(() => {
+      removeAbortListener();
       signal?.removeEventListener("abort", cancel);
       this.requests.delete(controller);
     });
+  }
+  /** Register before start() can synchronously deliver a frame. Every callback
+   * uses the resource fence, so stop/reopen within one lease rejects old frames. */
+  openResource<T>(create: (current: () => boolean) => T, dispose: (value: T) => void): { value: T; release(): void; current(): boolean } {
+    if (!this.active || !this.identity) throw abortError();
+    const epoch = this.epoch;
+    let released = false;
+    const current = () => !released && this.active && epoch === this.epoch;
+    const value = create(current);
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.resources.delete(release);
+      try { dispose(value); } catch { this.cleanupErrors += 1; }
+    };
+    if (!current()) { release(); throw abortError(); }
+    this.resources.add(release);
+    return { value, release, current };
   }
   close(): void {
     this.consumers = 0;
@@ -101,10 +135,30 @@ export class ReplaySequenceLease {
     this.manager.deactivate(this);
   }
   diagnostics() { return { owner: this.owner, identity: this.identity, consumers: this.consumers,
-    bars: this.store.barCount, requests: this.requests.size, totalRequests: this.totalRequests }; }
+    bars: 0, requests: this.requests.size, totalRequests: this.totalRequests,
+    streams: this.resources.size, cleanupErrors: this.cleanupErrors }; }
   private cancel(): void {
     this.epoch += 1;
     for (const request of this.requests) request.abort();
     this.requests.clear();
+    for (const release of this.resources) release();
+  }
+}
+
+export class ReplaySequenceLease extends ReplayDemandLease {
+  readonly store = new SeriesWindowStore();
+  constructor(owner: string, manager: ReplayDataManager) { super(owner, manager, "sequence"); }
+  bind(identity: ReplaySequenceIdentity): void {
+    if (this.bindIdentity(identity, JSON.stringify([identity.runId, identity.trackId, identity.sessionId,
+      identity.dataEpoch, identity.generation, identity.interval]))) this.store.clear({ source: "replay-manager-identity-change" });
+  }
+  override diagnostics() { return { ...super.diagnostics(), bars: this.store.barCount }; }
+}
+
+/** Run/session HTTP and stream ownership; never stores account data or rows. */
+export class ReplayOperationLease extends ReplayDemandLease {
+  constructor(owner: string, manager: ReplayDataManager, identity: ReplayOperationIdentity) {
+    super(owner, manager, "operation");
+    this.bindIdentity(identity, JSON.stringify([identity.runId, identity.sessionId, identity.purpose]));
   }
 }

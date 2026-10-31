@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { ReplayDataManager, type ReplayOperationLease } from "./replayDataManager.js";
+import { managedReplayAdapterApi, managedReplayAdapterStreams } from "./managedReplayTransport.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import type { MarketDataRuntimeContract } from "../market-data/marketDataRuntimeContract.js";
 import { defaultReplayApi, ReplayApiError } from "./replayApi.js";
@@ -95,6 +97,8 @@ interface ReplayStreamBoundary {
 
 export interface ReplayRuntimeLifecycleOptions {
   entry: ReplayRuntimeEntry;
+  dataManager?: ReplayDataManager;
+  runId?: string;
   /** Chart-only adapters observe the run owner's commands and never claim a lease. */
   controllerMode?: "manage" | "observe";
   api?: ReplayApiBoundary;
@@ -236,6 +240,8 @@ export class ReplayRuntimeLifecycle {
   readonly marketDataActions: MarketDataRuntimeContract["actions"];
   private readonly entry: ReplayRuntimeEntry;
   private readonly api: ReplayApiBoundary;
+  private readonly operations: ReplayOperationLease;
+  private releaseOperations: (() => void) | null = null;
   private readonly streamFactory: (options: ReplayStreamControllerOptions) => ReplayStreamBoundary;
   private readonly clientInstanceId: string;
   private readonly commandIdFactory: () => string;
@@ -293,6 +299,8 @@ export class ReplayRuntimeLifecycle {
 
   constructor({
     entry,
+    dataManager = new ReplayDataManager(),
+    runId,
     controllerMode = "manage",
     api = defaultReplayApi,
     store = new ReplayStore(),
@@ -302,7 +310,9 @@ export class ReplayRuntimeLifecycle {
   }: ReplayRuntimeLifecycleOptions) {
     this.entry = entry;
     this.controllerMode = controllerMode;
-    this.api = api;
+    const sessionId = entry.kind === "adapter" || entry.kind === "session" ? entry.sessionId : undefined;
+    this.operations = dataManager.createOperations({ runId: runId ?? sessionId ?? "unbound", ...(sessionId ? { sessionId } : {}), purpose: "adapter" });
+    this.api = managedReplayAdapterApi(this.operations, api);
     this.store = store;
     this.marketDataActions = {
       retry: () => this.restart(),
@@ -312,7 +322,7 @@ export class ReplayRuntimeLifecycle {
       onVisibleRangeChange: () => this.store.markVisibleRangePending(),
       consumeIndicatorRangeRequest: (requestId) => this.store.consumeIndicatorRequest(requestId),
     };
-    this.streamFactory = streamFactory;
+    this.streamFactory = managedReplayAdapterStreams(this.operations, streamFactory);
     this.clientInstanceId = clientInstanceId;
     this.commandIdFactory = commandIdFactory;
     this.snapshot = this.buildSnapshot();
@@ -357,6 +367,7 @@ export class ReplayRuntimeLifecycle {
 
   start(): void {
     if (this.started || this.disposed) return;
+    this.releaseOperations ??= this.operations.retain();
     this.started = true;
     void this.run();
   }
@@ -364,6 +375,7 @@ export class ReplayRuntimeLifecycle {
   restart(): void {
     if (this.disposed) return;
     this.stopCurrentRun(true);
+    this.releaseOperations ??= this.operations.retain();
     this.started = true;
     this.error = null;
     void this.run();
@@ -801,6 +813,8 @@ export class ReplayRuntimeLifecycle {
     if (this.disposed) return;
     this.disposed = true;
     this.stopCurrentRun();
+    this.releaseOperations?.();
+    this.releaseOperations = null;
     this.phase = "STOPPED";
     this.unsubscribeStore();
     this.store.dispose();
@@ -1331,16 +1345,20 @@ export function useReplayRuntime(
     streamFactory,
     clientInstanceId,
     commandIdFactory,
+    dataManager,
+    runId,
   }: Omit<ReplayRuntimeLifecycleOptions, "entry"> = {},
 ): ReplayRuntime {
   const lifecycle = useMemo(() => new ReplayRuntimeLifecycle({
     entry,
+    ...(dataManager === undefined ? {} : { dataManager }),
+    ...(runId === undefined ? {} : { runId }),
     ...(api === undefined ? {} : { api }),
     ...(store === undefined ? {} : { store }),
     ...(streamFactory === undefined ? {} : { streamFactory }),
     ...(clientInstanceId === undefined ? {} : { clientInstanceId }),
     ...(commandIdFactory === undefined ? {} : { commandIdFactory }),
-  }), [api, clientInstanceId, commandIdFactory, entry, store, streamFactory]);
+  }), [api, clientInstanceId, commandIdFactory, dataManager, entry, runId, store, streamFactory]);
   const lifecycleEffectGuard = useMemo(() => new ReplayLifecycleEffectGuard(), []);
   useEffect(
     () => lifecycleEffectGuard.mount(lifecycle),

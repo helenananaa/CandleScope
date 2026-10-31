@@ -4,6 +4,14 @@
   "browser": "Chrome/156.0.8078.74",
   "checks": [
     {
+      "name": "run operations survive chart selection and fence StrictMode/run change/unmount",
+      "status": "PASS",
+      "cancellations": 2,
+      "stopped": 3,
+      "publications": 1,
+      "requests": 3
+    },
+    {
       "name": "real provided-bars React lifecycle prioritizes pan/zoom while preserving script input",
       "status": "PASS"
     },
@@ -22,15 +30,18 @@
     },
     {
       "name": "BAR review selected-period paging, retry and fixed real chart viewport",
-      "status": "PASS"
+      "status": "PASS",
+      "requests": 3
     },
     {
       "name": "AGG_TRADE review selected-period paging, retry and fixed real chart viewport",
-      "status": "PASS"
+      "status": "PASS",
+      "requests": 3
     },
     {
       "name": "playing indicator time and same-ms tape sequence are sampled together",
-      "status": "PASS"
+      "status": "PASS",
+      "requestCount": 2
     },
     {
       "manager": {
@@ -48,20 +59,25 @@
             "consumers": 1,
             "bars": 3,
             "requests": 0,
-            "totalRequests": 29
+            "totalRequests": 29,
+            "streams": 0,
+            "cleanupErrors": 0
           }
         ],
+        "operations": [],
         "activeSequences": 1,
+        "activeOperations": 0,
         "requests": 0,
+        "streams": 0,
         "bars": 3
       },
       "name": "production multi-chart tape hook initializes indicators during continuous trades",
       "status": "PASS",
       "gets": 28,
       "posts": 3,
-      "firstResultAt": 1497.6999999955297,
+      "firstResultAt": 1494.8000000044703,
       "cancellations": 6,
-      "displayedSequence": 150,
+      "displayedSequence": 149,
       "sourceSequence": 157
     },
     {
@@ -80,35 +96,41 @@
             "consumers": 1,
             "bars": 3,
             "requests": 0,
-            "totalRequests": 29
+            "totalRequests": 30,
+            "streams": 0,
+            "cleanupErrors": 0
           }
         ],
+        "operations": [],
         "activeSequences": 1,
+        "activeOperations": 0,
         "requests": 0,
+        "streams": 0,
         "bars": 3
       },
       "name": "production multi-chart tape hook initializes indicators during continuous trades after rewind cancels the old seed",
       "status": "PASS",
       "gets": 28,
       "posts": 2,
-      "firstResultAt": 1849.6000000014901,
+      "firstResultAt": 1876.8999999985099,
       "cancellations": 7,
-      "displayedSequence": 101,
+      "displayedSequence": 100,
       "sourceSequence": 108
     },
     {
       "name": "four controlled replay cells restore early builtin results during an unfinished batch",
-      "status": "PASS"
+      "status": "PASS",
+      "requestCount": 108
     }
   ],
   "remainingWorkers": [],
   "exceptions": [],
   "driverStartupWaitMs": 60000,
-  "driverAdjustment": "Temporary copy of frontend-script-integration.mjs changed only startup polling from 100 to 600 iterations. Product code and fixture assertions unchanged. Earlier 10-second startup attempts failed before running fixture.",
+  "driverAdjustment": "Temporary copy changed only browser startup polling from 100 to 600 iterations, retaining the prior local allowance. Product and fixture assertions unchanged; temporary script removed.",
   "fullCheck": {
     "command": "npm run check",
     "exitCode": 0,
-    "frontendTests": 4673,
+    "frontendTests": 4677,
     "isolatedPerformanceTests": 1,
     "desktopTests": 124
   },

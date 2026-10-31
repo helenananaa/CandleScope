@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ReplayDataManager } from "../replayDataManager.js";
+import { managedReplayRunApi } from "../managedReplayTransport.js";
 
 import { ReplayV2ApiClient, ReplayV2ApiError } from "../replayV2Api.js";
 import {
@@ -411,7 +413,7 @@ test("read-only replay.v3 API does not retry invalid JSON from a successful resp
   assert.equal(requestCount, 1);
 });
 
-test("replay.v3 command POST retries one bodyless 5xx with the identical envelope", async () => {
+test("managed replay.v3 command POST preserves the one bodyless 5xx retry and identical envelope", async () => {
   let requestCount = 0;
   const requestBodies: string[] = [];
   const command: ReplayV2Command = {
@@ -437,7 +439,12 @@ test("replay.v3 command POST retries one bodyless 5xx with the identical envelop
     },
   });
 
-  const result = await client.commandRun("run-1", command);
+  const manager = new ReplayDataManager();
+  const operations = manager.createOperations({ runId: "run-1", purpose: "viewer" });
+  const release = operations.retain();
+  const result = await managedReplayRunApi(operations, client).commandRun("run-1", command);
+  assert.equal(operations.diagnostics().totalRequests, 1, "retry belongs to the existing client operation");
+  release();
 
   assert.equal(result.command_id, command.command_id);
   assert.equal(requestCount, 2);

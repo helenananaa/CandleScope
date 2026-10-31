@@ -1,7 +1,7 @@
-# Replay display sequences through MarketDataManager (#166)
+# Replay sequences and run operations through MarketDataManager (#166)
 
-This first frontend migration adds `MarketDataManager.replay` and connects the
-production multi-chart replay display path. It reuses `SeriesWindowStore`,
+This frontend migration adds `MarketDataManager.replay` and connects the
+production multi-chart replay display path, run controls and adapter streams. It reuses `SeriesWindowStore`,
 `ReplayChartProjection`, `ReplayTapeViewer` and their existing reveal/ordering
 contracts. It does not replace the replay engine or financial calculations.
 
@@ -33,13 +33,39 @@ identity, consumers, row count and pending/total requests; they contain no accou
 or order state. `MarketDataManager.diagnostics().replay` is also available in live
 workspaces, independently of their market cache.
 
+## Run and adapter operations
+
+`ReplayTrainingRunApp` retains a run-entry operation for loading/preparing its
+run. `useReplayViewerRuntime` retains a separate run-scoped operation for viewer
+and track state, play/pause/step/trade commands, progress, advisory requests,
+preparation and its training-run stream. Selection of another adapter inside the
+same run keeps this operation alive; a run change/unmount releases it. Layout
+effect retention precedes passive request effects and supports StrictMode replay.
+
+The shared adapter pool receives this same manager and the owning run ID. Each
+`ReplayRuntimeLifecycle` owns one adapter operation for capabilities, session
+validation, commands/recovery, report/journal and its canonical stream. Chart
+consumers still share one adapter connection and retain the existing controller
+lease rules. Restart replaces requests/streams within the same operation;
+last-consumer disposal releases the operation.
+
+Operation leases contain no rows, account state or order state. Typed API
+bindings enclose the complete parsed promise, so an HTTP response whose headers
+arrived before cancellation cannot publish a late body. The API clients retain
+their own command IDs, envelope serialization, retries, validation and ordering;
+the manager neither deduplicates commands nor adds retries. Stream resources have
+an additional per-open fence: callbacks and heartbeats from a stopped stream
+cannot resume after another stream opens on the same operation. Final release
+also stops registered resources even if their owning effect has not cleaned up.
+Diagnostics include active operations, pending/total requests and active streams.
+
 ## Scope still open
 
-This is not full dual-Manager acceptance. The source adapter pool/stream,
-run-level play/pause/trade controls, other replay API consumers and the backend
-DataManager facade still use their existing entry points. Routing those through
-the Managers, plus native saved-cursor/full-exit/restart, disconnect recovery and
-financial reference acceptance, remain follow-up work. No #166 checklist is
+This is not full dual-Manager acceptance. Hub/initial-market preparation, review
+and rail-specific API consumers, indicator/history providers outside the managed
+cell path, and the backend DataManager facade remain follow-up work. Native
+saved-cursor/full-exit/restart, disconnect recovery and financial reference
+acceptance also remain open. No #166 checklist is
 declared fully passed by this patch.
 
 The base includes #175 and #173. The separately developing #174 B130 public-block
