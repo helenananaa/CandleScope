@@ -1,0 +1,796 @@
+{
+  "passed": true,
+  "source": "public OKX recording from B130 latest-main native acceptance",
+  "fixture_sha256": "900095946177f206d2765773b93a6d49fba478fa397c4491dd0c64bed235b204",
+  "source_rows": 513,
+  "requested_range": [
+    1749081600000,
+    1793404800000
+  ],
+  "pages": [
+    {
+      "label": "cold-first",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1749081600000,
+          1771200000000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1771200000000,
+          "direction": "asc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 256,
+        "cache_hits": 0
+      },
+      "elapsed_ms": 1924.696,
+      "candle_row_reads": 1
+    },
+    {
+      "label": "warm-first",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1749081600000,
+          1771200000000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1771200000000,
+          "direction": "asc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 0,
+        "cache_hits": 17
+      },
+      "elapsed_ms": 4.84,
+      "candle_row_reads": 0
+    },
+    {
+      "label": "asc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1749081600000,
+          1771200000000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1771200000000,
+          "direction": "asc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 0,
+        "cache_hits": 17
+      },
+      "elapsed_ms": 4.817,
+      "candle_row_reads": 0
+    },
+    {
+      "label": "asc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1771200000000,
+          1793318400000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1793318400000,
+          "direction": "asc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 256,
+        "cache_hits": 0
+      },
+      "elapsed_ms": 16.122,
+      "candle_row_reads": 1
+    },
+    {
+      "label": "asc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1793318400000,
+          1793404800000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": null,
+        "blocks": 1,
+        "storage_rows": 1,
+        "cache_hits": 0
+      },
+      "elapsed_ms": 4.273,
+      "candle_row_reads": 1
+    },
+    {
+      "label": "desc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1771286400000,
+          1793404800000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1771286400000,
+          "direction": "desc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 256,
+        "cache_hits": 15
+      },
+      "elapsed_ms": 12.747,
+      "candle_row_reads": 1
+    },
+    {
+      "label": "desc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1749168000000,
+          1771286400000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": {
+          "source": {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1d",
+            "exchange": "okx",
+            "market_type": "futures",
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset"
+          },
+          "start_ms": 1749081600000,
+          "end_ms": 1793404800000,
+          "position_ms": 1749168000000,
+          "direction": "desc",
+          "revisions": [
+            {
+              "series": {
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "1d",
+                "exchange": "okx",
+                "market_type": "futures",
+                "provider_id": "okx",
+                "venue": "okx",
+                "asset_class": "crypto",
+                "series_variant": "native",
+                "price_adjustment": "raw",
+                "session_variant": "continuous",
+                "volume_semantics": "base_asset"
+              },
+              "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+              "version": 513
+            }
+          ],
+          "required_fields": [
+            "close",
+            "high",
+            "low",
+            "open",
+            "volume"
+          ]
+        },
+        "blocks": 17,
+        "storage_rows": 256,
+        "cache_hits": 15
+      },
+      "elapsed_ms": 13.336,
+      "candle_row_reads": 1
+    },
+    {
+      "label": "desc",
+      "receipt": {
+        "source": {
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1d",
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset"
+        },
+        "requested_range": [
+          1749081600000,
+          1793404800000
+        ],
+        "page_range": [
+          1749081600000,
+          1749168000000
+        ],
+        "revisions": [
+          {
+            "series": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1d",
+              "exchange": "okx",
+              "market_type": "futures",
+              "provider_id": "okx",
+              "venue": "okx",
+              "asset_class": "crypto",
+              "series_variant": "native",
+              "price_adjustment": "raw",
+              "session_variant": "continuous",
+              "volume_semantics": "base_asset"
+            },
+            "domain": "d126:4bb1fe2c5de746ac89fce116af2208d6",
+            "version": 513
+          }
+        ],
+        "unavailable_ranges": [],
+        "missing_fields": [],
+        "complete": true,
+        "continuation": null,
+        "blocks": 1,
+        "storage_rows": 1,
+        "cache_hits": 0
+      },
+      "elapsed_ms": 4.276,
+      "candle_row_reads": 1
+    }
+  ],
+  "compared_blocks": 104,
+  "compared_fields": 936,
+  "max_absolute_error": {
+    "open": 0,
+    "close": 0,
+    "high": 0,
+    "low": 0,
+    "volume": 2.3283064365386963e-10,
+    "quote_volume": 1.52587890625e-05
+  },
+  "amendment_expires_cursor": true,
+  "delete_expires_cursor": true,
+  "delete_unavailable_ranges": [
+    [
+      1750032000000,
+      1750118400000
+    ]
+  ],
+  "reader": {
+    "reads": 12,
+    "accepted_pages": 10,
+    "partial_pages": 1,
+    "failures": 2,
+    "cancellations": 0,
+    "storage_reads": 8,
+    "storage_rows": 1537,
+    "cache_hits": 64,
+    "accepted_blocks": 138,
+    "max_page_rows": 256,
+    "block_rows": 16
+  },
+  "blocks_before_shutdown": {
+    "estimated_bytes": 52258,
+    "entries": 17,
+    "retired_entries": 0,
+    "leases": 0,
+    "views": 0,
+    "inflight": 0,
+    "hits": 64,
+    "builds": 74,
+    "joins": 0,
+    "evictions": 0,
+    "invalidations": 57,
+    "stale_builds": 0,
+    "failures": 0,
+    "resets": 1,
+    "last_error": null,
+    "generation": 1,
+    "closed": false,
+    "limits": {
+      "bytes": 16777216,
+      "entries": 1024,
+      "flights": 8,
+      "views": 64,
+      "leases": 256,
+      "dependencies": 16,
+      "ranges": 128
+    }
+  },
+  "blocks_after_shutdown": {
+    "estimated_bytes": 0,
+    "entries": 0,
+    "retired_entries": 0,
+    "leases": 0,
+    "views": 0,
+    "inflight": 0,
+    "hits": 64,
+    "builds": 74,
+    "joins": 0,
+    "evictions": 0,
+    "invalidations": 57,
+    "stale_builds": 0,
+    "failures": 0,
+    "resets": 2,
+    "last_error": null,
+    "generation": 2,
+    "closed": true,
+    "limits": {
+      "bytes": 16777216,
+      "entries": 1024,
+      "flights": 8,
+      "views": 64,
+      "leases": 256,
+      "dependencies": 16,
+      "ranges": 128
+    }
+  },
+  "reserved_bytes_after_shutdown": 0
+}
