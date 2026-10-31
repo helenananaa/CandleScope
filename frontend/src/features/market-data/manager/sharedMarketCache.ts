@@ -155,6 +155,11 @@ export class SharedMarketCache {
     if (!entry.health.snapshot(serverVersion, state.health)) throw new Error("Obsolete market snapshot; fresh read required");
     if (previousVersion && (!entry.health.version || (serverVersion && !sameStream(previousVersion, serverVersion)))) {
       entry.proofs = []; entry.serverRowVersions.clear(); entry.expectedClosedTime = null; entry.inputInvalidation += 1;
+    } else if (previousVersion && serverVersion && serverVersion.barrier > previousVersion.barrier) {
+      // A newer snapshot can cross a critical event that this client never
+      // received. It proves only its returned range, not older cached history
+      // or indicator inputs outside that range. Keep rows as provisional.
+      entry.proofs = []; entry.inputInvalidation += 1;
     }
     const endpoint = response.endpoint ?? "history";
     const inputQuality = assessKlineQuality(response, endpoint);

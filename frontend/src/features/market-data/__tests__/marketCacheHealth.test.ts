@@ -143,6 +143,18 @@ test("targeted backfill preserves nonintersecting historical coverage", () => {
   assert.equal(cache.read(series, { from: 60, to: 120 }).complete, false);
 });
 
+test("a snapshot crossing unseen critical events revokes proofs and input stamps outside its returned range", () => {
+  const cache = healthy();
+  const oldInput = cache.captureVersion(series, { from: 60, to: 60 });
+  // A correction to time=60 was not delivered. A later HTTP read only covers
+  // time=120, so its newer barrier cannot validate the unchanged cached row.
+  read(cache, wire(3, 2), [row(120)]);
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, true);
+  assert.equal(cache.read(series, { from: 60, to: 60 }).complete, false);
+  assert.equal(oldInput.isCurrent(), false);
+  assert.notEqual(cache.planHistory(series, 2).action, "reuse");
+});
+
 test("production Feed switching consumes a healthy warm series with no HTTP or physical resubscribe", async t => {
   let calls = 0, currentSequence = 0, physical = 0, closeCount = 0, options!: KlineStreamOptions, controller!: KlineStreamController;
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
