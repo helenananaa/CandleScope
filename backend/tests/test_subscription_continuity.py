@@ -674,3 +674,27 @@ async def test_deleted_partial_repair_cannot_complete_strict_gap(tmp_path, monke
         assert store.query_bars(**IDENTITY, start_ms=T + 60_000, end_ms=T + 60_000) == []
     finally:
         await _close(dm, factory)
+
+
+@pytest.mark.anyio
+async def test_next_natural_close_survives_repair_of_older_gap(tmp_path, monkeypatch):
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch)
+    strict, errors, _ = capture(dm)
+    live, live_errors, _ = capture(dm, policy="gap_aware")
+    try:
+        await factory.emit(T, 99)
+        await _until(lambda: len(closed(strict)) == 1)
+        await factory.emit(T + 180_000, 103, closed=False)
+        await _history_repair(dm, store, T + 60_000, 100)
+        await _history_repair(dm, store, T + 120_000, 102)
+        await _until(lambda: len(closed(strict)) == 3)
+        # The forming candle was acquired before historical revisions, but its
+        # input lies entirely after the repaired range. Its natural close must
+        # still be delivered, including when composed with D126 fencing.
+        await factory.emit(T + 180_000, 103)
+        await _until(lambda: len(closed(strict)) == 4 or bool(errors))
+        assert errors == live_errors == []
+        assert closed(strict) == [T // 1000 + i * 60 for i in range(4)]
+        assert closed(live) == [T // 1000, T // 1000 + 180]
+    finally:
+        await _close(dm, factory)
