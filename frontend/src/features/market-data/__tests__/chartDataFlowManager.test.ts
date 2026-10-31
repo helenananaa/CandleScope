@@ -5,7 +5,8 @@ import { MarketDataManager } from "../manager/marketDataManager.js";
 import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
 import { IndicatorDataManager, type IndicatorDataManagerOptions } from "../../indicators/indicatorDataManager.js";
 import { registerSharedMarketCache } from "../../cache-gc/sharedMarketCacheOwner.js";
-import { buildIndicatorCacheContext, getCachedIndicatorResult, resetIndicatorResultCache } from "../../indicators/indicatorResultCacheStore.js";
+import { buildIndicatorCacheContext, cacheIndicatorSnapshot, getCachedIndicatorResult, resetIndicatorResultCache } from "../../indicators/indicatorResultCacheStore.js";
+import { normalizeParsedIndicatorPayload } from "../../indicators/indicatorPayloadRuntime.js";
 import { buildIndicatorOhlcv, buildIndicatorOhlcvSignature } from "../../indicators/indicatorComputeRuntime.js";
 import { cachedIndicatorComputeResult } from "../../indicators/indicatorCachedCompute.js";
 import { parseIndicatorPayloadEnvelope } from "../../indicators/indicatorContracts.js";
@@ -117,4 +118,28 @@ test("unhealthy targets never compute; targets and enabled definitions have fixe
   const definitions = parsed.indicators;
   assert.equal(definitions.length, 8); assert.ok(definitions.every(item => item.id.startsWith("ok-")));
   assert.equal(indicatorWarmPlanKey(plan), indicatorWarmPlanKey({ ...plan, indicators: plan.indicators.map(item => ({ ...item, lines: [] })) }));
+});
+
+test("hosted warming certifies only the returned range and retains its backend revision", async t => {
+  const response = { ...payload, range: { start: 180, end: 30000 },
+    dataRevision: { serverEpoch: "range-server", correctionRevision: "4", closedThrough: 30000 } };
+  const { warm, flow, context } = setup(t, { range: async ({ requests }) => ({ ok: true,
+    results: requests.map(request => ({ clientId: request.clientId, payload: response })) }) });
+  warm(); await tick();
+  const cached = getCachedIndicatorResult(hosted, context)!;
+  assert.equal(cached.computedSegments[0]?.start, 180, "unreturned history must remain unproven");
+  assert.equal(cached.revision?.serverEpoch, "range-server");
+  assert.equal(cached.revision?.correctionRevision, "4");
+  assert.equal(flow.health(hosted, context, { start: 60, end: 30000 }).covered, false);
+});
+
+test("a hosted warm patch preserves still-current output outside its actual response range", async t => {
+  const { warm, context } = setup(t, { range: async ({ requests }) => ({ ok: true,
+    results: requests.map(request => ({ clientId: request.clientId, payload: { ...payload, range: { start: 180, end: 30000 } } })) }) });
+  const old = parseIndicatorPayloadEnvelope({ ok: true, lines: [{ id: "ema", data: [{ time: 60, value: 10 }] }] });
+  assert.ok(cacheIndicatorSnapshot(hosted, context, normalizeParsedIndicatorPayload(old, hosted.id), [], { range: { start: 60, end: 60 } }));
+  warm(); await tick();
+  const cached = getCachedIndicatorResult(hosted, context)!;
+  assert.deepEqual(cached.normalized.lines[0]?.data.map(point => point.time), [60, 30000]);
+  assert.deepEqual(cached.computedSegments.map(segment => [segment.start, segment.end]), [[60, 60], [180, 30000]]);
 });

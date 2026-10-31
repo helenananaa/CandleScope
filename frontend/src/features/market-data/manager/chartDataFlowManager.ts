@@ -9,8 +9,8 @@ import { buildIndicatorComputeParams, buildIndicatorOhlcv, buildIndicatorOhlcvSi
 import { resolveLocalIndicatorExecution } from "../../indicators/indicatorComputeJobRuntime.js";
 import { buildHostedSubscriptionMessage } from "../../indicators/indicatorWsRuntime.js";
 import { normalizeParsedIndicatorPayload } from "../../indicators/indicatorPayloadRuntime.js";
-import { buildIndicatorCacheContext, cacheIndicatorSnapshot, getCachedIndicatorResult } from "../../indicators/indicatorResultCacheStore.js";
-import { indicatorRangeCovered } from "../../indicators/indicatorRangeCoverage.js";
+import { buildIndicatorCacheContext, cacheIndicatorSnapshot, getCachedIndicatorResult, replaceCachedIndicatorRange } from "../../indicators/indicatorResultCacheStore.js";
+import { indicatorRangeCovered, normalizeIndicatorRange, normalizeIndicatorRevision } from "../../indicators/indicatorRangeCoverage.js";
 import { indicatorRequestKey } from "../../indicators/indicatorRequestBroker.js";
 
 export interface IndicatorWarmPlan { indicators: IndicatorDefinition[]; candleUpColor: string; candleDownColor: string }
@@ -179,8 +179,20 @@ export class ChartDataFlowManager {
           signal: job.controller.signal, reason: "prewarm" }, true);
       } else return;
       if (payload.ok === false || job.controller.signal.aborted || !inputVersion.isCurrent() || this.plans.get(job.owner) !== job.plan) return;
-      if (cacheIndicatorSnapshot(indicator, context, normalizeParsedIndicatorPayload(payload, indicator.id), payload.param_schema,
-        { inputVersion, range: resolution.kind === "hosted" ? range : { start: Number(rows[0]!.time), end: Number(rows.at(-1)!.time) } })) this.warmed += 1;
+      const normalized = normalizeParsedIndicatorPayload(payload, indicator.id);
+      if (resolution.kind === "hosted") {
+        // A successful backend read may cover less than the request. Retain
+        // that exact proof/revision and preserve valid output outside it.
+        const returned = normalizeIndicatorRange(payload.range) ?? range;
+        const covered = normalizeIndicatorRange({ start: Math.max(range.start, returned.start), end: Math.min(range.end, returned.end) });
+        if (!covered) return;
+        const revision = normalizeIndicatorRevision(payload);
+        const stored = getCachedIndicatorResult(indicator, context)
+          ? replaceCachedIndicatorRange(indicator, context, normalized, covered, { revision })
+          : cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema, { inputVersion, range: covered, revision });
+        if (stored) this.warmed += 1;
+      } else if (cacheIndicatorSnapshot(indicator, context, normalized, payload.param_schema,
+        { inputVersion, range: { start: Number(rows[0]!.time), end: Number(rows.at(-1)!.time) } })) this.warmed += 1;
     }));
   }
 

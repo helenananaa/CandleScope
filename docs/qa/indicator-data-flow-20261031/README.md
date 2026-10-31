@@ -4,7 +4,7 @@ Base: merged #168 (`bab267477c2c834fd98c1cd77e5d774a4d69b6ea`).
 Source identity: [source-manifest.json](source-manifest.json).
 Contract: [INDICATOR_DATA_FLOW.md](../../architecture/INDICATOR_DATA_FLOW.md).
 
-Full local `npm run check` passed: 4,626 frontend tests, one isolated performance
+Full local `npm run check` passed: 4,628 frontend tests, one isolated performance
 gate, 123 desktop tests, architecture/plugin/i18n checks, types, lint and build.
 The existing `SingleChartPanes` effect-cleanup lint warning and bundle-size
 warnings remain. Dependencies match the reviewed #168 lockfile environment.
@@ -43,3 +43,12 @@ and browser workers. Market and hosted calculation transports are controlled.
 These files are not real-exchange observations, native installed-package
 acceptance, Windows qualification, a long-duration soak, or the full 157-item
 acceptance matrix. #168's immutable installed-package evidence is separate.
+
+## PR #172 review regression
+
+A hosted warm response may contain less history than requested. Warming now
+records the intersection of the returned/requested ranges and the backend
+revision, and patches an existing current cache instead of discarding output
+outside the returned range. Both added regression cases failed on the original
+PR and pass with the fix; all 20 demand/input-binding/warming tests pass.
+Both production Chromium receipts above were rerun after this correction.

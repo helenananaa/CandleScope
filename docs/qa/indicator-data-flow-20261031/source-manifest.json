@@ -20,8 +20,8 @@
     "frontend/src/features/indicators/indicatorWsRuntime.ts": "c31e28ab5ecd6def6e588003e571ee7817492b4d5642c97d921a6b61a6aae23f",
     "frontend/src/features/indicators/useIndicatorRuntime.ts": "0c347605d6faa2666b27be9024730de77b113584a9cfc3fbff7ef909b8bea6cd",
     "frontend/src/features/market-data/MarketDataWorkspaceProvider.tsx": "e75906bd363a2d87bb3557c79c19bf83b10e161b7a6bfa3650c6cf94adfaf2eb",
-    "frontend/src/features/market-data/__tests__/chartDataFlowManager.test.ts": "5ebf2ffb0550898fa990c722ba4c0bda51ef2e3336ac192b629661d91481a81f",
-    "frontend/src/features/market-data/manager/chartDataFlowManager.ts": "2f80d4af3d5bfc88626c36b46163229ef3d459dc360ea25cfc16f56b4e75e9e8",
+    "frontend/src/features/market-data/__tests__/chartDataFlowManager.test.ts": "afe09b5095b97c99b698a8cbfb90b9b6e4e594790426f10a325ad19bba613ec9",
+    "frontend/src/features/market-data/manager/chartDataFlowManager.ts": "918ab46090e7da79d82d64a49156d6d39f3537fd88e72cd617d43d5e4d0916c5",
     "frontend/src/features/market-data/manager/chartMarketController.ts": "3c53c02d7b02ea53eac996726fdb692aad9780b4cab40fa42383200e6b91725b",
     "frontend/src/features/market-data/marketDataWorkspaceContext.ts": "93ff200a8e3b9ea59ec795b768d9cd5fcd2d15299488daabfafe772727223174",
     "frontend/src/features/market-data/marketDataWorkspaceLifecycle.ts": "3673f58d78a7276db988f9ad628a0ff04ff0585a69b7409cace6b6604d7d6f2d"
