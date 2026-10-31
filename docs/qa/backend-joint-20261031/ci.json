@@ -1,0 +1,132 @@
+{
+  "checked_at_utc": "2026-10-31 06:44:50 UTC",
+  "runs": [
+    {
+      "id": 41177200380,
+      "name": "CCXT integration",
+      "head": "5a68fe016865878e4f7c7647abd244d122a33be0",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177200380",
+      "jobs": [
+        {
+          "id": 124467102482,
+          "name": "pinned-fork",
+          "status": "completed",
+          "conclusion": "success",
+          "failed": []
+        }
+      ]
+    },
+    {
+      "id": 41177200334,
+      "name": "macOS desktop",
+      "head": "5a68fe016865878e4f7c7647abd244d122a33be0",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177200334",
+      "jobs": [
+        {
+          "id": 124467103905,
+          "name": "package (x64)",
+          "status": "in_progress",
+          "conclusion": null,
+          "step": "Check frontend and desktop host",
+          "failed": []
+        },
+        {
+          "id": 124467104033,
+          "name": "package (arm64)",
+          "status": "in_progress",
+          "conclusion": null,
+          "step": "Check frontend and desktop host",
+          "failed": []
+        }
+      ]
+    },
+    {
+      "id": 41177200238,
+      "name": "macOS desktop",
+      "head": "54010214b8a2936048b579c773f5201961fcf1e0",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177200238",
+      "jobs": [
+        {
+          "id": 124467103600,
+          "name": "package (arm64)",
+          "status": "in_progress",
+          "conclusion": null,
+          "step": "Package native macOS app, DMG and ZIP",
+          "failed": []
+        },
+        {
+          "id": 124467103697,
+          "name": "package (x64)",
+          "status": "in_progress",
+          "conclusion": null,
+          "step": "Check frontend and desktop host",
+          "failed": []
+        }
+      ]
+    },
+    {
+      "id": 41177200119,
+      "name": "CCXT integration",
+      "head": "54010214b8a2936048b579c773f5201961fcf1e0",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177200119",
+      "jobs": [
+        {
+          "id": 124467101690,
+          "name": "pinned-fork",
+          "status": "completed",
+          "conclusion": "success",
+          "failed": []
+        }
+      ]
+    },
+    {
+      "id": 41177198975,
+      "name": "CCXT integration",
+      "head": "0d348ab5508ed0f92c3bd5609497b19e59f775d0",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177198975",
+      "jobs": [
+        {
+          "id": 124467098213,
+          "name": "pinned-fork",
+          "status": "completed",
+          "conclusion": "success",
+          "failed": []
+        }
+      ]
+    },
+    {
+      "id": 41177198896,
+      "name": "macOS desktop",
+      "head": "0d348ab5508ed0f92c3bd5609497b19e59f775d0",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177198896",
+      "jobs": [
+        {
+          "id": 124467176891,
+          "name": "package (x64)",
+          "status": "queued",
+          "conclusion": null,
+          "failed": []
+        },
+        {
+          "id": 124467177007,
+          "name": "package (arm64)",
+          "status": "queued",
+          "conclusion": null,
+          "failed": []
+        }
+      ]
+    }
+  ]
+}

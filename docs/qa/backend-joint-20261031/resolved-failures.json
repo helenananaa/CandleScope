@@ -1,0 +1,28 @@
+{
+  "source_receipt": {
+    "before_log": "output/backend-joint-20261031/source-receipt-before.log",
+    "failed": 2,
+    "description": "Committed REST history remained pending for market startup; transaction had no matching delivery acknowledgement."
+  },
+  "original_native_4d": {
+    "report": "output/backend-joint-20261031/native-okx-staged/report.json",
+    "failed": "4d real history timed out",
+    "delivery_pending": 1643,
+    "description": "Historical source replay repeatedly generated old realtime closes, revision rejection and recovery."
+  },
+  "interrupted_history_native_restart": {
+    "report": "output/backend-joint-20261031/native-okx-receipts/report.json",
+    "failed": "durable delivery degraded after restart",
+    "pending": 85,
+    "deferred_failures": 16,
+    "description": "Cancelled background pages had not reached projection; history owner now prevents their replay as live events."
+  },
+  "initial_harness_invocation": {
+    "description": "stdin-based pytest entry was incompatible with multiprocessing; rerun as python -m pytest, same selection retained."
+  },
+  "superseded_ci": {
+    "url": "https://github.com/helenananaa/CandleScope/actions/runs/41175080152",
+    "job_id": 124460904251,
+    "description": "Concurrent frontend cache timing test exceeded 100 ms (122.9 ms); obsolete head cancelled by later product fixes. Threshold unchanged; final heads checked separately."
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "source_identity": "source-identity.json",
+  "checks": "checks.json",
+  "files": [
+    {
+      "path": "docs/qa/PR138_144_148_INTEGRATION_20261031.md",
+      "bytes": 10770,
+      "sha256": "e126784cfdc3bd8c96407fdbdf9094f504b0f0b8e3ddc4f2e958c8550a11738a"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/README.md",
+      "bytes": 2827,
+      "sha256": "5a6f5566cff9d107917bf767c666ae3f0378c68bc1fa4234a39bc9a2b0f2c9a6"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/browser-history.json",
+      "bytes": 2186,
+      "sha256": "063b2537fd3ee4d2b5ef25cbe203478631dab1519f389e9d87e1ae6636faae4c"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/checks.json",
+      "bytes": 585,
+      "sha256": "0dd055e0414458248c842e6821459f02533f3a6caba582ed541cfbb0e38bdf4f"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/ci.json",
+      "bytes": 3613,
+      "sha256": "9d370a00db7602aa793b508e76ce16ebb9c5aede46a6dc41c4f7e12a750dc240"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/history-benchmark.json",
+      "bytes": 15474,
+      "sha256": "7596de5fe0920b431384d80d23c8675446015cfc34537505985e7f9329c405b2"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/joint-files.json",
+      "bytes": 4628,
+      "sha256": "31d91c057dbeb66a45798aa14630e60d7a4c302db36e118720fd5ad0f6ad77f5"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/live-okx.json",
+      "bytes": 230923,
+      "sha256": "01ea4aed7c07f0253e6152fbeaa7f72d32c71f3dbd08ff43b1ce700011914df9"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/live_probe.py",
+      "bytes": 10021,
+      "sha256": "410d9ca223f82076da5265c086c133f7b7fedd079f0d7b5ccf4e3ad686813130"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-cold.png",
+      "bytes": 193092,
+      "sha256": "2bfdfebfe2430dab2774e8a9c737b03c6718c4d904a8aadfc6ec1493446977d1"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-diagnostics.json",
+      "bytes": 12103,
+      "sha256": "29b8230a7b98ecf772b264917095d11ff038a7f75cc4d62bc51dd6b8faf6e386"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-final.png",
+      "bytes": 195927,
+      "sha256": "e116ad9396822f030e7bb5dbb6d2822dfddf821237e0d8b4725c7b72a2109801"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-market-settle.json",
+      "bytes": 27443,
+      "sha256": "12db4381b51bfdc3ef63c720cb1b585f9599ab083d82c252c3c8e4a6f82d2136"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-package.json",
+      "bytes": 213,
+      "sha256": "e4d1c5cb23075702ad52b8c3d2a598bb293c822330a88774bc77d21000bb12c6"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native-resources.json",
+      "bytes": 896,
+      "sha256": "90ca78d4284cc72dba166ab541d650ae46f7f76052fb7abd78e2e072348a8498"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native.json",
+      "bytes": 91400,
+      "sha256": "8ae5789f4b69ddff4b7f19b8b9c5f0da5b37b22fa81cb15d0e3252c837e8591a"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native_acceptance.mjs",
+      "bytes": 12032,
+      "sha256": "d7ba2a3b71287bcef0ab905f46299eae1400b13e3eff2d4830dd49c9cd9718e6"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/native_market_settle.mjs",
+      "bytes": 9114,
+      "sha256": "274e3eef378254753d7ece7db3fc4f04e7f69d1ac2aff5bc3f42358b188392d4"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/resolved-failures.json",
+      "bytes": 1424,
+      "sha256": "b0d4aa0c53247175e0a31820570d9e13bcf50ff9980d0537f67172f9993e29ed"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/run_backend.py",
+      "bytes": 806,
+      "sha256": "697c1f8867d3a31e8fe2556a861d60cbd427970c932afb5d31e11f193ef089e0"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/source-identity.json",
+      "bytes": 636,
+      "sha256": "bdd1e39cfa3253d87bb60d4325f92963430089332493b162c880d1a65f07fd3e"
+    }
+  ]
+}

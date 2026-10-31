@@ -1,0 +1,109 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "scope": "Real React lifecycle, SeriesDataFeed, scheduler, status UI and isolated JS indicator worker; synthetic source rows",
+        "requests": {
+          "45m": [
+            500,
+            1500
+          ],
+          "90m": [
+            500,
+            1500
+          ],
+          "2d": [
+            500,
+            1500
+          ],
+          "3d": [
+            500,
+            1500
+          ],
+          "4d": [
+            500,
+            1500
+          ],
+          "5d": [
+            500,
+            1500
+          ]
+        },
+        "publications": {
+          "45m": [
+            500,
+            1500
+          ],
+          "90m": [
+            500,
+            1500
+          ],
+          "2d": [
+            500,
+            1500
+          ],
+          "3d": [
+            500,
+            1500
+          ],
+          "4d": [
+            500,
+            1500
+          ],
+          "5d": [
+            500,
+            1500
+          ]
+        },
+        "indicators": {
+          "45m": [
+            128,
+            500,
+            1500
+          ],
+          "90m": [
+            128,
+            500,
+            1500
+          ],
+          "2d": [
+            128,
+            500,
+            1500
+          ],
+          "3d": [
+            128,
+            500,
+            1500
+          ],
+          "4d": [
+            128,
+            500,
+            1500
+          ],
+          "5d": [
+            128,
+            500,
+            1500
+          ]
+        },
+        "checks": [
+          "128 visible before hydration",
+          "500 and 1500 atomic publications",
+          "foreground pauses the next stage",
+          "other chart remains independent",
+          "SMA worker output matches arithmetic",
+          "preparation label clears"
+        ]
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

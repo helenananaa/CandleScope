@@ -1,0 +1,41 @@
+{
+  "method": "2-second psutil samples; sum of resident bytes across app and descendants, shared pages may be double-counted; not a budget cap or comparative benchmark",
+  "phases": {
+    "cold": {
+      "samples": 30,
+      "total_rss_mib": {
+        "min": 1154.3,
+        "median": 1420.1,
+        "max": 1706.1
+      },
+      "max_processes": 8
+    },
+    "restart": {
+      "samples": 11,
+      "total_rss_mib": {
+        "min": 1198.2,
+        "median": 1344.2,
+        "max": 1384.1
+      },
+      "max_processes": 8
+    },
+    "final-restart": {
+      "samples": 4,
+      "total_rss_mib": {
+        "min": 1114.0,
+        "median": 1237.9,
+        "max": 1303.8
+      },
+      "max_processes": 8
+    },
+    "market-settle": {
+      "samples": 8,
+      "total_rss_mib": {
+        "min": 1451.0,
+        "median": 1623.7,
+        "max": 1632.0
+      },
+      "max_processes": 8
+    }
+  }
+}

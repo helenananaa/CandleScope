@@ -1,0 +1,407 @@
+{
+  "verified-diagnostics": {
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 769590,
+      "reserved_bytes": 962560,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 1170,
+          "series": 7,
+          "estimated_bytes": 677430,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 6,
+          "closed_bars": 5,
+          "components": 21,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 32768,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 58,
+          "queued_events": 0,
+          "estimated_bytes": 59392,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 962560,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 0,
+      "rejected": 0
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  },
+  "final-restart-diagnostics": {
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 1054344,
+      "reserved_bytes": 2017280,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 1752,
+          "series": 7,
+          "estimated_bytes": 1014408,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 3,
+          "closed_bars": 3,
+          "components": 14,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 20480,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 19,
+          "queued_events": 0,
+          "estimated_bytes": 19456,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 2017280,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 0,
+      "rejected": 0
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  },
+  "restart-diagnostics": {
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 260894,
+      "reserved_bytes": 761856,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 394,
+          "series": 1,
+          "estimated_bytes": 228126,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 1,
+          "closed_bars": 3,
+          "components": 10,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 14336,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 18,
+          "queued_events": 0,
+          "estimated_bytes": 18432,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 761856,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 0,
+      "rejected": 0
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  },
+  "cold-diagnostics": {
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 661552,
+      "reserved_bytes": 258048,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 1040,
+          "series": 11,
+          "estimated_bytes": 602160,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 8,
+          "closed_bars": 0,
+          "components": 5,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 13312,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 45,
+          "queued_events": 0,
+          "estimated_bytes": 46080,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 258048,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 0,
+      "rejected": 0
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  },
+  "market-settle-diagnostics": {
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 1745354,
+      "reserved_bytes": 0,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 2926,
+          "series": 8,
+          "estimated_bytes": 1694154,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 7,
+          "closed_bars": 3,
+          "components": 17,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 27648,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 23,
+          "queued_events": 0,
+          "estimated_bytes": 23552,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 0,
+      "rejected": 0
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  }
+}
