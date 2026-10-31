@@ -41,7 +41,7 @@ function exactVictim(): GcVictim {
           metaRevision: current.metaRevision,
         }],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {

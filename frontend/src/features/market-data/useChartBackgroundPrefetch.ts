@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { symbolKey } from "../../utils/symbolKey.js";
-import { getFullCacheEntry } from "../watchlist-full-cache/watchlistFullCacheStore.js";
-import type { FullCacheStatus } from "../watchlist-full-cache/watchlistFullCacheTypes.js";
+import type { MarketDataService } from "./marketDataService.js";
+import type { MarketWarmLease } from "./manager/marketWarmQueue.js";
 import type { UseChartBackgroundPrefetchOptions } from "./marketDataTypes.js";
 import {
   canonicalizeIntervalValue,
@@ -38,7 +38,7 @@ export class ChartBackgroundPrefetchPriorityGate extends ForegroundPreloadGate {
 export interface BackgroundPrefetchSkipInput {
   activeInterval: string;
   fullCacheRows?: number;
-  fullCacheStatus?: FullCacheStatus | null;
+  fullCacheStatus?: "idle" | "loading" | "warm" | "stale" | "partial" | "live" | "error" | null;
   hasMemoryCache: boolean;
   inFlight: boolean;
   interval: string;
@@ -200,7 +200,9 @@ export function useChartBackgroundPrefetch({
   priorityGate,
   isForegroundBusy,
   schedulerOwner,
+  data,
 }: UseChartBackgroundPrefetchOptions & {
+  data?: MarketDataService | null;
   priorityGate?: ForegroundPreloadGate;
   isForegroundBusy?: () => boolean;
   schedulerOwner?: string;
@@ -215,7 +217,7 @@ export function useChartBackgroundPrefetch({
 
   useEffect(() => {
     if (!enabled) {
-      prefetchPriority.yieldToForeground();
+      if (!data) prefetchPriority.yieldToForeground();
       return undefined;
     }
     // Becoming eligible marks the end of foreground ownership, not the start
@@ -224,6 +226,7 @@ export function useChartBackgroundPrefetch({
     // already-admitted active-chart hydration request.
     prefetchPriority.requireQuietDwell();
     let cancelled = false;
+    let sharedWarm: MarketWarmLease | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const currentSymbolKey = symbolKey(symbol, marketType, exchange);
     attemptLedgerRef.current.enterScope(currentSymbolKey);
@@ -254,11 +257,11 @@ export function useChartBackgroundPrefetch({
         if (cancelled) return;
         const canonicalInterval = canonicalizeIntervalValue(intv) || intv;
         const key = `${currentSymbolKey}\u0000${canonicalInterval}`;
-        const fullCacheEntry = getFullCacheEntry(currentSymbolKey, canonicalInterval);
+        const shared = data?.read({ symbol, exchange, marketType, interval: canonicalInterval }, { limit: PREFETCH_BAR_LIMIT });
         if (shouldSkipChartBackgroundPrefetch({
           activeInterval,
-          fullCacheRows: fullCacheEntry?.rows.length || 0,
-          fullCacheStatus: fullCacheEntry?.status || null,
+          fullCacheRows: shared?.rows.length || 0,
+          fullCacheStatus: shared?.complete ? "warm" : null,
           hasMemoryCache: hasCache(symbol, canonicalInterval, { marketType, exchange }),
           inFlight: inFlightRef.current.has(key),
           interval: canonicalInterval,
@@ -266,10 +269,10 @@ export function useChartBackgroundPrefetch({
         })) continue;
         const attemptClaim = attemptLedgerRef.current.claimInterval(canonicalInterval);
         if (!attemptClaim) continue;
-        const lease = prefetchPriority.tryAcquirePreload(
+        const lease = data ? null : prefetchPriority.tryAcquirePreload(
           schedulerOwner || "chart-background-prefetch",
         );
-        if (!lease) {
+        if (!data && !lease) {
           attemptLedgerRef.current.releaseInterval(attemptClaim);
           const waitMs = prefetchPriority.waitMs();
           schedule(Number.isFinite(waitMs)
@@ -286,6 +289,18 @@ export function useChartBackgroundPrefetch({
         inFlightRef.current.add(key);
         let nextDelayMs = PREFETCH_INTERVAL_GAP_MS;
         try {
+          if (data) {
+            sharedWarm = data.warm({ exchange, marketType, symbol, interval: canonicalInterval }, {
+              owner: schedulerOwner || "chart-background-prefetch", reason: "frequent", nativeIntervals, limit: targetBarLimit,
+            });
+            const outcome = await sharedWarm.done;
+            sharedWarm = null;
+            if (outcome === "cancelled") attemptLedgerRef.current.releaseInterval(attemptClaim);
+            else if (outcome === "failed") {
+              const retryDelay = attemptLedgerRef.current.retryAfterFailure(attemptClaim);
+              if (retryDelay !== null) nextDelayMs = Math.max(nextDelayMs, retryDelay);
+            } else attemptLedgerRef.current.completeInterval(attemptClaim);
+          } else if (lease) {
           await seriesDataFeed.getLatest(
             { exchange, marketType, symbol, interval: canonicalInterval },
             {
@@ -302,9 +317,10 @@ export function useChartBackgroundPrefetch({
           } else {
             attemptLedgerRef.current.completeInterval(attemptClaim);
           }
+          }
         } catch {
           // Best-effort warming only; active interval loading owns user-visible errors.
-          if (lease.controller.signal.aborted) {
+          if (lease?.controller.signal.aborted) {
             // Foreground work preempted this attempt before it could warm the
             // cache. Let a future genuinely idle window retry it.
             attemptLedgerRef.current.releaseInterval(attemptClaim);
@@ -314,7 +330,7 @@ export function useChartBackgroundPrefetch({
           }
         } finally {
           inFlightRef.current.delete(key);
-          prefetchPriority.release(lease);
+          if (lease) prefetchPriority.release(lease);
         }
         if (!cancelled) schedule(nextDelayMs);
         return;
@@ -327,11 +343,13 @@ export function useChartBackgroundPrefetch({
       : PREFETCH_BUSY_RECHECK_MS);
     return () => {
       cancelled = true;
+      sharedWarm?.release();
       if (timer != null) clearTimeout(timer);
       prefetchPriority.cancelQueued(schedulerOwner || "chart-background-prefetch");
-      prefetchPriority.yieldToForeground();
+      if (!data) prefetchPriority.yieldToForeground();
     };
   }, [
+    data,
     activeInterval,
     enabled,
     exchange,

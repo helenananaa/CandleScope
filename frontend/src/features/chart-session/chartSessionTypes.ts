@@ -166,6 +166,9 @@ export interface UseChartSessionOptions {
   initialSession?: Partial<ChartSession> | null;
   controlledSession?: ChartSession | null;
   onSessionChange?: ((session: ChartSession) => void) | null;
+  onSelectionIntent?: ((transition: ChartSessionTransition) => void) | null;
+  onPreviewSeries?: ((session: ChartSession, nativeIntervals: readonly string[]) => void) | null;
+  onCancelPreview?: (() => void) | null;
   visibleRangeScope?: string | null;
 }
 
@@ -192,6 +195,9 @@ export interface ChartSessionView extends KlineSeriesIdentityInput {
 }
 
 export interface ChartSessionActions {
+  previewSymbol?(input: SymbolCode | SelectSymbolInput): void;
+  previewInterval?(interval: IntervalString): void;
+  cancelPreview?(): void;
   selectSymbol(input: SymbolCode | SelectSymbolInput): void;
   selectInterval(interval: IntervalString): void;
   selectMarketType(marketType: MarketType): void;

@@ -1,0 +1,150 @@
+{
+  "candidate": "0addb792a81160b7d3c3b27b3dfc6d583c17bf62",
+  "surface": "isolated Electron QA host, production renderer",
+  "samples": {
+    "native-hidden-confirmed": {
+      "at": 1793278181526,
+      "lifecycle": {
+        "windowId": "main-window",
+        "state": "visible-secondary",
+        "focused": false,
+        "visible": false,
+        "minimized": true
+      },
+      "windowVisible": false,
+      "runnableFrames": 0,
+      "stores": [
+        {
+          "cell": "cell-1",
+          "bars": 1500,
+          "mismatches": 1
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1500,
+          "mismatches": 1
+        }
+      ],
+      "display": [
+        {
+          "cell": "cell-1",
+          "bars": 1500,
+          "badOHLC": 1
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1500,
+          "badOHLC": 1
+        }
+      ]
+    },
+    "native-hidden-recovered": {
+      "at": 1793278230525,
+      "lifecycle": {
+        "windowId": "main-window",
+        "state": "visible-secondary",
+        "focused": false,
+        "visible": false,
+        "minimized": true
+      },
+      "windowVisible": false,
+      "runnableFrames": 0,
+      "stores": [
+        {
+          "cell": "cell-1",
+          "bars": 1503,
+          "mismatches": 1
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1503,
+          "mismatches": 1
+        }
+      ],
+      "display": [
+        {
+          "cell": "cell-1",
+          "bars": 1500,
+          "badOHLC": 1
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1500,
+          "badOHLC": 1
+        }
+      ]
+    },
+    "native-hidden-correction-complete": {
+      "at": 1793278341523,
+      "lifecycle": {
+        "windowId": "main-window",
+        "state": "visible-secondary",
+        "focused": false,
+        "visible": false,
+        "minimized": true
+      },
+      "windowVisible": false,
+      "runnableFrames": 0,
+      "stores": [
+        {
+          "cell": "cell-1",
+          "bars": 1503,
+          "mismatches": 0
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1503,
+          "mismatches": 0
+        }
+      ],
+      "display": [
+        {
+          "cell": "cell-1",
+          "bars": 1500,
+          "badOHLC": 1
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1500,
+          "badOHLC": 1
+        }
+      ]
+    },
+    "native-restored-no-new-tick": {
+      "at": 1793278384521,
+      "lifecycle": {
+        "windowId": "main-window",
+        "state": "focused",
+        "focused": true,
+        "visible": true,
+        "minimized": false
+      },
+      "windowVisible": true,
+      "runnableFrames": 0,
+      "stores": [
+        {
+          "cell": "cell-1",
+          "bars": 1503,
+          "mismatches": 0
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1503,
+          "mismatches": 0
+        }
+      ],
+      "display": [
+        {
+          "cell": "cell-1",
+          "bars": 1503,
+          "badOHLC": 0
+        },
+        {
+          "cell": "cell-2",
+          "bars": 1503,
+          "badOHLC": 0
+        }
+      ]
+    }
+  }
+}

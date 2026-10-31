@@ -3125,6 +3125,7 @@ export const id = {
   "chart.lineBreakDetail": "Line break {count} garis",
   "chart.fixedBrick": "Bata tetap {size}",
   "settings.diag.chartCache": "Cache lilin grafik utama",
+  "settings.diag.sharedMarketCache": "Cache data pasar bersama",
   "settings.diag.watchlistFullCache": "Cache latar belakang Daftar pantau Full",
   "settings.diag.indicatorCache": "Cache hasil indikator",
   "workbench.kicker": "Data runtime live · snapshot hanya-baca",

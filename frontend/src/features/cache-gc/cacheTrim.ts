@@ -1,5 +1,5 @@
 import { trimIndicatorResultCacheEntries } from "../indicators/indicatorResultCacheStore.js";
-import { trimWatchlistFullCacheEntries } from "../watchlist-full-cache/watchlistFullCacheStore.js";
+import { trimSharedMarketCacheEntries } from "./sharedMarketCacheOwner.js";
 import { gcVictimRelief } from "./cachePolicy.js";
 import type {
   CacheTrimOwnerResult,
@@ -69,13 +69,13 @@ export function executeFrontendGcPlan(plan: GcPlan | null | undefined, {
         })) || [],
         removed: [],
       };
-  const watchlistResult: CacheTrimOwnerResult = trimWatchlistFullCacheEntries(
-    groups["watchlist-full-cache"] || [],
+  const marketResult: CacheTrimOwnerResult = trimSharedMarketCacheEntries(
+    groups["shared-market-cache"] || [],
   );
   const indicatorResult: CacheTrimOwnerResult = trimIndicatorResultCacheEntries(
     groups["indicator-result-cache"] || [],
   );
-  const ownerResults: CacheTrimOwnerResult[] = [chartResult, watchlistResult, indicatorResult];
+  const ownerResults: CacheTrimOwnerResult[] = [chartResult, marketResult, indicatorResult];
   const removedBars = ownerResults.reduce((total, result) => total + (result.removedBars || 0), 0);
   const removedIndicatorPoints = ownerResults.reduce(
     (total, result) => total + (result.removedIndicatorPoints || 0),

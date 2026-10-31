@@ -17,6 +17,7 @@ import type { MarketDataRuntime } from "../../features/market-data/useMarketData
 import { structuralMock } from "../testHelpers.js";
 import { klineDependencyKey, registerCacheResource, unregisterCacheResource } from "../../features/cache-gc/cacheRegistry.js";
 import { getCachedIndicatorMetadata } from "../../features/indicators/indicatorResultCacheStore.js";
+import { buildIndicatorOhlcvSignature } from "../../features/indicators/indicatorComputeRuntime.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 const bars = Array.from({ length: 30 }, (_, index) => ({ time: epochSeconds(1_700_000_000 + 60 * index), open: index + 1, high: index + 2, low: index, close: index + 1, volume: 1 }));
@@ -110,6 +111,9 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     return <span>{runtime.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value}</span>;
   }
   const value = () => latest?.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value;
+  // Production caches identify the exact provided window, including its origin.
+  // Observe the same key instead of accidentally checking the pre-#159 key.
+  const cacheContext = () => ({ ...context, localInputKey: buildIndicatorOhlcvSignature(store.snapshot()) });
   const tick = (close: number) => owner.transact(selection, () => owner.apply("live-js-ticks", { type: "tick", row: { ...bars.at(-1)!, close, high: close + 1, is_closed: false } }));
   async function until(predicate: () => boolean) {
     for (let i = 0; i < 150; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 20)); }
@@ -118,7 +122,7 @@ async function checkLiveWindowTicks(): Promise<string[]> {
   try {
     flushSync(() => root.render(<View />));
     await until(() => value() === 30);
-    assert(getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context), "fixture did not establish native-style cache ownership");
+    assert(getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, cacheContext()), "fixture did not establish native-style cache ownership");
     tick(34);
     assert(store.snapshot() === stableSnapshot, "fixture must exercise the real O(1) in-place tail replacement");
     await until(() => value() === 34);
@@ -146,12 +150,14 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     replace(bars.slice(0, 5));
     await until(() => value() === 5);
     assert(latest!.view.activeIndicators[0]?.lines?.every(line => line.data.every(point => point.time <= bars[4]!.time)), "busy sampling retained the replaced source's future rows");
-    const cachedBeforeHide = getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context)?.contentVersion;
+    const hiddenCacheContext = cacheContext();
+    const cachedBeforeHide = getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, hiddenCacheContext)?.contentVersion;
+    assert(cachedBeforeHide !== undefined, "replacement window did not establish its own cache identity");
     flushSync(() => latest!.actions.toggleVisibility("live"));
     tick(80);
     await new Promise(resolve => setTimeout(resolve, 500));
     assert(document.querySelectorAll("iframe").length === 0
-      && getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context)?.contentVersion === cachedBeforeHide, "hidden script kept running on ticks");
+      && getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, hiddenCacheContext)?.contentVersion === cachedBeforeHide, "hidden script kept running on ticks");
     flushSync(() => latest!.actions.toggleVisibility("live"));
     await until(() => value() === 80);
     flushSync(() => latest!.actions.updateIndicatorScript("live", 'const until=Date.now()+400; while(Date.now()<until) {} plot("stale-owner",bars.map(bar=>bar.close+1000));', "frontend-js"));
@@ -161,7 +167,7 @@ async function checkLiveWindowTicks(): Promise<string[]> {
     owner.activate(owner.prepareSelection("other"));
     owner.activate(owner.prepareSelection("live-js-ticks"));
     await until(() => document.querySelectorAll("iframe").length === 0);
-    assert(value() !== 1080 && !getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, context),
+    assert(value() !== 1080 && !getCachedIndicatorMetadata(latest!.view.activeIndicators[0]!, cacheContext()),
       "an old owned input published or populated shared cache after selection ABA");
     return ["real live runtime follows stable-identity store ticks and makes progress during a continuous stream",
       "continuous ticks cannot starve timeout; failed program stays idle and corrected source recovers",

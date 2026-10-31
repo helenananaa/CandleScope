@@ -9,7 +9,7 @@ import type {
   KlineStreamSocket,
 } from "../klineContracts.js";
 import type { MarketSeries } from "../marketDataTypes.js";
-import { parseKlineStreamMessage } from "./klineStreamSubscription.js";
+import { isPermanentSubscriptionFailure, parseKlineStreamMessage } from "./klineStreamSubscription.js";
 
 const SOCKET_OPEN = 1;
 type StreamSeries = Pick<MarketSeries, "exchange" | "marketType" | "symbol">;
@@ -23,6 +23,7 @@ interface LogicalBatchSubscription {
   closed: boolean;
   serverState: "absent" | "subscribing" | "subscribed";
   activeIntervals: IntervalString[];
+  rejectedIntervals: Set<IntervalString>;
   retryAttempt: number;
   retryTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -87,6 +88,7 @@ export class BatchKlineStreamCoordinator {
       closed: false,
       serverState: "absent" as const,
       activeIntervals: [],
+      rejectedIntervals: new Set<IntervalString>(),
       retryAttempt: 0,
       retryTimer: null,
     };
@@ -98,6 +100,7 @@ export class BatchKlineStreamCoordinator {
       updateIntervals: (intervals) => {
         if (subscription.closed) return;
         subscription.intervals = canonicalIntervals(intervals);
+        for (const rejected of subscription.rejectedIntervals) if (!subscription.intervals.includes(rejected)) subscription.rejectedIntervals.delete(rejected);
         if (subscription.intervals.length === 0) return;
         if (subscription.serverState === "absent") {
           this.sendCommand("subscribe", [subscription]);
@@ -109,8 +112,13 @@ export class BatchKlineStreamCoordinator {
     };
     this.subscriptions.set(clientId, subscription);
     this.ensureSocket();
-    if (this.isOpen() && subscription.intervals.length > 0) {
-      this.sendCommand("subscribe", [subscription]);
+    if (this.isOpen()) {
+      // A new instrument can join an already-open workspace socket. Deliver
+      // the lifecycle after the caller has installed its logical subscriber.
+      queueMicrotask(() => {
+        if (!subscription.closed && this.isOpen()) subscription.options.onOpen?.(subscription.controller);
+      });
+      if (subscription.intervals.length > 0) this.sendCommand("subscribe", [subscription]);
     }
     return subscription.controller;
   };
@@ -209,6 +217,9 @@ export class BatchKlineStreamCoordinator {
     subscriptions: LogicalBatchSubscription[],
   ): void {
     if (!this.isOpen() || subscriptions.length === 0) return;
+    subscriptions = subscriptions.filter(item => action === "unsubscribe"
+      || item.intervals.some(interval => !item.rejectedIntervals.has(interval)));
+    if (!subscriptions.length) return;
     if (action === "subscribe") {
       subscriptions.forEach((item) => { item.serverState = "subscribing"; });
     }
@@ -220,7 +231,7 @@ export class BatchKlineStreamCoordinator {
         exchange: item.series.exchange,
         market_type: item.series.marketType,
         symbol: item.series.symbol,
-        intervals: item.intervals,
+        intervals: action === "unsubscribe" ? item.intervals : item.intervals.filter(interval => !item.rejectedIntervals.has(interval)),
       })),
     }));
     if (!sent && action === "subscribe") {
@@ -299,7 +310,17 @@ export class BatchKlineStreamCoordinator {
     if (!subscription || subscription.closed) return;
     const action = text(record.action);
     const active = stringList(record.active_intervals);
-    const failures = Array.isArray(record.failed) ? record.failed : [];
+    const failures = (Array.isArray(record.failed) ? record.failed : [])
+      .filter(isJsonRecord).map(failure => ({ ...failure,
+        interval: canonicalizeIntervalValue(text(failure.interval)) || text(failure.interval),
+      })).filter(failure => Boolean(failure.interval));
+    for (const failure of failures) {
+      if (isPermanentSubscriptionFailure(failure)) subscription.rejectedIntervals.add(failure.interval);
+    }
+    if (isPermanentSubscriptionFailure({ interval: "", code: text(record.code) })) {
+      for (const interval of subscription.intervals) if (!active.includes(interval)) subscription.rejectedIntervals.add(interval);
+    }
+    for (const interval of active) subscription.rejectedIntervals.delete(interval);
     const type: KlineStreamControlMessage["type"] = (
       record.ok === false && record.status !== "partial"
     )
@@ -310,10 +331,6 @@ export class BatchKlineStreamCoordinator {
         ? "absent"
         : "subscribed";
       subscription.activeIntervals = active;
-      if (subscription.serverState === "subscribed") {
-        subscription.retryAttempt = 0;
-        this.clearRetry(subscription);
-      }
     } else if (action === "update" && type !== "error") {
       subscription.serverState = "subscribed";
       subscription.activeIntervals = active;
@@ -327,22 +344,20 @@ export class BatchKlineStreamCoordinator {
       requested_intervals: [...subscription.intervals],
       intervals: active,
       active_intervals: active,
-      failed: failures
-        .filter(isJsonRecord)
-        .map((failure) => ({
-          ...failure,
-          interval: text(failure.interval),
-        }))
-        .filter((failure) => Boolean(failure.interval)),
+      failed: failures,
     };
     subscription.options.onControlMessage?.(message, subscription.controller);
-    if (action === "subscribe" && subscription.serverState === "absent") {
-      this.scheduleRetry(subscription);
-    }
-    if (action === "subscribe"
-      && subscription.serverState === "subscribed"
+    if (action === "subscribe" && failures.length === 0 && subscription.serverState === "subscribed"
       && JSON.stringify(subscription.activeIntervals) !== JSON.stringify(subscription.intervals)) {
+      // Demand changed while subscribe was in flight. Reconcile immediately;
+      // an actual server rejection below uses cooldown instead of an ACK loop.
       this.sendCommand("update", [subscription]);
+    } else if (action !== "unsubscribe" && subscription.intervals.some(interval => !subscription.activeIntervals.includes(interval)
+      && !subscription.rejectedIntervals.has(interval))) {
+      this.scheduleRetry(subscription);
+    } else {
+      subscription.retryAttempt = 0;
+      this.clearRetry(subscription);
     }
   }
 
@@ -358,13 +373,14 @@ export class BatchKlineStreamCoordinator {
     this.counts.retriesScheduled += 1;
     subscription.retryTimer = setTimeout(() => {
       subscription.retryTimer = null;
-      if (subscription.closed || subscription.serverState !== "absent") return;
+      if (subscription.closed || !subscription.intervals.some(interval => !subscription.activeIntervals.includes(interval)
+        && !subscription.rejectedIntervals.has(interval))) return;
       if (!this.isOpen()) {
         this.ensureSocket();
         return;
       }
       this.counts.retriesSent += 1;
-      this.sendCommand("subscribe", [subscription]);
+      this.sendCommand(subscription.serverState === "subscribed" ? "update" : "subscribe", [subscription]);
     }, delayMs);
   }
 }

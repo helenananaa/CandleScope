@@ -49,6 +49,8 @@ export interface UseSymbolSearchRuntimeOptions {
   currentMarketType?: string | null;
   currentExchange?: string;
   onSelect(selection: SymbolSelection): void;
+  onPreview?: (selection: SymbolSelection) => void;
+  onCancelPreview?: () => void;
   exchangeCatalog?: ExchangeCatalog | null;
   watchlists?: WatchlistGroup[] | null;
   onAddToWatchlist?: ((watchlistId: string, symbolKey: string) => void) | null;
@@ -60,6 +62,8 @@ export function useSymbolSearchRuntime({
   onClose,
   currentExchange = "binance",
   onSelect,
+  onPreview,
+  onCancelPreview,
   exchangeCatalog,
   watchlists,
   onAddToWatchlist,
@@ -147,6 +151,14 @@ export function useSymbolSearchRuntime({
     onClose();
   }, [catalog.stale, onClose, onSelect]);
 
+  const previewSymbol = useCallback((entry: SymbolSearchItem) => {
+    if (catalog.stale) return;
+    const exchange = entry.exchange || "binance";
+    onPreview?.({ symbol: entry.symbol, marketType: entry.marketType, exchange,
+      ...resolveKlineSeriesIdentity(exchange, entry) });
+  }, [catalog.stale, onPreview]);
+  useEffect(() => () => onCancelPreview?.(), [onCancelPreview]);
+
   const toggleFavorite = useCallback((symbolKey: string, event?: { stopPropagation(): void } | null) => {
     event?.stopPropagation();
     favoritesStore.actions.toggleFavorite(symbolKey);
@@ -199,6 +211,8 @@ export function useSymbolSearchRuntime({
     if (target !== inputRef.current && target.closest("input, select, button, summary, details")) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      const next = filteredSymbols[Math.min(highlightIndex + 1, filteredSymbols.length - 1)];
+      if (next) previewSymbol(next);
       setHighlightIndex((prev) => {
         const maxIndex = Math.max(0, filteredSymbols.length - 1);
         const next = Math.min(prev + 1, maxIndex);
@@ -214,6 +228,8 @@ export function useSymbolSearchRuntime({
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      const next = filteredSymbols[Math.max(highlightIndex - 1, 0)];
+      if (next) previewSymbol(next);
       setHighlightIndex((prev) => {
         const next = Math.max(prev - 1, 0);
         const topVisible = Math.floor(scrollTop / ROW_HEIGHT);
@@ -230,7 +246,7 @@ export function useSymbolSearchRuntime({
         selectSymbol(filteredSymbols[highlightIndex]);
       }
     }
-  }, [filteredSymbols, highlightIndex, scrollTop, selectSymbol]);
+  }, [filteredSymbols, highlightIndex, previewSymbol, scrollTop, selectSymbol]);
 
   const handleScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
     const element = event.currentTarget;
@@ -259,7 +275,7 @@ export function useSymbolSearchRuntime({
     actions: {
       setSearch, setMarketType, setQuoteFilter, setHighlightIndex, selectExchange,
       setAssetClass: (value: string) => { setAssetClass(value); setMarketType(""); setVenue(""); setQuoteFilter("ALL"); },
-      setVenue, setScope, toggleFavorite, selectSymbol, openContextMenu, closeContextMenu,
+      setVenue, setScope, toggleFavorite, selectSymbol, previewSymbol, openContextMenu, closeContextMenu,
       addContextSymbolToWatchlist, getSymbolWatchlists: (key: string) => getSymbolWatchlists(watchlists, key),
       handleKeyDown, handleScroll, refreshSymbols: catalog.refresh, loadMore: catalog.loadMore, loadSources: catalog.loadSources,
     },

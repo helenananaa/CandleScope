@@ -8,7 +8,7 @@ import {
   type IntervalString,
 } from "../../utils/intervals.js";
 import type { ExchangeId, MarketType, SymbolCode } from "../../utils/symbolKey.js";
-import type { InitialRowsResolution } from "../watchlist-full-cache/watchlistFullCacheTypes.js";
+import type { InitialRowsResolution } from "./manager/initialMarketRows.js";
 import type {
   CommitChartData,
   FeedCommitMeta,
@@ -427,7 +427,7 @@ export function useChartInitialLoad({
       source: "memory-cache-hit",
       needsRepair: false,
     };
-    // Shared/watchlist seeds are provisional inputs too. Do not derive a quote
+    // Shared seeds are provisional inputs too. Do not derive a quote
     // or warm-cache shortcut from a row the owned writer would quarantine.
     const cached = initialRows.rows?.every((row) => !validateKlineDomain(row)) ? initialRows.rows : [];
     const hasCacheHit = cached && cached.length > 0;
@@ -454,7 +454,7 @@ export function useChartInitialLoad({
       const displayedRows = warmActivation?.rows || cached;
       if (!warmActivation) {
         replaceChartData(sym, intv, displayedRows, {
-          cache: initialRows.tier === "watchlist-full",
+          cache: initialRows.tier === "shared-market",
           source: initialRows.source || "memory-cache-hit",
         });
       }

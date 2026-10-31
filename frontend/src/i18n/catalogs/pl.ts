@@ -3125,6 +3125,7 @@ export const pl = {
   "chart.lineBreakDetail": "Przełamanie {count}-liniowe",
   "chart.fixedBrick": "Stała cegła {size}",
   "settings.diag.chartCache": "Pamięć podręczna świec głównego wykresu",
+  "settings.diag.sharedMarketCache": "Wspólna pamięć podręczna danych rynkowych",
   "settings.diag.watchlistFullCache": "Pełna pamięć podręczna listy obserwowanych w tle",
   "settings.diag.indicatorCache": "Pamięć podręczna wyników wskaźników",
   "workbench.kicker": "Dane środowiska na żywo · migawka tylko do odczytu",

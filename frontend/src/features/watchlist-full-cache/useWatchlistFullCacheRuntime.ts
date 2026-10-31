@@ -5,19 +5,18 @@ import {
   buildWatchlistFullSocketTargets,
   buildWatchlistFullCacheTargets,
 } from "./watchlistFullCachePolicy.js";
-import { createWatchlistFullCachePreloadManager } from "./watchlistFullCachePreloadManager.js";
-import { createWatchlistFullCacheSocketManager } from "./watchlistFullCacheSocketManager.js";
+import { createWatchlistMarketDataConsumer } from "./watchlistMarketDataConsumer.js";
+import type { MarketDataService } from "../market-data/marketDataService.js";
 import type {
   FullCacheTarget,
   FullCacheTargetOptions,
 } from "./watchlistFullCacheTypes.js";
-import type { ForegroundPreloadGate } from "../market-data/foregroundPreloadGate.js";
 
 const MAX_PRELOAD_JOBS = 16;
 
 export interface UseWatchlistFullCacheRuntimeOptions extends FullCacheTargetOptions {
+  data: MarketDataService | null;
   enabled?: boolean;
-  foregroundPreloadGate?: ForegroundPreloadGate;
 }
 
 export interface WatchlistFullCacheRuntime {
@@ -32,14 +31,9 @@ export function useWatchlistFullCacheRuntime({
   customIntervalRecords = [],
   currentSession = {},
   enabled = true,
-  foregroundPreloadGate,
-}: UseWatchlistFullCacheRuntimeOptions = {}): WatchlistFullCacheRuntime {
-  const socketManagerRef = useRef<ReturnType<typeof createWatchlistFullCacheSocketManager> | null>(
-    null,
-  );
-  const preloadManagerRef = useRef<ReturnType<typeof createWatchlistFullCachePreloadManager> | null>(
-    null,
-  );
+  data,
+}: UseWatchlistFullCacheRuntimeOptions): WatchlistFullCacheRuntime {
+  const consumerRef = useRef<ReturnType<typeof createWatchlistMarketDataConsumer> | null>(null);
   const {
     symbol: currentSymbol,
     exchange: currentExchange,
@@ -107,28 +101,20 @@ export function useWatchlistFullCacheRuntime({
   );
 
   useEffect(() => {
-    const manager = createWatchlistFullCacheSocketManager();
-    socketManagerRef.current = manager;
-    return () => {
-      manager.dispose();
-      if (socketManagerRef.current === manager) socketManagerRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const manager = createWatchlistFullCachePreloadManager({
-      ...(foregroundPreloadGate ? { foregroundPreloadGate } : {}),
+    if (!data) return undefined;
+    const manager = createWatchlistMarketDataConsumer({
+      data,
     });
-    preloadManagerRef.current = manager;
+    consumerRef.current = manager;
     return () => {
       manager.dispose();
-      if (preloadManagerRef.current === manager) preloadManagerRef.current = null;
+      if (consumerRef.current === manager) consumerRef.current = null;
     };
-  }, [foregroundPreloadGate]);
+  }, [data]);
 
   useEffect(() => {
-    socketManagerRef.current?.syncTargets(socketTargets, enabled);
-  }, [enabled, socketTargets]);
+    consumerRef.current?.syncTargets(socketTargets, enabled);
+  }, [data, enabled, socketTargets]);
 
   const preloadJobs = useMemo(
     () => buildFullCachePreloadJobs(targets, {
@@ -143,14 +129,8 @@ export function useWatchlistFullCacheRuntime({
   );
 
   useEffect(() => {
-    preloadManagerRef.current?.syncJobs(preloadJobs, {
-      enabled,
-      activeSeries: {
-        symbolKey: currentSymbolKey,
-        ...(currentInterval === undefined ? {} : { interval: currentInterval }),
-      },
-    });
-  }, [currentInterval, currentSymbolKey, enabled, foregroundPreloadGate, preloadJobs]);
+    consumerRef.current?.syncJobs(preloadJobs, enabled);
+  }, [data, enabled, preloadJobs]);
 
   return {
     targets,
