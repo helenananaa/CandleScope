@@ -260,3 +260,26 @@ def test_gap_fill_uses_the_same_fence_as_the_initial_page(tmp_path, monkeypatch,
     assert [bar.close for bar in manager.cache.get_latest(KEY, 3)] == expected
     assert result.metadata["cache_read_retries"] == 1
     assert manager.cache.snapshot()["active_read_tokens"] == 0
+
+
+@pytest.mark.parametrize("change", ["amend", "delete"])
+def test_canonical_notification_rechecks_durable_revision_after_read(tmp_path, monkeypatch, change):
+    manager, adapter = _manager(tmp_path, monkeypatch, klines_repo.KlinesRepoAdapter)
+    once = True
+
+    def load():
+        nonlocal once
+        rows = adapter.query_bars("BTCUSDT", "1m")
+        if once:
+            once = False
+            if change == "amend":
+                klines_repo.upsert_klines("BTCUSDT", "1m", [_row(START + STEP, 200)], source=SOURCE)
+            else:
+                adapter.delete_bars("BTCUSDT", "1m")
+        return rows
+
+    bars = manager.cache.revision_consumer.adopt(KEY, load)
+    expected = [100, 200] if change == "amend" else []
+    assert [bar.close for bar in bars] == expected
+    assert [bar.close for bar in manager.cache.get_latest(KEY, 2)] == expected
+    assert manager.cache.snapshot()["active_read_tokens"] == 0
