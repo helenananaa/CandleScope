@@ -20,6 +20,7 @@ import type { KlineBar } from "./marketDataTypes.js";
 import { KlineConsumerRecovery } from "./feed/klineConsumerRecovery.js";
 import type { SeriesDataFeed } from "./feed/seriesDataFeed.js";
 import { planTargetBarRequest } from "./intervalRequestBudget.js";
+import { planInitialViewportCountBack } from "./useChartInitialLoad.js";
 
 const WS_RECONNECT_BASE_DELAY = 2_000;
 const WS_RECONNECT_MAX_DELAY = 60_000;
@@ -47,6 +48,19 @@ export function planKlineRecoveryCountBack(
     nativeIntervals: nativeIntervalValues,
     sourceRowBudget: WS_RECOVERY_SOURCE_ROW_BUDGET,
   })?.targetBars ?? desiredCountBack;
+}
+
+export function planHeldKlineRecoveryCountBack(
+  interval: IntervalString,
+  nativeIntervalValues: readonly IntervalString[],
+  heldBarCount: number,
+): number {
+  // A reconnect must not deepen an unfinished viewport into full history.
+  // Retain already loaded depth; the normal hydration lane owns expansion.
+  const viewport = planInitialViewportCountBack(interval, nativeIntervalValues);
+  const held = Number.isFinite(heldBarCount) ? Math.max(0, Math.floor(heldBarCount)) : 0;
+  return planKlineRecoveryCountBack(interval, nativeIntervalValues,
+    Math.max(viewport, Math.min(WS_RECOVERY_COUNT_BACK, held)));
 }
 
 export type KlineWebSocketStatus =
@@ -417,9 +431,10 @@ export function useKlineStreamRuntime({
 
               if (isReconnection) {
                 const currentIntv = intervalRef.current;
-                const recoveryCountBack = planKlineRecoveryCountBack(
+                const recoveryCountBack = planHeldKlineRecoveryCountBack(
                   currentIntv,
                   nativeIntervalValues,
+                  getCacheRows({ exchange, marketType, symbol, interval: currentIntv }).length,
                 );
                 console.log(`[WS-Recovery] Reconnected, reloading recent bars for ${symbol}@${currentIntv}`);
                 if (recoveryCountBack <= 0) {
