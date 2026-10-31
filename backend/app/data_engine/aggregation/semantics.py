@@ -180,15 +180,6 @@ class FieldSummary:
             )
         return fields
 
-    @property
-    def vwap(self) -> float | None:
-        # Valid only when the caller's volume semantics say quote/base is a
-        # price. Never average per-component or per-block VWAP values.
-        if self.quote_volume is None or self.volume <= 0:
-            return None
-        return self.quote_volume / self.volume
-
-
 def summarize_fields(rows: Sequence[tuple]) -> FieldSummary:
     """Reduce normalized (O,H,L,C,V,quote,trades,taker_base,taker_quote) rows."""
     if not rows:

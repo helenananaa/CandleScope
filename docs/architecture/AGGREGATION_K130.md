@@ -64,9 +64,9 @@ size to D126 and bound fragmentation before storing it.
   in the tested cases. Arbitrary grouping is compared with absolute tolerance
   `1e-8` or relative tolerance `1e-12`, not a claim of bitwise associativity.
   Unrounded native authoritative records are not rewritten by this contract.
-- VWAP is quote total / base total when those volume semantics are compatible;
-  consumers must not interpret it as a price for contract-count/inverse volume
-  without conversion. Missing sufficient statistics yield `None`.
+- VWAP is quote total / base total only for `base_asset` volume semantics.
+  Contract-count/inverse volume and missing sufficient statistics yield
+  `None`; conversion requires an explicit qualified source outside this stage.
 - Coverage is separate from closure and authority. An occupied contiguous
   prefix with a forming tail can expose enhanced totals; a closed partial
   prefix, overlap, hole or cross-boundary component cannot prove completeness.

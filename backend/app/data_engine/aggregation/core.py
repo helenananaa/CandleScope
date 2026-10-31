@@ -62,6 +62,14 @@ class AggregateSummary:
     all_authoritative: bool
     algorithm_version: str = ALGORITHM_VERSION
 
+    @property
+    def vwap(self) -> float | None:
+        """Derive price only from compatible quote/base sufficient statistics."""
+        if (self.target.volume_semantics != "base_asset"
+                or self.values.quote_volume is None or self.values.volume <= 0):
+            return None
+        return self.values.quote_volume / self.values.volume
+
     def evaluate(
         self, start_ms: int, end_ms: int, *,
         exclusions: tuple[tuple[int, int], ...] = (),

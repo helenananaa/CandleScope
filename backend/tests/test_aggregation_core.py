@@ -112,7 +112,10 @@ def test_unknown_and_known_zero_fields_and_vwap_sufficient_statistics():
             replace(bar(1), volume=9, quote_volume=180, taker_buy_base=0,
                     taker_buy_quote=0, trades=0)]
     summary = summarize(accepted(bars), target=TARGET)
-    assert summary.values.vwap == 19  # weighted 190/10, not average(10,20)
+    assert summary.vwap == 19  # weighted 190/10, not average(10,20)
+    contracts = replace(SOURCE, volume_semantics="contracts")
+    assert summarize(accepted(bars, series=contracts),
+                     target=replace(contracts, interval="7m")).vwap is None
     assert summary.values.trades == 0
     assert summary.values.taker_buy_base == 0
     assert summarize(accepted([bars[0], replace(bars[1], quote_volume=None)]),
