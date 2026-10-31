@@ -107,7 +107,7 @@ def run_smoke(*, dist_dir: Path, python: str) -> None:
             text=True,
         )
         if imported.stdout.strip() != (
-            "0.2.0 candlescope.script-runtime/1 candlescope.plugin/2 "
+            "0.2.1 candlescope.script-runtime/1 candlescope.plugin/2 "
             "candlescope.host-api/1 candlescope.paper/1 2 "
             "candlescope.scheduled-notification "
             "candlescope.market-scanner candlescope.integration-gateway "

@@ -87,6 +87,7 @@
 .research-advanced-details > button:disabled,
 .research-result-detail > button:disabled { opacity: .38; cursor: not-allowed; }
 .research-advanced-details { display: grid; min-width: 0; gap: 8px; }
+.research-chart-book-inputs { margin: 0; padding: 0; border: 0; }
 .research-advanced-details[open] { padding-top: 2px; }
 .research-advanced-details > summary { margin-bottom: 8px; }
 .research-json-readout,

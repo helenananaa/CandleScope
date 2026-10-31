@@ -8,22 +8,28 @@ import json
 import logging
 import threading
 import time
+from bisect import bisect_left
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from itertools import compress, count
+from operator import attrgetter, itemgetter, ne
 from typing import Any, Protocol
 
 from candlescope_plugin_sdk import (
     FEATURE_BATCH_EXECUTION_V1,
     FEATURE_RENDER_LINE_SERIES_V1,
+    AnalyzeRequest,
     Bar,
+    AnalyzeResult,
     ExecuteBatchRequest,
     ExecuteBatchResult,
     MarketContext,
     RuntimeDescriptor,
 )
 
-from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 from app.core.executors import run_indicator
+from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
@@ -35,8 +41,9 @@ from .runtime_routes import (
     load_indicator_runtime_routes_from_environment,
 )
 
-
 MAX_RECENT_ROUTE_RESULTS = 64
+# Live bar streams whose converted SDK bars are reused for unchanged rows.
+MAX_STREAM_BARS = 8
 DEFAULT_MAX_PENDING_SHADOW_TASKS = 64
 INDICATOR_RUNTIME_CATALOG_SCHEMA_VERSION = 1
 UNREGISTERED_SIDECAR_CODES = frozenset({"PLUGIN_NOT_FOUND"})
@@ -47,6 +54,8 @@ logger = logging.getLogger(__name__)
 
 class RuntimeHost(Protocol):
     async def descriptor(self, runtime_id: str) -> RuntimeDescriptor: ...
+
+    async def analyze(self, runtime_id: str, request: AnalyzeRequest) -> AnalyzeResult: ...
 
     async def execute_batch(
         self,
@@ -89,10 +98,25 @@ class IndicatorRuntimeRequest:
         object.__setattr__(self, "options", dict(self.options))
 
     def to_sdk_request(self) -> ExecuteBatchRequest:
+        options = dict(self.options)
+        # A live subscription's session is also its output and bars stream, so
+        # a runtime that negotiated render.output-patch/1 may send patches and
+        # one that negotiated batch-execution.bars-patch/1 may receive them.
+        output_stream = options.get("pineSessionId") if self.language == "pine" else None
+        if not isinstance(output_stream, str) or not output_stream:
+            output_stream = None
+        if self.language == "pine":
+            if "__pineLibraries" in self.params:
+                options["pineLibrarySources"] = self.params["__pineLibraries"]
+            if "__pineContexts" in self.params:
+                options["pineRequestContexts"] = self.params["__pineContexts"]
+            if "__pineCurrencyRates" in self.params:
+                options["pineCurrencyRates"] = self.params["__pineCurrencyRates"]
+            from app.indicator.pine_host_inputs import indicator_host_options
+            options = indicator_host_options(self, options)
         from app.data_engine.bar_basis import frozen_boundary_windows
         from app.data_engine.interval_policy import parse_interval_spec
-        bars = tuple(_to_sdk_bar(item) for item in self.bars)
-        options = dict(self.options)
+        bars = _sdk_bars(output_stream, self.bars)
         spec = parse_interval_spec(self.interval)
         if spec and (spec.phase_ms or spec.timezone) and bars:
             times = [bar.time * 1000 if bar.time < 100_000_000_000 else bar.time for bar in bars]
@@ -110,6 +134,8 @@ class IndicatorRuntimeRequest:
             bars=bars,
             params=dict(self.params),
             options=options,
+            output_stream=output_stream,
+            bars_stream=output_stream,
         )
 
 
@@ -179,6 +205,68 @@ def _to_sdk_bar(item: Any) -> Bar:
     )
 
 
+_BAR_FIELDS = ("time", "open", "high", "low", "close", "volume", "is_closed")
+# stream -> (raw values of each row, the Bars converted from them)
+_stream_bars: OrderedDict[str, tuple[list[tuple[Any, ...]], tuple[Bar, ...]]] = OrderedDict()
+_stream_bars_lock = threading.Lock()
+
+
+def _row_values(items: tuple[Any, ...]) -> Callable[[Any], tuple[Any, ...]] | None:
+    """Return a C getter of the raw values ``_to_sdk_bar`` reads from a row.
+
+    Only uniform rows qualify: plain dicts, or objects that are not mappings
+    and carry the fields as attributes.
+    """
+    kinds = set(map(type, items))
+    if len(kinds) != 1:
+        return None
+    kind = kinds.pop()
+    if kind is dict:
+        return itemgetter(*_BAR_FIELDS)
+    if not issubclass(kind, Mapping):
+        return attrgetter(*_BAR_FIELDS)
+    return None
+
+
+def _sdk_bars(stream: str | None, items: tuple[Any, ...]) -> tuple[Bar, ...]:
+    """Convert host rows, reusing a live stream's Bars for an unchanged prefix.
+
+    A Bar is reused only where the row's raw values equal those its Bar was
+    converted from, so the result always equals converting every row. The
+    reused Bars are the same objects, which lets the supervisor send only the
+    bars after them.
+    """
+    values = _row_values(items) if stream is not None and items else None
+    if values is None:
+        return tuple(_to_sdk_bar(item) for item in items)
+    with _stream_bars_lock:
+        held = _stream_bars.get(stream)
+    keep, kept, reused = 0, [], ()
+    try:
+        if held is not None:
+            old_values, old_bars = held
+            try:
+                start = bisect_left(old_values, values(items[0])[0], key=itemgetter(0))
+            except TypeError:
+                start = len(old_values)
+            limit = min(len(items), len(old_values) - start)
+            # The first row whose values differ, compared in C. Equal rows keep
+            # the stored values, so a tick only allocates the tail's.
+            keep = next(compress(count(), map(ne, map(values, items[:limit]), old_values[start:start + limit])), limit)
+            kept, reused = old_values[start:start + keep], old_bars[start:start + keep]
+        kept.extend(map(values, items[keep:]))
+    except (AttributeError, KeyError):
+        # A row lacks a field the getter reads: convert every row as before.
+        return tuple(_to_sdk_bar(item) for item in items)
+    bars = reused + tuple(_to_sdk_bar(item) for item in items[keep:])
+    with _stream_bars_lock:
+        _stream_bars[stream] = (kept, bars)
+        _stream_bars.move_to_end(stream)
+        while len(_stream_bars) > MAX_STREAM_BARS:
+            _stream_bars.popitem(last=False)
+    return bars
+
+
 def _default_failure_payload(
     failure: IndicatorRuntimeFailure,
 ) -> dict[str, Any]:
@@ -225,6 +313,10 @@ class IndicatorRuntimeService:
             raise ValueError("max_pending_shadow_tasks must be positive")
         self.routes = routes
         self.host = host
+        self.prepare_inputs = None
+        self.observe_result = None
+        self.release_inputs = None
+        self.stop_inputs = None
         self.legacy_languages = legacy_languages
         self.max_pending_shadow_tasks = int(max_pending_shadow_tasks)
         self._start_lock = asyncio.Lock()
@@ -245,6 +337,8 @@ class IndicatorRuntimeService:
             "sidecarErrors": 0,
         }
         self._recent: list[dict[str, Any]] = []
+        self.pine_data_manager = None
+        self._pine_requirements = OrderedDict()
 
     @classmethod
     def legacy_only(cls) -> "IndicatorRuntimeService":
@@ -335,6 +429,8 @@ class IndicatorRuntimeService:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._background_tasks.clear()
+        if self.stop_inputs is not None:
+            await self.stop_inputs()
 
     async def drain_shadow(self) -> None:
         """Wait for current shadow comparisons; intended for gates and tests."""
@@ -638,11 +734,40 @@ class IndicatorRuntimeService:
         try:
             if self.host is None:
                 raise IndicatorRuntimeRoutesError("plugin host is unavailable")
+            if self.prepare_inputs is not None:
+                request, failure_result = await self.prepare_inputs(request, self.host, route.runtime_id)
+                if failure_result is not None:
+                    return await run_indicator(adapt_sidecar, failure_result)
             # Tiny requests keep the established shadow dispatch ordering;
             # historical windows use the bounded CPU pool before IPC begins.
             sdk_request = (request.to_sdk_request() if len(request.bars) <= 64
                            else await run_indicator(request.to_sdk_request))
+            if request.language == "pine" and self.pine_data_manager is not None and not request.options.get("pineHostPrepared"):
+                libraries = sdk_request.options.get("pineLibrarySources", {})
+                library_key = json.dumps(libraries, sort_keys=True, ensure_ascii=False)
+                key = (route.runtime_id, sdk_request.source, sdk_request.context, library_key)
+                requirements = self._pine_requirements.get(key)
+                if requirements is None:
+                    analysis = await self.host.analyze(route.runtime_id, AnalyzeRequest(source=sdk_request.source, context=sdk_request.context, options={"pineLibrarySources": libraries}))
+                    requirements = analysis.meta.get("hostRequirements") or {}
+                    self._pine_requirements[key] = requirements
+                    while len(self._pine_requirements) > 64:
+                        self._pine_requirements.popitem(last=False)
+                else:
+                    self._pine_requirements.move_to_end(key)
+                if requirements.get("requests"):
+                    from app.core.executors import run_storage
+
+                    from .pine_host_inputs import requested_data
+                    data = await run_storage(requested_data, sdk_request, requirements, self.pine_data_manager())
+                    sdk_request = replace(sdk_request, options={**sdk_request.options, **data})
             result = await self.host.execute_batch(route.runtime_id, sdk_request)
+            if self.observe_result is not None:
+                try:
+                    await self.observe_result(request, result)
+                except Exception:
+                    logger.exception("Indicator result notification failed")
+                    result.meta["notificationStatus"] = "failed"
             payload = await run_indicator(adapt_sidecar, result)
             if not isinstance(payload, dict):
                 raise TypeError("sidecar adapter must return a dict payload")

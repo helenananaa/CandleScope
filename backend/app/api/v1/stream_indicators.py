@@ -956,6 +956,9 @@ async def _unsubscribe_indicator_client(
             except (asyncio.CancelledError, Exception):
                 pass
         await _release_indicator_stream(dm, meta)
+        release_inputs = meta.pop("_releaseRuntimeInputs", None)
+        if release_inputs is not None:
+            await release_inputs()
 
 
 async def _release_indicator_stream(dm, meta: dict) -> None:

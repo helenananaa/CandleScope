@@ -1,0 +1,33 @@
+{
+  "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+  "context": {
+    "exchange": "binance",
+    "marketType": "spot",
+    "symbol": "BTCUSDT",
+    "interval": "1m"
+  },
+  "bars": [
+    {
+      "time": 1700000000,
+      "open": 100,
+      "high": 102,
+      "low": 99,
+      "close": 101,
+      "volume": 10,
+      "isClosed": true
+    },
+    {
+      "time": 1700000060,
+      "open": 101,
+      "high": 103,
+      "low": 100,
+      "close": 102,
+      "volume": 11,
+      "isClosed": true
+    }
+  ],
+  "params": {},
+  "options": {},
+  "analysisSha256": "sha256:50cb14c7713a4f942f5dd906310ee7aaa785c3090cd2d3886f3c82a6e0ee5b62",
+  "executionSha256": "sha256:b18b584f5bff54a253b0028a03cf267f83eac1fec364d252a2e453f99e35de57"
+}

@@ -8,7 +8,7 @@ from app.backtest.native_contracts import (
     ReplayCommand,
 )
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from app.backtest.errors import BacktestError
 
@@ -59,8 +59,8 @@ def list_external(request: Request):
 
 @router.get("/runs/{run_id}")
 @external_router.get("/runs/{run_id}")
-def get_run(request: Request, run_id: str):
-    return _call(lambda: _native(request).get(run_id))
+def get_run(request: Request, run_id: str, if_state: str | None = Query(default=None, max_length=32)):
+    return _call(lambda: _native(request).get(run_id, if_state=if_state))
 
 
 @router.post("/runs/{run_id}/cancel")
@@ -88,8 +88,8 @@ def list_replays(request: Request):
 
 
 @router.get("/replays/{replay_id}")
-def get_replay(request: Request, replay_id: str):
-    return _call(lambda: _native(request).replay.get(replay_id))
+def get_replay(request: Request, replay_id: str, if_revision: int | None = Query(default=None, ge=0)):
+    return _call(lambda: _native(request).replay.get(replay_id, if_revision=if_revision))
 
 
 @router.get("/replays/{replay_id}/export")

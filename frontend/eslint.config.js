@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**']),
+  globalIgnores(['dist', 'desktop-dist', '.desktop-runtime', '.playwright-cli/**', '.local/**']),
   {
     files: ['**/*.{js,jsx,mjs,cjs}'],
     extends: [
@@ -76,6 +76,7 @@ export default defineConfig([
   },
   {
     files: [
+      'tests/fixtures/pine-host-entry/**/*.tsx',
       'scripts/**/*.{ts,tsx}',
       'src/**/__tests__/**/*.{ts,tsx}',
       'src/**/*.test.{ts,tsx}',

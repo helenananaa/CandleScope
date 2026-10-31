@@ -43,6 +43,10 @@
 .native-drawing-pane svg { display:block; width:100%; min-height:180px; }
 
 .native-advanced-inputs { margin:12px 0; }
+.native-advanced-inputs :is(button, select, input) { padding:6px 10px; border:1px solid var(--border-color); border-radius:var(--radius-control); color:var(--text-primary); background:var(--bg-primary); font:inherit; }
+.native-advanced-inputs button { cursor:pointer; }
+.native-advanced-inputs :is(button, select, input):disabled { opacity:.55; cursor:not-allowed; }
+.native-advanced-inputs :is(button, select, input):focus-visible { outline:2px solid var(--accent-blue); outline-offset:2px; }
 .native-advanced-inputs label { display:block; margin:10px 0; }
 .native-advanced-inputs select,.native-advanced-inputs input,.native-advanced-inputs textarea { width:100%; box-sizing:border-box; }
 .native-advanced-inputs textarea { min-height:140px; padding:10px; color:inherit; background:var(--bg-primary); border:1px solid var(--border-color); font-family:monospace; }

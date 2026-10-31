@@ -32,7 +32,8 @@ def config_hash(identity: RunIdentity) -> str:
             "execution_json": identity.execution_json,
             "engine_version": identity.engine_version,
     }
-    if identity.fidelity_mode == "AGG_TRADE_EXECUTION":
+    from .chart_book import DUAL_MODES
+    if identity.fidelity_mode in DUAL_MODES:
         payload.update(
             {
                 "signal_clock": identity.signal_clock,

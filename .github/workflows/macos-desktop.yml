@@ -76,6 +76,8 @@ jobs:
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q \
             tests/test_desktop_sidecar.py \
             tests/test_shared_market_inputs.py \
+            tests/test_pine_combined_host_inputs.py \
+            tests/test_pine_host_completion.py \
             tests/test_proxy_pool.py \
             tests/test_history_archive_*.py \
             tests/test_official_chart_archive.py \

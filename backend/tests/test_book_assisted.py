@@ -62,6 +62,7 @@ def test_book_assisted_market_uses_visible_touch_not_queue() -> None:
     result = BookAssistedKernel().run(events, buy_first)
     assert result.fills[0]["reason"] == "BOOK_ASSISTED_PRINT"
     assert str(result.fills[0]["price"]) == "101"
+    assert result.fills[0]["event_time_ms"] == 1200
     assert BOOK_FILL_POLICY != TRADE_FILL_POLICY
     report = build_report(
         {"run_id": "bt", "fidelity_mode": "BOOK_ASSISTED", "source_event_kind": "TRADE_AND_L2"},

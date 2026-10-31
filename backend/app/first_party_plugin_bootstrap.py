@@ -374,6 +374,32 @@ def _registry_path(environ: Mapping[str, str]) -> Path:
     return default_runtime_registry_path(environ)
 
 
+def _local_overrides(registry_path: Path) -> dict[str, Any]:
+    """Explicit pins for locally qualified installs; never download a local pin."""
+    path = registry_path.parent / "first-party-local-overrides.json"
+    if not path.exists():
+        return {}
+    try:
+        if path.stat().st_size > MAX_RELEASE_LOCK_BYTES:
+            raise ValueError("local override is too large")
+        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_json_object,
+                           parse_constant=_reject_json_constant)
+        if not isinstance(value, dict) or set(value) != {"schemaVersion", "runtimes"} or value["schemaVersion"] != 1:
+            raise ValueError("invalid local override schema")
+        pins = value["runtimes"]
+        if not isinstance(pins, dict) or set(pins) - FIRST_PARTY_RUNTIME_IDS:
+            raise ValueError("invalid local override runtimes")
+        for pin in pins.values():
+            if not isinstance(pin, dict) or set(pin) != {"version", "bundleSha256"}:
+                raise ValueError("invalid local override fields")
+            _string(pin["version"], "local override version", maximum=128)
+            if not isinstance(pin["bundleSha256"], str) or not _SHA256.fullmatch(pin["bundleSha256"]):
+                raise ValueError("invalid local override SHA-256")
+        return pins
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise FirstPartyPluginBootstrapError(f"unable to read local runtime override: {exc}") from exc
+
+
 def _host_platform() -> dict[str, str]:
     return {
         "system": platform.system(),
@@ -601,6 +627,7 @@ def ensure_first_party_plugins_from_environment(
         host_version=host_version,
     )
     current_by_runtime = {item["runtimeId"]: item for item in installer.list_plugins()}
+    local_pins = _local_overrides(registry_path)
     results: dict[str, FirstPartyPluginBootstrapItemResult] = {}
     pending: list[OfficialPluginRelease] = []
     for release in selected:
@@ -610,6 +637,17 @@ def ensure_first_party_plugins_from_environment(
                 "refusing to replace an unmanaged runtime activation",
                 runtime_id=release.runtime_id,
             )
+        pin = local_pins.get(release.runtime_id)
+        if pin is not None:
+            if (current is None or any(current.get(key) != pin[key] for key in ("version", "bundleSha256"))
+                    or any(current.get(key) is not True for key in ("enabled", "autoStart", "required"))):
+                raise FirstPartyPluginBootstrapError("local runtime pin does not match the active managed installation; activate that bundle or remove the pin", runtime_id=release.runtime_id)
+            checked = installer.check(release.runtime_id)
+            results[release.runtime_id] = FirstPartyPluginBootstrapItemResult(
+                status="ready", runtime_id=release.runtime_id, version=pin["version"],
+                bundle_sha256=pin["bundleSha256"], registry_path=registry_path,
+                reason=f"local-pin-checked:{checked.activation_id}")
+            continue
         if current is not None:
             # Bootstrap fills missing defaults. A user-selected, installer-
             # verified activation (including a newer/local build or a disabled

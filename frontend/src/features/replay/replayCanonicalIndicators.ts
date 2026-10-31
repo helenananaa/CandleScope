@@ -327,6 +327,7 @@ export class ReplayCanonicalIndicators {
     signal?.addEventListener("abort", cancel, { once: true });
     const canonical = jobs.filter(job => job.request.mode === "builtin" && BUILTINS.has(job.request.name ?? ""));
     const others = jobs.filter(job => !canonical.includes(job));
+    const captured = this.binding();
     this.active += jobs.length;
     for (const job of jobs) this.pending.set(job.clientId, (this.pending.get(job.clientId) ?? 0) + 1);
     this.report();
@@ -344,7 +345,18 @@ export class ReplayCanonicalIndicators {
     try {
       const fallback = (async () => {
         try {
-          const result = others.length ? await this.fallback({ jobs: others, signal: batch.signal }) : { ok: true, results: [] };
+          if (others.length && !captured) throw aborted();
+          const replayContext = captured ? {
+            sessionId: captured.sessionId, trackId: captured.trackId, dataEpoch: captured.dataEpoch,
+            revealedBoundaryMs: captured.revealedBoundaryMs,
+            ...(captured.sourceSequence === undefined ? {} : { sourceSequence: captured.sourceSequence }),
+          } : undefined;
+          const replayJobs = others.map(job => {
+            requestRows(job, this.store, captured?.sourceBars);
+            return { ...job, request: { ...job.request, ...(replayContext ? { replayContext } : {}) } };
+          });
+          const result = others.length ? await this.fallback({ jobs: replayJobs, signal: batch.signal }) : { ok: true, results: [] };
+          if (others.length && captured && !sameBinding(this.binding(), captured)) throw aborted();
           publish(result.results);
           return result;
         }

@@ -26,6 +26,7 @@ from app.exchanges.models import (
     SymbolInfo,
 )
 
+from app.exchanges.contract_rules import binance_contract_rules
 from .protocol import BinanceExchangeProtocol
 
 logger = logging.getLogger("candlescope.exchange.binance")
@@ -632,6 +633,7 @@ class BinanceExchangeAdapter:
                     raw=item,
                     listed_at_ms=_timestamp_ms(item.get("onboardDate")),
                     price_tick_size=_price_tick_size(item),
+                    **binance_contract_rules(item),
                 ),
             )
         return symbols
@@ -669,6 +671,7 @@ class BinanceExchangeAdapter:
                         else _timestamp_ms(item.get("deliveryDate"))
                     ),
                     price_tick_size=_price_tick_size(item),
+                    **binance_contract_rules(item),
                 ),
             )
         return symbols

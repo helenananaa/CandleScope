@@ -216,6 +216,8 @@ class AlertStore:
             rule = data["rules"].get(rule_id)
             if not isinstance(rule, dict) or not bool(rule.get("enabled", True)):
                 return None
+            if event.get("id") and any(item.get("id") == event["id"] for item in data["history"]):
+                return None
 
             now = int(time.time() * 1000)
             created_at = int(event.get("createdAt") or now)

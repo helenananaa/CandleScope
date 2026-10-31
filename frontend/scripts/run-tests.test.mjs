@@ -113,9 +113,28 @@ test("profile preserves serial backend execution and file batches fit Windows pr
   assert.equal(steps.length, 1);
   assert.equal(steps[0].id, "backend");
   assert.equal(steps[0].args.includes("-n"), false);
-  assert.ok(steps[0].args.includes("tests/backtest_contract/test_no_lookahead.py"));
+  assert.ok(plan.backend.includes("backend/tests/backtest_contract/test_no_lookahead.py"));
+  assert.ok(steps[0].args.includes("tests"));
   const full = parseArgs(["full"]);
   for (const step of createSteps(full, selectTests(full, files), files, REPO_ROOT, "out")) assert.ok(step.args.join(" ").length < 24_000, step.id);
+});
+
+test("growing backend inventories are partitioned without losing serial or parallel tests", () => {
+  const parallel = Array.from({ length: 500 }, (_, index) => `backend/tests/${"long-folder-".repeat(12)}/test_case_${index}.py`);
+  const serial = ["backend/tests/test_serial_a.py", "backend/tests/test_serial_b.py"];
+  const selected = { frontend: [], desktop: [], backend: [...parallel, ...serial], parallelBackend: parallel, serialBackend: serial };
+  const options = { ...parseArgs(["full", "--backend", "--workers", "4"]), packages: false };
+  const steps = createSteps(options, selected, selected, REPO_ROOT, path.join("long output folder", "results"));
+  const parallelSteps = steps.filter((step) => step.id.startsWith("backend-parallel"));
+  const serialSteps = steps.filter((step) => step.id.startsWith("backend-serial"));
+  const paths = (items) => items.flatMap((step) => step.args.filter((arg) => arg.endsWith(".py")));
+  assert.ok(parallelSteps.length > 1);
+  assert.deepEqual(paths(parallelSteps), parallel.map((file) => file.slice("backend/".length)));
+  assert.deepEqual(paths(serialSteps), serial.map((file) => file.slice("backend/".length)));
+  assert.ok(parallelSteps.every((step) => step.args.includes("-n") && step.args.includes("4")));
+  assert.ok(serialSteps.every((step) => !step.args.includes("-n")));
+  assert.equal(new Set(steps.map((step) => step.args.find((arg) => arg.startsWith("--junitxml=")))).size, steps.length);
+  assert.ok(steps.every((step) => step.args.join(" ").length < 24_000));
 });
 
 test("runner preserves failing child status, logs and subsequent independent results", async (context) => {

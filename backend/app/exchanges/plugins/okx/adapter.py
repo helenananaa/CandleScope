@@ -6,6 +6,7 @@ from typing import Any
 from app.core.config import REQUEST_TIMEOUT, get_effective_proxy
 from app.data_engine.market_data import DeliveryClass, MarketChannel, TransportMode
 from app.exchanges.catalog_http import fetch_catalog_json
+from app.exchanges.contract_rules import okx_contract_rules
 from app.exchanges.models import (
     CRYPTO_24X7_CALENDAR_ID,
     ExchangeCapabilities,
@@ -298,6 +299,7 @@ class OkxExchangeAdapter:
                         item.get("contTdSwTime"),
                     ),
                     expiry_at_ms=_timestamp_ms(item.get("expTime")),
+                    **okx_contract_rules(item, spot=inst_type in {"SPOT", "MARGIN"}),
                 ),
             )
         return symbols

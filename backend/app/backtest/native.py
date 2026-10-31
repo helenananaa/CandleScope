@@ -15,7 +15,6 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from app.core.config import runtime_environment
 from app.data_engine.interval_policy import parse_interval_spec
@@ -26,10 +25,13 @@ PROTOCOL = "candlescope.native-strategy/1"
 MODULES = {"pine": ("candlescope.pine-compat", "candlescope_plugin_pine_compat.native_strategy")}
 TERMINAL = {"COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED"}
 MAX_BYTES = 64 * 1024 * 1024
+_CANONICAL_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def encoded(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    # JSONEncoder keeps traversal/cycle state local to each encode call. Reuse
+    # only its fixed settings across the frequent stream and journal writes.
+    return _CANONICAL_ENCODER.encode(value)
 
 
 def digest(value):
@@ -95,7 +97,9 @@ def invoke(plugin, payload, cancelled=None, timeout=120):
     with tempfile.TemporaryFile() as inp, tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         inp.write(raw)
         inp.seek(0)
-        process = subprocess.Popen(plugin["command"], stdin=inp, stdout=out, stderr=err,
+        # Explicit application name avoids Windows' MAX_PATH argv[0] limit and
+        # preserves the managed venv launcher instead of resolving its base Python.
+        process = subprocess.Popen(plugin["command"], executable=plugin["command"][0], stdin=inp, stdout=out, stderr=err,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.monotonic() + timeout
         try:
@@ -164,12 +168,18 @@ class NativeBacktests:
                 try:
                     external_plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
                     external = self.runner(external_plugin, {"operation": "describe"}, timeout=15)
-                    supported = {"pine": {"pine-external/1", "pine-external/2", "pine-external/3", "pine-external/4", "pine-external/5"}}
+                    from .external_support import external_available as supports_external
                     external_available = (external["identity"].get("protocol") == PROTOCOL
-                                          and external["identity"].get("adapter") in supported[language])
+                                          and supports_external(language, external["identity"]))
                 except Exception:
                     external_available = False
-                result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available})
+                    external = {}
+                from .external_support import pine_replay_available
+                result.append({"language": language, "available": True, "identity": description["identity"], "external_available": external_available,
+                    **({"external_replay":"candlescope.external-replay/1"} if language=="pine" and external_available and pine_replay_available(external["identity"]) else {}),
+                    **({"external_controls": {key: external["identity"][key] for key in
+                        ("workbench_control", "risk_stop_contract", "closing_tick_contract", "external_sizing", "order_metadata_contract") if key in external["identity"]}}
+                        if language=="pine" and external_available and external["identity"].get("workbench_control") else {})})
             except Exception as exc:
                 result.append({"language": language, "available": False, "reason": str(exc)})
         return {"execution_mode": "NATIVE", "engines": result, "interactive_replay": True,
@@ -206,6 +216,14 @@ class NativeBacktests:
         finally:
             snapshot.close()
 
+    def analyze_source(self, source, libraries=None):
+        plugin = self.resolver("pine")
+        identity = self.runner(plugin, {"operation": "describe"}, timeout=15)["identity"]
+        if identity.get("adapter") != "pine-native/3":
+            raise BacktestError("PINE_RUNTIME_UPGRADE_REQUIRED", "Pine input discovery requires bridge 0.4.0 / engine 0.3.3")
+        return self.runner(plugin, {"protocol": PROTOCOL, "identity": identity,
+            "operation": "analyze", "source": source, "libraries": libraries or {}}, timeout=15)
+
     def create(self, payload, key):
         if not self.runtime.settings.bar_effective:
             raise BacktestError("FLAG_DISABLED", "BAR backtests are disabled")
@@ -213,16 +231,21 @@ class NativeBacktests:
         with self.lock:
             existing = self.db.execute("SELECT hash,record FROM runs WHERE key=?", (key,)).fetchone()
             if existing:
+                record = json.loads(existing[1])
                 if existing[0] != fingerprint:
-                    raise BacktestError("IDEMPOTENCY_CONFLICT", "key belongs to different native inputs")
-                return json.loads(existing[1])
+                    from .workbench_identity import request_identity
+                    stored = record.get("config")
+                    if (not isinstance(stored, dict) or digest(stored) != existing[0]
+                            or digest(request_identity(stored)) != digest(request_identity(payload))):
+                        raise BacktestError("IDEMPOTENCY_CONFLICT", "key belongs to different native inputs")
+                return record
             if self.closed or len(self.cancel_events) + len(self.replay.jobs) >= 2:
                 raise BacktestError("RUN_CAPACITY_EXCEEDED", "two native runs are already active")
             external = payload.get("execution_mode") == "CANDLESCOPE"
             plugin = self.resolver(payload["language"])
             if external:
-                if payload.get("libraries") or payload.get("magnifier"):
-                    raise BacktestError("EXTERNAL_UNSUPPORTED", "host matching does not accept native libraries or Magnifier")
+                if payload.get("magnifier"):
+                    raise BacktestError("EXTERNAL_UNSUPPORTED", "host matching requires execution events instead of native Magnifier")
                 plugin = {**plugin, "command": [*plugin["command"][:-1], plugin["command"][-1].replace(".native_strategy", ".external_strategy")]}
             identity = self.runner(plugin, {"operation": "describe"}, timeout=15)["identity"]
             if identity.get("protocol") != PROTOCOL:
@@ -244,9 +267,18 @@ class NativeBacktests:
                 requested = self.runtime.local_data.get_manifest(context["dataset_id"])
                 if pair[0].split(":")[-1] != requested["symbol"] or pair[1] != timeframe(context["interval"]):
                     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "requested metadata differs from frozen dataset")
-                contexts.append({"symbol": pair[0], "timeframe": pair[1],
-                                 "interval": parse_interval_spec(context["interval"]).canonical,
-                                 "bars": self._freeze(context)})
+                context_metadata = context.get("metadata")
+                context_profile = {}
+                if payload["language"] == "pine":
+                    from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+                    from .pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
+                    cached = get_cached_symbol_metadata(context.get("exchange", "binance"),
+                                                        context.get("market_type", "usdm"), requested["symbol"])
+                    context_metadata = catalog_chart_metadata(cached, context_metadata)
+                    context_profile = catalog_contract_profile(cached)
+                contexts.append({"symbol": pair[0], "timeframe": pair[1], "interval": parse_interval_spec(context["interval"]).canonical, "bars": self._freeze(context),
+                    **({"metadata": context_metadata} if context_metadata else {}),
+                    **({"contract_profile": context_profile} if context_profile else {})})
             magnifier = None
             if payload.get("magnifier"):
                 if payload["language"] != "pine":
@@ -268,7 +300,8 @@ class NativeBacktests:
                         cursor += 1
                     selected = []
                     while cursor < len(lower) and lower[cursor]["time"] * 1000 < end:
-                        selected.append(lower[cursor]); cursor += 1
+                        selected.append(lower[cursor])
+                        cursor += 1
                     if not selected or selected[0]["time"] * 1000 != start or lower_interval.next_ms(selected[-1]["time"] * 1000) != end:
                         raise BacktestError("DATA_QUALITY_FAILED", "Magnifier requires full intrabar coverage")
                     chart_bars.append({"chartBarIndex": index, "bars": selected})
@@ -277,6 +310,46 @@ class NativeBacktests:
                     "parameters": payload.get("parameters", {}), "bars": bars, "contexts": contexts,
                     "interval": parse_interval_spec(payload["interval"]).canonical,
                     "libraries": payload.get("libraries", {}), "context": payload["context"], "magnifier": magnifier}
+            if payload.get("currency_rates") is not None:
+                wire["currency_rates"] = payload["currency_rates"]
+            if payload["language"] == "pine":
+                from app.exchanges.symbol_catalog import get_cached_symbol_metadata
+                chart = dict(wire["context"])
+                from .pine_contract_metadata import catalog_chart_metadata, catalog_contract_profile
+                metadata = get_cached_symbol_metadata(payload.get("exchange", "binance"),
+                                                      payload.get("market_type", "usdm"), manifest["symbol"])
+                bound = catalog_chart_metadata(metadata, chart.get("metadata"))
+                if bound is not None:
+                    chart["metadata"] = bound
+                profile = catalog_contract_profile(metadata)
+                if profile:
+                    chart["contract_profile"] = profile
+                wire["context"] = chart
+                clock_interval = parse_interval_spec(payload["interval"])
+                wire["execution_times"] = [clock_interval.next_ms(bar["time"] * 1000) - 1 for bar in bars]
+            if payload["language"] == "pine":
+                from app.indicator.pine_host import symbol_metadata
+                inputs = {key: value for key, value in (payload.get("host_inputs") or {}).items() if value is not None}
+                # Exact metadata is frozen into the run wire and its identity hash.
+                if not inputs.get("chartMetadata"):
+                    metadata = symbol_metadata(payload.get("exchange", "binance"), payload.get("market_type", "usdm"), manifest["symbol"])
+                    if metadata:
+                        inputs["chartMetadata"] = metadata
+                inputs["chartMetadata"] = {k: v for k, v in inputs.get("chartMetadata", {}).items() if v is not None}
+                inputs["symbolMetadata"] = {key: {k: v for k, v in value.items() if v is not None}
+                    for key, value in inputs.get("symbolMetadata", {}).items()}
+                for context in payload.get("contexts", []):
+                    metadata = symbol_metadata(context.get("exchange", payload.get("exchange", "binance")),
+                        context.get("market_type", payload.get("market_type", "usdm")), context["symbol"].split(":", 1)[-1])
+                    if metadata:
+                        inputs["symbolMetadata"].setdefault(context["symbol"], metadata)
+                wire["host_inputs"] = inputs
+                if not external and "executionTimes" not in inputs:
+                    interval_spec = parse_interval_spec(payload["interval"])
+                    inputs["executionTimes"] = [interval_spec.next_ms(bar["time"] * 1000) - 1 for bar in bars]
+                    wire["clock_policy"] = "historical-bar-close"
+                else:
+                    wire["clock_policy"] = "scheduled-observation" if external else "host-supplied"
             if needs_boundaries:
                 wire["bar_boundaries"] = {f"{payload['context']['symbol']}:{payload['context']['timeframe']}": frozen_boundaries(payload["interval"], bars)}
                 for context in contexts:
@@ -284,11 +357,23 @@ class NativeBacktests:
             if external:
                 from .external import host_identity
                 from .external_market import freeze_execution
-                wire.update(fill_recalculation=payload.get("fill_recalculation", False), execution_events=freeze_execution(self, payload, bars), execution_fidelity=payload.get("execution_fidelity", "BAR_APPROX"))
+                wire.update(fill_recalculation=payload.get("fill_recalculation", False), execution_fidelity=payload.get("execution_fidelity", "BAR_APPROX"))
                 wire["execution_provenance"] = (payload.get("execution_data") or {}).get("provenance", {})
                 wire.update(host_settings=payload["host_settings"], interval=payload["interval"], host_runtime_identity=host_identity(),
                             account_model="SPOT_CASH_V1" if payload.get("market_type", "usdm") == "spot" else "LINEAR_PERP_ONE_WAY_V1",
                             context_intervals=[item["interval"] for item in payload.get("contexts", [])])
+                if payload["language"] == "pine":
+                    from .pine_workbench_v2 import freeze_grid
+                    account_settings = freeze_grid(wire, payload)
+                    from .workbench_sensitivity import CONTRACT as COST_CONTRACT
+                    wire.update(pine_cost_contract=COST_CONTRACT,
+                                cost_sensitivity_mode=account_settings.cost_sensitivity_mode)
+                    from .pine_workbench import freeze_control
+                    freeze_control(self, plugin, wire, payload)
+                from .pine_workbench_v2 import freeze_account
+                freeze_account(wire, payload, settings=account_settings if payload["language"] == "pine" else None)
+                wire["execution_events"] = freeze_execution(self, payload, bars,
+                    allow_bar_callbacks=bool(wire.get("pine_bar_path_contract")))
             if len(encoded(wire).encode()) > MAX_BYTES:
                 raise BacktestError("BUDGET_EXCEEDED", "native input exceeds 64 MiB")
             run_id = "native_" + uuid.uuid4().hex
@@ -298,6 +383,8 @@ class NativeBacktests:
                       "runtime_identity": identity, "plugin_installation": plugin.get("installation"),
                       "runtime_launch": plugin,
                       "row_count": len(bars), "result": None, "error": None}
+            if external and payload["language"]=="pine":
+                record["replay_contract"]="candlescope.external-replay/1"
             self.db.execute("INSERT INTO runs VALUES (?,?,?,?)", (run_id, key, fingerprint, encoded(record)))
             self.db.execute("INSERT INTO native_inputs VALUES (?,?)", (run_id, encoded(wire)))
             self._save_summary(record)
@@ -307,8 +394,15 @@ class NativeBacktests:
             self.pool.submit(self._execute, run_id, plugin, wire, cancel)
             return record
 
-    def get(self, run_id):
+    def get(self, run_id, *, if_state=None):
         with self.lock:
+            if if_state is not None:
+                row = self.db.execute("SELECT record FROM native_run_summaries WHERE id=?", (run_id,)).fetchone()
+                if not row:
+                    raise BacktestError("RUN_NOT_FOUND", "native run not found")
+                summary = json.loads(row[0])
+                if summary["state"] == if_state:
+                    return {**summary, "run_unchanged": True}
             row = self.db.execute("SELECT record FROM runs WHERE id=?", (run_id,)).fetchone()
             if not row:
                 raise BacktestError("RUN_NOT_FOUND", "native run not found")
@@ -318,6 +412,33 @@ class NativeBacktests:
         with self.lock:
             return [json.loads(row[0]) for row in self.db.execute(
                 "SELECT s.record FROM native_run_summaries s JOIN runs r ON r.id=s.id ORDER BY r.rowid DESC LIMIT 100")]
+
+    def _replay_origin(self, run_id):
+        """Read the original seal and settings without expanding the batch report."""
+        with self.lock:
+            try:
+                row = self.db.execute("""SELECT json_remove(record,'$.config','$.result'),
+                    json_extract(record,'$.config.language','$.config.interval','$.config.contexts'),
+                    json_type(record,'$.config.language'),json_type(record,'$.config.interval'),json_type(record,'$.config.contexts'),
+                    json_extract(record,'$.result.account_authority','$.result.report_hash'),
+                    json_type(record,'$.config'),json_type(record,'$.result')
+                    FROM runs WHERE id=?""", (run_id,)).fetchone()
+            except sqlite3.OperationalError as exc:
+                if str(exc) != "malformed JSON":
+                    raise
+                # Preserve the ordinary reader's malformed-record exception.
+                return self.get(run_id)
+            if row is None:
+                raise BacktestError("RUN_NOT_FOUND", "native run not found")
+            if row[6:] != ("object", "object"):
+                # Pending runs have no result yet. Creation must still report
+                # NOT_READY; damaged shapes retain the existing error path.
+                return self.get(run_id)
+            origin = json.loads(row[0])
+            origin["config"] = {name: value for name, value, kind in zip(
+                ("language", "interval", "contexts"), json.loads(row[1]), row[2:5]) if kind is not None}
+            origin["result"] = dict(zip(("account_authority", "report_hash"), json.loads(row[5])))
+            return origin
 
     def _save_summary(self, record):
         summary = {key: value for key, value in record.items() if key not in {"result", "config"}}
@@ -330,12 +451,34 @@ class NativeBacktests:
         self._save_summary(record)
         self.db.commit()
 
+    def _mark_running(self, run_id):
+        # Only the initial state changes here. Keep the complete frozen input
+        # in SQLite and project the authoritative summary before committing.
+        # Result publication and legacy records retain the ordinary updater.
+        try:
+            row = self.db.execute("""UPDATE runs SET record=json_set(record,'$.state','RUNNING')
+                WHERE id=? AND CASE WHEN json_valid(record) THEN
+                    json_extract(record,'$.state')='QUEUED'
+                    AND json_type(record,'$.config')='object'
+                    AND json_type(record,'$.result')='null' ELSE 0 END
+                RETURNING json_remove(record,'$.config','$.result')""", (run_id,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            if not (str(exc).startswith("no such function: json_")
+                    or str(exc) == 'near "RETURNING": syntax error'):
+                raise
+            row = None
+        if row is None:
+            self._update(run_id, state="RUNNING")
+            return
+        self._save_summary(json.loads(row[0]))
+        self.db.commit()
+
     def _execute(self, run_id, plugin, wire, cancel):
         try:
             with self.lock:
                 if cancel.is_set():
                     return
-                self._update(run_id, state="RUNNING")
+                self._mark_running(run_id)
             external = "host_settings" in wire
             if external:
                 from .external import run_external_host
@@ -348,10 +491,15 @@ class NativeBacktests:
             if result.get("account_authority") != authority:
                 raise BacktestError("NATIVE_PROTOCOL_ERROR", "unexpected account authority")
             result["bars"] = wire["bars"]
-            result["report_hash"] = digest(result)
+            from .native_checkpoint import checkpoint_digest
+            result["report_hash"] = checkpoint_digest(result)
             with self.lock:
                 if not cancel.is_set():
                     self._update(run_id, state="COMPLETED", result=result)
+                # The committed row owns the result now. Release the job's
+                # complete graph before a reader can acquire this lock and
+                # materialize its independent public copy.
+                result = None
         except Exception as exc:
             with self.lock:
                 if not cancel.is_set():
