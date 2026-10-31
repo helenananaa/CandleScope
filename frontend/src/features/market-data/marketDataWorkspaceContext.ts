@@ -4,6 +4,7 @@ import type { MarketWindowRegistry } from "./window/marketWindowSession.js";
 import type { KlineApi } from "./klineContracts.js";
 import type { SharedIndicatorStreamCoordinator } from "../indicators/sharedIndicatorStreamCoordinator.js";
 import type { ChartWorkScheduler } from "./chartWorkScheduler.js";
+import type { MarketDataManager } from "./manager/marketDataManager.js";
 
 export interface KlineStreamCoordinator {
   subscribe: import("./klineContracts.js").KlineStreamFactory;
@@ -13,6 +14,7 @@ export interface KlineStreamCoordinator {
 
 export interface MarketDataWorkspaceResources {
   brokerEnabled: boolean;
+  dataManager: MarketDataManager;
   indicatorStreamCoordinator: SharedIndicatorStreamCoordinator | null;
   klineApi: KlineApi;
   requestCoordinator: SharedKlineRequestCoordinator | null;

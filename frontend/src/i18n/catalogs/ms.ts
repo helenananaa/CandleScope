@@ -3125,6 +3125,7 @@ export const ms = {
   "chart.lineBreakDetail": "Pecahan {count} garis",
   "chart.fixedBrick": "Bata tetap {size}",
   "settings.diag.chartCache": "Cache lilin carta utama",
+  "settings.diag.sharedMarketCache": "Cache data pasaran dikongsi",
   "settings.diag.watchlistFullCache": "Cache latar belakang Senarai pantau Penuh",
   "settings.diag.indicatorCache": "Cache keputusan penunjuk",
   "workbench.kicker": "Pemeriksaan inventori dan muat turun sejarah",

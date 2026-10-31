@@ -104,12 +104,12 @@ export interface CacheDiagnostics extends Record<string, unknown> {
   runtimePressure?: Partial<BrowserRuntimePressure>;
   autoGcRuntime?: Record<string, unknown>;
   owners?: {
-    chart?: {
+    market?: {
       entries?: CacheDiagnosticsEntry[];
       totalBars?: number;
       seriesCount?: number;
     };
-    watchlist?: {
+    chart?: {
       entries?: CacheDiagnosticsEntry[];
       totalBars?: number;
       seriesCount?: number;

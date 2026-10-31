@@ -3126,6 +3126,7 @@ export const ru = {
   "chart.lineBreakDetail": "разрыв {count} линий",
   "chart.fixedBrick": "Фиксированный кирпич {size}",
   "settings.diag.chartCache": "Кэш свечей основного графика",
+  "settings.diag.sharedMarketCache": "Общий кэш рыночных данных",
   "settings.diag.watchlistFullCache": "Фоновый кэш списка наблюдения Full",
   "settings.diag.indicatorCache": "Кэш результатов индикаторов",
   "workbench.kicker": "Просмотр данных и загрузка истории",

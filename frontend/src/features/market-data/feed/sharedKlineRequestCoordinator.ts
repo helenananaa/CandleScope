@@ -120,6 +120,7 @@ function readBoundary(options: KlineRequestOptions): readonly unknown[] {
  * cannot cancel another Cell that is waiting for the same immutable result.
  */
 export class SharedKlineRequestCoordinator implements KlineApi {
+  readonly ownsRequestLeases = true;
   private readonly api: KlineApi;
   private readonly entries = new Map<string, SharedRequestEntry>();
   private readonly pendingHistory = new Set<SharedRequestEntry>();
@@ -575,8 +576,8 @@ export class SharedKlineRequestCoordinator implements KlineApi {
 const adapters = new WeakMap<KlineApi, SharedKlineRequestCoordinator>();
 
 /** Reuse a supplied workspace owner; raw adapters get the same cancellation contract. */
-export function sharedKlineRequests(api: KlineApi): SharedKlineRequestCoordinator {
-  if (api instanceof SharedKlineRequestCoordinator) return api;
+export function sharedKlineRequests(api: KlineApi): KlineApi {
+  if (api.ownsRequestLeases) return api;
   let coordinator = adapters.get(api);
   if (!coordinator) {
     coordinator = new SharedKlineRequestCoordinator(api, false);

@@ -3125,6 +3125,7 @@ export const ptPT = {
   "chart.lineBreakDetail": "ruptura de {count} linhas",
   "chart.fixedBrick": "Tijolo fixo {size}",
   "settings.diag.chartCache": "Cache de velas do gráfico principal",
+  "settings.diag.sharedMarketCache": "Cache partilhada de dados de mercado",
   "settings.diag.watchlistFullCache": "Cache de fundo Full da lista de observação",
   "settings.diag.indicatorCache": "Cache de resultados de indicadores",
   "workbench.kicker": "Inspecção de inventário e descarregamentos de histórico",

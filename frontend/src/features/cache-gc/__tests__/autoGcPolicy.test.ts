@@ -20,7 +20,7 @@ function diagnostics(entry: CacheDiagnosticsEntry): CacheDiagnostics {
     klineBars: entry.bars || 0,
     owners: {
       chart: { entries: [] },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [entry] },
     },
   };
@@ -55,7 +55,7 @@ test("auto frontend GC uses score only for ordering at a hard watermark", () => 
           { key: "cold-kline", tier: "cold", bars: 10, estimatedBytes: 1_000 },
         ],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {
@@ -88,7 +88,7 @@ test("auto frontend GC keeps the score gate for high but non-hard heap pressure"
       chart: {
         entries: [{ key: "cold-kline", tier: "cold", bars: 10, estimatedBytes: 1_000 }],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {
@@ -128,7 +128,7 @@ test("auto frontend GC continues after filtering a recent candidate", () => {
           },
         ],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {
@@ -158,7 +158,7 @@ test("auto frontend GC enforces max bytes for the first victim and fills with a 
           { key: "small", tier: "cold", bars: 4, estimatedBytes: 400 },
         ],
       },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: { entries: [] },
     },
   }, {
@@ -177,14 +177,14 @@ test("auto frontend GC enforces max bytes for the first victim and fills with a 
   );
 });
 
-test("auto frontend GC allows only exact safe trim for a subscribed watchlist entry", () => {
+test("auto frontend GC protects shared subscriptions and leaves range retention to the cache", () => {
   const plan = buildAutoFrontendGcPlan({
     estimatedBytes: 160_000,
     indicatorPoints: 0,
     klineBars: 800,
     owners: {
       chart: { entries: [] },
-      watchlist: {
+      market: {
         entries: [{
           key: "binance:spot:BTCUSDT::1m",
           tier: "subscribed",
@@ -209,10 +209,8 @@ test("auto frontend GC allows only exact safe trim for a subscribed watchlist en
     nowMs: 1_000_000,
   });
 
-  const victim = mustBeDefined(plan.victims[0]);
-  assert.equal(victim.action, "trim-range");
-  assert.equal(victim.tier, "subscribed");
-  assert.equal(victim.bars, 300);
+  assert.equal(plan.victims.length, 0);
+  assert.equal(plan.wouldFreeBars, 0);
   assert.equal(plan.autoSkipped.length, 0);
 });
 

@@ -3125,6 +3125,7 @@ export const it = {
   "chart.lineBreakDetail": "Line break a {count} linee",
   "chart.fixedBrick": "Mattone fisso {size}",
   "settings.diag.chartCache": "Cache candele del grafico principale",
+  "settings.diag.sharedMarketCache": "Cache condivisa dei dati di mercato",
   "settings.diag.watchlistFullCache": "Cache background Watchlist Full",
   "settings.diag.indicatorCache": "Cache risultati indicatori",
   "workbench.kicker": "Dati runtime live · snapshot in sola lettura",
