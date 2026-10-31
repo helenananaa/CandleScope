@@ -15,6 +15,7 @@ import { MarketWarmStreams } from "./marketWarmStreams.js";
 import { MarketWarmQueue, type MarketWarmLease } from "./marketWarmQueue.js";
 
 interface StreamTransport {
+  readonly reconnects?: boolean;
   subscribe: KlineStreamFactory;
   closeAll(): void;
   diagnostics(): object;
@@ -95,23 +96,25 @@ export class MarketDataManager implements MarketDataService {
         }),
     });
     this.sharedStreams = new SharedKlineStreamCoordinator(api, {
+      reconnects: this.transport.reconnects ?? false,
       createPhysicalStream: (series, streamOptions) => {
-        // Fence the physical lease before admission, not only downstream fan-out.
-        // A closed socket may still have a queued message after a reconnect.
+        // Transport socket epochs are fenced by the transport. Lease disposal
+        // is terminal, while a reconnecting transport may reopen this lease.
         let active = true;
+        let connected = true;
         let intervals = [...(streamOptions.intervals ?? [])];
         const connect = () => { for (const interval of intervals) this.cache.connect({ ...series, interval }); };
         const current = () => active && !this.closed;
         const controller = this.transport.subscribe(series, {
         ...streamOptions,
-        onOpen: controller => { if (current()) { connect(); streamOptions.onOpen?.(controller); } },
+        onOpen: controller => { if (current()) { connected = true; connect(); streamOptions.onOpen?.(controller); } },
         onStreamStatus: (event, controller) => {
           if (!current()) return;
           if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
           streamOptions.onStreamStatus?.(event, controller);
         },
         onControlMessage: (event, controller) => {
-          if (!current()) return;
+          if (!current() || !connected) return;
           for (const failure of event.failed ?? []) this.cache.disconnectSeries({ ...series, interval: failure.interval });
           if (event.type === "unsubscribed") for (const interval of event.intervals ?? event.requested_intervals ?? []) {
             this.cache.disconnectSeries({ ...series, interval });
@@ -123,7 +126,7 @@ export class MarketDataManager implements MarketDataService {
           streamOptions.onControlMessage?.(event, controller);
         },
         onBackfillCompleted: (event, controller) => {
-          if (!current()) return false;
+          if (!current() || !connected) return false;
           // A new backend completion is not validated by an earlier cache proof.
           const from = event.detail?.range_start_ms ?? event.detail?.request_start_ms;
           const to = event.detail?.range_end_ms ?? event.detail?.request_end_ms;
@@ -140,7 +143,7 @@ export class MarketDataManager implements MarketDataService {
           streamOptions.onParseError?.(error, event, controller);
         },
         onKline: (event, controller) => {
-          if (!current()) return;
+          if (!current() || !connected) return;
           this.cache.connect({ ...series, interval: event.interval });
           const accepted = this.cache.admitRealtime({ ...series, interval: event.interval }, event.tick,
             typeof event.message.event_type === "string" ? event.message.event_type : undefined,
@@ -156,7 +159,8 @@ export class MarketDataManager implements MarketDataService {
         },
         onClose: (event, controller) => {
           if (!current()) return;
-          active = false;
+          connected = false;
+          if (!this.transport.reconnects) active = false;
           this.cache.markDisconnected(series);
           streamOptions.onClose?.(event, controller);
         },

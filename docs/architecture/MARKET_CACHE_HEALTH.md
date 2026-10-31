@@ -104,6 +104,13 @@ at 1,500 target bars. Failed/budgeted verification leaves data provisional; a
 later real event or foreground request can retry. This is not a whole-provider
 source-row throughput guarantee.
 
+A batch transport reconnects its own socket while retaining logical leases.
+Its socket close revokes continuity and ACK state, but does not dispose the
+shared entry. The next open must reach the same consumers and resume admission;
+new consumers join that recovered entry. Actual lease release remains terminal,
+and the transport fences events from retired socket instances. Transports that
+do not reconnect retain their existing terminal-close behavior.
+
 ## Demand and retention budgets
 
 Active chart/watchlist leases retain their existing independent lifetimes.

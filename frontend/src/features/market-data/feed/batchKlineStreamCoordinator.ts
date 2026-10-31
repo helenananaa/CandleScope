@@ -54,6 +54,7 @@ function stringList(value: unknown): IntervalString[] {
 
 /** One window-level physical socket with stable logical client IDs per Cell. */
 export class BatchKlineStreamCoordinator {
+  readonly reconnects = true;
   private readonly subscriptions = new Map<string, LogicalBatchSubscription>();
   private readonly socketFactory: (url: string) => KlineStreamSocket;
   private readonly url: string | undefined;

@@ -38,6 +38,8 @@ interface SharedStreamEntry {
 
 export interface SharedKlineStreamCoordinatorOptions {
   createPhysicalStream?: PhysicalStreamFactory;
+  /** The transport reconnects its own controller; a socket close is not lease disposal. */
+  reconnects?: boolean;
 }
 
 export interface SharedKlineStreamDiagnostics {
@@ -129,9 +131,11 @@ function updateActiveIntervals(
 export class SharedKlineStreamCoordinator {
   private readonly entries = new Map<string, SharedStreamEntry>();
   private readonly createPhysicalStream: PhysicalStreamFactory;
+  private readonly reconnects: boolean;
   private nextSubscriberId = 0;
 
   constructor(api: KlineApi, options: SharedKlineStreamCoordinatorOptions = {}) {
+    this.reconnects = options.reconnects ?? false;
     this.createPhysicalStream = options.createPhysicalStream || ((series, streamOptions) => (
       new KlineStreamSubscription({ api, series, ...streamOptions })
     ));
@@ -288,8 +292,11 @@ export class SharedKlineStreamCoordinator {
       onClose: (event) => {
         if (entry.disposed) return;
         entry.open = false;
-        entry.disposed = true;
-        if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
+        entry.activeIntervals.clear();
+        if (!this.reconnects) {
+          entry.disposed = true;
+          if (this.entries.get(entry.key) === entry) this.entries.delete(entry.key);
+        }
         entry.subscribers.forEach((subscriber) => {
           if (!subscriber.closed) subscriber.options.onClose?.(event, subscriber.controller);
         });
