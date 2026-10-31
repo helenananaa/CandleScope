@@ -52,7 +52,27 @@ async function diagnose(name){
  const value=await until(name+' durable delivery settled',async()=>{const d=await(await fetch(url)).json();fs.writeFileSync(path.join(root,name+'-inflight.json'),JSON.stringify(d,null,2));return d;},d=>!d.bar_delivery.degraded&&d.bar_delivery.pending===0&&d.bar_delivery.recovery_pending===0&&d.query_engine.shared_aggregation_blocks.views===0&&d.query_engine.shared_aggregation_blocks.inflight===0&&d.query_engine.shared_aggregation_blocks.leases===0,30000);
  const snapshot={shared_blocks:value.query_engine.shared_aggregation_blocks,memory_budget:value.memory_budget,revision_adoption:value.revision_adoption,cache:value.cache,bar_delivery:value.bar_delivery,source_continuity:value.source_continuity,event_bus:value.event_bus,runtime:value.runtime};
  fs.writeFileSync(path.join(root,name+'-diagnostics.json'),JSON.stringify(snapshot,null,2));
- const blocks=snapshot.shared_blocks;assert.ok(blocks.entries+blocks.retired_entries<=blocks.limits.entries);assert.ok(blocks.estimated_bytes<=blocks.limits.bytes);assert.equal(blocks.last_error,null);assert.equal(snapshot.memory_budget.owners['aggregation-blocks'].reserved_bytes,0);if(name==='cold')assert.ok(blocks.builds>0,'native history must build B130 blocks');if(name==='verified')assert.ok(blocks.hits>0,'native target switch must reuse B130 blocks');record(name+'-blocks',blocks);assert.equal(snapshot.memory_budget.over_budget_bytes,0);assert.equal(snapshot.revision_adoption.last_error,null);assert.equal(snapshot.bar_delivery.degraded,false,JSON.stringify(snapshot.bar_delivery));assert.equal(snapshot.bar_delivery.pending,0,JSON.stringify(snapshot.bar_delivery));
+ const blocks=snapshot.shared_blocks;assert.ok(blocks.entries+blocks.retired_entries<=blocks.limits.entries);assert.ok(blocks.estimated_bytes<=blocks.limits.bytes);assert.equal(blocks.last_error,null);assert.equal(snapshot.memory_budget.owners['aggregation-blocks'].reserved_bytes,0);if(name==='verified')assert.ok(blocks.hits>0,'native target switch must reuse B130 blocks');record(name+'-blocks',blocks);assert.equal(snapshot.memory_budget.over_budget_bytes,0);assert.equal(snapshot.revision_adoption.last_error,null);assert.equal(snapshot.bar_delivery.degraded,false,JSON.stringify(snapshot.bar_delivery));assert.equal(snapshot.bar_delivery.pending,0,JSON.stringify(snapshot.bar_delivery));
+}
+async function proveSharedReads(rows){
+ const api=(await page.send('Runtime.evaluate',{expression:'window.candlescopeDesktop.apiBase',returnByValue:true})).result.value;
+ const bars=(await query(rows.find(r=>r.session.interval==='2d').id,'bars',{limit:128})).output;
+ // Cold backfill may materialize the displayed targets without a shared-block read.
+ // New targets over already loaded, closed 1d history exercise the actual packaged API.
+ const start=bars[bars.length-40].time*1000,end=bars[bars.length-4].time*1000;
+ const before=await(await fetch(api.replace('/api/v1','')+'/debug/snapshot')).json();
+ const receipts=[];
+ for(const interval of ['6d','8d']){
+  const params=new URLSearchParams({symbol:'BTC-USDT-SWAP',exchange:'okx',market_type:'futures',interval,start_ms:String(start),end_ms:String(end),repair:'none'});
+  const response=await fetch(api+'/klines/range?'+params);assert.equal(response.status,200);
+  const value=await response.json();fs.writeFileSync(path.join(root,'shared-range-'+interval+'.json'),JSON.stringify(value,null,2));
+  assert.ok(value.count>=6,JSON.stringify(value));receipts.push({interval,count:value.count,source:value.source});
+ }
+ const after=await until('packaged shared reads released',async()=>await(await fetch(api.replace('/api/v1','')+'/debug/snapshot')).json(),d=>d.query_engine.shared_aggregation_blocks.views===0&&d.query_engine.shared_aggregation_blocks.leases===0&&d.query_engine.shared_aggregation_blocks.inflight===0,30000);
+ const blocks=after.query_engine.shared_aggregation_blocks;
+ assert.ok(blocks.builds>0,'packaged API must build B130 blocks');
+ assert.ok(blocks.hits>before.query_engine.shared_aggregation_blocks.hits,'packaged cross-target API must reuse B130 blocks');
+ record('packaged-shared-reads',{start,end,receipts,before:before.query_engine.shared_aggregation_blocks,after:blocks});
 }
 async function capture(name){const shot=await page.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,name+'.png'),Buffer.from(shot.data,'base64'));}
 async function quit(phase){
@@ -76,7 +96,7 @@ try{
  const saved=await until('saved four charts',inspect,r=>r.persistence.state==='saved');record('saved',saved);
  await quit('saved');
  await launch('restart');
- const restored=await ready('restored custom histories');assert.deepEqual(restored.map(r=>r.session.interval),periods);record('restored',restored);await diagnose('restart');
+ const restored=await ready('restored custom histories');assert.deepEqual(restored.map(r=>r.session.interval),periods);record('restored',restored);await diagnose('restart');await proveSharedReads(restored);
  await execute(restored[1].id,'addIndicator',{id:'qa-b130-pine-local',name:'Pine SMA',kind:'script',executionTarget:'local',script:'//@version=5\nindicator("B130 Pine SMA")\nplot(ta.sma(close,20))',language:'pine',securityMode:'safe',visible:true});
  const pine=await until('bundled current-main Pine',()=>query(restored[1].id),r=>r.snapshot.indicators.some(i=>i.id==='qa-b130-pine-local'&&i.outputPointCount>0&&!i.error),60000);record('pine',pine.snapshot.indicators.find(i=>i.id==='qa-b130-pine-local'));
  const fourthStart=Date.now();const other=restored[0];await execute(other.id,'customIntervalCreate',{interval:'4d'});await execute(other.id,'interval',{interval:'4d'});

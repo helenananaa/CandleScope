@@ -95,8 +95,10 @@ class BlockLease:
     @property
     def block(self):
         with self._manager._lock:
+            if self._closed:
+                raise BlockRevisionChanged("block lease is released or invalidated")
             self._manager._check_view(self._view)
-            if self._closed or not self._entry.valid:
+            if not self._entry.valid:
                 raise BlockRevisionChanged("block lease is released or invalidated")
             return self._entry.block
 
@@ -106,6 +108,7 @@ class BlockLease:
                 self._closed = True
                 self._view.leases.discard(self)
                 self._manager._release_pin(self._entry)
+                self._entry = self._view = None
 
     def __enter__(self):
         return self.block

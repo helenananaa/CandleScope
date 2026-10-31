@@ -131,6 +131,23 @@ def test_pins_prevent_eviction_then_last_release_allows_lru():
     assert_idle(m)
 
 
+def test_closed_lease_handle_does_not_retain_an_evicted_payload():
+    import gc
+    import weakref
+    m = manager()
+    with m.view((SOURCE,)) as view:
+        lease = m.acquire(key(), view, lambda: build(view, key()))
+        reference = weakref.ref(lease._entry)
+        lease.close()
+        m.collect()
+        gc.collect()
+        assert reference() is None
+        with pytest.raises(BlockRevisionChanged):
+            _ = lease.block
+        lease.close()
+    assert_idle(m, empty=True)
+
+
 def test_invalidated_pinned_values_remain_charged_until_release():
     m = manager(max_entries=1)
     with pytest.raises(BlockRevisionChanged):
