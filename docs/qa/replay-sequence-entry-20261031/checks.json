@@ -1,0 +1,116 @@
+{
+  "passed": true,
+  "scope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "checks": [
+    {
+      "name": "real provided-bars React lifecycle prioritizes pan/zoom while preserving script input",
+      "status": "PASS"
+    },
+    {
+      "name": "real chart viewport callback drives bounded indicators through zoom and continuous drag",
+      "status": "PASS"
+    },
+    {
+      "name": "canonical indicator transport with real React training/review lifecycles",
+      "status": "PASS",
+      "cancellations": 2
+    },
+    {
+      "name": "canonical price/gap correction preserves real chart viewport",
+      "status": "PASS"
+    },
+    {
+      "name": "BAR review selected-period paging, retry and fixed real chart viewport",
+      "status": "PASS"
+    },
+    {
+      "name": "AGG_TRADE review selected-period paging, retry and fixed real chart viewport",
+      "status": "PASS"
+    },
+    {
+      "name": "playing indicator time and same-ms tape sequence are sampled together",
+      "status": "PASS"
+    },
+    {
+      "manager": {
+        "sequences": [
+          {
+            "owner": "replay-window-1",
+            "identity": {
+              "runId": "run",
+              "trackId": "track-1",
+              "sessionId": "adapter",
+              "dataEpoch": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "generation": 1,
+              "interval": "1m"
+            },
+            "consumers": 1,
+            "bars": 3,
+            "requests": 0,
+            "totalRequests": 29
+          }
+        ],
+        "activeSequences": 1,
+        "requests": 0,
+        "bars": 3
+      },
+      "name": "production multi-chart tape hook initializes indicators during continuous trades",
+      "status": "PASS",
+      "gets": 28,
+      "posts": 3,
+      "firstResultAt": 1497.6999999955297,
+      "cancellations": 6,
+      "displayedSequence": 150,
+      "sourceSequence": 157
+    },
+    {
+      "manager": {
+        "sequences": [
+          {
+            "owner": "replay-window-1",
+            "identity": {
+              "runId": "run",
+              "trackId": "track-1",
+              "sessionId": "adapter",
+              "dataEpoch": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "generation": 2,
+              "interval": "1m"
+            },
+            "consumers": 1,
+            "bars": 3,
+            "requests": 0,
+            "totalRequests": 29
+          }
+        ],
+        "activeSequences": 1,
+        "requests": 0,
+        "bars": 3
+      },
+      "name": "production multi-chart tape hook initializes indicators during continuous trades after rewind cancels the old seed",
+      "status": "PASS",
+      "gets": 28,
+      "posts": 2,
+      "firstResultAt": 1849.6000000014901,
+      "cancellations": 7,
+      "displayedSequence": 101,
+      "sourceSequence": 108
+    },
+    {
+      "name": "four controlled replay cells restore early builtin results during an unfinished batch",
+      "status": "PASS"
+    }
+  ],
+  "remainingWorkers": [],
+  "exceptions": [],
+  "driverStartupWaitMs": 60000,
+  "driverAdjustment": "Temporary copy of frontend-script-integration.mjs changed only startup polling from 100 to 600 iterations. Product code and fixture assertions unchanged. Earlier 10-second startup attempts failed before running fixture.",
+  "fullCheck": {
+    "command": "npm run check",
+    "exitCode": 0,
+    "frontendTests": 4673,
+    "isolatedPerformanceTests": 1,
+    "desktopTests": 124
+  },
+  "nativePackageQualified": false
+}

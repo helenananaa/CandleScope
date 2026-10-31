@@ -1,0 +1,17 @@
+{
+  "baseCommit": "e8ae4ad621afcd9d7f36fa6efd97bf1d2282a736",
+  "files": {
+    "frontend/src/chart-adapter/__tests__/replayCanonicalIndicators.browser.tsx": "a6ff96b42a144246b12a27ab6fc2253690e451512ee858617d19e629c87fc6bb",
+    "frontend/src/features/market-data/manager/marketDataManager.ts": "ecc9053b6c4b383c12458d30d23b9a36bfa49ddda93069cfeb033ccfd9f6a772",
+    "frontend/src/features/replay/ReplayApp.tsx": "b432c88d8ee55f50ed1352faa9e4d1d0647202de8c462de0d141477fb6d7b02d",
+    "frontend/src/features/replay/ReplayChartWorkspace.tsx": "cee754b210f9321ff1fff5680a69fcba2ea70f3bb35c0e066215d1392424266c",
+    "frontend/src/features/replay/__tests__/replayChartProjection.test.ts": "540878d7a9b7464a2554292c8fcd4d99b64c23740e83c133833c86992ff5668a",
+    "frontend/src/features/replay/replayChartProjection.ts": "368b73966c85bb00ac32a435d20a0159c83816078426af976ba3e6a60ba31438",
+    "docs/architecture/REPLAY_DATA_MANAGER_ENTRY.md": "44b728c5d38223e1b2fe75d19eb439047888dfc9565ba2a41bc948c1fa0eb404",
+    "frontend/src/features/market-data/__tests__/replayDataManager.test.ts": "3758acfbd1ae2617ba9d606b10f2c150934c137a90d906a7d5a2a43c0785a804",
+    "frontend/src/features/market-data/manager/marketDataManagerCore.ts": "b160b7ed842f60be16df15798673da18abcea494406d4a899e3d08a2537662f8",
+    "frontend/src/features/replay/ReplayDataProvider.tsx": "193c6a1f78fd08576d5a4a152614bca91f8255d2c25fadaa73c89c0f5e96d3c1",
+    "frontend/src/features/replay/replayDataContext.ts": "b3ae85c6a594da4d60cf90bcf694cff313d08845438bf7f4694abd1a86343f0f",
+    "frontend/src/features/replay/replayDataManager.ts": "4951730360abc57ef5589f57ba9ec663a5ad7e5143cadc99486d1f7e3cf94f95"
+  }
+}

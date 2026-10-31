@@ -92,7 +92,7 @@ interface CellProps {
 function ReplayChartCell({ runId, cell, track, workspace, controller, pool, globalSettings,
   integrity, links, intervalTransfers, hosts, controls, preferences, onOpenTrack, pageExportRef, pageDrawingExports, exportVisible }: CellProps) {
   const runtime = useSharedReplayChartRuntime(pool, track.adapter_session_id!);
-  const projection = useReplayChartProjection(runtime, track.track_id, cell.session.interval);
+  const projection = useReplayChartProjection(runtime, track.track_id, cell.session.interval, runId);
   const active = workspace.view.activeCellId === cell.id;
   const scope = `replay:${runId}:${workspace.view.activeWorkspaceId}:${cell.id}`;
   const surface = useChartSurfaceRuntime();

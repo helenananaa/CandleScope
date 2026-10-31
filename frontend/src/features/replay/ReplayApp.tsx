@@ -25,6 +25,7 @@ import { useControlCommands, usePageControlBridge } from "../app-control/useCont
 import { replayCommands } from "../app-control/replayCommands.js";
 import { settingsCommands } from "../app-control/settingsCommands.js";
 import { trainingHubCommands } from "../app-control/trainingHubCommands.js";
+import { ReplayDataProvider } from "./ReplayDataProvider.js";
 
 export { default as ReplayInitialMarketPicker } from "./components/ReplayInitialMarketPicker.js";
 
@@ -166,7 +167,7 @@ export default function ReplayApp({ entry }: ReplayAppProps) {
   useControlCommands(() => settingsCommands(chartSettingsRuntime));
   return (
     <PageSettingsContext.Provider value={chartSettingsRuntime}>
-      <ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} />
+      <ReplayDataProvider><ReplayEntrySurface entry={entry} chartSettingsRuntime={chartSettingsRuntime} /></ReplayDataProvider>
     </PageSettingsContext.Provider>
   );
 }

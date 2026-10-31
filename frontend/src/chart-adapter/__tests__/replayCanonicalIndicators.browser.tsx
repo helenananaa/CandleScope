@@ -1,4 +1,4 @@
-import { act, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { StrictMode, act, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { createChart, LineSeries, type UTCTimestamp } from "lightweight-charts";
 import { useProvidedBarsIndicatorRuntime } from "../../features/indicators/useProvidedBarsIndicatorRuntime.js";
@@ -13,6 +13,7 @@ import { useReplaySharedIndicatorRuntime, type ReplaySharedIndicatorRuntime } fr
 import type { ReplayRuntime, ReplayRuntimeLifecycle } from "../../features/replay/useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "../../features/replay/useReplayViewerRuntime.js";
 import type { ReplayTapeViewerObservation } from "../../features/replay/replayTapeViewer.js";
+import { ReplayDataProvider } from "../../features/replay/ReplayDataProvider.js";
 import { useReplayChartProjection } from "../../features/replay/replayChartProjection.js";
 import { ReplayCanonicalIndicators, type ReplayCanonicalBinding } from "../../features/replay/replayCanonicalIndicators.js";
 import { replayDisplayBarToKline } from "../../features/replay/replaySeriesProjection.js";
@@ -367,7 +368,7 @@ export async function checkColdTapePlayback(rewind = false) {
   };
   const host = document.createElement("div"); document.body.append(host); const root = createRoot(host);
   function Probe() {
-    const projection = useReplayChartProjection(runtime, "track-1", "1m");
+    const projection = useReplayChartProjection(runtime, "track-1", "1m", "run");
     assert(!projection.error, `production cell projection failed: ${projection.error}`);
     const value = useReplaySharedIndicatorRuntime(runtime, structuralMock<ReplayViewerRuntime>({ seriesStore: projection.seriesStore,
       tapeObservation: projection.tapeObservation ?? null, viewerState: { selected_track_id: "track-1", display_interval: "1m" } }), "cold-tape", persistence);
@@ -378,9 +379,10 @@ export async function checkColdTapePlayback(rewind = false) {
     });
     return null;
   }
+  const render = () => root.render(<StrictMode><ReplayDataProvider><Probe /></ReplayDataProvider></StrictMode>);
   const started = performance.now();
   try {
-    await act(async () => { root.render(<Probe />); });
+    await act(async () => { render(); });
     for (tick = 1; tick <= 150; tick++) {
       if (rewind && tick === 45) { sequence = 2; generation++; displayed = 0; }
       sequence++;
@@ -388,7 +390,7 @@ export async function checkColdTapePlayback(rewind = false) {
       snapshots.set(sequence, selected);
       await act(async () => {
         runtime = { ...runtime, store: { ...runtime.store, generation, sourceSequence: sequence } };
-        listeners.forEach(notify => notify()); root.render(<Probe />);
+        listeners.forEach(notify => notify()); render();
         await new Promise(resolve => setTimeout(resolve, 20));
       });
       if (store.last()) {
@@ -404,12 +406,17 @@ export async function checkColdTapePlayback(rewind = false) {
         error: (latest as ReplaySharedIndicatorRuntime | null)?.view.activeIndicators[0]?.error,
         status: (latest as ReplaySharedIndicatorRuntime | null)?.status, observation, bars: store.snapshot() })}`);
     if (rewind) assert(cancellations > 0, "rewind left the older seed observer running");
-    await act(async () => { runtime = { ...runtime, store: { ...runtime.store, state: "PAUSED" } }; root.render(<Probe />); });
+    await act(async () => { runtime = { ...runtime, store: { ...runtime.store, state: "PAUSED" } }; render(); });
     for (let wait = 0; wait < 60 && Number(store.last()?.volume) !== sequence; wait++) {
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
     }
     assert(Number(store.last()?.volume) === sequence, "paused chart did not catch up to its final source sequence");
-    return { name: `production multi-chart tape hook initializes indicators during continuous trades${rewind ? " after rewind cancels the old seed" : ""}`, status: "PASS", gets, posts, firstResultAt,
+    const diagnostics = (window as typeof window & { __CANDLESCOPE_REPLAY_DATA__?: { snapshot(): { replay: { activeSequences: number; sequences: Array<{ identity: { runId: string }; totalRequests: number }> } } } }).__CANDLESCOPE_REPLAY_DATA__!.snapshot().replay;
+    assert(diagnostics.activeSequences === 1 && diagnostics.sequences[0]!.identity.runId === "run"
+      && diagnostics.sequences[0]!.totalRequests > 0, "production tape cell bypassed the manager namespace");
+    await act(async () => root.unmount());
+    assert(!Object.hasOwn(window, "__CANDLESCOPE_REPLAY_DATA__"), "replay provider survived final unmount");
+    return { manager: diagnostics, name: `production multi-chart tape hook initializes indicators during continuous trades${rewind ? " after rewind cancels the old seed" : ""}`, status: "PASS", gets, posts, firstResultAt,
       cancellations,
       projectionDelayMs: 650, indicatorDelayMs: 800, ticks: 150, displayedSequence: displayed, sourceSequence: sequence };
   } finally { await act(async () => root.unmount()); host.remove(); globalThis.fetch = originalFetch; }
