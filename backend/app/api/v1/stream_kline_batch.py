@@ -638,6 +638,7 @@ class KlineBatchConnection:
                     "symbol": event.key.symbol,
                     "interval": event.key.interval,
                     "detail": event.detail or {},
+                    "stream_version": event.detail.get("stream_version"),
                 }
                 queued = await self.outbox.put(payload, key=key, timeout=1.0)
             else:
