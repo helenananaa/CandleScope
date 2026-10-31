@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 
+import pytest
+
 from app.api.v1.klines import _history_contract_payload
 from app.api.v1.stream_klines import _serialize_kline_event
 from app.data_engine.data_manager import DataManager
@@ -80,6 +82,35 @@ def test_http_and_ws_expose_the_same_clock_and_backend_calendar_predecessor(monk
     assert http["stable"] is True
     assert ws["previous_open_ms"] == 120_000
     assert ws["affected_range"] == {"from_ms": 180_000, "to_ms": 180_000}
+
+
+@pytest.mark.parametrize("during_read,final_only,stable", [
+    (None, True, True),
+    (DataEventType.BAR_UPDATED, True, True),
+    (DataEventType.BAR_CLOSED, True, False),
+    (DataEventType.BAR_UPDATED, False, False),
+])
+def test_materialized_history_preserves_snapshot_clock_without_admitting_repairs(
+    monkeypatch, during_read, final_only, stable,
+):
+    manager = DataManager()
+    clock = manager.event_bus.stream_versions
+    before = clock.snapshot(KEY)
+
+    def read(*args, **kwargs):
+        assert kwargs["_materialized_only"] is True
+        assert kwargs["auto_backfill"] is False
+        if during_read is not None:
+            publish(clock, event(during_read))
+        return QueryResult(symbol="ETHUSDT", interval="1m",
+                           metadata={"all_rows_final": final_only})
+
+    monkeypatch.setattr(manager.query_engine, "query", read)
+    result = manager.query_materialized("ETHUSDT", "1m", start_ms=0,
+                                        end_ms=180_000, limit=3)
+    version = _history_contract_payload(result)["stream_version"]
+    assert version == {**before, "stable": stable}
+    assert result.metadata["target_materialized_only"] is True
 
 
 def test_backfill_range_is_versioned_even_when_delivery_is_internal():

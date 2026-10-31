@@ -1082,12 +1082,17 @@ class DataManager:
             symbol, interval, exchange=exchange, market_type=market_type,
             action="range-query", source="materialized-history-probe",
         )
+        version_key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                       market_type=market_type, identity=series_identity)
+        version_before = self.event_bus.stream_versions.snapshot(version_key)
         result = self.query_engine.query(
             symbol, interval, start_ms=start_ms, end_ms=end_ms, limit=limit,
             exchange=exchange, market_type=market_type,
             series_identity=series_identity, auto_backfill=False,
             _materialized_only=True,
         )
+        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
+            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
         result.metadata["target_materialized_only"] = True
         return result
 
