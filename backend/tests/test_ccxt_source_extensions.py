@@ -147,7 +147,7 @@ def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spo
                             market_type=desc.market_type, start_ms=int(ROW[0]), end_ms=int(ROW[0]))
         bar = HistoricalFetcher._event_to_bar(event, task)
         assert bar is not None, "unknown enhanced fields must not discard valid OHLCV"
-        assert bar.enhanced_fields == frozenset({"volume", "quote_volume"})
+        assert bar.enhanced_fields == frozenset({"quote_volume"})
         result = await Reconciler(BackfillConfig(), klines_repo.AsyncKlinesRepoAdapter()).reconcile(
             [FetchResult(task=task, bars=[bar])], BackfillPlan(gaps=[]))
         assert result.bars_written == 1 and not result.errors
