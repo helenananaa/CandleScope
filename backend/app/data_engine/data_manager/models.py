@@ -916,6 +916,8 @@ class DataEventType(str, enum.Enum):
     STREAM_STARTED = "stream.started"
     STREAM_STOPPED = "stream.stopped"
     STREAM_ERROR = "stream.error"
+    SOURCE_GAP = "source.gap"
+    SOURCE_GAP_RESOLVED = "source.gap.resolved"
     BACKFILL_STARTED = "backfill.started"
     BACKFILL_COMPLETED = "backfill.completed"
     BACKFILL_FAILED = "backfill.failed"

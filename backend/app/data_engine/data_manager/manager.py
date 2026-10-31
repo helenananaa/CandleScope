@@ -82,13 +82,13 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, AsyncIterator, Protocol
 
 from app.core.async_cleanup import apply_thread_guard, finish_cleanup
 from app.core.executors import run_storage
-from app.data_engine.interval_policy import parse_interval_ms
-from app.data_engine.interval_resolution import IntervalResolver
+from app.data_engine.interval_policy import parse_interval_ms, parse_interval_spec
+from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose
 from app.data_engine.market_data.catalog import (
     MarketDataCatalog,
     MarketDataProviderDescriptor,
@@ -118,6 +118,7 @@ from .auto_gc import (
 from .cache import BarCache
 from .config import DataManagerConfig
 from .coordinator import IngestionFactory, StreamCoordinator
+from .continuity import CONTROLS, ContinuityConsumer, ContinuityPolicy, SourceGapRegistry
 from app.data_engine.consumer_recovery import RecoveryCallback
 from .event_bus import DataEventBus, MiddlewareHook
 from .facades import (
@@ -309,6 +310,8 @@ class DataManager:
             protection_lock=self._storage_gc_guard,
             on_subscription_change=self._mark_storage_gc_protection_changed,
         )
+        self.source_gaps = SourceGapRegistry()
+        self.event_bus.add_middleware(self._annotate_source_continuity)
         self.coordinator = StreamCoordinator(
             config=self._cfg.coordinator,
             cache=self.cache,
@@ -451,6 +454,7 @@ class DataManager:
 
         # Tell Coordinator to route ingestion data through BarAggregator
         self.coordinator.set_bar_aggregator(self.bar_aggregator)
+        self.coordinator.set_gap_handler(self._handle_ingestion_gap)
         self.maintenance = MaintenanceService(
             storage_provider=lambda: self.query_engine.storage,
             aggregator_config_snapshot=lambda: self.bar_aggregator.config.snapshot(),
@@ -712,36 +716,108 @@ class DataManager:
         # direct callbacks for standalone use, but facade queries submit the
         # structured MissingRange results below.
         self.query_engine.set_backfill_trigger(None)
-        if trigger is None:
-            self.coordinator.set_gap_handler(None)
+
+    async def _handle_ingestion_gap(self, key: SeriesKey, marker: Any) -> None:
+        if (getattr(getattr(marker, "stream_type", None), "value", None) != "kline"
+                or getattr(marker, "filled", False)):
             return
-
-        async def _handle_ingestion_gap(key: SeriesKey, gap: Any) -> None:
-            stream_type = getattr(getattr(gap, "stream_type", None), "value", None)
-            if stream_type != "kline" or getattr(gap, "filled", False):
-                return
-
-            interval_ms = parse_interval_ms(key.interval) or 0
-            start_ms = int(getattr(gap, "gap_start", 0) or 0) + interval_ms
-            end_ms = int(getattr(gap, "gap_end", 0) or 0) - interval_ms
-            if start_ms <= 0 or end_ms <= 0 or start_ms > end_ms:
-                return
-            metadata = None
-            if not key.identity.is_legacy_default_for(key.exchange):
-                metadata = {"series_identity": key.identity.to_dict()}
-            self._call_backfill_trigger(
-                key.symbol,
-                key.interval,
-                start_ms,
-                end_ms,
-                key.exchange,
-                key.market_type,
-                reason="tail_gap",
-                requester="ingestion_gap",
-                metadata=metadata,
+        spec = parse_interval_spec(key.interval)
+        if spec is None:
+            return
+        start = spec.next_ms(int(marker.gap_start))
+        end = spec.previous_ms(int(marker.gap_end))
+        expected_opens = getattr(marker, "expected_open_times", None)
+        if expected_opens is not None and len(expected_opens) > self.source_gaps.max_bars:
+            expected_opens = None  # truncated calendar evidence cannot narrow the repair range
+        if expected_opens:
+            start, end = expected_opens[0], expected_opens[-1]
+        if start > end:
+            return
+        targets = {key}
+        for exchange, market, symbol, interval in self.bar_aggregator.get_targets():
+            if (exchange, market, symbol) != (key.exchange, key.market_type, key.symbol):
+                continue
+            route = self.interval_resolver.resolve(
+                exchange=exchange, market_type=market, interval=interval,
+                purpose=IntervalPurpose.REALTIME,
             )
+            if route.base_interval == key.interval:
+                targets.add(SeriesKey.create(symbol, interval, exchange=exchange,
+                                            market_type=market, identity=key.identity))
+        for target in sorted(targets, key=str):
+            target_spec = parse_interval_spec(target.interval)
+            if target == key:
+                # Native exchange calendars may use an anchor different from
+                # the generic interval grid (for example Binance futures 3d).
+                lower, upper, expected = start, end, expected_opens
+            else:
+                lower, upper = target_spec.floor_ms(start), target_spec.floor_ms(end)
+                expected = (tuple(sorted({target_spec.floor_ms(opened) for opened in expected_opens}))
+                            if expected_opens is not None else None)
+            await self._open_source_gap(target, lower, upper, expected)
 
-        self.coordinator.set_gap_handler(_handle_ingestion_gap)
+    async def _open_source_gap(self, target: SeriesKey, lower: int, upper: int,
+                               expected: tuple[int, ...] | None = None) -> None:
+        gap, created = self.source_gaps.open(target, lower, upper, expected)
+        if not created:
+            return
+        # Signal before the post-gap bar, even without a repair backend.
+        await self.event_bus.emit(gap.event())
+        if self._backfill_trigger is None:
+            gap.fail("source_repair_unavailable")
+            await self.event_bus.emit(gap.event())
+            return
+        metadata = {"requires_trusted_finality": True, "source_gap_id": gap.id}
+        if not target.identity.is_legacy_default_for(target.exchange):
+            metadata["series_identity"] = target.identity.to_dict()
+        try:
+            self._call_backfill_trigger(
+                target.symbol, target.interval, lower, upper,
+                target.exchange, target.market_type, reason="tail_gap",
+                requester="ingestion_gap", metadata=metadata,
+            )
+        except Exception:
+            gap.fail("source_repair_submission_failed")
+            await self.event_bus.emit(gap.event())
+            logger.exception("Failed to submit source repair for %s", target)
+
+    async def _annotate_source_continuity(self, event: DataEvent) -> DataEvent:
+        if event.event_type == DataEventType.BACKFILL_FAILED:
+            gap_id = event.detail.get("source_gap_id")
+            gap = self.source_gaps.gaps.get(gap_id)
+            if gap is not None and gap.completed_at is None and gap.key == event.key:
+                gap.fail("source_repair_failed")
+                failure = gap.event()
+                failure.detail["state"] = "failed"
+                await self.event_bus.emit(failure)
+        if event.event_type == DataEventType.STREAM_STOPPED:
+            for gap in self.source_gaps.pending(event.key):
+                gap.fail("source_stream_closed")
+        if event.event_type == DataEventType.STREAM_STARTED:
+            self.source_gaps.retire(event.key)
+            route = self.interval_resolver.resolve(
+                exchange=event.key.exchange, market_type=event.key.market_type,
+                interval=event.key.interval, purpose=IntervalPurpose.REALTIME,
+            )
+            if route.base_interval:
+                spec = parse_interval_spec(event.key.interval)
+                for base_gap in self.source_gaps.pending():
+                    if (base_gap.key.exchange, base_gap.key.market_type, base_gap.key.symbol,
+                        base_gap.key.interval, base_gap.key.identity) != (
+                            event.key.exchange, event.key.market_type, event.key.symbol,
+                            route.base_interval, event.key.identity):
+                        continue
+                    opens = tuple(sorted({spec.floor_ms(opened) for opened in base_gap.expected}))
+                    await self._open_source_gap(event.key, spec.floor_ms(base_gap.start_ms),
+                                                spec.floor_ms(base_gap.end_ms), opens or None)
+        if event.bar is not None:
+            pending = self.source_gaps.pending(event.key)
+            if pending or self.source_gaps.overflowed:
+                return replace(event, detail={**event.detail, "source_continuity": {
+                    "state": "unverified" if self.source_gaps.overflowed else "gapped",
+                    "gap_ids": [gap.id for gap in pending],
+                }})
+        return event
 
     def set_backfill_suppression_lookup(self, lookup: Any | None) -> None:
         """Inject a read-only, non-blocking ledger suppression lookup."""
@@ -889,6 +965,7 @@ class DataManager:
         await self.aggregator_bridge.delivery.stop()
 
         # Close event bus
+        self.source_gaps.close()
         await self.event_bus.close()
 
         # Stream teardown can emit final cache-access signals.  Drain them only
@@ -1487,11 +1564,13 @@ class DataManager:
         *,
         max_pending: int = 64,
         replay: bool = True,
+        continuity: ContinuityPolicy | str | None = None,
     ) -> Any:
         return self.market_state.subscribe(
             keys,
             max_pending=max_pending,
             replay=replay,
+            continuity=continuity,
         )
 
     def _require_market_data_service(self) -> AdvancedMarketDataPort:
@@ -1705,8 +1784,13 @@ class DataManager:
         event_types: set[DataEventType] | None = None,
         *,
         on_recovery: RecoveryCallback | None = None,
+        continuity: ContinuityPolicy | str = "strict",
     ) -> SubscriptionHandle:
         """Subscribe to bar/stream events via callback.
+
+        ``continuity`` defaults to strict (10 seconds from gap detection).
+        Pass a ContinuityPolicy to set the wait budget, or "gap_aware" to
+        receive live events, mandatory gap controls, and historical corrections.
 
         Args:
             callback:    Async function ``(DataEvent) -> None``.
@@ -1739,9 +1823,22 @@ class DataManager:
                 "Both 'symbol' and 'interval' must be provided together, "
                 f"or both omitted. Got symbol={symbol!r}, interval={interval!r}"
             )
+        consumer = ContinuityConsumer(self.source_gaps, ContinuityPolicy.resolve(continuity), event_types)
+
+        async def deliver(event: DataEvent) -> None:
+            async for output in consumer.events(event):
+                await callback(output)
+
+        async def recover(error) -> None:
+            consumer.fail(error)
+            if on_recovery is not None:
+                await on_recovery(error)
+
         return self.event_bus.subscribe(
-            callback=callback, key=key, event_types=event_types,
-            on_recovery=on_recovery,
+            callback=deliver, key=key,
+            event_types=set(event_types) | CONTROLS if event_types is not None else None,
+            on_recovery=recover,
+            initial_events=self.source_gaps.initial_events(key),
         )
 
     def unsubscribe(self, handle: SubscriptionHandle) -> None:
@@ -1755,6 +1852,8 @@ class DataManager:
         exchange: str = "binance",
         market_type: str = "spot",
         event_types: set[DataEventType] | None = None,
+        *,
+        continuity: ContinuityPolicy | str = "strict",
     ) -> AsyncIterator[DataEvent]:
         """Subscribe as an async iterator.
 
@@ -1772,10 +1871,20 @@ class DataManager:
                 "Both 'symbol' and 'interval' must be provided together, "
                 f"or both omitted. Got symbol={symbol!r}, interval={interval!r}"
             )
-        async for event in self.event_bus.subscribe_iter(
-            key=key, event_types=event_types,
-        ):
-            yield event
+        consumer = ContinuityConsumer(self.source_gaps, ContinuityPolicy.resolve(continuity), event_types)
+        async def recover(error) -> None:
+            consumer.fail(error)
+        events = self.event_bus.subscribe_iter(
+            key=key, event_types=set(event_types) | CONTROLS if event_types is not None else None,
+            initial_events=lambda: self.source_gaps.initial_events(key),
+            on_recovery=recover,
+        )
+        try:
+            async for event in events:
+                async for output in consumer.events(event):
+                    yield output
+        finally:
+            await events.aclose()
 
     # ═══════════════════════════════════════════════════════════
     #  Stream Management
@@ -3110,6 +3219,45 @@ class DataManager:
         else:
             self.cache.bulk_load(key, bars)
 
+        # Resolve only actual, trusted final rows from storage. A successful
+        # job/status alone is not evidence that all missing bars were repaired.
+        canonical = [self.cache.get_bar_at(key, bar.time) or bar for bar in bars]
+        for gap in self.source_gaps.completing(key, canonical):
+            # Earlier pages can be corrected or deleted while the final page
+            # is in flight. Revalidate the bounded replay range before waking
+            # strict consumers; retained first-arrival copies are not proof.
+            storage = self.query_engine.storage
+            def load():
+                return storage.query_bars(
+                    symbol, interval, start_ms=gap.start_ms, end_ms=gap.end_ms,
+                    limit=self.source_gaps.max_bars + 1, exchange=exchange,
+                    market_type=market_type, series_identity=key.identity,
+                )
+            consumer = getattr(self.cache, "revision_consumer", None)
+            if consumer is not None:
+                verified = await run_storage(consumer.adopt, key, load)
+            elif storage is not None:
+                rows = await run_storage(load)
+                verified = [BarData.from_storage_row(row, exchange=exchange,
+                            market_type=market_type) for row in rows]
+            else:
+                verified = []
+            verified = [bar for bar in verified if bar.is_closed and bar.trusted_final
+                        and bar.time_ms in gap.expected]
+            if not gap.expected <= {bar.time_ms for bar in verified}:
+                gap.fail("source_gap_revision_changed")
+                await self.event_bus.emit(gap.event())
+            else:
+                canonical.extend(verified)
+        resolved, corrections = self.source_gaps.accept(key, canonical)
+        for bar, gap_ids in corrections:
+            await self.event_bus.emit(DataEvent(
+                DataEventType.BAR_AMENDED, key, bar,
+                detail={"source_gap_ids": gap_ids, "historical_repair": True},
+            ))
+        for gap in resolved:
+            await self.event_bus.emit(gap.event(resolved=True))
+
         detail = {
             "bars_count": len(bars),
             "earliest": bars[0].time,
@@ -3142,10 +3290,16 @@ class DataManager:
     #  Diagnostics
     # ═══════════════════════════════════════════════════════════
 
+    def continuity_contract(self, key: MarketStreamKey) -> dict[str, Any]:
+        """Describe continuity for one admitted provider channel, independently of its symbol."""
+        from app.data_engine.market_data.continuity_contract import continuity_contract
+        return continuity_contract(key)
+
     def market_data_control_snapshot(self) -> dict[str, Any]:
         """Describe the unified control plane without flattening data semantics."""
         return {
             "schema": "candlescope.market-data-control/1",
+            "source_continuity": self.source_gaps.snapshot(),
             "physical_unification": False,
             "cross_backend_atomicity": False,
             "access_namespaces": {

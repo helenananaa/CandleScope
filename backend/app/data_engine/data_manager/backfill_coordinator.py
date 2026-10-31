@@ -2520,6 +2520,9 @@ class BackfillCoordinator:
                 "reason": request.reason,
                 "priority": request.priority,
                 "requester": request.requester,
+                "source_gap_id": request.metadata.get("source_gap_id"),
+                "range_start_ms": request.start_ms,
+                "range_end_ms": request.end_ms,
                 "errors": report.errors if report is not None else ([error] if error else []),
             },
         ))

@@ -486,6 +486,7 @@ class FullOrderBookService:
         keys: MarketStreamKey | Iterable[MarketStreamKey],
         *,
         max_pending: int | None = None,
+        continuity=None,
     ) -> FullOrderBookAttachment:
         self._ensure_readable()
         if isinstance(keys, MarketStreamKey):
@@ -501,6 +502,7 @@ class FullOrderBookService:
             requested,
             max_pending=max_pending,
             replay=True,
+            continuity=continuity,
         )
         current = {
             key: record

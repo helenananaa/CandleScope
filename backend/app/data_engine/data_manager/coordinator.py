@@ -844,6 +844,8 @@ class StreamCoordinator:
                     start_signature = inspect.signature(self._ingestion_factory.start)
                     if "on_gap" in start_signature.parameters:
                         start_kwargs["on_gap"] = on_gap
+                    if "gap_repair_owner" in start_signature.parameters:
+                        start_kwargs["gap_repair_owner"] = "data_manager"
                 except (TypeError, ValueError):
                     logger.debug("Could not inspect ingestion factory start signature")
 

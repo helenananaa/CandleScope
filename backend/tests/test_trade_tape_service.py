@@ -210,6 +210,9 @@ async def test_cancelled_or_timed_out_stop_finishes_before_reuse(monkeypatch, ti
         await release
     assert service.diagnostics()["physical_streams"] == 1
     factory.handle = _Handle()
+    # The first phase proved timeout/cancellation ownership. Give the recovery
+    # phase its own budget instead of racing machine scheduling against 20 ms.
+    service._physical_stop_timeout_seconds = 3
     subscribe = asyncio.create_task(service.ensure_stream(_key(), consumer_id="new"))
     await asyncio.sleep(0)
     assert not subscribe.done()

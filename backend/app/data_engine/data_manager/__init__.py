@@ -52,11 +52,13 @@ from app.data_engine.series_identity import KlineSeriesIdentity
 from .storage_intents import StorageIntentRegistry
 from .subscriptions import SubscriptionTier
 from .manager import DataManager, StreamCapacityError
+from .continuity import ContinuityPolicy
 
 __all__ = [
     # Facade
     "DataManager",
     "StreamCapacityError",
+    "ContinuityPolicy",
     "BarDataFacade",
     "MarketStateFacade",
     "TradeDataFacade",
