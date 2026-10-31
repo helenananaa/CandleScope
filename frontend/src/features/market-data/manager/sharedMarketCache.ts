@@ -184,8 +184,16 @@ export class SharedMarketCache {
       // Latest is a tail observation, not a history claim. A contradictory
       // history response invalidates overlapping proof even if OHLCV is equal.
       if (endpoint !== "latest" && endpoint !== "seed") {
+        const overlapping = entry.proofs.filter(proof => proof.to >= from && proof.from <= to);
         entry.proofs = entry.proofs.filter(proof => proof.to < from || proof.from > to);
-        if (inputQuality.complete && quality.complete) { entry.proofs.push({ from, to }); entry.historyDemand = Math.min(1500, Math.max(entry.historyDemand, incoming.length)); }
+        if (inputQuality.complete && quality.complete) {
+          // A narrower verified snapshot does not revoke wider valid history.
+          // Missed critical events already clear those proofs above. Merge only
+          // overlapping ranges; adjacency alone is not a calendar proof.
+          entry.proofs.push({ from: Math.min(from, ...overlapping.map(proof => proof.from)),
+            to: Math.max(to, ...overlapping.map(proof => proof.to)) });
+          entry.historyDemand = Math.min(1500, Math.max(entry.historyDemand, incoming.length));
+        }
         entry.proofs = entry.proofs.slice(-128);
       }
     }
@@ -272,6 +280,11 @@ export class SharedMarketCache {
     const health = (entry?.health ?? new MarketHealthState(this.options.now, this.options.freshMs)).status(snapshot.complete && entry?.expectedClosedTime != null && Number(snapshot.rows.at(-1)?.time) >= entry.expectedClosedTime);
     return { snapshot, health, action: health.healthy ? "reuse" : !snapshot.complete ? "load"
       : !health.subscribed ? "subscribe-and-verify" : "verify" };
+  }
+
+  /** Current stream evidence only; historical coverage remains a separate check. */
+  hasCurrentStream(series: MarketSeries): boolean {
+    return this.entries.get(String(buildSeriesWindowKey(series)))?.health.status(true).healthy === true;
   }
 
   verificationDemand(series: MarketSeries): number {

@@ -38,6 +38,23 @@ test("a subscription/ACK and a legacy or unstable snapshot never prove health", 
   }
 });
 
+test("shared stream observations expire and revoke independently of historical coverage", () => {
+  let clock = now;
+  const cache = healthy(new SharedMarketCache({ now: () => clock }));
+  assert.equal(cache.hasCurrentStream(series), true);
+  assert.equal(cache.hasCurrentStream({ ...series, priceAdjustment: "adjusted" }), false);
+  // A larger history demand is unproven even while the stream is current.
+  assert.equal(cache.planHistory(series, 500).health.historyCovered, false);
+  clock += 15_001;
+  assert.equal(cache.hasCurrentStream(series), false);
+  cache.admitRealtime(series, row(180, false), "bar.updated", wire(2, 1, { observed_at_ms: clock }), 120_000);
+  assert.equal(cache.hasCurrentStream(series), true);
+  cache.markDisconnected(series);
+  assert.equal(cache.hasCurrentStream(series), false);
+  cache.connect(series);
+  assert.equal(cache.hasCurrentStream(series), false);
+});
+
 test("snapshot-before-stream and stream-before-snapshot converge on the same scoped cutover", () => {
   healthy();
   const cache = new SharedMarketCache({ now: () => now }); cache.connect(series);
@@ -153,6 +170,16 @@ test("a snapshot crossing unseen critical events revokes proofs and input stamps
   assert.equal(cache.read(series, { from: 60, to: 60 }).complete, false);
   assert.equal(oldInput.isCurrent(), false);
   assert.notEqual(cache.planHistory(series, 2).action, "reuse");
+});
+
+test("a narrower current snapshot preserves the already-proven wider history", () => {
+  const cache = new SharedMarketCache({ now: () => now });
+  cache.connect(series);
+  read(cache, wire(0, 0), [row(60), row(120), row(180), row(240)]);
+  cache.admitRealtime(series, row(300, false), "bar.created", wire(1), 240_000);
+  assert.equal(cache.planHistory(series, 4).action, "reuse");
+  read(cache, wire(1), [row(180), row(240)]);
+  assert.equal(cache.planHistory(series, 4).action, "reuse");
 });
 
 test("production Feed switching consumes a healthy warm series with no HTTP or physical resubscribe", async t => {

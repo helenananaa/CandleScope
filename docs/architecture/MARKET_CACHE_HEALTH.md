@@ -75,6 +75,13 @@ requires a real tail event within 15 seconds by both receipt and server time
 (at most five seconds of future clock skew). Coverage must reach the server's
 expected closed predecessor; row count alone is insufficient.
 
+A new chart that has received its interval ACK can reuse the shared owner's
+current stream observation while waiting for its own first tick. It queries the
+owner's existing expiry/continuity evidence; joining never renews its age. This
+avoids an unnecessary one-second fallback tail read. History coverage is still
+checked independently. A narrower complete snapshot merges overlapping valid
+coverage instead of discarding the previously verified wider hydration range.
+
 - Healthy and sufficient: return final history directly, retain the forming tail
   in the shared/private projection, and reuse the existing stream.
 - History present but tail uncertain: render the bounded provisional preview,
