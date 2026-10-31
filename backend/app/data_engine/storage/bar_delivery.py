@@ -11,6 +11,7 @@ from contextlib import closing
 
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.series_identity import KlineSeriesIdentity
+from .revisions import current_revision, series_change, series_values, register_derived, IDENTITY_COLUMNS
 
 
 def _json(value):
@@ -36,6 +37,13 @@ def init_bar_delivery_storage(conn):
         );
     """)
 
+    for table, column in (("bar_delivery", "observed_revision"),
+                          ("bar_delivery", "committed_revision"),
+                          ("bar_delivery", "recovery_required"),
+                          ("bar_delivery_watches", "observed_revision")):
+        if column not in {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
+
 
 class BarDeliveryJournal:
     def __init__(self, connect, write, *, max_pending=4096, retained=8192):
@@ -55,24 +63,25 @@ class BarDeliveryJournal:
                 if existing["payload"] != encoded:
                     raise ValueError("Bar delivery identity reused with different content")
                 return self._record(existing)
-            pending = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed')").fetchone()[0]
+            pending = conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
             if pending >= self.max_pending:
                 raise BarDeliveryUnavailable("Bar delivery journal is at capacity")
-            conn.execute("INSERT INTO bar_delivery(event_id,payload,phase,created_ms) VALUES (?,?,'pending',?)",
-                         (event_id, encoded, int(time.time() * 1000)))
+            conn.execute("INSERT INTO bar_delivery(event_id,payload,phase,created_ms,observed_revision) VALUES (?,?,'pending',?,?)",
+                         (event_id, encoded, int(time.time() * 1000), payload.get("acquisition_revision", current_revision(conn))))
             return self._record(conn.execute("SELECT * FROM bar_delivery WHERE event_id=?", (event_id,)).fetchone())
 
     def pending(self, limit=64):
         with closing(self._connect()) as conn:
             return [self._record(row) for row in conn.execute(
-                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') ORDER BY sequence LIMIT ?", (limit,))]
+                "SELECT * FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1 ORDER BY sequence LIMIT ?", (limit,))]
 
     def pending_count(self):
         with closing(self._connect()) as conn:
-            return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed')").fetchone()[0]
+            return conn.execute("SELECT COUNT(*) FROM bar_delivery WHERE phase IN ('pending','committed') OR recovery_required=1").fetchone()[0]
 
     def _prune(self, conn):
         conn.execute("""DELETE FROM bar_delivery WHERE phase IN ('published','rejected')
+            AND recovery_required=0
             AND sequence < (SELECT COALESCE(MAX(sequence),0)-? FROM bar_delivery)""", (self.retained,))
 
     @staticmethod
@@ -84,6 +93,9 @@ class BarDeliveryJournal:
         scope.update(identity.to_dict(), open_time=payload["storage_row"]["open_time"])
         row = conn.execute("SELECT * FROM klines WHERE " + " AND ".join(f"{name}=?" for name in scope), tuple(scope.values())).fetchone()
         record["canonical_row"] = dict(row) if row is not None else None
+        change = series_change(conn, series_values(payload["symbol"], payload["interval"],
+                                                   payload["exchange"], payload["market_type"], identity))
+        record["canonical_revision"] = int(change["revision"]) if change else 0
         return record
 
     def commit(self, event_id):
@@ -99,26 +111,93 @@ class BarDeliveryJournal:
             identity = KlineSeriesIdentity.for_exchange(payload["exchange"], **{
                 name: payload[name] for name in KlineSeriesIdentity.for_exchange(payload["exchange"]).to_dict()
                 if name in payload})
+            values = series_values(payload["symbol"], payload["interval"], payload["exchange"], payload["market_type"], identity)
+            if payload.get("derived"):
+                # A target may not exist yet when its input is repaired/deleted.
+                # Check its semantic family, including those source revisions.
+                family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
+                changes = conn.execute("SELECT * FROM kline_series_changes WHERE " +
+                    " AND ".join(f"{name}=?" for name, _ in family), tuple(value for _, value in family)).fetchall()
+            else:
+                change = series_change(conn, values)
+                changes = [change] if change is not None else []
+            for change in changes:
+                if change["revision"] <= record["observed_revision"]:
+                    continue
+                if not payload.get("derived"):
+                    start = payload["storage_row"]["open_time"]
+                    end = payload["storage_row"].get("close_time")
+                    # The durable range encloses every mutation ever observed
+                    # for this identity, including empty deletes. A disjoint
+                    # native candle cannot depend on those changed rows. This
+                    # lets an in-flight forming candle close after older gaps
+                    # are repaired, without granting it a newer acquisition.
+                    if end is not None and end >= start and (
+                        end < change["start_ms"] or start > change["end_ms"]
+                    ):
+                        continue
+                predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
+                                           (record["sequence"], change["revision"])).fetchone()
+                if change["delete_revision"] > record["observed_revision"] or predecessor is None:
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record["phase"] = "rejected"
+                    record["recovery_required"] = 1
+                    return self._canonical(conn, record)
+            if payload.get("derived"):
+                register_derived(conn, series_values(payload["symbol"], payload["interval"],
+                    payload["exchange"], payload["market_type"], identity))
             affected = self._write(payload["symbol"], payload["interval"], [payload["storage_row"]],
                                    payload["bar"]["source"], exchange=payload["exchange"],
                                    market_type=payload["market_type"], series_identity=identity, _connection=conn)
             record["phase"] = "committed" if affected else "rejected"
-            conn.execute("UPDATE bar_delivery SET phase=? WHERE event_id=?", (record["phase"], event_id))
+            record["committed_revision"] = current_revision(conn)
+            conn.execute("UPDATE bar_delivery SET phase=?,committed_revision=? WHERE event_id=?",
+                         (record["phase"], record["committed_revision"], event_id))
             self._prune(conn)
             return self._canonical(conn, record)
 
     def acknowledge(self, event_id):
         with closing(self._connect()) as conn, conn:
             conn.execute("UPDATE bar_delivery SET phase='published' WHERE event_id=? AND phase='committed'", (event_id,))
+            conn.execute("UPDATE bar_delivery SET recovery_required=0 WHERE event_id=? AND phase='rejected'", (event_id,))
             # Pending receipts and unpublished commits are never pruned.
             self._prune(conn)
 
     def watch(self, owner, series, from_ms):
         encoded = _json(series)
         with closing(self._connect()) as conn, conn:
-            conn.execute("""INSERT INTO bar_delivery_watches(watch_id,owner,series,from_ms) VALUES (?,?,?,?)
-                ON CONFLICT(watch_id) DO UPDATE SET from_ms=MIN(from_ms,excluded.from_ms)""",
-                (owner + ":" + encoded, owner, encoded, from_ms))
+            conn.execute("BEGIN IMMEDIATE")
+            watch_id = owner + ":" + encoded
+            existing = conn.execute("SELECT * FROM bar_delivery_watches WHERE watch_id=?", (watch_id,)).fetchone()
+            if existing is not None and not self._watch_superseded(conn, self._record_watch(existing)):
+                from_ms = min(from_ms, existing["from_ms"])
+                revision = existing["observed_revision"]
+            else:
+                revision = current_revision(conn)
+            conn.execute("""INSERT INTO bar_delivery_watches(watch_id,owner,series,from_ms,observed_revision)
+                VALUES (?,?,?,?,?) ON CONFLICT(watch_id) DO UPDATE SET from_ms=excluded.from_ms,
+                observed_revision=excluded.observed_revision""", (watch_id, owner, encoded, from_ms, revision))
+
+    @staticmethod
+    def _record_watch(row):
+        return {**dict(row), "series": json.loads(row["series"])}
+
+    @staticmethod
+    def _watch_superseded(conn, watch):
+        series = watch["series"]
+        exchange = series.get("exchange", "binance")
+        identity = KlineSeriesIdentity.for_exchange(exchange, **{
+            name: series[name] for name in KlineSeriesIdentity.for_exchange(exchange).to_dict() if name in series})
+        values = series_values(series["symbol"], series["interval"], exchange,
+                               series.get("market_type", "spot"), identity)
+        family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
+        return conn.execute("SELECT 1 FROM kline_series_changes WHERE " +
+            " AND ".join(f"{name}=?" for name, _ in family) + " AND delete_revision>? LIMIT 1",
+            (*[value for _, value in family], watch.get("observed_revision", 0))).fetchone() is not None
+
+    def watch_superseded(self, watch):
+        with closing(self._connect()) as conn:
+            return self._watch_superseded(conn, watch)
 
     def recovery_watches(self, owner, through_ms, limit=32, after=None):
         """Read a bounded page; a value cursor remains valid after acknowledgement."""
@@ -142,8 +221,8 @@ class BarDeliveryJournal:
 
     def capture_failed_watches(self, owner):
         with closing(self._connect()) as conn, conn:
-            conn.execute("""INSERT INTO bar_delivery_watches(watch_id,owner,series,from_ms,through_ms)
-                SELECT 'retry:' || watch_id,'retry:' || owner,series,from_ms,NULL
+            conn.execute("""INSERT INTO bar_delivery_watches(watch_id,owner,series,from_ms,through_ms,observed_revision)
+                SELECT 'retry:' || watch_id,'retry:' || owner,series,from_ms,NULL,observed_revision
                 FROM bar_delivery_watches WHERE owner=?
                 ON CONFLICT(watch_id) DO UPDATE SET from_ms=MIN(from_ms,excluded.from_ms),through_ms=NULL""", (owner,))
 

@@ -62,6 +62,34 @@ def test_quality_rejection_is_not_a_storage_failure(journal):
     assert klines_repo.query_klines("BTCUSDT", "1m")[0]["close"] == 4
 
 
+@pytest.mark.parametrize("mutation", ["repair", "delete"])
+@pytest.mark.parametrize("other_open", [0, 120_000])
+def test_disjoint_history_change_does_not_reject_a_fresh_native_close(journal, mutation, other_open):
+    journal.enqueue("forming-before-repair", payload())
+    if mutation == "repair":
+        other = {**payload(4)["storage_row"], "open_time": other_open, "close_time": other_open + 59_999}
+        klines_repo.upsert_klines("BTCUSDT", "1m", [other], source="repair_binance_rest_verified")
+    else:
+        klines_repo.KlinesRepoAdapter().delete_bars("BTCUSDT", "1m", start_ms=other_open, end_ms=other_open + 59_999)
+    # Reopening exercises the durable conservative range, not transient state.
+    result = klines_repo.KlinesRepoAdapter().bar_delivery.commit("forming-before-repair")
+    assert result["phase"] == "committed"
+    assert result["canonical_row"]["close"] == 2
+
+
+@pytest.mark.parametrize("mutation", ["repair", "delete"])
+def test_later_disjoint_change_cannot_hide_an_overlapping_mutation(journal, mutation):
+    journal.enqueue("old", payload())
+    if mutation == "repair":
+        klines_repo.upsert_klines("BTCUSDT", "1m", [payload(4)["storage_row"]], source="repair_binance_rest_verified")
+    else:
+        klines_repo.KlinesRepoAdapter().delete_bars("BTCUSDT", "1m", start_ms=60_000, end_ms=119_999)
+    other = {**payload(4)["storage_row"], "open_time": 120_000, "close_time": 179_999}
+    klines_repo.upsert_klines("BTCUSDT", "1m", [other], source="repair_binance_rest_verified")
+    result = klines_repo.KlinesRepoAdapter().bar_delivery.commit("old")
+    assert result["phase"] == "rejected" and result["recovery_required"] == 1
+
+
 def test_pending_journal_has_finite_admission(journal):
     journal.max_pending = 2
     journal.enqueue("event-a", payload())

@@ -466,7 +466,7 @@ class DataEventBus:
                 if item is None:
                     break
                 self._record_queue_lag(sub, item.enqueued_at)
-                yield deepcopy(item.event) if item.sequence else item.event
+                yield deepcopy(item.event)
                 self._confirm(sub, item)
         finally:
             def remove() -> None:
@@ -489,6 +489,20 @@ class DataEventBus:
             await finish_cleanup(apply_thread_guard(self._protection_lock, remove))
 
     # ── Public: Emit ─────────────────────────────────────────
+
+    def require_recovery(self, key: SeriesKey, reason: str, *,
+                         event_types: set[DataEventType] | None = None) -> None:
+        """Invalidate affected consumers when a producer cannot deliver a bar.
+
+        Called on the bus event loop. Terminal state is set synchronously;
+        user recovery callbacks run in their existing isolated tasks. This
+        also wakes iterators and continuity waits without a later data event.
+        """
+        callbacks, queues = self._matching_subscriptions(key)
+        for _, sub in (*callbacks, *queues):
+            subscribed = sub.handle.event_types
+            if event_types is None or subscribed is None or subscribed & event_types:
+                self._require_recovery(sub, reason, None)
 
     async def emit(self, event: DataEvent) -> None:
         ticket = self.stream_versions.begin(event)
@@ -524,7 +538,7 @@ class DataEventBus:
 
         if self._closed:
             raise RuntimeError("event bus is closed")
-        event = processed
+        event = deepcopy(processed)
         delivery_id = event.detail.get("delivery_id")
         if delivery_id and delivery_id in self._delivery_ids:
             return
@@ -533,7 +547,6 @@ class DataEventBus:
         if event.event_type not in _REPLACEABLE_TYPES:
             # A single immutable copy is shared by the replay window and queues.
             # Callbacks receive a copy, so mutation cannot corrupt later replay.
-            event = deepcopy(event)
             self._sequence += 1
             sequence = self._sequence
             self._journal[sequence] = _QueuedEvent(event, time.perf_counter(), sequence)
@@ -684,6 +697,17 @@ class DataEventBus:
             return set(self._callback_ids_by_key) | set(self._queue_ids_by_key)
 
     # ── Public: Snapshot ─────────────────────────────────────
+
+    def memory_usage(self):
+        queues = [sub.queue for sub in [*self._callback_subs.values(), *self._queue_subs.values()]]
+        queued = sum(queue.qsize() for queue in queues)
+        return {"journal_events": len(self._journal), "queued_events": queued,
+                "estimated_bytes": (len(self._journal) + queued) * 1024,
+                "protection": "durable recovery is stored separately in SQLite"}
+
+    def _memory_roots(self):
+        queues = [sub.queue for sub in [*self._callback_subs.values(), *self._queue_subs.values()]]
+        return [list(self._journal.values()), *[list(queue._queue) for queue in queues]]
 
     def snapshot(self) -> dict:
         """JSON-serializable diagnostic snapshot."""
@@ -846,7 +870,7 @@ class DataEventBus:
                 continue
             self._record_queue_lag(sub, item.enqueued_at)
             try:
-                await handle.callback(deepcopy(item.event) if item.sequence else item.event)
+                await handle.callback(deepcopy(item.event))
                 self._confirm(sub, item)
             except asyncio.CancelledError:
                 raise

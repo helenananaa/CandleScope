@@ -1,0 +1,354 @@
+{
+  "baseline_revision": "40f789bfca167c2e1d3022d786fa578accfd068c",
+  "main_base": "b84b5e3d514e43fca556613fe107e29d12f7a329",
+  "candidate": "D126 code in this PR",
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate-repeat",
+    "baseline-repeat"
+  ],
+  "scope": "Controlled backend primitives and isolated SQLite; shared macOS host; no desktop/network acceptance; no frozen latency gate",
+  "runs": {
+    "baseline": {
+      "variant": "baseline",
+      "python": "3.12.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "scenarios": {
+        "construct_record": {
+          "p50_us": 0.75,
+          "p95_us": 1.0,
+          "p99_us": 1.541,
+          "samples": 1000
+        },
+        "tail_upsert": {
+          "p50_us": 1.416,
+          "p95_us": 1.5,
+          "p99_us": 4.125,
+          "samples": 2000
+        },
+        "event_snapshot": {
+          "p50_us": 23.5,
+          "p95_us": 24.417,
+          "p99_us": 42.875,
+          "samples": 1000
+        },
+        "warm_1": {
+          "p50_us": 437.3125,
+          "p95_us": 605.291,
+          "p99_us": 831.25,
+          "samples": 200
+        },
+        "warm_1500": {
+          "p50_us": 640.75,
+          "p95_us": 919.791,
+          "p99_us": 1154.292,
+          "samples": 200
+        },
+        "warm_5000": {
+          "p50_us": 1108.9165,
+          "p95_us": 1364.625,
+          "p99_us": 1626.792,
+          "samples": 200
+        },
+        "cold_sqlite_1500": {
+          "p50_us": 8013.2080000000005,
+          "p95_us": 8575.0,
+          "p99_us": 9041.417,
+          "samples": 40
+        },
+        "write_1": {
+          "p50_us": 369.54150000000004,
+          "p95_us": 586.75,
+          "p99_us": 1495.792,
+          "samples": 50
+        },
+        "write_1000": {
+          "p50_us": 6950.208,
+          "p95_us": 163470.708,
+          "p99_us": 163470.708,
+          "samples": 20
+        },
+        "publisher_0": {
+          "p50_us": 2.917,
+          "p95_us": 3.292,
+          "p99_us": 29.792,
+          "samples": 100
+        },
+        "publisher_1000": {
+          "p50_us": 2.833,
+          "p95_us": 2.917,
+          "p99_us": 5.167,
+          "samples": 100
+        }
+      },
+      "retained_python_bytes": 1976520,
+      "peak_python_bytes": 1984032,
+      "shared_event_records": 0,
+      "input_hash": "0108997f358b39b08bcbbc0cd778e2693f4ee14a79cdadda498a196d298d9bf3",
+      "query_hashes": {
+        "1": "6825bbc5d7f60816632e3df74392c3c891650e07aa3e04fc71d635577e0dc3a6",
+        "1500": "ee9ac3f42affc2684d013568214e7e9a32c8f7c4896fb30f5b91a995d3b7a823",
+        "5000": "b81483beb51e3bdaed959186f319b70773db1c89d11668917a3217f3e385abce"
+      },
+      "canonical_hash": "6cfe49810a3dc31f6f4010ee92e480b82729285d60c81cd50b0bd77a034bb134",
+      "process_peak_rss_bytes": 212828160,
+      "rss_scope": "whole interpreter maximum; includes imports, SQLite and all sequential scenarios"
+    },
+    "candidate": {
+      "variant": "candidate",
+      "python": "3.12.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "scenarios": {
+        "construct_record": {
+          "p50_us": 1.916,
+          "p95_us": 1.958,
+          "p99_us": 2.0,
+          "samples": 1000
+        },
+        "tail_upsert": {
+          "p50_us": 1.375,
+          "p95_us": 1.458,
+          "p99_us": 1.5,
+          "samples": 2000
+        },
+        "event_snapshot": {
+          "p50_us": 13.916,
+          "p95_us": 14.25,
+          "p99_us": 16.417,
+          "samples": 1000
+        },
+        "warm_1": {
+          "p50_us": 440.875,
+          "p95_us": 492.959,
+          "p99_us": 786.333,
+          "samples": 200
+        },
+        "warm_1500": {
+          "p50_us": 627.0625,
+          "p95_us": 705.458,
+          "p99_us": 1466.916,
+          "samples": 200
+        },
+        "warm_5000": {
+          "p50_us": 1071.729,
+          "p95_us": 1223.542,
+          "p99_us": 2350.292,
+          "samples": 200
+        },
+        "cold_sqlite_1500": {
+          "p50_us": 11872.7915,
+          "p95_us": 12828.416,
+          "p99_us": 12997.458,
+          "samples": 40
+        },
+        "write_1": {
+          "p50_us": 1119.979,
+          "p95_us": 1663.167,
+          "p99_us": 3883.25,
+          "samples": 50
+        },
+        "write_1000": {
+          "p50_us": 13584.604,
+          "p95_us": 14470.959,
+          "p99_us": 14470.959,
+          "samples": 20
+        },
+        "publisher_0": {
+          "p50_us": 13.916,
+          "p95_us": 14.458,
+          "p99_us": 55.667,
+          "samples": 100
+        },
+        "publisher_1000": {
+          "p50_us": 108.125,
+          "p95_us": 113.833,
+          "p99_us": 216.625,
+          "samples": 100
+        }
+      },
+      "retained_python_bytes": 1872392,
+      "peak_python_bytes": 1878912,
+      "shared_event_records": 500,
+      "input_hash": "0108997f358b39b08bcbbc0cd778e2693f4ee14a79cdadda498a196d298d9bf3",
+      "query_hashes": {
+        "1": "6825bbc5d7f60816632e3df74392c3c891650e07aa3e04fc71d635577e0dc3a6",
+        "1500": "ee9ac3f42affc2684d013568214e7e9a32c8f7c4896fb30f5b91a995d3b7a823",
+        "5000": "b81483beb51e3bdaed959186f319b70773db1c89d11668917a3217f3e385abce"
+      },
+      "canonical_hash": "6cfe49810a3dc31f6f4010ee92e480b82729285d60c81cd50b0bd77a034bb134",
+      "process_peak_rss_bytes": 223920128,
+      "rss_scope": "whole interpreter maximum; includes imports, SQLite and all sequential scenarios"
+    },
+    "candidate-repeat": {
+      "variant": "candidate",
+      "python": "3.12.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "scenarios": {
+        "construct_record": {
+          "p50_us": 2.25,
+          "p95_us": 5.583,
+          "p99_us": 12.666,
+          "samples": 1000
+        },
+        "tail_upsert": {
+          "p50_us": 1.584,
+          "p95_us": 3.625,
+          "p99_us": 19.584,
+          "samples": 2000
+        },
+        "event_snapshot": {
+          "p50_us": 16.334,
+          "p95_us": 45.542,
+          "p99_us": 108.625,
+          "samples": 1000
+        },
+        "warm_1": {
+          "p50_us": 525.2080000000001,
+          "p95_us": 795.667,
+          "p99_us": 2017.292,
+          "samples": 200
+        },
+        "warm_1500": {
+          "p50_us": 839.1669999999999,
+          "p95_us": 1445.333,
+          "p99_us": 1836.459,
+          "samples": 200
+        },
+        "warm_5000": {
+          "p50_us": 1307.3125,
+          "p95_us": 1849.333,
+          "p99_us": 3165.833,
+          "samples": 200
+        },
+        "cold_sqlite_1500": {
+          "p50_us": 15185.354500000001,
+          "p95_us": 19093.916,
+          "p99_us": 19910.333,
+          "samples": 40
+        },
+        "write_1": {
+          "p50_us": 1303.7295,
+          "p95_us": 1529.5,
+          "p99_us": 4243.708,
+          "samples": 50
+        },
+        "write_1000": {
+          "p50_us": 16480.854,
+          "p95_us": 18485.291,
+          "p99_us": 18485.291,
+          "samples": 20
+        },
+        "publisher_0": {
+          "p50_us": 16.917,
+          "p95_us": 17.917,
+          "p99_us": 63.917,
+          "samples": 100
+        },
+        "publisher_1000": {
+          "p50_us": 130.3125,
+          "p95_us": 155.125,
+          "p99_us": 188.875,
+          "samples": 100
+        }
+      },
+      "retained_python_bytes": 1872392,
+      "peak_python_bytes": 1878912,
+      "shared_event_records": 500,
+      "input_hash": "0108997f358b39b08bcbbc0cd778e2693f4ee14a79cdadda498a196d298d9bf3",
+      "query_hashes": {
+        "1": "6825bbc5d7f60816632e3df74392c3c891650e07aa3e04fc71d635577e0dc3a6",
+        "1500": "ee9ac3f42affc2684d013568214e7e9a32c8f7c4896fb30f5b91a995d3b7a823",
+        "5000": "b81483beb51e3bdaed959186f319b70773db1c89d11668917a3217f3e385abce"
+      },
+      "canonical_hash": "6cfe49810a3dc31f6f4010ee92e480b82729285d60c81cd50b0bd77a034bb134",
+      "process_peak_rss_bytes": 224067584,
+      "rss_scope": "whole interpreter maximum; includes imports, SQLite and all sequential scenarios"
+    },
+    "baseline-repeat": {
+      "variant": "baseline",
+      "python": "3.12.15",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "scenarios": {
+        "construct_record": {
+          "p50_us": 0.791,
+          "p95_us": 0.875,
+          "p99_us": 1.125,
+          "samples": 1000
+        },
+        "tail_upsert": {
+          "p50_us": 1.5,
+          "p95_us": 1.583,
+          "p99_us": 1.625,
+          "samples": 2000
+        },
+        "event_snapshot": {
+          "p50_us": 25.375,
+          "p95_us": 27.417,
+          "p99_us": 50.083,
+          "samples": 1000
+        },
+        "warm_1": {
+          "p50_us": 500.5625,
+          "p95_us": 546.417,
+          "p99_us": 778.541,
+          "samples": 200
+        },
+        "warm_1500": {
+          "p50_us": 737.125,
+          "p95_us": 862.958,
+          "p99_us": 1131.584,
+          "samples": 200
+        },
+        "warm_5000": {
+          "p50_us": 1310.5835,
+          "p95_us": 1865.333,
+          "p99_us": 3170.666,
+          "samples": 200
+        },
+        "cold_sqlite_1500": {
+          "p50_us": 9748.8955,
+          "p95_us": 12242.792,
+          "p99_us": 15359.958,
+          "samples": 40
+        },
+        "write_1": {
+          "p50_us": 405.8965,
+          "p95_us": 686.083,
+          "p99_us": 1729.667,
+          "samples": 50
+        },
+        "write_1000": {
+          "p50_us": 8000.729,
+          "p95_us": 8870.875,
+          "p99_us": 8870.875,
+          "samples": 20
+        },
+        "publisher_0": {
+          "p50_us": 3.5415,
+          "p95_us": 4.542,
+          "p99_us": 32.083,
+          "samples": 100
+        },
+        "publisher_1000": {
+          "p50_us": 3.458,
+          "p95_us": 3.667,
+          "p99_us": 15.792,
+          "samples": 100
+        }
+      },
+      "retained_python_bytes": 1976520,
+      "peak_python_bytes": 1984032,
+      "shared_event_records": 0,
+      "input_hash": "0108997f358b39b08bcbbc0cd778e2693f4ee14a79cdadda498a196d298d9bf3",
+      "query_hashes": {
+        "1": "6825bbc5d7f60816632e3df74392c3c891650e07aa3e04fc71d635577e0dc3a6",
+        "1500": "ee9ac3f42affc2684d013568214e7e9a32c8f7c4896fb30f5b91a995d3b7a823",
+        "5000": "b81483beb51e3bdaed959186f319b70773db1c89d11668917a3217f3e385abce"
+      },
+      "canonical_hash": "6cfe49810a3dc31f6f4010ee92e480b82729285d60c81cd50b0bd77a034bb134",
+      "process_peak_rss_bytes": 212828160,
+      "rss_scope": "whole interpreter maximum; includes imports, SQLite and all sequential scenarios"
+    }
+  }
+}

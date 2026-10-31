@@ -668,9 +668,11 @@ def test_unconfirmed_native_bar_expires_on_timeout_without_closed_event() -> Non
         assert agg.get_bucket_state(
             "BTC-USDT", "1h", 0, exchange="okx", market_type="spot",
         ) is None
-        assert state.status == BarStatus.EXPIRED
+        assert state.status == BarStatus.FORMING  # previously captured read snapshot stays stable
+        expired = next(event.bar for event in reversed(events) if event.event_type == BarEventType.EXPIRED)
+        assert expired.status == BarStatus.EXPIRED
         assert state.finality == BarFinality.PROVISIONAL
-        assert state.close_reason == "timeout_unconfirmed"
+        assert expired.close_reason == "timeout_unconfirmed"
         assert BarEventType.CLOSED not in [event.event_type for event in events]
         assert BarEventType.EXPIRED in [event.event_type for event in events]
 
@@ -756,7 +758,9 @@ def test_shutdown_expires_unconfirmed_native_bar_without_closed_event() -> None:
 
         await agg.stop()
 
-        assert state.status == BarStatus.EXPIRED
+        assert state.status == BarStatus.FORMING  # previously captured read snapshot stays stable
+        expired = next(event.bar for event in reversed(events) if event.event_type == BarEventType.EXPIRED)
+        assert expired.status == BarStatus.EXPIRED
         assert BarEventType.CLOSED not in [event.event_type for event in events]
         assert BarEventType.EXPIRED in [event.event_type for event in events]
 
@@ -834,7 +838,9 @@ def test_legacy_source_close_flag_cannot_disable_native_finality_boundary() -> N
 
         await agg._check_timeouts()
 
-        assert state.status == BarStatus.EXPIRED
+        assert state.status == BarStatus.FORMING  # previously captured read snapshot stays stable
+        expired = next(event.bar for event in reversed(events) if event.event_type == BarEventType.EXPIRED)
+        assert expired.status == BarStatus.EXPIRED
         assert BarEventType.CLOSED not in [event.event_type for event in events]
 
         await agg.ingest_bar_input(
@@ -1318,7 +1324,8 @@ def test_active_capacity_expires_unconfirmed_native_bar_without_closed_event() -
                 )
 
         assert first is not None
-        assert first.status == BarStatus.EXPIRED
+        assert first.status == BarStatus.FORMING
+        assert any(event.bar.status == BarStatus.EXPIRED for event in events)
         assert agg.get_recent_bars(
             "BTC-USDT", "1h", exchange="okx", market_type="spot",
         ) == []
