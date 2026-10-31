@@ -522,6 +522,9 @@ export function useIndicatorComputeController({
 
       publishResults(scheduled.results);
     } catch (error) {
+      // A workspace input fence or cancelled consumer is not a program error.
+      // Persisting it would disable frontend JS until the user edits the script.
+      if (error instanceof Error && error.name === "AbortError") return;
       if (inputIsCurrent() && committedRuntimeRef.current.lifecycleKey === lifecycleKey) {
         const message = error instanceof Error ? error.message : String(error);
         const failedJobKeysById = resolveSubmittedLocalJobKeysById({

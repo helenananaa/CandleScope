@@ -66,13 +66,16 @@ export async function checkIndicatorDataFlow() {
   }
   let browserExecutions = 0, hostedExecutions = 0;
   let backendAvailable = false, backendFailures = 0;
+  let cancelNextBrowser = false;
   const indicators = new IndicatorDataManager({ cache: market.cache, gate, coalesceMs: 40,
     compute: input => routeIndicatorComputeBatch(input, async ({ jobs }) => {
       if (!backendAvailable) { backendFailures += 1; throw new Error("controlled backend offline"); }
       return { ok: true, results: jobs.map(job => ({ clientId: job.clientId, jobKey: job.jobKey,
         payload: parseIndicatorPayloadEnvelope({ ok: true, lines: [{ id: "ema", data: job.request.ohlcv.map(row => ({ time: row.time, value: row.close })) }] }) })) };
     }, async (request, signal) => {
-      browserExecutions += 1; return computeFrontendScript(request, signal);
+      browserExecutions += 1;
+      if (cancelNextBrowser) { cancelNextBrowser = false; throw new DOMException("superseded input", "AbortError"); }
+      return computeFrontendScript(request, signal);
     }),
     range: async ({ requests }) => {
       hostedExecutions += 1;
@@ -169,6 +172,18 @@ export async function checkIndicatorDataFlow() {
     await until(() => { const item = latest.get("left")?.view.activeIndicators.find(item => item.id === "offline-ema"); return Boolean(item?.lines?.length && !item.error); }, "backend result did not recover");
     assert(value("right") === 10 && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "transport failure changed unrelated chart");
     checks.push("failed backend work cannot poison a pending real JS worker; backend recovery preserves the other chart");
+    const beforeCancellation = browserExecutions;
+    cancelNextBrowser = true; latest.get("left")!.actions.recompute(true);
+    await until(() => browserExecutions > beforeCancellation, "cancelled computation did not run");
+    await delay(150);
+    assert(!latest.get("left")!.view.activeIndicators.find(item => item.id === "js")!.error,
+      "superseded computation became a persistent script error");
+    sequence.set("ETHUSDT", 3);
+    market.cache.admitRealtime(identity("ETHUSDT"), { ...corrected, close: 88 }, "bar.amended", wire("ETHUSDT"), null);
+    render("ETHUSDT", 3);
+    await until(() => latest.get("left")?.view.activeIndicators[0]?.lines?.[0]?.data[0]?.value === 88,
+      "fresh source did not automatically compute after cancellation");
+    checks.push("superseded input cancellation is not a script failure and fresh demand still computes");
     return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics() };
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();

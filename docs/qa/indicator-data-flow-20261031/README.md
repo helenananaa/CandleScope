@@ -4,10 +4,10 @@ Base: #168 plus integrated #138/#148/#144 (`128b4932` main).
 Source identity: [source-manifest.json](source-manifest.json).
 Contract: [INDICATOR_DATA_FLOW.md](../../architecture/INDICATOR_DATA_FLOW.md).
 
-After integrating main, full local `npm run check` passed: 4,647 frontend tests,
-one isolated performance gate, 123 desktop tests, architecture/plugin/i18n checks,
-types, lint and build. The subsequent native control fix passed all 124 desktop
-tests and changed-file lint.
+Full local `npm run check` at `d9877109` passed: 4,648 frontend tests,
+one isolated performance gate, 124 desktop tests, architecture/plugin/i18n checks,
+types, lint and build. The final cancellation guard also passed type checking,
+changed-file lint, 11 targeted tests and both production browser suites.
 The existing `SingleChartPanes` effect-cleanup lint warning and bundle-size
 warnings remain. Dependencies match the reviewed #168 lockfile environment.
 
@@ -83,3 +83,12 @@ different input windows. All 16 targeted manager/runtime/controller tests pass.
 The production fixture additionally proves that a real pending browser worker
 survives a backend failure, then the backend recovers without moving the other
 chart. Existing JavaScript/replay/editor browser checks were rerun successfully.
+
+## Superseded computation cancellation
+
+A native warm switch exposed an `AbortError` from the manager's input fence
+being retained as a permanent JavaScript definition error. The controller now
+treats cancellation as a non-error outcome. The actual React/browser-worker
+fixture failed before this guard; afterward a fresh source amendment computes
+the new value automatically without a manual reset or script edit. All seven
+data-flow cases finish with no outstanding demands or retained workers.

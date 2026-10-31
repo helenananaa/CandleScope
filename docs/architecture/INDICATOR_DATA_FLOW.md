@@ -30,6 +30,10 @@ range or exact provided OHLCV (including finality). Stored custom script IDs
 remain part of equality when no inline definition is supplied. Logical chart
 IDs and request scope/generation are not computation identity.
 
+Independent execution routes and input-window chunks publish successful work
+before reporting sibling failures. Cancelled or superseded computations never
+become persistent script errors.
+
 Each consumer has its own abort lease. Cancelling one rejects that consumer
 immediately. Only the final consumer cancels its work; a physical batch is
 aborted only when all its entries are unused. Transport requests receive
@@ -106,7 +110,8 @@ Unit regressions cover consumer and batch budgets, identity isolation, stored
 custom scripts, disconnect/correction fencing, held forming samples, exact
 cache reuse, force/replay boundaries, promotion, preemption and plan replacement.
 
-This is not #161 native installed-package qualification, all-provider coverage,
-long-duration soak, cross-window request sharing, or proof of semantically
-shared hosted subscriptions. #168's real-package acceptance applies to its own
-immutable package; it is not inherited by this change.
+These fixtures alone do not establish native installed-package qualification.
+The PR records native acceptance against its exact source and package hashes.
+All-provider coverage, long-duration soak, cross-window request sharing and
+semantic sharing of hosted subscriptions remain separate work. #168's package
+evidence is not inherited by this change.
