@@ -952,6 +952,9 @@ class DataManager:
             action="range-query" if start_ms is not None or end_ms is not None else "history-query",
             source=backfill_requester,
         )
+        version_key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                       market_type=market_type, identity=series_identity)
+        version_before = self.event_bus.stream_versions.snapshot(version_key)
         result = self.query_engine.query(
             symbol=symbol,
             interval=interval,
@@ -964,6 +967,8 @@ class DataManager:
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
+        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
+            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1000,6 +1005,9 @@ class DataManager:
             action="history-query",
             source=backfill_requester,
         )
+        version_key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                       market_type=market_type, identity=series_identity)
+        version_before = self.event_bus.stream_versions.snapshot(version_key)
         result = self.query_engine.query_latest(
             symbol,
             interval,
@@ -1010,6 +1018,8 @@ class DataManager:
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
+        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
+            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1043,6 +1053,9 @@ class DataManager:
             action="query-before",
             source=backfill_requester,
         )
+        version_key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                       market_type=market_type, identity=series_identity)
+        version_before = self.event_bus.stream_versions.snapshot(version_key)
         result = self.query_engine.query_before(
             symbol,
             interval,
@@ -1054,6 +1067,8 @@ class DataManager:
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
+        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
+            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -2399,13 +2414,15 @@ class DataManager:
         """Invalidate (clear) cached bars for a series."""
         market_type = self._normalize_market_type(market_type)
         identity = series_identity or KlineSeriesIdentity.for_exchange(exchange)
-        self.cache.invalidate(SeriesKey(
+        key = SeriesKey(
             symbol,
             interval,
             exchange=exchange,
             market_type=market_type,
             **identity.to_dict(),
-        ))
+        )
+        self.cache.invalidate(key)
+        self.event_bus.stream_versions.invalidate(key)
 
         if self.cache.revision_consumer is not None:
             self.cache.revision_consumer.sync(force=True)
@@ -2413,6 +2430,7 @@ class DataManager:
     def cache_clear(self) -> None:
         """Clear all cached data."""
         self.cache.clear()
+        self.event_bus.stream_versions.clear()
 
     def plan_memory_gc(
         self,

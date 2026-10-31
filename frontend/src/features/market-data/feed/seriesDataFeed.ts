@@ -104,6 +104,7 @@ interface GetBarsOptions {
 }
 
 interface GetHistoryOptions {
+  cacheMode?: KlineRequestContext["cacheMode"];
   days?: number | null;
   countBack?: number | null;
   source?: string;
@@ -2419,6 +2420,7 @@ export class SeriesDataFeed {
       ...(intent === undefined ? {} : { intent }),
       ...(indicatorWindowOwner === undefined ? {} : { indicatorWindowOwner }),
       priority,
+      cacheMode,
     });
     return { ...result, plan };
   }
@@ -2436,6 +2438,7 @@ export class SeriesDataFeed {
       intent,
       indicatorWindowOwner: requestedIndicatorWindowOwner,
       priority = "foreground",
+      cacheMode = "network-only",
     }: GetHistoryOptions = {},
   ): Promise<AppliedKlineResult> {
     if (!this.isSeriesRequestAllowed(series)) return dataPlaneDisabledResult();
@@ -2448,6 +2451,7 @@ export class SeriesDataFeed {
     );
     const transportDemand = this.transportDemandOptions(series);
     const clientContext = this.transportContext(series, epoch, requestScope, priority, `kline-history:${source}`);
+    clientContext.cacheMode = cacheMode;
     const realtimeFence = this.beginRealtimeRequest(series);
     return this.runLogicalRequest(
       priority,

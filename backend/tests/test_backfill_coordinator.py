@@ -1342,6 +1342,47 @@ def test_rate_limit_deferral_releases_worker_slot_and_preserves_chunk_progress()
     asyncio.run(_run())
 
 
+def test_merging_deferred_range_retires_replaced_chunks_public_priority() -> None:
+    """Reusing a chunk ID must not leave its old admission interest alive."""
+    from app.exchanges.public_admission import get_public_admission
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule
+
+    async def _run() -> None:
+        quota = RateLimitRule("merge-test", "merge-test", 10, 60)
+        calls = []
+
+        class _Engine:
+            async def run(self, **kwargs):
+                calls.append((kwargs["range_start_ms"], kwargs["range_end_ms"]))
+                if len(calls) == 1:
+                    raise _quota_deferral(1, bucket_key=quota.bucket_key)
+                permit = await get_public_admission().acquire(
+                    [quota], HistoricalRequest("binance", "spot", "/klines", "BTCUSDT"),
+                )
+                permit.finish(status_code=200)
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=_Engine(),
+            loop=asyncio.get_running_loop(), base_delay_seconds=0,
+        )
+        original = asyncio.create_task(coord.request_and_wait(
+            _request(60_000, 120_000, request_id="cold-latest"),
+        ))
+        await _wait_until(lambda: coord.snapshot()["deferred_chunks"] == 1)
+        assert get_public_admission().snapshot()["protected"] == 1
+        merged_id = coord.request(_request(0, 120_000, request_id="visible-history"))
+        assert merged_id == "cold-latest"
+        outcome = await asyncio.wait_for(original, timeout=0.5)
+        assert outcome.status == "completed"
+        assert calls == [(60_000, 120_000), (0, 120_000)]
+        assert get_public_admission().snapshot()["protected"] == 0
+
+    asyncio.run(_run())
+
+
 def test_cancelling_rate_limit_deferred_chunk_prevents_timer_revival() -> None:
     async def _run() -> None:
         class _Engine:

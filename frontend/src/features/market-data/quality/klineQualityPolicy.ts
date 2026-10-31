@@ -70,7 +70,7 @@ export function assessRealtimeEffect(row: KlineBar, eventType: unknown, held: Kl
     reason: invalid ? "invalid-row" : !accepted ? "forming-after-final" : amendment ? "historical-amendment" : current ? "current-row" : "historical-row" };
 }
 
-/** HTTP/WS have no declared comparable source revision; opaque fields do not outrank a request fence. */
+/** Legacy HTTP/WS have no comparable source revision; opaque fields do not outrank a request fence. */
 export function chooseHttpRow(row: KlineBar, mutation: { row: KlineBar; authoritative: boolean; version: number } | undefined,
   requestVersion: number, trustedFinalResponse: boolean): "http" | "realtime" | "promote-http" {
   if (!mutation) return "http";
