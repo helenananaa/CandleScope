@@ -30,6 +30,7 @@ import {
   useChartInitialLoad,
 } from "./useChartInitialLoad.js";
 import { useActiveChartHistoryHydration } from "./useActiveChartHistoryHydration.js";
+import { useHistoryHydrationHolds } from "./useIndicatorHistoryPreparation.js";
 import { useChartLoadMoreLeft } from "./useChartLoadMoreLeft.js";
 import { useSessionTransitionReset } from "./useSessionTransitionReset.js";
 import { useMarketDataEvents } from "./marketDataEvents.js";
@@ -612,6 +613,7 @@ export function useMarketDataRuntime({
     interval,
     nativeIntervalValues,
   );
+  const [indicatorPreparationHeld, holdHistoryHydrationForIndicators] = useHistoryHydrationHolds();
   const plannedActiveHistoryViewportCountBack = planInitialViewportCountBack(
     interval,
     nativeIntervalValues,
@@ -626,6 +628,7 @@ export function useMarketDataRuntime({
     // Deepen the active interval after first paint even in a dense workspace;
     // this is active-chart hydration, not speculative cross-interval warming.
     enabled: backgroundPrefetchEnabled
+      && !indicatorPreparationHeld
       && activeChartReady
       && marketDataReady
       && !loading
@@ -1256,6 +1259,7 @@ export function useMarketDataRuntime({
       display,
     },
     actions: {
+      holdHistoryHydrationForIndicators,
       retry,
       loadMoreLeft: loadMoreLeftWithPriority,
       loadMoreRight,
@@ -1270,6 +1274,12 @@ export function useMarketDataRuntime({
       loadingMoreRight,
       initialHistoryPending,
       activeChartReady,
+      historyPreparing: backgroundPrefetchEnabled && activeChartReady && marketDataReady
+        && !loading && !initialHistoryPending && chartDataMeta.historyComplete === true
+        && chartDataMeta.historyRepairPending !== true
+        && activeHistoryViewportCountBack > 0
+        && (chartDataMeta.historyValidatedCountBack ?? 0) >= activeHistoryViewportCountBack
+        && (chartDataMeta.historyValidatedCountBack ?? 0) < activeHistoryTargetCountBack,
       canLoadMoreLeft: canRequestMoreLeftDuringRuntime({
         hasMoreLeft,
         loading,

@@ -12,6 +12,7 @@ import {
   INITIAL_VIEWPORT_MAX_WAIT_MS,
   INITIAL_VIEWPORT_PROBE_WAIT_MS,
   planInitialHistoryCountBack,
+  planInitialHistoryAdmission,
   planInitialViewportCountBack,
   shouldRequestInitialLatest,
   shouldRequestInitialLatestForReadiness,
@@ -23,6 +24,23 @@ import {
   resolveBeforePageRequest,
 } from "../useChartLoadMoreLeft.js";
 import { epochSeconds } from "../../../test/testHelpers.js";
+
+test("regular intervals stage first paint while retaining the full history budget", () => {
+  const nativeIntervals = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "3d"];
+  for (const interval of ["45m", "90m", "2d", "3d", "4d", "5d"]) {
+    assert.deepEqual(planInitialHistoryAdmission(interval, nativeIntervals), {
+      historyCountBack: 1500, viewportCountBack: 128, materializedOnly: false,
+    }, interval);
+  }
+  assert.deepEqual(planInitialHistoryAdmission("10007m", nativeIntervals), {
+    historyCountBack: 500, viewportCountBack: 500, materializedOnly: true,
+  });
+  assert.equal(planInitialHistoryCountBack("10007m", nativeIntervals), 0,
+    "the source budget remains closed even when a target probe is admitted");
+  assert.deepEqual(planInitialHistoryAdmission("10007m", []), {
+    historyCountBack: 0, viewportCountBack: 0, materializedOnly: false,
+  }, "unresolved capabilities must not be treated as a budget-only limitation");
+});
 
 test("initial latest is reserved for exchange-native intervals", () => {
   const nativeIntervals = ["1m", "5m", "1h", "4h"];
@@ -297,7 +315,7 @@ test("derived initial history is bounded by native source-row expansion", () => 
   assert.equal(planInitialHistoryCountBack("89m", []), 0);
 
   assert.equal(planInitialViewportCountBack("1m", nativeIntervals), 500);
-  assert.equal(planInitialViewportCountBack("45m", nativeIntervals), 500);
+  assert.equal(planInitialViewportCountBack("45m", nativeIntervals), 128);
   assert.equal(planInitialViewportCountBack("57m", nativeIntervals), 500);
   assert.equal(planInitialViewportCountBack("47m", nativeIntervals), 422);
   assert.equal(planInitialViewportCountBack("91m", nativeIntervals), 216);

@@ -11,6 +11,7 @@ import {
   activeHistoryHydrationContinuationDelayMs,
   activeHistoryHydrationRetryDelayMs,
   runActiveHistoryHydration,
+  nextHistoryHydrationCountBack,
   shouldStartActiveHistoryHydration,
 } from "../useActiveChartHistoryHydration.js";
 
@@ -141,6 +142,73 @@ test("foreground synchronously aborts hydration and fences its late result", asy
 
   assert.equal(outcome, "preempted");
   assert.equal(commits.length, 0);
+});
+
+test("staged hydration publishes complete indicator windows and releases the gate between stages", async () => {
+  const gate = new ForegroundPreloadGate(0);
+  const requests: number[] = [];
+  const commits: Parameters<CommitChartData>[] = [];
+  const options = {
+    series: { ...SERIES, interval: "45m" },
+    sessionKey: "staged",
+    targetCountBack: 1_500,
+    priorityGate: gate,
+    seriesDataFeed: feedWith(async (_series, raw) => {
+      requests.push((raw as { countBack: number }).countBack);
+      return settledResult();
+    }),
+    commitMergedChartData: (...args: Parameters<CommitChartData>) => { commits.push(args); },
+  };
+  assert.equal(await runActiveHistoryHydration({ ...options, validatedCountBack: 128 }), "progress");
+  assert.equal(commits[0]?.[3].historyValidatedCountBack, 500);
+  assert.equal(commits[0]?.[3].deferIndicatorWindow, false);
+  const foreground = gate.enterForeground("indicator-range-demand");
+  assert.equal(await runActiveHistoryHydration({ ...options, validatedCountBack: 500 }), "blocked");
+  assert.deepEqual(requests, [500]);
+  foreground.release();
+  assert.equal(await runActiveHistoryHydration({ ...options, validatedCountBack: 500 }), "complete");
+  assert.deepEqual(requests, [500, 1_500]);
+  assert.equal(commits[1]?.[3].historyValidatedCountBack, 1_500);
+  assert.equal(nextHistoryHydrationCountBack(422, 128), 422);
+  assert.equal(nextHistoryHydrationCountBack(1500, 64), 500);
+  assert.equal(activeHistoryHydrationContinuationDelayMs("progress", 0), null,
+    "the next stage must wait for the committed proof to reach React");
+});
+
+test("a proven listing boundary finishes staged preparation without an extra deep request", async () => {
+  const commits: Parameters<CommitChartData>[] = [];
+  const outcome = await runActiveHistoryHydration({
+    series: SERIES, sessionKey: "short-listing", targetCountBack: 1_500, validatedCountBack: 128,
+    priorityGate: new ForegroundPreloadGate(0),
+    seriesDataFeed: feedWith(async () => settledResult({ history_state: "exhausted", has_more: false })),
+    commitMergedChartData: (...args) => { commits.push(args); },
+  });
+  assert.equal(outcome, "complete");
+  assert.equal(commits[0]?.[3].historyValidatedCountBack, 1_500);
+});
+
+test("each chart owns its hydration proof and a superseded stage cannot publish", async () => {
+  const commits: Parameters<CommitChartData>[] = [];
+  let current = true;
+  const staleFeed = feedWith(async () => {
+    current = false;
+    return settledResult();
+  });
+  staleFeed.isCurrent = () => current;
+  const options = {
+    series: SERIES, sessionKey: "chart-a", targetCountBack: 1_500, validatedCountBack: 128,
+    priorityGate: new ForegroundPreloadGate(0), seriesDataFeed: staleFeed,
+    commitMergedChartData: (...args: Parameters<CommitChartData>) => { commits.push(args); },
+  };
+  assert.equal(await runActiveHistoryHydration(options), "preempted");
+  assert.equal(commits.length, 0);
+  assert.equal(await runActiveHistoryHydration({
+    ...options, sessionKey: "chart-b", series: { ...SERIES, interval: "90m" },
+    seriesDataFeed: feedWith(async () => settledResult()), validatedCountBack: 500,
+  }), "complete");
+  assert.equal(commits.length, 1);
+  assert.equal(commits[0]?.[1], "90m");
+  assert.equal(commits[0]?.[3].historyValidatedCountBack, 1_500);
 });
 
 test("pending hydration keeps one lease across bounded contract probes", async () => {

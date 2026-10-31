@@ -953,6 +953,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   // projection write has actually succeeded. Interval-transition fencing must
   // never treat a failed setData recovery as ownership of the target dataset.
   const committedProjectionGenerationRef = useRef(0);
+  const paintedSourceRef = useRef<{
+    store: SeriesWindowView; version: number; datasetKey: string;
+  } | null>(null);
   const projectionRenderContextRef = useRef<ProjectionRenderContext | null>(null);
   const mainSeriesTypeRef = useRef<MainChartType | null>(null);
   const mainSeriesReferenceRef = useRef<{ series: MainSeriesHandle | null; signature: string }>({ series: null, signature: "" });
@@ -3778,6 +3781,96 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     settleDatasetViewportTransfer,
   ]);
 
+  const sessionViewportInputsRef = useRef({ dataMeta, datasetKey, savedVisibleRange, seriesStore });
+  useLayoutEffect(() => {
+    sessionViewportInputsRef.current = { dataMeta, datasetKey, savedVisibleRange, seriesStore };
+  }, [dataMeta, datasetKey, savedVisibleRange, seriesStore]);
+  const restorePaintedSessionViewport = useCallback(() => {
+    const { dataMeta, datasetKey, savedVisibleRange, seriesStore } = sessionViewportInputsRef.current;
+    const painted = paintedSourceRef.current;
+    // Admission is synchronous; a shared scheduler can defer its LWC write.
+    // Never consume a session restore against empty/outgoing display rows.
+    if (!seriesStore || painted?.store !== seriesStore
+      || painted.version !== seriesStore.version || painted.datasetKey !== datasetKey
+      || displayRowsRef.current.length === 0) return;
+    const rows = rowsFromStore(seriesStore);
+    if (pendingSurfaceViewportRef.current !== null) return;
+    if (!shouldRestoreChartViewport({
+      dataMeta,
+      datasetKey,
+      hasRestored: hasRestoredRangeRef.current,
+      hasRows: rows.length > 0,
+      lastRestoreSource: lastViewportRestoreSourceRef.current,
+      userInteracted: userInteractedRef.current,
+    })) {
+      notifyLinkedViewportReady();
+      return;
+    }
+
+    if (followLatestViewport(displayRowsRef.current)) {
+      hasRestoredRangeRef.current = true;
+      lastViewportRestoreSourceRef.current = "follow-latest";
+      publishViewportRangeChange();
+      notifyLinkedViewportReady();
+      return;
+    }
+
+    const restorePlan = planVisibleRangeRestore(savedVisibleRange, rows, dataMeta);
+    let restored = false;
+    isRestoringViewportRef.current = true;
+    try {
+      restored = viewportControllerRef.current?.applySessionRestore(
+        restorePlan,
+        { sessionKey: datasetKey },
+      ) ?? false;
+      if (restored && !followLatestRef.current && surfaceAxisModeRef.current === "derived-ordinal") {
+        liveSessionViewportRef.current = {
+          ...(restorePlan.barSpacing == null ? {} : { barSpacing: restorePlan.barSpacing }),
+          rightOffset: restorePlan.rightOffset
+            ?? Math.max(0, chartRef.current?.timeScale().options().rightOffset ?? 0),
+        };
+      }
+    } finally {
+      isRestoringViewportRef.current = false;
+    }
+    recordPerfEvent("chart.viewport.restore", {
+      applied: Boolean(restored),
+      bars: rows.length,
+      datasetKey,
+      mode: restorePlan?.mode || "fit",
+      visibleLogicalRange: captureVisibleRange()?.logical || null,
+    });
+    if (restored) {
+      hasRestoredRangeRef.current = true;
+      lastViewportRestoreSourceRef.current = dataMeta?.source || null;
+      publishViewportRangeChange();
+    }
+    notifyLinkedViewportReady();
+  }, [captureVisibleRange, followLatestViewport, notifyLinkedViewportReady, publishViewportRangeChange]);
+
+  const sessionViewportRestoreFrameRef = useRef<number | null>(null);
+  const schedulePaintedSessionViewportRestore = useCallback(() => {
+    const { dataMeta, datasetKey, seriesStore } = sessionViewportInputsRef.current;
+    if (sessionViewportRestoreFrameRef.current !== null
+      || !shouldRestoreChartViewport({ dataMeta, datasetKey,
+        hasRestored: hasRestoredRangeRef.current,
+        hasRows: Boolean(seriesStore?.barCount),
+        lastRestoreSource: lastViewportRestoreSourceRef.current,
+        userInteracted: userInteractedRef.current,
+      })) return;
+    // LWC queues its logical-range writes until drawing. Let projection and
+    // carrier updates finish before restoring; their retained outgoing range
+    // must not overwrite the target session's initial range in the same draw.
+    sessionViewportRestoreFrameRef.current = requestAnimationFrame(() => {
+      sessionViewportRestoreFrameRef.current = null;
+      restorePaintedSessionViewport();
+    });
+  }, [restorePaintedSessionViewport]);
+  useEffect(() => () => {
+    if (sessionViewportRestoreFrameRef.current !== null) cancelAnimationFrame(sessionViewportRestoreFrameRef.current);
+    sessionViewportRestoreFrameRef.current = null;
+  }, []);
+
   useEffect(() => {
     const series = mainSeriesRef.current;
     const store = seriesStore;
@@ -3991,7 +4084,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         hasRestoredRangeRef.current = true;
         lastViewportRestoreSourceRef.current = "follow-latest";
       }
-      if (projectionRendered) latestWindowScrollGateRef.current.didCommit(store, store.version);
+      if (projectionRendered) {
+        paintedSourceRef.current = { store, version: store.version, datasetKey: datasetKeyRef.current };
+        schedulePaintedSessionViewportRestore();
+        latestWindowScrollGateRef.current.didCommit(store, store.version);
+      }
     } finally {
       isSyncingRef.current = false;
     }
@@ -4223,7 +4320,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
           hasRestoredRangeRef.current = true;
           lastViewportRestoreSourceRef.current = "follow-latest";
         }
-        if (projectionRendered) latestWindowScrollGateRef.current.didCommit(currentStore, currentStore.version);
+        if (projectionRendered) {
+          paintedSourceRef.current = { store: currentStore, version: currentStore.version, datasetKey: datasetKeyRef.current };
+          schedulePaintedSessionViewportRestore();
+          latestWindowScrollGateRef.current.didCommit(currentStore, currentStore.version);
+        }
       } finally {
         isSyncingRef.current = false;
       }
@@ -4232,61 +4333,11 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       scheduleVisibleRangeSave();
     });
     return () => { unsubscribe(); };
-  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
+  }, [chartAdapter, clearFutureTimeAxis, commitFutureTimeAxisPlan, createFutureTimeAxisPlan, displaySubscription, ensureTransferredHistoryFill, followLatestViewport, mainSeriesRenderContext, materializeRuntimePaneLayout, notifyLinkedViewportReady, projectionSettings, publishDrawingProjectionStore, refreshOrdinalSurfaceTimeScale, refreshScrolledAwayFromLatest, schedulePaintedSessionViewportRestore, scheduleLeftHistoryDemandFlush, scheduleTransferredHistoryFill, scheduleVisibleRangeSave, seriesReady, seriesStore, settleDatasetViewportTransfer, updateMainSeriesReference]);
 
   useEffect(() => {
-    const rows = rowsFromStore(seriesStore);
-    if (pendingSurfaceViewportRef.current !== null) return;
-    if (!shouldRestoreChartViewport({
-      dataMeta,
-      datasetKey,
-      hasRestored: hasRestoredRangeRef.current,
-      hasRows: rows.length > 0,
-      lastRestoreSource: lastViewportRestoreSourceRef.current,
-      userInteracted: userInteractedRef.current,
-    })) {
-      notifyLinkedViewportReady();
-      return;
-    }
-
-    if (followLatestViewport(displayRowsRef.current)) {
-      hasRestoredRangeRef.current = true;
-      lastViewportRestoreSourceRef.current = "follow-latest";
-      publishViewportRangeChange();
-      notifyLinkedViewportReady();
-      return;
-    }
-
-    const restorePlan = planVisibleRangeRestore(savedVisibleRange, rows, dataMeta);
-    let restored = false;
-    isRestoringViewportRef.current = true;
-    try {
-      restored = viewportControllerRef.current?.applySessionRestore(
-        restorePlan,
-        { sessionKey: datasetKey },
-      ) ?? false;
-      if (restored && !followLatestRef.current && surfaceAxisModeRef.current === "derived-ordinal") {
-        liveSessionViewportRef.current = {
-          ...(restorePlan.barSpacing == null ? {} : { barSpacing: restorePlan.barSpacing }),
-          rightOffset: restorePlan.rightOffset
-            ?? Math.max(0, chartRef.current?.timeScale().options().rightOffset ?? 0),
-        };
-      }
-    } finally {
-      isRestoringViewportRef.current = false;
-    }
-    recordPerfEvent("chart.viewport.restore", {
-      applied: Boolean(restored),
-      bars: rows.length,
-      datasetKey,
-      mode: restorePlan?.mode || "fit",
-      visibleLogicalRange: captureVisibleRange()?.logical || null,
-    });
-    hasRestoredRangeRef.current = true;
-    lastViewportRestoreSourceRef.current = dataMeta?.source || null;
-    if (restored) publishViewportRangeChange();
-    notifyLinkedViewportReady();
-  }, [captureVisibleRange, dataMeta, datasetKey, followLatestViewport, notifyLinkedViewportReady, publishViewportRangeChange, savedVisibleRange, seriesStore]);
+    schedulePaintedSessionViewportRestore();
+  }, [dataMeta, datasetKey, schedulePaintedSessionViewportRestore, savedVisibleRange, seriesStore]);
 
   useEffect(() => {
     const chart = chartRef.current;

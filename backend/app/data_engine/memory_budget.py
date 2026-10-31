@@ -22,6 +22,25 @@ class MemoryBudgetExceeded(RuntimeError):
 _work_leases = ContextVar("market_data_memory_leases", default=None)
 
 
+def budgeted_query(function):
+    """Keep synchronous history leases through adoption and publication.
+
+    Nested source reads borrow the outer query's scope so retained components
+    cannot outlive their admission lease between pages.
+    """
+    @wraps(function)
+    def run(*args, **kwargs):
+        if _work_leases.get() is not None:
+            return function(*args, **kwargs)
+        with ExitStack() as leases:
+            token = _work_leases.set(leases)
+            try:
+                return function(*args, **kwargs)
+            finally:
+                _work_leases.reset(token)
+    return run
+
+
 def budgeted_work(function):
     @wraps(function)
     async def run(self, *args, **kwargs):

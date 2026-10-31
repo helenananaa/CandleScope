@@ -153,6 +153,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
       options.demandScope ?? null,
       options.demandGeneration ?? null,
       ...readBoundary(options),
+      ...(options.materializedOnly ? ["materialized-only"] : []),
     ];
     return this.join(
       "history",
@@ -175,6 +176,7 @@ export class SharedKlineRequestCoordinator implements KlineApi {
             exchange,
             options: {
               ...(options.countBack === undefined ? {} : { countBack: options.countBack }),
+              ...(options.materializedOnly === undefined ? {} : { materializedOnly: options.materializedOnly }),
               ...(options.maxWaitMs === undefined ? {} : { maxWaitMs: options.maxWaitMs }),
               ...(options.intent === undefined ? {} : { intent: options.intent }),
               ...(options.demandScope === undefined ? {} : { demandScope: options.demandScope }),

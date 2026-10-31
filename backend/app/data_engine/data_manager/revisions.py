@@ -11,7 +11,7 @@ import time
 from .models import BarData, QueryResult, QuerySource, SeriesKey
 from app.data_engine.interval_policy import is_ephemeral_interval
 from app.data_engine.storage.revisions import ensure_acquisition, StaleAcquisition
-from app.data_engine.memory_budget import MemoryBudgetExceeded
+from app.data_engine.memory_budget import MemoryBudgetExceeded, budgeted_query
 
 
 class RevisionUnavailable(RuntimeError):
@@ -147,7 +147,7 @@ def revision_checked_query(function):
             return _pending(symbol, interval, context, "memory_budget_deferred", min_revision)
         except (RevisionUnavailable, StaleAcquisition):
             return _pending(symbol, interval, context, "revision_unavailable", min_revision)
-    return query
+    return budgeted_query(query)
 
 
 def _pending(symbol, interval, kwargs, reason, required=None, observed=None):

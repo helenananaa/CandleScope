@@ -9,6 +9,7 @@ import {
   fetchExchanges,
   fetchKlinesBefore,
   fetchKlinesHistory,
+  fetchKlinesHistoryBatch,
   fetchLatestKlines,
   fetchKlinesRange,
   fetchSubscriptions,
@@ -78,6 +79,28 @@ test("kline endpoints validate payloads and forward AbortSignal", async (context
 
   assert.equal(capturedOptions?.signal, controller.signal);
   assert.deepEqual(payload.data, [kline()]);
+});
+
+test("history probe boundary survives single and batched HTTP transport", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const captured: { url: string; body?: string }[] = [];
+  globalThis.fetch = async (url, options) => {
+    captured.push({ url: String(url), ...(typeof options?.body === "string" ? { body: options.body } : {}) });
+    return String(url).endsWith("/batch")
+      ? jsonResponse({ results: [{ request_id: "history-0", ok: true, status: 200, payload: { data: [] } }] })
+      : jsonResponse({ data: [] });
+  };
+  const options = { materializedOnly: true, countBack: 500, maxWaitMs: 0 };
+  await fetchKlinesHistory("BTCUSDT", "10007m", null, "futures", "binance", options);
+  await fetchKlinesHistoryBatch([{
+    symbol: "BTCUSDT", interval: "10007m", days: null,
+    marketType: "futures", exchange: "binance", options,
+  }]);
+  assert.equal(new URL(captured[0]!.url, "http://localhost").searchParams.get("materialized_only"), "true");
+  assert.equal(new URL(captured[0]!.url, "http://localhost").pathname, "/api/v1/klines/history/materialized");
+  const batch = JSON.parse(captured[1]!.body!) as { requests: { materialized_only?: boolean }[] };
+  assert.equal(batch.requests[0]?.materialized_only, true);
 });
 
 test("count-back history omits the redundant days window", async (context) => {

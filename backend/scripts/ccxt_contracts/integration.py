@@ -33,6 +33,8 @@ def main() -> int:
         "test_kline_revision_contract.py", "test_query_cache_fencing.py",
         "test_indicator_api.py", "test_indicator_runtime_transport_routing.py",
         "test_*subscription_continuity.py", "test_recovery_*.py", "test_consumer_recovery.py",
+        "test_custom_history_streaming.py", "test_materialized_history_probe.py",
+        "test_history_revision_admission.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",
