@@ -506,8 +506,12 @@ def upsert_klines(
                     (item[0], item[1], *item[9:])
                     for item in payload
                 ]
-            conn.executemany(sql, write_payload)
+            written = conn.executemany(sql, write_payload).rowcount
             affected = conn.total_changes - changes_before
+            if source == "backfill" and written == len(rows):
+                from .kline_sources import acknowledge_history_projection
+
+                acknowledge_history_projection(conn, rows)
             if _connection is None:
                 conn.commit()
 
