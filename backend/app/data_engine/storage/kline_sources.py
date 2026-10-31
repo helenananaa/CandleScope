@@ -331,14 +331,22 @@ def acknowledge(ref: dict) -> None:
         )
 
 
-def pending(descriptor: StreamDescriptor, limit: int = 500) -> list[RawMessage]:
+def pending(descriptor: StreamDescriptor, limit: int = 500, *, include_history=False) -> list[RawMessage]:
+    """Replay market-owned receipts; interrupted historical pages stay with backfill.
+
+    Their observations and unacknowledged revision remain durable. History's
+    repair ledger reissues uncommitted work instead of pushing old bars through
+    live continuity. Legacy receipts without an owner retain their old behavior.
+    """
     with closing(klines_repo._connect()) as conn, conn:
         _schema(conn)
         rows = conn.execute(
             """SELECT h.*,o.envelope_json,o.source,o.received_at FROM kline_source_heads h
             JOIN kline_source_observations o ON h.observation_id=o.id
-            WHERE h.series=? AND h.delivered_revision<h.revision ORDER BY h.open_time LIMIT ?""",
-            (series(descriptor), limit),
+            WHERE h.series=? AND h.delivered_revision<h.revision
+            AND (? OR COALESCE(json_extract(o.envelope_json,'$._source_delivery_owner'),'market')!='history')
+            ORDER BY h.open_time LIMIT ?""",
+            (series(descriptor), include_history, limit),
         ).fetchall()
         result = []
         for row in rows:
@@ -424,5 +432,29 @@ def filter_projection_rows(
             if not head["is_closed"] or any(row.get(k) != data[k] for k in _VALUES):
                 continue
             refs = [_ref(head)]
-        result.append(dict(row, _source_verified=bool(refs)))
+        verified = dict(row, _source_verified=bool(refs))
+        if (
+            head is not None
+            and head["source"] in {DataSource.HTTP.value, DataSource.HTTP_BACKFILL.value}
+            and _ref(head) in row.get("source_refs", [])
+        ):
+            verified["_history_source_ref"] = _ref(head)
+        result.append(verified)
     return result
+
+
+def acknowledge_history_projection(conn, rows: list[dict]) -> None:
+    """Consume REST history only inside its accepted native write transaction.
+
+    History is delivered through backfill completion, not the realtime startup
+    replay. A rollback must leave both the projection and receipt uncommitted.
+    Derived writes and websocket receipts retain their market-delivery ack.
+    """
+    for row in rows:
+        ref = row.get("_history_source_ref")
+        if ref is not None:
+            conn.execute(
+                "UPDATE kline_source_heads SET delivered_revision=? "
+                "WHERE series=? AND open_time=? AND revision=?",
+                (ref["revision"], ref["series"], ref["open_time"], ref["revision"]),
+            )

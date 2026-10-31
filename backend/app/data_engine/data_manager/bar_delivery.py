@@ -16,8 +16,9 @@ logger = logging.getLogger("data_manager.bar_delivery")
 
 class DurableBarDelivery:
     def __init__(self, storage_provider, publish, *, retry_delay=0.1, max_submissions=64,
-                 recovery_lookback_bars=500):
+                 recovery_lookback_bars=500, require_recovery=None):
         self._storage_provider, self._publish = storage_provider, publish
+        self._require_recovery = require_recovery
         self.retry_delay = retry_delay
         self.owner = uuid.uuid4().hex
         self.recover_source = None
@@ -26,11 +27,14 @@ class DurableBarDelivery:
         self._worker = self._recovery = None
         self._closing = False
         self._submissions = set()
+        self._submission_payloads = {}
+        self._dispatch_records = []
         self.max_submissions = max(1, max_submissions)
         self._admission_rejected = 0
         self._receipt_failed = False
         self.recovery_lookback_bars = max(1, recovery_lookback_bars)
         self._watched = {}
+        self._watched_revisions = {}
         self._pending = 0
         self._recovery_pending = 0
         self._recovery_cursor = None
@@ -42,6 +46,15 @@ class DurableBarDelivery:
     @property
     def journal(self):
         return getattr(self._storage_provider(), "bar_delivery", None)
+
+    def memory_usage(self):
+        return {"submission_payloads": len(self._submission_payloads),
+                "dispatch_records": len(self._dispatch_records),
+                "estimated_bytes": len(self._submission_payloads) * 4096 + len(self._dispatch_records) * 8192,
+                "protection": "in-flight delivery is drained; pending recovery stays in SQLite"}
+
+    def _memory_roots(self):
+        return [list(self._submission_payloads.values()), list(self._dispatch_records)]
 
     def snapshot(self):
         return dict(mode="durable" if self.journal is not None else "legacy",
@@ -82,6 +95,7 @@ class DurableBarDelivery:
             except Exception:
                 logger.exception("Bar recovery watches retained after shutdown write failure")
         self._watched.clear()
+        self._watched_revisions.clear()
         if cancelled:
             raise asyncio.CancelledError
 
@@ -90,8 +104,10 @@ class DurableBarDelivery:
             raise BarDeliveryUnavailable("Bar delivery is shutting down")
         if self.journal is None or is_ephemeral_interval(key.interval):
             return
+        store = getattr(self._storage_provider(), "revision_store", None)
+        observed_revision = store.observed_revision if store is not None else None
         protected_from = self._watched.get(key)
-        if protected_from is not None and (from_ms is None or from_ms >= protected_from):
+        if protected_from is not None and (from_ms is None or from_ms >= protected_from) and self._watched_revisions.get(key) == observed_revision:
             return
         spec = parse_interval_spec(key.interval)
         if spec is None:
@@ -105,7 +121,10 @@ class DurableBarDelivery:
             start = min(start, from_ms)
         series = dict(symbol=key.symbol, interval=key.interval, exchange=key.exchange,
                       market_type=key.market_type, **key.identity.to_dict())
+        if protected_from is not None and from_ms is not None:
+            start = from_ms  # journal keeps the old prefix unless deletion superseded it
         await self._retry(self.journal.watch, self.owner, series, start)
+        self._watched_revisions[key] = observed_revision
         self._watched[key] = min(start, self._watched.get(key, start))
 
     async def _retry(self, function, *args):
@@ -126,10 +145,12 @@ class DurableBarDelivery:
             raise BarDeliveryUnavailable("Bar delivery is shutting down or at admission capacity")
         task = asyncio.current_task()
         self._submissions.add(task)
+        self._submission_payloads[task] = payload
         try:
             return await self._submit(event_id, payload, key)
         finally:
             self._submissions.discard(task)
+            self._submission_payloads.pop(task, None)
 
     async def _submit(self, event_id, payload, key):
         try:
@@ -141,7 +162,7 @@ class DurableBarDelivery:
             self._receipt_failed = True
             raise
         self._wake.set()
-        if record["phase"] in {"published", "rejected"}:
+        if record["phase"] in {"published", "rejected"} and not record.get("recovery_required"):
             return record["phase"]
         # Never accumulate ingestion callbacks waiting for a dispatcher lock.
         # Admission is already durable; the one dispatcher owns its completion.
@@ -156,10 +177,14 @@ class DurableBarDelivery:
         async with self._dispatcher:
             try:
                 records = await self._retry(journal.pending)
+                self._dispatch_records = records
                 self._pending = await self._retry(journal.pending_count)
                 for pending in records:
                     record = await self._retry(journal.commit, pending["event_id"])
                     if record["phase"] == "rejected":
+                        if record.get("recovery_required"):
+                            self._invalidate(record)
+                            await self._retry(journal.acknowledge, record["event_id"])
                         self._rejected += 1
                     elif record["phase"] == "committed":
                         # A later authoritative repair may already have replaced
@@ -167,6 +192,8 @@ class DurableBarDelivery:
                         # current correction, never roll a cold cache backward.
                         if record["canonical_row"] is not None:
                             await self._publish(self._event(record))
+                        else:
+                            self._invalidate(record)
                         await self._retry(journal.acknowledge, record["event_id"])
                         self._published += 1
                     self._pending -= 1
@@ -177,20 +204,36 @@ class DurableBarDelivery:
                 self._failures += 1
                 self._last_error = f"{type(exc).__name__}: {exc}"
                 logger.warning("Final bar delivery deferred; durable receipt retained: %s", exc)
+            finally:
+                self._dispatch_records = []
+
+    def _invalidate(self, record):
+        # Rejection protects storage but cannot silently remove an expected
+        # close from a live consumer. Keep the receipt pending until the bus
+        # has marked affected subscriptions terminal, independently of callbacks.
+        if self._require_recovery is None:
+            raise BarDeliveryUnavailable("Consumer recovery handler is not configured")
+        self._require_recovery(self._key(record))
 
     @staticmethod
-    def _event(record):
+    def _key(record):
         value = record["payload"]
         identity_names = ("provider_id", "venue", "asset_class", "series_variant", "price_adjustment", "session_variant", "volume_semantics")
-        key = SeriesKey(value["symbol"], value["interval"], exchange=value["exchange"],
-                        market_type=value["market_type"], **{k: value[k] for k in identity_names if k in value})
+        return SeriesKey(value["symbol"], value["interval"], exchange=value["exchange"],
+                         market_type=value["market_type"], **{k: value[k] for k in identity_names if k in value})
+
+    @classmethod
+    def _event(cls, record):
+        value = record["payload"]
+        key = cls._key(record)
         current = record["canonical_row"]
         superseded = any(current.get(k) != v for k, v in value["storage_row"].items() if k != "source_refs") or current["source"] != value["bar"]["source"]
         return DataEvent(DataEventType.BAR_AMENDED if superseded else DataEventType(value["event_type"]), key,
                          BarData.from_storage_row(current) if superseded else BarData.from_dict(value["bar"]),
                          BarData.from_dict(value["previous_bar"]) if value.get("previous_bar") and not superseded else None,
                          detail={**value.get("detail", {}), "delivery_id": record["event_id"],
-                                 "delivery_sequence": record["sequence"], "canonical_reconciled": superseded},
+                                 "delivery_sequence": record["sequence"], "canonical_reconciled": superseded,
+                                 "storage_revision": record.get("canonical_revision")},
                          timestamp_ms=value["timestamp_ms"])
 
     async def _run(self):
@@ -217,12 +260,14 @@ class DurableBarDelivery:
             self._recovery_cursor = None
             watches = await self._retry(self.journal.recovery_watches, self.owner, through_ms)
         self._recovery_pending = await self._retry(self.journal.recovery_pending_count, self.owner)
-        if watches and self.recover_source is None:
-            self._recovery_error = "Authoritative source recovery is not configured"
-            return
         for watch in watches:
             try:
-                if await self.recover_source(watch):
+                superseded = getattr(self.journal, "watch_superseded", None)
+                obsolete = callable(superseded) and await self._retry(superseded, watch)
+                if not obsolete and self.recover_source is None:
+                    self._recovery_error = "Authoritative source recovery is not configured"
+                    continue
+                if obsolete or await self.recover_source(watch):
                     await self._retry(self.journal.finish_recovery, watch["watch_id"])
                     self._recovery_pending -= 1
                 else:
@@ -271,7 +316,8 @@ def source_recovery_handler(coordinator):
             symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type,
             start_ms=watch["from_ms"], end_ms=end, reason="bar_delivery_recovery", priority=50,
             requester="bar_delivery", metadata={"requires_trusted_finality": True,
-                "series_identity": key.identity.to_dict(), "recovery_watch_id": watch["watch_id"]}))
+                "series_identity": key.identity.to_dict(), "recovery_watch_id": watch["watch_id"],
+                "acquisition_revision": watch.get("observed_revision", 0)}))
         status = getattr(outcome.status, "value", outcome.status)
         return status == "completed" and outcome.verified_contiguous is True and not outcome.error
     return recover

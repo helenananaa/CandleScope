@@ -158,7 +158,7 @@ class SeriesKey:
 # ═══════════════════════════════════════════════════════════════
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class BarData:
     """A single OHLCV bar in the format expected by lightweight-charts.
 
@@ -190,11 +190,19 @@ class BarData:
     trusted_final: bool = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.source = normalize_kline_source(self.source)
+        object.__setattr__(self, "source", normalize_kline_source(self.source))
         resolved = kline_source_quality(self.source)
-        self.quality_rank = resolved.rank
-        self.quality = resolved.finality.value
-        self.trusted_final = bool(self.is_closed and resolved.trusted_final)
+        object.__setattr__(self, "quality_rank", resolved.rank)
+        object.__setattr__(self, "quality", resolved.finality.value)
+        object.__setattr__(self, "trusted_final", bool(self.is_closed and resolved.trusted_final))
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        # All fields are immutable scalars or tuples. Event envelopes can
+        # isolate their metadata without duplicating the published record.
+        return self
 
     def to_dict(self) -> dict:
         """Return the legacy lightweight-charts OHLCV shape."""
@@ -384,7 +392,7 @@ class BarData:
             if normalized_fields[3] is not None else None,
             source=row.get("source", ""),
         )
-        bar._prevalidated_aggregation_fields = normalized_fields
+        object.__setattr__(bar, "_prevalidated_aggregation_fields", normalized_fields)
         return bar
 
     @classmethod
@@ -447,7 +455,7 @@ class BarData:
             if normalized_fields[3] is not None else None,
             source=str(source or ""),
         )
-        bar._prevalidated_aggregation_fields = normalized_fields
+        object.__setattr__(bar, "_prevalidated_aggregation_fields", normalized_fields)
         return bar
 
     @classmethod
@@ -604,7 +612,7 @@ class BarData:
                 if normalized_fields[3] is not None else None,
                 source=source,
             )
-            bar._prevalidated_aggregation_fields = normalized_fields
+            object.__setattr__(bar, "_prevalidated_aggregation_fields", normalized_fields)
             append_bar(bar)
         return bars, True
 
@@ -671,7 +679,7 @@ class BarData:
             taker_buy_quote=self.taker_buy_quote,
             source=self.source,
         )
-        bar._prevalidated_aggregation_fields = self._prevalidated_aggregation_fields
+        object.__setattr__(bar, "_prevalidated_aggregation_fields", self._prevalidated_aggregation_fields)
         return bar
 
     def with_source(self, source: str) -> BarData:
@@ -690,7 +698,7 @@ class BarData:
             taker_buy_quote=self.taker_buy_quote,
             source=source,
         )
-        bar._prevalidated_aggregation_fields = self._prevalidated_aggregation_fields
+        object.__setattr__(bar, "_prevalidated_aggregation_fields", self._prevalidated_aggregation_fields)
         return bar
 
     @staticmethod

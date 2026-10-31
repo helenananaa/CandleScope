@@ -115,13 +115,14 @@ async def test_compute_mode_builtin_accepts_engine_marker_without_name() -> None
     assert payload["lines"][0]["name"] == "MA(7)"
 
 
-def test_compute_batch_preserves_non_pine_language_to_runtime(
+def test_compute_batch_preserves_pine_language_and_execution_options_to_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime_service = object()
     observed: list[tuple[str | None, object | None]] = []
 
-    async def _compute_script(req, *, runtime_service=None, origin=None):
+    async def _compute_script(req, *, runtime_service=None, origin=None, execution_options=None):
+        assert execution_options == {}
         observed.append((req.language, runtime_service))
         return {"ok": True, "schemaVersion": 1, "lines": []}
 

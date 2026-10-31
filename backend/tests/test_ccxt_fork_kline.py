@@ -240,7 +240,11 @@ def test_python_fork_1500_rows_and_concurrent_requests_are_independent():
     assert first[0]["raw"] != second[0]["raw"]
 
 
-def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch):
+@pytest.mark.parametrize("history_projection", [False, True])
+def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch, tmp_path, history_projection):
+    from app.data_engine.storage import klines_repo, kline_sources
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "klines.sqlite")
+    klines_repo.init_klines_storage()
     exchange = fork_exchange()
     calls = []
 
@@ -269,7 +273,8 @@ def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch):
         try:
             return await plugin.fetch_history_with_config(
                 TransportRequest(
-                    DESCRIPTOR, limit=2000, start_ms=ROW[0], end_ms=ROW[6]
+                    DESCRIPTOR, limit=2000, start_ms=ROW[0], end_ms=ROW[6],
+                    history_projection=history_projection,
                 ),
                 IngestionConfig(ccxt_fork_kline_enabled=True),
             )
@@ -287,6 +292,9 @@ def test_primary_uses_fork_rest_method_with_1500_and_shared_pool(monkeypatch):
         )
     ]
     assert messages[0].request_limit == 1500
+    assert messages[0].payload["_source_delivery_owner"] == ("history" if history_projection else "market")
+    assert bool(kline_sources.pending(DESCRIPTOR)) is not history_projection
+    assert len(kline_sources.pending(DESCRIPTOR, include_history=True)) == 1
     assert parse(messages[0].payload).data["quote_volume"] == 1010
 
 

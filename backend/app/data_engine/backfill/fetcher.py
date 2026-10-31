@@ -397,6 +397,7 @@ class HistoricalFetcher:
                 break
 
             req = current_request
+            req.history_projection = True
 
             # Fetch with retry
             page_bars: list[FetchedBar] = []
@@ -944,11 +945,15 @@ class HistoricalFetcher:
                 volume=float(data["volume"]),
                 exchange=task.exchange,
                 market_type=task.market_type,
-                quote_volume=float(data.get("quote_volume", 0)),
-                trades=int(data.get("trades", 0)),
-                taker_buy_base=float(data.get("taker_buy_base", 0)),
-                taker_buy_quote=float(data.get("taker_buy_quote", 0)),
+                # Unknown venue fields are nullable in normalized events.
+                # FetchedBar uses arithmetic placeholders internally; the
+                # qualification mask preserves null in storage/publication.
+                quote_volume=float(data["quote_volume"]) if data.get("quote_volume") is not None else 0.0,
+                trades=int(data["trades"]) if data.get("trades") is not None else 0,
+                taker_buy_base=float(data["taker_buy_base"]) if data.get("taker_buy_base") is not None else 0.0,
+                taker_buy_quote=float(data["taker_buy_quote"]) if data.get("taker_buy_quote") is not None else 0.0,
                 source="backfill",
+                source_ref=dict(data["source_ref"]) if data.get("source_ref") else None,
                 enhanced_fields=enhanced_fields,
                 series_identity=identity_from_metadata(
                     task.exchange,

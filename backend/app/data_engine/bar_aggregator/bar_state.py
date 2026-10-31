@@ -20,6 +20,8 @@ Usage::
 """
 from __future__ import annotations
 
+from app.data_engine.readonly import ReadonlyFields
+
 import logging
 import time
 from collections import OrderedDict
@@ -187,8 +189,8 @@ class ComponentSnapshotOHLCVMerge:
     """
 
     @staticmethod
-    def _snapshot_from_input(bar_input: BarInput) -> dict:
-        return {
+    def _snapshot_from_input(bar_input: BarInput) -> ReadonlyFields:
+        return ReadonlyFields({
             "source_ref": bar_input.extra.get("source_ref"),
             "open_time_ms": bar_input.open_time_ms,
             "close_time_ms": bar_input.close_time_ms,
@@ -209,7 +211,7 @@ class ComponentSnapshotOHLCVMerge:
             # can fall back to monotonic cumulative evidence instead of
             # silently treating every update as equally fresh.
             "sequence": bar_input.sequence,
-        }
+        })
 
     @staticmethod
     def _is_monotonic_candidate(existing: dict, candidate: dict) -> bool:

@@ -77,7 +77,8 @@ async def _fetch_binance_raw(
                     headers=exchange.last_response_headers,
                 )
                 await prepare_source_messages(
-                    messages, descriptor, watermark=watermark
+                    messages, descriptor, watermark=watermark,
+                    history_projection=req.history_projection,
                 )
                 if all(
                     message.payload["_source_receipt"]["status"] == "selected"
@@ -241,7 +242,8 @@ async def _fetch_okx_kline_raw(
                     headers=getattr(exchange, "last_response_headers", None),
                 )
                 await prepare_source_messages(
-                    messages, descriptor, watermark=watermark
+                    messages, descriptor, watermark=watermark,
+                    history_projection=req.history_projection,
                 )
                 if all(
                     m.payload["_source_receipt"]["status"] == "selected"

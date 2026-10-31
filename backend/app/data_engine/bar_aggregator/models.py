@@ -13,19 +13,17 @@ All timestamps are in **milliseconds** (consistent with ingestion/backfill).
 """
 from __future__ import annotations
 
-import json
-from app.data_engine.series_identity import (
-    KlineSeriesIdentity,
-    resolve_kline_series_identity,
-)
-
+from copy import deepcopy
 import enum
+import json
 import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from dataclasses import dataclass, field, replace
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 from app.data_engine.market_data.kline_metrics import declared_enhanced_fields
+from app.data_engine.readonly import ReadonlyFields
+from app.data_engine.series_identity import KlineSeriesIdentity, resolve_kline_series_identity
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -244,12 +242,24 @@ class BarState:
     requires_authoritative_close: bool = False  # native snapshots must receive an explicit close
     finality: BarFinality = BarFinality.PROVISIONAL
     close_reason: str | None = None
-    source_snapshots: dict[str, dict[str, Any]] = field(default_factory=dict)
+    source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=dict)
     source_refs: dict[str, dict[str, Any]] = field(default_factory=dict)
     status: BarStatus = BarStatus.FORMING
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     series_identity: KlineSeriesIdentity | None = None
+
+    acquisition_revision: int | None = None
+
+    def __deepcopy__(self, memo):
+        # Builder scalars are immutable. Share immutable component values and
+        # copy only their index; foreign mutable components retain isolation.
+        result = replace(self, source_snapshots={
+            key: value if isinstance(value, ReadonlyFields) else deepcopy(value, memo)
+            for key, value in self.source_snapshots.items()
+        }, source_refs=deepcopy(self.source_refs, memo))
+        memo[id(self)] = result
+        return result
 
     @property
     def identity(self) -> KlineSeriesIdentity:
@@ -360,6 +370,12 @@ class BarEvent:
     # For AMENDED events — the old bar state before amendment
     previous_bar: BarState | None = None
     delivery_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+    def __deepcopy__(self, memo):
+        result = replace(self, bar=deepcopy(self.bar, memo),
+                         previous_bar=deepcopy(self.previous_bar, memo))
+        memo[id(self)] = result
+        return result
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {
