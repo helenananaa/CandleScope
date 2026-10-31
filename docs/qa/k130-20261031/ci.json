@@ -1,0 +1,526 @@
+{
+  "observed_at": "2026-10-31 11:48:44 UTC",
+  "source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "base_main": "128b493246756c6f422138cd03ce7bb312e089ab",
+  "pr": 173,
+  "merged_main_runs": [
+    {
+      "id": 41193597012,
+      "name": "CCXT integration",
+      "head_sha": "128b493246756c6f422138cd03ce7bb312e089ab",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41193597012",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-10-31T10:38:46Z",
+      "updated_at": "2026-10-31T10:43:26Z"
+    },
+    {
+      "id": 41193597019,
+      "name": "macOS desktop",
+      "head_sha": "128b493246756c6f422138cd03ce7bb312e089ab",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41193597019",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-10-31T10:38:46Z",
+      "updated_at": "2026-10-31T11:21:16Z"
+    }
+  ],
+  "product_runs": [
+    {
+      "id": 41195338772,
+      "name": "CCXT integration",
+      "head_sha": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41195338772",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-10-31T11:04:39Z",
+      "updated_at": "2026-10-31T11:09:20Z"
+    },
+    {
+      "id": 41195338773,
+      "name": "macOS desktop",
+      "head_sha": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41195338773",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "started_at": "2026-10-31T11:04:39Z",
+      "updated_at": "2026-10-31T11:47:48Z"
+    }
+  ],
+  "product_jobs": [
+    {
+      "id": 124520322047,
+      "name": "pinned-fork",
+      "head_sha": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41195338772/job/124520322047",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-31T11:04:59Z",
+      "completed_at": "2026-10-31T11:09:19Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-31T11:04:59Z",
+          "completed_at": "2026-10-31T11:05:00Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-31T11:05:00Z",
+          "completed_at": "2026-10-31T11:05:04Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-31T11:05:04Z",
+          "completed_at": "2026-10-31T11:05:05Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-31T11:05:05Z",
+          "completed_at": "2026-10-31T11:05:05Z"
+        },
+        {
+          "name": "Install isolated test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-31T11:05:05Z",
+          "completed_at": "2026-10-31T11:05:33Z"
+        },
+        {
+          "name": "Build and verify immutable fork wheel",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-31T11:05:33Z",
+          "completed_at": "2026-10-31T11:07:07Z"
+        },
+        {
+          "name": "Verify combined source, boundary, archive and admission contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-31T11:07:07Z",
+          "completed_at": "2026-10-31T11:09:17Z"
+        },
+        {
+          "name": "Upload integration evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-31T11:09:17Z",
+          "completed_at": "2026-10-31T11:09:18Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-31T11:09:18Z",
+          "completed_at": "2026-10-31T11:09:18Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-31T11:09:18Z",
+          "completed_at": "2026-10-31T11:09:18Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-31T11:09:18Z",
+          "completed_at": "2026-10-31T11:09:18Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-10-31T11:09:18Z",
+          "completed_at": "2026-10-31T11:09:18Z"
+        }
+      ]
+    },
+    {
+      "id": 124520524248,
+      "name": "package (arm64)",
+      "head_sha": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41195338773/job/124520524248",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-31T11:05:58Z",
+      "completed_at": "2026-10-31T11:28:17Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-31T11:05:58Z",
+          "completed_at": "2026-10-31T11:06:00Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-31T11:06:00Z",
+          "completed_at": "2026-10-31T11:06:06Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-31T11:06:06Z",
+          "completed_at": "2026-10-31T11:06:09Z"
+        },
+        {
+          "name": "Run astral-sh/setup-uv@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-31T11:06:09Z",
+          "completed_at": "2026-10-31T11:06:11Z"
+        },
+        {
+          "name": "Verify native architecture",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-31T11:06:11Z",
+          "completed_at": "2026-10-31T11:06:11Z"
+        },
+        {
+          "name": "Install locked frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-31T11:06:11Z",
+          "completed_at": "2026-10-31T11:06:59Z"
+        },
+        {
+          "name": "Check frontend and desktop host",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-31T11:06:59Z",
+          "completed_at": "2026-10-31T11:14:11Z"
+        },
+        {
+          "name": "Check desktop control adapters",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-31T11:14:11Z",
+          "completed_at": "2026-10-31T11:14:14Z"
+        },
+        {
+          "name": "Package native macOS app, DMG and ZIP",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-31T11:14:14Z",
+          "completed_at": "2026-10-31T11:21:54Z"
+        },
+        {
+          "name": "Regress replay inputs, indicators and financial boundaries with bundled Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-31T11:21:54Z",
+          "completed_at": "2026-10-31T11:26:45Z"
+        },
+        {
+          "name": "Verify relocated ZIP and native runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-31T11:26:45Z",
+          "completed_at": "2026-10-31T11:27:05Z"
+        },
+        {
+          "name": "Install isolated smoke test tooling",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-31T11:27:05Z",
+          "completed_at": "2026-10-31T11:27:06Z"
+        },
+        {
+          "name": "Launch relocated app and restart with bundled backend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-31T11:27:06Z",
+          "completed_at": "2026-10-31T11:28:00Z"
+        },
+        {
+          "name": "Record checksums and source identity",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-31T11:28:00Z",
+          "completed_at": "2026-10-31T11:28:01Z"
+        },
+        {
+          "name": "Upload verified packages",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-31T11:28:01Z",
+          "completed_at": "2026-10-31T11:28:08Z"
+        },
+        {
+          "name": "Upload verification evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-31T11:28:08Z",
+          "completed_at": "2026-10-31T11:28:12Z"
+        },
+        {
+          "name": "Post Run astral-sh/setup-uv@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 30,
+          "started_at": "2026-10-31T11:28:12Z",
+          "completed_at": "2026-10-31T11:28:12Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 31,
+          "started_at": "2026-10-31T11:28:12Z",
+          "completed_at": "2026-10-31T11:28:12Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32,
+          "started_at": "2026-10-31T11:28:12Z",
+          "completed_at": "2026-10-31T11:28:12Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33,
+          "started_at": "2026-10-31T11:28:12Z",
+          "completed_at": "2026-10-31T11:28:14Z"
+        }
+      ]
+    },
+    {
+      "id": 124520524388,
+      "name": "package (x64)",
+      "head_sha": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41195338773/job/124520524388",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-31T11:06:00Z",
+      "completed_at": "2026-10-31T11:47:47Z",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-31T11:06:02Z",
+          "completed_at": "2026-10-31T11:06:05Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-31T11:06:05Z",
+          "completed_at": "2026-10-31T11:06:14Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-31T11:06:14Z",
+          "completed_at": "2026-10-31T11:06:23Z"
+        },
+        {
+          "name": "Run astral-sh/setup-uv@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-31T11:06:23Z",
+          "completed_at": "2026-10-31T11:06:29Z"
+        },
+        {
+          "name": "Verify native architecture",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-31T11:06:29Z",
+          "completed_at": "2026-10-31T11:06:29Z"
+        },
+        {
+          "name": "Install locked frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-31T11:06:29Z",
+          "completed_at": "2026-10-31T11:08:02Z"
+        },
+        {
+          "name": "Check frontend and desktop host",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-31T11:08:02Z",
+          "completed_at": "2026-10-31T11:18:28Z"
+        },
+        {
+          "name": "Check desktop control adapters",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-31T11:18:28Z",
+          "completed_at": "2026-10-31T11:18:35Z"
+        },
+        {
+          "name": "Package native macOS app, DMG and ZIP",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-31T11:18:35Z",
+          "completed_at": "2026-10-31T11:32:44Z"
+        },
+        {
+          "name": "Regress replay inputs, indicators and financial boundaries with bundled Python",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-10-31T11:32:44Z",
+          "completed_at": "2026-10-31T11:44:32Z"
+        },
+        {
+          "name": "Verify relocated ZIP and native runtime",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-31T11:44:32Z",
+          "completed_at": "2026-10-31T11:45:13Z"
+        },
+        {
+          "name": "Install isolated smoke test tooling",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-31T11:45:13Z",
+          "completed_at": "2026-10-31T11:45:15Z"
+        },
+        {
+          "name": "Launch relocated app and restart with bundled backend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-31T11:45:15Z",
+          "completed_at": "2026-10-31T11:46:45Z"
+        },
+        {
+          "name": "Record checksums and source identity",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-10-31T11:46:45Z",
+          "completed_at": "2026-10-31T11:46:48Z"
+        },
+        {
+          "name": "Upload verified packages",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-31T11:46:48Z",
+          "completed_at": "2026-10-31T11:47:16Z"
+        },
+        {
+          "name": "Upload verification evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-31T11:47:16Z",
+          "completed_at": "2026-10-31T11:47:26Z"
+        },
+        {
+          "name": "Post Run astral-sh/setup-uv@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 30,
+          "started_at": "2026-10-31T11:47:26Z",
+          "completed_at": "2026-10-31T11:47:26Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 31,
+          "started_at": "2026-10-31T11:47:26Z",
+          "completed_at": "2026-10-31T11:47:27Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 32,
+          "started_at": "2026-10-31T11:47:27Z",
+          "completed_at": "2026-10-31T11:47:28Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 33,
+          "started_at": "2026-10-31T11:47:28Z",
+          "completed_at": "2026-10-31T11:47:28Z"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "backend": {
+      "passed": 1126,
+      "failed": 0,
+      "skipped": 0
+    },
+    "each_macos_architecture": {
+      "frontend": 4633,
+      "desktop_host": 123,
+      "desktop_control": 6,
+      "bundled_python": {
+        "passed": 1058,
+        "failed": 0,
+        "skipped": 1,
+        "skip": "Windows-only CRT descriptor lock regression; verified against downloaded JUnit"
+      }
+    }
+  }
+}

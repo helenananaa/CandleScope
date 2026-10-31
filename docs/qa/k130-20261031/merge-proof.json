@@ -1,0 +1,35 @@
+{
+  "main_after_merge": "128b493246756c6f422138cd03ce7bb312e089ab",
+  "prior_accepted_product_commit": "71849b3db0a372ff5f1b7d768b3618c089aa94e6",
+  "non_qa_differences": [],
+  "merges": [
+    {
+      "number": 138,
+      "state": "closed",
+      "merged": true,
+      "merged_at": "2026-10-31T10:38:11Z",
+      "merge_commit_sha": "59a32f67ad87639d86db01c6287df2387143261a",
+      "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
+      "url": "https://github.com/helenananaa/CandleScope/pull/138"
+    },
+    {
+      "number": 148,
+      "state": "closed",
+      "merged": true,
+      "merged_at": "2026-10-31T10:38:38Z",
+      "merge_commit_sha": "b23c05823bed9a81cef2f6eb7adabb5773aba5ec",
+      "head": "21ba546148965b3668c02963056bb055bf9042c0",
+      "url": "https://github.com/helenananaa/CandleScope/pull/148"
+    },
+    {
+      "number": 144,
+      "state": "closed",
+      "merged": true,
+      "merged_at": "2026-10-31T10:38:44Z",
+      "merge_commit_sha": "128b493246756c6f422138cd03ce7bb312e089ab",
+      "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
+      "url": "https://github.com/helenananaa/CandleScope/pull/144"
+    }
+  ],
+  "k130_source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13"
+}

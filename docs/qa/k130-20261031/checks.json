@@ -1,0 +1,10 @@
+{
+  "tests": 1894,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "seconds": 162.951,
+  "modules": 115,
+  "source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "log_sha256": "d64ed072c3c9988c6ba20cc7dbd026871684a9c01122466678299d1bdbe6fe89"
+}

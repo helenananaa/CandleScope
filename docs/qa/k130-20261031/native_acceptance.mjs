@@ -4,7 +4,7 @@ import path from 'node:path';
 import {spawn, execFileSync} from 'node:child_process';
 import {ControlClient} from '../../../packages/candlescope-control/client.mjs';
 const scriptRoot=path.dirname(new URL(import.meta.url).pathname);
-const repo=path.resolve(scriptRoot,'../../..');
+const repo=path.resolve(process.env.CANDLE_NATIVE_REPO || path.join(scriptRoot,'../../..'));
 const root=path.resolve(process.env.CANDLE_JOINT_NATIVE_OUTPUT || path.join(repo,'output/k130-reproduction/native'));
 assert.ok(!fs.existsSync(path.join(root,'profile')) && !fs.existsSync(path.join(root,'data')), 'Use a fresh output directory');fs.mkdirSync(root,{recursive:true});
 const executable=path.join(repo,'frontend/desktop-dist/mac-arm64/CandleScope.app/Contents/MacOS/CandleScope');
@@ -72,7 +72,7 @@ try{
  const receipt=await until('configuration receipt',()=>client.call('request.get',{requestId}),r=>r.final,240000);record('configuration-receipt',receipt);
  assert.ok(['ready','applied'].includes(receipt.state),JSON.stringify(receipt));
  const loaded=await ready('four custom histories');record('custom-cold',{elapsedMs:Date.now()-started,charts:loaded});await diagnose('cold');
- for(const row of loaded){const bars=(await query(row.id,'bars',{limit:500})).output;assert.ok(bars.length>=128);assert.ok(bars.every((b,i)=>Number.isFinite(b.close)&&(!i||b.time>bars[i-1].time)));}
+ for(const row of loaded){const bars=(await query(row.id,'bars',{limit:500})).output;fs.writeFileSync(path.join(root,'cold-bars-'+row.session.interval+'.json'),JSON.stringify(bars));assert.ok(bars.length>=128);assert.ok(bars.every((b,i)=>Number.isFinite(b.close)&&(!i||b.time>bars[i-1].time)));}
  const saved=await until('saved four charts',inspect,r=>r.persistence.state==='saved');record('saved',saved);
  await quit('saved');
  await launch('restart');
@@ -83,6 +83,6 @@ try{
  const fourth=await until('4d real history',()=>query(other.id),r=>r.snapshot?.session.interval==='4d'&&r.snapshot.barCount>=128&&!r.snapshot.status.initialHistoryPending&&r.snapshot.status.activeChartReady&&!r.snapshot.loading&&!r.snapshot.computing,180000);await sleep(1200);fourth.snapshot=(await query(other.id)).snapshot;assertViewport(fourth.snapshot);record('4d',{...fourth.snapshot,elapsedMs:Date.now()-fourthStart});
  const fifthStart=Date.now();await execute(other.id,'customIntervalCreate',{interval:'5d'});await execute(other.id,'interval',{interval:'5d'});
  const fifth=await until('5d real history',()=>query(other.id),r=>r.snapshot?.session.interval==='5d'&&r.snapshot.barCount>=128&&!r.snapshot.status.initialHistoryPending&&r.snapshot.status.activeChartReady&&!r.snapshot.loading&&!r.snapshot.computing,180000);await sleep(1200);fifth.snapshot=(await query(other.id)).snapshot;assertViewport(fifth.snapshot);record('5d',{...fifth.snapshot,elapsedMs:Date.now()-fifthStart});
- await until('final save',inspect,r=>r.persistence.state==='saved');await diagnose('verified');await quit('verified');await launch('final-restart');const finalRestored=await ready('final saved 5d');assert.deepEqual(finalRestored.map(r=>r.session.interval),['5d','90m','2d','3d']);assert.ok(finalRestored[1].indicators.some(i=>i.id==='qa-k130-pine-local'&&i.outputPointCount>0&&!i.error));record('final-restored',finalRestored);await diagnose('final-restart');await quit('final-restored');report.passed=true;
+ await until('final save',inspect,r=>r.persistence.state==='saved');await diagnose('verified');await quit('verified');await launch('final-restart');const finalRestored=await ready('final saved 5d');assert.deepEqual(finalRestored.map(r=>r.session.interval),['5d','90m','2d','3d']);assert.ok(finalRestored[1].indicators.some(i=>i.id==='qa-k130-pine-local'&&i.outputPointCount>0&&!i.error));record('final-restored',finalRestored);for(const row of finalRestored){const bars=(await query(row.id,'bars',{limit:500})).output;fs.writeFileSync(path.join(root,'restored-bars-'+row.session.interval+'.json'),JSON.stringify(bars));}await diagnose('final-restart');await quit('final-restored');report.passed=true;
 }catch(error){report.passed=false;report.error=String(error);console.error(error);process.exitCode=1;try{if(page)await capture('failure');}catch{}}
 finally{clearInterval(sampler);if(child){try{await quit('failed');}catch(error){report.cleanupError=String(error);child.kill('SIGTERM');}}save();}

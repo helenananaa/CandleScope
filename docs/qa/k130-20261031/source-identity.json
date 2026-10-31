@@ -1,0 +1,12 @@
+{
+  "base_main": "128b493246756c6f422138cd03ce7bb312e089ab",
+  "product_source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "native_source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "regression_probe_source": "2f1fc0f483ccc7ef0fb847e0a87cdb2c24acf44f",
+  "benchmark_source": "2f1fc0f483ccc7ef0fb847e0a87cdb2c24acf44f",
+  "benchmark_baseline": "8e0766126496fd899b45c536e9f7d0e9944b4e19",
+  "benchmark_baseline_product_equal_to_main": true,
+  "benchmark_final_delta": "323061a6 only gates the new summary VWAP API by volume semantics; benchmark reducers, normalized snapshots and final field projection are unchanged.",
+  "app_installed": false,
+  "raw_output": "/Users/ryanliang/.codex/worktrees/issue-130-k130/CandleScope/output/k130-20261031"
+}

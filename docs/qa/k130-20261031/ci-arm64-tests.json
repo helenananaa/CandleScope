@@ -1,0 +1,36 @@
+{
+  "source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "workflow_run": 41195338773,
+  "job": 124520524248,
+  "architecture": "arm64",
+  "artifact_id": 13040339771,
+  "artifact_sha256": "19811e94186868bbc0b8f1b9efef67a8bd90e2a552a89a48b86dc572a80a66a2",
+  "junit_sha256": "d53ddee03757397023d86c9f02d73638041b94f9f3de18e9783ccd04ea098324",
+  "suite": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "1",
+      "tests": "1059",
+      "time": "289.238",
+      "timestamp": "2026-10-31T11:21:55.771123",
+      "hostname": "iad20-fj917-79d0c194-86f0-409e-b14c-cf3926785257-1A107E783D52.local"
+    }
+  ],
+  "skips": [
+    {
+      "test": {
+        "classname": "tests.test_desktop_sidecar",
+        "name": "test_parent_monitor_does_not_block_numpy_dll_initialization",
+        "time": "0.001"
+      },
+      "skip": {
+        "type": "pytest.skip",
+        "message": "Windows CRT descriptor lock regression"
+      },
+      "reason": "/Users/runner/work/CandleScope/CandleScope/backend/tests/test_desktop_sidecar.py:208: Windows CRT descriptor lock regression"
+    }
+  ],
+  "downloaded_artifact_digest_verified": true
+}

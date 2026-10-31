@@ -1,0 +1,31 @@
+{
+  "root": "/Users/ryanliang/.codex/worktrees/backend-joint-20261031/CandleScope",
+  "python": "3.12.15",
+  "machine": "arm64",
+  "cases": {
+    "fixed_18000_rows_89m": {
+      "milliseconds": [
+        99.31174999655923,
+        98.09687500091968,
+        107.15583300043363,
+        115.44141700142063,
+        107.04925000027288
+      ],
+      "median_ms": 107.04925000027288,
+      "traced_peak_bytes": 228632,
+      "output_sha256": "d815d5f85c92224ad89218947b7c8c4f5c93af38dd53a3af3ad63a8463cd78fe"
+    },
+    "live_389_component_updates": {
+      "milliseconds": [
+        99.2943750025006,
+        103.89595800370444,
+        98.15591700316872,
+        95.12387500581099,
+        95.60991699981969
+      ],
+      "median_ms": 98.15591700316872,
+      "traced_peak_bytes": 291254,
+      "output_sha256": "09a0a649becb38ff18ec6e5b30d70e53c71d32e9add917524809e9d11e408808"
+    }
+  }
+}

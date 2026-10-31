@@ -1,0 +1,10 @@
+{
+  "root": "/Users/ryanliang/.codex/worktrees/backend-joint-20261031/CandleScope",
+  "checks": {
+    "history_crossing_source_not_closed": false,
+    "live_crossing_source_not_closed": false,
+    "strict_month_source_uses_actual_end": false,
+    "raw_and_decoded_leaf_precision_match": false,
+    "session_daily_label_keeps_canonical_end": false
+  }
+}

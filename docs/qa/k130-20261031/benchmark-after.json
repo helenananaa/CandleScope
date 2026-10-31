@@ -1,0 +1,31 @@
+{
+  "root": "/Users/ryanliang/.codex/worktrees/issue-130-k130/CandleScope",
+  "python": "3.12.15",
+  "machine": "arm64",
+  "cases": {
+    "fixed_18000_rows_89m": {
+      "milliseconds": [
+        114.36912499630125,
+        112.59812500065891,
+        105.39766700094333,
+        109.3897079990711,
+        109.70775000168942
+      ],
+      "median_ms": 109.70775000168942,
+      "traced_peak_bytes": 228808,
+      "output_sha256": "d815d5f85c92224ad89218947b7c8c4f5c93af38dd53a3af3ad63a8463cd78fe"
+    },
+    "live_389_component_updates": {
+      "milliseconds": [
+        101.0987909976393,
+        100.0414170048316,
+        99.23966699716402,
+        102.53979200206231,
+        102.98749999492429
+      ],
+      "median_ms": 101.0987909976393,
+      "traced_peak_bytes": 345462,
+      "output_sha256": "09a0a649becb38ff18ec6e5b30d70e53c71d32e9add917524809e9d11e408808"
+    }
+  }
+}

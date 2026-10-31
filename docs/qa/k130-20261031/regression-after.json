@@ -1,0 +1,10 @@
+{
+  "root": "/Users/ryanliang/.codex/worktrees/issue-130-k130/CandleScope",
+  "checks": {
+    "history_crossing_source_not_closed": true,
+    "live_crossing_source_not_closed": true,
+    "strict_month_source_uses_actual_end": true,
+    "raw_and_decoded_leaf_precision_match": true,
+    "session_daily_label_keeps_canonical_end": true
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "product_source": "323061a655fa4f7ebdd18fcdde660a5e3043ca13",
+  "files": [
+    {
+      "path": "docs/qa/PR173_K130_20261031.md",
+      "bytes": 7827,
+      "sha256": "45375ffae2aacea7e6cf751a142c1e336940120edcf56f12b6a7345d74eb2806"
+    },
+    {
+      "path": "docs/qa/k130-20261031/README.md",
+      "bytes": 2968,
+      "sha256": "4231880c756b124966f61b81381cd584122ac7ed7abf890ff86475486a4961a2"
+    },
+    {
+      "path": "docs/qa/k130-20261031/benchmark-after.json",
+      "bytes": 886,
+      "sha256": "08cbb2e8efb9d920ee1a739b75ec82b9115ca21fd754531d0a636fa5472c5720"
+    },
+    {
+      "path": "docs/qa/k130-20261031/benchmark-before.json",
+      "bytes": 891,
+      "sha256": "88be0404b5507652fedf06d2cf0826cdec0f1c9973f24bfabf8396ca32577ee6"
+    },
+    {
+      "path": "docs/qa/k130-20261031/benchmark.py",
+      "bytes": 2405,
+      "sha256": "e9f70a9ccd3f3cbbf01ee04b4715edb38861e4ed120dcce0c1ceffa0cd3038dc"
+    },
+    {
+      "path": "docs/qa/k130-20261031/checks.json",
+      "bytes": 248,
+      "sha256": "a7a60f5967ddc16c5304cb036d4aa6494d0f41fd76aaf35e24ab6cb16022ff7d"
+    },
+    {
+      "path": "docs/qa/k130-20261031/ci-arm64-tests.json",
+      "bytes": 1165,
+      "sha256": "c77940ad8f29da14d73256fb6db0e8ced6c8979562d91de9a15cb3a0118fbccf"
+    },
+    {
+      "path": "docs/qa/k130-20261031/ci-x64-tests.json",
+      "bytes": 1163,
+      "sha256": "7b3654e6bd4fcea2cab2263e7a933f46375661477ac81ca3d94da9438b37a353"
+    },
+    {
+      "path": "docs/qa/k130-20261031/ci.json",
+      "bytes": 17101,
+      "sha256": "26242b01aec9c0bc93fd1e8bc1fd0ed9274d0f4876eea6313d78355793cafeb5"
+    },
+    {
+      "path": "docs/qa/k130-20261031/cold-diagnostics.json",
+      "bytes": 49837,
+      "sha256": "7a96e8837eb984fe0fdb124f6ac2a66486b9ce5db12d1ef2ff36a58e58e2f173"
+    },
+    {
+      "path": "docs/qa/k130-20261031/final-restart-diagnostics.json",
+      "bytes": 47985,
+      "sha256": "6d64b559ac2176e7d4f506b354531ff0a929641491d83532ba87175949322d85"
+    },
+    {
+      "path": "docs/qa/k130-20261031/joint-files.json",
+      "bytes": 4789,
+      "sha256": "bb518fd773b4b832e3ce93b490cb18e6ae9d9034c56184882f005ba9a48d2c4e"
+    },
+    {
+      "path": "docs/qa/k130-20261031/live-reopen-diagnostics.json",
+      "bytes": 49373,
+      "sha256": "b39787964a117796e891ac924bbf0a223ffa9ff824a634ae9f9cbbf00b36292d"
+    },
+    {
+      "path": "docs/qa/k130-20261031/merge-proof.json",
+      "bytes": 1212,
+      "sha256": "5935334a6d9cfe9e07d3600ca8b104050a91f395de1a7ed69b124b9de6997f2d"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native-cold.png",
+      "bytes": 192776,
+      "sha256": "9eb51385caee6fd04ced06b10aff782a36ff9cec783707fd49c8345be70dcd17"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native-live.json",
+      "bytes": 5145,
+      "sha256": "61686b5db91551aeb728722768cf0eaf984694f1843575571ac9cd4ae7d59ec1"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native-live.png",
+      "bytes": 203729,
+      "sha256": "54b0a1b60d829b6043a8c3fc2049cdf5e4bc70fff2afb9b48efbbd973efa135d"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native-parity.json",
+      "bytes": 1041,
+      "sha256": "83f8ba738127f049cc930f357f206d105481b0d4bf595afd15d3bd679a93832a"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native.json",
+      "bytes": 91342,
+      "sha256": "cf717bf69b8899e978d794f76c7142eecab0203bb5d363f5bd7e22c7d6bc2691"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native_acceptance.mjs",
+      "bytes": 13042,
+      "sha256": "0cfc0dde564e3accd11430cd6aa188ce1f518e0a60222c12dd2fca11e0df4486"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native_live_reopen.mjs",
+      "bytes": 10354,
+      "sha256": "cfe46e320effe6ff4e4aa147351852fdbcf16ce1018503d0a3c6ecc46f25731d"
+    },
+    {
+      "path": "docs/qa/k130-20261031/native_parity.py",
+      "bytes": 4469,
+      "sha256": "d067cad57f9501104287567263461fb3db5b63b36962082c51a8a17f572a98ff"
+    },
+    {
+      "path": "docs/qa/k130-20261031/package-proof.json",
+      "bytes": 4144,
+      "sha256": "0057f697f551f30d2a36b037f90433b851c2b16c1da287ca8ee9173563aae5f8"
+    },
+    {
+      "path": "docs/qa/k130-20261031/parity-inputs.json.gz",
+      "bytes": 124670,
+      "sha256": "2ccd35a0173652e38ac8eb39cd2a75da39e8afbbc2938380387814f1c19670b2"
+    },
+    {
+      "path": "docs/qa/k130-20261031/regression-after.json",
+      "bytes": 340,
+      "sha256": "567a16f9a8a301b9eeb69fd08c1981b0926cbe038c9f91efe0a418fe50362aa7"
+    },
+    {
+      "path": "docs/qa/k130-20261031/regression-before.json",
+      "bytes": 353,
+      "sha256": "b9b8568378bb68498c27ee76102000a4aee70a6623091292ee460235585e1f46"
+    },
+    {
+      "path": "docs/qa/k130-20261031/regression_probe.py",
+      "bytes": 3037,
+      "sha256": "da475931e1bc516c471fd4e6f31eeef44d09bd7ab7d534cf10b9eb4aadf81154"
+    },
+    {
+      "path": "docs/qa/k130-20261031/restart-diagnostics.json",
+      "bytes": 48590,
+      "sha256": "7c9297305b47bd2cab9f989775c53649102fba19eac2cbde23455da994c5cfb4"
+    },
+    {
+      "path": "docs/qa/k130-20261031/run_backend.py",
+      "bytes": 832,
+      "sha256": "3a5760377731630afbba47c68a0e4f02fea817e4d7644d09091c53eb0cff4934"
+    },
+    {
+      "path": "docs/qa/k130-20261031/source-identity.json",
+      "bytes": 754,
+      "sha256": "5fb43a127182937a2a17ef95a9eb1c7e2deb56403836879191eae7ba5e41e1e5"
+    },
+    {
+      "path": "docs/qa/k130-20261031/verified-diagnostics.json",
+      "bytes": 48176,
+      "sha256": "aecc181c5af219edcefdfc5b96fd4efeedbdebe5023703b9890336f245f2b902"
+    }
+  ]
+}

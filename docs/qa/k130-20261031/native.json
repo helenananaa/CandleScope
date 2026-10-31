@@ -1,0 +1,3131 @@
+{
+  "scope": "Actual packaged macOS app, bundled Python/backend, live public market data, isolated profile; no response stubs",
+  "phases": [
+    {
+      "name": "cold-launch",
+      "at": "2026-10-31T11:09:44.594Z",
+      "value": {
+        "pid": 20730,
+        "instanceId": "c67f81642a9bdb9a07f5bd3295abd3e2",
+        "browser": "Chrome/150.0.7871.212"
+      }
+    },
+    {
+      "name": "initial",
+      "at": "2026-10-31T11:09:45.104Z",
+      "value": {
+        "workspaceId": "workspace-default",
+        "windowId": "main-window",
+        "name": "默认工作区",
+        "revision": 0,
+        "ready": true,
+        "layout": "single",
+        "layoutLocked": false,
+        "maxCellsPerWindow": 4,
+        "activeCellId": "cell-1",
+        "persistence": {
+          "state": "saved",
+          "mode": "indexeddb",
+          "error": null
+        },
+        "cells": [
+          {
+            "cellId": "cell-1",
+            "session": {
+              "symbol": "BTCUSDT",
+              "exchange": "binance",
+              "marketType": "spot",
+              "interval": "1h"
+            },
+            "linkGroupId": "group-primary",
+            "indicators": [],
+            "runtime": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1h"
+              },
+              "indicatorSignature": "[]",
+              "marketReady": false,
+              "indicatorsReady": true,
+              "barCount": 0,
+              "loading": true,
+              "initialHistoryPending": true,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [],
+              "error": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "configuration-receipt",
+      "at": "2026-10-31T11:10:10.516Z",
+      "value": {
+        "requestId": "native-custom-history",
+        "instanceId": "c67f81642a9bdb9a07f5bd3295abd3e2",
+        "state": "applied",
+        "code": "READINESS_TIMEOUT",
+        "readiness": "unverified",
+        "revision": 1,
+        "snapshot": {
+          "workspaceId": "workspace-default",
+          "windowId": "main-window",
+          "name": "默认工作区",
+          "revision": 1,
+          "ready": true,
+          "layout": "quad",
+          "layoutLocked": false,
+          "maxCellsPerWindow": 4,
+          "activeCellId": "cell-1",
+          "persistence": {
+            "state": "saved",
+            "mode": "indexeddb",
+            "error": null
+          },
+          "cells": [
+            {
+              "cellId": "cell-1",
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "45m"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "control-native-custom-history-0-0",
+                  "engineName": "EMA",
+                  "params": {
+                    "period": 20
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "okx",
+                  "marketType": "futures",
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "45m"
+                },
+                "indicatorSignature": "[[\"control-native-custom-history-0-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+                "marketReady": false,
+                "indicatorsReady": false,
+                "barCount": 1,
+                "loading": true,
+                "initialHistoryPending": true,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  0
+                ],
+                "error": null
+              }
+            },
+            {
+              "cellId": "cell-2",
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "90m"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "control-native-custom-history-1-0",
+                  "engineName": "EMA",
+                  "params": {
+                    "period": 20
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "okx",
+                  "marketType": "futures",
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "90m"
+                },
+                "indicatorSignature": "[[\"control-native-custom-history-1-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 129,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  110
+                ],
+                "error": null
+              }
+            },
+            {
+              "cellId": "cell-3",
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "2d"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "control-native-custom-history-2-0",
+                  "engineName": "EMA",
+                  "params": {
+                    "period": 20
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "okx",
+                  "marketType": "futures",
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "2d"
+                },
+                "indicatorSignature": "[[\"control-native-custom-history-2-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 129,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  110
+                ],
+                "error": null
+              }
+            },
+            {
+              "cellId": "cell-4",
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "3d"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "control-native-custom-history-3-0",
+                  "engineName": "EMA",
+                  "params": {
+                    "period": 20
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "okx",
+                  "marketType": "futures",
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "3d"
+                },
+                "indicatorSignature": "[[\"control-native-custom-history-3-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 129,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  110
+                ],
+                "error": null
+              }
+            }
+          ]
+        },
+        "final": true
+      }
+    },
+    {
+      "name": "custom-cold",
+      "at": "2026-10-31T11:10:17.432Z",
+      "value": {
+        "elapsedMs": 32328,
+        "charts": [
+          {
+            "id": "chart:cell-1",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "45m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 129,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.5522388059701493,
+              "rightOffset": 5,
+              "time": {
+                "from": 1793097000,
+                "to": 1793456100
+              },
+              "rightmostTime": 1793456100,
+              "logical": {
+                "from": 0,
+                "to": 133
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-0-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 110
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-2",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "90m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 129,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.5714285714285716,
+              "rightOffset": 4,
+              "time": {
+                "from": 1792751400,
+                "to": 1793458800
+              },
+              "rightmostTime": 1793458800,
+              "logical": {
+                "from": 0,
+                "to": 132
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-1-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 110
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-3",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "2d"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 129,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.5714285714285716,
+              "rightOffset": 4,
+              "time": {
+                "from": 1771200000,
+                "to": 1793836800
+              },
+              "rightmostTime": 1793836800,
+              "logical": {
+                "from": 0,
+                "to": 132
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-2-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 110
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-4",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "3d"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 129,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.511278195488722,
+              "rightOffset": 4,
+              "time": {
+                "from": 1760227200,
+                "to": 1794182400
+              },
+              "rightmostTime": 1794182400,
+              "logical": {
+                "from": 0,
+                "to": 132
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-3-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 110
+              }
+            ],
+            "computing": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "saved",
+      "at": "2026-10-31T11:10:17.573Z",
+      "value": {
+        "workspaceId": "workspace-default",
+        "windowId": "main-window",
+        "name": "默认工作区",
+        "revision": 1,
+        "ready": true,
+        "layout": "quad",
+        "layoutLocked": false,
+        "maxCellsPerWindow": 4,
+        "activeCellId": "cell-1",
+        "persistence": {
+          "state": "saved",
+          "mode": "indexeddb",
+          "error": null
+        },
+        "cells": [
+          {
+            "cellId": "cell-1",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "45m"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "control-native-custom-history-0-0",
+                "engineName": "EMA",
+                "params": {
+                  "period": 20
+                },
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "45m"
+              },
+              "indicatorSignature": "[[\"control-native-custom-history-0-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 129,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                110
+              ],
+              "error": null
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "90m"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "control-native-custom-history-1-0",
+                "engineName": "EMA",
+                "params": {
+                  "period": 20
+                },
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "90m"
+              },
+              "indicatorSignature": "[[\"control-native-custom-history-1-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 129,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                110
+              ],
+              "error": null
+            }
+          },
+          {
+            "cellId": "cell-3",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "2d"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "control-native-custom-history-2-0",
+                "engineName": "EMA",
+                "params": {
+                  "period": 20
+                },
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "2d"
+              },
+              "indicatorSignature": "[[\"control-native-custom-history-2-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 129,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                110
+              ],
+              "error": null
+            }
+          },
+          {
+            "cellId": "cell-4",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "3d"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "control-native-custom-history-3-0",
+                "engineName": "EMA",
+                "params": {
+                  "period": 20
+                },
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "okx",
+                "marketType": "futures",
+                "symbol": "BTC-USDT-SWAP",
+                "interval": "3d"
+              },
+              "indicatorSignature": "[[\"control-native-custom-history-3-0\",\"EMA\",{\"period\":20},\"builtin\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 129,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                110
+              ],
+              "error": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "saved-full-exit",
+      "at": "2026-10-31T11:10:38.104Z",
+      "value": {
+        "pids": [
+          20730,
+          20731,
+          20732,
+          20733,
+          20766,
+          20765,
+          20770,
+          20771
+        ],
+        "remaining": []
+      }
+    },
+    {
+      "name": "restart-launch",
+      "at": "2026-10-31T11:10:44.837Z",
+      "value": {
+        "pid": 20854,
+        "instanceId": "8d8eddf88c0e48dfd51dfd9d244ebbdc",
+        "browser": "Chrome/150.0.7871.212"
+      }
+    },
+    {
+      "name": "restored",
+      "at": "2026-10-31T11:10:48.679Z",
+      "value": [
+        {
+          "id": "chart:cell-1",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "45m"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 129,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.5522388059701493,
+            "rightOffset": 4,
+            "time": {
+              "from": 1793094300,
+              "to": 1793450700
+            },
+            "rightmostTime": 1793450700,
+            "logical": {
+              "from": -1,
+              "to": 132
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-0-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 110
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-2",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "90m"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 129,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.5714285714285716,
+            "rightOffset": 3,
+            "time": {
+              "from": 1792746000,
+              "to": 1793453400
+            },
+            "rightmostTime": 1793453400,
+            "logical": {
+              "from": -1,
+              "to": 131
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-1-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 110
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-3",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "2d"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 128,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.5714285714285716,
+            "rightOffset": 4,
+            "time": {
+              "from": 1771027200,
+              "to": 1793836800
+            },
+            "rightmostTime": 1793836800,
+            "logical": {
+              "from": -1,
+              "to": 131
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-2-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 109
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-4",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "3d"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 128,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.511278195488722,
+            "rightOffset": 4,
+            "time": {
+              "from": 1759968000,
+              "to": 1794182400
+            },
+            "rightmostTime": 1794182400,
+            "logical": {
+              "from": -1,
+              "to": 131
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-3-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 109
+            }
+          ],
+          "computing": false
+        }
+      ]
+    },
+    {
+      "name": "pine",
+      "at": "2026-10-31T11:10:49.255Z",
+      "value": {
+        "id": "qa-k130-pine-local",
+        "name": "Pine SMA",
+        "kind": "script",
+        "executionTarget": "local",
+        "script": "//@version=5\nindicator(\"K130 Pine SMA\")\nplot(ta.sma(close,20))",
+        "language": "pine",
+        "securityMode": "safe",
+        "visible": true,
+        "bindingId": "indicator:qa-k130-pine-local",
+        "error": null,
+        "outputPointCount": 110
+      }
+    },
+    {
+      "name": "4d",
+      "at": "2026-10-31T11:10:54.014Z",
+      "value": {
+        "session": {
+          "exchange": "okx",
+          "marketType": "futures",
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "4d"
+        },
+        "settings": {
+          "theme": "dark",
+          "customBg": "#0f172a",
+          "upColor": "#22c55e",
+          "downColor": "#ef4444",
+          "chartType": "candlestick",
+          "renkoBoxSizeMode": "atr",
+          "renkoAtrLength": 14,
+          "renkoBoxSize": 1,
+          "pointFigureBoxSizeMode": "atr",
+          "pointFigureAtrLength": 14,
+          "pointFigureBoxSize": 1,
+          "pointFigureReversalAmount": 3,
+          "kagiReversalMode": "atr",
+          "kagiAtrLength": 14,
+          "kagiReversalAmount": 1,
+          "lineBreakNumberOfLines": 3,
+          "cachePreset": "standard",
+          "cacheLimits": {
+            "minutes": 200000,
+            "hours": 50000,
+            "daily": 0
+          },
+          "ephemeralCacheBars": 86400,
+          "frontendCacheBudgetBytes": 67108864,
+          "sqliteStorageBudgetBytes": null,
+          "storageRowLimitsEnabled": false,
+          "locale": "zh-CN"
+        },
+        "barCount": 129,
+        "loading": false,
+        "sessionCapabilities": {
+          "exchangeCatalogStatus": "ready",
+          "exchangeLimitations": [
+            "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+            "All physical public market-data I/O is owned by pinned CCXT",
+            "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+          ],
+          "exchangeCapabilityAvailable": true,
+          "historyIntervalAvailable": true,
+          "realtimeIntervalAvailable": true,
+          "marketDataReady": true,
+          "webSocketReady": true
+        },
+        "nativeIntervals": [
+          {
+            "value": "1s",
+            "label": "1s",
+            "seconds": 1
+          },
+          {
+            "value": "1m",
+            "label": "1m",
+            "seconds": 60
+          },
+          {
+            "value": "3m",
+            "label": "3m",
+            "seconds": 180
+          },
+          {
+            "value": "5m",
+            "label": "5m",
+            "seconds": 300
+          },
+          {
+            "value": "15m",
+            "label": "15m",
+            "seconds": 900
+          },
+          {
+            "value": "30m",
+            "label": "30m",
+            "seconds": 1800
+          },
+          {
+            "value": "1h",
+            "label": "1H",
+            "seconds": 3600
+          },
+          {
+            "value": "2h",
+            "label": "2H",
+            "seconds": 7200
+          },
+          {
+            "value": "4h",
+            "label": "4H",
+            "seconds": 14400
+          },
+          {
+            "value": "6h",
+            "label": "6H",
+            "seconds": 21600
+          },
+          {
+            "value": "12h",
+            "label": "12H",
+            "seconds": 43200
+          },
+          {
+            "value": "1d",
+            "label": "1D",
+            "seconds": 86400
+          },
+          {
+            "value": "3d",
+            "label": "3D",
+            "seconds": 259200
+          },
+          {
+            "value": "1w",
+            "label": "1W",
+            "seconds": 604800
+          },
+          {
+            "value": "1M",
+            "label": "1M",
+            "seconds": 2592000
+          }
+        ],
+        "customIntervals": [
+          {
+            "value": "4d",
+            "createdAt": 1793445049276,
+            "lastUsedAt": 1793445049276,
+            "usageCount": 1,
+            "pinned": false,
+            "order": 0
+          }
+        ],
+        "exchangeMarketTypes": [
+          "spot",
+          "futures"
+        ],
+        "error": null,
+        "status": {
+          "initialHistoryPending": false,
+          "activeChartReady": true,
+          "hasMoreLeft": true,
+          "loadingMoreLeft": false,
+          "loadingMoreRight": false,
+          "canLoadMoreLeft": true,
+          "canLoadMoreRight": false,
+          "canRestoreLatestWindow": true
+        },
+        "visibleRange": {
+          "barSpacing": 2.4925373134328357,
+          "rightOffset": 5,
+          "time": {
+            "from": 1749081600,
+            "to": 1795046400
+          },
+          "rightmostTime": 1795046400,
+          "logical": {
+            "from": 0,
+            "to": 133
+          }
+        },
+        "indicators": [
+          {
+            "id": "control-native-custom-history-0-0",
+            "name": "EMA",
+            "engineName": "EMA",
+            "kind": "builtin",
+            "executionTarget": "local",
+            "params": {
+              "period": 20
+            },
+            "visible": true,
+            "error": null,
+            "outputPointCount": 110
+          }
+        ],
+        "computing": false,
+        "elapsedMs": 4758
+      }
+    },
+    {
+      "name": "5d",
+      "at": "2026-10-31T11:10:57.753Z",
+      "value": {
+        "session": {
+          "exchange": "okx",
+          "marketType": "futures",
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "5d"
+        },
+        "settings": {
+          "theme": "dark",
+          "customBg": "#0f172a",
+          "upColor": "#22c55e",
+          "downColor": "#ef4444",
+          "chartType": "candlestick",
+          "renkoBoxSizeMode": "atr",
+          "renkoAtrLength": 14,
+          "renkoBoxSize": 1,
+          "pointFigureBoxSizeMode": "atr",
+          "pointFigureAtrLength": 14,
+          "pointFigureBoxSize": 1,
+          "pointFigureReversalAmount": 3,
+          "kagiReversalMode": "atr",
+          "kagiAtrLength": 14,
+          "kagiReversalAmount": 1,
+          "lineBreakNumberOfLines": 3,
+          "cachePreset": "standard",
+          "cacheLimits": {
+            "minutes": 200000,
+            "hours": 50000,
+            "daily": 0
+          },
+          "ephemeralCacheBars": 86400,
+          "frontendCacheBudgetBytes": 67108864,
+          "sqliteStorageBudgetBytes": null,
+          "storageRowLimitsEnabled": false,
+          "locale": "zh-CN"
+        },
+        "barCount": 129,
+        "loading": false,
+        "sessionCapabilities": {
+          "exchangeCatalogStatus": "ready",
+          "exchangeLimitations": [
+            "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+            "All physical public market-data I/O is owned by pinned CCXT",
+            "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+          ],
+          "exchangeCapabilityAvailable": true,
+          "historyIntervalAvailable": true,
+          "realtimeIntervalAvailable": true,
+          "marketDataReady": true,
+          "webSocketReady": true
+        },
+        "nativeIntervals": [
+          {
+            "value": "1s",
+            "label": "1s",
+            "seconds": 1
+          },
+          {
+            "value": "1m",
+            "label": "1m",
+            "seconds": 60
+          },
+          {
+            "value": "3m",
+            "label": "3m",
+            "seconds": 180
+          },
+          {
+            "value": "5m",
+            "label": "5m",
+            "seconds": 300
+          },
+          {
+            "value": "15m",
+            "label": "15m",
+            "seconds": 900
+          },
+          {
+            "value": "30m",
+            "label": "30m",
+            "seconds": 1800
+          },
+          {
+            "value": "1h",
+            "label": "1H",
+            "seconds": 3600
+          },
+          {
+            "value": "2h",
+            "label": "2H",
+            "seconds": 7200
+          },
+          {
+            "value": "4h",
+            "label": "4H",
+            "seconds": 14400
+          },
+          {
+            "value": "6h",
+            "label": "6H",
+            "seconds": 21600
+          },
+          {
+            "value": "12h",
+            "label": "12H",
+            "seconds": 43200
+          },
+          {
+            "value": "1d",
+            "label": "1D",
+            "seconds": 86400
+          },
+          {
+            "value": "3d",
+            "label": "3D",
+            "seconds": 259200
+          },
+          {
+            "value": "1w",
+            "label": "1W",
+            "seconds": 604800
+          },
+          {
+            "value": "1M",
+            "label": "1M",
+            "seconds": 2592000
+          }
+        ],
+        "customIntervals": [
+          {
+            "value": "4d",
+            "createdAt": 1793445049276,
+            "lastUsedAt": 1793445049276,
+            "usageCount": 1,
+            "pinned": false,
+            "order": 0
+          },
+          {
+            "value": "5d",
+            "createdAt": 1793445054025,
+            "lastUsedAt": 1793445054025,
+            "usageCount": 1,
+            "pinned": false,
+            "order": 1
+          }
+        ],
+        "exchangeMarketTypes": [
+          "spot",
+          "futures"
+        ],
+        "error": null,
+        "status": {
+          "initialHistoryPending": false,
+          "activeChartReady": true,
+          "hasMoreLeft": true,
+          "loadingMoreLeft": false,
+          "loadingMoreRight": false,
+          "canLoadMoreLeft": true,
+          "canLoadMoreRight": false,
+          "canRestoreLatestWindow": true
+        },
+        "visibleRange": {
+          "barSpacing": 2.4925373134328357,
+          "rightOffset": 5,
+          "time": {
+            "from": 1737936000,
+            "to": 1795392000
+          },
+          "rightmostTime": 1795392000,
+          "logical": {
+            "from": 0,
+            "to": 133
+          }
+        },
+        "indicators": [
+          {
+            "id": "control-native-custom-history-0-0",
+            "name": "EMA",
+            "engineName": "EMA",
+            "kind": "builtin",
+            "executionTarget": "local",
+            "params": {
+              "period": 20
+            },
+            "visible": true,
+            "error": null,
+            "outputPointCount": 110
+          }
+        ],
+        "computing": false,
+        "elapsedMs": 3739
+      }
+    },
+    {
+      "name": "verified-full-exit",
+      "at": "2026-10-31T11:11:18.007Z",
+      "value": {
+        "pids": [
+          20854,
+          20855,
+          20856,
+          20857,
+          20876,
+          20864,
+          20878,
+          20879
+        ],
+        "remaining": []
+      }
+    },
+    {
+      "name": "final-restart-launch",
+      "at": "2026-10-31T11:11:24.812Z",
+      "value": {
+        "pid": 20916,
+        "instanceId": "f0e09d85057c51c5f9c09ac0821bc582",
+        "browser": "Chrome/150.0.7871.212"
+      }
+    },
+    {
+      "name": "final-restored",
+      "at": "2026-10-31T11:11:27.647Z",
+      "value": [
+        {
+          "id": "chart:cell-1",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "5d"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 129,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [
+            {
+              "value": "4d",
+              "createdAt": 1793445049276,
+              "lastUsedAt": 1793445049276,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 0
+            },
+            {
+              "value": "5d",
+              "createdAt": 1793445054025,
+              "lastUsedAt": 1793445054025,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 1
+            }
+          ],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.492537313432836,
+            "rightOffset": 4,
+            "time": {
+              "from": 1737504000,
+              "to": 1794528000
+            },
+            "rightmostTime": 1794528000,
+            "logical": {
+              "from": -0.9999999999999716,
+              "to": 132
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-0-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 110
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-2",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "90m"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 129,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [
+            {
+              "value": "4d",
+              "createdAt": 1793445049276,
+              "lastUsedAt": 1793445049276,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 0
+            },
+            {
+              "value": "5d",
+              "createdAt": 1793445054025,
+              "lastUsedAt": 1793445054025,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 1
+            }
+          ],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.5714285714285716,
+            "rightOffset": 2,
+            "time": {
+              "from": 1792740600,
+              "to": 1793453400
+            },
+            "rightmostTime": 1793453400,
+            "logical": {
+              "from": -2,
+              "to": 130
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-1-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "bindingId": "indicator:control-native-custom-history-1-0",
+              "error": null,
+              "outputPointCount": 110
+            },
+            {
+              "id": "qa-k130-pine-local",
+              "name": "Pine SMA",
+              "kind": "script",
+              "executionTarget": "local",
+              "script": "//@version=5\nindicator(\"K130 Pine SMA\")\nplot(ta.sma(close,20))",
+              "language": "pine",
+              "securityMode": "safe",
+              "visible": true,
+              "bindingId": "indicator:qa-k130-pine-local",
+              "error": null,
+              "outputPointCount": 110
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-3",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "2d"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 128,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [
+            {
+              "value": "4d",
+              "createdAt": 1793445049276,
+              "lastUsedAt": 1793445049276,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 0
+            },
+            {
+              "value": "5d",
+              "createdAt": 1793445054025,
+              "lastUsedAt": 1793445054025,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 1
+            }
+          ],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.5714285714285716,
+            "rightOffset": 3,
+            "time": {
+              "from": 1770854400,
+              "to": 1793664000
+            },
+            "rightmostTime": 1793664000,
+            "logical": {
+              "from": -2,
+              "to": 130
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-2-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 109
+            }
+          ],
+          "computing": false
+        },
+        {
+          "id": "chart:cell-4",
+          "session": {
+            "exchange": "okx",
+            "marketType": "futures",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "3d"
+          },
+          "settings": {
+            "theme": "dark",
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "chartType": "candlestick",
+            "renkoBoxSizeMode": "atr",
+            "renkoAtrLength": 14,
+            "renkoBoxSize": 1,
+            "pointFigureBoxSizeMode": "atr",
+            "pointFigureAtrLength": 14,
+            "pointFigureBoxSize": 1,
+            "pointFigureReversalAmount": 3,
+            "kagiReversalMode": "atr",
+            "kagiAtrLength": 14,
+            "kagiReversalAmount": 1,
+            "lineBreakNumberOfLines": 3,
+            "cachePreset": "standard",
+            "cacheLimits": {
+              "minutes": 200000,
+              "hours": 50000,
+              "daily": 0
+            },
+            "ephemeralCacheBars": 86400,
+            "frontendCacheBudgetBytes": 67108864,
+            "sqliteStorageBudgetBytes": null,
+            "storageRowLimitsEnabled": false,
+            "locale": "zh-CN"
+          },
+          "barCount": 128,
+          "loading": false,
+          "sessionCapabilities": {
+            "exchangeCatalogStatus": "ready",
+            "exchangeLimitations": [
+              "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+              "All physical public market-data I/O is owned by pinned CCXT",
+              "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+            ],
+            "exchangeCapabilityAvailable": true,
+            "historyIntervalAvailable": true,
+            "realtimeIntervalAvailable": true,
+            "marketDataReady": true,
+            "webSocketReady": true
+          },
+          "nativeIntervals": [
+            {
+              "value": "1s",
+              "label": "1s",
+              "seconds": 1
+            },
+            {
+              "value": "1m",
+              "label": "1m",
+              "seconds": 60
+            },
+            {
+              "value": "3m",
+              "label": "3m",
+              "seconds": 180
+            },
+            {
+              "value": "5m",
+              "label": "5m",
+              "seconds": 300
+            },
+            {
+              "value": "15m",
+              "label": "15m",
+              "seconds": 900
+            },
+            {
+              "value": "30m",
+              "label": "30m",
+              "seconds": 1800
+            },
+            {
+              "value": "1h",
+              "label": "1H",
+              "seconds": 3600
+            },
+            {
+              "value": "2h",
+              "label": "2H",
+              "seconds": 7200
+            },
+            {
+              "value": "4h",
+              "label": "4H",
+              "seconds": 14400
+            },
+            {
+              "value": "6h",
+              "label": "6H",
+              "seconds": 21600
+            },
+            {
+              "value": "12h",
+              "label": "12H",
+              "seconds": 43200
+            },
+            {
+              "value": "1d",
+              "label": "1D",
+              "seconds": 86400
+            },
+            {
+              "value": "3d",
+              "label": "3D",
+              "seconds": 259200
+            },
+            {
+              "value": "1w",
+              "label": "1W",
+              "seconds": 604800
+            },
+            {
+              "value": "1M",
+              "label": "1M",
+              "seconds": 2592000
+            }
+          ],
+          "customIntervals": [
+            {
+              "value": "4d",
+              "createdAt": 1793445049276,
+              "lastUsedAt": 1793445049276,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 0
+            },
+            {
+              "value": "5d",
+              "createdAt": 1793445054025,
+              "lastUsedAt": 1793445054025,
+              "usageCount": 1,
+              "pinned": false,
+              "order": 1
+            }
+          ],
+          "exchangeMarketTypes": [
+            "spot",
+            "futures"
+          ],
+          "error": null,
+          "status": {
+            "initialHistoryPending": false,
+            "activeChartReady": true,
+            "hasMoreLeft": true,
+            "loadingMoreLeft": false,
+            "loadingMoreRight": false,
+            "canLoadMoreLeft": true,
+            "canLoadMoreRight": false,
+            "canRestoreLatestWindow": true
+          },
+          "visibleRange": {
+            "barSpacing": 2.511278195488722,
+            "rightOffset": 3,
+            "time": {
+              "from": 1759708800,
+              "to": 1793923200
+            },
+            "rightmostTime": 1793923200,
+            "logical": {
+              "from": -2,
+              "to": 130
+            }
+          },
+          "indicators": [
+            {
+              "id": "control-native-custom-history-3-0",
+              "name": "EMA",
+              "engineName": "EMA",
+              "kind": "builtin",
+              "executionTarget": "local",
+              "params": {
+                "period": 20
+              },
+              "visible": true,
+              "error": null,
+              "outputPointCount": 109
+            }
+          ],
+          "computing": false
+        }
+      ]
+    },
+    {
+      "name": "final-restored-full-exit",
+      "at": "2026-10-31T11:11:47.950Z",
+      "value": {
+        "pids": [
+          20916,
+          20917,
+          20918,
+          20919,
+          20930,
+          20925,
+          20932,
+          20933
+        ],
+        "remaining": []
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}
