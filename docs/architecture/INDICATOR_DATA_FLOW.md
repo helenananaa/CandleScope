@@ -11,9 +11,8 @@ private to each chart.
 - `MarketDataManager` remains the only shared market admission owner.
 - `IndicatorDataManager` owns in-flight range and provided-input computation
   demands. Its stream port uses the existing shared indicator socket/shard
-  coordinator. This change does not introduce semantic deduplication of live
-  indicator WebSocket subscriptions or move their checkpoint state into a new
-  store.
+  coordinator. Equivalent builtin subscriptions share a wire as described below;
+  checkpoint state remains in the existing per-consumer recovery lane.
 - `indicatorResultCacheStore` remains the normalized result owner. No second
   result collection is introduced. Definitions, parameters, complete market
   identity, input scope and provided input origin retain their existing cache
@@ -87,6 +86,33 @@ results reuse the existing computed-range coverage/hydration path. A larger
 window or changed forming sample correctly requires fresh computation.
 
 ## Health and recovery
+
+### Bounded JavaScript inputs (#164)
+
+`IndicatorDataManager.inputs` reads and subscribes to explicit `[from, to]`
+ranges in `SharedMarketCache`. It retains no second row collection. The chart's
+owned window declares the bounded time axis and ownership epoch; the shared
+cache supplies immutable values and dependency versions. A missing/mismatched
+axis waits for data instead of silently substituting a different calculation
+origin. Corrections can wake JS before the private chart projection publishes.
+
+Each enabled chart owns one range subscription and retention lease. Selection,
+history growth and closing the chart replace/release that consumer's lease;
+manager disposal releases all remaining leases. Unrelated range changes do not
+wake a consumer. Diagnostics expose active input subscriptions. Cache hard
+limits still take precedence over retention.
+
+The existing 250 ms forming-sample scheduler and pending-computation guard
+remain in place. Held forming samples may finish during ticks, while source
+ownership, closed-row correction, finality and disconnect invalidate old work.
+Exact stamps are still required for reusable results. JS and hosted adapters
+continue through the same request broker and normalized result-cache admission
+functions; per-chart publication guards remain necessary for independent views.
+
+This migration does not introduce persistent Workers or an incremental script
+SDK (#154 remains deferred). Broader consolidation of per-chart recovery and
+result subscriptions, native-package qualification of this new input path,
+and all-provider/long-duration acceptance remain separate #164 work.
 
 Result health reports computed range coverage, input validity, source
 continuity, source freshness and last computation time separately. A current
