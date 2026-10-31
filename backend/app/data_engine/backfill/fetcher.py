@@ -397,6 +397,7 @@ class HistoricalFetcher:
                 break
 
             req = current_request
+            req.history_projection = True
 
             # Fetch with retry
             page_bars: list[FetchedBar] = []
