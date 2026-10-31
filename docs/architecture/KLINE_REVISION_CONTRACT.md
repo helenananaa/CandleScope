@@ -100,6 +100,14 @@ retired without fetching; new windows can establish fresh watches. Pending
 receipts survive process exit and cannot resurrect a deleted series. An
 unversioned late backfill notification is only a hint to reread canonical rows.
 
+A native receipt may commit after a newer mutation only when its complete candle
+range is disjoint from the durable, lifetime-coalesced mutation range, or the
+existing ordered-predecessor rule applies. This permits the next natural close
+after older missing bars are repaired. It does not advance the receipt's
+acquisition revision. Overlapping edits, empty/full-range deletes and uncertain
+derived dependencies still require the original fence/recovery path; a later
+disjoint edit cannot hide an earlier overlapping mutation.
+
 Revision-rejected receipts also persist `bar_delivery.recovery_required=1` in
 the rejection transaction. They remain in the bounded pending/admission count
 and cannot be pruned until the dispatcher marks matching bar subscriptions

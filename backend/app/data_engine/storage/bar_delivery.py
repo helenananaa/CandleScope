@@ -124,6 +124,18 @@ class BarDeliveryJournal:
             for change in changes:
                 if change["revision"] <= record["observed_revision"]:
                     continue
+                if not payload.get("derived"):
+                    start = payload["storage_row"]["open_time"]
+                    end = payload["storage_row"].get("close_time")
+                    # The durable range encloses every mutation ever observed
+                    # for this identity, including empty deletes. A disjoint
+                    # native candle cannot depend on those changed rows. This
+                    # lets an in-flight forming candle close after older gaps
+                    # are repaired, without granting it a newer acquisition.
+                    if end is not None and end >= start and (
+                        end < change["start_ms"] or start > change["end_ms"]
+                    ):
+                        continue
                 predecessor = conn.execute("SELECT 1 FROM bar_delivery WHERE sequence<? AND committed_revision=?",
                                            (record["sequence"], change["revision"])).fetchone()
                 if change["delete_revision"] > record["observed_revision"] or predecessor is None:
