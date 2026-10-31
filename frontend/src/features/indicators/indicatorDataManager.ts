@@ -8,6 +8,7 @@ import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
 import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import { createIndicatorCacheInputSource } from "./indicatorInputBinding.js";
+import { IndicatorInputRanges } from "./indicatorInputRanges.js";
 import { IndicatorRequestBroker, indicatorRequestKey } from "./indicatorRequestBroker.js";
 import type { IndicatorComputeRequest, IndicatorPayloadEnvelope, IndicatorRangeRequest, IndicatorRangeBatchResponse } from "./indicatorTypes.js";
 import type { SharedIndicatorStreamCoordinator } from "./sharedIndicatorStreamCoordinator.js";
@@ -25,6 +26,7 @@ export interface IndicatorDataManagerOptions {
  * a chart's request scope, generation, client IDs or cancellation controller. */
 export class IndicatorDataManager {
   readonly inputSource;
+  readonly inputs: IndicatorInputRanges;
   readonly streams: SharedIndicatorStreamCoordinator | null;
   private readonly scope = `indicator-flow:${crypto.randomUUID()}`;
   private nextRequest = 0;
@@ -33,6 +35,7 @@ export class IndicatorDataManager {
 
   constructor(readonly options: IndicatorDataManagerOptions) {
     this.inputSource = createIndicatorCacheInputSource(options.cache);
+    this.inputs = new IndicatorInputRanges(options.cache);
     this.streams = options.streams ?? null;
     this.ranges = new IndicatorRequestBroker({
       ...(options.coalesceMs === undefined ? {} : { coalesceMs: options.coalesceMs }),
@@ -107,8 +110,8 @@ export class IndicatorDataManager {
     return this.foreground(awaitIndicatorComputations(results).then(results => ({ ok: true, results })), speculative);
   }
 
-  diagnostics() { return { range: this.ranges.diagnostics(), compute: this.computes.diagnostics() }; }
-  dispose(): void { this.ranges.dispose(); this.computes.dispose(); }
+  diagnostics() { return { range: this.ranges.diagnostics(), compute: this.computes.diagnostics(), inputs: this.inputs.diagnostics() }; }
+  dispose(): void { this.ranges.dispose(); this.computes.dispose(); this.inputs.dispose(); }
   private id(): string { return `${this.scope}:${++this.nextRequest}`; }
   private computeInputCurrent(series: MarketSeries, rows: KlineBar[]): () => boolean {
     const last = rows.at(-1);
