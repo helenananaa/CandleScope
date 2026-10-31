@@ -1,0 +1,25 @@
+{
+  "command": "npm run check",
+  "exitCode": 0,
+  "node": "v24.22.1",
+  "npm": "11.19.1",
+  "frontendTests": 4669,
+  "isolatedPerformanceTests": 1,
+  "desktopTests": 124,
+  "targetedStreamTests": 48,
+  "indicatorFlowBrowserCases": 11,
+  "javascriptRuntimeBrowserCases": 12,
+  "editorBrowserCases": 3,
+  "scope": "Local controlled tests; not new installed-package qualification",
+  "existingWarnings": [
+    "SingleChartPanes effect cleanup ref",
+    "Vite bundle sizes"
+  ],
+  "logSha256": {
+    "full-check.log": "8f23025a1c2d6e502d13d0790a68fd98c57769a7729011ef246e4d82e6d2bfc7",
+    "targeted-unit.log": "6106f02389517b8192aae089d1b03f0f2fef1b722b2eb5aa127e910b77110110",
+    "identity-before.log": "acba9b67cfba72e75c0cd8aa565c4a629fb430158e437a4d44b443fd04e6f1e4",
+    "history-growth-before.log": "8e5b1ce73cee0c790b2757beffb10aad076eb35c8b40653c4baa47ff5b880e6e",
+    "dedup-before.log": "dae979108782a4fab484cb87b48e8794a761ebd992e265eee97db0e08d58f544"
+  }
+}

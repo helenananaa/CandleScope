@@ -1,0 +1,24 @@
+{
+  "baseCommit": "0b490d4e1b3c5883b20f271b57d8f51c09315a7c",
+  "scope": "Hosted builtin subscription sharing; controlled Chromium evidence, not native qualification",
+  "sourceFiles": {
+    "docs/architecture/INDICATOR_DATA_FLOW.md": "69985b6aadc2a797a3f977b85ddb79dabc4569a840a5f8e52c79a54b5fafcaea",
+    "frontend/package-lock.json": "d0910ab091ff90c7851498c5fb978990755511b7dc095f989f2da47d554991a3",
+    "frontend/package.json": "682972d987fdcf9a36487f74ab6f0916fee80d52f8985a8a349347c79e359c4c",
+    "frontend/scripts/frontend-script-integration.mjs": "6335094f17fd97d208ca78df6667b520d909e83c3854222c2a35c6b9c01cddba",
+    "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "c7d08a0ce3f98816183a644fd72d5afd0dcfd96c7e9d4b11616703b50efe7cfb",
+    "frontend/src/features/indicators/__tests__/sharedIndicatorStreamCoordinator.test.ts": "31b1870504f2cd8f4f6eca23ab56938f87aa751490748a1faf41dba17d4aa971",
+    "frontend/src/features/indicators/indicatorStreamConnection.ts": "ffa4dcc1353ec45b5b8cbae8e0fcb06934afc89806c1d354faec7714c52ec52e",
+    "frontend/src/features/indicators/indicatorStreamController.ts": "7df5e19c9d2b61a69519e52228ec3c35dee9349d88b37f245baf298d6073df13",
+    "frontend/src/features/indicators/indicatorStreamSharing.ts": "db1e5e3c20932d6117d65d12a060bd41d722775091e0e2707a0a71e117cea129",
+    "frontend/src/features/indicators/indicatorWsRuntime.ts": "c31e28ab5ecd6def6e588003e571ee7817492b4d5642c97d921a6b61a6aae23f",
+    "frontend/src/features/indicators/sharedIndicatorStreamCoordinator.ts": "9eb98cdd2737033a5ec307e508954cffba02c12f613fc1c9a6190a6f1f211ae3",
+    "frontend/src/features/market-data/MarketDataWorkspaceProvider.tsx": "568382b27ad6e5d758e5578501560680a945ba5ae3ecc76747f2df5b3659b407",
+    "frontend/src/features/market-data/klineSeriesIdentity.ts": "bf5bef484d7df0849674b815e30df7148721cf0f02a9763c2c38fe17b753d6ad"
+  },
+  "receipts": {
+    "javascript-chromium.json": "09eaeea84ea1263708a349e51f85b6d7e9da084ec4bcc2fdb446e4d8ae8d8db3",
+    "indicator-flow-chromium.json": "70625ac52d27d63868824816b34e80fb534815ad913b7d4cd470c0b6e804fbe1",
+    "checks.json": "8fd0016d26933af1e4c5650f9b987ba9e6cbd5e2b1bba9985ced4503a6cc5e46"
+  }
+}

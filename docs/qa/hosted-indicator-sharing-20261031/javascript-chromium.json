@@ -1,0 +1,45 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/hosted-indicator-dedup-20261031/CandleScope/output/hosted-indicator-sharing-release-js-20261031",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "checks": [
+          "real isolated worker computes starter SMA",
+          "opaque worker cannot use DOM, Node, storage, network or child workers; input copy preserved",
+          "runtime, syntax, nonfinite and forged output errors clear plots",
+          "infinite loop times out while parent event loop remains responsive",
+          "queued/running cancellation releases both slots and all frames; new work succeeds",
+          "real React replay rewind cancels stale worker and excludes unrevealed input/output",
+          "syntax error clears old curves; corrected source and remounted persistence restore without backend execution",
+          "real live runtime follows stable-identity store ticks and makes progress during a continuous stream",
+          "continuous ticks cannot starve timeout; failed program stays idle and corrected source recovers",
+          "source replacement fences busy old work immediately and keeps only the new window's timestamps",
+          "hidden script stays idle and resumes from the latest source window when shown",
+          "owner ABA rejects the delayed result and cache write without a React context change"
+        ],
+        "parentTimerBeats": 100,
+        "remainingFrames": 0
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "editor": {
+    "result": {
+      "type": "object",
+      "value": {
+        "checks": [
+          "real panel/editor offers frontend JS when plugin catalog fails",
+          "new and updated previews stay pending until worker output; all-null warm-up completes",
+          "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"
+        ]
+      }
+    }
+  },
+  "passed": true,
+  "browserExitCode": 0
+}

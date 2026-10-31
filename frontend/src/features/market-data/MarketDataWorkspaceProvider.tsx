@@ -143,6 +143,10 @@ export function MarketDataWorkspaceProvider({
           ...common,
           indicator: indicator ? {
             logicalClients: indicator.logicalClients,
+            logicalSubscriptions: indicator.logicalSubscriptions,
+            sharedSubscriptions: indicator.sharedSubscriptions,
+            deduplicatedSubscriptions: indicator.deduplicatedSubscriptions,
+            privateScriptSubscriptions: indicator.privateScriptSubscriptions,
             maxSubscriptions: indicator.maxSubscriptions,
             physicalShards: indicator.physicalShards,
             subscriptions: indicator.subscriptions,
