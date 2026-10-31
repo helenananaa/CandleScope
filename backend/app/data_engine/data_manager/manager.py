@@ -446,6 +446,10 @@ class DataManager:
         self.memory_budget.register("history-backfill", limit_bytes=self._cfg.memory_owner_budgets.get("history-backfill", 64 * 1024 * 1024),
                                     usage=lambda: {"estimated_bytes": 0})
         self.query_engine.memory_budget = self.memory_budget
+        from app.data_engine.aggregation.blocks import SharedBlockManager
+        self.shared_blocks = SharedBlockManager(budget=self.memory_budget,
+            max_bytes=self._cfg.memory_owner_budgets.get("aggregation-blocks", 16 * 1024 * 1024))
+        self.query_engine.shared_blocks = self.shared_blocks
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
@@ -867,6 +871,7 @@ class DataManager:
         """
         if self._started:
             return
+        self.shared_blocks.reopen()
         self._started = True
         self._cache_access_loop = asyncio.get_running_loop()
         self._cache_access_stopping = False
@@ -910,6 +915,7 @@ class DataManager:
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
+        self.shared_blocks.close()
         if not self._started:
             return
         logger.info("DataManager shutting down...")
@@ -3858,6 +3864,7 @@ class DataManager:
             if consumer is not None:
                 try:
                     await run_storage(consumer.sync)
+                    await run_storage(self.shared_blocks.poll)
                     self._revision_loop_error = None
                 except Exception as exc:
                     # Retain the cursor; reads refuse stale revision promises
