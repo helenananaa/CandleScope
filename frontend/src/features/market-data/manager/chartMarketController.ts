@@ -4,7 +4,7 @@ import type { MarketWarmLease } from "./marketWarmQueue.js";
 import { buildSeriesWindowKey } from "../window/seriesWindowKey.js";
 
 export interface ChartMarketControllerOptions {
-  data: MarketDataService;
+  data: Pick<MarketDataService, "warm" | "prepareForeground">;
   owner: string;
   hoverDwellMs?: number;
   handoffTtlMs?: number;

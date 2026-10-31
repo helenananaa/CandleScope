@@ -1,3 +1,4 @@
+import { indicatorWarmPlanKey, type IndicatorWarmPlan } from "../market-data/manager/chartDataFlowManager.js";
 import { bindSharedIndicatorPrefix, createIndicatorCacheInputSource } from "./indicatorInputBinding.js";
 import { buildIndicatorOhlcvSignature } from "./indicatorComputeRuntime.js";
 import { captureStableSeries } from "../market-data/window/stableSeriesSnapshot.js";
@@ -630,6 +631,13 @@ export function useIndicatorRuntime(
       ? {}
       : { persistence: options.indicatorPersistence }),
   });
+
+  const warmPlanKey = indicatorWarmPlanKey({ indicators: activeIndicators, candleUpColor, candleDownColor });
+  const warmOwner = options.streamIdentity?.cellId;
+  useLayoutEffect(() => {
+    if (!marketWorkspaceResources || !warmOwner || options.realtimeEnabled === false) return;
+    return marketWorkspaceResources.dataFlow.registerPlan(`chart:${warmOwner}`, JSON.parse(warmPlanKey) as IndicatorWarmPlan);
+  }, [marketWorkspaceResources, warmOwner, warmPlanKey, options.realtimeEnabled]);
 
   const frontendWindow = useFrontendScriptWindow(
     options.marketData?.view.seriesStore ?? null,
@@ -1649,7 +1657,9 @@ export function useIndicatorRuntime(
         if (message.securityMode !== undefined) {
           rangeRequest.securityMode = message.securityMode;
         }
-        const requestRange = () => indicatorRangeBatcher.schedule(rangeRequest);
+        const requestRange = () => marketWorkspaceResources
+          ? marketWorkspaceResources.indicatorDataManager.range(rangeRequest)
+          : indicatorRangeBatcher.schedule(rangeRequest);
         const payload = await (workScheduler && workSchedulerCellId
           ? workScheduler.run(workSchedulerCellId, "indicator-range", requestRange)
           : requestRange());
@@ -1762,6 +1772,7 @@ export function useIndicatorRuntime(
     currentStreamLifecycleKeyRef,
     getIndicatorCacheContext,
     indicatorRangeBatcher,
+    marketWorkspaceResources,
     indicatorRangeRequestsRef,
     indicatorRangeScheduler,
     inputSource,
@@ -2453,7 +2464,8 @@ export function useIndicatorRuntime(
     setIndicatorError,
     subscriptionUpdatesReady: hostedSubscriptionUpdatesReady,
     symbol,
-    streamCoordinator: marketWorkspaceResources?.indicatorStreamCoordinator || null,
+    seriesIdentity,
+    streamCoordinator: marketWorkspaceResources?.indicatorDataManager.streams || null,
     streamIdentity: options.streamIdentity || null,
   });
 
@@ -3109,6 +3121,7 @@ export function useIndicatorRuntime(
   ]);
 
   const { computeAll, computing, recompute } = useIndicatorComputeController({
+    executeBatch: marketWorkspaceResources?.indicatorDataManager.compute,
     seriesIdentity,
     inputSource,
     activeIndicators,

@@ -1,3 +1,4 @@
+import { klineSeriesIdentityKey, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { getIndicatorStreamUrl } from "../../services/indicatorApi.js";
@@ -37,6 +38,7 @@ import type {
 } from "./indicatorTypes.js";
 
 export interface UseIndicatorStreamControllerOptions {
+  seriesIdentity?: KlineSeriesIdentityInput | undefined;
   activeIndicators: IndicatorDefinition[];
   activeIndicatorsRef: MutableRefObject<IndicatorDefinition[]>;
   applyWsPatch: NonNullable<IndicatorWsHandlers["onPatch"]>;
@@ -204,6 +206,7 @@ function markHostedSeedCoverageUnacknowledged(
 }
 
 export function useIndicatorStreamController({
+  seriesIdentity,
   activeIndicators,
   activeIndicatorsRef,
   applyWsPatch,
@@ -251,6 +254,7 @@ export function useIndicatorStreamController({
   }, [subscriptionUpdatesReady]);
 
   const getHostedSubscriptionContext = useCallback(() => ({
+    seriesIdentity,
     candleDownColor: candleDownColorRef.current,
     candleUpColor: candleUpColorRef.current,
     chartData: chartDataRef.current || [],
@@ -261,6 +265,7 @@ export function useIndicatorStreamController({
     marketType,
     symbol,
   }), [
+    seriesIdentity,
     candleDownColorRef,
     candleUpColorRef,
     chartDataMetaRef,
@@ -354,6 +359,7 @@ export function useIndicatorStreamController({
   const chartDataVersion = chartDataMeta?.version ?? 0;
   const chartDataStatus = chartDataMeta?.status || "idle";
   const currentHostedSignatureKey = JSON.stringify([
+    klineSeriesIdentityKey(exchange, seriesIdentity),
     exchange,
     marketType,
     symbol,
@@ -369,7 +375,7 @@ export function useIndicatorStreamController({
     // later semantic changes publish only from the committed layout effect.
     currentHostedSignaturesRef.current = buildCurrentHostedIndicatorSignatures(
       activeIndicators,
-      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol },
+      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol, seriesIdentity },
     );
   }
   const currentHostedSignatureKeyRef = useRef(currentHostedSignatureKey);
@@ -377,7 +383,7 @@ export function useIndicatorStreamController({
     if (currentHostedSignatureKeyRef.current === currentHostedSignatureKey) return;
     currentHostedSignaturesRef.current = buildCurrentHostedIndicatorSignatures(
       activeIndicators,
-      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol },
+      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol, seriesIdentity },
     );
     currentHostedSignatureKeyRef.current = currentHostedSignatureKey;
   }, [
@@ -385,6 +391,7 @@ export function useIndicatorStreamController({
     candleDownColor,
     candleUpColor,
     currentHostedSignatureKey,
+    seriesIdentity,
     exchange,
     interval,
     marketType,

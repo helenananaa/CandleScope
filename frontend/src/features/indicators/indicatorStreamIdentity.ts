@@ -16,6 +16,7 @@ export type HostedIndicatorIdentityContext = Pick<
   | "interval"
   | "marketType"
   | "symbol"
+  | "seriesIdentity"
 >;
 
 /**

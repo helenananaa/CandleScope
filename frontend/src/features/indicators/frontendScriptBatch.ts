@@ -1,5 +1,6 @@
 import { isFrontendScript } from "./frontendScriptContract.js";
 import { computeFrontendScript } from "./frontendScriptRuntime.js";
+import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import type { IndicatorComputeBatchItem } from "./indicatorTypes.js";
 
@@ -11,7 +12,7 @@ export async function routeIndicatorComputeBatch(
 ) {
   const browserJobs = options.jobs.filter(job => isFrontendScript(job.request));
   const hostedJobs = options.jobs.filter(job => !isFrontendScript(job.request));
-  const browser = Promise.all(browserJobs.map(async job => {
+  const browser = awaitIndicatorComputations(browserJobs.map(async job => {
     const payload = await frontend(job.request, options.signal);
     const result = { clientId: job.clientId, jobKey: job.jobKey, payload };
     options.onResults?.([result]);
@@ -19,7 +20,7 @@ export async function routeIndicatorComputeBatch(
   }));
   const server = hostedJobs.length ? hosted({ ...options, jobs: hostedJobs })
     : Promise.resolve({ ok: true, results: [] as IndicatorComputeBatchItem[] });
-  const [local, remote] = await Promise.all([browser, server]);
+  const [local, remote] = await awaitIndicatorComputations([browser, server] as const);
   const results = [...local, ...remote.results];
   const byKey = new Map(results.map(item => [item.jobKey, item]));
   if (results.length !== options.jobs.length || byKey.size !== options.jobs.length

@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile, unlink, chmod, lstat, rename } from "node:f
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { ControlFiles } from "./control-files.mjs";
+import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_REPLY_BYTES = 2 * 1024 * 1024;
@@ -41,7 +42,7 @@ export class DesktopControlService {
     this.readyWindows.add(windowId);
     if (!this.trackWindowLifecycle || this.trackedWindows.has(window)) return;
     this.trackedWindows.add(window);
-    window.webContents.on("did-start-loading", () => this.disconnect(windowId));
+    trackControlWindowLifecycle(window.webContents, () => this.disconnect(windowId));
     window.once("closed", () => this.disconnect(windowId));
   }
 

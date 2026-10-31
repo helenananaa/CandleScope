@@ -21,6 +21,7 @@ import { DesktopStrategyStorage } from "./strategy-storage.mjs";
 import { WorkspaceBusConflictError, WorkspaceBusHub } from "./workspace-bus-hub.mjs";
 import { TrustedDesktopExtensionHost } from "./trusted-extension-host.mjs";
 import { WorkflowControlHost } from "./workflow-control-host.mjs";
+import { trackControlWindowLifecycle } from "./control-window-lifecycle.mjs";
 
 if (process.argv.includes("--extensions-safe-mode")) process.env.CANDLESCOPE_EXTENSIONS_SAFE_MODE = "1";
 
@@ -203,8 +204,7 @@ async function boot() {
     const sender = event.sender;
     if (!registeredWorkflowContents.has(sender)) {
       registeredWorkflowContents.add(sender);
-      sender.on("did-start-loading", () => workflowControl.disconnect(windowId));
-      sender.once("destroyed", () => workflowControl.disconnect(windowId));
+      trackControlWindowLifecycle(sender, () => workflowControl.disconnect(windowId));
     }
     workflowControl.ready(windowId);
   });

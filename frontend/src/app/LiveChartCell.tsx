@@ -243,7 +243,7 @@ function LiveChartCell({
   useLocale();
   const marketWorkspaceResources = useMarketDataWorkspaceResources();
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
-    data: marketWorkspaceResources.dataManager, owner: `chart:${cell.id}`,
+    data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,
   }) : null, [cell.id, marketWorkspaceResources]);
   useEffect(() => () => marketController?.releaseAll(), [marketController]);
   const handleSelectionIntent = useCallback((transition: import("../features/chart-session/chartSessionTypes.js").ChartSessionTransition) => {

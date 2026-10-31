@@ -8,13 +8,14 @@ import { build, preview } from "vite";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const marketHealth = process.argv.includes("--market-health");
+const indicatorFlow = process.argv.includes("--indicator-flow");
 const native = process.argv.includes("--native");
 if (native && !marketHealth) throw new Error("The isolated native host currently supports only --market-health");
 const intervalAdmission = process.argv.includes("--interval-admission");
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
-const fixture = marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -104,7 +105,7 @@ app.on("window-all-closed",()=>app.quit());
   // The tab can be discoverable while its initial document is still being
   // replaced. Probe readiness without starting the fixture, then invoke it
   // exactly once in the committed document.
-  const checkName = marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
+  const checkName = indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
   let fixtureReady = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
@@ -121,6 +122,7 @@ app.on("window-all-closed",()=>app.quit());
   if (!fixtureReady) throw new Error("Fixture did not load");
   const result = await page.send("Runtime.evaluate", {
     expression: `window.${checkName}()`,
+
     awaitPromise: true, returnByValue: true,
   });
   receipt.result = result;
@@ -133,7 +135,7 @@ app.on("window-all-closed",()=>app.quit());
   receipt.exceptions = page.events.filter(item => item.method === "Runtime.exceptionThrown");
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!historyStages && !intervalAdmission && !marketHealth) {
+  if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));

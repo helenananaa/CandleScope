@@ -105,8 +105,7 @@ export async function checkProvidedBarsChartViewport() {
     return <SingleChartPanes ref={surface} seriesStore={store} symbol="FIXTURE" interval="1m"
       datasetKey="visible-chart" theme="dark" customBg="" upColor="#00aa00" downColor="#aa0000"
       drawingReadOnly followLatest={false} subPanes={indicators.view.subPanes}
-      onViewportRangeChange={indicators.actions.ensureVisibleIndicatorRange}
-      onVisibleRangeChange={indicators.actions.ensureVisibleIndicatorRange} />;
+      onViewportRangeChange={indicators.actions.ensureVisibleIndicatorRange} />;
   }
   const host = document.createElement("div"), style = document.createElement("style");
   host.style.cssText = "width:700px;height:400px;position:relative;display:flex";

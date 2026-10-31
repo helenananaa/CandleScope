@@ -1,3 +1,5 @@
+import type { ChartDataFlowManager } from "./manager/chartDataFlowManager.js";
+import type { IndicatorDataManager } from "../indicators/indicatorDataManager.js";
 import { createContext, useContext } from "react";
 import type { SharedKlineRequestCoordinator } from "./feed/sharedKlineRequestCoordinator.js";
 import type { MarketWindowRegistry } from "./window/marketWindowSession.js";
@@ -15,6 +17,8 @@ export interface KlineStreamCoordinator {
 export interface MarketDataWorkspaceResources {
   brokerEnabled: boolean;
   dataManager: MarketDataManager;
+  indicatorDataManager: IndicatorDataManager;
+  dataFlow: ChartDataFlowManager;
   indicatorStreamCoordinator: SharedIndicatorStreamCoordinator | null;
   klineApi: KlineApi;
   requestCoordinator: SharedKlineRequestCoordinator | null;

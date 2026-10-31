@@ -16,6 +16,8 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { computeIndicatorBatch } from "../../services/indicatorApi.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
 import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
+import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
+import { cachedIndicatorComputeResult } from "./indicatorCachedCompute.js";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import {
   buildIndicatorComputeParams,
@@ -75,6 +77,8 @@ export interface UseIndicatorComputeControllerOptions {
   seriesIdentity?: KlineSeriesIdentityInput;
   inputSource?: IndicatorCacheInputSource | undefined;
   computeBatch?: IndicatorComputeBatchExecutor;
+  /** Whole live demand route, including browser scripts; replay retains its executor. */
+  executeBatch?: IndicatorComputeBatchExecutor | undefined;
   inputSnapshot?: StableSeriesSnapshot;
   onComputePendingChange?(delta: 1 | -1): void;
   forceHostedSubscriptions(): void;
@@ -160,6 +164,7 @@ export function useIndicatorComputeController({
   seriesIdentity,
   inputSource,
   computeBatch = computeIndicatorBatch,
+  executeBatch,
   onComputePendingChange,
   inputSnapshot,
   forceHostedSubscriptions,
@@ -287,6 +292,7 @@ export function useIndicatorComputeController({
         ohlcv: execution.mode === "builtin" ? builtinOhlcv : ohlcv,
         params,
         exchange: context.exchange,
+        seriesIdentity: context.seriesIdentity,
         symbol: context.symbol,
         interval: context.interval,
         marketType: context.marketType,
@@ -373,14 +379,18 @@ export function useIndicatorComputeController({
       const cachedJobKeys: string[] = [];
       for (const { id, normalized, error } of processedResults) {
         if (error || !normalized) continue;
-        const cached = cacheContext === null || cacheIndicatorSnapshot(
+        const jobKey = acceptedJobKeyById.get(id);
+        // A separately provided builtin viewport cannot certify the larger
+        // script-input cache identity. Its completed job can still publish.
+        const cacheable = jobKey !== undefined && targetByJobKey.get(jobKey)?.job.request.ohlcv === ohlcv;
+        const cached = cacheContext === null || !cacheable || cacheIndicatorSnapshot(
           indicatorById.get(id),
           cacheContext,
           normalized,
           newParamSchemas[id],
-          inputVersion ? { inputVersion } : {},
+          { ...(inputVersion ? { inputVersion } : {}),
+            range: { start: Number(providedRows[0]!.time), end: Number(providedRows.at(-1)!.time) } },
         );
-        const jobKey = acceptedJobKeyById.get(id);
         if (cached && jobKey) cachedJobKeys.push(jobKey);
       }
       jobCoordinator.complete(cachedJobKeys);
@@ -442,8 +452,16 @@ export function useIndicatorComputeController({
         onResults: publishResults,
         execute: async (physicalJobs, signal, publish) => {
           const startedAt = performance.now();
-          const chunks = chunkIndicatorComputeJobs(physicalJobs);
-          for (const job of physicalJobs) {
+          const cached = physicalJobs.flatMap(job => {
+            const result = cachedIndicatorComputeResult(job, targetByJobKey.get(job.jobKey)?.indicator, cacheContext, force);
+            return result ? [result] : [];
+          });
+          const cachedKeys = new Set(cached.map(result => result.jobKey));
+          publish(cached);
+          const misses = physicalJobs.filter(job => !cachedKeys.has(job.jobKey));
+          if (!misses.length) return cached;
+          const chunks = chunkIndicatorComputeJobs(misses);
+          for (const job of misses) {
             submittedJobKeys.add(job.jobKey);
             if (cacheContext !== null) {
               removeCachedIndicatorResult(
@@ -465,14 +483,15 @@ export function useIndicatorComputeController({
           });
           try {
             onComputePendingChange?.(1);
-            const responses = await Promise.all(
+            const responses = await awaitIndicatorComputations(
               chunks.map(async (chunk) => {
-                const response = await routeIndicatorComputeBatch({ jobs: chunk, signal, onResults: publish }, computeBatch);
+                const request = { jobs: chunk, signal, onResults: publish };
+                const response = await (executeBatch ? executeBatch(request) : routeIndicatorComputeBatch(request, computeBatch));
                 publish(response.results);
                 return response;
               }),
             );
-            return responses.flatMap((response) => response.results);
+            return [...cached, ...responses.flatMap((response) => response.results)];
           } finally {
             onComputePendingChange?.(-1);
             markPerf("indicator.compute.end", {
@@ -503,6 +522,9 @@ export function useIndicatorComputeController({
 
       publishResults(scheduled.results);
     } catch (error) {
+      // A workspace input fence or cancelled consumer is not a program error.
+      // Persisting it would disable frontend JS until the user edits the script.
+      if (error instanceof Error && error.name === "AbortError") return;
       if (inputIsCurrent() && committedRuntimeRef.current.lifecycleKey === lifecycleKey) {
         const message = error instanceof Error ? error.message : String(error);
         const failedJobKeysById = resolveSubmittedLocalJobKeysById({
@@ -567,6 +589,7 @@ export function useIndicatorComputeController({
     candleUpColorRef,
     chartDataRef,
     computeBatch,
+    executeBatch,
     historyLimit,
     jobCoordinator,
     onComputePendingChange,
