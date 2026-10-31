@@ -131,7 +131,7 @@ function updateActiveIntervals(
 export class SharedKlineStreamCoordinator {
   private readonly entries = new Map<string, SharedStreamEntry>();
   private readonly createPhysicalStream: PhysicalStreamFactory;
-  private readonly reconnects: boolean;
+  readonly reconnects: boolean;
   private nextSubscriberId = 0;
 
   constructor(api: KlineApi, options: SharedKlineStreamCoordinatorOptions = {}) {
