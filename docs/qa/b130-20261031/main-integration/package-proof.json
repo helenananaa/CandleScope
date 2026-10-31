@@ -1,0 +1,12 @@
+{
+  "source": "533b0a07a34e0924684f1bf29f946e9d4d71e8b9",
+  "tracked_backend_files": 909,
+  "tracked_python_files": 854,
+  "backend_files_byte_identical": true,
+  "asar_sha256": "bbc426149f0f507e017d7bea636a0e52e51680f7f6946daff4b4b048fb321242",
+  "runtime_manifest_sha256": "ee3687892a5552796f85dad380eb1f601cf477500c68acb6cb8f405a5b25ece0",
+  "installed_app_symlink": "/Users/ryanliang/CandleScope/output/okx-readonly-20261025/candidate-23bcac99/installed/CandleScope.app",
+  "codesign_deep_strict": true,
+  "app_installed": false,
+  "runtime_dependency_diff": []
+}

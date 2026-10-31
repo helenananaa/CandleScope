@@ -1,0 +1,12 @@
+{
+  "product_source": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+  "current_main": "e8ae4ad621afcd9d7f36fa6efd97bf1d2282a736",
+  "integration_commit": "533b0a07a34e0924684f1bf29f946e9d4d71e8b9",
+  "backend_tree": "da3f9fb151d2e30d844f717d76f6f828966e3ee9",
+  "frontend_tree": "3d3546471f5e2974515bd26d637667477c6f594c",
+  "backend_identical_to_tested_product": true,
+  "frontend_identical_to_current_main": true,
+  "frontend_targeted_tests": 26,
+  "frontend_test_log_sha256": "d41842d6a313114f8231fea9c1bfa1976349e937b7ee1e4fce2068ec3be04265",
+  "scope": "Late main PR #175 integration qualification; product head and its completed CI remain unchanged"
+}

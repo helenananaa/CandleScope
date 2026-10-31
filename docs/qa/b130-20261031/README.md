@@ -56,3 +56,12 @@ UI profile or user data.
 
 The candidate is ad-hoc signed, not installed, notarized or released. H127,
 R129 and J remain separate stages; this is not full 157-item release acceptance.
+
+`main-integration/` records the later current-main combination at
+`533b0a07a34e0924684f1bf29f946e9d4d71e8b9` (main `e8ae4ad6` + product
+`2182ead3`). Its backend tree equals the tested product; its frontend tree equals
+current main. The 26 targeted frontend tests and fresh native arm64 UI/restart
+qualification are supplemental, not a rerun of dual-architecture CI. Offline
+parity can also be replayed with that subdirectory (789 closed bars). The third
+capture contains a search overlay; the fourth live-restored capture is the
+clear final visual evidence. All original captures remain in the raw output.
