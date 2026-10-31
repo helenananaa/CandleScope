@@ -130,6 +130,38 @@ def test_okx_units_and_missing_fields(database, spot, ws):
     assert head["ws_event_time"] is None
 
 
+@pytest.mark.parametrize("spot", [False, True])
+def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spot):
+    from app.data_engine.backfill.config import BackfillConfig
+    from app.data_engine.backfill.fetcher import HistoricalFetcher
+    from app.data_engine.backfill.models import BackfillTask, BackfillPlan, FetchResult
+    from app.data_engine.backfill.reconciler import Reconciler
+
+    async def run():
+        desc, message = okx_message(spot=spot)
+        await prepare_source_messages([message], desc, watermark=kline_sources.rest_watermark())
+        message.source = DataSource.HTTP_BACKFILL
+        event = NormalizeLayer(IngestionConfig(), desc).parse_raw(message)
+        assert event is not None and event.data["is_closed"]
+        task = BackfillTask(symbol=desc.symbol, interval=desc.interval, exchange=desc.exchange,
+                            market_type=desc.market_type, start_ms=int(ROW[0]), end_ms=int(ROW[0]))
+        bar = HistoricalFetcher._event_to_bar(event, task)
+        assert bar is not None, "unknown enhanced fields must not discard valid OHLCV"
+        assert bar.enhanced_fields == frozenset({"volume", "quote_volume"})
+        result = await Reconciler(BackfillConfig(), klines_repo.AsyncKlinesRepoAdapter()).reconcile(
+            [FetchResult(task=task, bars=[bar])], BackfillPlan(gaps=[]))
+        assert result.bars_written == 1 and not result.errors
+        rows = klines_repo.KlinesRepoAdapter().query_bars(
+            symbol=desc.symbol, interval=desc.interval, exchange=desc.exchange,
+            market_type=desc.market_type, start_ms=int(ROW[0]), end_ms=int(ROW[0]))
+        assert len(rows) == 1 and rows[0]["close"] == 102
+        assert rows[0]["volume"] == (100 if spot else 1)
+        assert rows[0]["quote_volume"] == 101
+        assert all(rows[0][name] is None for name in ("trades", "taker_buy_base", "taker_buy_quote"))
+
+    asyncio.run(run())
+
+
 def test_okx_unordered_closed_change_requires_rest(database):
     desc, msg = okx_message(ws=True)
     asyncio.run(prepare_source_messages([msg], desc))
