@@ -14,12 +14,10 @@ from typing import Any
 
 from app.data_engine.interval_policy import (
     IntervalAlignment,
-    aggregate_tail_is_closed,
     compute_bucket_end_ms,
     compute_bucket_start,
     compute_bucket_start_ms,
     compute_month_bucket_ms,
-    enhanced_components_are_complete,
     find_best_base_interval,
     next_month_bucket,
     parse_custom_interval,
@@ -29,6 +27,10 @@ from app.data_engine.interval_policy import (
     row_is_closed,
 )
 from app.data_engine.market_data.kline_metrics import serialize_kline_enhancements
+from app.data_engine.aggregation.adapters import chart_field_summary
+from app.data_engine.aggregation.semantics import (
+    ClosePolicy, FieldSummary, evaluate_coverage, sum_additive,
+)
 from app.data_engine.interval_resolution import IntervalRoute
 from app.data_engine.custom_materialization import custom_materialization_registry
 from app.data_engine.history.calendar import (
@@ -165,75 +167,36 @@ def _aggregate_rows_to_interval(
             if calendar is not None and interval is not None
             else bucket_start + custom_interval_seconds
         )
-        expected_source_opens: list[int] | None = None
         if calendar is not None and source_interval is not None:
-            expected_source_opens = [
-                int(open_ms) // 1000
-                for open_ms in calendar.expected_opens(
-                    bucket_start * 1000,
-                    bucket_end * 1000 - 1,
-                    source_interval,
-                )
-            ]
-            actual_source_opens = [int(row["time"]) for row in rows]
-            is_expected_prefix = bool(
-                expected_source_opens
-                and actual_source_opens
-                == expected_source_opens[:len(actual_source_opens)]
-            )
-            reaches_expected_tail = bool(
-                is_expected_prefix
-                and len(actual_source_opens) == len(expected_source_opens)
-            )
-            enhanced_complete = bool(
-                is_expected_prefix
-                and (reaches_expected_tail or not row_is_closed(rows[-1]))
-            )
+            expected_source_opens = list(calendar.expected_opens(
+                bucket_start * 1000, bucket_end * 1000 - 1, source_interval,
+            ))
+            actual_source_opens = [int(row["time"]) * 1000 for row in rows]
+            prefix = bool(expected_source_opens and actual_source_opens
+                          == expected_source_opens[:len(actual_source_opens)])
+            reaches_end = prefix and len(actual_source_opens) == len(expected_source_opens)
+            # The calendar owns actual source closes (including a session's
+            # shortened last bar); never pretend calendar months are 30 days.
+            within_bounds = all(expected_bucket_end_ms(calendar, opened, source_interval)
+                                <= bucket_end * 1000 for opened in actual_source_opens)
         else:
-            reaches_expected_tail = False
-            enhanced_complete = enhanced_components_are_complete(
-                rows,
-                bucket_start_seconds=bucket_start,
-                bucket_end_seconds=bucket_end,
-                source_interval_seconds=source_interval_seconds,
-            )
-        enhanced_rows = [
-            serialize_kline_enhancements(
-                volume=row.get("volume"),
-                quote_volume=row.get("quote_volume"),
-                trades=row.get("trades"),
-                taker_buy_base=row.get("taker_buy_base"),
-                taker_buy_quote=row.get("taker_buy_quote"),
-            )
-            for row in rows
-        ]
+            prefix = bool(source_interval_seconds and source_interval_seconds > 0
+                          and int(rows[0]["time"]) == bucket_start
+                          and all(int(cur["time"]) - int(prev["time"]) == source_interval_seconds
+                                  for prev, cur in zip(rows, rows[1:])))
+            source_end = int(rows[-1]["time"]) + (source_interval_seconds or 0)
+            reaches_end = source_end == bucket_end
+            within_bounds = source_end <= bucket_end
+        coverage = evaluate_coverage(
+            has_components=True, starts_at_boundary=prefix, contiguous=prefix,
+            reaches_end=reaches_end, within_bounds=within_bounds,
+            all_closed=all(row_is_closed(row) for row in rows),
+            last_closed=row_is_closed(rows[-1]), close_policy=ClosePolicy.SUCCESSOR,
+        )
         result.append({
             "time": bucket_start,
-            "open": rows[0]["open"],
-            "high": max(row["high"] for row in rows),
-            "low": min(row["low"] for row in rows),
-            "close": rows[-1]["close"],
-            "volume": round(sum(row["volume"] for row in rows), 8),
-            "quote_volume": _sum_optional_field(enhanced_rows, "quote_volume")
-            if enhanced_complete else None,
-            "trades": _sum_optional_field(enhanced_rows, "trades", integer=True)
-            if enhanced_complete else None,
-            "taker_buy_base": _sum_optional_field(enhanced_rows, "taker_buy_base")
-            if enhanced_complete else None,
-            "taker_buy_quote": _sum_optional_field(enhanced_rows, "taker_buy_quote")
-            if enhanced_complete else None,
-            "is_closed": bool(
-                enhanced_complete
-                and (
-                    row_is_closed(rows[-1]) and reaches_expected_tail
-                    if expected_source_opens is not None
-                    else aggregate_tail_is_closed(
-                        rows,
-                        bucket_end_seconds=bucket_end,
-                        source_interval_seconds=source_interval_seconds,
-                    )
-                )
-            ),
+            **chart_field_summary(rows).project(enhanced_complete=coverage.enhanced_complete),
+            "is_closed": coverage.closed,
         })
     return result
 
@@ -245,12 +208,8 @@ def _sum_optional_field(
     integer: bool = False,
 ) -> float | int | None:
     """Sum an additive field only when every component provides it."""
-    values = [row.get(field) for row in rows]
-    if any(value is None for value in values):
-        return None
-    if integer:
-        return sum(int(value) for value in values)
-    return round(sum(float(value) for value in values), 8)
+    total = sum_additive((row.get(field) for row in rows), integer=integer)
+    return total if integer or total is None else round(total, 8)
 
 
 def _aggregate_fixed_bars_to_interval(
@@ -299,6 +258,7 @@ def _aggregate_fixed_bars_to_interval(
     first_time = 0
     last_time = 0
     last_is_closed = False
+    all_closed = True
     contiguous = True
     open_value = 0.0
     high_value = 0.0
@@ -320,46 +280,26 @@ def _aggregate_fixed_bars_to_interval(
         if bucket_start is None:
             return
         bucket_end = bucket_start + custom_interval_seconds
-        reaches_bucket_end = bool(
-            source_seconds is not None
-            and last_time + source_seconds >= bucket_end
+        coverage = evaluate_coverage(
+            has_components=True,
+            starts_at_boundary=bool(source_seconds and first_time == bucket_start),
+            contiguous=contiguous,
+            reaches_end=bool(source_seconds and last_time + source_seconds == bucket_end),
+            within_bounds=bool(source_seconds and last_time + source_seconds <= bucket_end),
+            all_closed=all_closed, last_closed=last_is_closed,
+            close_policy=ClosePolicy.SUCCESSOR,
         )
-        enhanced_complete = bool(
-            source_seconds is not None
-            and first_time == bucket_start
-            and contiguous
-            and (reaches_bucket_end or not last_is_closed)
+        fields = FieldSummary(
+            open_value, high_value, low_value, close_value,
+            sum_additive(volume_values),
+            sum_additive(quote_values) if quote_complete else None,
+            sum_additive(trades_values, integer=True) if trades_complete else None,
+            sum_additive(taker_base_values) if taker_base_complete else None,
+            sum_additive(taker_quote_values) if taker_quote_complete else None,
         )
         result.append(BarData(
-            time=bucket_start,
-            open=open_value,
-            high=high_value,
-            low=low_value,
-            close=close_value,
-            volume=round(sum(volume_values), 8),
-            is_closed=bool(
-                enhanced_complete and last_is_closed and reaches_bucket_end
-            ),
-            quote_volume=(
-                round(sum(quote_values), 8)
-                if enhanced_complete and quote_complete
-                else None
-            ),
-            trades=(
-                sum(trades_values)
-                if enhanced_complete and trades_complete
-                else None
-            ),
-            taker_buy_base=(
-                round(sum(taker_base_values), 8)
-                if enhanced_complete and taker_base_complete
-                else None
-            ),
-            taker_buy_quote=(
-                round(sum(taker_quote_values), 8)
-                if enhanced_complete and taker_quote_complete
-                else None
-            ),
+            time=bucket_start, is_closed=coverage.closed,
+            **fields.project(enhanced_complete=coverage.enhanced_complete),
         ))
         if on_bucket is not None:
             on_bucket(bucket_inputs, tuple(bucket_values), result[-1])
@@ -389,6 +329,7 @@ def _aggregate_fixed_bars_to_interval(
             first_time = row_time
             last_time = row_time
             contiguous = True
+            all_closed = True
             open_value = row_open
             high_value = row_high
             low_value = row_low
@@ -416,6 +357,7 @@ def _aggregate_fixed_bars_to_interval(
         volume_values.append(float(row_volume))
         last_time = row_time
         last_is_closed = row_is_closed
+        all_closed = all_closed and row_is_closed
 
         if quote_volume is None:
             quote_complete = False

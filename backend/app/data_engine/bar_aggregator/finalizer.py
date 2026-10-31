@@ -40,6 +40,8 @@ from __future__ import annotations
 import logging
 import time
 
+# Both lifecycle paths consume the same K130 closure proof.
+from .bar_state import has_complete_closed_component_coverage as _has_complete_closed_component_coverage
 from .config import BarAggregatorConfig
 from .models import (
     BarState,
@@ -57,24 +59,6 @@ from .models import (
 from .time_bucket import TimeBucketEngine
 
 logger = logging.getLogger("bar_aggregator.L4_Finalizer")
-
-
-def _has_complete_closed_component_coverage(state: BarState) -> bool:
-    """Prove that closed component snapshots cover the whole target bucket."""
-    ordered = sorted(
-        state.source_snapshots.values(),
-        key=lambda item: (int(item["open_time_ms"]), int(item["close_time_ms"])),
-    )
-    if not ordered or not all(bool(item.get("is_closed")) for item in ordered):
-        return False
-    if int(ordered[0]["open_time_ms"]) != state.bucket_start_ms:
-        return False
-    if int(ordered[-1]["close_time_ms"]) + 1 < state.bucket_end_ms:
-        return False
-    return all(
-        int(current["open_time_ms"]) == int(previous["close_time_ms"]) + 1
-        for previous, current in zip(ordered, ordered[1:])
-    )
 
 
 # ═══════════════════════════════════════════════════════════════

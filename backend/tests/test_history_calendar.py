@@ -114,6 +114,11 @@ def test_coarse_session_bucket_ends_stay_on_canonical_grid() -> None:
         holidays=("2024-01-01", "2024-07-01"),
     )
 
+    daily_open = _ms("2024-02-29T14:30:00+00:00")
+    assert expected_bucket_end_ms(calendar, daily_open, "1d") == _ms(
+        "2024-03-01T00:00:00+00:00"
+    )
+
     # New Year's Day is closed, so the public 2M open is the first actual
     # session on Jan 2.  Its close nevertheless remains the canonical Mar 1
     # boundary, rather than two nominal months after the delayed open.

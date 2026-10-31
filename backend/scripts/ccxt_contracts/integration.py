@@ -34,7 +34,9 @@ def main() -> int:
         "test_indicator_api.py", "test_indicator_runtime_transport_routing.py",
         "test_*subscription_continuity.py", "test_recovery_*.py", "test_consumer_recovery.py",
         "test_custom_history_streaming.py", "test_materialized_history_probe.py",
-        "test_history_revision_admission.py",
+        "test_history_revision_admission.py", "test_aggregation_core.py",
+        "test_interval_policy_consistency.py", "test_bar_aggregator_contracts.py",
+        "test_kline_order_flow_metrics.py", "test_history_calendar.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

@@ -21,6 +21,10 @@ Usage::
 from __future__ import annotations
 
 from app.data_engine.readonly import ReadonlyFields
+from app.data_engine.aggregation.adapters import (
+    snapshot_aggregation_values, snapshot_coverage, snapshot_field_summary,
+)
+from app.data_engine.aggregation.semantics import sum_additive
 
 import logging
 import time
@@ -53,16 +57,7 @@ def has_complete_closed_component_coverage(state: BarState) -> bool:
         state.source_snapshots.values(),
         key=lambda item: (int(item["open_time_ms"]), int(item["close_time_ms"])),
     )
-    if not ordered or not all(bool(item.get("is_closed")) for item in ordered):
-        return False
-    if int(ordered[0]["open_time_ms"]) != state.bucket_start_ms:
-        return False
-    if int(ordered[-1]["close_time_ms"]) + 1 < state.bucket_end_ms:
-        return False
-    return all(
-        int(current["open_time_ms"]) == int(previous["close_time_ms"]) + 1
-        for previous, current in zip(ordered, ordered[1:])
-    )
+    return snapshot_coverage(ordered, state.bucket_start_ms, state.bucket_end_ms).closed
 
 
 class StandardOHLCVMerge:
@@ -190,7 +185,7 @@ class ComponentSnapshotOHLCVMerge:
 
     @staticmethod
     def _snapshot_from_input(bar_input: BarInput) -> ReadonlyFields:
-        return ReadonlyFields({
+        snapshot = {
             "source_ref": bar_input.extra.get("source_ref"),
             "open_time_ms": bar_input.open_time_ms,
             "close_time_ms": bar_input.close_time_ms,
@@ -211,7 +206,9 @@ class ComponentSnapshotOHLCVMerge:
             # can fall back to monotonic cumulative evidence instead of
             # silently treating every update as equally fresh.
             "sequence": bar_input.sequence,
-        })
+        }
+        snapshot["aggregation_values"] = snapshot_aggregation_values(snapshot)
+        return ReadonlyFields(snapshot)
 
     @staticmethod
     def _is_monotonic_candidate(existing: dict, candidate: dict) -> bool:
@@ -358,32 +355,24 @@ class ComponentSnapshotOHLCVMerge:
         first = ordered[0]
         last = ordered[-1]
 
-        state.open = float(first["open"])
-        state.high = max(float(snap["high"]) for snap in ordered)
-        state.low = min(float(snap["low"]) for snap in ordered)
-        state.close = float(last["close"])
-        state.volume = round(sum(float(snap["volume"]) for snap in ordered), 8)
-        state.quote_volume = round(sum(float(snap["quote_volume"]) for snap in ordered), 8)
-        state.trades = sum(int(snap["trades"]) for snap in ordered)
-        state.taker_buy_base = round(sum(float(snap["taker_buy_base"]) for snap in ordered), 8)
-        state.taker_buy_quote = round(sum(float(snap["taker_buy_quote"]) for snap in ordered), 8)
-        state.enhanced_fields = frozenset.intersection(*(
-            frozenset(snap["enhanced_fields"])
-            for snap in ordered
-        ))
-        components_are_contiguous = (
-            int(first["open_time_ms"]) == state.bucket_start_ms
-            and all(
-                int(current["open_time_ms"]) == int(previous["close_time_ms"]) + 1
-                for previous, current in zip(ordered, ordered[1:])
-            )
+        coverage = snapshot_coverage(ordered, state.bucket_start_ms, state.bucket_end_ms)
+        summary = snapshot_field_summary(ordered)
+        fields = summary.project(
+            enhanced_complete=coverage.enhanced_complete,
         )
-        covers_available_bucket = (
-            int(last["close_time_ms"]) + 1 >= state.bucket_end_ms
-            or not bool(last["is_closed"])
-        )
-        if not components_are_contiguous or not covers_available_bucket:
-            state.enhanced_fields = frozenset()
+        for name in ("open", "high", "low", "close", "volume"):
+            setattr(state, name, fields[name])
+        enhanced = ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote")
+        state.enhanced_fields = frozenset(name for name in enhanced if fields[name] is not None)
+        # Preserve legacy diagnostic counters behind the mask. They are not
+        # eligible fields: K130 and published records retain None for unknown.
+        for name in enhanced:
+            value = getattr(summary, name)
+            if value is None:
+                value = sum_additive((row[name] for row in ordered), integer=name == "trades")
+            if name != "trades":
+                value = round(value, 8)
+            setattr(state, name, value)
         state.tick_count = len(ordered)
         state.first_input_at_ms = int(first["open_time_ms"])
         state.last_input_at_ms = int(last["open_time_ms"])

@@ -20,7 +20,8 @@ from enum import Enum
 from functools import lru_cache
 from typing import Any, Mapping, Optional, Sequence
 
-from app.data_engine.market_data.kline_metrics import serialize_kline_enhancements
+from app.data_engine.aggregation.adapters import chart_field_summary
+from app.data_engine.aggregation.semantics import ClosePolicy, evaluate_coverage
 
 
 VALID_INTERVALS = [
@@ -89,7 +90,7 @@ def aggregate_tail_is_closed(
         return False
     if source_interval_seconds is None:
         return True
-    return int(rows[-1]["time"]) + source_interval_seconds >= bucket_end_seconds
+    return int(rows[-1]["time"]) + source_interval_seconds == bucket_end_seconds
 
 
 def enhanced_components_are_complete(
@@ -105,19 +106,23 @@ def enhanced_components_are_complete(
     the latest open source component, but the first component and every step
     before it must still be present.
     """
-    if not rows or not source_interval_seconds or source_interval_seconds <= 0:
-        return False
-    if int(rows[0]["time"]) != bucket_start_seconds:
-        return False
-    if any(
-        int(current["time"]) - int(previous["time"]) != source_interval_seconds
-        for previous, current in zip(rows, rows[1:])
-    ):
-        return False
-    reaches_bucket_end = (
-        int(rows[-1]["time"]) + source_interval_seconds >= bucket_end_seconds
+    return _chart_coverage(
+        rows, bucket_start_seconds, bucket_end_seconds, source_interval_seconds,
+    ).enhanced_complete
+
+
+def _chart_coverage(rows, start, end, width):
+    return evaluate_coverage(
+        has_components=bool(rows),
+        starts_at_boundary=bool(rows and width and width > 0 and int(rows[0]["time"]) == start),
+        contiguous=all(int(cur["time"]) - int(prev["time"]) == width
+                       for prev, cur in zip(rows, rows[1:])),
+        reaches_end=bool(rows and width and int(rows[-1]["time"]) + width == end),
+        within_bounds=bool(rows and width and int(rows[-1]["time"]) + width <= end),
+        all_closed=all(row_is_closed(row) for row in rows),
+        last_closed=bool(rows and row_is_closed(rows[-1])),
+        close_policy=ClosePolicy.SUCCESSOR,
     )
-    return reaches_bucket_end or not row_is_closed(rows[-1])
 
 
 STANDARD_INTERVAL_MS = {key: value * 1000 for key, value in INTERVAL_SECONDS.items()}
@@ -647,42 +652,16 @@ def aggregate_kline_rows(
         if not all(_stored_component_is_closed(
             row,
             open_time_ms=open_time_ms,
-            source_ms=source_ms,
+            source_end_ms=(source_spec.next_ms(open_time_ms) if source_spec else open_time_ms + source_ms),
             now_ms=now_ms,
         ) for row, open_time_ms in zip(rows, expected_opens)):
             continue
 
         try:
-            enhanced_rows = [
-                serialize_kline_enhancements(
-                    volume=row.get("volume"),
-                    quote_volume=row.get("quote_volume"),
-                    trades=row.get("trades"),
-                    taker_buy_base=row.get("taker_buy_base"),
-                    taker_buy_quote=row.get("taker_buy_quote"),
-                )
-                for row in rows
-            ]
             rebuilt.append({
                 "open_time": bucket_open_ms,
                 "close_time": bucket_end_ms - 1,
-                "open": float(rows[0]["open"]),
-                "high": max(float(row["high"]) for row in rows),
-                "low": min(float(row["low"]) for row in rows),
-                "close": float(rows[-1]["close"]),
-                "volume": round(sum(float(row["volume"]) for row in rows), 8),
-                "quote_volume": _sum_optional_additive_field(
-                    enhanced_rows, "quote_volume",
-                ),
-                "trades": _sum_optional_additive_field(
-                    enhanced_rows, "trades", integer=True,
-                ),
-                "taker_buy_base": _sum_optional_additive_field(
-                    enhanced_rows, "taker_buy_base",
-                ),
-                "taker_buy_quote": _sum_optional_additive_field(
-                    enhanced_rows, "taker_buy_quote",
-                ),
+                **chart_field_summary(rows).project(),
                 "is_closed": True,
             })
         except (KeyError, TypeError, ValueError):
@@ -697,7 +676,7 @@ def _stored_component_is_closed(
     row: Mapping[str, Any],
     *,
     open_time_ms: int,
-    source_ms: int,
+    source_end_ms: int,
     now_ms: int,
 ) -> bool:
     """Validate one storage-shaped source component for strict reconstruction."""
@@ -708,7 +687,7 @@ def _stored_component_is_closed(
     except (KeyError, TypeError, ValueError):
         return False
     return (
-        close_time_ms == int(open_time_ms) + int(source_ms) - 1
+        close_time_ms == int(source_end_ms) - 1 and int(source_end_ms) > int(open_time_ms)
         and close_time_ms < int(now_ms)
     )
 
@@ -851,65 +830,13 @@ def aggregate_rows_by_month(
     for bucket_start in sorted(buckets):
         rows = sorted(buckets[bucket_start], key=lambda row: row["time"])
         bucket_end = next_month_bucket(bucket_start, months)
-        enhanced_complete = enhanced_components_are_complete(
-            rows,
-            bucket_start_seconds=bucket_start,
-            bucket_end_seconds=bucket_end,
-            source_interval_seconds=source_interval_seconds,
-        )
-        enhanced_rows = [
-            serialize_kline_enhancements(
-                volume=row.get("volume"),
-                quote_volume=row.get("quote_volume"),
-                trades=row.get("trades"),
-                taker_buy_base=row.get("taker_buy_base"),
-                taker_buy_quote=row.get("taker_buy_quote"),
-            )
-            for row in rows
-        ]
+        coverage = _chart_coverage(rows, bucket_start, bucket_end, source_interval_seconds)
         result.append({
             "time": bucket_start,
-            "open": rows[0]["open"],
-            "high": max(row["high"] for row in rows),
-            "low": min(row["low"] for row in rows),
-            "close": rows[-1]["close"],
-            "volume": round(sum(row["volume"] for row in rows), 8),
-            "quote_volume": _sum_optional_additive_field(enhanced_rows, "quote_volume")
-            if enhanced_complete else None,
-            "trades": _sum_optional_additive_field(enhanced_rows, "trades", integer=True)
-            if enhanced_complete else None,
-            "taker_buy_base": _sum_optional_additive_field(enhanced_rows, "taker_buy_base")
-            if enhanced_complete else None,
-            "taker_buy_quote": _sum_optional_additive_field(enhanced_rows, "taker_buy_quote")
-            if enhanced_complete else None,
-            # A newer component implicitly confirms any older component whose
-            # explicit close event was missed, but a partial target bucket is
-            # still forming until that component reaches its calendar end.
-            "is_closed": bool(
-                enhanced_complete
-                and aggregate_tail_is_closed(
-                    rows,
-                    bucket_end_seconds=bucket_end,
-                    source_interval_seconds=source_interval_seconds,
-                )
-            ),
+            **chart_field_summary(rows).project(enhanced_complete=coverage.enhanced_complete),
+            "is_closed": coverage.closed,
         })
     return result
-
-
-def _sum_optional_additive_field(
-    rows: list[dict],
-    field: str,
-    *,
-    integer: bool = False,
-) -> float | int | None:
-    """Sum an additive field only for a complete component set."""
-    values = [row.get(field) for row in rows]
-    if any(value is None for value in values):
-        return None
-    if integer:
-        return sum(int(value) for value in values)
-    return round(sum(float(value) for value in values), 8)
 
 
 def add_months(ts_seconds: int, months: int) -> int:
