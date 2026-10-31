@@ -313,6 +313,7 @@ def validate_run(request: Request, payload: RunCreateRequest) -> dict[str, Any]:
                 contract_data_mode=payload.contract_data_mode,
                 account_model=payload.account_model,
                 funding_mode=payload.funding_mode,
+                **({'execution_data':values['execution_data']} if values.get('execution_data') is not None else {}),
             )
             require_contract_snapshot(preview, payload.contract_data_mode)
             require_declared_snapshot(preview, payload)
@@ -347,6 +348,7 @@ def create_run(
                 contract_data_mode=payload.contract_data_mode,
                 account_model=payload.account_model,
                 funding_mode=payload.funding_mode,
+                **({'execution_data':values['execution_data']} if values.get('execution_data') is not None else {}),
             )
             require_contract_snapshot(preview, payload.contract_data_mode)
             require_declared_snapshot(preview, payload)

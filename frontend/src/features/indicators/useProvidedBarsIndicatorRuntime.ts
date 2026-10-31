@@ -308,6 +308,7 @@ export function useProvidedBarsIndicatorRuntime({
       fills: visibleOutputState.fills,
       hlines: visibleOutputState.hlines,
       bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     },
   ), [clamped.activeIndicators, visibleOutputState]);
   const view = useMemo(() => ({
@@ -318,6 +319,7 @@ export function useProvidedBarsIndicatorRuntime({
     fills: visibleOutputState.fills,
     hlines: visibleOutputState.hlines,
     bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     barcolors: visibleOutputState.barcolors,
     signals: visibleOutputState.signals,
     paramSchemas: visibleOutputState.paramSchemas,

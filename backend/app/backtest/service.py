@@ -58,6 +58,8 @@ from app.simulation.execution_realism import (
 from app.simulation.cost_sensitivity import build_cost_sensitivity_matrix
 
 from .errors import BacktestError
+from .chart_book import BOOK_MODES, DUAL_MODES, normalize_data
+from .chart_book import derive_chart_bars as derive_book_chart_bars
 from .checkpoint_codec import checkpoint_session, checkpoint_json
 from .identity import canonical_json, config_hash, parse_parameters, sha256_hex
 from .models import (
@@ -108,6 +110,7 @@ from .strategy.host_planner import HostOrderPlanner
 from .strategy.registry import StrategyRevisionRegistry, build_default_strategy_registry
 from .strategy.builtin import build_builtin_provider
 from .strategy.pine_adapter import PineStrategyProvider
+from .strategy.pine_engine import REVISION as PINE_ENGINE_REVISION, PineEngineProvider
 from .strategy.workspace import compile_revision
 from .external_provider.contracts import EXTERNAL_REVISION
 from .external_provider.control import ExternalProviderControl
@@ -124,6 +127,8 @@ FIDELITY_MATRIX = {
     "AGG_TRADE_TAPE": ("AGG_TRADE", "AGGREGATED_TRADE_SEQUENCE"),
     "AGG_TRADE_EXECUTION": ("AGG_TRADE", "AGGREGATED_TRADE_SEQUENCE"),
     "BOOK_ASSISTED": ("TRADE_AND_L2", "BOOK_ASSISTED"),
+    "BOOK_DEPTH": ("TRADE_AND_L2", "BOOK_DEPTH"),
+    "BOOK_SAMPLED": ("TRADE_AND_L2", "BOOK_SAMPLED"),
     "QUEUE_EXACT": ("ORDER_LEVEL", "ORDER_LEVEL_REQUIRED"),
 }
 
@@ -197,8 +202,8 @@ class BacktestService:
         if self.settings.trade_tape_effective:
             fidelity_modes.append("AGG_TRADE_TAPE")
             fidelity_modes.append("AGG_TRADE_EXECUTION")
-        if self.settings.book_assisted_effective:
-            fidelity_modes.append("BOOK_ASSISTED")
+        if self.settings.book_assisted_effective and self.settings.trade_tape_effective:
+            fidelity_modes.extend(sorted(BOOK_MODES))
         return {
             "engine_version": ENGINE_VERSION,
             "schema_version": SCHEMA_VERSION,
@@ -523,6 +528,10 @@ class BacktestService:
             raise BacktestError(
                 "SCHEMA_UNKNOWN_FIELD", f"unknown strategy revision {revision_id}"
             )
+        pine_libraries = {}
+        if source["language"] == "PINE_ENGINE":
+            compiled = json.loads(str(source["compiled_json"]))
+            pine_libraries = json.loads(compiled["executionSource"]).get("libraries", {})
         return self.create_strategy_revision(
             {
                 "name": name,
@@ -530,6 +539,7 @@ class BacktestService:
                 "base_revision_id": source["base_revision_id"],
                 "source_text": source["source_text"],
                 "parameter_schema": json.loads(str(source["parameter_schema_json"])),
+                "libraries": pine_libraries,
                 "_force_new_revision": True,
             },
             now_ms=now_ms,
@@ -593,6 +603,7 @@ class BacktestService:
                     (
                         PineStrategyProvider()
                         if row["base_revision_id"] == "pine-long-flat-v1"
+                        else PineEngineProvider() if row["base_revision_id"] == PINE_ENGINE_REVISION
                         else build_builtin_provider(str(row["base_revision_id"]))
                     )
                 )
@@ -1122,7 +1133,7 @@ class BacktestService:
             "source_event_kind": identity.source_event_kind,
             "engine_version": identity.engine_version,
         }
-        if identity.fidelity_mode == "AGG_TRADE_EXECUTION":
+        if identity.fidelity_mode in DUAL_MODES:
             result.update(
                 {
                     "signal_clock": identity.signal_clock,
@@ -1157,6 +1168,15 @@ class BacktestService:
         stored_payload = dict(payload)
         stored_payload["source_event_kind"] = identity.source_event_kind
         normalized_execution = json.loads(identity.execution_json)
+        stored_payload.pop('chart_book_data_hash',None)
+        if 'chart_book_data_hash' in normalized_execution:
+            stored_payload['chart_book_data_hash']=normalized_execution['chart_book_data_hash']
+        if normalized_execution.get("pine_runtime_identity"):
+            stored_payload["pine_runtime_identity"] = normalized_execution["pine_runtime_identity"]
+        for name in ("pine_chart_metadata", "pine_contexts", "pine_local_data_root", "pine_order_runtime_identity", "pine_fill_callbacks", "pine_process_on_close", "pine_risk_windows", "pine_bar_path_contract", "pine_v2_bar_contract", "pine_history_ticks", "pine_realtime_ticks"):
+            stored_payload.pop(name, None)
+            if name in normalized_execution:
+                stored_payload[name] = normalized_execution[name]
         for name in ("checkpoint_policy", "checkpoint_interval", "cost_sensitivity_mode"):
             if name in normalized_execution:
                 stored_payload[name] = normalized_execution[name]
@@ -1230,7 +1250,7 @@ class BacktestService:
                     )
                 }
             )
-        if identity.fidelity_mode == "AGG_TRADE_EXECUTION":
+        if identity.fidelity_mode in DUAL_MODES:
             stored_payload.update(
                 {
                     "signal_clock": identity.signal_clock,
@@ -2659,7 +2679,7 @@ class BacktestService:
             if spec is not None:
                 return execute(self, run_id, spec, events, {
                     "now_ms": now_ms, "warmup_events": warmup_events,
-                    "snapshot_evidence": snapshot_evidence,
+                    "snapshot_evidence": snapshot_evidence, "observation_market": observation_market,
                 })
         if (not getattr(self, "_colocated_worker", False)
                 and json.loads(str(record["config_json"])).get("python_execution_protocol") == "MARKET_BATCH_V1"):
@@ -2691,9 +2711,12 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = HostOrderPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
+            historical_plan=None
+            if config.get("pine_history_ticks"):
+                from .pine_chart_bar import fixed_history
+                events,historical_plan=fixed_history(events,max_bars=self.settings.max_bar_rows,
+                    max_bytes=self.settings.worker_memory_mb*1024*1024)
             adapter.start(
                 {
                     "roles": ["BARS"],
@@ -2702,6 +2725,15 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
+                    **({"pineExecutionScheduleContract": "candlescope.pine-execution-schedule/1"}
+                       if config.get("pine_bar_path_contract") else {}),
+                    **({"pineStreamContract":"candlescope.pine-external-stream/1","pineHistoricalBars":historical_plan}
+                       if config.get("pine_history_ticks") else {}),
                 }
             )
 
@@ -2725,7 +2757,15 @@ class BacktestService:
             observed = 0
             resume_sequence = 0
 
-            kernel = SimulationKernel(
+            bar_kernel_type = SimulationKernel
+            if config.get("pine_bar_path_contract"):
+                from app.simulation.pine_chart_kernel import PineChartBarKernel
+                bar_kernel_type = PineChartBarKernel
+                if config.get("pine_v2_bar_contract"):
+                    from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+                    bar_kernel_type = PineV2BarKernel
+            kernel = bar_kernel_type(
+                process_orders_on_close=bool(config.get("pine_process_on_close")),
                 account_model=str(
                     config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
                 ),
@@ -2762,6 +2802,11 @@ class BacktestService:
                 if kernel.equity_curve_event_interval < 10_000:
                     kernel.equity_curve_event_interval = 10_000
                 kernel.scale_stream_decisions = True
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -2772,12 +2817,19 @@ class BacktestService:
                     raise BacktestError(
                         "CHECKPOINT_CORRUPT", "checkpoint mode does not match BAR run"
                     )
-                kernel.restore(payload["engine"])
-                session.restore(payload["provider"])
+                if config.get("pine_history_ticks"):
+                    session.restore(payload["provider"])
+                    kernel.restore(payload["engine"])
+                else:
+                    kernel.restore(payload["engine"])
+                    session.restore(payload["provider"])
                 session.generation = int(record["generation"])
                 planner.restore(payload.get("planner") or {})
                 observed = int(payload["observed"])
                 resume_sequence = int(payload["sequence"])
+                if config.get("pine_bar_path_contract") and (observed != kernel.chart_bar_count
+                        or resume_sequence != kernel.source_sequence):
+                    raise BacktestError("CHECKPOINT_CORRUPT", "historical BAR observation cursor differs")
 
             if checkpoint is None:
                 self._save_bar_checkpoint(
@@ -2791,9 +2843,23 @@ class BacktestService:
                 )
 
             input_modes = feature_names = None
+            closing = None
+            if config.get("pine_process_on_close") and not config.get("pine_bar_path_contract"):
+                from .pine_closing import ChartClosingTicks
+                closing = ChartClosingTicks(kernel)
+            historical_callbacks = None
+            if config.get("pine_bar_path_contract"):
+                from .pine_chart_bar import ChartHistoricalBarCallbacks,ChartHistoricalTicks
+                callback_type=ChartHistoricalTicks if config.get("pine_history_ticks") else ChartHistoricalBarCallbacks
+                historical_callbacks = callback_type(session, adapter, planner, kernel,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events, deadline=deadline,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                        expected_generation=expected_generation))
             python_batch = None
             generic_bar = None
-            if getattr(self, "_colocated_worker", False):
+            if getattr(self, "_colocated_worker", False) and historical_callbacks is None:
                 from .strategy.python_market_batch import PythonMarketBatchProvider
                 if type(getattr(provider, "provider", None)) is PythonMarketBatchProvider:
                     python_batch = provider.provider
@@ -2821,6 +2887,8 @@ class BacktestService:
                     )
                 phase = "WARMUP" if observed < warmup_events else "EVALUATION"
                 observed += 1
+                if historical_callbacks is not None:
+                    return historical_callbacks.observe(event)
                 if generic_bar is not None:
                     wire = generic_bar.observe(event, phase)
                     return planner.plan(wire, context=(None if planner.config is None else _planning_context(kernel, event)))
@@ -2841,6 +2909,7 @@ class BacktestService:
                     market=dict(observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}),
                     bar=bar,
                     features=self._observation_features(provider, bar=bar, trade=None, _names=feature_names),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return planner.plan(
                     wire,
@@ -2849,6 +2918,7 @@ class BacktestService:
 
             streamed_last: MarketEvent | None = None
             streamed_count = 0
+            resume_bar_count = observed
 
             def remaining_events() -> Iterable[MarketEvent]:
                 nonlocal streamed_last, streamed_count
@@ -2858,7 +2928,7 @@ class BacktestService:
                         continue
                     if event.role == "BARS":
                         seen_bars += 1
-                        streamed_count = resume_sequence + seen_bars
+                        streamed_count = resume_bar_count + seen_bars
                         if streamed_count > self.settings.max_bar_rows:
                             raise BacktestError(
                                 "BUDGET_EXCEEDED",
@@ -2869,9 +2939,17 @@ class BacktestService:
 
             last_order_count = len(kernel.orders)
             last_fill_count = len(kernel.fills)
+            from .pine_chart_window import ChartWindowDiscovery
+            window_discovery=ChartWindowDiscovery(provider,session,kernel,planner,
+                enabled=bool(config.get("pine_history_ticks") and resume_sequence==0),
+                new_planner=lambda:_new_host_planner(config,execution_reporter=self._execution_reporter(session)),
+                deadline=deadline,control=lambda:self._assert_execution_control(run_id,deadline=deadline,
+                    expected_generation=expected_generation))
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
+                if window_discovery.pending():
+                    return
                 interval = int(config.get("checkpoint_interval") or self.settings.checkpoint_event_interval)
                 order_count = len(kernel.orders)
                 fill_count = len(kernel.fills)
@@ -2905,15 +2983,27 @@ class BacktestService:
                         fault_point, run_id=run_id, sequence=event.sequence
                     )
 
-            result = kernel.run(
-                remaining_events(),
-                strategy,
-                warmup_events=0,
-                finalize=True,
-                checkpoint_callback=checkpoint_after,
-            )
+            def run_window():
+                return kernel.run(
+                    remaining_events(),strategy,warmup_events=0,finalize=True,
+                    checkpoint_callback=checkpoint_after,
+                    **({"fill_callback": historical_callbacks.on_fill} if historical_callbacks is not None else {}),
+                    **({"vertex_callback":historical_callbacks.on_vertex} if config.get("pine_history_ticks") else {}),
+                    **({"close_callback": closing.process} if closing is not None else {}))
+            def reset_window_bookkeeping():
+                nonlocal observed,streamed_last,streamed_count,last_order_count,last_fill_count,planner
+                planner=window_discovery.planner
+                if historical_callbacks is not None:
+                    historical_callbacks.planner=planner
+                observed=resume_bar_count
+                streamed_last,streamed_count=None,0
+                last_order_count,last_fill_count=len(kernel.orders),len(kernel.fills)
+            result=window_discovery.execute(run_window,reset_window_bookkeeping)
             cost_sensitivity = (
-                self._build_cost_sensitivity(config, kernel, events, result)
+                self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
+                    deadline=deadline, control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                        expected_generation=expected_generation), run_id=run_id)
                 if materialized
                 else None
             )
@@ -2982,7 +3072,7 @@ class BacktestService:
                 | kernel.account.coverage(),
                 "fill_model": {
                     "name": (
-                        BAR_FILL_POLICY_V2
+                        kernel.fill_policy if config.get("pine_bar_path_contract") else BAR_FILL_POLICY_V2
                         if kernel.execution_model_revision == EXECUTION_REALISM_V2
                         else "BAR_NEXT_BAR_WORST_CASE_V1"
                     ),
@@ -3000,6 +3090,13 @@ class BacktestService:
                     ),
                     "gap_policy": kernel.gap_policy,
                     "order_closeout": "CANCEL_OPEN_AT_END",
+                    **({"path_contract": config["pine_bar_path_contract"],
+                        "timestamps": "LINEAR_INTERPOLATION_SYNTHETIC", "physical_tape": False,
+                        "official_oracle_verified": False} if config.get("pine_bar_path_contract") else {}),
+                    **({"v2_path_contract": config["pine_v2_bar_contract"],
+                        "capacity_policy": "SHARED_BAR_VOLUME_PARTICIPATION" if kernel.execution_model_revision else "UNCAPPED",
+                        "mark_authority": "HISTORICAL_MARK_INDEX" if kernel.account_model == "LINEAR_PERP_ONE_WAY_V2" else "PATH_MARK",
+                        "account_event_order": "EVENTS_AT_TIME_PRECEDE_PATH_MATCH"} if config.get("pine_v2_bar_contract") else {}),
                     **_execution_fill_model(config),
                 },
                 "cost_sensitivity": cost_sensitivity,
@@ -3024,18 +3121,18 @@ class BacktestService:
             raise BacktestError("FLAG_DISABLED", "TRADE_TAPE backtests are disabled")
         record = self.get_run(run_id)
         current = RunState(record["state"])
-        if record["fidelity_mode"] != "AGG_TRADE_EXECUTION":
+        if record["fidelity_mode"] not in DUAL_MODES:
             raise BacktestError(
                 "FIDELITY_UNSUPPORTED",
-                "execute_dual_clock_run only supports AGG_TRADE_EXECUTION",
+                "execute_dual_clock_run requires a physical chart execution mode",
             )
         if not getattr(self, "_colocated_worker", False) and self._fault_injector is None and isinstance(events, tuple):
             from .colocated import provider_spec, execute
-            spec = provider_spec(provider, fidelity="AGG_TRADE_EXECUTION")
+            spec = provider_spec(provider, fidelity=str(record["fidelity_mode"]))
             if spec is not None:
                 return execute(self, run_id, spec, events, {
                     "now_ms": now_ms, "warmup_events": warmup_events,
-                    "snapshot_evidence": snapshot_evidence,
+                    "snapshot_evidence": snapshot_evidence, "observation_market": observation_market,
                 })
         stamp = now_ms or _now_ms()
         warmup_events = self._resolve_warmup(record, warmup_events)
@@ -3062,9 +3159,10 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = HostOrderPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
+            from .pine_event_requests import chart_realtime_context
+            realtime_context=chart_realtime_context(config,events,max_bars=self.settings.max_bar_rows,
+                max_bytes=self.settings.worker_memory_mb*1024*1024)
             adapter.start(
                 {
                     "roles": ["BARS"],
@@ -3075,6 +3173,14 @@ class BacktestService:
                     "signalClock": SIGNAL_CLOCK,
                     "executionClock": EXECUTION_CLOCK,
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
+                    **({"pineExecutionScheduleContract":"candlescope.pine-execution-schedule/1",
+                        "pineStreamContract":"candlescope.pine-external-stream/1","pineRealtimeTicks":True,**realtime_context}
+                       if config.get("pine_realtime_ticks") else {}),
                 }
             )
             event_bytes = _event_wire_bytes(events)
@@ -3084,6 +3190,8 @@ class BacktestService:
                     "aggregate-trade snapshot exceeds worker memory ceiling",
                 )
             kernel = DualClockSimulationKernel(
+                execution_fidelity=str(record["fidelity_mode"]),
+                process_orders_on_close=bool(config.get("pine_process_on_close")),
                 signal_interval=str(config["signal_interval"]),
                 gap_policy="REJECT",
                 max_events=self.settings.max_trade_events,
@@ -3106,6 +3214,11 @@ class BacktestService:
                 execution_reporter=self._execution_reporter(session),
             )
             resume_sequence = 0
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -3117,8 +3230,8 @@ class BacktestService:
                         "CHECKPOINT_CORRUPT",
                         "checkpoint mode does not match dual-clock run",
                     )
-                kernel.restore(payload["engine"])
                 session.restore(payload["provider"])
+                kernel.restore(payload["engine"])
                 session.generation = int(record["generation"])
                 planner.restore(payload.get("planner") or {})
                 resume_sequence = int(payload["sequence"])
@@ -3140,6 +3253,22 @@ class BacktestService:
             )
             collected_chart_bars = []
 
+            callbacks = None
+            if config.get("pine_fill_callbacks") or config.get("pine_realtime_ticks"):
+                from .pine_callbacks import ChartFillCallbacks
+                from .pine_realtime_ticks import ChartRealtimeTicks
+                callback_type=ChartRealtimeTicks if config.get("pine_realtime_ticks") else ChartFillCallbacks
+                callbacks = callback_type(session, adapter, planner, kernel,
+                    market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])},
+                    warmup=warmup_events, deadline=deadline,
+                    features=lambda bar: self._observation_features(provider, bar=bar, trade=None),
+                    control=lambda: self._assert_execution_control(run_id, deadline=deadline, expected_generation=expected_generation))
+
+            closing = None
+            if config.get("pine_process_on_close"):
+                from .pine_closing import ChartClosingTicks
+                closing = ChartClosingTicks(kernel, callbacks if not config.get("pine_realtime_ticks") or config.get("pine_fill_callbacks") else None)
+
             def strategy(
                 _visible: tuple[MarketEvent, ...], bar: MarketEvent
             ) -> list[dict]:
@@ -3157,6 +3286,8 @@ class BacktestService:
                 phase = "WARMUP" if bar.sequence <= warmup_events else "EVALUATION"
                 bar_payload = dict(bar.payload)
                 self._assert_frame_inputs(provider, bar=bar_payload, trade=None)
+                if callbacks is not None:
+                    return callbacks.observe(bar, confirmed=True)
                 wire = adapter.observe(
                     sequence=bar.sequence,
                     event_time_ms=bar.event_time_ms,
@@ -3167,6 +3298,7 @@ class BacktestService:
                     features=self._observation_features(
                         provider, bar=bar_payload, trade=None
                     ),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return planner.plan(
                     wire,
@@ -3183,9 +3315,17 @@ class BacktestService:
             )
             last_order_count = len(kernel.execution.orders)
             last_fill_count = len(kernel.execution.fills)
+            from .pine_chart_window import ChartWindowDiscovery
+            window_discovery=ChartWindowDiscovery(provider,session,kernel,planner,
+                enabled=bool(realtime_context and resume_sequence==0),
+                new_planner=lambda:_new_host_planner(config,execution_reporter=self._execution_reporter(session)),
+                deadline=deadline,control=lambda:self._assert_execution_control(run_id,deadline=deadline,
+                    expected_generation=expected_generation))
 
             def checkpoint_after(event: MarketEvent) -> None:
                 nonlocal last_order_count, last_fill_count
+                if window_discovery.pending():
+                    return
                 fault_point = None
                 if self._fault_injector is not None:
                     order_count = len(kernel.execution.orders)
@@ -3220,14 +3360,30 @@ class BacktestService:
                         fault_point, run_id=run_id, sequence=event.sequence
                     )
 
-            result = kernel.run(
-                remaining_events,
-                strategy,
-                warmup_events=0,
-                finalize=True,
-                checkpoint_callback=checkpoint_after,
-            )
-            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result)
+            def run_window():
+                from .pine_event_requests import trial_events
+                # The first attempt has no stream yet; the frozen event plan
+                # requires discovery just as the later interrupted attempts do.
+                pending=bool(window_discovery.enabled and (window_discovery.provider.stream is None or window_discovery.pending()))
+                rows,cutoff=trial_events(remaining_events,adapter.input_plan,pending)
+                return kernel.run(rows,strategy,warmup_events=0,finalize=True,checkpoint_callback=checkpoint_after,
+                    **({"end_time_ms":cutoff} if cutoff is not None else
+                       {"end_time_ms":int(config["end_time_ms"])} if record["fidelity_mode"] in BOOK_MODES else {}),
+                    **({"fill_callback": callbacks.on_fill} if callbacks is not None and not config.get("pine_realtime_ticks") else {}),
+                    **({"tick_callback":callbacks.on_tick} if config.get("pine_realtime_ticks") else {}),
+                    **({"close_callback": closing.process} if closing is not None else {}))
+            def reset_window_bookkeeping():
+                nonlocal planner,last_order_count,last_fill_count
+                planner=window_discovery.planner
+                if callbacks is not None:
+                    callbacks.planner=planner
+                collected_chart_bars.clear()
+                last_order_count,last_fill_count=len(kernel.execution.orders),len(kernel.execution.fills)
+            result=window_discovery.execute(run_window,reset_window_bookkeeping)
+            cost_sensitivity = self._build_cost_sensitivity(config, kernel, events, result, provider=provider, planner=planner, input_plan=adapter.input_plan,
+                market=observation_market or {"venue": "local", "symbol": str(record["dataset_id"])}, warmup=warmup_events,
+                deadline=deadline, control=lambda: self._assert_execution_control(run_id, deadline=deadline,
+                    expected_generation=expected_generation), run_id=run_id)
             metrics_market_context = _metrics_market_context(
                 config, events, result.fills
             )
@@ -3278,17 +3434,19 @@ class BacktestService:
             chart_interval=str(config["signal_interval"]),
             chart_bars=(collected_chart_bars if reuse_chart_bars else [
                 _trade_chart_bar(bar)
-                for bar in derive_complete_trade_bars(events, str(config["signal_interval"]))
+                for bar in (derive_book_chart_bars(events,str(config['signal_interval']),int(config['end_time_ms']))
+                    if record['fidelity_mode'] in BOOK_MODES
+                    else derive_complete_trade_bars(events, str(config["signal_interval"])))
             ]),
             result_overrides={
-                "report_label": "AGGREGATED_TRADE_SEQUENCE",
+                "report_label": FIDELITY_MATRIX[str(record['fidelity_mode'])][1],
                 "strategy_metadata": strategy_metadata,
                 "signal_event_count": kernel.builder.signal_count,
                 "execution_event_count": kernel.execution_event_count,
                 "data_quality": dict((snapshot_evidence or {}).get("quality") or {}),
                 "contract_coverage": kernel.account.coverage(),
                 "fill_model": {
-                    "name": (
+                    "name": kernel.execution.fill_policy if record['fidelity_mode'] in BOOK_MODES else (
                         TRADE_FILL_POLICY_V2
                         if kernel.execution.execution_model_revision
                         == EXECUTION_REALISM_V2
@@ -3299,7 +3457,8 @@ class BacktestService:
                     "bar_builder": BAR_BUILDER_REVISION,
                     "signal_interval": kernel.signal_interval,
                     "timezone": BAR_TIMEZONE,
-                    "source_honesty": "aggTrade is aggregated; raw trades and queue position are unmodeled",
+                    "source_honesty": "aggregate prints with physical book liquidity; queue priority remains modeled" if record['fidelity_mode'] in BOOK_MODES else "aggTrade is aggregated; raw trades and queue position are unmodeled",
+                    **({'queue_exact':False,'book_execution':result.ledger['book_execution']} if record['fidelity_mode'] in BOOK_MODES else {}),
                     **_execution_fill_model(config),
                     "slippage_bps": str(kernel.execution.slippage_bps),
                     "taker_fee_bps": str(kernel.execution.taker_fee_bps),
@@ -3375,9 +3534,7 @@ class BacktestService:
                 config = json.loads(str(record["config_json"]))
             except (TypeError, ValueError, json.JSONDecodeError):
                 config = {}
-            planner = HostOrderPlanner(
-                config, execution_reporter=self._execution_reporter(session)
-            )
+            planner = _new_host_planner(config, execution_reporter=self._execution_reporter(session))
             adapter.start(
                 {
                     "roles": ["TRADES"],
@@ -3386,6 +3543,11 @@ class BacktestService:
                     "seed": config.get("seed"),
                     "outputMode": config.get("output_mode") or "TARGET_POSITION",
                     "tradeExplanationEnabled": self.settings.trade_explanation_effective,
+                    "pineChartMetadata": config.get("pine_chart_metadata") or ({"priceTickSize": str(config["price_tick"])} if config.get("price_tick") is not None else None),
+                    "pineChartInterval": config.get("signal_interval") or config.get("interval"),
+                    "pineChartMarketType": config.get("market_type"),
+                    "pineRequestedContexts": config.get("pine_contexts", []),
+                    "pineLocalDataRoot": config.get("pine_local_data_root"),
                 }
             )
 
@@ -3408,7 +3570,10 @@ class BacktestService:
             # Isolated providers that can stream several frames per exchange
             # get them while no order is working; see step_ahead below.
             batch_size = (
-                0 if getattr(self, "_colocated_worker", False) or self._fault_injector is not None
+                # Account observations must come from the kernel at this event,
+                # after any mark, funding and execution callbacks have applied.
+                0 if (getattr(self, "_colocated_worker", False) or self._fault_injector is not None
+                      or config.get("pine_runtime_identity"))
                 else _provider_step_batch_size(provider)
             )
             trades: tuple[MarketEvent, ...] = ()
@@ -3448,6 +3613,7 @@ class BacktestService:
                     features=self._observation_features(
                         provider, bar=bar, trade=trade, _names=feature_names
                     ),
+                    account_view=_pine_account_view(kernel) if config.get("pine_runtime_identity") else None,
                 )
                 return frame, state
 
@@ -3571,6 +3737,11 @@ class BacktestService:
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )
+            if config.get("pine_runtime_identity"):
+                from .pine_contract_metadata import configure_legacy_account
+                configure_legacy_account(getattr(kernel, "execution", kernel), {
+                    "account_model": config.get("account_model"), "context": {"metadata": config.get("pine_chart_metadata")}})
+            planner.bind_kernel(kernel)
             checkpoint = self.repository.latest_checkpoint(run_id)
             if checkpoint is not None:
                 payload = self._verified_checkpoint_payload(record, checkpoint)
@@ -4050,11 +4221,11 @@ class BacktestService:
         if fidelity_mode == "BAR_APPROX" and not self.settings.bar_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_BAR_ENABLED is 0")
         if (
-            fidelity_mode in {"TRADE_TAPE", "AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}
+            fidelity_mode in {"TRADE_TAPE", "AGG_TRADE_TAPE", *DUAL_MODES}
             and not self.settings.trade_tape_enabled
         ):
             raise BacktestError("FLAG_DISABLED", "BACKTEST_TRADE_TAPE_ENABLED is 0")
-        if fidelity_mode == "BOOK_ASSISTED" and not self.settings.book_assisted_enabled:
+        if fidelity_mode in BOOK_MODES and not self.settings.book_assisted_enabled:
             raise BacktestError("FLAG_DISABLED", "BACKTEST_BOOK_ASSISTED_ENABLED is 0")
 
     def _assert_active_budget(self) -> None:
@@ -4124,6 +4295,17 @@ class BacktestService:
         fidelity = str(payload.get("fidelity_mode") or "")
         if fidelity not in FIDELITY_MATRIX:
             raise BacktestError("FIDELITY_UNSUPPORTED", f"unknown fidelity {fidelity}")
+        book_data_hash=None
+        if fidelity in BOOK_MODES:
+            _,book_data_hash=normalize_data(payload.get('execution_data'),max_events=self.settings.max_trade_events,
+                max_bytes=self.settings.worker_memory_mb*1024*1024)
+            if (payload.get('execution_model_revision') or payload.get('participation_rate') is not None
+                    or payload.get('bar_path_scenario') is not None
+                    or _config_decimal(payload,'latency_ms','0') != 0
+                    or _config_decimal(payload,'latency_events','0') != 0):
+                raise BacktestError('FIDELITY_UNSUPPORTED','book capacity retains its declared physical policy')
+        elif payload.get('execution_data') is not None:
+            raise BacktestError('FIDELITY_MISLABEL','frozen book data requires a chart book mode')
         source_kind, _label = FIDELITY_MATRIX[fidelity]
         requested_kind = str(payload.get("source_event_kind") or source_kind)
         if requested_kind != source_kind:
@@ -4335,6 +4517,7 @@ class BacktestService:
                             (
                                 PineStrategyProvider()
                                 if base_revision == "pine-long-flat-v1"
+                                else PineEngineProvider() if base_revision == PINE_ENGINE_REVISION
                                 else build_builtin_provider(base_revision)
                             )
                         )
@@ -4374,7 +4557,7 @@ class BacktestService:
                             "roles": [
                                 (
                                     "BARS"
-                                    if fidelity in {"BAR_APPROX", "AGG_TRADE_EXECUTION"}
+                                    if fidelity in {"BAR_APPROX", *DUAL_MODES}
                                     else "TRADES"
                                 )
                             ],
@@ -4395,7 +4578,7 @@ class BacktestService:
             "bar_builder": None,
             "timezone": None,
         }
-        if fidelity == "AGG_TRADE_EXECUTION":
+        if fidelity in DUAL_MODES:
             interval = parse_interval_spec(
                 str(payload.get("signal_interval") or payload.get("interval") or "")
             )
@@ -4422,7 +4605,11 @@ class BacktestService:
                     "AGG_TRADE_EXECUTION M2 requires gap_policy=REJECT",
                 )
         try:
-            execution_realism = parse_execution_realism(payload, fidelity_mode=fidelity)
+            pine_path=False
+            if persisted_revision is not None and persisted_revision["base_revision_id"]==PINE_ENGINE_REVISION:
+                pine_execution=json.loads(json.loads(str(persisted_revision["compiled_json"]))["executionSource"])
+                pine_path=any(pine_execution.get(name) is True for name in ("fillCallbacks","historyTicks"))
+            execution_realism = parse_execution_realism(payload, fidelity_mode=fidelity, pine_bar_path=pine_path)
         except MarketDatasetError as exc:
             raise BacktestError(exc.code, str(exc)) from exc
         try:
@@ -4455,6 +4642,8 @@ class BacktestService:
             "exchange": str(payload.get("exchange") or "binance"),
             "market_type": str(payload.get("market_type") or "usdm"),
         }
+        if book_data_hash is not None:
+            execution_config['chart_book_data_hash']=book_data_hash
         if payload.get("checkpoint_policy") is not None or payload.get("checkpoint_interval") is not None:
             policy = payload.get("checkpoint_policy") or "INTERVAL"
             interval = payload.get("checkpoint_interval")
@@ -4497,6 +4686,76 @@ class BacktestService:
         persisted_execution = self.repository.get_strategy_revision(
             str(payload["strategy_revision_id"])
         )
+        if persisted_execution is not None and persisted_execution["base_revision_id"] == PINE_ENGINE_REVISION:
+            compiled_pine = json.loads(str(persisted_execution["compiled_json"]))
+            execution_config["pine_runtime_identity"] = compiled_pine["dependencyHash"]
+            fill_callbacks = json.loads(compiled_pine["executionSource"]).get("fillCallbacks") is True
+            history_ticks = json.loads(compiled_pine["executionSource"]).get("historyTicks") is True
+            realtime_ticks = json.loads(compiled_pine["executionSource"]).get("realtimeTicks") is True
+            if realtime_ticks and fidelity not in DUAL_MODES and not (history_ticks and fidelity=="BAR_APPROX"):
+                raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require aggregate-trade execution; historical BAR ticks require calc_on_every_history_tick")
+            if realtime_ticks and fidelity in DUAL_MODES:
+                envelope=json.loads(compiled_pine["executionSource"])
+                if (output_mode!="ORDER_INTENT" or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
+                    raise BacktestError("FIDELITY_UNSUPPORTED","realtime Pine ticks require the negotiated aggregate-trade stream and ORDER_INTENT")
+                execution_config["pine_realtime_ticks"]=True
+            if history_ticks and not execution_config.get("pine_realtime_ticks"):
+                envelope=json.loads(compiled_pine["executionSource"])
+                if (fidelity!="BAR_APPROX" or output_mode!="ORDER_INTENT"
+                        or envelope["identity"].get("external_stream_contract")!="candlescope.pine-external-stream/1"):
+                    raise BacktestError("FIDELITY_UNSUPPORTED","chart historical ticks require the negotiated BAR stream and ORDER_INTENT")
+                execution_config.update(pine_history_ticks=True,pine_bar_path_contract="candlescope.pine-bar-path/1")
+                if account_model=="LINEAR_PERP_ONE_WAY_V2" or execution_realism.enabled:
+                    execution_config["pine_v2_bar_contract"]="candlescope.pine-v2-bar/1"
+            process_close = json.loads(compiled_pine["executionSource"]).get("processOnClose") is True
+            stop_functions = json.loads(compiled_pine["executionSource"]).get("riskStopFunctions") or []
+            if stop_functions:
+                from .pine_risk_stops import window_contract
+                if output_mode != "ORDER_INTENT":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine stop rules require ORDER_INTENT")
+                execution_config["pine_risk_windows"] = window_contract({**payload, "fidelity_mode": fidelity}, stop_functions)
+            if process_close:
+                execution_config["pine_process_on_close"] = True
+            if fill_callbacks:
+                if fidelity not in {"BAR_APPROX", *DUAL_MODES} or output_mode != "ORDER_INTENT":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "Pine fill callbacks require ORDER_INTENT and BAR or aggregate-trade execution")
+                if fidelity == "BAR_APPROX":
+                    envelope = json.loads(compiled_pine["executionSource"])
+                    if envelope.get("executionScheduleContract") != "candlescope.pine-execution-schedule/1":
+                        raise BacktestError("FIDELITY_UNSUPPORTED", "historical BAR callbacks require explicit execution schedules")
+                    if account_model == "LINEAR_PERP_ONE_WAY_V2" or execution_realism.enabled:
+                        execution_config["pine_v2_bar_contract"] = "candlescope.pine-v2-bar/1"
+                    execution_config["pine_bar_path_contract"] = "candlescope.pine-bar-path/1"
+                execution_config["pine_fill_callbacks"] = True
+            if output_mode == "ORDER_INTENT" or process_close:
+                from .strategy.pine_planner import host_identity
+                execution_config["pine_order_runtime_identity"] = host_identity()
+            if fidelity not in {"BAR_APPROX", *DUAL_MODES}:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "chart Pine requires closed-bar observations")
+        if payload.get("pine_chart_metadata") is not None:
+            from .native_contracts import PineChartMetadata
+            if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Pine contract metadata requires PINE_ENGINE")
+            try:
+                metadata = PineChartMetadata.model_validate(payload["pine_chart_metadata"]).model_dump(exclude_none=True)
+            except ValueError as exc:
+                raise BacktestError("SCHEMA_UNKNOWN_FIELD", "invalid Pine contract metadata") from exc
+            from fractions import Fraction
+            for field, config_field in (("priceTickSize", "price_tick"), ("quantityStep", "qty_step")):
+                if metadata.get(field) is not None and payload.get(config_field) is not None and Fraction(metadata[field]) != Fraction(str(payload[config_field])):
+                    raise BacktestError("DATA_SNAPSHOT_MISMATCH", f"Pine {field} differs from Host {config_field}")
+            if account_model == "SPOT_CASH_V1" and metadata.get("pointValue", 1) != 1:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "spot cash accounting requires unit pointValue")
+            execution_config["pine_chart_metadata"] = metadata
+        if payload.get("pine_contexts"):
+            from .pine_requested_data import normalize_contexts
+            if persisted_execution is None or persisted_execution["base_revision_id"] != PINE_ENGINE_REVISION:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "Requested Pine datasets require PINE_ENGINE.")
+            root = getattr(self, "pine_local_data_root", None)
+            if not root:
+                raise BacktestError("PINE_REQUEST_DATA_REQUIRED", "The local dataset service is unavailable.")
+            execution_config["pine_contexts"] = normalize_contexts(payload["pine_contexts"])
+            execution_config["pine_local_data_root"] = root
         python_protocol = payload.get("python_execution_protocol")
         if python_protocol is not None:
             from .strategy.python_market_batch import EXECUTION_PROTOCOL, certified_source
@@ -4541,7 +4800,7 @@ class BacktestService:
             )
         if host_policy is not None:
             execution_config.update(host_policy.identity())
-        if fidelity == "AGG_TRADE_EXECUTION":
+        if fidelity in DUAL_MODES:
             execution_config.update(signal_identity)
         if contract_data_mode == "HISTORICAL_CONTRACT_V1":
             execution_config["contract_data_mode"] = contract_data_mode
@@ -4602,10 +4861,14 @@ class BacktestService:
 
         return report
 
-    @staticmethod
-    def _build_cost_sensitivity(config, kernel, events, result):
+    def _build_cost_sensitivity(self, config, kernel, events, result, **pine_context):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
             return {"status": "SKIPPED_BY_REQUEST", "scenarios": []}
+        if kernel.execution_model_revision != EXECUTION_REALISM_V2 and not config.get("pine_bar_path_contract") and config.get("fidelity_mode") not in BOOK_MODES:
+            return {}
+        if config.get("pine_runtime_identity"):
+            from .pine_sensitivity import build_matrix
+            return build_matrix(self, config, kernel, events, result, **pine_context)
         return build_cost_sensitivity_matrix(kernel, events, result)
 
     def _save_bar_checkpoint(
@@ -5401,9 +5664,13 @@ def _policy_result_overrides(
     policy = planner.report()
     if not policy:
         return {}
+    pine_orders = policy.pop("pine_orders", None)
+    pine_stops = policy.pop("pine_risk_stops", None)
     return {
         "rejected": [*result.rejected, *planner.rejections],
-        "risk_policy": policy,
+        **({"risk_policy": policy} if policy else {}),
+        **({"pine_orders": pine_orders} if pine_orders is not None else {}),
+        **({"pine_risk_stops": pine_stops} if pine_stops is not None else {}),
     }
 
 
@@ -5483,3 +5750,28 @@ def _trade_chart_bar(bar: MarketEvent) -> dict[str, object]:
         "close": float(bar.payload["close"]),
         "volume": float(bar.payload["volume"]),
     }
+
+
+def _pine_account_view(kernel):
+    account = kernel.account
+    from .external import account_feedback_profit
+    from .pine_contract_metadata import observed_contract_metadata
+    metadata = observed_contract_metadata(kernel)
+    return {**({"_contract_metadata": metadata} if metadata is not None else {}), "position_size": float(account.position_qty),
+            "position_avg_price": None if account.entry_price is None else float(account.entry_price),
+            "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
+            "netprofit": float(account_feedback_profit(account, kernel.initial_balance)),
+            "openprofit": float(account.unrealized())}
+
+
+def _new_host_planner(config, **kwargs):
+    if config.get("pine_process_on_close"):
+        from .strategy.pine_planner import host_identity
+        if config.get("pine_order_runtime_identity") != host_identity():
+            raise BacktestError("IDENTITY_MUTATION", "Pine closing-tick implementation changed; create a fresh run")
+    if config.get("pine_runtime_identity") and config.get("output_mode") == "ORDER_INTENT":
+        from .strategy.pine_planner import PineHostPlanner, host_identity
+        if config.get("pine_order_runtime_identity") != host_identity():
+            raise BacktestError("IDENTITY_MUTATION", "Pine Host order implementation changed; create a fresh run")
+        return PineHostPlanner(config, **kwargs)
+    return HostOrderPlanner(config, **kwargs)

@@ -176,27 +176,36 @@ export function createSteps(options, selected, files, root, output) {
   if (selected.desktop.length) node("desktop", ["--test", `--test-concurrency=${options.workers}`, "desktop/*.test.mjs"]);
   function backend(id, tests, workers) {
     if (!tests.length) return;
-    const argsFor = (batchId, batch) => ["-u", "-m", "pytest", ...batch, "-q", "--durations=30",
-      `--junitxml=${path.join(output, `${batchId}.xml`)}`,
-      ...(workers > 1 ? ["-n", String(workers), "--dist=loadfile"] : [])];
-    // Leave room for quoting, the executable and numbered report names below
-    // CreateProcess's limit. Partition the selection; never drop or broaden it.
-    const capacity = 24_000 - python.length - argsFor(id, []).join(" ").length - 128;
-    let batch = [], size = 0, index = 0;
-    const flush = () => {
-      if (!batch.length) return;
-      const batchId = index++ === 0 ? id : `${id}-${index}`;
-      steps.push({ id: batchId, command: python, args: argsFor(batchId, batch), cwd: path.join(root, "backend") });
-      batch = []; size = 0;
+    const commandArgs = (name, paths) => {
+      const args = ["-u", "-m", "pytest", ...paths, "-q", "--durations=30", `--junitxml=${path.join(output, `${name}.xml`)}`];
+      if (workers > 1) args.push("-n", String(workers), "--dist=loadfile");
+      return args;
     };
+    if (options.profile === "profile" && tests.length === files.backend.length) {
+      // Profile the complete recursive suite in one serial Python process.
+      steps.push({ id, command: python, args: commandArgs(id, ["tests"]), cwd: path.join(root, "backend") });
+      return;
+    }
+    const batches = [];
+    let current = [];
+    // Reserve the longest possible batch suffix and quoting overhead rather
+    // than letting a growing inventory exceed Windows CreateProcess limits.
+    const budgetName = `${id}-${tests.length}`;
+    const length = (paths) => commandArgs(budgetName, paths).reduce((sum, arg) => sum + arg.length + 3, python.length + 3);
     for (const file of tests) {
       const relative = file.slice("backend/".length);
-      const cost = relative.length + 3;
-      if (cost > capacity) throw new Error(`Test path exceeds process argument budget: ${file}`);
-      if (size + cost > capacity) flush();
-      batch.push(relative); size += cost;
+      if (current.length && length([...current, relative]) > 22_000) {
+        batches.push(current);
+        current = [];
+      }
+      if (length([relative]) > 22_000) throw new Error(`Backend test argument exceeds process limit: ${file}`);
+      current.push(relative);
     }
-    flush();
+    if (current.length) batches.push(current);
+    batches.forEach((paths, index) => {
+      const name = batches.length === 1 ? id : `${id}-${index + 1}`;
+      steps.push({ id: name, command: python, args: commandArgs(name, paths), cwd: path.join(root, "backend") });
+    });
   }
   if (options.workers === 1) backend("backend", selected.backend, 1);
   else {

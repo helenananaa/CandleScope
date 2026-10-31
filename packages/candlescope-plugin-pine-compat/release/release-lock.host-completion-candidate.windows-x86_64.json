@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "local-remediation-candidate-unpublished",
+  "plugin": {
+    "id": "candlescope.pine-compat",
+    "package": "candlescope-plugin-pine-compat",
+    "version": "0.3.2"
+  },
+  "python": {
+    "requires": ">=3.11,<3.14",
+    "module": "candlescope_plugin_pine_compat"
+  },
+  "wheels": {
+    "candlescope-plugin-pine-compat": {
+      "version": "0.3.2",
+      "source": "qualified-local-wheel",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.3.2-py3-none-any.whl",
+      "sha256": "sha256:7c8b84e4f012dcf305b1cc9455e111d0695e44243203a94e047c59c7294a2f8c",
+      "size": 50597
+    },
+    "candlescope-plugin-sdk": {
+      "version": "0.2.0",
+      "source": "qualified-local-wheel",
+      "artifactFilename": "candlescope_plugin_sdk-0.2.0-py3-none-any.whl",
+      "sha256": "sha256:64d4c67fc64a9a66e059c7226bd38b0c7bac469b49ec57396d275aac6ae76658",
+      "size": 111978
+    },
+    "pine-compat-runtime": {
+      "version": "0.3.2",
+      "source": "qualified-local-wheel",
+      "artifactFilename": "pine_compat_runtime-0.3.2-cp310-abi3-win_amd64.whl",
+      "sha256": "sha256:8f5747a9c09d426ae70acdafba3faf782c942ad8405a7a1943ce2200a6a98fc3",
+      "size": 6425473
+    }
+  },
+  "probe": {
+    "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+    "context": {
+      "exchange": "binance",
+      "marketType": "spot",
+      "symbol": "BTCUSDT",
+      "interval": "1m"
+    },
+    "bars": [
+      {
+        "time": 1700000000,
+        "open": 100,
+        "high": 102,
+        "low": 99,
+        "close": 101,
+        "volume": 10,
+        "isClosed": true
+      },
+      {
+        "time": 1700000060,
+        "open": 101,
+        "high": 103,
+        "low": 100,
+        "close": 102,
+        "volume": 11,
+        "isClosed": true
+      }
+    ],
+    "params": {},
+    "options": {},
+    "analysisSha256": "sha256:50cb14c7713a4f942f5dd906310ee7aaa785c3090cd2d3886f3c82a6e0ee5b62",
+    "executionSha256": "sha256:2ed443cb6b0d449eeb7d160f1899a176a213eb5b3c2b2c33d3dbe34365b5bea3"
+  },
+  "sourceProvenance": {
+    "hostCommit": "690911b9c53c32c3e56ef2337e44ae0f9a85eadf",
+    "engineBaseCommit": "232b93dd109108d227a522ef3f3bcb32ed31a002",
+    "enginePatchedCommit": "199aca438a150a436d6724ceee0afd4595a76b92",
+    "enginePatch": "engine-patches/renko-event-rows-v2.patch",
+    "enginePatchSha256": "sha256:6998f47e967a3841f80f264d2cc9dfb78aea1cbe7f90899116510415e5c5f83e",
+    "engineNativeSha256": "sha256:b0142f11d986f35a043a294cd844608140540b3ef4f2fa493947bc4d3119ca3f",
+    "qualification": "local Windows candidate; public release and packaged desktop acceptance remain pending"
+  }
+}

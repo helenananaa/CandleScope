@@ -14,6 +14,7 @@ import { NativeSeriesScene } from "./NativeSeriesScene.js";
 
 import { reportAnalytics, reportTrade, formatReportPercent } from "./nativeReportAnalytics.js";
 import { NativePerformanceChart } from "./NativePerformanceChart.js";
+import { NativeCostSensitivity } from "./NativeCostSensitivity.js";
 
 interface NativeMarker { time: number; value: number; kind: "entry" | "exit" | "fill" }
 export function NativeCurve({ points, title, markers = [], onLocate }: { points: Array<{ time: number; value: number | null }>; title: string;
@@ -66,15 +67,16 @@ export function NativeCurve({ points, title, markers = [], onLocate }: { points:
 export function NativeStrategyReport({ run, onLocate, onReviewTrade, active = true, view = "all", stale = false }: { stale?: boolean; active?: boolean; onReviewTrade?: ((trade: StrategyTradeFocus | null) => void) | undefined; view?: "all" | "overview" | "trades"; run: NativeRun; onLocate?: ((time: number) => void) | undefined }) {
   const [replay, setReplay] = useState<NativeReplayRecord | null>(null);
   const [replayView, setReplayView] = useState(!run.result);
+  const canReplay = run.execution_mode !== "CANDLESCOPE" || run.replay_contract === "candlescope.external-replay/1";
   const controlId = useId();
   useControlCommands(() => ({ id: `native-report-view:${controlId}`, title: "Native report mode", context: () => ({ runId: run.run_id, replayView, active }), snapshot: () => ({ runId: run.run_id, replayView, active, executionMode: run.execution_mode }), commands: [
-    command("replayView", "Switch between analysis and native incremental replay.", object({ enabled: bool }), ({ enabled }) => setReplayView(enabled), { available: () => active && run.execution_mode !== "CANDLESCOPE" }),
+    command("replayView", "Switch between analysis and native incremental replay.", object({ enabled: bool }), ({ enabled }) => setReplayView(enabled), { available: () => active && canReplay }),
   ] }));
   return <>
     {stale && <div className="strategy-notice" data-tone="warning" role="status"><strong>{t("chartTester.result.stale")}</strong> · {t("chartTester.result.staleGuidanceTitle")}</div>}
-    {run.execution_mode !== "CANDLESCOPE" && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t("native.replay.title")}</span>}</div>}
-    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView && replay ? { ...run, result: replay.result } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
-      controls={replayView && run.execution_mode !== "CANDLESCOPE" ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} /> : null}
+    {canReplay && <div className="native-report-view-switch"><button aria-pressed={replayView} onClick={() => setReplayView(!replayView)}>{t(replayView ? "report.analysis" : "report.replay")}</button>{replayView && <span>{t(run.execution_mode === "CANDLESCOPE" ? "report.replay" : "native.replay.title")}</span>}</div>}
+    <NativeResultBody key={`${replayView ? replay?.replay_id ?? "replay" : "analysis"}:${run.run_id}`} run={replayView ? { ...run, result: replay?.result ?? null } : run} onLocate={stale ? undefined : onLocate} view={view} onReviewTrade={stale ? undefined : onReviewTrade} active={active && !stale}
+      controls={replayView && canReplay ? <NativeReplayControls runId={run.run_id} replay={replay} onChange={setReplay} hostAccount={run.execution_mode === "CANDLESCOPE"} /> : null}
       exportUrl={replayView && replay ? nativeExportUrl(run.run_id).replace(`/runs/${run.run_id}/`, `/replays/${replay.replay_id}/`) : nativeExportUrl(run.run_id, run.execution_mode)} /></>
 }
 
@@ -136,6 +138,8 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
   const preferred = ["side", "direction", "entryTime", "entry_time", "entry_time_ms", "entryPrice", "entry_price", "exitTime", "exit_time", "exit_time_ms", "exitPrice", "exit_price", "qty", "quantity", "profit", "net_pnl"];
   const columns = [...preferred.filter((key) => sourceColumns.includes(key)), ...sourceColumns.filter((key) => !preferred.includes(key))];
   const labels: Record<string, string> = {
+    pine_comment: t("native.orderComment"), pine_alert_message: t("native.orderAlertMessage"),
+    pine_alert_enabled: t("native.orderAlertEnabled"), pine_fill_role: t("native.orderFillRole"),
     side: t("chartTester.result.side"), direction: t("chartTester.result.side"), entry_time_ms: t("backtest.openTime"), exit_time_ms: t("backtest.closeTime"),
     entry_price: t("chartTester.result.entry"), exit_price: t("chartTester.result.exit"), net_pnl: t("strategyDock.pnl"),
     entryTime: t("backtest.openTime"), entry_time: t("backtest.openTime"),
@@ -184,6 +188,7 @@ function NativeResultBody({ run, onLocate, exportUrl, view, controls, onReviewTr
       <div title={t("report.factorBasis")}><span>{t("report.factor")}</span><strong>{display(analytics.profitFactor)}</strong><small>{t("report.factorBasis")}</small></div>
     </div>
     <NativePerformanceChart result={result} />
+    {run.execution_mode === "CANDLESCOPE" && <NativeCostSensitivity matrix={result.cost_sensitivity} />}
     <details open={view === "all"}><summary>{t("native.price")}</summary>
     <NativeCurve points={result.bars.map((bar) => ({ time: bar.time, value: bar.close }))} title={t("native.price")} markers={markers} onLocate={onLocate} />
     {graphics.map((graphic, index) => <NativeCurve key={index} {...graphic} />)}

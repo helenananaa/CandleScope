@@ -31,10 +31,11 @@ class LocalBarSnapshotProvider:
     """Read-only adapter from an immutable local BAR revision."""
 
     def __init__(
-        self, service: LocalDatasetService, *, max_rows: int = 200_000
+        self, service: LocalDatasetService, *, max_rows: int = 200_000, pinned_revisions: bool = False
     ) -> None:
         self._service = service
         self._max_rows = int(max_rows)
+        self._pinned_revisions = pinned_revisions
 
     def open(
         self,
@@ -55,6 +56,7 @@ class LocalBarSnapshotProvider:
                 data_epoch=ref.data_epoch,
                 max_rows=self._max_rows,
                 interval=ref.interval,
+                **({"pinned_revision": True} if self._pinned_revisions else {}),
             )
         except LocalDatasetError as exc:
             raise MarketDatasetError(str(exc), code=exc.code) from exc

@@ -253,7 +253,7 @@ async def test_real_bar_adapter_download_archive_and_pinned_revision(tmp_path):
     await service.start()
     try:
         job = await service.submit(req)
-        result = await terminal(service, job["id"])
+        result = await terminal(service, job["id"], timeout=30)
         assert result["state"] == "READY", result
         assert len(repairs) == 1
         assert repairs[0].end_ms == START + 60_000

@@ -125,7 +125,34 @@ export interface BacktestTradeRecord extends Record<string, unknown> {
   exit_explanation?: TradeExplanationV1 | null;
 }
 
+export interface PineRiskStopReport {
+  contract: "candlescope.pine-risk-stops/1";
+  windows: { policy: string; interval?: string; intraday_per_bar?: boolean };
+  blocked: boolean;
+  flatten_requested: boolean;
+  residual_position: string;
+  trips: Array<{
+    callSiteId: number;
+    function: string;
+    time_ms: number;
+    session: number | null;
+    intraday: number | null;
+    permanent: boolean;
+    equity: string;
+    peak: string;
+    intraday_peak: string;
+    netprofit: string;
+    filled_order_count: number;
+    consecutive_loss_days: number;
+    alert_message?: string;
+  }>;
+  actions: Array<{ action: "MARKET_CLOSE_SUBMITTED"; time_ms: number; execution_sequence: number; client_tag: string; qty: string }>;
+  fill_count_convention: string;
+  close_timing: string;
+}
+
 export interface BacktestReport {
+  pine_risk_stops?: PineRiskStopReport;
   schemaVersion: string;
   runId: string;
   fidelity_mode: string;

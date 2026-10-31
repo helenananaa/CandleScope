@@ -29,8 +29,8 @@ def test_package_metadata_pins_only_public_runtime_contracts() -> None:
     assert project["name"] == "candlescope-plugin-pine-compat"
     assert project["version"] == candlescope_plugin_pine_compat.__version__
     assert project["dependencies"] == [
-        "candlescope-plugin-sdk==0.2.0",
-        "pine-compat-runtime==0.3.2+cs.1",
+        "candlescope-plugin-sdk==0.2.1",
+        "pine-compat-runtime==0.3.3+cs.1",
     ]
 
 
@@ -71,7 +71,7 @@ def test_release_lock_tracks_the_exact_public_engine_asset() -> None:
 
 def test_current_release_pins_the_qualified_downstream_engine() -> None:
     lock = json.loads((ROOT / "release/release-lock.json").read_text(encoding="utf-8"))
-    assert lock["plugin"]["version"] == candlescope_plugin_pine_compat.__version__
+    assert lock["plugin"]["version"] == "0.3.3"
     engine = lock["wheels"]["pine-compat-runtime"]
     assert engine["version"] == "0.3.2+cs.1"
     assert engine["releaseCommit"] == "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea"

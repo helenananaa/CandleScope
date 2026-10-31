@@ -1,15 +1,30 @@
+import { workbenchEnglish } from "./workbenchEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
+import { pineEnglish } from "./pineEnglish.js";
 import { externalProviderEnglish } from "./externalProviderEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...workbenchEnglish,
+  "native.inputs.priceTick": "Minimum price increment",
+  "native.inputs.currency": "Quote currency (requires the actual price tick)",
+  "native.inputs.pointValue": "Contract point value",
+  "native.inputs.quantityStep": "Quantity increment (exact decimal)",
+  "native.inputs.minContract": "Minimum quantity",
+  "native.inputs.quantityPrecision": "Quantity decimal places (0-9)",
+  "indicator.pine.currencyRates": "Pine effective currency rates (JSON)",
+  "indicator.pine.currencyRatesHelp": "Supply rates with their actual availability time in Unix milliseconds. Future observations are excluded from earlier queries. Rates are supplied explicitly; no currency market is substituted.",
+  "indicator.pine.quoteCurrency": "Chart quote currency (requires the actual price tick)",
+  "indicator.pine.contexts": "Pine requested markets (JSON)",
+  "indicator.pine.contextsHelp": "Declare the local markets used by dynamic or nested requests. Timeframes use Pine notation (60 = one hour). Specify marketType when needed; missing data must be prepared first.",
   ...intervalBasisMessages["en"],
   "interval.historyOnly": "History only · realtime unavailable",
   "interval.unavailableHelp": "The requested chart has been preserved. Choose another interval, or change the source in the symbol picker.",
 
   ...readonlyAccountEnglish,
+  ...pineEnglish,
   ...externalProviderEnglish,
   "replay.err.futureInput": "The start time plus the forward window includes future bars. Choose an earlier start or shorten the forward window; only closed historical bars are available.",
   "plugin.trust.scriptRuntimeExecution": "The installer creates a separate Python environment and runs the package verification probe. After restart, script code runs as your current user without an OS sandbox. Files, network access and subprocesses are not restricted by the platform plugin permission summary.",
@@ -303,6 +318,7 @@ export const en = {
   "native.external.fillRecalculation": "Evaluate strategy after fills",
   "native.external.fillHint": "Requires calc_on_order_fills: Pine recalculates the current bar;New orders become eligible on the next market event.",
   "native.replay.incremental": "Advance native strategy state within fixed history. Last-bar flags use the full horizon; after a process restart, rebuild from frozen inputs to the checkpoint cursor.",
+  "native.replay.host": "Restore the CandleScope account and pending orders from the checkpoint, then continue through the remaining frozen market events.",
   "native.replay.method": "Rebuild the native account from each historical prefix. Checkpoints retain the frozen input and cursor; realtime execution semantics are not substituted.",
   "native.replay.empty": "No replay report yet. Step forward or play to begin, or return to the full report.",
   "native.replay.start": "Create replay",
@@ -353,6 +369,10 @@ export const en = {
   "native.price": "Historical close",
   "native.trades": "Trades",
   "native.orders": "Orders",
+  "native.orderComment": "Order comment",
+  "native.orderAlertMessage": "Fill alert message",
+  "native.orderAlertEnabled": "Fill alert enabled",
+  "native.orderFillRole": "Fill leg",
   "native.raw": "Complete native report and graphics",
   "replay.portfolio.title": "Portfolio equity",
   "replay.portfolio.load": "Load / refresh portfolio curve",

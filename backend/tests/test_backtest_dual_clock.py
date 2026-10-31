@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from decimal import Decimal
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -90,6 +91,92 @@ def test_boundary_signal_can_fill_on_first_post_boundary_aggregate_trade() -> No
     assert result.fills[0]["reason"] == "NEXT_PRINT"
     assert result.ledger["signal_event_count"] == 1
     assert result.ledger["execution_event_count"] == 3
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_fill_callback_restores_reporter_and_checkpoint_hashes(stream):
+    events = (_trade(1,1000,"10","100"), _trade(2,60000,"10","100"), _trade(3,60000,"11","100"),
+        _trade(4,120000,"12","100"))
+    def run(kernel, rows):
+        def signal(_visible,bar):
+            return [{"side":"BUY","type":"MARKET","qty":"2"}] if bar.sequence == 1 else []
+        def fill(trade,forming):
+            assert forming.event_time_ms == trade.event_time_ms
+            return [{"side":"SELL","type":"MARKET","qty":"2","reduce_only":True}] if kernel.account.position_qty else []
+        return kernel.run(rows,signal,fill_callback=fill)
+    kernel = DualClockSimulationKernel("1m",scale_stream_decisions=stream)
+    def reporter(_):
+        pass
+    kernel.execution.execution_reporter = reporter
+    run(kernel,events[:2])
+    assert kernel.execution.execution_reporter is reporter
+    restored = DualClockSimulationKernel("1m",scale_stream_decisions=stream)
+    restored.restore(kernel.snapshot())
+    resumed = run(restored,events[2:])
+    baseline = run(DualClockSimulationKernel("1m",scale_stream_decisions=stream),events)
+    assert [row["event_time_ms"] for row in resumed.fills] == [60000,60000]
+    assert [row["sequence"] for row in resumed.fills] == [2,3]
+    for field in ("decision_hash","fill_hash","ledger_hash","report_hash"):
+        assert getattr(resumed,field) == getattr(baseline,field)
+
+
+def test_fill_callback_exception_restores_the_prior_reporter():
+    kernel = DualClockSimulationKernel("1m")
+    def reporter(_):
+        pass
+    kernel.execution.execution_reporter = reporter
+    def fail(*_):
+        raise RuntimeError("controlled callback failure")
+    with pytest.raises(RuntimeError,match="controlled callback failure"):
+        kernel.run((_trade(1,1000,"10"),_trade(2,60000,"10")),
+            lambda *_: [{"side":"BUY","type":"MARKET","qty":"1"}],fill_callback=fail)
+    assert kernel.execution.execution_reporter is reporter
+
+
+def test_contract_boundary_closes_before_future_mark_and_funding_and_restores():
+    from tests.test_backtest_account_v2_m4 import rules, event
+    tape = (replace(rules(-2),sequence=1), replace(event("MARK_INDEX",-1,mark_price="100"),sequence=2),
+        replace(_trade(1,1000,"100","100"),sequence=3), replace(_trade(2,60000,"100","100"),sequence=4),
+        replace(event("MARK_INDEX",120000,mark_price="200"),sequence=5),
+        replace(event("FUNDING",120000,funding_rate=".01",period_id="p1"),sequence=6),
+        replace(_trade(3,120000,"100","100"),sequence=7), replace(_trade(4,180000,"100","100"),sequence=8))
+    def make():
+        return DualClockSimulationKernel("1m",account_model="LINEAR_PERP_ONE_WAY_V2",funding_mode="HISTORICAL_REQUIRED")
+    seen = []
+    def strategy(kernel):
+        def decide(_,bar):
+            seen.append((bar.event_time_ms,str(kernel.account.mark),str(kernel.account.cumulative_funding)))
+            if bar.sequence == 1:
+                return [{"side":"BUY","type":"MARKET","qty":"1"}]
+            if bar.sequence == 2:
+                return [{"side":"SELL","type":"MARKET","qty":"1","reduce_only":True}]
+            return []
+        return decide
+    kernel = make()
+    baseline = kernel.run(tape,strategy(kernel))
+    assert seen == [(59999,"100","0"),(119999,"100","0"),(179999,"200","-2.00")]
+    assert len(baseline.fills) == 2
+    paused = make()
+    paused.run(tape[:5],strategy(paused))
+    assert paused.snapshot()["bar_builder"]["confirmed"] is True
+    restored = make()
+    restored.restore(paused.snapshot())
+    resumed = restored.run(tape[5:],strategy(restored))
+    for field in ("decision_hash","fill_hash","ledger_hash","report_hash"):
+        assert getattr(resumed,field) == getattr(baseline,field)
+
+
+def test_confirmed_builder_keeps_gap_and_late_print_guards_after_restore():
+    from app.simulation.trade_bar_builder import TradeBarBuilder
+    builder = TradeBarBuilder("1m")
+    builder.push(_trade(1,1000,"10"))
+    assert builder.close_before(60000)[0].event_time_ms == 59999
+    restored = TradeBarBuilder("1m")
+    restored.restore(builder.snapshot())
+    with pytest.raises(MarketDatasetError,match="DATA_GAP_REJECTED"):
+        restored.push(_trade(2,59999,"10"))
+    with pytest.raises(MarketDatasetError,match="DATA_GAP_REJECTED"):
+        restored.push(_trade(3,120000,"10"))
 
 
 @pytest.mark.parametrize("scale_stream_decisions", [False, True])

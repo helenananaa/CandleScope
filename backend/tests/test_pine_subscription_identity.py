@@ -16,3 +16,13 @@ def test_pine_session_identity_is_subscription_local_and_excludes_http_ranges():
     assert "pineSessionId" not in _script_runtime_request(
         {**first, "language": "community-lang"}, [], transport="websocket.snapshot"
     ).options
+
+
+def test_pine_owner_survives_reconnect_and_keeps_restart_epoch_separate():
+    meta = dict(language="pine", script="plot(close)", exchange="binance", market_type="spot",
+                symbol="BTCUSDT", interval="1m", pineSessionOwner="workspace/window/cell/indicator")
+    first = _script_runtime_request(dict(meta), [], transport="websocket.snapshot")
+    resumed = _script_runtime_request({**meta, "params": {"__pineSessionEpoch": "restart"}}, [], transport="websocket.snapshot")
+    other = _script_runtime_request({**meta, "pineSessionOwner": "other"}, [], transport="websocket.snapshot")
+    assert first.options["pineSessionId"] == resumed.options["pineSessionId"] != other.options["pineSessionId"]
+    assert resumed.options["pineSessionEpoch"] == "restart"

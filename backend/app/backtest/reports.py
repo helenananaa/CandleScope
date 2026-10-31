@@ -42,6 +42,8 @@ LABELS = {
     "AGG_TRADE_TAPE": "AGGREGATED_TRADE_SEQUENCE",
     "AGG_TRADE_EXECUTION": "AGGREGATED_TRADE_SEQUENCE",
     "BOOK_ASSISTED": "BOOK_ASSISTED",
+    "BOOK_DEPTH": "BOOK_DEPTH",
+    "BOOK_SAMPLED": "BOOK_SAMPLED",
     "QUEUE_EXACT": "ORDER_LEVEL_REQUIRED",
 }
 
@@ -57,11 +59,18 @@ def build_report(
     except (TypeError, ValueError, json.JSONDecodeError):
         config = {}
     explanation_enabled = bool(payload.get("trade_explanation_enabled"))
+    pine_orders = payload.get("pine_orders")
     # Enrichment already creates detached nested trees for every returned row.
     def copy_row(item):
         return dict(item) if explanation_enabled else copy.deepcopy(dict(item))
     fills = [copy_row(item) for item in payload.get("fills") or []]
+    if pine_orders is not None:
+        from .pine_order_metadata import enrich_fills
+        fills = enrich_fills(fills, pine_orders.get("fill_allocations", []))
     orders = [copy_row(item) for item in payload.get("orders") or []]
+    if pine_orders is not None:
+        from .pine_order_metadata import enrich_orders
+        orders = enrich_orders(orders, pine_orders.get("order_annotations", {}))
     rejected_orders = [
         copy_row(item) for item in payload.get("rejected") or []
     ]
@@ -224,6 +233,37 @@ def build_report(
             item.get("reason") == "ORDER_REJECTED_RISK" or str(item.get("reason", "")).startswith("SPOT_INSUFFICIENT_")
             for item in payload.get("rejected") or []
         )
+    if pine_orders is not None:
+        report["pine_orders"] = copy.deepcopy(pine_orders)
+    if payload.get("pine_risk_stops") is not None:
+        report["pine_risk_stops"] = copy.deepcopy(payload["pine_risk_stops"])
+    if config.get("pine_bar_path_contract"):
+        report["identity"]["pine_bar_path_contract"] = config["pine_bar_path_contract"]
+        report["cost_sensitivity"] = copy.deepcopy(payload.get("cost_sensitivity") or {})
+        report["report_label"] += "_WITH_SYNTHETIC_OHLC_PATH"
+        report["unmodeled"].append("physical intrabar tape and actual intrabar timestamps")
+        report["suitable_for"] = ["historical OHLC path signals", "historical fill recalculation"]
+        if config.get("pine_v2_bar_contract"):
+            report["identity"]["pine_v2_bar_contract"] = config["pine_v2_bar_contract"]
+    if config.get("pine_process_on_close"):
+        from app.simulation.closing_tick import CONTRACT, REASON
+        closing = {
+            "contract": CONTRACT,
+            "synthetic": True,
+            "price": "REVEALED_BAR_CLOSE",
+            "liquidity": "UNUSED_BAR_PARTICIPATION" if config.get("execution_model_revision") else "UNCAPPED",
+            "fill_count": sum(item.get("reason") == REASON for item in fills),
+            "close_auction_is_historical_fact": False,
+        }
+        if fidelity in {'BOOK_ASSISTED','BOOK_DEPTH','BOOK_SAMPLED'}:
+            closing.update(price='VISIBLE_BOOK_AT_SIMULATED_CLOSE',liquidity='REMAINING_DECLARED_BOOK_CAPACITY')
+        report["report_label"] += "_WITH_SIMULATED_CLOSE"
+        report["identity"]["closing_tick_contract"] = CONTRACT
+        report["fill_model"] = {**report["fill_model"], "closing_tick": closing}
+        report["unmodeled"].append("close auction liquidity")
+        report["suitable_for"] = ["completed-bar signals", "simulated closing-tick execution"]
+        if config.get("pine_bar_path_contract"):
+            report["suitable_for"] = ["historical OHLC path signals", "historical fill recalculation", "simulated closing-tick execution"]
     if config.get("execution_model_revision"):
         report["order_events"] = list(
             (payload.get("ledger") or {}).get("order_events") or []
@@ -247,6 +287,7 @@ def build_report(
             "ohlc_path_is_historical_fact": False,
             "agg_trade_is_raw_trade": False,
             "queue_exact": False,
+            **({"closing_tick": closing} if config.get("pine_process_on_close") else {}),
         }
         if fidelity == "BAR_APPROX":
             report["unmodeled"] = [
@@ -255,11 +296,18 @@ def build_report(
         traced = sum(bool(item.get("source_event_hash")) for item in fills)
         report["fill_trace"] = {
             "fill_count": len(fills),
-            "authoritative_event_trace_count": traced,
+            "authoritative_event_trace_count": sum(bool(item.get("source_event_hash")) and item.get("source_event_kind") != "SCRIPT_BAR_CLOSE" for item in fills),
+            **({"simulated_event_trace_count": sum(item.get("source_event_kind") == "SCRIPT_BAR_CLOSE" for item in fills)}
+               if config.get("pine_process_on_close") else {}),
             "complete": traced == len(fills),
         }
     strategy_metadata = payload.get("strategy_metadata")
-    if fidelity == "AGG_TRADE_EXECUTION":
+    from .chart_book import DUAL_MODES,BOOK_MODES
+    if fidelity in BOOK_MODES:
+        report['unmodeled']=['exchange queue priority','hidden liquidity','unobserved book modifications']
+        report['suitable_for']=['completed-bar and observed-print signals','conservative physical book execution']
+        report['cost_sensitivity']=copy.deepcopy(payload.get('cost_sensitivity') or {})
+    if fidelity in DUAL_MODES:
         report["identity"].update(
             {
                 "signal_clock": config.get("signal_clock"),
@@ -377,7 +425,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
     if not traced:
         lines = [
             "order_id,sequence,event_time_ms,side,action,position_before,"
-            "position_after,price,qty,fee,reason"
+            "position_after,price,qty,fee,reason,contract_multiplier"
         ]
         for fill in fills:
             lines.append(
@@ -394,6 +442,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
                         str(fill.get("qty") or ""),
                         str(fill.get("fee") or "0"),
                         str(fill.get("reason") or ""),
+                        str(fill.get("contract_multiplier", "1")),
                     ]
                 )
             )
@@ -401,7 +450,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
     lines = [
         "order_id,sequence,event_time_ms,side,action,position_before,"
         "position_after,price,qty,fee,reason,source_event_kind,source_sequence,"
-        "source_event_time_ms,source_event_hash"
+        "source_event_time_ms,source_event_hash,contract_multiplier"
     ]
     for fill in fills:
         lines.append(
@@ -422,6 +471,7 @@ def _fills_csv(fills: list[Mapping[str, Any]]) -> str:
                     str(fill.get("source_sequence") or ""),
                     str(fill.get("source_event_time_ms") or ""),
                     str(fill.get("source_event_hash") or ""),
+                    str(fill.get("contract_multiplier", "1")),
                 ]
             )
         )
@@ -437,7 +487,6 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
         fills,
         key=lambda item: (
             int(item.get("sequence") or 0),
-            str(item.get("order_id") or ""),
         ),
     )
     for fill in ordered:
@@ -447,6 +496,9 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
         sign = Decimal("1") if side == "BUY" else Decimal("-1")
         qty = Decimal(str(fill.get("qty") or "0"))
         price = Decimal(str(fill.get("price") or "0"))
+        multiplier = Decimal(str(fill.get("contract_multiplier", "1")))
+        if not multiplier.is_finite() or multiplier <= 0:
+            raise ValueError("invalid fill contract multiplier")
         fee = abs(Decimal(str(fill.get("fee") or "0")))
         if qty <= 0 or price <= 0:
             continue
@@ -461,6 +513,7 @@ def build_round_trip_trades(fills: list[Mapping[str, Any]]) -> list[dict[str, An
                 (price - Decimal(str(lot["price"])))
                 * closed
                 * Decimal(str(lot["sign"]))
+                * multiplier
             )
             total_fee = entry_fee + exit_fee
             trade_id = f"trade-{len(trades) + 1}"

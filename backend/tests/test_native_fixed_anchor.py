@@ -150,9 +150,12 @@ plot(request.security(syminfo.tickerid, "14", time), "Requested time")
             wire = json.loads(runtime.native.db.execute("SELECT wire FROM native_inputs WHERE id=?", (run_id,)).fetchone()[0])
             assert wire["interval"] == parse_interval_spec(selected_interval).canonical
             assert wire["bars"] == expected_bars(selected_interval, config["start_time_ms"], config["end_time_ms"] + 1)
-            own = next(c for c in wire["contexts"] if c["timeframe"] == "7")
+            # Compiler-discovered inputs reuse the primary frozen chart for a
+            # self request instead of adding a second copy to the contexts.
+            assert wire["context"]["timeframe"] == "7"
+            assert not any(c["symbol"] == wire["context"]["symbol"] and c["timeframe"] == "7"
+                           for c in wire["contexts"])
             higher = next(c for c in wire["contexts"] if c["timeframe"] == "14")
-            assert own["interval"] == wire["interval"]
             assert higher["interval"] == parse_interval_spec(body["contexts"][0]["interval"]).canonical
             result = run["result"]
             assert len(result["orders"]) == 42 and len(result["trades"]) == 21
