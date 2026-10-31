@@ -139,7 +139,8 @@ def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spo
 
     async def run():
         desc, message = okx_message(spot=spot)
-        await prepare_source_messages([message], desc, watermark=kline_sources.rest_watermark())
+        await prepare_source_messages([message], desc, watermark=kline_sources.rest_watermark(),
+                                      history_projection=True)
         message.source = DataSource.HTTP_BACKFILL
         event = NormalizeLayer(IngestionConfig(), desc).parse_raw(message)
         assert event is not None and event.data["is_closed"]
@@ -158,7 +159,7 @@ def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spo
         assert rows[0]["volume"] == (100 if spot else 1)
         assert rows[0]["quote_volume"] == 101
         assert all(rows[0][name] is None for name in ("trades", "taker_buy_base", "taker_buy_quote"))
-        assert not kline_sources.pending(desc)
+        assert not kline_sources.pending(desc, include_history=True)
         replayed = []
         replay = NormalizeLayer(IngestionConfig(ccxt_fork_kline_enabled=True), desc)
         async def receive(event):
@@ -167,6 +168,28 @@ def test_okx_closed_history_with_unknown_fields_reaches_reconciler(database, spo
         await replay.replay_source_pending()
         assert replayed == []
 
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("spot", [False, True])
+def test_interrupted_history_page_is_durable_but_not_replayed_as_live(database, spot):
+    async def run():
+        desc, message = okx_message(spot=spot)
+        await prepare_source_messages([message], desc, watermark=kline_sources.rest_watermark(),
+                                      history_projection=True)
+        # Simulate cancellation/crash before the reconciler writes canonical rows.
+        assert len(kline_sources.pending(desc, include_history=True)) == 1
+        assert kline_sources.latest(desc, int(ROW[0]))["delivered_revision"] == 0
+        replay = NormalizeLayer(IngestionConfig(ccxt_fork_kline_enabled=True), desc)
+        async def unexpected(event):
+            pytest.fail("uncommitted history must not become a live close")
+        replay.on_event(unexpected)
+        await replay.replay_source_pending()
+        assert not kline_sources.pending(desc)
+        # Reconciliation REST remains market-owned and recoverable by replay.
+        _, correction = okx_message(spot=spot)
+        await prepare_source_messages([correction], desc, watermark=kline_sources.rest_watermark())
+        assert len(kline_sources.pending(desc)) == 1
     asyncio.run(run())
 
 

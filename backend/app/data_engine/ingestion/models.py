@@ -345,6 +345,9 @@ class TransportRequest:
     # holding their own worker slot.  They opt into an immediate typed defer
     # and return the work to their delayed queue instead.
     defer_on_rate_limit: bool = False
+    # Backfill owns projection/completion; startup market replay must not emit
+    # partially fetched historical pages as a sequence of live closes.
+    history_projection: bool = False
 
     # Convenience properties for backward compat
     @property
