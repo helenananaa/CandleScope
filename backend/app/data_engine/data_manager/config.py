@@ -99,6 +99,9 @@ class QueryConfig:
     max_limit: int = 10_000
     sync_backfill_timeout_seconds: float = 0
     auto_backfill: bool = True
+    # Fixed-width multi-page reads reduce each page before pulling the next.
+    # False retains the bounded batch implementation for comparison/rollback.
+    stream_custom_history: bool = True
 
 
 @dataclass
@@ -196,9 +199,19 @@ class DataManagerConfig:
     event_bus: EventBusConfig = field(default_factory=EventBusConfig)
     coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
 
+    memory_budget_bytes: int = 256 * 1024 * 1024
+    memory_owner_budgets: dict[str, int] = field(default_factory=lambda: {
+        "bar-cache": 128 * 1024 * 1024, "realtime-state": 128 * 1024 * 1024,
+        "event-delivery": 32 * 1024 * 1024, "history-query": 64 * 1024 * 1024,
+        "history-backfill": 64 * 1024 * 1024,
+        "durable-delivery": 16 * 1024 * 1024,
+    })
+
     def snapshot(self) -> dict:
         """JSON-serializable representation of all settings."""
         return {
+            "memory_budget_bytes": self.memory_budget_bytes,
+            "memory_owner_budgets": dict(self.memory_owner_budgets),
             "cache": {
                 "max_bars_per_series": self.cache.max_bars_per_series,
                 "max_series": self.cache.max_series,
@@ -214,6 +227,7 @@ class DataManagerConfig:
                 "max_limit": self.query.max_limit,
                 "sync_backfill_timeout_seconds": self.query.sync_backfill_timeout_seconds,
                 "auto_backfill": self.query.auto_backfill,
+                "stream_custom_history": self.query.stream_custom_history,
             },
             "event_bus": {
                 "subscriber_queue_size": self.event_bus.subscriber_queue_size,

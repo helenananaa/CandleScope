@@ -110,6 +110,8 @@ def test_missing_component_stays_provisional_until_backfill_repairs_it(monkeypat
         repair = replace(event(2), source=DataSource.HTTP_BACKFILL)
         await agg.on_market_event(repair)
         await agg.on_market_event(repair)
+        assert state.volume == 6  # Published snapshots remain detached.
+        state = next(b for b in agg.get_recent_bars("BTC-USDT", target, exchange="okx") if b.bucket_start_ms == A)
         assert state.volume == 7
         assert state.finality is BarFinality.AUTHORITATIVE
     asyncio.run(run())
@@ -144,6 +146,8 @@ def test_sqlite_queries_restart_and_warm_start_keep_anchor(monkeypatch, tmp_path
         assert state.volume == 5  # 4 closed minutes plus the current snapshot
         for i in range(4, 7):
             await agg.on_market_event(event(i))
+        assert state.volume == 5
+        state = next(b for b in agg.get_recent_bars("BTC-USDT", target, exchange="okx") if b.bucket_start_ms == A)
         assert state.volume == 7
     asyncio.run(warm())
 

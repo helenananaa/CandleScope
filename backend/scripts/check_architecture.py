@@ -7,6 +7,7 @@ either, including through relative imports, package initializers or re-exports.
 from __future__ import annotations
 
 import ast
+import re
 from collections import deque
 from dataclasses import dataclass
 from importlib.util import resolve_name
@@ -151,7 +152,28 @@ def violations(app_root: Path) -> list[str]:
             if path:
                 errors.append(" -> ".join(path) + ": shared business owner depends on HTTP")
     errors.extend(training_violations(app_root, graph))
+    errors.extend(kline_writer_violations(app_root))
     return sorted(set(errors))
+
+
+def kline_writer_violations(app_root: Path) -> list[str]:
+    """Inventory literal K-line SQL writers; runtime revision tests are separate.
+
+    This catches ordinary SQL and f-string literal fragments, not arbitrary
+    generated SQL. New owners require a writer/transaction contract review.
+    """
+    owners = {"data_engine/storage/klines_repo.py", "data_engine/storage/revisions.py",
+              "data_engine/storage/kline_repair.py"}
+    mutation = re.compile(r"\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+[\"`\[]?klines\b", re.I)
+    errors = []
+    for path in sorted(app_root.rglob("*.py")):
+        relative = path.relative_to(app_root).as_posix()
+        if relative in owners:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and mutation.search(node.value):
+                errors.append(f"{relative}:{node.lineno}: K-line SQL mutation must use the storage revision owner")
+    return errors
 
 
 def training_violations(app_root: Path, graph: dict[str, list[Dependency]]) -> list[str]:

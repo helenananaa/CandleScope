@@ -1,0 +1,354 @@
+{
+  "date": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "scope": "BTC USDT perpetual contracts on Binance futures, OKX futures (BTC-USDT-SWAP), Bybit swap.linear; public real WS/REST backend paths",
+  "verdict": "PASS_WITH_DECLARED_CAPABILITY_LIMITS",
+  "market_runs": [
+    {
+      "run": "markets-5",
+      "verdict": "PASS",
+      "checks": {
+        "run_and_shutdown_completed_without_error": true,
+        "actual_socket_clients_closed": true,
+        "binance.book_reports_gap_and_restore": true,
+        "binance.strict_book_no_stale_or_errors": true,
+        "binance.short_timeout_does_not_stop_other_consumers": true,
+        "binance.strict_holds_during_invalid_state": true,
+        "okx.book_reports_gap_and_restore": true,
+        "okx.strict_book_no_stale_or_errors": true,
+        "okx.short_timeout_does_not_stop_other_consumers": true,
+        "okx.strict_holds_during_invalid_state": true,
+        "okx.observational_trade_break_visible": true,
+        "okx.observational_trade_resumed": true,
+        "okx.strict_trade_explicitly_rejected": true,
+        "bybit.book_reports_gap_and_restore": true,
+        "bybit.strict_book_no_stale_or_errors": true,
+        "bybit.short_timeout_does_not_stop_other_consumers": true,
+        "bybit.strict_holds_during_invalid_state": true,
+        "bybit.observational_trade_break_visible": true,
+        "bybit.observational_trade_resumed": true,
+        "bybit.strict_trade_explicitly_rejected": true,
+        "binance.strict_trade_ids_contiguous": true,
+        "binance.live_delivered_while_strict_awaited_repair": true,
+        "binance.short_trade_timeout_preserves_shared_repair": true,
+        "binance_rest_strict_replay_and_live_corrections_match": true
+      },
+      "details": {
+        "binance": {
+          "book_restore_seconds_after_reconnect_release": 3.194,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15,
+          "repaired_aggregate_trades": 69
+        },
+        "okx": {
+          "book_restore_seconds_after_reconnect_release": 1.584,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15
+        },
+        "bybit": {
+          "book_restore_seconds_after_reconnect_release": 2.213,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15
+        }
+      },
+      "actual_fault": {
+        "started": 1793253981.185604,
+        "before": {
+          "binance.trade.live": 93,
+          "binance.trade.strict": 93,
+          "binance.book.live": 64,
+          "binance.book.strict": 60,
+          "okx.trade.live": 80,
+          "okx.book.live": 92,
+          "okx.book.strict": 92,
+          "bybit.trade.live": 62,
+          "bybit.book.live": 232,
+          "bybit.book.strict": 232,
+          "binance.book.short_strict": 9,
+          "binance.trade.short_strict": 21,
+          "okx.book.short_strict": 8,
+          "bybit.book.short_strict": 26
+        },
+        "closed_clients": {
+          "binance|futures|system|": 2,
+          "ccxt-unified|okx|swap.linear|system|": 1,
+          "ccxt-unified|bybit|swap.linear|system|": 1
+        },
+        "reconnect_released": 1793253986.2569962,
+        "finished": 1793254005.26072
+      },
+      "note": "Restoration times include injected scheduling gates; not normal-network latency benchmarks."
+    },
+    {
+      "run": "socket-abort-1",
+      "verdict": "PASS",
+      "checks": {
+        "run_and_shutdown_completed_without_error": true,
+        "actual_socket_clients_closed": true,
+        "binance.book_reports_gap_and_restore": true,
+        "binance.strict_book_no_stale_or_errors": true,
+        "binance.short_timeout_does_not_stop_other_consumers": true,
+        "binance.strict_holds_during_invalid_state": true,
+        "okx.book_reports_gap_and_restore": true,
+        "okx.strict_book_no_stale_or_errors": true,
+        "okx.short_timeout_does_not_stop_other_consumers": true,
+        "okx.strict_holds_during_invalid_state": true,
+        "okx.observational_trade_break_visible": true,
+        "okx.observational_trade_resumed": true,
+        "okx.strict_trade_explicitly_rejected": true,
+        "bybit.book_reports_gap_and_restore": true,
+        "bybit.strict_book_no_stale_or_errors": true,
+        "bybit.short_timeout_does_not_stop_other_consumers": true,
+        "bybit.strict_holds_during_invalid_state": true,
+        "bybit.observational_trade_break_visible": true,
+        "bybit.observational_trade_resumed": true,
+        "bybit.strict_trade_explicitly_rejected": true,
+        "binance.strict_trade_ids_contiguous": true,
+        "binance.live_delivered_while_strict_awaited_repair": true,
+        "binance.short_trade_timeout_preserves_shared_repair": true,
+        "binance_rest_strict_replay_and_live_corrections_match": true
+      },
+      "details": {
+        "binance": {
+          "book_restore_seconds_after_reconnect_release": 7.476,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15,
+          "repaired_aggregate_trades": 28
+        },
+        "okx": {
+          "book_restore_seconds_after_reconnect_release": 2.593,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15
+        },
+        "bybit": {
+          "book_restore_seconds_after_reconnect_release": 2.188,
+          "short_timeout_seconds": 0.75,
+          "patient_timeout_seconds": 15
+        }
+      },
+      "actual_fault": {
+        "started": 1793254279.019383,
+        "before": {
+          "binance.trade.live": 55,
+          "binance.trade.strict": 55,
+          "binance.book.live": 72,
+          "binance.book.strict": 68,
+          "okx.trade.live": 13,
+          "okx.book.live": 59,
+          "okx.book.strict": 59,
+          "bybit.trade.live": 169,
+          "bybit.book.live": 138,
+          "bybit.book.strict": 138,
+          "binance.book.short_strict": 11,
+          "binance.trade.short_strict": 2,
+          "okx.book.short_strict": 8,
+          "bybit.book.short_strict": 18
+        },
+        "aborted_socket_transports": 4,
+        "reconnect_released": 1793254283.0220952,
+        "finished": 1793254302.023648
+      },
+      "note": "Restoration times include injected scheduling gates; not normal-network latency benchmarks."
+    }
+  ],
+  "kline_run": {
+    "run": "klines-3",
+    "verdict": "PASS",
+    "checks": {
+      "run_and_shutdown_completed_without_error": true,
+      "binance.strict_final_bar_sequence_contiguous": true,
+      "binance.both_interrupted_preview_and_missing_candle_repaired": true,
+      "binance.live_controls_and_corrections": true,
+      "binance.live_updates_while_strict_waits": true,
+      "binance.short_timeout_is_independent": true,
+      "binance.independent_rest_ohlcv_parity": true,
+      "okx.strict_final_bar_sequence_contiguous": true,
+      "okx.both_interrupted_preview_and_missing_candle_repaired": true,
+      "okx.live_controls_and_corrections": true,
+      "okx.live_updates_while_strict_waits": true,
+      "okx.short_timeout_is_independent": true,
+      "okx.independent_rest_ohlcv_parity": true,
+      "bybit.strict_final_bar_sequence_contiguous": true,
+      "bybit.both_interrupted_preview_and_missing_candle_repaired": true,
+      "bybit.live_controls_and_corrections": true,
+      "bybit.live_updates_while_strict_waits": true,
+      "bybit.short_timeout_is_independent": true,
+      "bybit.independent_rest_ohlcv_parity": true
+    },
+    "details": {
+      "binance": {
+        "closed_times": [
+          1793254020,
+          1793254080,
+          1793254140
+        ],
+        "replayed_bars": 2,
+        "live_updates_during_repair": 8,
+        "short_timeout_seconds": 0.75,
+        "patient_timeout_seconds": 20
+      },
+      "okx": {
+        "closed_times": [
+          1793254020,
+          1793254080,
+          1793254140
+        ],
+        "replayed_bars": 2,
+        "live_updates_during_repair": 6,
+        "short_timeout_seconds": 0.75,
+        "patient_timeout_seconds": 20
+      },
+      "bybit": {
+        "closed_times": [
+          1793254020,
+          1793254080,
+          1793254140
+        ],
+        "replayed_bars": 2,
+        "live_updates_during_repair": 4,
+        "short_timeout_seconds": 0.75,
+        "patient_timeout_seconds": 20
+      }
+    },
+    "fault": {
+      "started": 1793254082.507395,
+      "resume_target": 1793254203,
+      "source_before": {
+        "binance": {
+          "count": 54,
+          "closed": 1,
+          "last_open": 1793254080000,
+          "last_at": 1793254082.022526
+        },
+        "okx": {
+          "count": 36,
+          "closed": 1,
+          "last_open": 1793254080000,
+          "last_at": 1793254081.874309
+        },
+        "bybit": {
+          "count": 19,
+          "closed": 1,
+          "last_open": 1793254080000,
+          "last_at": 1793254081.133697
+        }
+      },
+      "closed_clients": {
+        "okx|futures|system||descriptor-shard|0": 1,
+        "binance|futures|system|": 1,
+        "ccxt-unified|bybit|swap.linear|system|": 1
+      },
+      "reconnect_released": 1793254203.009669
+    }
+  },
+  "regressions": {
+    "runs": [
+      {
+        "name": "fix-regression-2",
+        "counts": {
+          "passed": 172,
+          "failed": 1
+        }
+      },
+      {
+        "name": "recheck",
+        "counts": {
+          "passed": 2
+        }
+      }
+    ],
+    "latest_result_per_test": {
+      "passed": 173
+    },
+    "meaning": "Latest result for each test across two runs; not one final all-suite invocation."
+  },
+  "fixes": [
+    {
+      "issue": "OKX retirement notice triggered reconnect loops on port 8443",
+      "fix": "Move raw and unified CCXT WS defaults to 443; preserve watches for notice 64010 and pass through pong and real errors",
+      "official_source": "https://www.okx.com/docs-v5/log_en/",
+      "evidence": "markets-1, markets-2, markets-3"
+    },
+    {
+      "issue": "Shared runtime resets could leave some cached-watch consumers unaware of the source break",
+      "fix": "Observe unified physical lifecycle; notify every runtime subscriber before reset; fence obsolete watch results and buffered source state",
+      "evidence": "markets-4 versus markets-5 and socket-abort-1"
+    },
+    {
+      "issue": "Interrupted forming Kline was excluded from repair; unified projector could falsely finalize its cached preview",
+      "fix": "Include missed final updates in the L5 gap and clear forming-candle projection on interruption",
+      "evidence": "klines-2 sequence audit versus klines-3 six-candle REST parity"
+    }
+  ],
+  "boundaries": [
+    "Public market data only; no account credentials or orders.",
+    "Two final trade/book drills (runtime recycle and direct socket abort), one final long Kline outage; not an hours-long soak or every symbol/market.",
+    "OKX and Bybit ordinary trades are observational: strict is rejected and outage events are explicitly unrecoverable. Their current book integration supplies valid replaceable snapshots, not every historical depth change.",
+    "Patient wait budgets were 15s for trade/books and 20s for Kline; short consumers used 0.75s. These runs do not establish that every repair fits the default 10s.",
+    "A 4s reconnect gate and 3s REST gate were injected in market drills; long Kline outage crossed a complete minute, with a 3s repair scheduling gate. All market prices, IDs, timestamps, payloads and repair responses came from exchanges.",
+    "No browser/native UI, packaging, commit, PR, merge, or deployment."
+  ],
+  "environment_repair": "Installed bundled pip via ensurepip only into this worktree .venv to enable the existing isolated plugin sidecar test.",
+  "prior_failed_candidates_preserved": [
+    "markets-1",
+    "markets-2",
+    "markets-3",
+    "markets-4",
+    "klines-1",
+    "klines-2",
+    "fix-regression",
+    "fix-regression-2"
+  ],
+  "source_sha256": {
+    "backend/app/alerts/runtime.py": "2ad30d5bda5ab004c40c23cce0bc781fcdfad292af594ecdbf11ca9539576fc3",
+    "backend/app/data_engine/continuity_policy.py": "e46685bf7ed45bfb0216fd93ef2443508fe3ce3844acc0320427d0741ad25f49",
+    "backend/app/data_engine/data_manager/README.md": "d6af4928a7483c4edcc0e2d3c8a99ceb3eb8ed6cc688190e44f34b6da6e28a63",
+    "backend/app/data_engine/data_manager/README_zh.md": "277d8b5d0cb579aa73cf736e08dd1f1c56d1f65d5bb92fe5ab97ce0495ddefc8",
+    "backend/app/data_engine/data_manager/__init__.py": "b8c299d0903091b534283dc5176ebb5bb05bc45dfc165f5fc1a4fc359c2b9eef",
+    "backend/app/data_engine/data_manager/backfill_coordinator.py": "6fed8b3ff7aa3e55404cc67099cded2022e9ee5cd4f12f0880ef3888b69f3a9e",
+    "backend/app/data_engine/data_manager/continuity.py": "5409de3c74b834daa8a5066287ec0cd4e7c2e4409bf84d2feea740ec4d56ff0f",
+    "backend/app/data_engine/data_manager/coordinator.py": "34d1c4f8d35b0f01e42081b12f5f2e41f500ce39ee9d10ea370bff2a8120de48",
+    "backend/app/data_engine/data_manager/event_bus.py": "69ad180a2d94731f143a2614fa79bc85d01faf5396b1f8ec79e22ef30e75b824",
+    "backend/app/data_engine/data_manager/facades.py": "f03fe5b646772f0fb0fefe5bba479b19140086694662df0e6f56f22c13d78e26",
+    "backend/app/data_engine/data_manager/manager.py": "51822a6a99acf1e03c8ebe1a5bcad9676466420c156f15509fa6817f34237c5d",
+    "backend/app/data_engine/data_manager/models.py": "eb354e38a0ed5e3d3c412a36190839db7272af71bcc33238f7f43e3001ede1a3",
+    "backend/app/data_engine/ingestion/__init__.py": "913e3294e2a73bb39aebe349f50bd5345a67932fd9f458fb13cb8d6b92f96993",
+    "backend/app/data_engine/ingestion/continuity.py": "23b48fe225a48268620527849d81f6c745d568c580a1b4a07a5f1f4c5fc1580a",
+    "backend/app/data_engine/ingestion/factory.py": "1734b22a2bef0af396c9eb3e3409f7d44f6da28a88ba92c848227a881b91b0fd",
+    "backend/app/data_engine/ingestion/models.py": "6d0240c8f89ce5c5353533b8d47dce09dabd2d96b8935f817911b694798e2869",
+    "backend/app/data_engine/ingestion/recovery.py": "9bb1b0762bc1b40834053a646a6fa16717de753611ed0f7a71c9c9d464eb2804",
+    "backend/app/data_engine/interval_resolution.py": "140f841357bcd0fc2698ed7d6bfcb2de3e5d198475fd858261133c5799751b48",
+    "backend/app/data_engine/market_data/append_hub.py": "90c69fbb5b5ef30d51d1c3e23a9fdcd2903ed5394bc02c36826d9d2115498ce1",
+    "backend/app/data_engine/market_data/continuity.py": "ee94fefcb65187c198435f39a81245f47816dac0c2d1b6602d779c6e51e5d48e",
+    "backend/app/data_engine/market_data/continuity_contract.py": "032f24e0a275f77658140e6d202492e3c1d88c002c3ddb7c27cca6fe9a6b63ef",
+    "backend/app/data_engine/market_data/full_order_book_service.py": "f458ae183ca5a8e0175d482fe5a3d42404e5e3db8fd5b2a39b4777f329421c74",
+    "backend/app/data_engine/market_data/hub.py": "067d6ff4f36c79557784d48018504f3f2547b3f9ac67ef4d260537e12f0af507",
+    "backend/app/data_engine/market_data/liquidation_service.py": "24cec3c4f330b7b6be5d046be21fbca98fb527ceda073f75feb8aa20d8e0a711",
+    "backend/app/data_engine/market_data/order_book_service.py": "1cc2fd8a2debb328c1f251829f85eff7ef0dcc886387cb3d7e917bbc3f6850a5",
+    "backend/app/data_engine/market_data/ports.py": "fe481a94a6a9bc319eb95e544ef85049ddd36e64321efea47f3476ac0dfbd867",
+    "backend/app/data_engine/market_data/service.py": "6d3490f9d199aa7445a5bb19b5949dd9123a4ffbce37203bf3d0ab176af9d029",
+    "backend/app/data_engine/market_data/trade_continuity.py": "e985a3db91b35307ee329557177747f08398ada5fa6863002b8d919633e2fcb0",
+    "backend/app/data_engine/market_data/trade_flow_service.py": "f7de5af4030b3fd8fea6c330c08307443fe601e52f7755d2d8c28c95b2a0c174",
+    "backend/app/data_engine/market_data/trade_tape_service.py": "12cf348f80f387e37419898e28fd38ef6cc8b7f1e2b16ee0bf0c6f59f0bb2eed",
+    "backend/app/exchanges/ccxt_ext/generic.py": "3dbe409608f7b55a65c41d6e6173d85bb87fa5d17ecc43b00e62844e8b6c9f9a",
+    "backend/app/exchanges/ccxt_ext/okx.py": "fe4b679d285c6892b7587422d0b85abdee96e711af2dd1c9b1884911dad6991e",
+    "backend/app/exchanges/ccxt_ext/runtime.py": "0c0adff269446f2732690fea2dfc11653f4bf1b2a931ebb78309e97ddc189b1f",
+    "backend/app/exchanges/ccxt_ext/session.py": "0ac4e93a91b013c0566209bfd1fde328253c7efd515151291f3dd2e422294cc9",
+    "backend/app/exchanges/ccxt_ext/unified.py": "0db1ae95cab885fcc12dda19ba617ed1151e72ef0691425f5c04bb2ad154114e",
+    "backend/tests/test_ccxt_okx_shadow.py": "16fccb7a26f11625be66de46312e7056346fceb6c8b947bda06e2cdf4a1a1d51",
+    "backend/tests/test_ccxt_unified_provider.py": "ca4cf14be12388c2ebded1cbd0bb324d071d0bdc960f05a825bd7c3f5e9c971d",
+    "backend/tests/test_kline_batch_stream.py": "bf64dc963b1971a2a29772b5cf045c7553ea124adc3b0dbdb127fb3dd6aa3f0a",
+    "backend/tests/test_market_subscription_continuity.py": "ec89bdfadaae7bdfbde85cdbfddb9344458623e3a43edef467dbfd776f9786ad",
+    "backend/tests/test_recovery_delivery_integration.py": "7a587b074113c1ead845b6d0b5c072f3951bd30a6e06bd7e21d3f3725e91b601",
+    "backend/tests/test_recovery_kline_consumers.py": "014c5810fcd55fa0217b77dfcdb04d6296ccebf1cf4004a3289e1f37d6e35756",
+    "backend/tests/test_subscription_continuity.py": "c535ebac426b774aed484226c3f7c1464448f937a2c5eeaf88bd603be438e923",
+    "backend/tests/test_trade_flow_service.py": "c90469730e85234fbbd4f0475f4a5be2f034ca52d234343fe793f861cefe561e",
+    "backend/tests/test_trade_tape_service.py": "a13c331a19a41bd20f01918d4b447212bc392b646cfb0ec63f53091174f9dc95"
+  },
+  "probe_sha256": {
+    "probe_markets.py": "f1b0a557e280e851b7ad1857e9dc88fe414310f1bf47907cba1801e0cb62d479",
+    "probe_klines.py": "f0831da365f9f60ff82139ffcf5e433a7f6f52893ec9af8f163b4410fd6b7088"
+  },
+  "base_head": "b84b5e3d514e43fca556613fe107e29d12f7a329",
+  "branch": "codex/issue-112-recovery-validation"
+}

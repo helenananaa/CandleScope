@@ -5,10 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import StatusBar, { type StatusBarModel } from "../StatusBar.js";
 import { t } from "../../i18n/index.js";
 
-function render(wsStatus: string) {
+function render(wsStatus: string, extra: Partial<StatusBarModel> = {}) {
   const status: StatusBarModel = { connectionStatus: "connected", dataSource: "cache", exchangeLabel: "Binance",
     marketLabel: "spot", wsStatus, wsStatusLabel: "", barCount: 1500, loadingMoreLeft: false,
-    hasMoreLeft: true, exchangeCatalogStatus: "ready" };
+    hasMoreLeft: true, exchangeCatalogStatus: "ready", ...extra };
   return renderToStaticMarkup(<StatusBar status={status} />);
 }
 test("cached history does not claim the exchange is live while waiting for data", () => {
@@ -19,6 +19,14 @@ test("cached history does not claim the exchange is live while waiting for data"
     assert.ok(!html.includes(t("status.ws.live")));
     assert.match(html, /data-live-bar-count="1500"/);
   }
+});
+test("history preparation and indicator calculation are independent visible states", () => {
+  const history = render("live", { historyPreparing: true });
+  assert.ok(history.includes(t("preparation.title")));
+  assert.ok(!history.includes(t("indicator.computing")));
+  const indicators = render("live", { indicatorComputing: true });
+  assert.ok(!indicators.includes(t("preparation.title")));
+  assert.ok(indicators.includes(t("indicator.computing")));
 });
 test("observed live data and disconnected transports retain distinct indicators", () => {
   assert.match(render("live"), /data-connection-status="connected"/);

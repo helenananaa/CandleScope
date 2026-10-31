@@ -1,0 +1,358 @@
+{
+  "date": "2026-10-29",
+  "repository": "helenananaa/CandleScope",
+  "heads": {
+    "main": "5195d98396eddd57025c9dfe758434e876001a6c",
+    "pr138": "8299ad5fc25c1cd90299172833ec6385c5fbd64c",
+    "pr144_code": "d9829fb93118a76d3f017f2d7b3a11e47f3050b9",
+    "pr148": "2c0deb5f4bb785e261ff52eefeffe6cf7ef9a6e1",
+    "joint_tree": "c110ace7a89b5617c7a4dcc9091b3dead3c9efe3",
+    "test_runner_fix": "f0844357f432a0bd11ae5a0e23fc44d9db8dbc74"
+  },
+  "pytest": {
+    "full": {
+      "tests": "861",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "248.345"
+    },
+    "experimental": {
+      "tests": "74",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "20.127"
+    },
+    "joint": {
+      "tests": "1496",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "182.730"
+    }
+  },
+  "joint_files": [
+    "tests/test_backfill_component_boundaries.py",
+    "tests/test_backfill_coordinator.py",
+    "tests/test_backfill_diagnostics.py",
+    "tests/test_backfill_event_audience.py",
+    "tests/test_backfill_gap_detector.py",
+    "tests/test_backfill_history_availability.py",
+    "tests/test_backfill_rate_limit.py",
+    "tests/test_backfill_reconciler.py",
+    "tests/test_bar_aggregator_contracts.py",
+    "tests/test_bar_cache_history_capacity.py",
+    "tests/test_bar_cache_read_tokens.py",
+    "tests/test_bar_delivery_bridge.py",
+    "tests/test_bar_delivery_journal.py",
+    "tests/test_calendar_basis.py",
+    "tests/test_ccxt_fork_kline.py",
+    "tests/test_ccxt_gap_recovery.py",
+    "tests/test_ccxt_unified_provider.py",
+    "tests/test_consumer_recovery.py",
+    "tests/test_custom_aggregate_blocks.py",
+    "tests/test_custom_history_streaming.py",
+    "tests/test_custom_interval_listing_boundary.py",
+    "tests/test_custom_interval_phase1.py",
+    "tests/test_data_engine_phase1_boundaries.py",
+    "tests/test_data_manager_gc.py",
+    "tests/test_data_manager_warm_start_bridge.py",
+    "tests/test_event_bus_routing_index.py",
+    "tests/test_fixed_anchor.py",
+    "tests/test_gc_execution_safety.py",
+    "tests/test_history_archive_admission.py",
+    "tests/test_history_archive_cache.py",
+    "tests/test_history_archive_import_cleanup.py",
+    "tests/test_history_archive_providers.py",
+    "tests/test_history_archive_proxy_pool.py",
+    "tests/test_history_archive_routing.py",
+    "tests/test_history_archive_sources.py",
+    "tests/test_history_archive_storage.py",
+    "tests/test_history_revision_admission.py",
+    "tests/test_indicator_api.py",
+    "tests/test_indicator_compute_batch.py",
+    "tests/test_indicator_data_manager_bridge.py",
+    "tests/test_indicator_finite_windows.py",
+    "tests/test_indicator_plugin_serialization_parity.py",
+    "tests/test_indicator_range_batch.py",
+    "tests/test_indicator_range_result_service.py",
+    "tests/test_indicator_resume.py",
+    "tests/test_indicator_runtime_routes.py",
+    "tests/test_indicator_runtime_service.py",
+    "tests/test_indicator_runtime_transport_routing.py",
+    "tests/test_indicator_series_revision.py",
+    "tests/test_indicator_sidecar_ws_regressions.py",
+    "tests/test_indicator_ws_resume.py",
+    "tests/test_ingestion_health_observer.py",
+    "tests/test_ingestion_session_types.py",
+    "tests/test_interval_routing_phase3.py",
+    "tests/test_kline_batch_stream.py",
+    "tests/test_kline_order_flow_metrics.py",
+    "tests/test_kline_quality_contract.py",
+    "tests/test_kline_query_projection.py",
+    "tests/test_kline_repair.py",
+    "tests/test_kline_revision_contract.py",
+    "tests/test_kline_series_identity.py",
+    "tests/test_kline_source_journal.py",
+    "tests/test_klines_api.py",
+    "tests/test_maintenance_facade.py",
+    "tests/test_manual_history_api.py",
+    "tests/test_manual_history_gc_protection.py",
+    "tests/test_manual_history_planner.py",
+    "tests/test_manual_history_repository.py",
+    "tests/test_manual_history_runtime.py",
+    "tests/test_manual_history_service.py",
+    "tests/test_market_subscription_continuity.py",
+    "tests/test_materialized_history_probe.py",
+    "tests/test_pyne_removal.py",
+    "tests/test_query_cache_fencing.py",
+    "tests/test_query_engine_paths.py",
+    "tests/test_recovery_delivery_integration.py",
+    "tests/test_recovery_kline_consumers.py",
+    "tests/test_revision_delivery_recovery.py",
+    "tests/test_source_revision_pipeline.py",
+    "tests/test_storage_retention_gc.py",
+    "tests/test_subscription_continuity.py",
+    "tests/test_trade_flow_service.py",
+    "tests/test_trade_tape_service.py"
+  ],
+  "frontend_targeted": {
+    "passed": 431,
+    "failed": 0,
+    "skipped": 0
+  },
+  "browser": {
+    "browser-history-ready": {
+      "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+      "output": "E:\\CodexData\\worktrees\\pr-138-148-recovery\\CandleScope\\output\\pr144-integration\\browser-history-ready",
+      "browser": "Chrome/155.0.8059.85",
+      "result": {
+        "result": {
+          "type": "object",
+          "value": {
+            "scope": "Real React lifecycle, SeriesDataFeed, scheduler, status UI and isolated JS indicator worker; synthetic source rows",
+            "requests": {
+              "45m": [
+                500,
+                1500
+              ],
+              "90m": [
+                500,
+                1500
+              ],
+              "2d": [
+                500,
+                1500
+              ],
+              "3d": [
+                500,
+                1500
+              ],
+              "4d": [
+                500,
+                1500
+              ],
+              "5d": [
+                500,
+                1500
+              ]
+            },
+            "publications": {
+              "45m": [
+                500,
+                1500
+              ],
+              "90m": [
+                500,
+                1500
+              ],
+              "2d": [
+                500,
+                1500
+              ],
+              "3d": [
+                500,
+                1500
+              ],
+              "4d": [
+                500,
+                1500
+              ],
+              "5d": [
+                500,
+                1500
+              ]
+            },
+            "indicators": {
+              "45m": [
+                128,
+                500,
+                1500
+              ],
+              "90m": [
+                128,
+                500,
+                1500
+              ],
+              "2d": [
+                128,
+                500,
+                1500
+              ],
+              "3d": [
+                128,
+                500,
+                1500
+              ],
+              "4d": [
+                128,
+                500,
+                1500
+              ],
+              "5d": [
+                128,
+                500,
+                1500
+              ]
+            },
+            "checks": [
+              "128 visible before hydration",
+              "500 and 1500 atomic publications",
+              "foreground pauses the next stage",
+              "other chart remains independent",
+              "SMA worker output matches arithmetic",
+              "preparation label clears"
+            ]
+          }
+        }
+      },
+      "immediateWorkerCount": 0,
+      "remainingWorkers": [],
+      "exceptions": [],
+      "passed": true,
+      "browserExitCode": 0
+    },
+    "browser-admission": {
+      "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+      "output": "E:\\CodexData\\worktrees\\pr-138-148-recovery\\CandleScope\\output\\pr144-integration\\browser-admission",
+      "browser": "Chrome/155.0.8059.85",
+      "result": {
+        "result": {
+          "type": "object",
+          "value": {
+            "passed": true,
+            "checks": [
+              "restored interval and market preserved; data and WebSocket gates closed; preferences untouched",
+              "unsaved exact custom interval admitted independently of favorites",
+              "explicit native selection recovers; non-divisible action leaves current interval intact",
+              "source switch preserves unavailable period; sibling cell stays ready and unchanged",
+              "controlled workspace restore publishes the requested identity unchanged",
+              "history-only mode remains ready and visibly discloses unavailable realtime"
+            ],
+            "requests": [
+              "/api/v1/exchanges/"
+            ],
+            "scope": "Real session hooks and UI with controlled capabilities; not live provider or packaged native acceptance"
+          }
+        }
+      },
+      "immediateWorkerCount": 0,
+      "remainingWorkers": [],
+      "exceptions": [],
+      "passed": true,
+      "browserExitCode": 0
+    }
+  },
+  "evidence": {
+    "full.xml": {
+      "path": "output/pr144-integration/full.xml",
+      "sha256": "c37f8a6a39461de5db1c9570b7a43e0dac5563a6389125fb16ab32cf6c1f47df"
+    },
+    "full.log": {
+      "path": "output/pr144-integration/full.log",
+      "sha256": "42079e3791b5dcb37f177c83290660caaf9f605c343927d93daf1c069735642f"
+    },
+    "experimental.xml": {
+      "path": "output/pr144-integration/experimental.xml",
+      "sha256": "1cd17c06dc58d690e9e54a7f069c8640dc145c20e40edea074f612f07766ca8c"
+    },
+    "experimental.log": {
+      "path": "output/pr144-integration/experimental.log",
+      "sha256": "1134f5362b9ce0e626be376a516e82166e01cbb7783eaa6a9f484eb1660a14ad"
+    },
+    "joint.xml": {
+      "path": "output/pr144-integration/joint.xml",
+      "sha256": "8c5f69b5a26ab23e1635d6ecbcb4e20b01a8869e8a35eec2969f95f82795daac"
+    },
+    "joint.log": {
+      "path": "output/pr144-integration/joint.log",
+      "sha256": "a88b9ae7c8279d63269770aacc501f237612af8dccd22123f09f35be5a8f926b"
+    },
+    "joint-files.json": {
+      "path": "output/pr144-integration/joint-files.json",
+      "sha256": "d312a19fbc03b6aee12b8115a18708068cb9814b58d5da61d286a8762988b4cf"
+    },
+    "frontend-tests.log": {
+      "path": "output/pr144-integration/frontend-tests.log",
+      "sha256": "76ff4149f21d2060611f60cd476ac0989071ec643d0ace4a18736e7d171c171c"
+    },
+    "typecheck.log": {
+      "path": "output/pr144-integration/typecheck.log",
+      "sha256": "c5526ac794a5703b1c80b8c42e2adf60d3f431dca6505af243dd2fd1089500df"
+    },
+    "frontend-architecture.log": {
+      "path": "output/pr144-integration/frontend-architecture.log",
+      "sha256": "553856dc774f187ceb629e8313e82cf92e5d298bca4dc9aa1eda5f53ceb62eb4"
+    },
+    "backend-architecture.log": {
+      "path": "output/pr144-integration/backend-architecture.log",
+      "sha256": "6269a5ee9e1f2c2b05c835ec33f9d951f519175bdcf4e5fb8565ccba6663d63a"
+    },
+    "i18n.log": {
+      "path": "output/pr144-integration/i18n.log",
+      "sha256": "a85d0923f9ec832d943ac58bc1f6d9bb9d5b8904d9b6bf71d501ff9fbd019b6a"
+    },
+    "browser-history-ready/result.json": {
+      "path": "output/pr144-integration/browser-history-ready/result.json",
+      "sha256": "091fa2b9cc7c4dc95bd7d88f54f517c9ef3ce3fbce28af804d807185ad845c12"
+    },
+    "browser-admission/result.json": {
+      "path": "output/pr144-integration/browser-admission/result.json",
+      "sha256": "4e848b256c676995d7527a22c3b8d60b162aa7fe296b1e42b03f0152b732ad21"
+    },
+    "frontend-full.log": {
+      "path": "output/pr144-integration/frontend-full.log",
+      "sha256": "5f0743699905212bed8cdb8adf50c0f17fea9de7d7463586bc7fab46b72df8ca"
+    },
+    "runner-tests.log": {
+      "path": "output/pr144-integration/runner-tests.log",
+      "sha256": "6d543533898d4b4092e77c742bf5215e70e87a63769ce0b9cc376eb5080e500e"
+    },
+    "runner-status.json": {
+      "path": "output/pr144-integration/runner-status.json",
+      "sha256": "bb6eb12b72abccb038d76aa8f1add9bbdde82cc1024691f6ea569bdb3b6c98b5"
+    },
+    "runner-lint.log": {
+      "path": "output/pr144-integration/runner-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "limitations": [
+    "Reservation is a conservative Python allocation estimate, not an RSS ceiling.",
+    "Browser fixtures use synthetic history and controlled capabilities; they do not qualify live venues or packaged desktop recovery.",
+    "K130/B130, versioned H127 and R129 integration, full resource/latency matrix and long-running venue recovery remain open."
+  ],
+  "frontend_full_before_runner_fix": {
+    "functional_passed": 4546,
+    "functional_failed": 1,
+    "functional_skipped": 1,
+    "isolated_performance_passed": 1,
+    "failure": "backend selection exceeded Windows command-length gate"
+  },
+  "runner_after_fix": {
+    "passed": 10,
+    "failed": 0,
+    "lint_exit": 0
+  }
+}

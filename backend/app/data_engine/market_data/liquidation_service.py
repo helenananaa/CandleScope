@@ -233,6 +233,7 @@ class LiquidationService:
                 handle = await self._factory.start_market(
                     _descriptor(identity),
                     _on_event,
+                    **self._continuity_health_options(identity),
                 )
             except BaseException:
                 await drain_cancellation_safe_cleanup(
@@ -371,17 +372,20 @@ class LiquidationService:
         *,
         recent_limit: int = 500,
         max_pending_records: int | None = None,
+        continuity=None,
     ) -> LiquidationAttachment:
         if isinstance(keys, MarketStreamKey) or _looks_like_identity(keys):
             return self.attach_many(
                 [keys],  # type: ignore[list-item]
                 recent_limit=recent_limit,
                 max_pending_records=max_pending_records,
+                continuity=continuity,
             )
         return self.attach_many(
             keys,
             recent_limit=recent_limit,
             max_pending_records=max_pending_records,
+            continuity=continuity,
         )
 
     def attach_many(
@@ -390,8 +394,11 @@ class LiquidationService:
         *,
         recent_limit: int = 500,
         max_pending_records: int | None = None,
+        continuity=None,
     ) -> LiquidationAttachment:
         self._ensure_readable()
+        from app.data_engine.continuity_policy import observational_policy
+        policy = observational_policy(continuity, channel="liquidation")
         identities = tuple(dict.fromkeys(self._validate_identity(key) for key in keys))
         if not identities:
             raise ValueError("liquidation attachment requires at least one identity")
@@ -401,7 +408,9 @@ class LiquidationService:
         subscription = self.hub.subscribe(
             max_pending_records=max_pending_records,
             predicate=lambda event: event.stream_identity in identity_set,
+            source_quality="sampled_liquidations" if policy is not None else None,
         )
+        subscription.stream_identities = identity_set
         recent = {
             identity: (
                 self.engine.raw_tail(identity, bounded_recent)
@@ -411,6 +420,12 @@ class LiquidationService:
             for identity in identities
         }
         return LiquidationAttachment(subscription=subscription, recent=recent)
+
+    def _continuity_health_options(self, identity):
+        from .continuity import health_callback, ingestion_options
+        reservation = self._physical.get(identity)
+        return ingestion_options(self._factory, on_health=health_callback(self.hub, lambda: (identity,)
+            if self._physical.get(identity) is reservation else ()))
 
     def diagnostics(self) -> dict[str, Any]:
         if self._closed:

@@ -14,7 +14,8 @@ if (native && !marketHealth) throw new Error("The isolated native host currently
 const intervalAdmission = process.argv.includes("--interval-admission");
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
-const fixture = indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const historyStages = process.argv.includes("--history-stages");
+const fixture = indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -101,8 +102,27 @@ app.on("window-all-closed",()=>app.quit());
   if (!tab) throw new Error("Owned integration page is missing");
   page = await CDP.open(tab.webSocketDebuggerUrl);
   await page.send("Runtime.enable");
+  // The tab can be discoverable while its initial document is still being
+  // replaced. Probe readiness without starting the fixture, then invoke it
+  // exactly once in the committed document.
+  const checkName = indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
+  let fixtureReady = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      const ready = await page.send("Runtime.evaluate", {
+        expression: `document.readyState === 'complete' && typeof window.${checkName} === 'function'`,
+        returnByValue: true,
+      });
+      if (ready.result?.value === true) { fixtureReady = true; break; }
+    } catch (error) {
+      if (!String(error).includes("Execution context was destroyed")) throw error;
+    }
+    await sleep(100);
+  }
+  if (!fixtureReady) throw new Error("Fixture did not load");
   const result = await page.send("Runtime.evaluate", {
-    expression: `new Promise((resolve,reject)=>{const until=Date.now()+10000;const ready=()=>{if(window.${indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"})Promise.resolve(window.${indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck"}()).then(resolve,reject);else if(Date.now()>until)reject(new Error('Fixture did not load'));else setTimeout(ready,20);};ready();})`,
+    expression: `window.${checkName}()`,
+
     awaitPromise: true, returnByValue: true,
   });
   receipt.result = result;
@@ -115,7 +135,7 @@ app.on("window-all-closed",()=>app.quit());
   receipt.exceptions = page.events.filter(item => item.method === "Runtime.exceptionThrown");
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!intervalAdmission && !marketHealth && !indicatorFlow) {
+  if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));

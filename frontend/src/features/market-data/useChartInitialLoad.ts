@@ -38,6 +38,7 @@ const INITIAL_BACKFILL_TIMEOUT_MS = 10_000;
 const INITIAL_BACKFILL_MAX_WAIT_MS = 60_000;
 export const INITIAL_HISTORY_COUNT_BACK = 1_500;
 export const INITIAL_VIEWPORT_COUNT_BACK = 500;
+export const STAGED_INITIAL_VIEWPORT_COUNT_BACK = 128;
 // A 4x4 Cell is only about 300 CSS px wide at the release viewport. 128 bars
 // preserves enough context for the shipped MA/RSI/SMA fixtures, then the
 // focused Cell uses the existing serialized hydration lane to reach 1,500.
@@ -268,10 +269,39 @@ export function planInitialViewportCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
 ): number {
-  return Math.min(
-    INITIAL_VIEWPORT_COUNT_BACK,
-    planInitialHistoryCountBack(interval, nativeIntervalValues),
+  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues);
+  // Materialized probes cannot start the source-backed hydration lane.
+  return admission.materializedOnly ? 0 : admission.viewportCountBack;
+}
+
+export function planInitialHistoryAdmission(
+  interval: IntervalString,
+  nativeIntervalValues: readonly IntervalString[],
+): { historyCountBack: number; viewportCountBack: number; materializedOnly: boolean } {
+  const plan = planTargetBarRequest({
+    desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
+    interval,
+    nativeIntervals: nativeIntervalValues,
+    sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
+  });
+  // Only a resolved route that exceeds the source budget may use this escape
+  // hatch. It permits a bounded target read, never a larger base-history read.
+  const materializedOnly = plan.blockedReason === null && plan.targetBars === 0;
+  const historyCountBack = materializedOnly ? INITIAL_VIEWPORT_COUNT_BACK : plan.targetBars;
+  // Stage regular low-fanout derived periods and multi-day native periods.
+  // Keep expensive irregular intervals on their existing budgeted admission.
+  const staged = !materializedOnly && plan.blockedReason === null && (
+    (plan.derived && plan.sourceFactor > 1 && plan.sourceFactor <= 5)
+    || /^[2-5]d$/.test(interval)
   );
+  return {
+    historyCountBack,
+    viewportCountBack: Math.min(
+      staged ? STAGED_INITIAL_VIEWPORT_COUNT_BACK : INITIAL_VIEWPORT_COUNT_BACK,
+      historyCountBack,
+    ),
+    materializedOnly,
+  };
 }
 
 export function initialViewportCountBackCapForCellCount(
@@ -457,8 +487,9 @@ export function useChartInitialLoad({
       interval: intv,
       ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
     };
-    const initialHistoryCountBack = planInitialHistoryCountBack(intv, nativeIntervalValues);
-    const plannedViewportCountBack = planInitialViewportCountBack(intv, nativeIntervalValues);
+    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues);
+    const initialHistoryCountBack = initialAdmission.historyCountBack;
+    const plannedViewportCountBack = initialAdmission.viewportCountBack;
     const initialViewportCountBack = initialViewportCountBackCap == null
       ? plannedViewportCountBack
       : Math.min(
@@ -743,9 +774,11 @@ export function useChartInitialLoad({
         markInitialDataShown();
       }
       setLoading(false);
-      void seriesDataFeed.repairVisibleGaps(series, historyResult.data, null, {
-        source: "initial-held-gap-planner",
-      });
+      if (!initialAdmission.materializedOnly) {
+        void seriesDataFeed.repairVisibleGaps(series, historyResult.data, null, {
+          source: "initial-held-gap-planner",
+        });
+      }
       return true;
     }
 
@@ -843,6 +876,47 @@ export function useChartInitialLoad({
         stopRetrying();
       };
       controller.signal.addEventListener("abort", abortListener, { once: true });
+    }
+
+    if (initialAdmission.materializedOnly) {
+      try {
+        const result = await seriesDataFeed.getHistory(series, {
+          countBack: initialViewportCountBack,
+          materializedOnly: true,
+          maxWaitMs: 0,
+          source: "initial-materialized-history",
+          signal: controller.signal,
+          commit: "none",
+        });
+        if (!ownsInitialResult(result)) {
+          relinquishInitialOwnership();
+          return;
+        }
+        if (
+          result.data.length > 0
+          && initialHistoryCacheProof(result, initialViewportCountBack).historyComplete
+        ) {
+          commitHistoryResult(result);
+          return;
+        }
+        // A partial/missing target must not start the ordinary repair retry
+        // loop: this route has no admitted source-history budget.
+        setHasMoreLeft(false);
+        setInitialHistoryPending(false);
+        setLoading(false);
+        if (!hasCacheHit) {
+          setConnectionStatus("disconnected");
+          setError(new Error(`No complete stored history is available for ${intv}; preparing it exceeds the current history limit`));
+        }
+      } catch (error) {
+        if (ownsInitialResult(undefined)) {
+          setInitialHistoryPending(false);
+          setLoading(false);
+          setError(error instanceof Error ? error : new Error(String(error)));
+          if (!hasCacheHit) setConnectionStatus("disconnected");
+        }
+      }
+      return;
     }
 
     markPerf("chart.initialLoad.history.request", {

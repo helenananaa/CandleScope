@@ -509,7 +509,8 @@ def test_query_engine_interior_gap_fill_uses_series_exchange() -> None:
         BarData(time=180, open=1, high=1, low=1, close=1, volume=1),
     ]
 
-    filled = engine._fill_interior_gaps(key, bars, "1m")
+    with engine._cache.read_token(key) as token:
+        filled = engine._fill_interior_gaps(key, bars, "1m", read_token=token)
 
     assert storage.calls[0]["exchange"] == "okx"
     assert storage.calls[0]["market_type"] == "spot"

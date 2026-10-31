@@ -32,6 +32,9 @@ from app.data_engine.storage.trade_flow_store import (
 )
 from app.data_engine.storage.trade_flow_writer import TradeFlowRollupWriter
 from .append_hub import AppendBatchHub, AppendBatchSubscription
+from .continuity import ingestion_options
+from .trade_continuity import TradeContinuitySubscription
+from app.data_engine.continuity_policy import ContinuityPolicy
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import DeliveryClass, MarketChannel, MarketStreamKey, TransportMode
 from .trade_flow import (
@@ -72,7 +75,7 @@ class _IngestionFactory(Protocol):
 class TradeFlowAttachment:
     """One multiplexed raw subscription and its gap-free handoff snapshots."""
 
-    subscription: AppendBatchSubscription[NormalizedAggTrade]
+    subscription: AppendBatchSubscription[NormalizedAggTrade] | TradeContinuitySubscription
     recent: dict[StreamIdentity, tuple[NormalizedAggTrade, ...]]
 
 
@@ -173,6 +176,7 @@ class TradeFlowService:
             maxsize=max(1, int(archive_forward_queue_size)),
         )
         self._repair_page_size = max(1, min(int(repair_page_size), 1000))
+        self._continuity_changed = asyncio.Event()
         self._max_repair_trades_per_gap = max(
             1,
             int(max_repair_trades_per_gap),
@@ -360,6 +364,7 @@ class TradeFlowService:
                             _descriptor(identity),
                             _on_event,
                             on_gap=_on_l5_gap,
+                            **ingestion_options(self._factory, gap_repair_owner="trade_flow"),
                         )
                     except BaseException:
                         await drain_cancellation_safe_cleanup(
@@ -540,6 +545,7 @@ class TradeFlowService:
         *,
         recent_limit: int = 500,
         max_pending_records: int | None = None,
+        continuity=None,
     ) -> TradeFlowAttachment:
         """Atomically attach one multiplexed subscriber and recent snapshots.
 
@@ -553,11 +559,13 @@ class TradeFlowService:
                 [keys],  # type: ignore[list-item]
                 recent_limit=recent_limit,
                 max_pending_records=max_pending_records,
+                continuity=continuity,
             )
         return self.attach_many(
             keys,
             recent_limit=recent_limit,
             max_pending_records=max_pending_records,
+            continuity=continuity,
         )
 
     def attach_many(
@@ -566,8 +574,10 @@ class TradeFlowService:
         *,
         recent_limit: int = 500,
         max_pending_records: int | None = None,
+        continuity=None,
     ) -> TradeFlowAttachment:
         self._ensure_readable()
+        policy = ContinuityPolicy.resolve(continuity) if continuity is not None else None
         identities = tuple(dict.fromkeys(self._validate_identity(key) for key in keys))
         if not identities:
             raise ValueError("trade-flow attachment requires at least one identity")
@@ -606,7 +616,7 @@ class TradeFlowService:
                 self.engine.raw_tail(identity, bounded_recent),
             )
         ]
-        if unrecoverable:
+        if unrecoverable and (policy is None or policy.mode == "strict"):
             raise RuntimeError(
                 "trade-flow attachment requires contiguous retained history; "
                 f"unresolved or collapsed gap for {unrecoverable}",
@@ -628,6 +638,8 @@ class TradeFlowService:
             )
             for identity in identities
         }
+        if policy is not None:
+            subscription = TradeContinuitySubscription(subscription, self, identities, policy)
         return TradeFlowAttachment(subscription=subscription, recent=recent)
 
     async def archive_coverage(
@@ -787,7 +799,8 @@ class TradeFlowService:
     async def _shutdown_impl(self) -> None:
         """Perform cleanup once; feed-stop degradation cannot block draining."""
 
-        self._accepting_events = False
+        # Closing already rejects new leases. Keep the ingestion workers and
+        # intake alive while physical stop flushes buffered Recovery events.
         await self._cancel_idle_stops()
         await self._drain_stop_finalizers()
         async with self._lifecycle_lock:
@@ -796,6 +809,9 @@ class TradeFlowService:
             await asyncio.gather(*(
                 self._shutdown_identity(identity) for identity in identities
             ))
+        # Stop waits are bounded. A failed or timed-out feed may still call us,
+        # so seal intake before draining queues and terminating their workers.
+        self._accepting_events = False
         await asyncio.sleep(0)
         await self._drain_stop_finalizers()
         async with self._lifecycle_lock:
@@ -826,6 +842,7 @@ class TradeFlowService:
         await self.archive_writer.close()
 
         self._closed = True
+        self._notify_continuity()
         self._shutdown_complete.set()
 
     def _schedule_idle_stop_locked(
@@ -1293,6 +1310,8 @@ class TradeFlowService:
 
     async def _forward_result(self, result: TradeFlowIngestResult) -> None:
         assert result.trade is not None
+        if result.is_gap_fill or result.detected_gap is not None:
+            self._notify_continuity()
         if not result.is_gap_fill:
             if result.detected_gap is not None:
                 self.hub.mark_discontinuity(
@@ -1386,6 +1405,11 @@ class TradeFlowService:
             return
         self._degraded_identities.add(identity)
         self._metrics["repair_degraded"] += 1
+        self._notify_continuity()
+
+    def _notify_continuity(self) -> None:
+        self._continuity_changed.set()
+        self._continuity_changed = asyncio.Event()
 
     async def _run_repairs(self) -> None:
         while True:

@@ -517,29 +517,10 @@ def build_synthetic_bars(
             # Use 0.0 for None values (indicator warmup period)
             val = 0.0
 
-        # Clone bar and override the target field
-        new_bar = BarData(
-            time=bar.time,
-            open=bar.open,
-            high=bar.high,
-            low=bar.low,
-            close=bar.close,
-            volume=bar.volume,
-        )
-
-        if target_input == "close":
-            new_bar.close = val
-        elif target_input == "open":
-            new_bar.open = val
-        elif target_input == "high":
-            new_bar.high = val
-        elif target_input == "low":
-            new_bar.low = val
-        elif target_input == "volume":
-            new_bar.volume = val
-        else:
-            # For derived fields (hl2, hlc3, etc.) we override close
-            new_bar.close = val
+        # Construct the consumer-owned synthetic value before publication.
+        values = {name: getattr(bar, name) for name in ("time", "open", "high", "low", "close", "volume")}
+        values[target_input if target_input in {"open", "high", "low", "close", "volume"} else "close"] = val
+        new_bar = BarData(**values)
 
         synthetic.append(new_bar)
 

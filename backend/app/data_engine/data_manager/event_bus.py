@@ -228,6 +228,9 @@ class _CallbackSubscription:
 class _QueueSubscription:
     queue: _SubscriberQueue
     handle: SubscriptionHandle
+    on_recovery: RecoveryCallback | None = None
+    recovery_task: asyncio.Task | None = None
+    recovery_notification_error: str | None = None
     dropped: int = 0
     delivered: int = 0
     total_lag_ms: float = 0.0
@@ -303,6 +306,7 @@ class DataEventBus:
         event_types: set[DataEventType] | None = None,
         *,
         on_recovery: RecoveryCallback | None = None,
+        initial_events: tuple[DataEvent, ...] = (),
     ) -> SubscriptionHandle:
         """Register a callback to receive events.
 
@@ -336,6 +340,10 @@ class DataEventBus:
             maxsize=self._cfg.subscriber_queue_size,
         )
         sub = _CallbackSubscription(queue=queue, handle=handle, on_recovery=on_recovery)
+        for event in initial_events:
+            if queue.offer(deepcopy(event)) == "critical_full":
+                self._require_recovery(sub, "source_gap_snapshot_exhausted", None)
+                break
         with self._protection_lock, self._subscription_lock:
             self._subscriptions[handle.id] = handle
             self._callback_subs[handle.id] = sub
@@ -401,6 +409,9 @@ class DataEventBus:
         self,
         key: SeriesKey | None = None,
         event_types: set[DataEventType] | None = None,
+        *,
+        initial_events: tuple[DataEvent, ...] | Callable[[], tuple[DataEvent, ...]] = (),
+        on_recovery: RecoveryCallback | None = None,
     ) -> AsyncIterator[DataEvent]:
         """Subscribe as an async iterator.
 
@@ -424,11 +435,18 @@ class DataEventBus:
             key=key,
             event_types=event_types,
         )
-        sub = _QueueSubscription(queue=queue, handle=handle)
+        sub = _QueueSubscription(queue=queue, handle=handle, on_recovery=on_recovery)
         def register() -> None:
             if self._closed:
                 raise RuntimeError("event bus is closed")
             with self._protection_lock, self._subscription_lock:
+                # GC lock acquisition may suspend registration. Take source
+                # evidence here so a gap opened during that wait is included.
+                seed = initial_events() if callable(initial_events) else initial_events
+                for event in seed:
+                    if queue.offer(deepcopy(event)) == "critical_full":
+                        self._require_recovery(sub, "source_gap_snapshot_exhausted", None)
+                        break
                 self._queue_subs[handle.id] = sub
                 self._index_subscription(
                     handle,
@@ -448,7 +466,7 @@ class DataEventBus:
                 if item is None:
                     break
                 self._record_queue_lag(sub, item.enqueued_at)
-                yield deepcopy(item.event) if item.sequence else item.event
+                yield deepcopy(item.event)
                 self._confirm(sub, item)
         finally:
             def remove() -> None:
@@ -471,6 +489,20 @@ class DataEventBus:
             await finish_cleanup(apply_thread_guard(self._protection_lock, remove))
 
     # ── Public: Emit ─────────────────────────────────────────
+
+    def require_recovery(self, key: SeriesKey, reason: str, *,
+                         event_types: set[DataEventType] | None = None) -> None:
+        """Invalidate affected consumers when a producer cannot deliver a bar.
+
+        Called on the bus event loop. Terminal state is set synchronously;
+        user recovery callbacks run in their existing isolated tasks. This
+        also wakes iterators and continuity waits without a later data event.
+        """
+        callbacks, queues = self._matching_subscriptions(key)
+        for _, sub in (*callbacks, *queues):
+            subscribed = sub.handle.event_types
+            if event_types is None or subscribed is None or subscribed & event_types:
+                self._require_recovery(sub, reason, None)
 
     async def emit(self, event: DataEvent) -> None:
         ticket = self.stream_versions.begin(event)
@@ -506,7 +538,7 @@ class DataEventBus:
 
         if self._closed:
             raise RuntimeError("event bus is closed")
-        event = processed
+        event = deepcopy(processed)
         delivery_id = event.detail.get("delivery_id")
         if delivery_id and delivery_id in self._delivery_ids:
             return
@@ -515,7 +547,6 @@ class DataEventBus:
         if event.event_type not in _REPLACEABLE_TYPES:
             # A single immutable copy is shared by the replay window and queues.
             # Callbacks receive a copy, so mutation cannot corrupt later replay.
-            event = deepcopy(event)
             self._sequence += 1
             sequence = self._sequence
             self._journal[sequence] = _QueuedEvent(event, time.perf_counter(), sequence)
@@ -666,6 +697,17 @@ class DataEventBus:
             return set(self._callback_ids_by_key) | set(self._queue_ids_by_key)
 
     # ── Public: Snapshot ─────────────────────────────────────
+
+    def memory_usage(self):
+        queues = [sub.queue for sub in [*self._callback_subs.values(), *self._queue_subs.values()]]
+        queued = sum(queue.qsize() for queue in queues)
+        return {"journal_events": len(self._journal), "queued_events": queued,
+                "estimated_bytes": (len(self._journal) + queued) * 1024,
+                "protection": "durable recovery is stored separately in SQLite"}
+
+    def _memory_roots(self):
+        queues = [sub.queue for sub in [*self._callback_subs.values(), *self._queue_subs.values()]]
+        return [list(self._journal.values()), *[list(queue._queue) for queue in queues]]
 
     def snapshot(self) -> dict:
         """JSON-serializable diagnostic snapshot."""
@@ -828,10 +870,13 @@ class DataEventBus:
                 continue
             self._record_queue_lag(sub, item.enqueued_at)
             try:
-                await handle.callback(deepcopy(item.event) if item.sequence else item.event)
+                await handle.callback(deepcopy(item.event))
                 self._confirm(sub, item)
             except asyncio.CancelledError:
                 raise
+            except ConsumerRecoveryRequired as exc:
+                self._require_recovery(sub, exc.reason, item.sequence or None)
+                return
             except Exception as exc:
                 sub.last_error = str(exc)
                 self._callback_errors += 1
@@ -885,7 +930,7 @@ class DataEventBus:
         queue.close_nowait()
         self._recovery_required += 1
         logger.error("Consumer recovery required: %s", error.to_dict())
-        if isinstance(sub, _CallbackSubscription) and sub.on_recovery is not None:
+        if sub.on_recovery is not None:
             # Separate bounded task: a hung callback must not hide the gap.
             sub.recovery_task = asyncio.create_task(
                 self._notify_recovery(sub, error),
@@ -897,7 +942,7 @@ class DataEventBus:
         self._worker_tasks.add(task)
         task.add_done_callback(self._worker_tasks.discard)
 
-    async def _notify_recovery(self, sub: _CallbackSubscription, error: ConsumerRecoveryRequired) -> None:
+    async def _notify_recovery(self, sub: _CallbackSubscription | _QueueSubscription, error: ConsumerRecoveryRequired) -> None:
         try:
             await sub.on_recovery(error)
         except asyncio.CancelledError:

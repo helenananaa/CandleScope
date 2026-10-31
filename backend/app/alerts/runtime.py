@@ -291,7 +291,7 @@ class AlertRuntimeEngine:
         ]
         indicator_values = self._indicator_values(rule, closed_window)
 
-        if event.event_type == DataEventType.BAR_AMENDED:
+        if event.event_type == DataEventType.BAR_AMENDED or event.detail.get("continuity_replayed"):
             frontier = closed_window[-1] if closed_window else window[-1]
             current = {**self._bar_values(frontier), **indicator_values}
             self._previous_values[rule_id] = current
@@ -304,8 +304,8 @@ class AlertRuntimeEngine:
                 history_bars=len(window),
                 state="state_updated",
             )
-            # Amendments repair the indicator frontier but never manufacture a
-            # historical alert after the fact.
+            # Corrections and continuity catch-up repair the indicator frontier
+            # without manufacturing a historical alert after the fact.
             return None
 
         current = {**self._bar_values(event.bar), **indicator_values}

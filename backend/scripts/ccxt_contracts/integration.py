@@ -29,6 +29,12 @@ def main() -> int:
         "test_okx_utc_protocol.py", "test_plugin_provider_v2.py", "test_proxy_pool*.py",
         "test_public_admission.py", "test_public_transport_loopback.py", "test_source_revision_pipeline.py",
         "test_transport_http_rate_limit_metadata.py", "test_pyne_removal.py",
+        "test_bar_delivery_*.py", "test_revision_delivery_recovery.py",
+        "test_kline_revision_contract.py", "test_query_cache_fencing.py",
+        "test_indicator_api.py", "test_indicator_runtime_transport_routing.py",
+        "test_*subscription_continuity.py", "test_recovery_*.py", "test_consumer_recovery.py",
+        "test_custom_history_streaming.py", "test_materialized_history_probe.py",
+        "test_history_revision_admission.py",
     )
     files = sorted({str(path) for pattern in patterns for path in (backend / "tests").glob(pattern)})
     return pytest.main(["-q", "-p", "pytest_asyncio.plugin", "-p", "anyio.pytest_plugin",

@@ -6,6 +6,7 @@ export function buildStatusBarViewModel({
   marketStatus,
   marketView,
   sessionStatus,
+  indicatorComputing,
 }: AppShellViewModelContext): StatusBarModel {
   const {
     wsStatusLabel,
@@ -24,6 +25,8 @@ export function buildStatusBarViewModel({
     barCount: marketStatus.barCount,
     loadingMoreLeft: marketStatus.loadingMoreLeft,
     hasMoreLeft: marketStatus.hasMoreLeft,
+    historyPreparing: marketStatus.historyPreparing === true,
+    indicatorComputing,
     exchangeCatalogStatus: sessionStatus.exchangeCatalogStatus,
     exchangeLimitations: sessionStatus.exchangeLimitations,
   };

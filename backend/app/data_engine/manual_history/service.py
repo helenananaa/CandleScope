@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.data_engine.storage.revisions import fenced_manual_job
+
 import asyncio
 import logging
 import time
@@ -370,6 +372,7 @@ class ManualHistoryService:
             return guarded_release(self.repository, collection_id)
         return self.repository.release_collection(collection_id)
 
+    @fenced_manual_job
     async def run_job(self, job_id: str) -> Any:
         async with self._active:
             self._active_job_ids.add(job_id)
@@ -720,7 +723,7 @@ class ManualHistoryService:
                 target.symbol,
                 target.canonical_interval,
                 rebuilt,
-                source=collection.exchange,
+                source="manual_history_derived",
                 exchange=collection.exchange,
                 market_type=collection.market_type,
             )

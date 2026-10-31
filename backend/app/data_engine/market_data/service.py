@@ -240,9 +240,13 @@ class MarketDataService:
                     await self._on_ingestion_event(physical_id, event)
 
                 try:
+                    from .continuity import health_callback, ingestion_options
                     handle = await self._factory.start_market(
                         entry.descriptor,
                         _on_event,
+                        **ingestion_options(self._factory, on_health=health_callback(
+                            self.hub, lambda: tuple(entry.logical_keys)
+                            if self._physical_entries.get(physical_id) is entry else ())),
                     )
                 except BaseException:
                     await drain_cancellation_safe_cleanup(
@@ -1920,9 +1924,10 @@ class MarketDataService:
         *,
         max_pending: int = 64,
         replay: bool = True,
+        continuity=None,
     ) -> MarketHubSubscription:
         self._ensure_open()
-        return self.hub.subscribe(keys, max_pending=max_pending, replay=replay)
+        return self.hub.subscribe(keys, max_pending=max_pending, replay=replay, continuity=continuity)
 
     async def shutdown(self) -> None:
         async with self._lock:

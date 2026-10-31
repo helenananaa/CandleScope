@@ -60,6 +60,8 @@ Architecture::
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import json
 from app.data_engine.series_identity import (
     KlineSeriesIdentity,
@@ -467,12 +469,13 @@ class BarAggregator:
         )
         if pipeline is None:
             return None
-        return pipeline.bar_state.get_active(
+        return deepcopy(pipeline.bar_state.get_active(
             exchange.lower().strip(),
             market_type.lower().strip(),
             symbol.upper().strip(),
             bucket_start_ms,
-        )
+        ))
+
 
     def expire_bucket(
         self,
@@ -748,7 +751,7 @@ class BarAggregator:
         )
         if p is None:
             return None
-        return p.bar_state.get_latest_bar(exchange, market_type, symbol)
+        return deepcopy(p.bar_state.get_latest_bar(exchange, market_type, symbol))
 
     def get_active_bars(
         self,
@@ -764,7 +767,7 @@ class BarAggregator:
         )
         if p is None:
             return []
-        return p.bar_state.get_all_active(exchange, market_type, symbol)
+        return deepcopy(p.bar_state.get_all_active(exchange, market_type, symbol))
 
     def get_recent_bars(
         self,
@@ -781,9 +784,33 @@ class BarAggregator:
         )
         if p is None:
             return []
-        return p.bar_state.get_recent_closed(exchange, market_type, symbol, limit)
+        return deepcopy(p.bar_state.get_recent_closed(exchange, market_type, symbol, limit))
 
     # ── Public: Snapshot ─────────────────────────────────────
+
+    def memory_usage(self):
+        active = closed = components = 0
+        for pipeline in list(self._pipelines.values()):
+            engine = pipeline.bar_state
+            active += len(engine._active)
+            closed += len(engine._closed)
+            components += sum(len(state.source_snapshots) for state in
+                              [*engine._active.values(), *engine._closed.values()])
+        events = [event for queue, _ in list(self._publisher._subscribers)
+                  for event in list(queue._queue) if isinstance(event, BarEvent)]
+        queued_components = sum(len(state.source_snapshots) for event in events
+                                for state in (event.bar, event.previous_bar) if state is not None)
+        return {"active_bars": active, "closed_bars": closed, "components": components,
+                "queued_snapshots": len(events), "queued_components": queued_components,
+                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024,
+                "protection": "active and correction state owned by realtime executor"}
+
+    def _memory_roots(self):
+        # Diagnostic traversal is synchronous on the aggregation event loop;
+        # callers must not retain or mutate the owner-private roots.
+        return [*[list(engine._active.values()) + list(engine._closed.values())
+                  for pipeline in list(self._pipelines.values()) for engine in [pipeline.bar_state]],
+                *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)]]
 
     def snapshot(self) -> dict:
         """Full diagnostic snapshot of the entire aggregator."""
@@ -825,6 +852,9 @@ class BarAggregator:
         if pipeline is None:
             logger.warning("No pipeline for interval %s", interval)
             return
+
+        revision_provider = getattr(self, "acquisition_revision_provider", None)
+        acquisition_revision = revision_provider() if revision_provider is not None else None
 
         # L2: Compute which bucket this input belongs to
         bucket_start_ms = pipeline.time_bucket.compute_bucket(bar_input.open_time_ms)
@@ -874,6 +904,9 @@ class BarAggregator:
         state, change = pipeline.bar_state.apply(
             exchange, market_type, symbol, bucket_start_ms, bar_input,
         )
+
+        if state.acquisition_revision is None:
+            state.acquisition_revision = acquisition_revision
 
         # Drain eviction buffers — emit events for bars that were
         # force-closed or expired during apply() due to limit enforcement.

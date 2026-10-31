@@ -61,6 +61,7 @@ export interface RequestSignalOptions {
 
 export interface KlineHistoryOptions extends RequestSignalOptions {
   countBack?: number | null;
+  materializedOnly?: boolean;
   maxWaitMs?: number;
   intent?: "viewport" | "active_hydration";
 }
@@ -206,11 +207,15 @@ export async function fetchKlinesHistory(
   exchange = "binance",
   options: KlineHistoryOptions = {},
 ): Promise<TransportKlineResponse> {
-  const payload = await request(buildUrl("/klines/history", {
+  // A distinct URL fails closed on older servers, which may ignore an unknown
+  // query flag on /history and accidentally expand the expensive base route.
+  const endpoint = options.materializedOnly ? "/klines/history/materialized" : "/klines/history";
+  const payload = await request(buildUrl(endpoint, {
     symbol,
     interval,
     days: options.countBack == null ? days : undefined,
     count_back: options.countBack,
+    materialized_only: options.materializedOnly,
     exchange,
     market_type: marketType,
     max_wait_ms: options.maxWaitMs,
@@ -240,6 +245,7 @@ export async function fetchKlinesHistoryBatch(
         interval: item.interval,
         days: item.days ?? 7,
         count_back: item.options.countBack,
+        materialized_only: item.options.materializedOnly,
         exchange: item.exchange,
         market_type: item.marketType,
         max_wait_ms: item.options.maxWaitMs,

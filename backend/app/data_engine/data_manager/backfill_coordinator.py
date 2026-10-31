@@ -2003,6 +2003,11 @@ class BackfillCoordinator:
         if self._shutdown:
             raise RuntimeError("BackfillCoordinator is shut down")
 
+        store = getattr(self._storage, "revision_store", None)
+        if store is not None:
+            from app.data_engine.storage.revisions import acquisition_delete_floor
+            request.metadata.setdefault("acquisition_revision", acquisition_delete_floor(store.observed_revision))
+
         self._prune_retained_state()
         rejected_reason = self._demand_rejection_reason(request)
         if rejected_reason is not None:
@@ -2515,6 +2520,9 @@ class BackfillCoordinator:
                 "reason": request.reason,
                 "priority": request.priority,
                 "requester": request.requester,
+                "source_gap_id": request.metadata.get("source_gap_id"),
+                "range_start_ms": request.start_ms,
+                "range_end_ms": request.end_ms,
                 "errors": report.errors if report is not None else ([error] if error else []),
             },
         ))

@@ -35,6 +35,55 @@ ingestion -> bar_aggregator -> DataManager -> API / WS / Indicator
 
 ## 公共 API
 
+### 每个订阅的源数据连续性策略
+
+`subscribe()`、`subscribe_async()`、`subscribe_iter()` 支持 `continuity`：
+
+```python
+from app.data_engine.data_manager import ContinuityPolicy, DataEventType
+
+strict = dm.subscribe(on_closed, symbol="BTCUSDT", interval="1m",
+    event_types={DataEventType.BAR_CLOSED}, on_recovery=reload_snapshot,
+    continuity=ContinuityPolicy("strict", max_wait_seconds=2.0))
+live = dm.subscribe(on_live_or_control, symbol="BTCUSDT", interval="1m",
+    continuity="gap_aware")
+```
+
+- 默认 `strict`，从发现缺口起最多等待 10 秒，可按订阅配置。等待只阻塞该订阅的工作队列，复用 EventBus 的有界缓冲与回放。已有后台补洞负责共享修复；DM 拥有的 K 线入口不再由 L5.5 统一等待，但保留去重和顺序保护。TradeFlow 也由自己的共享 ID 修复服务负责，避免上游统一等待阻塞实时优先订阅。
+- 严格模式必须看到覆盖所有缺失开盘时间的可信已收盘数据，才按顺序交付补回的 `BAR_CLOSED` 和暂存尾部。补回数据及等待期间收到的尾部带 `continuity_replayed=True`，报警据此更新状态，不将追赶数据当作新信号触发。
+- `gap_aware` 会继续交付，并在 K 线详情中标注 `source_continuity`；`SOURCE_GAP` / `SOURCE_GAP_RESOLVED` 不受事件类型过滤，以免隐藏缺口。订阅了 `BAR_AMENDED` 的消费者还会收到历史修正；其他消费者可按控制事件的范围重新读取。消费者必须处理这些控制事件，已有浏览器协议不会自动切到此模式。
+- 等待超时、补洞失败、源停止、回放耗尽或存储延迟造成收盘交付倒序，callback 通过 `on_recovery`、iterator 通过 `ConsumerRecoveryRequired` 明确要求重新取快照再订阅。缺口期间新加入的严格订阅也需要在补齐后重新取快照，因为它没有收到订阅前的尾部。取消某个订阅不会取消共享修复。
+- 保证范围是订阅期间**已检测到的源数据缺口与最终 K 线**，不包含初始历史、每个盘中 tick 或外部副作用的 exactly-once。交易日历决定预期时间；派生周期必须修复对应目标 K 线，不能只凭基础周期补齐就恢复交付。
+- 一个 wildcard 订阅共用一个工作队列；需要各序列独立延迟时使用多个订阅。缺口证据最多保留 256 条、合计 10,000 根预期 K 线；若未完成证据被挤出，严格交付会明确失败，需重启 DataManager 并重新建立快照。诊断见 `market_data_control_snapshot().source_continuity`。
+
+### 跨交易所与其他数据类型
+
+策略没有交易所或商品白名单，沿用已注册插件的市场、通道、交易日历和数据权限。先用 `dm.continuity_contract(key)` 查询该交易所/市场/通道是否可用、支持的策略及恢复能力。插件未提供的实时流或历史数据不会因选择策略而凭空出现；例如当前 Twelve Data K 线仅声明历史能力。CCXT 的细分市场必须使用插件声明的名称，例如 Bybit 的 `swap.linear`。
+
+```python
+# K 线默认 strict；其他服务通过参数显式选择，省略时保留原交付接口。
+trades = dm.trades.attach(trade_keys, continuity="strict")
+book = dm.books.full.attach(book_keys, continuity="gap_aware")
+# 部分盘口和 ticker / mark / funding / OI 等最新状态同样支持两种策略。
+partial = dm.books.partial.attach(partial_keys, continuity="strict")
+state = dm.market_state.subscribe(state_keys, continuity="strict")
+liquidations = dm.liquidations.attach(liquidation_keys, continuity="gap_aware")
+```
+
+| 数据类型 | strict | gap_aware |
+|---|---|---|
+| K 线 | 按预期时间补齐可信收盘 K 线 | 实时交付、缺口控制、历史修正 |
+| 声明连续 ID 和历史重放能力的成交 | 共享 REST 修复，逐订阅按 ID 补回；队列/保留窗口耗尽则要求重同步 | 继续交付；`batch.detail.source_continuity` 描述缺口，`batch.corrections` 返回补回成交 |
+| 完整盘口 | 等待通过序号校验的新快照 | 立即收到失效状态，再收到恢复状态 |
+| 部分盘口和其他最新行情状态 | 等待有效的新状态；允许合并中间更新 | 缺口状态不会被最新值合并吞掉 |
+| 无连续序号的普通成交、采样清算 | 抛出 `ContinuityUnsupported`，不能承诺完整源事件 | 接受观察/采样语义，标注 `source_exhaustive=False`，断线时通知不可补回 |
+
+盘口与最新状态的严格保证是**当前状态有效**，不承诺重放断线期间每个盘口变化。成交订阅的等待预算从消费者观察到缺号批次起计算，批次内多段缺口共享预算。等待只占用该订阅，关闭或超时不会取消其他消费者的共享修复。成交缓冲受订阅 `max_pending_records` 和引擎保留窗口限制；补齐后 `continuity_replayed=True` 标记追赶批次。实时优先消费者必须处理空记录控制批次和修正字段，不能只遍历 `records`。
+
+最新状态的缺口证据也有容量上限；若共享 hub 丢失未恢复的证据，严格订阅会收到 `source_gap_tracking_exhausted`，需要重建所属服务并获取新快照，单独重新订阅不足以恢复保证。
+
+现有浏览器协议没有自动启用新参数；这些契约首先提供给 DataManager 后端消费者。这里的跨交易所验证使用受控源输入、真实服务与 SQLite，不等同于全交易所实盘验收。
+
 `DataManager` 常用方法：
 
 | 方法 | 用途 |

@@ -114,6 +114,7 @@ class KlineHistoryBatchItem(BaseModel):
     session_variant: str = Field(default=DEFAULT_SESSION_VARIANT, min_length=1, max_length=64)
     volume_semantics: str = Field(default=DEFAULT_VOLUME_SEMANTICS, min_length=1, max_length=64)
     intent: Literal["viewport", "active_hydration"] = "viewport"
+    materialized_only: bool = False
     request_scope: str | None = Field(default=None, max_length=128)
     request_generation: int | None = Field(default=None, ge=0)
     max_wait_ms: int = Field(default=3500, ge=0, le=8000)
@@ -1924,6 +1925,7 @@ async def get_klines(
     limit: int = Query(500, ge=1, le=1000, description="Number of rows"),
     exchange: str = Query(DEFAULT_EXCHANGE, description="Exchange, e.g. binance"),
     market_type: str = Query(DEFAULT_MARKET_TYPE, description="Market type: spot, futures, swap"),
+    min_revision: int | None = Query(None, ge=0, description="Minimum committed storage revision"),
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get the latest K-line bars for a symbol/interval pair.
@@ -1963,6 +1965,7 @@ async def get_klines(
             exchange,
             market_type=market_type,
             **identity_kwargs,
+            **({"min_revision": min_revision} if isinstance(min_revision, int) else {}),
         )
     except Exception as exc:
         raise _query_http_exception(exc, "DataManager query failed") from exc
@@ -2223,6 +2226,10 @@ async def get_klines_history(
             )
         ),
     ] = "viewport",
+    materialized_only: Annotated[
+        bool,
+        Query(description="Read target cache/storage only; never derive, repair or prewarm"),
+    ] = False,
     request_scope: str | None = Query(
         None,
         max_length=128,
@@ -2339,9 +2346,16 @@ async def get_klines_history(
             needed_limit = cap["needed_limit"]
 
         async def _run_history_query(auto_backfill=None):
+            # A distinct method is intentional: the compatibility adapter must
+            # never silently discard the no-base-read boundary on an older DM.
+            query_method = dm.query
+            if materialized_only:
+                query_method = getattr(dm, "query_materialized", None)
+                if not callable(query_method):
+                    raise HTTPException(status_code=503, detail="Materialized history probes unavailable")
             return await run_storage(
                 _call_data_manager_method,
-                dm.query,
+                query_method,
                 symbol, interval,
                 start_ms=start_ms,
                 end_ms=end_ms,
@@ -2382,7 +2396,7 @@ async def get_klines_history(
         # active_hydration lane also uses zero-wait, but it must continue to
         # admit its background repair or the focused chart can never reach its
         # full history target.
-        read_only_viewport_probe = max_wait_ms == 0 and intent == "viewport"
+        read_only_viewport_probe = materialized_only or (max_wait_ms == 0 and intent == "viewport")
         result = await _run_history_query(
             auto_backfill=False if read_only_viewport_probe else None,
         )
@@ -2438,7 +2452,7 @@ async def get_klines_history(
         # very first response already carries data. Poll re-queries pass
         # auto_backfill=False so we wait for the already-scheduled backfill
         # instead of spamming duplicate backfill requests.
-        if max_wait_ms > 0 and (
+        if not materialized_only and max_wait_ms > 0 and (
             _should_wait_for_backfill(result)
             or bool(submitted and verification_only)
         ):
@@ -2502,7 +2516,8 @@ async def get_klines_history(
     # foreground page is fully trustworthy, and never after its HTTP consumer
     # disconnected. The scheduler still caps background work to one slot.
     if (
-        bool(data)
+        not materialized_only
+        and bool(data)
         and bool(verification["verified_contiguous"])
         and _all_rows_final(result)
         and not identity_kwargs
@@ -2534,6 +2549,7 @@ async def get_klines_history(
         "symbol": symbol.upper(),
         "interval": interval,
         "intent": intent,
+        "materialized_only": materialized_only,
         "days": days,
         "count_back": count_back,
         "start_ms": start_ms,
@@ -2561,6 +2577,34 @@ async def get_klines_history(
     # wire contract while avoiding that redundant traversal and its resulting
     # event-loop stall.
     return ORJSONResponse(payload)
+
+
+@router.get("/history/materialized")
+async def get_materialized_klines_history(
+    request: Request,
+    symbol: str = Query("BTCUSDT"),
+    interval: str = Query("1h"),
+    days: float = Query(7, ge=0.001),
+    count_back: int | None = Query(None, ge=1, le=MAX_RANGE_RESPONSE_BARS),
+    exchange: str = Query(DEFAULT_EXCHANGE),
+    market_type: str = Query(DEFAULT_MARKET_TYPE),
+    request_scope: str | None = Query(None, max_length=128),
+    request_generation: int | None = Query(None, ge=0),
+    series_identity_query: KlineSeriesIdentityQuery = Depends(),
+):
+    """A target-only probe, including when the client/backend versions differ.
+
+    Older servers return 404 for this URL rather than ignoring a new query
+    flag and expanding source history. The batch schema rejects unknown fields
+    equivalently. A caller cannot enable repair by overriding wait or intent.
+    """
+    return await get_klines_history(
+        request=request, symbol=symbol, interval=interval, days=days,
+        count_back=count_back, exchange=exchange, market_type=market_type,
+        intent="viewport", materialized_only=True, max_wait_ms=0,
+        request_scope=request_scope, request_generation=request_generation,
+        series_identity_query=series_identity_query,
+    )
 
 
 @router.post("/history/batch")
@@ -2598,6 +2642,7 @@ async def post_klines_history_batch(
                 exchange=item.exchange,
                 market_type=item.market_type,
                 intent=item.intent,
+                materialized_only=item.materialized_only,
                 request_scope=item.request_scope,
                 request_generation=item.request_generation,
                 max_wait_ms=item.max_wait_ms,

@@ -2,14 +2,21 @@
 from __future__ import annotations
 
 import time
+import sys
 from dataclasses import dataclass, replace
 from typing import Any
 
 from app.data_engine.interval_policy import is_ephemeral_interval
 
-from .models import SeriesKey, StreamStatus
+from .models import BarData, SeriesKey, StreamStatus
 
-BAR_ESTIMATED_BYTES = 96
+# Conservative per-record allocation estimate including scalar referents and
+# two list slots; shared references are deduplicated by opt-in heap diagnostics.
+_sample_bar = BarData(0, 0., 0., 0., 0., 0.)
+BAR_ESTIMATED_BYTES = sys.getsizeof(_sample_bar) + sum(
+    sys.getsizeof(getattr(_sample_bar, name)) for name in BarData.__slots__
+) + 16
+del _sample_bar
 DEFAULT_COLD_IDLE_SECONDS = 30 * 60
 DEFAULT_MAX_VICTIMS = 50
 DEFAULT_PLAN_TTL_MS = 30_000
@@ -27,6 +34,7 @@ class MemoryGcPolicy:
     preserve_active: bool = True
     preserve_subscribed: bool = True
     ephemeral_keep_bars: int | None = None
+    max_estimated_bytes: int | None = None
 
     @classmethod
     def from_mapping(cls, values: dict[str, Any] | None = None) -> "MemoryGcPolicy":
@@ -42,6 +50,7 @@ class MemoryGcPolicy:
             preserve_active=bool(values.get("preserve_active", True)),
             preserve_subscribed=bool(values.get("preserve_subscribed", True)),
             ephemeral_keep_bars=_optional_positive_int(values.get("ephemeral_keep_bars")),
+            max_estimated_bytes=_optional_positive_int(values.get("max_estimated_bytes")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -53,6 +62,7 @@ class MemoryGcPolicy:
             "preserve_active": self.preserve_active,
             "preserve_subscribed": self.preserve_subscribed,
             "ephemeral_keep_bars": self.ephemeral_keep_bars,
+            "max_estimated_bytes": self.max_estimated_bytes,
         }
 
 
@@ -88,6 +98,9 @@ def plan_memory_gc(
             ) * max(1, int(cache_snapshot.get("max_series", 0) or 0))
     max_series = effective_policy.max_series or int(cache_snapshot.get("max_series", 0) or 0) or None
     runtime_hard_pressure = _runtime_hard_memory_pressure(runtime_pressure)
+    budget = getattr(data_manager, "memory_budget", None)
+    common_pressure = budget.snapshot() if budget is not None else {}
+    cache_byte_budget = effective_policy.max_estimated_bytes or common_pressure.get("owners", {}).get("bar-cache", {}).get("limit_bytes", 128 * 1024 * 1024)
     pressure = {
         "total_bars": total_bars,
         "max_total_bars": max_total_bars,
@@ -96,6 +109,8 @@ def plan_memory_gc(
         "max_series": max_series,
         "over_series": max(0, total_series - max_series) if max_series else 0,
         "runtime_hard_pressure": runtime_hard_pressure,
+        "estimated_bytes": total_bars * BAR_ESTIMATED_BYTES,
+        "over_estimated_bytes": max(0, total_bars * BAR_ESTIMATED_BYTES - cache_byte_budget, common_pressure.get("over_budget_bytes", 0)),
     }
     entries = _cache_entries(
         data_manager,
@@ -138,6 +153,7 @@ def plan_memory_gc(
         "pressure": pressure,
         "runtimePressure": runtime_pressure or {},
         "protected_count": protected_count,
+        "degraded_protected_memory": bool(pressure["over_estimated_bytes"] and not victims),
         "candidate_count": len(candidates),
         "victims": victims,
         "would_remove_series": sum(1 for item in victims if item.get("action") == "delete-series"),
@@ -339,6 +355,7 @@ def _candidate_action(
     idle_enough = idle_ms is not None and idle_ms >= policy.cold_idle_seconds * 1000
     under_pressure = bool(
         pressure.get("over_total_bars")
+        or pressure.get("over_estimated_bytes")
         or pressure.get("over_series")
         or pressure.get("runtime_hard_pressure")
     )

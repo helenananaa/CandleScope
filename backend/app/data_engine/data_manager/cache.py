@@ -40,8 +40,9 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 from app.data_engine.kline_quality import incoming_source_can_replace
 
@@ -59,6 +60,21 @@ class HistoryCapacityReservation:
     capacity_bars: int
     active: bool
     capped: bool
+
+
+@dataclass(eq=False, slots=True)
+class CacheReadToken:
+    """Opaque, scoped refill permission; contains no retained bar references.
+
+    Generation/revision catch writes and trimming of a resident series. The
+    explicit invalidation bit also fences deletion of an already absent key.
+    Only BarCache may advance or invalidate a registered token.
+    """
+
+    key: SeriesKey
+    generation: int | None
+    revision: int | None
+    invalidated: bool = False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -403,6 +419,7 @@ class BarCache:
     """
 
     def __init__(self, config: CacheConfig | None = None) -> None:
+        self.revision_consumer = None
         self._cfg = config or CacheConfig()
         self._lock = threading.Lock()
         # OrderedDict for LRU tracking — most recently used at the end
@@ -414,6 +431,10 @@ class BarCache:
         # Monotonic across remove/clear/LRU cycles so a stale plan cannot pass
         # revision checks against a newly-created incarnation of the same key.
         self._next_series_generation = 0
+        # Retain fences only while queries are in flight, including cold misses.
+        # Removing a series must not erase the fence of an older database read.
+        self._read_tokens: dict[SeriesKey, set[CacheReadToken]] = {}
+        self._rejected_read_refills = 0
         # Eviction callbacks
         self._eviction_callbacks: list[Any] = []
         # Configurable ephemeral cache limit (default 86400 = 24h of 1s)
@@ -510,9 +531,78 @@ class BarCache:
         if evicted:
             self._on_bars_evicted(key, evicted)
 
+    @contextmanager
+    def read_token(self, key: SeriesKey) -> Iterator[CacheReadToken]:
+        """Capture a refill fence before reading cache/storage; release on exit.
+
+        No lock is held during I/O. Unrelated series and reads do not invalidate
+        this token; normal writes retain the existing mutation revision rules.
+        This token is process-local; an attached revision consumer synchronizes
+        durable changes before capture and adoption through the same owner.
+        """
+        if self.revision_consumer is not None:
+            self.revision_consumer.sync()
+        with self._lock:
+            series = self._series.get(key)
+            token = CacheReadToken(
+                key,
+                series.generation if series is not None else None,
+                series.revision if series is not None else None,
+            )
+            self._read_tokens.setdefault(key, set()).add(token)
+        try:
+            yield token
+        finally:
+            with self._lock:
+                tokens = self._read_tokens[key]
+                tokens.remove(token)
+                if not tokens:
+                    del self._read_tokens[key]
+
+    def bulk_load_if_unchanged(
+        self,
+        key: SeriesKey,
+        bars: list[BarData],
+        *,
+        read_token: CacheReadToken,
+    ) -> bool:
+        """Atomically validate and adopt one page, including an empty read.
+
+        A query may adopt several pages with the same token. Its own accepted
+        fills advance that token, while competing queries still see revision
+        drift. Closed, foreign, invalidated or stale tokens fail closed.
+        """
+        evicted: list[BarData] = []
+        if self.revision_consumer is not None:
+            self.revision_consumer.sync(force=True)
+        with self._lock:
+            series = self._series.get(key)
+            if (
+                read_token not in self._read_tokens.get(key, ())
+                or read_token.invalidated
+                or read_token.generation != (series.generation if series is not None else None)
+                or read_token.revision != (series.revision if series is not None else None)
+            ):
+                self._rejected_read_refills += 1
+                return False
+            if bars:
+                series = self._get_or_create(key)
+                evicted = series.bulk_load(bars)
+                read_token.generation = series.generation
+                read_token.revision = series.revision
+        if evicted:
+            self._on_bars_evicted(key, evicted)
+        return True
+
+    def _invalidate_read_tokens(self, key: SeriesKey) -> None:
+        """Fence in-flight reads before removal, including absent keys (locked)."""
+        for token in self._read_tokens.get(key, ()):
+            token.invalidated = True
+
     def invalidate(self, key: SeriesKey) -> None:
         """Remove all cached bars while retaining any bounded reservation."""
         with self._lock:
+            self._invalidate_read_tokens(key)
             series = self._series.pop(key, None)
             if series:
                 logger.debug("Invalidated cache for %s (%d bars)", key, series.count)
@@ -520,6 +610,7 @@ class BarCache:
     def remove_series(self, key: SeriesKey) -> int:
         """Remove one cached series and return its previous bar count."""
         with self._lock:
+            self._invalidate_read_tokens(key)
             series = self._series.pop(key, None)
             self._history_capacities.pop(key, None)
             if series is None:
@@ -550,6 +641,7 @@ class BarCache:
             ):
                 return 0, "stale"
             removed = series.count
+            self._invalidate_read_tokens(key)
             self._series.pop(key, None)
             self._history_capacities.pop(key, None)
             logger.debug("Conditionally removed cache series %s (%d bars)", key, removed)
@@ -559,6 +651,8 @@ class BarCache:
         """Remove all cached data."""
         with self._lock:
             count = len(self._series)
+            for key in self._read_tokens:
+                self._invalidate_read_tokens(key)
             self._series.clear()
             self._history_capacities.clear()
             logger.info("Cache cleared (%d series removed)", count)
@@ -748,6 +842,7 @@ class BarCache:
                 if series.last_access_ms < cutoff_ms:
                     to_remove.append(key)
             for key in to_remove:
+                self._invalidate_read_tokens(key)
                 self._series.pop(key, None)
                 self._history_capacities.pop(key, None)
                 self._evictions += 1
@@ -847,6 +942,8 @@ class BarCache:
                 "hits": self._hits,
                 "misses": self._misses,
                 "evictions": self._evictions,
+                "active_read_tokens": sum(len(tokens) for tokens in self._read_tokens.values()),
+                "rejected_read_refills": self._rejected_read_refills,
                 "history": {
                     "max_bars_per_series": self._cfg.history_max_bars_per_series,
                     "max_series": self._cfg.history_max_series,
@@ -864,6 +961,38 @@ class BarCache:
                     for key, series in self._series.items()
                 },
             }
+
+    def invalidate_dependents(self, key):
+        """Conservative family invalidation for derived projections/tokens.
+
+        The dependency/block owner may narrow this later. Cache-only ephemeral
+        streams are not durable materializations and retain their own lifetime.
+        """
+        from app.data_engine.interval_policy import is_ephemeral_interval
+        with self._lock:
+            keys = set(self._series) | set(self._read_tokens)
+            for candidate in keys:
+                if (candidate != key and not is_ephemeral_interval(candidate.interval)
+                        and candidate.exchange == key.exchange and candidate.market_type == key.market_type
+                        and candidate.symbol == key.symbol and candidate.identity == key.identity):
+                    self._invalidate_read_tokens(candidate)
+                    self._series.pop(candidate, None)
+                    self._history_capacities.pop(candidate, None)
+
+    def memory_usage(self):
+        from .gc import BAR_ESTIMATED_BYTES
+        with self._lock:
+            count = sum(series.count for series in self._series.values())
+            return {"bars": count, "series": len(self._series),
+                    "estimated_bytes": count * BAR_ESTIMATED_BYTES,
+                    "estimate_basis": "record, scalar referents and list slots; conservative"}
+
+    def _memory_roots(self):
+        with self._lock:
+            # Copy containers, share immutable records. No caller can mutate
+            # cache storage through diagnostic roots.
+            return [(key, list(series._bars), list(series._time_index))
+                    for key, series in self._series.items()]
 
     def health_snapshot(self) -> dict[str, int]:
         """Return the constant-size counters needed by ``/health``."""
@@ -884,6 +1013,7 @@ class BarCache:
         # Evict LRU series if at capacity
         while len(self._series) >= self._cfg.max_series:
             evicted_key, evicted_series = self._series.popitem(last=False)
+            self._invalidate_read_tokens(evicted_key)
             self._history_capacities.pop(evicted_key, None)
             self._evictions += 1
             logger.debug(

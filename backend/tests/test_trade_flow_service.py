@@ -833,11 +833,19 @@ async def test_cancelled_shutdown_can_be_awaited_again_to_completion(tmp_path) -
         await first_waiter
     assert service.diagnostics()["state"] == "closing"
 
+    # Cancelling the shutdown caller must not close intake before the feed's
+    # stop owner has had a chance to flush its final callbacks.
+    await factory.emit(_event(1))
     factory.stop_gate.set()
     await service.shutdown()
 
     assert service.diagnostics()["state"] == "closed"
     assert service.engine.diagnostics()["active_streams"] == 0
+    assert service.diagnostics()["events_after_stop"] == 0
+    rows = await service.rollup_store.query_rollups(
+        exchange="binance", market_type="futures", symbol="BTCUSDT",
+    )
+    assert rows[0]["agg_trade_count"] == 1
 
 
 @_async_test
@@ -872,6 +880,12 @@ async def test_hung_physical_stop_times_out_but_durability_drains(tmp_path) -> N
     assert diagnostics["last_physical_stop_error"]
     assert diagnostics["shutdown"]["pending_physical_stop_tasks"] == 1
 
+    # Timeout seals intake even though the transport's cleanup is still alive.
+    processed = diagnostics["commands_processed"]
+    await factory.emit(_event(3))
+    assert service.diagnostics()["events_after_stop"] == 1
+    assert service.diagnostics()["commands_processed"] == processed
+
     factory.stop_gate.set()
     await _wait_until(
         lambda: service.diagnostics()["shutdown"][
@@ -899,6 +913,10 @@ async def test_physical_stop_failure_is_degraded_but_shutdown_closes(tmp_path) -
     assert diagnostics["physical_stop_failures"] == 1
     assert diagnostics["physical_stops_succeeded"] == 0
     assert "transport stop failed" in diagnostics["last_physical_stop_error"]
+
+    await factory.emit(_event(1))
+    assert service.diagnostics()["events_after_stop"] == 1
+    assert service.diagnostics()["commands_processed"] == 0
 
 
 @_async_test

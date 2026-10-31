@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 
@@ -33,6 +33,8 @@ class AppendBatch(Generic[RecordT]):
     continuity: bool = True
     resync_required: bool = False
     dropped_before: int = 0
+    detail: dict = field(default_factory=dict)
+    corrections: tuple[RecordT, ...] = ()
 
     def __len__(self) -> int:
         return len(self.records)
@@ -47,10 +49,12 @@ class AppendBatchSubscription(Generic[RecordT]):
         *,
         max_pending_records: int,
         predicate: Callable[[RecordT], bool] | None,
+        source_quality: str | None = None,
     ) -> None:
         self._hub = hub
         self._max_pending_records = max(1, int(max_pending_records))
         self._predicate = predicate
+        self._source_quality = source_quality
         self._pending: deque[AppendBatch[RecordT]] = deque()
         self._pending_records = 0
         self._ready = asyncio.Event()
@@ -58,6 +62,8 @@ class AppendBatchSubscription(Generic[RecordT]):
         self._dropped_batches = 0
         self._dropped_records = 0
         self._deferred_dropped_before = 0
+        self._source_control = None
+        self.stream_identities = None
 
     @property
     def pending_batch_count(self) -> int:
@@ -81,6 +87,11 @@ class AppendBatchSubscription(Generic[RecordT]):
 
     async def receive(self) -> AppendBatch[RecordT] | None:
         while True:
+            if self._source_control is not None:
+                control, self._source_control = self._source_control, None
+                if not self._pending:
+                    self._ready.clear()
+                return control
             if self._pending:
                 batch = self._pending.popleft()
                 self._pending_records -= len(batch)
@@ -157,6 +168,9 @@ class AppendBatchSubscription(Generic[RecordT]):
                     continuity=False,
                     resync_required=True,
                     dropped_before=first_dropped + queue_discontinuity,
+                    detail={**first.detail, **({"source_continuity": {
+                        **first.detail["source_continuity"], "state": "gapped",
+                    }} if "source_continuity" in first.detail else {})},
                 ),
             )
         else:
@@ -168,6 +182,11 @@ class AppendBatchSubscription(Generic[RecordT]):
             continuity=incoming_discontinuity == 0,
             resync_required=incoming_discontinuity > 0,
             dropped_before=incoming_discontinuity,
+            detail={**batch.detail, **({"source_continuity": {
+                "guarantee": self._source_quality,
+                "state": "gapped" if incoming_discontinuity else "observed",
+                "source_exhaustive": False,
+            }} if self._source_quality else {})},
         )
         self._pending.append(offered)
         self._pending_records += len(offered)
@@ -227,6 +246,26 @@ class AppendBatchHub(Generic[RecordT]):
         self._pending_dropped_since_flush += missing
         self._metrics["explicit_discontinuities"] += 1
         return True
+
+    def mark_source_gap(self, identities, *, reason: str) -> None:
+        """A bounded control slot for opt-in observational consumers."""
+        affected = set(identities)
+        for subscription in tuple(self._subscriptions):
+            if subscription._source_quality is None:
+                continue
+            if subscription.stream_identities is not None:
+                relevant = affected.intersection(subscription.stream_identities)
+                if not relevant:
+                    continue
+            else:
+                relevant = affected
+            subscription._source_control = AppendBatch(self._sequence, (), continuity=False,
+                resync_required=True, detail={"source_continuity": {
+                    "state": "unrecoverable", "reason": reason,
+                    "identities": sorted(relevant), "source_exhaustive": False,
+                    "guarantee": subscription._source_quality,
+                }})
+            subscription._ready.set()
 
     def append(self, record: RecordT) -> bool:
         """Append one record without waiting for subscribers.
@@ -294,6 +333,7 @@ class AppendBatchHub(Generic[RecordT]):
         *,
         max_pending_records: int | None = None,
         predicate: Callable[[RecordT], bool] | None = None,
+        source_quality: str | None = None,
     ) -> AppendBatchSubscription[RecordT]:
         if self._closed:
             raise RuntimeError("append batch hub is closed")
@@ -303,6 +343,7 @@ class AppendBatchHub(Generic[RecordT]):
                 max_pending_records or self._default_subscriber_max_pending_records
             ),
             predicate=predicate,
+            source_quality=source_quality,
         )
         self._subscriptions.add(subscription)
         self._metrics["subscriptions_total"] += 1
