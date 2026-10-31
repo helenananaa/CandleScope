@@ -176,6 +176,8 @@ test("create, monitor, disconnect, and export do not cancel the run", async () =
   assert.equal(store.getState().runs[0]?.state, "COMPLETED");
   assert.equal((result.exported.manifest as { reportLabel: string }).reportLabel, "APPROXIMATE");
   assert.equal(reportHidesApproximate(result.report), false);
+  assert.equal(reportHidesApproximate({ ...result.report, report_label: "APPROXIMATE_WITH_SIMULATED_CLOSE" }), false);
+  assert.equal(reportHidesApproximate({ ...result.report, report_label: "TRADE_SEQUENCE_WITH_SIMULATED_CLOSE" }), true);
 });
 
 test("refresh after disconnect keeps the last known run", () => {

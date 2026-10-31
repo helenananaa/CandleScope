@@ -180,6 +180,8 @@ export interface BacktestApiClient {
     python_runtime_mode?: string;
     python_trusted_confirmed?: boolean;
     parameters: Record<string, unknown>;
+    pine_contexts?: unknown[];
+      output_mode?: "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT";
     execution_overrides?: import("../../shared/strategyRunSettings.js").StrategyExecutionOverrides;
     chart_cell_scope: string;
     strategy_draft_id: string;
@@ -267,6 +269,7 @@ export interface BacktestDataset {
 }
 
 export interface SnapshotPreviewRequest {
+  execution_data?: unknown;
   dataset_id: string;
   data_epoch: string;
   start_time_ms: number;

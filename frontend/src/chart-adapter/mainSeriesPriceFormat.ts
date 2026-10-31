@@ -32,6 +32,6 @@ export class MainSeriesPriceFormatTracker {
       }
     }
     this.rowCount = rows.length;
-    return { type: "price" as const, precision: this.precision, minMove: 10 ** -this.precision };
+    return { type: "price" as const, precision: this.precision, minMove: Number(`1e-${this.precision}`) };
   }
 }

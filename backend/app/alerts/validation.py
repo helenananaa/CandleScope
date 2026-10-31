@@ -31,6 +31,7 @@ VALID_VALUE_FIELDS = {
     "rsi",
     "macdHist",
     "ma20",
+    "pineAlert",
 }
 VALID_AFTER_TRIGGER = {"auto_disable", "keep", "pause"}
 

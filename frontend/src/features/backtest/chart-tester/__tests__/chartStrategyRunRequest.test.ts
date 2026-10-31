@@ -49,6 +49,23 @@ const request: ChartStrategyRunRequest = {
   },
 };
 
+test("Pine libraries are frozen into revision dependencies and excluded from input overrides", async () => {
+  const libraries = { "local/Math/1": '//@version=6\nlibrary("Math")\nexport twice(float x) => x * 2' };
+  const input = { ...request, language: "pine" as const, attachment: { ...request.attachment, language: "pine" as const,
+    parameters: { length: 5, __pineLibrariesText: JSON.stringify(libraries) } } };
+  const frozen = await freezeChartStrategyRunRequest(input);
+  assert.deepEqual(frozen.attachment.parameters, { length: 5, __pineLibraries: libraries });
+  const changed = await freezeChartStrategyRunRequest({ ...input, attachment: { ...input.attachment, parameters: { ...input.attachment.parameters, __pineLibrariesText: JSON.stringify({ "local/Math/1": libraries["local/Math/1"].replace("x * 2", "x * 3") }) } } });
+  assert.notEqual(changed.parameterHash, frozen.parameterHash);
+  await assert.rejects(freezeChartStrategyRunRequest({ ...input, attachment: { ...input.attachment, parameters: { __pineLibrariesText: "[" } } }));
+  const api = apiWithResolutions([resolution(), resolution()], []);
+  const create = api.createStrategyRevision;
+  api.createStrategyRevision = async (body, signal) => { assert.deepEqual(body.libraries, libraries); return create(body, signal); };
+  api.smokeStrategyRevision = async (_revision, body) => { assert.deepEqual(body.parameters, { length: 5 }); return { ok: true }; };
+  api.createRun = async (body) => { assert.deepEqual(body.parameters, { length: 5 }); return completed(); };
+  await runChartStrategyBacktest({ api, request: input });
+});
+
 test("Python requires current-source consent before compilation and carries runtime mode through smoke and Run", async () => {
   const python = { ...request, language: "python" as const, attachment: { ...request.attachment, language: "python" as const } };
   const calls: string[] = [];
@@ -271,7 +288,7 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
   });
   assert.equal(outcome.kind, "TERMINAL");
   assert.deepEqual(calls, [
-    "revision:PINE_SUBSET",
+    "revision:PINE_ENGINE",
     "resolve",
     "smoke",
     "validate",
@@ -287,6 +304,58 @@ test("READY follows revision-resolve-smoke-validate-reresolve-create-poll", asyn
     pollIntervalMs: 0,
   });
   assert.equal(keys[0], keys[1]);
+});
+
+test("Pine charts compile through the real engine revision rather than the frozen example subset", async () => {
+  const calls: string[] = [];
+  const pine: ChartStrategyRunRequest = { ...request, language: "pine",
+    source: '//@version=6\nstrategy("SMA")\nif close > ta.sma(close, 2)\n    strategy.entry("L", strategy.long)',
+    attachment: { ...request.attachment, language: "pine" } };
+  const outcome = await runChartStrategyBacktest({ api: apiWithResolutions([resolution(), resolution()], calls),
+    request: pine, pollIntervalMs: 0 });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.equal(calls[0], "revision:PINE_ENGINE");
+});
+
+test("Pine requested datasets are frozen into manual and automatically prepared runs", async (context) => {
+  const previousFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = previousFetch; });
+  const dataset = { dataset_id: "remote", data_epoch: "remote-epoch", name: "ETH", symbol: "ETHUSDT",
+    interval: "2m", first_open_ms: 0, last_close_ms: 599999, exchange: "okx", market_type: "spot" };
+  const signal = new AbortController().signal;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options?.signal, signal);
+    if (String(url).endsWith("/datasets")) return new Response(JSON.stringify({ datasets: [dataset] }));
+    assert.ok(String(url).endsWith("/datasets/snapshot"));
+    const body = JSON.parse(String(options?.body)) as Record<string, unknown>;
+    assert.equal(body.exchange, "okx"); assert.equal(body.market_type, "spot");
+    return new Response(JSON.stringify({ snapshot_hash: "remote-snapshot" }));
+  };
+  const pine: ChartStrategyRunRequest = { ...request, language: "pine", attachment: {
+    ...request.attachment, language: "pine", parameters: { length: 5, __pineInputs: {
+      contexts: [{ dataset, symbol: "OKX:ETHUSDT" }], magnifier: null, libraries: "{}",
+    } },
+  } };
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution(), resolution()], calls);
+  api.createStrategyRevision = async () => ({ ...revision, language: "PINE_ENGINE", output_modes: ["TARGET_POSITION", "ORDER_INTENT"] });
+  api.createRun = async (body) => {
+    assert.deepEqual(body.parameters, { length: 5 });
+    assert.equal(body.output_mode, "ORDER_INTENT");
+    assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.snapshot_hash, "remote-snapshot");
+    assert.equal((body.pine_contexts as Record<string, unknown>[])[0]?.exchange, "okx");
+    return completed();
+  };
+  assert.equal((await runChartStrategyBacktest({ api, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
+  const automatic = apiWithResolutions([resolution("NEEDS_DATA")], []);
+  automatic.createStrategyRevision = api.createStrategyRevision;
+  automatic.prepareChartContext = async (_body, _signal, intent) => {
+    assert.deepEqual(intent?.parameters, { length: 5 });
+    assert.equal(intent?.output_mode, "ORDER_INTENT");
+    assert.equal((intent?.pine_contexts?.[0] as Record<string, unknown>).snapshot_hash, "remote-snapshot");
+    return { ...resolution(), prepared_run: completed() };
+  };
+  assert.equal((await runChartStrategyBacktest({ api: automatic, request: pine, signal, pollIntervalMs: 0 })).kind, "TERMINAL");
 });
 
 test("an idempotent completed Run is reused without polling or retry", async () => {
@@ -315,7 +384,7 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
     request,
   });
   assert.equal(first.kind, "NEEDS_DATA");
-  assert.deepEqual(firstCalls, ["revision:PINE_SUBSET", "resolve"]);
+  assert.deepEqual(firstCalls, ["revision:PINE_ENGINE", "resolve"]);
 
   const nextCalls: string[] = [];
   const next = await runChartStrategyBacktest({
@@ -326,7 +395,7 @@ test("NEEDS_DATA stops for confirmation and materialize always re-resolves", asy
   });
   assert.equal(next.kind, "TERMINAL");
   assert.deepEqual(nextCalls.slice(0, 3), [
-    "revision:PINE_SUBSET",
+    "revision:PINE_ENGINE",
     "materialize:true",
     "resolve",
   ]);
@@ -344,7 +413,7 @@ test("automatic preparation carries frozen strategy intent and observes the serv
   };
   const outcome = await runChartStrategyBacktest({ api, request, pollIntervalMs: 0 });
   assert.equal(outcome.kind, "TERMINAL");
-  assert.deepEqual(calls, ["revision:PINE_SUBSET", "resolve", "prepare", "get"]);
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve", "prepare", "get"]);
 });
 
 test("validate/create drift fails before create", async () => {
@@ -454,7 +523,7 @@ test("imported dataset previews and freezes without materialize or online resolv
   assert.equal(outcome.resolution.cost_preset?.preset_revision, "2");
   assert.equal(outcome.resolution.account_execution_preset?.account_model, "SPOT_CASH_V1");
   assert.deepEqual(calls, [
-    "revision:PINE_SUBSET",
+    "revision:PINE_ENGINE",
     "preview",
     "smoke",
     "validate",

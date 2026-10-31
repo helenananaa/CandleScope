@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from copy import deepcopy
 import hashlib
 from app.core.config import getenv
 from .qualified_json import try_bar_input_bytes
@@ -27,6 +28,7 @@ class StrategyHostAdapter:
         inline: bool = False,
     ) -> None:
         self.session = session
+        self.input_plan = {}
         self.step_timeout_s = step_timeout_s
         self._worker: SerialWorker | None = None
         self._closed = False
@@ -45,6 +47,7 @@ class StrategyHostAdapter:
 
     def start(self, input_plan: dict[str, Any]) -> dict[str, Any]:
         described = self.session.describe()
+        self.input_plan = deepcopy(input_plan)
         self.session.prepare(
             {"runId": self.session.run_id, "inputPlan": input_plan, **input_plan}
         )
@@ -61,10 +64,12 @@ class StrategyHostAdapter:
         bar: dict[str, Any] | None,
         features: dict[str, Any] | None = None,
         trade: dict[str, Any] | None = None,
+        account_view: dict[str, Any] | None = None,
     ) -> dict[str, Any] | StrategyOutput | None:
         return self.observe_frame(self.frame(
             sequence=sequence, event_time_ms=event_time_ms, watermark_ms=watermark_ms,
             phase=phase, market=market, bar=bar, features=features, trade=trade,
+            account_view=account_view,
         ))
 
     def frame(
@@ -78,13 +83,15 @@ class StrategyHostAdapter:
         bar: dict[str, Any] | None,
         features: dict[str, Any] | None = None,
         trade: dict[str, Any] | None = None,
+        account_view: dict[str, Any] | None = None,
     ) -> ObservationFrame:
         if event_time_ms > watermark_ms:
             raise StrategyProviderError("LOOKAHEAD_VIOLATION", "host refused future bar")
-        encoded = try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
+        encoded = None if account_view else try_bar_input_bytes(sequence, watermark_ms, bar, trade, features)
         input_hash = ("sha256:" + hashlib.sha256(encoded).hexdigest() if encoded is not None
                       else canonical_hash({"sequence": sequence, "watermark": watermark_ms,
-                                           "bar": bar, "trade": trade, "features": features}))
+                                           "bar": bar, "trade": trade, "features": features,
+                                           **({"account": account_view} if account_view else {})}))
         return ObservationFrame(
             run_id=self.session.run_id,
             sequence=sequence,
@@ -96,6 +103,7 @@ class StrategyHostAdapter:
             bar=bar,
             trade=trade,
             features=features or {},
+            account_view=account_view or {},
         )
 
     def observe_batch(

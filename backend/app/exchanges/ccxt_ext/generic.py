@@ -8,7 +8,6 @@ import sys
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
-from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from typing import Any
 
@@ -28,6 +27,7 @@ from app.exchanges.catalog_worker import (
     catalog_worker_enabled,
     run_catalog_loader,
 )
+from app.exchanges.contract_rules import ccxt_contract_rules, precision_increment
 from app.exchanges.models import ExchangeCapabilities, SymbolInfo
 from app.exchanges.pagination import ReverseTimePaginationPolicy
 from app.exchanges.public_admission import (
@@ -947,6 +947,8 @@ async def load_ccxt_symbols(
                     listed_at_ms=_timestamp(market.get("created")),
                     expiry_at_ms=_timestamp(market.get("expiry")),
                     price_tick_size=_price_tick_size(exchange, market),
+                    **ccxt_contract_rules(exchange, market, tick_mode=ccxt.TICK_SIZE,
+                                          decimal_mode=ccxt.DECIMAL_PLACES, significant_mode=ccxt.SIGNIFICANT_DIGITS),
                 )
             )
     finally:
@@ -1094,19 +1096,8 @@ def _timestamp(value: Any) -> int | None:
 
 
 def _price_tick_size(exchange: Any, market: dict[str, Any]) -> str:
-    precision = (market.get("precision") or {}).get("price")
-    if isinstance(precision, bool) or precision is None:
-        return ""
-    try:
-        if exchange.precisionMode == ccxt.TICK_SIZE:
-            tick = Decimal(str(precision))
-        else:
-            tick = Decimal(1).scaleb(-int(precision))
-    except (InvalidOperation, TypeError, ValueError, OverflowError):
-        return ""
-    if not tick.is_finite() or tick <= 0:
-        return ""
-    return format(tick, "f")
+    return precision_increment(getattr(exchange, "precisionMode", None), (market.get("precision") or {}).get("price"),
+                               tick_mode=ccxt.TICK_SIZE, decimal_mode=ccxt.DECIMAL_PLACES)
 
 
 def CcxtUnifiedPlugin(entry):

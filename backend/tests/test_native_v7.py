@@ -18,9 +18,12 @@ if bar_index == 1:
 def test_worker_and_single_shot_preserve_complete_financial_reports_and_disclose_contract(runtime,language):
     host,payload=runtime
     request=config(payload,language)
-    first=terminal(host.native,host.native.create(request,'worker')['run_id'])
+    first=terminal(host.native,host.native.create(request,'worker')['run_id'],timeout=120)
     host.native.runner=lambda *args,**kwargs: invoke(*args,**kwargs)
-    second=terminal(host.native,host.native.create(request,'single')['run_id'])
+    # The single-shot control starts a fresh interpreter for each bar across
+    # all four cost scenarios. Use the run deadline rather than the short UI
+    # polling helper's 25-second default; compare the entire result unchanged.
+    second=terminal(host.native,host.native.create(request,'single')['run_id'],timeout=120)
     assert first['state']==second['state']=='COMPLETED', (first.get('error'),second.get('error'))
     expected = 'historical-prefix/1'
     assert first['result']['evaluation_contract'] == expected

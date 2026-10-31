@@ -3,22 +3,55 @@
   "pythonVersion": "3.12",
   "engines": {
     "pine-compat-runtime": {
-      "commit": "28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
+      "commit": "c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+      "version": "0.3.3+cs.1",
       "archive": {
-        "filename": "pine-compat-runtime-28ecae3c645e9269e2099d27cc9abbb1f52ee9ea.tar.gz",
-        "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/28ecae3c645e9269e2099d27cc9abbb1f52ee9ea",
-        "sha256": "sha256:e7c7ec3a7e00d954d70a0da27e7ea6d0964618b8a74c51595260b1b925370411"
+        "filename": "pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc.tar.gz",
+        "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+        "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
       },
       "bridge": "candlescope-plugin-pine-compat",
-      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v1.patch",
-      "patchSha256": "sha256:1484da89eede2500a136a6bd91fd8038df721df9404f2e6d5daf16a6ae06ea8f",
-      "version": "0.3.2+cs.1"
+      "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v2.patch",
+      "patchSha256": "sha256:53cc3758f4fb575d02e00094b5b8a29ff35e2992eddd57273ff72b1af6485ec3"
     }
+  },
+  "numpy": {
+    "Darwin-arm64": {
+      "filename": "numpy-2.3.3-cp312-cp312-macosx_11_0_arm64.whl",
+      "url": "https://files.pythonhosted.org/packages/6b/0e/c6211bb92af26517acd52125a237a92afe9c3124c6a68d3b9f81b62a0568/numpy-2.3.3-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "sha256:cb32e3cf0f762aee47ad1ddc6672988f7f27045b0783c887190545baba73aa25"
+    },
+    "Darwin-x86_64": {
+      "filename": "numpy-2.3.3-cp312-cp312-macosx_10_13_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/51/5d/bb7fc075b762c96329147799e1bcc9176ab07ca6375ea976c475482ad5b3/numpy-2.3.3-cp312-cp312-macosx_10_13_x86_64.whl",
+      "sha256": "sha256:cfdd09f9c84a1a934cde1eec2267f0a43a7cd44b2cca4ff95b7c0d14d144b0bf"
+    },
+    "Linux-x86_64": {
+      "filename": "numpy-2.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/51/64/7de3c91e821a2debf77c92962ea3fe6ac2bc45d0778c1cbe15d4fce2fd94/numpy-2.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "sha256:d9192da52b9745f7f0766531dcfa978b7763916f158bb63bdb8a1eca0068ab20"
+    },
+    "Windows-AMD64": {
+      "filename": "numpy-2.3.3-cp312-cp312-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/32/ee/de999f2625b80d043d6d2d628c07d0d5555a677a3cf78fdf868d409b8766/numpy-2.3.3-cp312-cp312-win_amd64.whl",
+      "sha256": "sha256:497d7cad08e7092dba36e3d296fe4c97708c93daf26643a1ae4b03f6294d30eb"
+    }
+  },
+  "tzdata": {
+    "filename": "tzdata-2026.2-py2.py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/ce/e4/dccd7f47c4b64213ac01ef921a1337ee6e30e8c6466046018326977efd95/tzdata-2026.2-py2.py3-none-any.whl",
+    "sha256": "sha256:bbe9af844f658da81a5f95019480da3a89415801f6cc966806612cc7169bffe7"
   },
   "platforms": [
     "Darwin-arm64",
     "Darwin-x86_64",
     "Linux-x86_64",
     "Windows-AMD64"
-  ]
+  ],
+  "bridgeProbes": {
+    "candlescope-plugin-pine-compat": {
+      "path": "packages/candlescope-plugin-pine-compat/release/source-probe.0.4.0.json",
+      "sha256": "sha256:bfcba0f9b8fc8b6b25e2e178a935c2bfbfacae60df9de531257188410bb0e866"
+    }
+  }
 }

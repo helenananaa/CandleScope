@@ -54,6 +54,7 @@ def environment(tmp_path, *, mismatch=False):
             "contract": "external-broker/1", "intents": intents}
     runtime.native.resolver = lambda language: {"plugin_id": "candlescope.pine-compat", "command": ["fixture"]}
     runtime.native.runner = runner
+    runtime.native.analyze_source = lambda source, libraries=None: {"requirements": {"requests": []}}
     csv = tmp_path / "signals.csv"
     csv.write_text("time,open,high,low,close,volume\n" + "\n".join(
         f"{bar['open_time']},{bar['open']},{bar['high']},{bar['low']},{bar['close']},{bar['volume'] + int(mismatch)}"
@@ -135,7 +136,10 @@ if bar_index == 2 and brick > previous
             assert len(job["request"]["requirements"]) == 1
         assert len(runtime.native.list()) == 1
         if language == "fixture":
-            assert len(observed) == 4
+            # Baseline plus independently rerun baseline/fee/slippage scenarios.
+            assert len(observed) == 16
+            assert [len(wire["bars"]) for wire in observed] == [1, 2, 3, 4] * 4
+            assert result["cost_sensitivity"]["baseline_reexecution_verified"]
         else:
             graphic = result["graphics"][0]
             first_brick = graphic["values"][1] if "values" in graphic else next(point["value"] for point in graphic["data"] if point["time"] == START_MS // 1000 + 60)

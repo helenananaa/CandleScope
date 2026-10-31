@@ -12,6 +12,22 @@ class SampledBookKernel(DepthQueueKernel):
     max_age_ms: int = 2000
     stale_trade_events: int = 0
 
+    def snapshot(self, *, history_encoder=None):
+        return {**DepthQueueKernel.snapshot(self,history_encoder=history_encoder),
+            "sampled_state":{"schema":"sampled-book/1","sample_time_ms":self.sample_time_ms,
+                "max_age_ms":self.max_age_ms,"stale_trade_events":self.stale_trade_events}}
+
+    def restore(self,payload):
+        from .book_checkpoint import corrupt
+        state=payload.get("sampled_state") or {}
+        stamp,count=state.get("sample_time_ms"),state.get("stale_trade_events")
+        if (state.get("schema")!="sampled-book/1" or state.get("max_age_ms")!=self.max_age_ms
+                or (stamp is not None and type(stamp) is not int) or type(count) is not int or count<0
+                or (stamp is None)!=(payload.get("book_state",{}).get("sequence") is None)):
+            corrupt("sampled-book checkpoint identity differs")
+        DepthQueueKernel.restore(self,payload)
+        self.sample_time_ms,self.stale_trade_events=stamp,count
+
     def _validate_book(self, event):
         data = event.payload
         seq, observed = data.get("sample_index"), data.get("sample_time_ms")
@@ -38,9 +54,12 @@ class SampledBookKernel(DepthQueueKernel):
         return False
 
     def _match(self, event):
+        from .v2_margin import reprice
         if event.role == "ORDER_BOOK":
             self._apply_book(event)
+            reprice(self, event)
             return
+        reprice(self, event)
         if self.sample_time_ms is None:
             depth_error("trade precedes sampled book")
         if event.event_time_ms < self.sample_time_ms:

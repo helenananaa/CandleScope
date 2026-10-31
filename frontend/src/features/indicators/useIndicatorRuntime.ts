@@ -3,6 +3,7 @@ import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeries
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { t } from "../../i18n/index.js";
+import { pineRuntimeNotice } from "./indicatorPayloadRuntime.js";
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
 import type { MarketDataRuntime } from "../market-data/useMarketDataRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
@@ -1102,6 +1103,7 @@ export function useIndicatorRuntime(
                 payload,
               ),
               error,
+              runtimeNotice: pineRuntimeNotice(payload.meta, indicator.runtimeNotice),
               ...(schema.length > 0 ? { paramSchema: schema } : {}),
             }
           : indicator
@@ -1148,6 +1150,7 @@ export function useIndicatorRuntime(
                 payload,
               ),
               error: payload?.ok === false ? formatIndicatorError(payload) : null,
+              runtimeNotice: pineRuntimeNotice(payload.meta, indicator.runtimeNotice),
             }
           : indicator
       )
@@ -3201,10 +3204,12 @@ export function useIndicatorRuntime(
       fills: visibleOutputState.fills,
       hlines: visibleOutputState.hlines,
       bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     }),
     [
       activeIndicators,
       visibleOutputState.bgcolors,
+      visibleOutputState.drawings,
       visibleOutputState.fills,
       visibleOutputState.hlines,
       visibleOutputState.markers,
@@ -3219,6 +3224,7 @@ export function useIndicatorRuntime(
     fills: visibleOutputState.fills,
     hlines: visibleOutputState.hlines,
     bgcolors: visibleOutputState.bgcolors,
+      drawings: visibleOutputState.drawings,
     barcolors: visibleOutputState.barcolors,
     signals: visibleOutputState.signals,
     paramSchemas: visibleOutputState.paramSchemas,

@@ -1,5 +1,6 @@
 import type {
   IndicatorBgColor,
+  IndicatorDrawing,
   IndicatorDefinition,
   IndicatorFill,
   IndicatorHLine,
@@ -58,6 +59,7 @@ export interface IndicatorPaneData {
 }
 
 export interface IndicatorPaneAuxiliaryData {
+  drawings?: readonly IndicatorDrawing[] | undefined;
   markers?: readonly IndicatorMarker[];
   fills?: readonly IndicatorFill[];
   hlines?: readonly IndicatorHLine[];
@@ -78,6 +80,7 @@ function paneHasVisibleAuxiliaryOutput(
   pane: string,
   lines: readonly IndicatorLine[],
 ): boolean {
+  if (auxiliary.drawings?.some((item) => item.objects.length > 0 && itemBelongsToIndicatorPane(item, indicatorId, pane))) return true;
   if (auxiliary.markers?.some((item) =>
     itemBelongsToIndicatorPane(item, indicatorId, pane))) {
     return true;
@@ -107,6 +110,7 @@ function auxiliaryPanesForIndicator(
 ): Set<string> {
   const panes = new Set<string>();
   for (const items of [
+    auxiliary.drawings,
     auxiliary.markers,
     auxiliary.hlines,
     auxiliary.bgcolors,

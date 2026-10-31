@@ -1,0 +1,1459 @@
+{
+  "snapshot": {
+    "type": "indicator.snapshot",
+    "kind": "script",
+    "clientId": "client",
+    "indicatorId": "pine-rich",
+    "exchange": "binance",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "market_type": "spot",
+    "name": "rich",
+    "params": {},
+    "barTime": 0,
+    "schemaVersion": 1,
+    "ok": true,
+    "error": null,
+    "lines": [
+      {
+        "name": "fast",
+        "color": "#ef4444",
+        "type": "line",
+        "pane": "main",
+        "lineWidth": 2,
+        "lineStyle": 0,
+        "data": [
+          {
+            "time": 1700000000,
+            "value": 100.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000060,
+            "value": 101.5,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000120,
+            "value": 102.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000180,
+            "value": 103.5,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000240,
+            "value": 104.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000300,
+            "value": 100.5,
+            "color": "#22c55e"
+          }
+        ],
+        "id": "pine-plot-0",
+        "visible": true,
+        "trackPrice": false,
+        "base": 0.0,
+        "per_bar_color": true
+      },
+      {
+        "name": "volume",
+        "color": "#2962ff",
+        "type": "histogram",
+        "pane": "separate",
+        "lineWidth": 1,
+        "lineStyle": 0,
+        "data": [
+          {
+            "time": 1700000000,
+            "value": 1.0
+          },
+          {
+            "time": 1700000060,
+            "value": 1.0
+          },
+          {
+            "time": 1700000120,
+            "value": 1.0
+          },
+          {
+            "time": 1700000180,
+            "value": 1.0
+          },
+          {
+            "time": 1700000240,
+            "value": 1.0
+          },
+          {
+            "time": 1700000300,
+            "value": 1.0
+          }
+        ],
+        "id": "pine-plot-1",
+        "visible": true,
+        "trackPrice": false,
+        "base": 0.0
+      }
+    ],
+    "result": {
+      "lines": [
+        {
+          "id": "pine-plot-0",
+          "title": "fast",
+          "pane": "main",
+          "data": [
+            {
+              "time": 1700000000,
+              "value": 100.5,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000060,
+              "value": 101.5,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000120,
+              "value": 102.5,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000180,
+              "value": 103.5,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000240,
+              "value": 104.5,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000300,
+              "value": 100.5,
+              "color": "#22c55e"
+            }
+          ],
+          "linewidth": 2,
+          "linestyle": 0,
+          "base": 0.0,
+          "trackPrice": false,
+          "visible": true,
+          "colorData": [
+            {
+              "time": 1700000000,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000060,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000120,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000180,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000240,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000300,
+              "color": "#22c55e"
+            }
+          ],
+          "per_bar_color": true,
+          "color": "#ef4444"
+        }
+      ],
+      "histograms": [
+        {
+          "id": "pine-plot-1",
+          "title": "volume",
+          "pane": "separate",
+          "data": [
+            {
+              "time": 1700000000,
+              "value": 1.0
+            },
+            {
+              "time": 1700000060,
+              "value": 1.0
+            },
+            {
+              "time": 1700000120,
+              "value": 1.0
+            },
+            {
+              "time": 1700000180,
+              "value": 1.0
+            },
+            {
+              "time": 1700000240,
+              "value": 1.0
+            },
+            {
+              "time": 1700000300,
+              "value": 1.0
+            }
+          ],
+          "linewidth": 1,
+          "linestyle": 0,
+          "base": 0.0,
+          "trackPrice": false,
+          "visible": true,
+          "color_up": "#2962ff",
+          "color_down": "#2962ff"
+        }
+      ],
+      "markers": [
+        {
+          "id": "pine-plotshape-0",
+          "title": "cross",
+          "shape": "arrowUp",
+          "color": "#22c55e",
+          "text": "",
+          "position": "belowBar",
+          "size": "normal",
+          "pane": "main",
+          "data": [
+            {
+              "time": 1700000000,
+              "shape": "arrowUp",
+              "color": "#22c55e",
+              "text": "",
+              "position": "belowBar",
+              "size": "normal",
+              "pane": "main"
+            },
+            {
+              "time": 1700000120,
+              "shape": "arrowUp",
+              "color": "#22c55e",
+              "text": "",
+              "position": "belowBar",
+              "size": "normal",
+              "pane": "main"
+            },
+            {
+              "time": 1700000240,
+              "shape": "arrowUp",
+              "color": "#22c55e",
+              "text": "",
+              "position": "belowBar",
+              "size": "normal",
+              "pane": "main"
+            }
+          ]
+        }
+      ],
+      "hlines": [
+        {
+          "id": "pine-hline-0",
+          "price": 100.0,
+          "title": "floor",
+          "color": "#787b86",
+          "linestyle": "dashed",
+          "linewidth": 1,
+          "pane": "main"
+        }
+      ],
+      "fills": [
+        {
+          "id": "pine-fill-0",
+          "plot1_id": "pine-plot-0",
+          "plot2_id": "pine-plot-1",
+          "title": "band",
+          "color": "#ef4444",
+          "fillGaps": true,
+          "pane": "main",
+          "colorData": [
+            {
+              "time": 1700000000,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000060,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000120,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000180,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000240,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000300,
+              "color": "#22c55e"
+            }
+          ]
+        }
+      ],
+      "bgcolors": [
+        {
+          "id": "pine-bgcolor-0",
+          "title": "trend",
+          "color": "rgba(34,197,94,0.1)",
+          "pane": "main",
+          "regions": [
+            {
+              "time": 1700000000,
+              "color": "rgba(34,197,94,0.1)"
+            },
+            {
+              "time": 1700000180,
+              "color": "rgba(34,197,94,0.1)"
+            }
+          ]
+        }
+      ],
+      "barcolors": [
+        {
+          "id": "pine-barcolor-0",
+          "title": "bars",
+          "data": [
+            {
+              "time": 1700000000,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000060,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000120,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000180,
+              "color": "#22c55e"
+            },
+            {
+              "time": 1700000240,
+              "color": "#ef4444"
+            },
+            {
+              "time": 1700000300,
+              "color": "#22c55e"
+            }
+          ]
+        }
+      ],
+      "signals": [
+        {
+          "id": "pine-alert-0-0",
+          "name": "alert",
+          "side": "alert",
+          "message": "up",
+          "pane": "main",
+          "data": [
+            {
+              "time": 1700000000,
+              "side": "alert",
+              "name": "alert",
+              "message": "up"
+            }
+          ]
+        },
+        {
+          "id": "pine-alert-0-1",
+          "name": "alert",
+          "side": "alert",
+          "message": "up",
+          "pane": "main",
+          "data": [
+            {
+              "time": 1700000300,
+              "side": "alert",
+              "name": "alert",
+              "message": "up"
+            }
+          ]
+        }
+      ],
+      "objects": {
+        "pineScenes": [
+          {
+            "id": "pine-native-objects-main",
+            "pane": "main",
+            "asOf": 1700000300,
+            "times": [
+              1700000000,
+              1700000060,
+              1700000120,
+              1700000180,
+              1700000240,
+              1700000300
+            ],
+            "objects": [
+              {
+                "kind": "lines",
+                "row": {
+                  "id": 1,
+                  "x1": 0,
+                  "y1": 99.0,
+                  "x2": 5,
+                  "y2": 104.0
+                }
+              },
+              {
+                "kind": "plotseries",
+                "row": {
+                  "id": 0,
+                  "family": "plotChars",
+                  "values": [
+                    true,
+                    false,
+                    true,
+                    false,
+                    true,
+                    false
+                  ]
+                }
+              },
+              {
+                "kind": "gradientfills",
+                "row": {
+                  "id": 1,
+                  "firstValues": [
+                    102.5,
+                    103.5,
+                    104.5,
+                    105.5,
+                    106.5,
+                    102.5
+                  ],
+                  "secondValues": [
+                    98.5,
+                    99.5,
+                    100.5,
+                    101.5,
+                    102.5,
+                    98.5
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": {
+        "engine": "pine-compat-runtime",
+        "closedBarsOnly": true
+      }
+    },
+    "drawings": [
+      {
+        "id": "pine-native-objects-main",
+        "pane": "main",
+        "asOf": 1700000300,
+        "times": [
+          1700000000,
+          1700000060,
+          1700000120,
+          1700000180,
+          1700000240,
+          1700000300
+        ],
+        "objects": [
+          {
+            "kind": "lines",
+            "row": {
+              "id": 1,
+              "x1": 0,
+              "y1": 99.0,
+              "x2": 5,
+              "y2": 104.0
+            }
+          },
+          {
+            "kind": "plotseries",
+            "row": {
+              "id": 0,
+              "family": "plotChars",
+              "values": [
+                true,
+                false,
+                true,
+                false,
+                true,
+                false
+              ]
+            }
+          },
+          {
+            "kind": "gradientfills",
+            "row": {
+              "id": 1,
+              "firstValues": [
+                102.5,
+                103.5,
+                104.5,
+                105.5,
+                106.5,
+                102.5
+              ],
+              "secondValues": [
+                98.5,
+                99.5,
+                100.5,
+                101.5,
+                102.5,
+                98.5
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "outputSchemaVersion": 2,
+    "series": [
+      {
+        "id": "pine-rich:pine-plot-0",
+        "localId": "pine-plot-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "line",
+        "data": [
+          {
+            "time": 1700000000,
+            "value": 100.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000060,
+            "value": 101.5,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000120,
+            "value": 102.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000180,
+            "value": 103.5,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000240,
+            "value": 104.5,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000300,
+            "value": 100.5,
+            "color": "#22c55e"
+          }
+        ],
+        "style": {
+          "title": "fast",
+          "color": "#ef4444",
+          "lineWidth": 2,
+          "lineStyle": 0,
+          "visible": true,
+          "trackPrice": false,
+          "base": 0.0
+        },
+        "scale": "right",
+        "zIndex": 10
+      },
+      {
+        "id": "pine-rich:pine-plot-1",
+        "localId": "pine-plot-1",
+        "indicatorId": "pine-rich",
+        "pane": "separate",
+        "type": "histogram",
+        "data": [
+          {
+            "time": 1700000000,
+            "value": 1.0
+          },
+          {
+            "time": 1700000060,
+            "value": 1.0
+          },
+          {
+            "time": 1700000120,
+            "value": 1.0
+          },
+          {
+            "time": 1700000180,
+            "value": 1.0
+          },
+          {
+            "time": 1700000240,
+            "value": 1.0
+          },
+          {
+            "time": 1700000300,
+            "value": 1.0
+          }
+        ],
+        "style": {
+          "title": "volume",
+          "color": "#2962ff",
+          "lineWidth": 1,
+          "lineStyle": 0,
+          "visible": true,
+          "trackPrice": false,
+          "base": 0.0
+        },
+        "scale": "right",
+        "zIndex": 10
+      }
+    ],
+    "annotations": [
+      {
+        "id": "pine-rich:pine-plotshape-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "marker",
+        "data": [
+          {
+            "time": 1700000000,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000120,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000240,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          }
+        ],
+        "style": {
+          "shape": "arrowUp",
+          "color": "#22c55e",
+          "text": "",
+          "position": "belowBar",
+          "size": "normal"
+        },
+        "scale": "series",
+        "zIndex": 30
+      },
+      {
+        "id": "pine-rich:pine-hline-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "hline",
+        "data": [
+          {
+            "value": 100.0
+          }
+        ],
+        "style": {
+          "title": "floor",
+          "color": "#787b86",
+          "lineStyle": "dashed",
+          "lineWidth": 1
+        },
+        "scale": "right",
+        "zIndex": 20
+      },
+      {
+        "id": "pine-rich:pine-bgcolor-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "bgcolor",
+        "data": [
+          {
+            "time": 1700000000,
+            "color": "rgba(34,197,94,0.1)"
+          },
+          {
+            "time": 1700000180,
+            "color": "rgba(34,197,94,0.1)"
+          }
+        ],
+        "style": {
+          "title": "trend",
+          "color": "rgba(34,197,94,0.1)"
+        },
+        "scale": "pane",
+        "zIndex": 0
+      },
+      {
+        "id": "pine-rich:pine-barcolor-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "barcolor",
+        "data": [
+          {
+            "time": 1700000000,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000060,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000120,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000180,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000240,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000300,
+            "color": "#22c55e"
+          }
+        ],
+        "style": {},
+        "scale": "price",
+        "zIndex": 5
+      },
+      {
+        "id": "pine-rich:pine-alert-0-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "signal",
+        "data": [
+          {
+            "time": 1700000000,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ],
+        "style": {
+          "name": "alert",
+          "side": "alert",
+          "message": "up"
+        },
+        "scale": "event",
+        "zIndex": 40
+      },
+      {
+        "id": "pine-rich:pine-alert-0-1",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "signal",
+        "data": [
+          {
+            "time": 1700000300,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ],
+        "style": {
+          "name": "alert",
+          "side": "alert",
+          "message": "up"
+        },
+        "scale": "event",
+        "zIndex": 40
+      }
+    ],
+    "fills": [
+      {
+        "id": "pine-rich:pine-fill-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "betweenSeries",
+        "seriesIds": [
+          "pine-rich:pine-plot-0",
+          "pine-rich:pine-plot-1"
+        ],
+        "localSeriesIds": [
+          "pine-plot-0",
+          "pine-plot-1"
+        ],
+        "style": {
+          "title": "band",
+          "color": "#ef4444"
+        },
+        "scale": "right",
+        "zIndex": 1
+      }
+    ],
+    "paneLayout": [
+      {
+        "id": "main",
+        "type": "main",
+        "seriesIds": [
+          "pine-rich:pine-plot-0"
+        ],
+        "annotationIds": [
+          "pine-rich:pine-plotshape-0",
+          "pine-rich:pine-hline-0",
+          "pine-rich:pine-bgcolor-0",
+          "pine-rich:pine-barcolor-0",
+          "pine-rich:pine-alert-0-0",
+          "pine-rich:pine-alert-0-1"
+        ]
+      },
+      {
+        "id": "separate",
+        "type": "indicator",
+        "seriesIds": [
+          "pine-rich:pine-plot-1"
+        ],
+        "annotationIds": []
+      }
+    ],
+    "markers": [
+      {
+        "id": "pine-plotshape-0",
+        "title": "cross",
+        "shape": "arrowUp",
+        "color": "#22c55e",
+        "text": "",
+        "position": "belowBar",
+        "size": "normal",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000000,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000120,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          },
+          {
+            "time": 1700000240,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          }
+        ]
+      }
+    ],
+    "legacyFills": [
+      {
+        "id": "pine-fill-0",
+        "plot1_id": "pine-plot-0",
+        "plot2_id": "pine-plot-1",
+        "title": "band",
+        "color": "#ef4444",
+        "fillGaps": true,
+        "pane": "main",
+        "colorData": [
+          {
+            "time": 1700000000,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000060,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000120,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000180,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000240,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000300,
+            "color": "#22c55e"
+          }
+        ]
+      }
+    ],
+    "hlines": [
+      {
+        "id": "pine-hline-0",
+        "price": 100.0,
+        "title": "floor",
+        "color": "#787b86",
+        "linestyle": "dashed",
+        "linewidth": 1,
+        "pane": "main"
+      }
+    ],
+    "bgcolors": [
+      {
+        "id": "pine-bgcolor-0",
+        "title": "trend",
+        "color": "rgba(34,197,94,0.1)",
+        "pane": "main",
+        "regions": [
+          {
+            "time": 1700000000,
+            "color": "rgba(34,197,94,0.1)"
+          },
+          {
+            "time": 1700000180,
+            "color": "rgba(34,197,94,0.1)"
+          }
+        ]
+      }
+    ],
+    "barcolors": [
+      {
+        "id": "pine-barcolor-0",
+        "title": "bars",
+        "data": [
+          {
+            "time": 1700000000,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000060,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000120,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000180,
+            "color": "#22c55e"
+          },
+          {
+            "time": 1700000240,
+            "color": "#ef4444"
+          },
+          {
+            "time": 1700000300,
+            "color": "#22c55e"
+          }
+        ]
+      }
+    ],
+    "signals": [
+      {
+        "id": "pine-alert-0-0",
+        "name": "alert",
+        "side": "alert",
+        "message": "up",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000000,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ]
+      },
+      {
+        "id": "pine-alert-0-1",
+        "name": "alert",
+        "side": "alert",
+        "message": "up",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000300,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ]
+      }
+    ],
+    "meta": {
+      "engine": "pine-compat-runtime",
+      "closedBarsOnly": true
+    },
+    "range": {
+      "start": 1700000000,
+      "end": 1700000300
+    }
+  },
+  "patch": {
+    "type": "indicator.patch",
+    "kind": "script",
+    "clientId": "client",
+    "indicatorId": "pine-rich",
+    "exchange": "binance",
+    "symbol": "BTCUSDT",
+    "interval": "1m",
+    "market_type": "spot",
+    "name": "rich",
+    "params": {},
+    "barTime": 1700000360,
+    "schemaVersion": 1,
+    "ok": true,
+    "error": null,
+    "lines": [
+      {
+        "name": "fast",
+        "color": "#ef4444",
+        "type": "line",
+        "pane": "main",
+        "lineWidth": 2,
+        "lineStyle": 0,
+        "data": [
+          {
+            "time": 1700000360,
+            "value": 101.5,
+            "color": "#ef4444"
+          }
+        ],
+        "id": "pine-plot-0",
+        "visible": true,
+        "trackPrice": false,
+        "base": 0.0,
+        "per_bar_color": true
+      },
+      {
+        "name": "volume",
+        "color": "#2962ff",
+        "type": "histogram",
+        "pane": "separate",
+        "lineWidth": 1,
+        "lineStyle": 0,
+        "data": [
+          {
+            "time": 1700000360,
+            "value": 1.0
+          }
+        ],
+        "id": "pine-plot-1",
+        "visible": true,
+        "trackPrice": false,
+        "base": 0.0
+      }
+    ],
+    "drawings": [
+      {
+        "id": "pine-native-objects-main",
+        "pane": "main",
+        "asOf": 1700000360,
+        "times": [
+          1700000000,
+          1700000060,
+          1700000120,
+          1700000180,
+          1700000240,
+          1700000300,
+          1700000360
+        ],
+        "objects": [
+          {
+            "kind": "lines",
+            "row": {
+              "id": 1,
+              "x1": 0,
+              "y1": 99.0,
+              "x2": 6,
+              "y2": 104.0
+            }
+          },
+          {
+            "kind": "plotseries",
+            "row": {
+              "id": 0,
+              "family": "plotChars",
+              "values": [
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true
+              ]
+            }
+          },
+          {
+            "kind": "gradientfills",
+            "row": {
+              "id": 1,
+              "firstValues": [
+                102.5,
+                103.5,
+                104.5,
+                105.5,
+                106.5,
+                102.5,
+                103.5
+              ],
+              "secondValues": [
+                98.5,
+                99.5,
+                100.5,
+                101.5,
+                102.5,
+                98.5,
+                99.5
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "outputSchemaVersion": 2,
+    "series": [
+      {
+        "id": "pine-rich:pine-plot-0",
+        "localId": "pine-plot-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "line",
+        "data": [
+          {
+            "time": 1700000360,
+            "value": 101.5,
+            "color": "#ef4444"
+          }
+        ],
+        "style": {
+          "title": "fast",
+          "color": "#ef4444",
+          "lineWidth": 2,
+          "lineStyle": 0,
+          "visible": true,
+          "trackPrice": false,
+          "base": 0.0
+        },
+        "scale": "right",
+        "zIndex": 10
+      },
+      {
+        "id": "pine-rich:pine-plot-1",
+        "localId": "pine-plot-1",
+        "indicatorId": "pine-rich",
+        "pane": "separate",
+        "type": "histogram",
+        "data": [
+          {
+            "time": 1700000360,
+            "value": 1.0
+          }
+        ],
+        "style": {
+          "title": "volume",
+          "color": "#2962ff",
+          "lineWidth": 1,
+          "lineStyle": 0,
+          "visible": true,
+          "trackPrice": false,
+          "base": 0.0
+        },
+        "scale": "right",
+        "zIndex": 10
+      }
+    ],
+    "annotations": [
+      {
+        "id": "pine-rich:pine-plotshape-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "marker",
+        "data": [
+          {
+            "time": 1700000360,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          }
+        ],
+        "style": {
+          "shape": "arrowUp",
+          "color": "#22c55e",
+          "text": "",
+          "position": "belowBar",
+          "size": "normal"
+        },
+        "scale": "series",
+        "zIndex": 30
+      },
+      {
+        "id": "pine-rich:pine-hline-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "hline",
+        "data": [
+          {
+            "value": 100.0
+          }
+        ],
+        "style": {
+          "title": "floor",
+          "color": "#787b86",
+          "lineStyle": "dashed",
+          "lineWidth": 1
+        },
+        "scale": "right",
+        "zIndex": 20
+      },
+      {
+        "id": "pine-rich:pine-bgcolor-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "bgcolor",
+        "data": [
+          {
+            "time": 1700000360,
+            "color": "rgba(34,197,94,0.1)"
+          }
+        ],
+        "style": {
+          "title": "trend",
+          "color": "rgba(34,197,94,0.1)"
+        },
+        "scale": "pane",
+        "zIndex": 0
+      },
+      {
+        "id": "pine-rich:pine-barcolor-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "barcolor",
+        "data": [
+          {
+            "time": 1700000360,
+            "color": "#ef4444"
+          }
+        ],
+        "style": {},
+        "scale": "price",
+        "zIndex": 5
+      },
+      {
+        "id": "pine-rich:pine-alert-0-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "signal",
+        "data": [],
+        "style": {
+          "name": "alert",
+          "side": "alert",
+          "message": "up"
+        },
+        "scale": "event",
+        "zIndex": 40
+      },
+      {
+        "id": "pine-rich:pine-alert-0-1",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "signal",
+        "data": [
+          {
+            "time": 1700000360,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ],
+        "style": {
+          "name": "alert",
+          "side": "alert",
+          "message": "up"
+        },
+        "scale": "event",
+        "zIndex": 40
+      }
+    ],
+    "fills": [
+      {
+        "id": "pine-rich:pine-fill-0",
+        "indicatorId": "pine-rich",
+        "pane": "main",
+        "type": "betweenSeries",
+        "seriesIds": [
+          "pine-rich:pine-plot-0",
+          "pine-rich:pine-plot-1"
+        ],
+        "localSeriesIds": [
+          "pine-plot-0",
+          "pine-plot-1"
+        ],
+        "style": {
+          "title": "band",
+          "color": "#ef4444"
+        },
+        "scale": "right",
+        "zIndex": 1
+      }
+    ],
+    "paneLayout": [
+      {
+        "id": "main",
+        "type": "main",
+        "seriesIds": [
+          "pine-rich:pine-plot-0"
+        ],
+        "annotationIds": [
+          "pine-rich:pine-plotshape-0",
+          "pine-rich:pine-hline-0",
+          "pine-rich:pine-bgcolor-0",
+          "pine-rich:pine-barcolor-0",
+          "pine-rich:pine-alert-0-0",
+          "pine-rich:pine-alert-0-1"
+        ]
+      },
+      {
+        "id": "separate",
+        "type": "indicator",
+        "seriesIds": [
+          "pine-rich:pine-plot-1"
+        ],
+        "annotationIds": []
+      }
+    ],
+    "markers": [
+      {
+        "id": "pine-plotshape-0",
+        "title": "cross",
+        "shape": "arrowUp",
+        "color": "#22c55e",
+        "text": "",
+        "position": "belowBar",
+        "size": "normal",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000360,
+            "shape": "arrowUp",
+            "color": "#22c55e",
+            "text": "",
+            "position": "belowBar",
+            "size": "normal",
+            "pane": "main"
+          }
+        ]
+      }
+    ],
+    "legacyFills": [
+      {
+        "id": "pine-fill-0",
+        "plot1_id": "pine-plot-0",
+        "plot2_id": "pine-plot-1",
+        "title": "band",
+        "color": "#ef4444",
+        "fillGaps": true,
+        "pane": "main",
+        "colorData": [
+          {
+            "time": 1700000360,
+            "color": "#ef4444"
+          }
+        ]
+      }
+    ],
+    "hlines": [
+      {
+        "id": "pine-hline-0",
+        "price": 100.0,
+        "title": "floor",
+        "color": "#787b86",
+        "linestyle": "dashed",
+        "linewidth": 1,
+        "pane": "main"
+      }
+    ],
+    "bgcolors": [
+      {
+        "id": "pine-bgcolor-0",
+        "title": "trend",
+        "color": "rgba(34,197,94,0.1)",
+        "pane": "main",
+        "regions": [
+          {
+            "time": 1700000360,
+            "color": "rgba(34,197,94,0.1)"
+          }
+        ],
+        "data": []
+      }
+    ],
+    "barcolors": [
+      {
+        "id": "pine-barcolor-0",
+        "title": "bars",
+        "data": [
+          {
+            "time": 1700000360,
+            "color": "#ef4444"
+          }
+        ]
+      }
+    ],
+    "signals": [
+      {
+        "id": "pine-alert-0-0",
+        "name": "alert",
+        "side": "alert",
+        "message": "up",
+        "pane": "main",
+        "data": []
+      },
+      {
+        "id": "pine-alert-0-1",
+        "name": "alert",
+        "side": "alert",
+        "message": "up",
+        "pane": "main",
+        "data": [
+          {
+            "time": 1700000360,
+            "side": "alert",
+            "name": "alert",
+            "message": "up"
+          }
+        ]
+      }
+    ],
+    "meta": {
+      "engine": "pine-compat-runtime",
+      "closedBarsOnly": true
+    },
+    "reason": "bar_update",
+    "range": {
+      "start": 1700000360,
+      "end": 1700000360
+    }
+  }
+}

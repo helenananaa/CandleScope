@@ -549,6 +549,35 @@ def test_bootstrap_preserves_verified_user_activation_and_disabled_choice(
     assert not result.changed and not result.downloaded
 
 
+@pytest.mark.parametrize("matches", [True, False])
+def test_explicit_local_pin_is_checked_without_downloading_or_downgrading(tmp_path, matches):
+    release = _release(b"official")
+    lock = _write_lock(tmp_path / "releases.json", release)
+    registry = tmp_path / "runtime-registry.json"
+    pin = {"version": "0.4.0", "bundleSha256": "sha256:" + "ab" * 32}
+    (tmp_path / "first-party-local-overrides.json").write_text(json.dumps(
+        {"schemaVersion": 1, "runtimes": {release.runtime_id: pin}}), encoding="utf-8")
+    class Installer:
+        def __init__(self, **kwargs): pass
+        def list_plugins(self):
+            return [{"runtimeId": release.runtime_id, **pin, "version": "0.4.0" if matches else "0.3.0",
+                     "managed": True, "enabled": True, "autoStart": True, "required": True}]
+        def check(self, runtime_id):
+            assert runtime_id == release.runtime_id
+            return SimpleNamespace(activation_id="local-1")
+        def install(self, *args, **kwargs): pytest.fail("must not replace a pinned local install")
+    kwargs = dict(host_name="CandleScope", host_version="0.3.0",
+                  environ=_single_fixture_environment(tmp_path, CANDLESCOPE_RUNTIME_REGISTRY=str(registry)),
+                  release_lock_path=lock, installer_factory=Installer,
+                  opener=lambda *args, **kwargs: pytest.fail("must not download"))
+    if matches:
+        result = ensure_first_party_plugins_from_environment(**kwargs)
+        assert result.version == "0.4.0" and result.reason == "local-pin-checked:local-1"
+    else:
+        with pytest.raises(FirstPartyPluginBootstrapError, match="local runtime pin does not match"):
+            ensure_first_party_plugins_from_environment(**kwargs)
+
+
 def test_multi_runtime_bootstrap_verifies_then_installs_in_runtime_order(
     tmp_path: Path,
 ) -> None:

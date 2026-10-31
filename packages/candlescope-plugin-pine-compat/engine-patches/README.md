@@ -1,6 +1,40 @@
 # Renko event-series candidate
 
-The current desktop/release recipe uses `host-contracts-v1.patch`, which combines
+## Current combined Host source
+
+`host-contracts-v2.patch` applies to Core 0.3.3 commit
+`c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc` and versions the downstream wheel
+as `0.3.3+cs.1`. It preserves the upstream Renko event rows, metadata, calendar,
+currency and incremental Host contracts while adding the frozen boundary
+contract from the published 0.3.2+cs.1 runtime. The patch digest and source
+archive are pinned in `frontend/scripts/desktop-plugin-sources.json`.
+
+The bridge source is 0.4.0 with SDK 0.2.1. Published bridge 0.3.3 assets and
+release locks remain immutable; source bundles are separately marked
+`desktop-source-build-unpublished`. `scripts/qualify_host_contracts.py` qualifies
+the combined source runtime. Historical candidate records follow below.
+
+## Host completion candidate
+
+`renko-event-rows-v2.patch` applies to runtime commit
+`232b93dd109108d227a522ef3f3bcb32ed31a002`. Its SHA-256 is
+`6998f47e967a3841f80f264d2cc9dfb78aea1cbe7f90899116510415e5c5f83e`.
+The resulting source is commit `199aca438a150a436d6724ceee0afd4595a76b92`.
+The parser moved into `request_input.rs`; the existing upper-bound alignment
+already selects the final confirmed row in a same-time cohort. The patch keeps
+Renko-only nondecreasing timestamps, rejects descending event rows and regular
+duplicate timestamps, and maps a known empty Renko context to `na`.
+
+The separate `release/release-lock.host-completion-candidate.windows-x86_64.json`
+pins the actual Windows wheels, source base, patch and installed native digest.
+It is an unpublished local candidate; it retains version 0.3.2 and must not be
+substituted for the published upstream 0.3.2 release. Its managed bundle install,
+full Host regression and desktop acceptance must be qualified separately.
+Legacy Renko controls alone do not qualify every combination of duplicate event
+timestamps, streaming request deltas and dynamically discovered request windows.
+
+## Published 0.3.2 source candidate
+The published bridge 0.3.3 recipe used `host-contracts-v1.patch`, which combines
 the two historical candidates below and versions the downstream engine as
 `0.3.2+cs.1`. The originals remain as historical evidence. The combined patch
 applies directly to `28ecae3c645e9269e2099d27cc9abbb1f52ee9ea`, without applying

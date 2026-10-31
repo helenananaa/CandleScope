@@ -1,9 +1,12 @@
+import { PineObjectPrimitive } from "../chart-adapter/pineObjectPrimitive.js";
+import type { IndicatorDrawing } from "../features/indicators/indicatorTypes.js";
 import { useChartDisplaySubscription } from "../features/market-data/useChartDisplaySubscription.js";
 import { createProjectionCommitGate } from "../chart-adapter/projectionCommitGate.js";
 import type { ChartDisplayScheduler } from "../features/market-data/chartDisplaySubscription.js";
 import { drawingDocumentSessionRegistry } from "../features/drawings/core/drawingDocumentStore.js";
 import { describeError } from "../i18n/serverErrors.js";
 import PanePriceScaleMenu from "./PanePriceScaleMenu.js";
+import { PineScenePrimitive } from "../chart-adapter/pineScenePrimitive.js";
 import { usePanePriceScaleMenu } from "./usePanePriceScaleMenu.js";
 import NativePaneDrawingHost from "./NativePaneDrawingHost.js";
 import { buildPaneDescriptors, type PaneDescriptor } from "./singleChartIndicatorPanes.js";
@@ -357,6 +360,7 @@ export interface SingleChartPanesProps {
   indicatorFills?: IndicatorFill[];
   indicatorHlines?: IndicatorHLine[];
   indicatorBgcolors?: IndicatorBgColor[];
+  indicatorDrawings?: IndicatorDrawing[] | undefined;
   indicatorBarcolors?: IndicatorBarColor[];
   onRemoveSubPane?: ((pane: IndicatorSubPane) => void) | null;
   invertScale?: boolean;
@@ -396,6 +400,7 @@ interface LookupMap<TKey, TValue> {
 }
 
 interface IndicatorSeriesEntry {
+  nativePrimitive?: PineScenePrimitive;
   createdAtMs: number;
   drawingIdentity: number;
   key: string;
@@ -874,6 +879,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   indicatorFills = resolveStableOptionalChartCollection<IndicatorFill>(),
   indicatorHlines = resolveStableOptionalChartCollection<IndicatorHLine>(),
   indicatorBgcolors = resolveStableOptionalChartCollection<IndicatorBgColor>(),
+  indicatorDrawings = resolveStableOptionalChartCollection<IndicatorDrawing>(),
   indicatorBarcolors = resolveStableOptionalChartCollection<IndicatorBarColor>(),
   onRemoveSubPane = null,
   invertScale = false,
@@ -4369,6 +4375,15 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         };
 
         if (existing) {
+          if (line.nativeScene) {
+            if (!existing.nativePrimitive) {
+              existing.nativePrimitive = new PineScenePrimitive(line.nativeScene);
+              existing.series.attachPrimitive(existing.nativePrimitive);
+            } else existing.nativePrimitive.setScene(line.nativeScene);
+          } else if (existing.nativePrimitive) {
+            existing.series.detachPrimitive(existing.nativePrimitive);
+            delete existing.nativePrimitive;
+          }
           existing.series.applyOptions?.(buildIndicatorSeriesOptions(line, {
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           }));
@@ -4409,6 +4424,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           });
           series.setData(validData);
+          const nativePrimitive = line.nativeScene ? new PineScenePrimitive(line.nativeScene) : undefined;
+          if (nativePrimitive) series.attachPrimitive(nativePrimitive);
           recordPerfEvent("chart.indicatorSeries.setData", {
             ...detail,
             path: "single-reconcile",
@@ -4421,6 +4438,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             path: "single-reconcile",
           });
           nextEntries.push({
+            ...(nativePrimitive ? { nativePrimitive } : {}),
             createdAtMs: Date.now(),
             drawingIdentity: nextDrawingPaneAnchorIdentityRef.current++,
             key,
@@ -4737,6 +4755,41 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       paneRenderStateRef.current.delete(paneId);
     }
   }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !indicatorDatasetOwned) return;
+    const attached: Array<{ series: NonNullable<typeof mainSeriesRef.current>; primitive: PineObjectPrimitive }> = [];
+    for (const pane of paneDescriptors) {
+      const scenes = indicatorDrawings.filter((scene) => (scene.pane === "main" ? "main" : `${scene.pane}-${scene.indicatorId}`) === pane.id);
+      if (!scenes.length) continue;
+      const series = pane.id === "main" ? mainSeriesRef.current : selectIndicatorPaneAnnotationTarget(indicatorSeriesRef.current, pane.id,
+        panePlaceholderSeriesRef.current.seriesByPane.get(pane.paneIndex)?.series ?? null);
+      if (!series) continue;
+      const primitive = new PineObjectPrimitive();
+      primitive.update(scenes, sourceRowsRef.current, (time) => {
+        const display = displayRowsRef.current;
+        if (!display.length) return null;
+        const sourceTime = (index: number) => { const row = display[index]!; return typeof row.time === "number" ? row.time : row.time.sourceTime; };
+        let lo = 0, hi = display.length;
+        while (lo < hi) { const mid = (lo + hi) >>> 1; if (sourceTime(mid) < time) lo = mid + 1; else hi = mid; }
+        if (lo < display.length && sourceTime(lo) === time) return chart.timeScale().timeToCoordinate(display[lo]!.time);
+        if (lo === 0 || lo === display.length) {
+          const anchor = lo === 0 ? 0 : display.length - 1, x = chart.timeScale().timeToCoordinate(display[anchor]!.time);
+          if (x === null) return null;
+          return x + (time - sourceTime(anchor)) / (parseIntervalSeconds(interval) || 60) * chart.timeScale().options().barSpacing;
+        }
+        const left = Math.max(0, Math.min(display.length - 2, lo - 1)), a = chart.timeScale().timeToCoordinate(display[left]!.time);
+        const b = display[left + 1] ? chart.timeScale().timeToCoordinate(display[left + 1]!.time) : null;
+        if (a === null) return null;
+        const step = display[left + 1] ? sourceTime(left + 1) - sourceTime(left) : (parseIntervalSeconds(interval) || 60);
+        return a + (time - sourceTime(left)) / Math.max(1, step) * (b === null ? chart.timeScale().options().barSpacing : b - a);
+      });
+      series.attachPrimitive(primitive);
+      attached.push({ series, primitive });
+    }
+    return () => { for (const { series, primitive } of attached) series.detachPrimitive(primitive); };
+  }, [dataMeta, indicatorDatasetOwned, indicatorDrawings, interval, paneDescriptors, seriesReady]);
 
   useEffect(() => {
     // Main data and indicators commit in separate React effects. Removing old
