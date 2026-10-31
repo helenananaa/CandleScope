@@ -342,6 +342,19 @@ def test_cache_only_consumer_never_starts_or_joins_a_build():
     assert_idle(m)
 
 
+def test_small_owner_warm_hits_do_not_reserve_unused_default_build_capacity():
+    m = manager(max_bytes=32 * 1024)
+    with m.view((SOURCE,)) as view:
+        with m.acquire(key(), view, lambda: build(view, key()), work_bytes=8 * 1024):
+            with m.acquire(key(), view) as cached:
+                assert cached.summary.values.volume == 6
+            with m.acquire(key(), view, lambda: build(view, key())) as reused:
+                assert reused is cached
+            assert m.acquire(key(1), view) is None
+    assert m.snapshot()["builds"] == 1
+    assert_idle(m)
+
+
 def test_recursive_builder_fails_instead_of_blocking_its_own_worker():
     m = manager()
     with m.view((SOURCE,)) as view:

@@ -364,8 +364,6 @@ class SharedBlockManager:
         With no builder this is a cache-only lookup: a miss returns None without
         I/O, a flight, or waiting for another consumer's build.
         """
-        if work_bytes <= 0 or work_bytes > self.max_bytes:
-            raise MemoryBudgetExceeded("block working allowance exceeds its owner budget")
         cache_key = (key, view.revisions)
         owner = False
         with self._lock:
@@ -393,6 +391,8 @@ class SharedBlockManager:
                 return None
             flight = self._flights.get(cache_key)
             if flight is None:
+                if work_bytes <= 0 or work_bytes + 2048 > self.max_bytes:
+                    raise MemoryBudgetExceeded("block working allowance exceeds its owner budget")
                 if len(self._flights) >= self.max_flights:
                     raise MemoryBudgetExceeded("block build capacity exhausted")
                 self._make_room(work_bytes + 2048)
