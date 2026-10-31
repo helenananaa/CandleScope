@@ -1,0 +1,30 @@
+{
+  "base": "4bf08e69342b6a9aeece91a9a44991030e1f0b9d",
+  "sourceTreeSha256": "77dc4e8bc9066a6e3e94e2d68efa169b5ba88289c603c127f4384181620dc4d6",
+  "files": {
+    "backend/app/api/v1/klines.py": "9445c731a2fc5e4e6bac4348f8e793f188bbbb6d5d664a1b0bd2440a8dbed1c1",
+    "backend/app/api/v1/stream_kline_batch.py": "e2fb1cf6fafae58556c6e0339028f6884d2651964713e2e207719e78ab3a3719",
+    "backend/app/api/v1/stream_klines.py": "cb0296798faaf9b8074d0d2f6b6b9e38b6e76e0bcd55810cb843122e92475905",
+    "backend/app/data_engine/data_manager/event_bus.py": "92d40475a74f276acb2bf1bdc4c4069f2ae1749ee4ad47c53e66ed4d2280e1ce",
+    "backend/app/data_engine/data_manager/manager.py": "7572199ba7aedd2c123314018d87c4aab41fe381f7f681381c9e22502f532b75",
+    "backend/app/data_engine/data_manager/stream_version.py": "5015a05dbba66414372f5e902d3879a65ce28f4dc14f885168a485f4c4c69829",
+    "backend/tests/test_market_stream_version.py": "b6d4d5a556b9d173616f8c07432e7171928961ef9d10e554dcf11b7ae9bce3d3",
+    "frontend/package.json": "d91327687ec80e351516fe22c59316d5b3119318496eb537287b9b3bbc01797c",
+    "frontend/scripts/frontend-script-integration.mjs": "72f61cae3502ea9f45a62c6bd30bffc642f9c2cea3327614aad8dad62c08955d",
+    "frontend/scripts/market-health-browser.html": "9d0c2861c0cc675f21b291cf825015cee55a37fb8643f8538fe64093eab5d8b0",
+    "frontend/src/chart-adapter/__tests__/marketHealth.browser.tsx": "28c595e40b7f5f0619e9c1fce20ab261437b61855564abbf24d57eb8734b4a29",
+    "frontend/src/features/market-data/__tests__/marketCacheHealth.test.ts": "4471744935255455e5d8d68204ec21b7e07bc5dfaedf13761c910bf3ab99f82e",
+    "frontend/src/features/market-data/__tests__/marketWarmStreams.test.ts": "6da13b3818729c569ae3418c30843f48a7cd01a89d002a5ec6bf28f262e6d014",
+    "frontend/src/features/market-data/feed/seriesDataFeed.ts": "4c26c2a96bb4149e6a3ed7f8ba64f62cb0c6741e746ac0d150c13919f1885b94",
+    "frontend/src/features/market-data/manager/initialMarketRows.ts": "a79a7d98aed35bee70f3f38ccc9dd681caaf5b9b77903bfcf88126788fad1790",
+    "frontend/src/features/market-data/manager/marketDataManager.ts": "6cad787a8499f30d7a4017d0c215907e52f70d321ac0c61700db6d5b0214c1c9",
+    "frontend/src/features/market-data/manager/marketHealth.ts": "2fe59e82b63fb022b0817bf3da2f2cd14743c57719fbf6ac726ca99b33a15722",
+    "frontend/src/features/market-data/manager/marketHealthRecovery.ts": "7a0f80d907c7e044aa11246b7b2d1c597c9b93acd9789060a918970431d27e96",
+    "frontend/src/features/market-data/manager/marketWarmStreams.ts": "f3a8a0eef3f64b3984e05c22571044f12ebe8d6a9bb251e87a684f757f3d8994",
+    "frontend/src/features/market-data/manager/sharedMarketCache.ts": "d88f50f810b3df36c92a7953f4e4dd72df376fb28ea25a914b684a256dca5b55",
+    "frontend/src/features/market-data/quality/klineQualityPolicy.ts": "5b1ef8766587040a0197648b111771bba23cb00bcaec693583851d53c0d57d47",
+    "frontend/src/features/market-data/useActiveChartHistoryHydration.ts": "57de00785196cd94c812de8f3172c8f4a4a8fbc8f4d17396c80654a406741c7b",
+    "frontend/src/features/market-data/useChartInitialLoad.ts": "0bf496eee8c04f59782ddf703801e368237100b8f4632ac8c13567098972bb5c",
+    "frontend/src/features/market-data/useMarketDataRuntime.ts": "8fc27e1b3e6ae7053a6acb7e9089f51347af6034bf01dd4f396cfc32d7f1dbbd"
+  }
+}
