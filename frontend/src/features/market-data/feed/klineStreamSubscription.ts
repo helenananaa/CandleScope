@@ -170,7 +170,7 @@ function canonicalIntervalList(intervals: readonly IntervalString[] = []): Inter
   return canonical;
 }
 
-function isPermanentSubscriptionFailure(
+export function isPermanentSubscriptionFailure(
   failure: KlineStreamIntervalFailure | undefined,
 ): boolean {
   const code = typeof failure?.code === "string"

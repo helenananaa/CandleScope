@@ -30,6 +30,8 @@ export function buildTopBarViewModel({
       currentExchange: exchange,
       exchangeCatalog,
       onSelectSymbol: sessionActions.selectSymbol,
+      ...(sessionActions.previewSymbol ? { onPreview: sessionActions.previewSymbol } : {}),
+      ...(sessionActions.cancelPreview ? { onCancelPreview: sessionActions.cancelPreview } : {}),
       watchlists: watchlistView.watchlists,
       onAddToWatchlist: watchlistActions.addToWatchlist,
     },

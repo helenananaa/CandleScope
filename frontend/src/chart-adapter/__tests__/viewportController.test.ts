@@ -379,6 +379,33 @@ test("applyAnchorShift does not double compensate an auto-rebased prepend", () =
   assert.deepEqual(calls, []);
 });
 
+test("recovery anchors use the shared axis when an indicator has already prepended history", () => {
+  const { chart, calls, timeScale } = createChart();
+  timeScale.range = { from: 1468.875, to: 1526.875 };
+  // Candles still display 500 rows while a faster indicator has expanded the
+  // shared timeline. The old candle tail now occupies logical index 1496.
+  Object.assign(timeScale, {
+    timeToCoordinate: () => 200,
+    coordinateToLogical: () => 1496,
+  });
+  const controller = new ViewportController({ chartProvider: () => chart });
+  const anchor = controller.captureAnchor(Array.from({ length: 500 }, (_, time) => ({ time })));
+  assert.equal(controller.applyAnchorShift(anchor, () => 1496), true);
+  assert.deepEqual(calls, [], "restoring candles must not add the 997-row shift twice");
+});
+
+test("structural anchors retain a shared-axis prefix outside the candle window", () => {
+  const { chart, calls, timeScale } = createChart();
+  let logical = 15;
+  Object.assign(timeScale, { timeToCoordinate: () => 0, coordinateToLogical: () => logical });
+  const controller = new ViewportController({ chartProvider: () => chart });
+  const anchor = controller.captureAnchor(Array.from({ length: 11 }, (_, time) => ({ time })));
+  logical = 19;
+  assert.equal(controller.applyAnchorShift(anchor, () => 14), true);
+  assert.deepEqual(calls, [["setVisibleLogicalRange", { from: 14, to: 24 }]],
+    "compensation uses the chart timeline rather than the candle-local row index");
+});
+
 test("structural compensation bypasses the interaction lock", () => {
   const { chart, calls } = createChart();
   let unlock: (() => void) | undefined;

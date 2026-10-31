@@ -1,4 +1,5 @@
 import { hasVerifiedCoverage } from "./quality/klineQualityPolicy.js";
+import { bindSharedWindow } from "./manager/sharedWindowBinding.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
 import {
@@ -7,7 +8,6 @@ import {
 } from "../../utils/intervals.js";
 import type { MutableRefObject } from "react";
 import type { ChartSessionRuntime } from "../chart-session/chartSessionTypes.js";
-import { resolveInitialRows as resolveWatchlistInitialRows } from "../watchlist-full-cache/watchlistFullCacheResolver.js";
 import { useKlineStreamRuntime } from "./useKlineStreamRuntime.js";
 import type { KlineWebSocketStatus } from "./useKlineStreamRuntime.js";
 import {
@@ -55,6 +55,8 @@ import {
   type KlineSeriesIdentityInput,
 } from "./klineSeriesIdentity.js";
 import { useMarketDataWorkspaceResources } from "./marketDataWorkspaceContext.js";
+import { buildSeriesWindowKey } from "./window/seriesWindowKey.js";
+import { resolveSharedInitialRows } from "./manager/initialMarketRows.js";
 import {
   planRightWindowPage,
   rightWindowPageReachedLatest,
@@ -523,18 +525,28 @@ export function useMarketDataRuntime({
     schedulerCellId,
   ]);
 
+  useLayoutEffect(() => {
+    const cache = workspaceResources?.dataManager.cache;
+    if (!cache) return undefined;
+    const key = buildSeriesWindowKey({ exchange, marketType, symbol, interval, ...seriesIdentity });
+    return bindSharedWindow(cache, { exchange, marketType, symbol, interval, ...seriesIdentity }, {
+      bounds: () => activeSeriesStore?.seriesKey === key
+        ? { from: activeSeriesStore.first()?.time, to: activeSeriesStore.last()?.time } : { from: undefined, to: undefined },
+      read: () => getCache(symbol, interval, { marketType, exchange }) ?? [],
+      ...(activeSeriesStore ? { subscribeWindow: (listener: () => void) => activeSeriesStore.subscribe(listener) } : {}),
+      commit: (rows, quality) => commitPatchedChartData(symbol, interval, rows, { source: "shared-market-range", quality }),
+    });
+  }, [activeSeriesStore, commitPatchedChartData, exchange, getCache, interval, marketType, seriesIdentity, symbol, workspaceResources]);
+
   const resolveInitialRows = useCallback(
-    (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => resolveWatchlistInitialRows({
-      symbol: sym,
-      interval: intv,
-      marketType: mt,
-      exchange: ex,
-      getMemoryRows: (cacheSymbol, cacheInterval) => getCache(cacheSymbol, cacheInterval, {
-        marketType: mt,
-        exchange: ex,
-      }),
-    }),
-    [getCache],
+    (sym: SymbolCode, intv: IntervalString, mt: MarketType, ex: ExchangeId) => {
+      const memoryRows = getCache(sym, intv, { marketType: mt, exchange: ex });
+      return resolveSharedInitialRows({
+        exchange: ex, marketType: mt, symbol: sym, interval: intv,
+        ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
+      }, memoryRows, workspaceResources?.dataManager.cache, planInitialViewportCountBack(intv, nativeIntervalValues));
+    },
+    [exchange, getCache, marketType, nativeIntervalValues, seriesIdentity, workspaceResources],
   );
 
   const {
@@ -693,17 +705,20 @@ export function useMarketDataRuntime({
 
     const promise = (async () => {
       try {
-        const result = await seriesDataFeed.getRange(series, {
-          start: plan.start,
-          end: plan.end,
-          repair: "wait",
-          waitMs: 1_500,
-          strict: true,
-          source: "right-window-page",
-          signal: controller.signal,
-          commit: "none",
-          maxPages: 1,
+        const rangeOptions = { start: plan.start, end: plan.end, source: "right-window-page",
+          signal: controller.signal, commit: "none" as const, maxPages: 1 };
+        const hasCachedRange = workspaceResources?.dataManager.read(series, { from: plan.start, to: plan.end }).complete === true;
+        let result = await seriesDataFeed.getRange(series, {
+          ...rangeOptions, repair: hasCachedRange ? "none" : "wait", waitMs: hasCachedRange ? 0 : 1_500,
+          strict: !hasCachedRange, cacheMode: hasCachedRange ? "prefer-cache" : "network-only",
         });
+        // Eviction/correction can race the asynchronous Feed boundary. A lost
+        // cache proof returns to the original strict repair contract.
+        if (hasCachedRange && ownsRequest() && (isKlineResultRepairPending(result) || !hasVerifiedCoverage(result, "range"))) {
+          result = await seriesDataFeed.getRange(series, {
+            ...rangeOptions, repair: "wait", waitMs: 1_500, strict: true, cacheMode: "network-only",
+          });
+        }
         const reachedLatest = rightWindowPageReachedLatest(result, plan);
         const rows = result.data || [];
         const settledEmptyTail = reachedLatest
@@ -764,6 +779,7 @@ export function useMarketDataRuntime({
     setHasMoreLeft,
     setLoadingMoreRight,
     symbol,
+    workspaceResources,
   ]);
 
   const restoreLatestWindow = useCallback((): Promise<boolean> => {
@@ -1023,6 +1039,7 @@ export function useMarketDataRuntime({
   }, [backgroundPrefetchPriority]);
 
   useChartBackgroundPrefetch({
+    data: workspaceResources?.dataManager ?? null,
     symbol,
     exchange,
     marketType,

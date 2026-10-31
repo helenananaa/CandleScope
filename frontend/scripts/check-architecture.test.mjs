@@ -34,6 +34,19 @@ test("data admission cannot reintroduce the display scheduler", (t) => {
   assert.equal(result.violations.some(v => v.rule === "admission-no-display-scheduler"), true);
 });
 
+test("watchlist candles cannot reintroduce a private transport or cache owner", t => {
+  const result = runArchitectureFixture(t, {
+    "src/features/watchlist-full-cache/private.ts": 'import { defaultKlineApi } from "../market-data/feed/klineApi.js"; new WebSocket("ws://fixture");',
+    "src/features/market-data/feed/klineApi.ts": "export const defaultKlineApi = {};",
+  });
+  assert.equal(result.violations.filter(v => v.rule === "watchlist-candles-via-manager").length, 2);
+  const allowed = runArchitectureFixture(t, {
+    "src/features/watchlist-full-cache/consumer.ts": 'import type { MarketDataService } from "../market-data/marketDataService.js";',
+    "src/features/market-data/marketDataService.ts": "export interface MarketDataService {}",
+  });
+  assert.equal(allowed.ok, true);
+});
+
 test("architecture source discovery classifies every JavaScript and TypeScript module extension", () => {
   assert.equal(sourceFileKind("feature.ts"), "typescript");
   assert.equal(sourceFileKind("Component.tsx"), "typescript");

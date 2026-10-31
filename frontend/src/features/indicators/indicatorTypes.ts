@@ -575,6 +575,9 @@ export interface IndicatorWsHandlers {
 }
 
 export interface IndicatorCacheContext {
+  inputSource?: import("./indicatorInputBinding.js").IndicatorCacheInputSource | undefined;
+  /** Entire provided input including calculation origin, not just output range. */
+  localInputKey?: string | undefined;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   exchange: string;
   marketType: string;
@@ -585,6 +588,7 @@ export interface IndicatorCacheContext {
 }
 
 export interface IndicatorCacheMetadata {
+  inputVersion?: import("../market-data/manager/sharedMarketCache.js").MarketInputVersion;
   range?: IndicatorRange | null;
   revision?: IndicatorRevision | null;
   dataRevision?: IndicatorRevision | null;
