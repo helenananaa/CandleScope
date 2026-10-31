@@ -629,7 +629,8 @@ async def test_iterator_replay_exhaustion_wakes_wait_without_late_delivery(tmp_p
 
 
 @pytest.mark.anyio
-async def test_partial_gap_repair_uses_latest_canonical_revision(tmp_path, monkeypatch):
+@pytest.mark.parametrize("notify_revision", [False, True])
+async def test_partial_gap_repair_uses_latest_canonical_revision(tmp_path, monkeypatch, notify_revision):
     dm, store, factory, _ = await manager(tmp_path, monkeypatch)
     strict, errors, _ = capture(dm)
     live, _, _ = capture(dm, policy="gap_aware")
@@ -638,7 +639,14 @@ async def test_partial_gap_repair_uses_latest_canonical_revision(tmp_path, monke
         await _until(lambda: len(closed(strict)) == 1)
         await factory.emit(T + 180_000, 103)
         await _history_repair(dm, store, T + 60_000, 100)
-        await _history_repair(dm, store, T + 60_000, 150)
+        if notify_revision:
+            await _history_repair(dm, store, T + 60_000, 150)
+        else:
+            # A durable writer can revise the first repair before its next
+            # notification. Completion must re-read the whole missing range.
+            row = store.query_bars(**IDENTITY, start_ms=T + 60_000, end_ms=T + 60_000)[0]
+            row.update(open=150, high=150, low=150, close=150)
+            store.upsert_bars(**IDENTITY, rows=[row], source="backfill_rest_verified")
         await _history_repair(dm, store, T + 120_000, 102)
         await _until(lambda: len(closed(strict)) == 4)
         assert errors == []
