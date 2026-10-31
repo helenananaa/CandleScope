@@ -129,6 +129,16 @@ export class ForegroundPreloadGate {
   tryAcquirePreload(ownerOrNow: string | number = "preload", requestedNow?: number): PreloadLease | null {
     const owner = typeof ownerOrNow === "string" ? ownerOrNow : "preload";
     const now = typeof ownerOrNow === "number" ? ownerOrNow : (requestedNow ?? this.now());
+    return this.acquireQueuedPreload(owner, now, true);
+  }
+
+  /** An explicit hover/focus intent has its own short dwell. It may skip the
+   * background quiet grace, but never active work or history hydration. */
+  tryAcquireIntentPreload(owner: string): PreloadLease | null {
+    return this.acquireQueuedPreload(owner, this.now(), false);
+  }
+
+  private acquireQueuedPreload(owner: string, now: number, requireQuiet: boolean): PreloadLease | null {
     if (this.disposed || this.foregroundPreemptionDepth > 0) return null;
     this.enqueueOwner(owner, "preload");
     if (
@@ -136,7 +146,7 @@ export class ForegroundPreloadGate {
       || this.foregroundOwners.size > 0
       || this.hydrationQueue.length > 0
     ) return null;
-    if (this.waitMs(now) > 0) {
+    if (requireQuiet && this.waitMs(now) > 0) {
       this.scheduleWake();
       return null;
     }

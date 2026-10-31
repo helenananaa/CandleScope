@@ -4,10 +4,17 @@ import type {
   CacheResource,
 } from "./cacheGcTypes.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
+import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 
 const resources = new Map<string, CacheResource>();
 const dependencies = new Map<string, Set<string>>();
 const leases = new Map<string, CacheLease>();
+const klineAvailability = new Set<(key: string) => boolean>();
+
+export function registerKlineAvailabilityProvider(provider: (key: string) => boolean): () => void {
+  klineAvailability.add(provider);
+  return () => { klineAvailability.delete(provider); };
+}
 
 function scopedKey(owner: string, key: string): string {
   return `${owner}:${key}`;
@@ -22,17 +29,19 @@ export function klineDependencyKey({
   marketType = "spot",
   symbol = "",
   interval = "",
+  ...identity
 }: {
   exchange?: unknown;
   marketType?: unknown;
   symbol?: unknown;
   interval?: unknown;
-} = {}): string {
+} & KlineSeriesIdentityInput = {}): string {
   return [
     normalizePart(exchange, "binance").toLowerCase(),
     normalizePart(marketType, "spot").toLowerCase(),
     normalizePart(symbol).toUpperCase(),
     canonicalizeIntervalValue(interval) || normalizePart(interval),
+    ...(isLegacyKlineSeriesIdentity(exchange, identity) ? [] : [klineSeriesIdentityKey(exchange, identity)]),
   ].join(":");
 }
 
@@ -114,6 +123,7 @@ export function hasCacheLease(owner: string, key: string): boolean {
 }
 
 export function dependencyAvailable(dependencyKey: string): boolean {
+  for (const available of klineAvailability) if (available(dependencyKey)) return true;
   for (const resource of resources.values()) {
     if (
       resource.type === "kline"

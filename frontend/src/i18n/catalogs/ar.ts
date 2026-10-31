@@ -3125,6 +3125,7 @@ export const ar = {
   "chart.lineBreakDetail": "كسر {count} خطوط",
   "chart.fixedBrick": "طوبة ثابتة {size}",
   "settings.diag.chartCache": "تخزين شموع الرسم الرئيسي",
+  "settings.diag.sharedMarketCache": "ذاكرة تخزين مؤقت مشتركة لبيانات السوق",
   "settings.diag.watchlistFullCache": "تخزين خلفية قائمة المراقبة الكاملة",
   "settings.diag.indicatorCache": "تخزين نتائج المؤشرات",
   "workbench.kicker": "فحص الجرد وتنزيلات السجل",

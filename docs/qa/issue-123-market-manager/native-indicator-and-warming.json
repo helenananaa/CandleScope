@@ -1,0 +1,103 @@
+{
+  "candidate": "8e7d13fb4d3a0f104d26a7d40f5879c8f40a6873",
+  "surface": "isolated Electron QA host, production renderer",
+  "script": "const until = Date.now() + 150; while(Date.now() < until) {} let sum = 0; plot(\"Prefix\", bars.map(bar => (sum += bar.close)), {pane:\"separate\",color:\"#22c55e\"});",
+  "hiddenBurst": {
+    "ticks": 100,
+    "periodMs": 20,
+    "restoredComparisons": [
+      {
+        "cell": "cell-1",
+        "inputRows": 500,
+        "outputRows": 500,
+        "maxTime": 1793276460,
+        "actualLast": 40000502.75000002,
+        "expectedLast": 40000502.75000002,
+        "mismatches": 0
+      },
+      {
+        "cell": "cell-2",
+        "inputRows": 500,
+        "outputRows": 500,
+        "maxTime": 1793276460,
+        "actualLast": 40000502.75000002,
+        "expectedLast": 40000502.75000002,
+        "mismatches": 0
+      }
+    ]
+  },
+  "distinctInputs": {
+    "comparisons": [
+      {
+        "cell": "cell-1",
+        "inputRows": 1000,
+        "outputRows": 1000,
+        "actualLast": 80007739.62999997,
+        "expectedLast": 80007739.62999997,
+        "badValues": 0
+      },
+      {
+        "cell": "cell-2",
+        "inputRows": 500,
+        "outputRows": 500,
+        "actualLast": 40000502.75000002,
+        "expectedLast": 40000502.75000002,
+        "badValues": 0
+      }
+    ],
+    "rightRowsUnchanged": true,
+    "rightViewportUnchanged": true
+  },
+  "earlierCorrection": {
+    "comparisons": [
+      {
+        "cell": "cell-1",
+        "rows": 1000,
+        "actualLast": 80004165.94999996,
+        "expectedLast": 80004165.94999996,
+        "badValues": 0
+      },
+      {
+        "cell": "cell-2",
+        "rows": 500,
+        "actualLast": 40000502.75000002,
+        "expectedLast": 40000502.75000002,
+        "badValues": 0
+      }
+    ],
+    "rightRowsUnchanged": true,
+    "rightIndicatorUnchanged": true
+  },
+  "promotionRequests": [
+    {
+      "at": 1793281304.67931,
+      "kind": "http_start",
+      "query": {
+        "symbol": "BTCUSDT",
+        "interval": "5m",
+        "count_back": "500",
+        "exchange": "binance",
+        "market_type": "spot",
+        "max_wait_ms": "0",
+        "intent": "viewport"
+      },
+      "delay_ms": 5000,
+      "status": null
+    },
+    {
+      "at": 1793281309.680267,
+      "kind": "http",
+      "query": {
+        "symbol": "BTCUSDT",
+        "interval": "5m",
+        "count_back": "500",
+        "exchange": "binance",
+        "market_type": "spot",
+        "max_wait_ms": "0",
+        "intent": "viewport"
+      },
+      "delay_ms": null,
+      "status": 200
+    }
+  ]
+}

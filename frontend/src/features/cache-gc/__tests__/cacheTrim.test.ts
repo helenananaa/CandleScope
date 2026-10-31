@@ -6,25 +6,26 @@ import {
   resetIndicatorResultCache,
   snapshotIndicatorResultCacheDiagnostics,
 } from "../../indicators/indicatorResultCacheStore.js";
-import {
-  getFullCacheEntry,
-  mergeFullCacheRows,
-  resetWatchlistFullCache,
-  snapshotWatchlistFullCacheDiagnostics,
-} from "../../watchlist-full-cache/watchlistFullCacheStore.js";
+import { SharedMarketCache } from "../../market-data/manager/sharedMarketCache.js";
+import { registerSharedMarketCache, snapshotSharedMarketCacheDiagnostics } from "../sharedMarketCacheOwner.js";
+import type { KlineBar } from "../../market-data/marketDataTypes.js";
 import { executeFrontendGcPlan } from "../cacheTrim.js";
 import { planFrontendGc } from "../cachePolicy.js";
 import type { GcPlan, GcVictim } from "../cacheGcTypes.js";
 import { epochSeconds, mustBeDefined, partialMock } from "../../../test/testHelpers.js";
 
-test("executeFrontendGcPlan dispatches victims to cache owners", () => {
-  resetWatchlistFullCache();
+const series = { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "1m" };
+function seed(cache: SharedMarketCache, times: number[]) {
+  for (const time of times) cache.admitRealtime(series, { time: epochSeconds(time), open: 100, high: 110,
+    low: 90, close: 100, volume: 1, is_closed: true } as KlineBar);
+}
+
+test("executeFrontendGcPlan dispatches victims to cache owners", t => {
+  const cache = new SharedMarketCache();
+  t.after(registerSharedMarketCache(cache));
   resetIndicatorResultCache();
 
-  mergeFullCacheRows("binance:spot:ETHUSDT", "1m", [
-    { time: epochSeconds(1), close: 100 },
-    { time: epochSeconds(2), close: 101 },
-  ], { status: "warm" });
+  seed(cache, [1, 2]);
   cacheIndicatorSnapshot(
     { id: "ma", engineName: "MA", params: { period: 20 } },
     { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "1m" },
@@ -39,17 +40,17 @@ test("executeFrontendGcPlan dispatches victims to cache owners", () => {
     },
   );
 
-  const watchlistSnapshot = snapshotWatchlistFullCacheDiagnostics();
+  const marketSnapshot = snapshotSharedMarketCacheDiagnostics();
   const indicatorSnapshot = snapshotIndicatorResultCacheDiagnostics();
   const nowMs = Date.now();
   const ownerPlan = planFrontendGc({
     generatedAtMs: nowMs,
-    estimatedBytes: watchlistSnapshot.estimatedBytes + indicatorSnapshot.estimatedBytes,
-    klineBars: watchlistSnapshot.totalBars,
+    estimatedBytes: marketSnapshot.estimatedBytes + indicatorSnapshot.estimatedBytes,
+    klineBars: marketSnapshot.totalBars,
     indicatorPoints: indicatorSnapshot.totalPoints,
     owners: {
       chart: { entries: [] },
-      watchlist: watchlistSnapshot,
+      market: marketSnapshot,
       indicators: indicatorSnapshot,
     },
   }, {
@@ -60,7 +61,7 @@ test("executeFrontendGcPlan dispatches victims to cache owners", () => {
   });
   assert.deepEqual(
     new Set(ownerPlan.victims.map((victim) => victim.owner)),
-    new Set(["watchlist-full-cache", "indicator-result-cache"]),
+    new Set(["shared-market-cache", "indicator-result-cache"]),
   );
 
   const report = executeFrontendGcPlan({
@@ -86,33 +87,29 @@ test("executeFrontendGcPlan dispatches victims to cache owners", () => {
   assert.equal(report.removedCount, 3);
   assert.equal(report.removedBars, 7);
   assert.equal(report.removedIndicatorPoints, 1);
-  assert.equal(getFullCacheEntry("binance:spot:ETHUSDT", "1m"), null);
+  assert.equal(cache.read(series).rows.length, 0);
 });
 
-test("executeFrontendGcPlan skips live watchlist entries", () => {
-  resetWatchlistFullCache();
-  resetIndicatorResultCache();
-
-  mergeFullCacheRows("binance:spot:BTCUSDT", "1m", [
-    { time: epochSeconds(1), close: 100 },
-  ], { status: "live" });
-
-  const report = executeFrontendGcPlan(partialMock<GcPlan>({
-    victims: [
-      partialMock<GcVictim>({ owner: "watchlist-full-cache", key: "binance:spot:BTCUSDT::1m" }),
-    ],
-  }));
-
+test("executeFrontendGcPlan protects a shared series acquired after planning", t => {
+  const cache = new SharedMarketCache();
+  t.after(registerSharedMarketCache(cache));
+  seed(cache, [1]);
+  const snapshot = snapshotSharedMarketCacheDiagnostics();
+  const plan = planFrontendGc({ estimatedBytes: snapshot.estimatedBytes, klineBars: snapshot.totalBars,
+    owners: { market: snapshot } }, { maxEstimatedBytes: 1, maxKlineBars: 0 });
+  assert.equal(plan.victims.length, 1);
+  const release = cache.subscribe(series, () => {});
+  const report = executeFrontendGcPlan(plan);
   assert.equal(report.removedCount, 0);
-  assert.notEqual(getFullCacheEntry("binance:spot:BTCUSDT", "1m"), null);
+  assert.equal(cache.read(series).rows.length, 1);
+  release();
 });
 
-test("indicator range-trim plan and execution use identical accounting", () => {
-  resetWatchlistFullCache();
+test("indicator range-trim plan and execution use identical accounting", t => {
+  const cache = new SharedMarketCache();
+  t.after(registerSharedMarketCache(cache));
   resetIndicatorResultCache();
-  mergeFullCacheRows("binance:spot:ETHUSDT", "1m", [
-    { time: epochSeconds(1), close: 100 },
-  ], { status: "warm" });
+  seed(cache, [1]);
   cacheIndicatorSnapshot(
     { id: "ma", engineName: "MA", params: { period: 20 } },
     { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "1m" },
@@ -149,7 +146,7 @@ test("indicator range-trim plan and execution use identical accounting", () => {
     klineBars: 0,
     owners: {
       chart: { entries: [] },
-      watchlist: { entries: [] },
+      market: { entries: [] },
       indicators: indicatorSnapshot,
     },
   }, {

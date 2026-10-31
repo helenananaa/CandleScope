@@ -236,7 +236,7 @@ export default function CacheDiagnosticsPanel({
   const frontend = frontendDiagnostics || {};
   const owners = frontend.owners || {};
   const chart = owners.chart || {};
-  const watchlist = owners.watchlist || {};
+  const market = owners.market || {};
   const indicators = owners.indicators || {};
   const backendCache = backendDiagnostics?.data_manager?.cache || {};
   const storageFiles = backendDiagnostics?.storage?.files || {};
@@ -298,11 +298,11 @@ export default function CacheDiagnosticsPanel({
         <SectionTitle title={t("settings.diag.frontendCache")} badge={t("settings.diag.local")} />
         <div className="st-diagnostics-grid">
           <StatCard label={t("settings.diag.chartBars")} value={t("settings.diag.barsUnit", { count: formatNumber(chart.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(chart.seriesCount) })} />
-          <StatCard label={t("settings.diag.watchlistFull")} value={t("settings.diag.barsUnit", { count: formatNumber(watchlist.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(watchlist.seriesCount) })} />
+          <StatCard label={t("settings.diag.sharedMarketCache")} value={t("settings.diag.barsUnit", { count: formatNumber(market.totalBars) })} detail={t("settings.diag.seriesCount", { count: formatNumber(market.seriesCount) })} />
           <StatCard label={t("settings.diag.indicatorResults")} value={t("settings.diag.pointsUnit", { count: formatNumber(indicators.totalPoints) })} detail={t("settings.diag.entriesUnit", { count: formatNumber(indicators.entryCount) })} />
           <StatCard label={t("settings.diag.estimatedMem")} value={formatBytes(frontend.estimatedBytes)} detail={t("settings.diag.browserEstimate")} />
         </div>
-        <TopEntries entries={[...(chart.entries || []), ...(watchlist.entries || [])]} metric="bars" />
+        <TopEntries entries={[...(chart.entries || []), ...(market.entries || [])]} metric="bars" />
         <div className="st-actions-row">
           <button className="st-btn st-btn-secondary" onClick={() => onPlanFrontendGc?.()}>
             {t("settings.diag.planFrontend")}

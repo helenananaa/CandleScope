@@ -3125,6 +3125,7 @@ export const nl = {
   "chart.lineBreakDetail": "{count}-lijns Line Break",
   "chart.fixedBrick": "Vaste steen {size}",
   "settings.diag.chartCache": "Kaarscache van de hoofdgrafiek",
+  "settings.diag.sharedMarketCache": "Gedeelde marktgegevenscache",
   "settings.diag.watchlistFullCache": "Volledige achtergrondcache van de volglijst",
   "settings.diag.indicatorCache": "Cache van indicatorresultaten",
   "workbench.kicker": "Inventarisinspectie en geschiedenisdownloads",

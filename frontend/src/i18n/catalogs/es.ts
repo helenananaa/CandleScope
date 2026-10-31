@@ -3132,6 +3132,7 @@ export const es = {
   "chart.lineBreakDetail": "ruptura de {count} líneas",
   "chart.fixedBrick": "Ladrillo fijo {size}",
   "settings.diag.chartCache": "Caché de velas del gráfico principal",
+  "settings.diag.sharedMarketCache": "Caché compartida de datos de mercado",
   "settings.diag.watchlistFullCache": "Caché en segundo plano Completo de Lista de seguimiento",
   "settings.diag.indicatorCache": "Caché de resultados de indicadores",
   "workbench.kicker": "Consulta de datos y descarga de historial",

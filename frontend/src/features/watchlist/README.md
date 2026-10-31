@@ -38,7 +38,7 @@ depend on legacy flat fields.
 - `watchlistStore.js` owns watchlist list storage, sidebar width, collapsed sidebar state, collapsed list state, symbol normalization, and list mutations.
 - `watchlistSubscriptionRuntime.js` owns backend subscription synchronization, tier updates, price WebSocket updates, and full-tier interval request planning.
 - `WatchlistSidebar.jsx` renders watchlists from feature-owned view data and calls feature actions for list, layout, and subscription changes.
-- `features/watchlist-full-cache` owns full-tier background K-line arrays. It is a sibling feature so the sidebar never stores candle rows itself.
+- `features/watchlist-full-cache` declares full-tier candle subscriptions and warming demands through the injected `MarketDataService`. Candle facts and transport admission belong to the workspace `MarketDataManager`; the sidebar never stores candle rows.
 
 ## Allowed Dependencies
 
@@ -53,7 +53,7 @@ depend on legacy flat fields.
 - Do not import App internals or sibling feature internals.
 - Do not let watchlist UI access `localStorage`, create `WebSocket`, or call backend services directly.
 - Do not merge watchlist price streaming into `features/market-data`; watchlist prices are a separate subscription surface.
-- Do not store K-line arrays in `WatchlistSidebar.jsx`; full-tier candle rows belong to `features/watchlist-full-cache`.
+- Do not store K-line arrays in `WatchlistSidebar.jsx`; full-tier candle rows belong to the shared market range cache.
 
 ## Subscription Tiers
 

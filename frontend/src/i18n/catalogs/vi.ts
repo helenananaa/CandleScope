@@ -3125,6 +3125,7 @@ export const vi = {
   "chart.lineBreakDetail": "Phá {count} đường",
   "chart.fixedBrick": "Gạch cố định {size}",
   "settings.diag.chartCache": "Cache nến biểu đồ chính",
+  "settings.diag.sharedMarketCache": "Bộ nhớ đệm dữ liệu thị trường dùng chung",
   "settings.diag.watchlistFullCache": "Cache nền Watchlist Full",
   "settings.diag.indicatorCache": "Cache kết quả chỉ báo",
   "workbench.kicker": "Dữ liệu runtime trực tiếp · ảnh chụp chỉ đọc",

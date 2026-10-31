@@ -39,6 +39,7 @@ import type { IndicatorDefinition } from "../features/indicators/indicatorTypes.
 import { useFrontendAutoGcRuntime } from "../features/cache-gc/useFrontendAutoGcRuntime.js";
 import { useWatchlistRuntime } from "../features/watchlist/useWatchlistRuntime.js";
 import { useWatchlistFullCacheRuntime } from "../features/watchlist-full-cache/useWatchlistFullCacheRuntime.js";
+import { useMarketDataWorkspaceResources } from "../features/market-data/marketDataWorkspaceContext.js";
 import { useReplayEntryCapability } from "../features/replay/useReplayEntryCapability.js";
 import { useDrawingToolSelectionState } from "../features/drawings/drawingToolState.js";
 import { buildLiveReplayLaunchContext } from "../features/replay-launcher/replayLaunchContext.js";
@@ -408,7 +409,8 @@ function LiveWorkspaceApp() {
       if (target.__CANDLESCOPE_WORKSPACE_BUS__ === handle) delete target.__CANDLESCOPE_WORKSPACE_BUS__;
     };
   }, [workspaceBus]);
-  const [foregroundPreloadGate] = useState(() => new ForegroundPreloadGate());
+  const marketWorkspace = useMarketDataWorkspaceResources();
+  const [foregroundPreloadGate] = useState(() => marketWorkspace?.dataManager.foregroundPreloadGate ?? new ForegroundPreloadGate());
   const [activeEnvironment, setActiveEnvironment] = useState<{
     workspaceId: string;
     workspaceRuntimeKey: string;
@@ -473,8 +475,8 @@ function LiveWorkspaceApp() {
   const activeSession = currentActiveEnvironment?.value.session ?? workspace.view.activeCell.session;
   const activeSubscriptionContext = currentActiveEnvironment?.value.subscriptionContext;
   useWatchlistFullCacheRuntime({
+    data: marketWorkspace?.dataManager ?? null,
     enabled: currentActiveEnvironment?.value.marketDataReady === true,
-    foregroundPreloadGate,
     watchlists: watchlist.view.watchlists,
     subscriptionTiers: watchlist.view.subscriptionTiers,
     exchangeCatalog: activeSubscriptionContext?.exchangeCatalog ?? null,

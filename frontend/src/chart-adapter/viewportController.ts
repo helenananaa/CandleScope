@@ -52,6 +52,15 @@ function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function sharedAxisIndex(timeScale: AdapterTimeScale | null, time: ChartTime): number | null {
+  return safeCall(() => {
+    const coordinate = timeScale?.timeToCoordinate?.(time);
+    if (coordinate == null) return null;
+    const logical = timeScale?.coordinateToLogical?.(coordinate);
+    return finiteNumber(logical) ? Number(logical) : null;
+  }, null);
+}
+
 function toLogicalRange(range: ViewportLogicalRange): LogicalRange {
   return {
     from: range.from as Logical,
@@ -400,10 +409,14 @@ export class ViewportController {
     const index = Math.min(previousRows.length - 1, Math.max(0, Math.round(range.from)));
     const time = previousRows[index]?.time;
     if (time == null) return null;
+    // Other series can extend LWC's shared axis before candles publish (for
+    // example an async indicator during minimized recovery). Candle-local
+    // array offsets then no longer describe the anchor's screen position.
+    const logical = sharedAxisIndex(timeScale, time) ?? index;
     return {
       time,
-      index,
-      screenOffset: index - range.from,
+      index: logical,
+      screenOffset: logical - range.from,
     };
   }
 
@@ -412,14 +425,14 @@ export class ViewportController {
     indexOfTime: ((time: ChartTime) => number) | null | undefined,
   ): boolean {
     if (!anchor || typeof indexOfTime !== "function") return false;
-    const newIndex = indexOfTime(anchor.time);
+    const timeScale = this.getTimeScale();
+    const newIndex = sharedAxisIndex(timeScale, anchor.time) ?? indexOfTime(anchor.time);
     if (
       !Number.isFinite(newIndex)
       || newIndex < 0
       || !Number.isFinite(anchor.screenOffset)
     ) return false;
 
-    const timeScale = this.getTimeScale();
     const currentRange = safeCall(() => timeScale?.getVisibleLogicalRange?.(), null);
     if (
       !currentRange
