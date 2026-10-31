@@ -15,6 +15,42 @@ class Captured(Exception):
         self.request = request
 
 
+@pytest.mark.parametrize("market_type", ["spot", "swap.linear"])
+@pytest.mark.parametrize("interval", ["6h", "12h", "1d", "2d", "3d", "1w", "1M", "3M"])
+def test_owned_rest_pool_uses_qualified_utc_grid_for_source_history(market_type, interval):
+    from app.exchanges.ccxt_ext.catalog import get_ccxt_catalog_entry
+    from app.exchanges.ccxt_ext.generic import _create_exchange
+
+    async def run():
+        exchange = _create_exchange(get_ccxt_catalog_entry("okx"), IngestionConfig(proxy_mode="none"),
+                                    market_type=market_type, websocket=False)
+        spot = market_type == "spot"
+        symbol = "BTC/USDT" if spot else "BTC/USDT:USDT"
+        exchange.set_markets([{
+            "id": "BTC-USDT" if spot else "BTC-USDT-SWAP", "symbol": symbol,
+            "base": "BTC", "quote": "USDT", "type": "spot" if spot else "swap",
+            "spot": spot, "swap": not spot, "future": False, "option": False,
+            "contract": not spot, "linear": not spot, "inverse": False,
+            "settle": None if spot else "USDT",
+        }])
+        async def load(*args, **kwargs):
+            return exchange.markets
+        async def rest(request, *args):
+            raise Captured(request)
+        exchange.load_markets = load
+        exchange.publicGetMarketHistoryCandles = rest
+        try:
+            with pytest.raises(Captured) as got:
+                await exchange.fetch_candlescope_klines(symbol, interval, 1772323200000, 1,
+                                                       {"until": 1772323200000})
+            assert got.value.request["bar"] == okx_utc_interval(interval)
+            assert got.value.request["before"] == 1772323199999
+            assert got.value.request["after"] == 1772323200001
+        finally:
+            await exchange.close()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("profile_type", [OkxSpotCcxtProfile, OkxSwapCcxtProfile])
 @pytest.mark.parametrize("interval", ["1m", "6h", "12h", "1d", "3d", "1w", "1M"])
 def test_utc_subscribe_cache_reverse_unsubscribe_and_rest(profile_type, interval):

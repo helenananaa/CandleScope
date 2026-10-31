@@ -1033,6 +1033,14 @@ def _create_exchange(
         "aiohttp_trust_env": config.proxy_mode == "system",
         "options": options,
     }
+    if entry.exchange_id == "okx" and not websocket:
+        from app.exchanges.okx_intervals import OKX_UTC_INTERVALS
+
+        # REST clients are separate from the primary WS profile. Include its
+        # qualified native grids (notably 2d/3d); pinned CCXT appends the UTC
+        # suffix itself when requesting historical source candles.
+        values["timeframes"] = {key: value.removesuffix("utc")
+                                for key, value in OKX_UTC_INTERVALS.items()}
     if config.http_proxy and config.proxy_mode != "none":
         values["httpsProxy"] = config.http_proxy
         values["wssProxy"] = config.http_proxy
