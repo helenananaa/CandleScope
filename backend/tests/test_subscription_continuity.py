@@ -626,3 +626,43 @@ async def test_iterator_replay_exhaustion_wakes_wait_without_late_delivery(tmp_p
         await asyncio.gather(next_event, return_exceptions=True)
         await iterator.aclose()
         await _close(dm, factory)
+
+
+@pytest.mark.anyio
+async def test_partial_gap_repair_uses_latest_canonical_revision(tmp_path, monkeypatch):
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch)
+    strict, errors, _ = capture(dm)
+    live, _, _ = capture(dm, policy="gap_aware")
+    try:
+        await factory.emit(T, 99)
+        await _until(lambda: len(closed(strict)) == 1)
+        await factory.emit(T + 180_000, 103)
+        await _history_repair(dm, store, T + 60_000, 100)
+        await _history_repair(dm, store, T + 60_000, 150)
+        await _history_repair(dm, store, T + 120_000, 102)
+        await _until(lambda: len(closed(strict)) == 4)
+        assert errors == []
+        assert [e.bar.close for e in strict if e.event_type == DataEventType.BAR_CLOSED] == [99, 150, 102, 103]
+        repaired = [e.bar.close for e in live if e.event_type == DataEventType.BAR_AMENDED and e.bar.time == T // 1000 + 60]
+        assert repaired == [100, 150]
+    finally:
+        await _close(dm, factory)
+
+
+@pytest.mark.anyio
+async def test_deleted_partial_repair_cannot_complete_strict_gap(tmp_path, monkeypatch):
+    dm, store, factory, _ = await manager(tmp_path, monkeypatch)
+    strict, errors, _ = capture(dm)
+    try:
+        await factory.emit(T, 99)
+        await _until(lambda: len(closed(strict)) == 1)
+        await factory.emit(T + 180_000, 103)
+        await _history_repair(dm, store, T + 60_000, 100)
+        store.delete_bars(**IDENTITY, start_ms=T + 60_000, end_ms=T + 60_000)
+        await _history_repair(dm, store, T + 120_000, 102)
+        await _until(lambda: bool(errors) or len(closed(strict)) == 4)
+        assert closed(strict) == [T // 1000]
+        assert errors and errors[0].reason == "source_gap_revision_changed"
+        assert store.query_bars(**IDENTITY, start_ms=T + 60_000, end_ms=T + 60_000) == []
+    finally:
+        await _close(dm, factory)
