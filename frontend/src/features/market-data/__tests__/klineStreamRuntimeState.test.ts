@@ -7,6 +7,7 @@ import {
   createKlineStreamAcknowledgementState,
   getKlineStreamIntervalStatus,
   planKlineRecoveryCountBack,
+  planHeldKlineRecoveryCountBack,
   reduceKlineStreamControlMessage,
   retainTrackedKlineStreamRejections,
   WS_KLINE_FRESHNESS_MS,
@@ -19,6 +20,18 @@ test("stream recovery shares the bounded derived-history policy", () => {
   assert.equal(planKlineRecoveryCountBack("91m", nativeIntervals), 216);
   assert.equal(planKlineRecoveryCountBack("91m", nativeIntervals, 50), 50);
   assert.equal(planKlineRecoveryCountBack("10001m", nativeIntervals), 0);
+});
+
+test("reconnect retains staged custom history depth instead of requesting full history", () => {
+  const nativeIntervals = ["1m", "15m", "30m", "1d", "2d", "3d"];
+  for (const interval of ["45m", "90m", "4d", "5d"]) {
+    assert.equal(planHeldKlineRecoveryCountBack(interval, nativeIntervals, 0), 128);
+    assert.equal(planHeldKlineRecoveryCountBack(interval, nativeIntervals, 112), 128);
+    assert.equal(planHeldKlineRecoveryCountBack(interval, nativeIntervals, 500), 500);
+    assert.equal(planHeldKlineRecoveryCountBack(interval, nativeIntervals, 1500), 1500);
+  }
+  assert.equal(planHeldKlineRecoveryCountBack("1m", nativeIntervals, 0), 500);
+  assert.equal(planHeldKlineRecoveryCountBack("10001m", nativeIntervals, 1500), 0);
 });
 
 test("socket open remains connecting before any interval is acknowledged", () => {
