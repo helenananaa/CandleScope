@@ -386,7 +386,7 @@ class SessionCalendar:
         """Return a session-aware exclusive bucket end for an expected open."""
         width_ms = _interval_width_ms(interval)
         # Coarse session bars expose the first *actual* session open inside a
-        # canonical weekly/monthly bucket.  A holiday or DST transition can
+        # canonical daily/weekly/monthly bucket. A holiday or DST transition can
         # move that timestamp away from the canonical grid, so stepping from
         # the exposed open would also move the close edge.  Close coarse bars
         # on the shared UTC grid while retaining the real open timestamp.
@@ -396,7 +396,7 @@ class SessionCalendar:
                 width_ms,
                 interval=interval,
             )
-            if is_weekly_interval(interval) or is_monthly_interval(interval)
+            if width_ms >= _DAY_MS or is_monthly_interval(interval)
             else int(open_ms)
         )
         natural_end_ms = compute_bucket_end_ms(
@@ -404,9 +404,9 @@ class SessionCalendar:
             width_ms,
             interval=interval,
         )
-        # Daily/multi-day/monthly buckets intentionally retain their natural
-        # calendar edge; only intraday session tails can be shorter than the
-        # nominal interval width.
+        # Daily/multi-day/monthly rows use the canonical edge, consistent with
+        # _coarse_expected_opens. Adding 24h to a daily 09:30 label would cross
+        # into the next canonical day (and out of its monthly parent bucket).
         if width_ms >= _DAY_MS or is_monthly_interval(interval):
             return natural_end_ms
         for session_start_ms, session_end_ms in self._session_segments(
