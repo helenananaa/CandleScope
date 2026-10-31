@@ -199,6 +199,9 @@ def _serialize_kline_event(event) -> dict[str, Any]:
     return {
         "type": "kline",
         "event_type": event.event_type.value,
+        "stream_version": event.detail.get("stream_version"),
+        "affected_range": event.detail.get("affected_range"),
+        "previous_open_ms": event.detail.get("previous_open_ms"),
         "exchange": event.key.exchange,
         "symbol": event.key.symbol,
         "interval": event.key.interval,
@@ -363,6 +366,7 @@ async def stream_multi_kline(
                         "interval": event.key.interval,
                         "market_type": event.key.market_type,
                         "detail": event.detail or {},
+                        "stream_version": event.detail.get("stream_version"),
                     },
                     key=event_key,
                     timeout=1.0,
@@ -648,6 +652,7 @@ async def forward_events_to_ws(
                             "interval": event.key.interval,
                             "market_type": event.key.market_type,
                             "detail": event.detail or {},
+                        "stream_version": event.detail.get("stream_version"),
                         })
                     except Exception:
                         return
