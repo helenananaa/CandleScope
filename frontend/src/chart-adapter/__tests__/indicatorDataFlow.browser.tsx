@@ -65,8 +65,13 @@ export async function checkIndicatorDataFlow() {
     assert(market.cache.planHistory(identity(symbol), 500).action === "reuse", "fixture health missing");
   }
   let browserExecutions = 0, hostedExecutions = 0;
+  let backendAvailable = false, backendFailures = 0;
   const indicators = new IndicatorDataManager({ cache: market.cache, gate, coalesceMs: 40,
-    compute: input => routeIndicatorComputeBatch(input, async () => { throw new Error("JS routed to backend"); }, async (request, signal) => {
+    compute: input => routeIndicatorComputeBatch(input, async ({ jobs }) => {
+      if (!backendAvailable) { backendFailures += 1; throw new Error("controlled backend offline"); }
+      return { ok: true, results: jobs.map(job => ({ clientId: job.clientId, jobKey: job.jobKey,
+        payload: parseIndicatorPayloadEnvelope({ ok: true, lines: [{ id: "ema", data: job.request.ohlcv.map(row => ({ time: row.time, value: row.close })) }] }) })) };
+    }, async (request, signal) => {
       browserExecutions += 1; return computeFrontendScript(request, signal);
     }),
     range: async ({ requests }) => {
@@ -151,6 +156,19 @@ export async function checkIndicatorDataFlow() {
     await until(() => latest.get("left")?.view.activeIndicators[0]?.lines?.[0]?.data[0]?.value === 77, "correction retained stale prewarmed output");
     assert(value("right") === 10 && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "correction changed unrelated chart");
     checks.push("historical correction invalidates warmed input and recomputes only the affected chart");
+    const beforeFailure = browserExecutions;
+    flushSync(() => {
+      latest.get("left")!.actions.addIndicator({ id: "offline-ema", engineName: "EMA", executionTarget: "local", params: { period: 20 } });
+      latest.get("left")!.actions.updateIndicatorScript("js", program + "\n// mixed transport failure", "frontend-js", "safe");
+    });
+    await until(() => latest.get("left")?.view.activeIndicators.find(item => item.id === "offline-ema")?.error === "controlled backend offline", "backend failure was not observed");
+    const jsAfterFailure = latest.get("left")!.view.activeIndicators.find(item => item.id === "js")!;
+    assert(backendFailures > 0 && browserExecutions > beforeFailure && !jsAfterFailure.error && jsAfterFailure.lines?.[0]?.data[0]?.value === 77,
+      "backend transport failure poisoned the independent browser computation");
+    backendAvailable = true; latest.get("left")!.actions.recompute(true);
+    await until(() => { const item = latest.get("left")?.view.activeIndicators.find(item => item.id === "offline-ema"); return Boolean(item?.lines?.length && !item.error); }, "backend result did not recover");
+    assert(value("right") === 10 && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "transport failure changed unrelated chart");
+    checks.push("failed backend work cannot poison a pending real JS worker; backend recovery preserves the other chart");
     return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics() };
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();

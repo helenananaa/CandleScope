@@ -16,6 +16,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { computeIndicatorBatch } from "../../services/indicatorApi.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
 import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
+import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import { cachedIndicatorComputeResult } from "./indicatorCachedCompute.js";
 import { markPerf, recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import {
@@ -482,7 +483,7 @@ export function useIndicatorComputeController({
           });
           try {
             onComputePendingChange?.(1);
-            const responses = await Promise.all(
+            const responses = await awaitIndicatorComputations(
               chunks.map(async (chunk) => {
                 const request = { jobs: chunk, signal, onResults: publish };
                 const response = await (executeBatch ? executeBatch(request) : routeIndicatorComputeBatch(request, computeBatch));

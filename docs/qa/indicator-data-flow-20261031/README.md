@@ -68,3 +68,18 @@ readiness and pending receipts. The new regression failed before the fix and all
 The merged indicator-flow fixture and main's `--history-stages` fixture passed;
 the JavaScript/replay/editor fixture was rerun after integration. Native package
 qualification is recorded separately in the PR with its exact artifact hashes.
+
+## Mixed computation failure isolation
+
+A later native offline/minimize run exposed an independent problem: a failing
+HTTP job rejected a mixed computation while its browser worker was pending,
+marking the successful JavaScript definition with a persistent network error.
+Computation aggregation now waits for independent jobs to settle and publish
+successes before reporting failures, across execution routes, shared-manager
+requests, and input-window chunks. Abort signals still own cancellation.
+
+The new manager regression failed before the change and passes for equal and
+different input windows. All 16 targeted manager/runtime/controller tests pass.
+The production fixture additionally proves that a real pending browser worker
+survives a backend failure, then the backend recovers without moving the other
+chart. Existing JavaScript/replay/editor browser checks were rerun successfully.

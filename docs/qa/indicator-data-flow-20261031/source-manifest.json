@@ -7,12 +7,12 @@
     "frontend/scripts/frontend-script-integration.mjs": "6335094f17fd97d208ca78df6667b520d909e83c3854222c2a35c6b9c01cddba",
     "frontend/scripts/indicator-flow-browser.html": "340fa5ec47537c6cfbe756105fe6d0a065557a72e33f3abebab9deb5ae432411",
     "frontend/src/app/LiveChartCell.tsx": "21597b1ad64de0b24debf7dc8bbd4de82a726bdaeccdf849a975822e953f3d2f",
-    "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "c68bbb7fec79fd40317bb7a6b52e81d75fa159fca8aa7371646424134d20fede",
-    "frontend/src/features/indicators/__tests__/indicatorDataManager.test.ts": "5a8b61ff0f465bb400593d7acf90a6fbc446ba71e2cbd4ad270cd8ceb8ed209d",
+    "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "8e5b014007dd31f6d99f8059ff434932f902c376781792f5b9adceda22fa7f4b",
+    "frontend/src/features/indicators/__tests__/indicatorDataManager.test.ts": "036833655883ca77ecfb6e8fa81eeea063a8b9b1c9ebc8c93b667e9f9ea9019e",
     "frontend/src/features/indicators/__tests__/indicatorStreamIdentity.test.ts": "0633968d6d9429b3479171f13ffd1a08228d5b065c6ec4e3bd70d2e9f35be5f5",
     "frontend/src/features/indicators/indicatorCachedCompute.ts": "bd0181a3f7a32fbe04250b20c9e3928108d14654f74e3e6430f112c66f516da2",
-    "frontend/src/features/indicators/indicatorComputeController.ts": "d4f418ba9e570b9e54e081b5e2e400ab8cc812162bee90408806b2dafcf35863",
-    "frontend/src/features/indicators/indicatorDataManager.ts": "6a8c944256fc10ae2fb1eed9fdcf4a28af8e6438d9ad4a1d49a8a4dda1648f4c",
+    "frontend/src/features/indicators/indicatorComputeController.ts": "9f6b285c4648684c3c4629ad8f2afc116b10dee03650f080e7b4dfb00ea5ac87",
+    "frontend/src/features/indicators/indicatorDataManager.ts": "9757cbb00fb749f9668bca8773d043138c0abbd7ddbe237e6683cf7e51226210",
     "frontend/src/features/indicators/indicatorRequestBroker.ts": "5d3d9ec0e5eff9cec361a9a3be08c49cd4c6a1df3c3b336c2784f86c2942c132",
     "frontend/src/features/indicators/indicatorStreamController.ts": "7df5e19c9d2b61a69519e52228ec3c35dee9349d88b37f245baf298d6073df13",
     "frontend/src/features/indicators/indicatorStreamIdentity.ts": "5be7029adfe659046101b6def98d93a019e1b81687970c9d69a5004f3814360c",
@@ -28,6 +28,8 @@
     "frontend/desktop/control-service.mjs": "ac1eaf0a9d686f0eb909af944bace4fc8f593f61adcf3b6c136ea1c487c9c3b7",
     "frontend/desktop/control-service.test.mjs": "49c0b4349738b594c7c717902f654ed68d4da60a5ffbb87a4a0398440590c51d",
     "frontend/desktop/control-window-lifecycle.mjs": "7a2bd0bc6cdcb248a3ad82de307d955fb55f353fee7840197943b01803a73222",
-    "frontend/desktop/main.mjs": "1c7146b46a02343154962722a533dc969cf6a4eedd4e1d09c32f7347027ff3e5"
+    "frontend/desktop/main.mjs": "1c7146b46a02343154962722a533dc969cf6a4eedd4e1d09c32f7347027ff3e5",
+    "frontend/src/features/indicators/indicatorComputeSettlement.ts": "7c40b54cce8340ca1a303fe090b0d22af3c6c91620d0b944d4c2b4fecf758374",
+    "frontend/src/features/indicators/frontendScriptBatch.ts": "2ab610150383220dfd04802ea63a7333ad51a9ccfc7b18c4513b4c76a41b0945"
   }
 }

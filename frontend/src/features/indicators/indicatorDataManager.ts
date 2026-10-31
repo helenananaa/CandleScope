@@ -5,6 +5,7 @@ import type { SharedMarketCache } from "../market-data/manager/sharedMarketCache
 import type { ForegroundPreloadGate } from "../market-data/foregroundPreloadGate.js";
 import { klineSeriesIdentityKey } from "../market-data/klineSeriesIdentity.js";
 import { routeIndicatorComputeBatch } from "./frontendScriptBatch.js";
+import { awaitIndicatorComputations } from "./indicatorComputeSettlement.js";
 import type { IndicatorComputeBatchExecutor } from "./indicatorComputeController.js";
 import { createIndicatorCacheInputSource } from "./indicatorInputBinding.js";
 import { IndicatorRequestBroker, indicatorRequestKey } from "./indicatorRequestBroker.js";
@@ -103,7 +104,7 @@ export class IndicatorDataManager {
         options.onResults?.([result]); return result;
       });
     });
-    return this.foreground(Promise.all(results).then(results => ({ ok: true, results })), speculative);
+    return this.foreground(awaitIndicatorComputations(results).then(results => ({ ok: true, results })), speculative);
   }
 
   diagnostics() { return { range: this.ranges.diagnostics(), compute: this.computes.diagnostics() }; }

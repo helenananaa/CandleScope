@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { IndicatorDataManager } from "../indicatorDataManager.js";
 import { IndicatorRequestBroker } from "../indicatorRequestBroker.js";
+import { routeIndicatorComputeBatch } from "../frontendScriptBatch.js";
 import { SharedMarketCache } from "../../market-data/manager/sharedMarketCache.js";
 import { ForegroundPreloadGate } from "../../market-data/foregroundPreloadGate.js";
 import { epochSeconds } from "../../../test/testHelpers.js";
@@ -21,6 +22,23 @@ function seeded() {
   return cache;
 }
 const range = (clientId: string): IndicatorRangeRequest => ({ ...series, clientId, kind: "builtin", name: "EMA", params: { length: 20 }, start: 120, end: 180 });
+
+test("a failed backend batch cannot poison a pending browser result, including a different input window", async t => {
+  for (const sameWindow of [true, false]) {
+    const gate = new ForegroundPreloadGate(0);
+    const manager = new IndicatorDataManager({ cache: seeded(), gate, coalesceMs: 0,
+      compute: options => routeIndicatorComputeBatch(options, async () => { throw new Error("backend offline"); },
+        async () => { await tick(); return payload; }),
+    });
+    t.after(() => { manager.dispose(); gate.dispose(); });
+    const published: string[] = [];
+    await assert.rejects(manager.compute({ onResults: results => published.push(...results.map(item => item.clientId)), jobs: [
+      { clientId: "js", jobKey: "js", request: { ...series, language: "frontend-js", script: "plot(close)", ohlcv: rows } },
+      { clientId: "ema", jobKey: "ema", request: { ...series, mode: "builtin", name: "EMA", ohlcv: sameWindow ? rows : rows.slice(1) } },
+    ] }), /backend offline/);
+    assert.deepEqual(published, ["js"], "successful browser work must publish before a sibling transport failure is reported");
+  }
+});
 
 test("two charts share a semantic range; cancelling one scope leaves the other alive", async t => {
   const calls: Array<{ requests: Omit<IndicatorRangeRequest, "signal">[]; signal?: AbortSignal }> = [];
