@@ -359,7 +359,7 @@ def _normalize_okx(
     )
 
 
-async def prepare_source_messages(messages, descriptor, *, watermark=None):
+async def prepare_source_messages(messages, descriptor, *, watermark=None, history_projection=False):
     from app.core.executors import run_storage
     from app.data_engine.storage import kline_sources
 
@@ -372,6 +372,7 @@ async def prepare_source_messages(messages, descriptor, *, watermark=None):
     for message in unrecorded:
         message.payload = dict(
             message.payload,
+            _source_delivery_owner="history" if history_projection else "market",
             _source_build={
                 key: build[key]
                 for key in ("source_commit", "upstream_version", "schema")
