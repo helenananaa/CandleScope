@@ -994,6 +994,14 @@ class DataManager:
     #  Query Interface — the main API for data consumers
     # ═══════════════════════════════════════════════════════════
 
+    def read_history_blocks(self, source: SeriesKey, start_ms: int, end_ms: int, **options):
+        """Read an H127 page without network/backfill or target materialization.
+
+        Use on a storage worker as a context manager. Only a successful exit
+        exposes the page receipt and continuation; B130 leases end on exit.
+        """
+        return self.query_engine.read_history_blocks(source, start_ms, end_ms, **options)
+
     def query(
         self,
         symbol: str,
