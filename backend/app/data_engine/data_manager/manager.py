@@ -3154,6 +3154,33 @@ class DataManager:
         # Resolve only actual, trusted final rows from storage. A successful
         # job/status alone is not evidence that all missing bars were repaired.
         canonical = [self.cache.get_bar_at(key, bar.time) or bar for bar in bars]
+        for gap in self.source_gaps.completing(key, canonical):
+            # Earlier pages can be corrected or deleted while the final page
+            # is in flight. Revalidate the bounded replay range before waking
+            # strict consumers; retained first-arrival copies are not proof.
+            storage = self.query_engine.storage
+            def load():
+                return storage.query_bars(
+                    symbol, interval, start_ms=gap.start_ms, end_ms=gap.end_ms,
+                    limit=self.source_gaps.max_bars + 1, exchange=exchange,
+                    market_type=market_type, series_identity=key.identity,
+                )
+            consumer = getattr(self.cache, "revision_consumer", None)
+            if consumer is not None:
+                verified = await run_storage(consumer.adopt, key, load)
+            elif storage is not None:
+                rows = await run_storage(load)
+                verified = [BarData.from_storage_row(row, exchange=exchange,
+                            market_type=market_type) for row in rows]
+            else:
+                verified = []
+            verified = [bar for bar in verified if bar.is_closed and bar.trusted_final
+                        and bar.time_ms in gap.expected]
+            if not gap.expected <= {bar.time_ms for bar in verified}:
+                gap.fail("source_gap_revision_changed")
+                await self.event_bus.emit(gap.event())
+            else:
+                canonical.extend(verified)
         resolved, corrections = self.source_gaps.accept(key, canonical)
         for bar, gap_ids in corrections:
             await self.event_bus.emit(DataEvent(

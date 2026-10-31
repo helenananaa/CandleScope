@@ -125,6 +125,11 @@ class SourceGapRegistry:
             events.append(event)
         return tuple(events)
 
+    def completing(self, key: SeriesKey, bars: list[BarData]) -> list[SourceGap]:
+        incoming = {bar.time_ms for bar in bars if bar.is_closed and bar.trusted_final}
+        return [gap for gap in self.pending(key) if not gap.error and gap.expected
+                and gap.expected <= gap.repaired.keys() | incoming]
+
     def accept(self, key: SeriesKey, bars: list[BarData]) -> tuple[list[SourceGap], list[tuple[BarData, list[str]]]]:
         resolved: list[SourceGap] = []
         corrections: list[tuple[BarData, list[str]]] = []
@@ -135,7 +140,9 @@ class SourceGapRegistry:
             opened = int(bar.time) * 1000
             ids = []
             for gap in pending:
-                if gap.error or opened not in gap.expected or opened in gap.repaired:
+                if gap.error or opened not in gap.expected:
+                    continue
+                if gap.repaired.get(opened) == bar:
                     continue
                 gap.repaired[opened] = deepcopy(bar)
                 ids.append(gap.id)
