@@ -11,7 +11,8 @@ const row = (time: number, close = 1) => ({ time, open: 1, high: 5, low: 0, clos
 function fixture() {
   const frames = new Map<number, () => void>();
   let id = 0;
-  const scheduler = new ChartWorkScheduler({ requestFrame: cb => { frames.set(++id, cb); return id; }, cancelFrame: handle => { frames.delete(handle); } });
+  // Frame timing is simulated here; host scheduling must not consume its budget.
+  const scheduler = new ChartWorkScheduler({ now: () => 0, requestFrame: cb => { frames.set(++id, cb); return id; }, cancelFrame: handle => { frames.delete(handle); } });
   const registry = new MarketWindowRegistry();
   const cells = ["a", "b"].map(cellId => {
     scheduler.registerCell(cellId, cellId === "a" ? "focused" : "visible-secondary");
