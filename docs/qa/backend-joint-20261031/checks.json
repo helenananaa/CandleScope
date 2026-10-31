@@ -16,11 +16,19 @@
     "desktop_tests": 123,
     "full_check_exit_code": 0,
     "i18n_languages": 30,
-    "i18n_keys": 5253
+    "i18n_keys": 5253,
+    "tested_commit": "8ec3d284f976ff10a059a8f9f7a683f9732ad322"
   },
   "browser_history_passed": true,
   "native_passed": true,
   "live_okx_passed": true,
   "native_order_book_passed": true,
-  "pr148_source_backfill_tests": 69
+  "pr148_source_backfill_tests": 69,
+  "native_upgrade_passed": true,
+  "display_clock_regression": {
+    "tests": 15,
+    "failures": 0,
+    "skipped": 0,
+    "includes_expensive_frame_budget_test": true
+  }
 }

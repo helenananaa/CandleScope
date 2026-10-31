@@ -1,0 +1,1379 @@
+{
+  "started_ms": 1793434616918,
+  "completed_ms": 1793434861483,
+  "method": "actual websocket outage across one complete 1m candle; real BackfillEngine/Coordinator/SQLite, with 3s repair scheduling delay to observe isolation",
+  "errors": [],
+  "source": {
+    "okx": {
+      "count": 150,
+      "closed": 2,
+      "last_open": 1793434860000,
+      "last_at": 1793434860.501269
+    }
+  },
+  "gaps": [
+    {
+      "at": 1793434804.124646,
+      "phase": "recovering",
+      "kind": "gap",
+      "exchange": "okx",
+      "gap": {
+        "type": "gap",
+        "stream_key": "okx:futures:BTC-USDT-SWAP@kline_1m",
+        "symbol": "BTC-USDT-SWAP",
+        "stream_type": "kline",
+        "gap_start": 1793434620000,
+        "gap_end": 1793434800000,
+        "expected_count": 2,
+        "filled": false
+      }
+    }
+  ],
+  "repairs": [
+    {
+      "started": 1793434804.1272829,
+      "kwargs": {
+        "symbol": "BTC-USDT-SWAP",
+        "intervals": [
+          "1m"
+        ],
+        "range_start_ms": 1793434680000,
+        "range_end_ms": 1793434740000,
+        "exchange": "okx",
+        "market_type": "futures",
+        "metadata": {
+          "requires_trusted_finality": true,
+          "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+          "requested_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "acquisition_revision": 1,
+          "interval_work_plan": {
+            "requested_target_bars": 2,
+            "effective_target_bars": 2,
+            "base_interval": "1m",
+            "source_factor": 1,
+            "source_padding_bars": 0,
+            "planned_source_rows": 2,
+            "source_row_budget": 1000,
+            "budget_limited": false,
+            "derived": false
+          },
+          "parent_request_id": "6e54cc0def75417a9277902c11bef886",
+          "chunk_sequence": 0,
+          "ledger_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "reason": "tail_gap",
+          "priority": 25,
+          "requester": "ingestion_gap",
+          "request_id": "6e54cc0def75417a9277902c11bef886"
+        }
+      }
+    },
+    {
+      "started": 1793434807.239379,
+      "kwargs": {
+        "symbol": "BTC-USDT-SWAP",
+        "intervals": [
+          "1m"
+        ],
+        "range_start_ms": 1793434680000,
+        "range_end_ms": 1793434740000,
+        "exchange": "okx",
+        "market_type": "futures",
+        "metadata": {
+          "requires_trusted_finality": true,
+          "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+          "requested_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "acquisition_revision": 1,
+          "interval_work_plan": {
+            "requested_target_bars": 2,
+            "effective_target_bars": 2,
+            "base_interval": "1m",
+            "source_factor": 1,
+            "source_padding_bars": 0,
+            "planned_source_rows": 2,
+            "source_row_budget": 1000,
+            "budget_limited": false,
+            "derived": false
+          },
+          "parent_request_id": "6e54cc0def75417a9277902c11bef886",
+          "chunk_sequence": 0,
+          "ledger_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "reason": "tail_gap",
+          "priority": 25,
+          "requester": "ingestion_gap",
+          "request_id": "6e54cc0def75417a9277902c11bef886"
+        }
+      },
+      "finished": 1793434810.593052,
+      "report": {
+        "run_id": "744a4eba884d",
+        "symbol": "BTC-USDT-SWAP",
+        "exchange": "okx",
+        "status": "completed",
+        "plan": {
+          "gaps": [
+            {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1m",
+              "exchange": "okx",
+              "market_type": "futures",
+              "gap_type": "interior",
+              "start_ms": 1793434680000,
+              "end_ms": 1793434740000,
+              "missing_bars": 2,
+              "db_latest_ms": null,
+              "reference_ms": null,
+              "metadata": {
+                "repair_mode": "authoritative_refresh"
+              }
+            }
+          ],
+          "decompositions": [],
+          "tasks": [
+            {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1m",
+              "exchange": "okx",
+              "market_type": "futures",
+              "start_ms": 1793434680000,
+              "end_ms": 1793434740000,
+              "priority": 1,
+              "estimated_bars": 2,
+              "task_key": "okx:futures:BTC-USDT-SWAP@1m:1793434680000-1793434740000",
+              "metadata": {
+                "requires_trusted_finality": true,
+                "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+                "requested_range": {
+                  "start_ms": 1793434680000,
+                  "end_ms": 1793434740000
+                },
+                "acquisition_revision": 1,
+                "interval_work_plan": {
+                  "requested_target_bars": 2,
+                  "effective_target_bars": 2,
+                  "base_interval": "1m",
+                  "source_factor": 1,
+                  "source_padding_bars": 0,
+                  "planned_source_rows": 2,
+                  "source_row_budget": 1000,
+                  "budget_limited": false,
+                  "derived": false
+                },
+                "parent_request_id": "6e54cc0def75417a9277902c11bef886",
+                "chunk_sequence": 0,
+                "ledger_range": {
+                  "start_ms": 1793434680000,
+                  "end_ms": 1793434740000
+                },
+                "reason": "tail_gap",
+                "priority": 25,
+                "requester": "ingestion_gap",
+                "request_id": "6e54cc0def75417a9277902c11bef886",
+                "repair_mode": "authoritative_refresh"
+              }
+            }
+          ],
+          "estimated_requests": 1,
+          "estimated_bars": 2,
+          "custom_intervals": [],
+          "metadata": {}
+        },
+        "fetch_results": [
+          {
+            "task": {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1m",
+              "exchange": "okx",
+              "market_type": "futures",
+              "start_ms": 1793434680000,
+              "end_ms": 1793434740000,
+              "priority": 1,
+              "estimated_bars": 2,
+              "task_key": "okx:futures:BTC-USDT-SWAP@1m:1793434680000-1793434740000",
+              "metadata": {
+                "requires_trusted_finality": true,
+                "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+                "requested_range": {
+                  "start_ms": 1793434680000,
+                  "end_ms": 1793434740000
+                },
+                "acquisition_revision": 1,
+                "interval_work_plan": {
+                  "requested_target_bars": 2,
+                  "effective_target_bars": 2,
+                  "base_interval": "1m",
+                  "source_factor": 1,
+                  "source_padding_bars": 0,
+                  "planned_source_rows": 2,
+                  "source_row_budget": 1000,
+                  "budget_limited": false,
+                  "derived": false
+                },
+                "parent_request_id": "6e54cc0def75417a9277902c11bef886",
+                "chunk_sequence": 0,
+                "ledger_range": {
+                  "start_ms": 1793434680000,
+                  "end_ms": 1793434740000
+                },
+                "reason": "tail_gap",
+                "priority": 25,
+                "requester": "ingestion_gap",
+                "request_id": "6e54cc0def75417a9277902c11bef886",
+                "repair_mode": "authoritative_refresh"
+              }
+            },
+            "bars_count": 2,
+            "status": "completed",
+            "elapsed_ms": 346,
+            "pages_fetched": 1,
+            "errors": [],
+            "source_complete": false,
+            "exhausted_before_ms": null,
+            "empty_reason": null,
+            "retryable": false,
+            "metadata": {
+              "history_sources": [
+                "backfill"
+              ],
+              "history_lane": "rest",
+              "rest_pages": 1
+            }
+          }
+        ],
+        "reconcile_result": {
+          "bars_received": 2,
+          "bars_written": 2,
+          "bars_skipped": 0,
+          "bars_deduplicated": 0,
+          "custom_bars_generated": 0,
+          "custom_bars_written": 0,
+          "bars_cached": 0,
+          "written_ranges": [
+            {
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "1m",
+              "exchange": "okx",
+              "market_type": "futures",
+              "start_ms": 1793434680000,
+              "end_ms": 1793434740000,
+              "bars_written": 2,
+              "source": "backfill",
+              "phase": "standard"
+            }
+          ],
+          "write_errors": 0,
+          "failed_batches": [],
+          "archive_objects_imported": 0,
+          "archive_dependent_rows_invalidated": 0,
+          "elapsed_ms": 1,
+          "errors": []
+        },
+        "started_at_ms": 1793434810243,
+        "completed_at_ms": 1793434810593,
+        "elapsed_ms": 350,
+        "written_ranges": [
+          {
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "exchange": "okx",
+            "market_type": "futures",
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000,
+            "bars_written": 2,
+            "source": "backfill",
+            "phase": "standard"
+          }
+        ],
+        "data_preview": [],
+        "errors": [],
+        "metadata": {
+          "requires_trusted_finality": true,
+          "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+          "requested_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "acquisition_revision": 1,
+          "interval_work_plan": {
+            "requested_target_bars": 2,
+            "effective_target_bars": 2,
+            "base_interval": "1m",
+            "source_factor": 1,
+            "source_padding_bars": 0,
+            "planned_source_rows": 2,
+            "source_row_budget": 1000,
+            "budget_limited": false,
+            "derived": false
+          },
+          "parent_request_id": "6e54cc0def75417a9277902c11bef886",
+          "chunk_sequence": 0,
+          "ledger_range": {
+            "start_ms": 1793434680000,
+            "end_ms": 1793434740000
+          },
+          "reason": "tail_gap",
+          "priority": 25,
+          "requester": "ingestion_gap",
+          "request_id": "6e54cc0def75417a9277902c11bef886",
+          "repair_mode": "authoritative_refresh"
+        }
+      }
+    }
+  ],
+  "fault": {
+    "started": 1793434681.641858,
+    "resume_target": 1793434803,
+    "source_before": {
+      "okx": {
+        "count": 65,
+        "closed": 1,
+        "last_open": 1793434680000,
+        "last_at": 1793434680.450228
+      }
+    },
+    "closed_clients": {
+      "okx|futures|system||True|descriptor-shard|0": 1
+    },
+    "reconnect_released": 1793434803.011146
+  },
+  "natural_close_after_repair": true,
+  "source_continuity": {
+    "tracking_exhausted": false,
+    "retained_gaps": 1,
+    "pending": []
+  },
+  "parity": [
+    {
+      "exchange": "okx",
+      "open_time": 1793434680000,
+      "match": true,
+      "fields": {
+        "open": true,
+        "high": true,
+        "low": true,
+        "close": true,
+        "volume": true
+      },
+      "rest": {
+        "event_type": "kline",
+        "symbol": "BTC-USDT-SWAP",
+        "exchange": "okx",
+        "event_time_ms": 1793434680000,
+        "received_at_ms": 1793434860432,
+        "source": "http_backfill",
+        "data": {
+          "open": 77386.1,
+          "high": 77397.1,
+          "low": 77386.1,
+          "close": 77397.1,
+          "volume": 9.7723,
+          "interval": "1m",
+          "open_time": 1793434680000,
+          "close_time": 1793434739999,
+          "quote_volume": 756323.08686,
+          "trades": null,
+          "taker_buy_base": null,
+          "taker_buy_quote": null,
+          "enhanced_fields": [
+            "volume",
+            "quote_volume"
+          ],
+          "is_closed": true,
+          "close_evidence": "okx_confirm",
+          "source_candle": {
+            "schema": "candlescope.okx.kline.v1",
+            "exchange": "okx",
+            "marketType": "swap.linear",
+            "marketId": "BTC-USDT-SWAP",
+            "symbol": "BTC/USDT:USDT",
+            "timeframe": "1m",
+            "timestamp": 1793434680000,
+            "open": "77386.1",
+            "high": "77397.1",
+            "low": "77386.1",
+            "close": "77397.1",
+            "volume": "9.7723",
+            "volumeUnit": "base",
+            "quoteVolume": "756323.08686",
+            "quoteVolumeUnit": "quote",
+            "sourceVolume": "977.23",
+            "sourceVolumeUnit": "contracts",
+            "volumeCcy": "9.7723",
+            "volumeCcyUnit": "base",
+            "closed": true,
+            "closeEvidence": "okx_confirm",
+            "closeTime": null,
+            "eventTime": null,
+            "trades": null,
+            "takerBuyBaseVolume": null,
+            "takerBuyQuoteVolume": null,
+            "raw": "[\"1793434680000\",\"77386.1\",\"77397.1\",\"77386.1\",\"77397.1\",\"977.23\",\"9.7723\",\"756323.08686\",\"1\"]",
+            "_source_delivery_owner": "market",
+            "_source_build": {
+              "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+              "upstream_version": "4.5.60",
+              "schema": "candlescope.binance.usdm.kline.v1"
+            },
+            "_source_receipt": {
+              "status": "selected",
+              "observation_id": 152,
+              "ref": {
+                "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+                "open_time": 1793434680000,
+                "revision": 3
+              }
+            }
+          },
+          "source_ref": {
+            "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+            "open_time": 1793434680000,
+            "revision": 3
+          },
+          "is_correction": true
+        },
+        "stream_key": "okx:futures:BTC-USDT-SWAP@kline_1m",
+        "sequence": 1793434680000,
+        "market_type": "futures"
+      },
+      "storage": [
+        {
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset",
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1m",
+          "open_time": 1793434680000,
+          "close_time": 1793434739999,
+          "open": 77386.1,
+          "high": 77397.1,
+          "low": 77386.1,
+          "close": 77397.1,
+          "volume": 9.7723,
+          "quote_volume": 756323.08686,
+          "trades": null,
+          "taker_buy_base": null,
+          "taker_buy_quote": null,
+          "source": "source_snapshot_verified"
+        }
+      ]
+    },
+    {
+      "exchange": "okx",
+      "open_time": 1793434740000,
+      "match": true,
+      "fields": {
+        "open": true,
+        "high": true,
+        "low": true,
+        "close": true,
+        "volume": true
+      },
+      "rest": {
+        "event_type": "kline",
+        "symbol": "BTC-USDT-SWAP",
+        "exchange": "okx",
+        "event_time_ms": 1793434740000,
+        "received_at_ms": 1793434860741,
+        "source": "http_backfill",
+        "data": {
+          "open": 77397.1,
+          "high": 77473.2,
+          "low": 77397.1,
+          "close": 77460.4,
+          "volume": 84.3044,
+          "interval": "1m",
+          "open_time": 1793434740000,
+          "close_time": 1793434799999,
+          "quote_volume": 6528501.0348,
+          "trades": null,
+          "taker_buy_base": null,
+          "taker_buy_quote": null,
+          "enhanced_fields": [
+            "volume",
+            "quote_volume"
+          ],
+          "is_closed": true,
+          "close_evidence": "okx_confirm",
+          "source_candle": {
+            "schema": "candlescope.okx.kline.v1",
+            "exchange": "okx",
+            "marketType": "swap.linear",
+            "marketId": "BTC-USDT-SWAP",
+            "symbol": "BTC/USDT:USDT",
+            "timeframe": "1m",
+            "timestamp": 1793434740000,
+            "open": "77397.1",
+            "high": "77473.2",
+            "low": "77397.1",
+            "close": "77460.4",
+            "volume": "84.3044",
+            "volumeUnit": "base",
+            "quoteVolume": "6528501.0348",
+            "quoteVolumeUnit": "quote",
+            "sourceVolume": "8430.44",
+            "sourceVolumeUnit": "contracts",
+            "volumeCcy": "84.3044",
+            "volumeCcyUnit": "base",
+            "closed": true,
+            "closeEvidence": "okx_confirm",
+            "closeTime": null,
+            "eventTime": null,
+            "trades": null,
+            "takerBuyBaseVolume": null,
+            "takerBuyQuoteVolume": null,
+            "raw": "[\"1793434740000\",\"77397.1\",\"77473.2\",\"77397.1\",\"77460.4\",\"8430.44\",\"84.3044\",\"6528501.0348\",\"1\"]",
+            "_source_delivery_owner": "market",
+            "_source_build": {
+              "source_commit": "43f7d748b22757873e1b81776e150ca67b67da07",
+              "upstream_version": "4.5.60",
+              "schema": "candlescope.binance.usdm.kline.v1"
+            },
+            "_source_receipt": {
+              "status": "selected",
+              "observation_id": 154,
+              "ref": {
+                "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+                "open_time": 1793434740000,
+                "revision": 1
+              }
+            }
+          },
+          "source_ref": {
+            "series": "[\"okx\",\"futures\",\"BTC-USDT-SWAP\",\"1m\"]",
+            "open_time": 1793434740000,
+            "revision": 1
+          },
+          "is_correction": true
+        },
+        "stream_key": "okx:futures:BTC-USDT-SWAP@kline_1m",
+        "sequence": 1793434740000,
+        "market_type": "futures"
+      },
+      "storage": [
+        {
+          "exchange": "okx",
+          "market_type": "futures",
+          "provider_id": "okx",
+          "venue": "okx",
+          "asset_class": "crypto",
+          "series_variant": "native",
+          "price_adjustment": "raw",
+          "session_variant": "continuous",
+          "volume_semantics": "base_asset",
+          "symbol": "BTC-USDT-SWAP",
+          "interval": "1m",
+          "open_time": 1793434740000,
+          "close_time": 1793434799999,
+          "open": 77397.1,
+          "high": 77473.2,
+          "low": 77397.1,
+          "close": 77460.4,
+          "volume": 84.3044,
+          "quote_volume": 6528501.0348,
+          "trades": null,
+          "taker_buy_base": null,
+          "taker_buy_quote": null,
+          "source": "source_snapshot_verified"
+        }
+      ]
+    }
+  ],
+  "memory_budget": {
+    "limit_bytes": 268435456,
+    "estimated_bytes": 17542,
+    "reserved_bytes": 0,
+    "over_budget_bytes": 0,
+    "admission_rejections": 0,
+    "owners": {
+      "bar-cache": {
+        "bars": 2,
+        "series": 1,
+        "estimated_bytes": 1158,
+        "estimate_basis": "record, scalar referents and list slots; conservative",
+        "limit_bytes": 134217728,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "unique_retained_bytes": 1911,
+        "unique_objects": 40
+      },
+      "realtime-state": {
+        "active_bars": 1,
+        "closed_bars": 2,
+        "components": 0,
+        "queued_snapshots": 0,
+        "queued_components": 0,
+        "estimated_bytes": 3072,
+        "protection": "active and correction state owned by realtime executor",
+        "limit_bytes": 134217728,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "unique_retained_bytes": 0,
+        "unique_objects": 0
+      },
+      "event-delivery": {
+        "journal_events": 12,
+        "queued_events": 1,
+        "estimated_bytes": 13312,
+        "protection": "durable recovery is stored separately in SQLite",
+        "limit_bytes": 33554432,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "unique_retained_bytes": 27006,
+        "unique_objects": 350
+      },
+      "durable-delivery": {
+        "submission_payloads": 0,
+        "dispatch_records": 0,
+        "estimated_bytes": 0,
+        "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+        "limit_bytes": 16777216,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0,
+        "unique_retained_bytes": 0,
+        "unique_objects": 0
+      },
+      "history-query": {
+        "estimated_bytes": 0,
+        "limit_bytes": 67108864,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0
+      },
+      "history-backfill": {
+        "estimated_bytes": 0,
+        "limit_bytes": 67108864,
+        "reserved_bytes": 0,
+        "over_budget_bytes": 0
+      }
+    },
+    "heap_measurement": "deduplicated reachable Python values; excludes allocator/RSS and external memory"
+  },
+  "delivery": {
+    "mode": "durable",
+    "degraded": false,
+    "pending": 0,
+    "recovery_pending": 0,
+    "failures": 0,
+    "last_error": null,
+    "recovery_error": null,
+    "unconfirmed_receipt": false,
+    "active_submissions": 0,
+    "admission_rejected": 0,
+    "published": 2,
+    "rejected": 0
+  },
+  "passed": true,
+  "source_code": "ec189fb9371f61b70dcf394108636f698e63cc6c",
+  "raw_report": "output/backend-joint-main-bab-20261031/live/report.json",
+  "raw_report_sha256": "afd8d5c903189c3bfd006da4e549e018bf742a2ae518fc505b1a1e745a400f4e",
+  "consumers": {
+    "okx.strict": {
+      "errors": [],
+      "event_counts": {
+        "bar.created": 4,
+        "bar.updated": 122,
+        "bar.closed": 4
+      },
+      "closed_amended_and_last_events": [
+        {
+          "at": 1793434679.564564,
+          "phase": "startup",
+          "kind": "consumer",
+          "label": "okx.strict",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434679553,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434620,
+              "open": 77397.0,
+              "high": 77397.0,
+              "low": 77362.6,
+              "close": 77386.0,
+              "volume": 26.6756,
+              "is_closed": true
+            },
+            "detail": {
+              "delivery_id": "43f7107453dd4cec8c25c83c5bf4f6c1",
+              "delivery_sequence": 1,
+              "canonical_reconciled": false,
+              "storage_revision": 1,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 58,
+                "barrier": 2,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434679553
+              },
+              "affected_range": {
+                "from_ms": 1793434620000,
+                "to_ms": 1793434620000
+              },
+              "previous_open_ms": 1793434560000
+            }
+          }
+        },
+        {
+          "at": 1793434810.603103,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.strict",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434810603,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434680,
+              "open": 77386.1,
+              "high": 77397.1,
+              "low": 77386.1,
+              "close": 77397.1,
+              "volume": 9.7723,
+              "is_closed": true
+            },
+            "detail": {
+              "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+              "continuity_replayed": true,
+              "original_open_time_ms": 1793434680000
+            }
+          }
+        },
+        {
+          "at": 1793434810.6031659,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.strict",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434810603,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434740,
+              "open": 77397.1,
+              "high": 77473.2,
+              "low": 77397.1,
+              "close": 77460.4,
+              "volume": 84.3044,
+              "is_closed": true
+            },
+            "detail": {
+              "source_gap_id": "abeb580fc5fb4c7cabcd90d97b4d1762",
+              "continuity_replayed": true,
+              "original_open_time_ms": 1793434740000
+            }
+          }
+        },
+        {
+          "at": 1793434859.543941,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.strict",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434859535,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434800,
+              "open": 77460.4,
+              "high": 77460.5,
+              "low": 77397.0,
+              "close": 77397.1,
+              "volume": 63.5787,
+              "is_closed": true
+            },
+            "detail": {
+              "delivery_id": "51b955836ac741189900f5dd2af0e5ed",
+              "delivery_sequence": 2,
+              "canonical_reconciled": false,
+              "storage_revision": 4,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 135,
+                "barrier": 8,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434859535
+              },
+              "affected_range": {
+                "from_ms": 1793434800000,
+                "to_ms": 1793434800000
+              },
+              "previous_open_ms": 1793434740000
+            }
+          }
+        },
+        {
+          "at": 1793434860.5019069,
+          "phase": "verified",
+          "kind": "consumer",
+          "label": "okx.strict",
+          "event": {
+            "event_type": "bar.updated",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434860501,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434860,
+              "open": 77397.0,
+              "high": 77397.0,
+              "low": 77397.0,
+              "close": 77397.0,
+              "volume": 0.1058,
+              "is_closed": false
+            },
+            "detail": {
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 137,
+                "barrier": 9,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434860501
+              },
+              "affected_range": {
+                "from_ms": 1793434860000,
+                "to_ms": 1793434860000
+              },
+              "previous_open_ms": 1793434800000
+            }
+          }
+        }
+      ]
+    },
+    "okx.live": {
+      "errors": [],
+      "event_counts": {
+        "bar.created": 4,
+        "bar.updated": 128,
+        "bar.closed": 2,
+        "source.gap": 1,
+        "bar.amended": 2,
+        "source.gap.resolved": 1
+      },
+      "closed_amended_and_last_events": [
+        {
+          "at": 1793434679.564461,
+          "phase": "startup",
+          "kind": "consumer",
+          "label": "okx.live",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434679553,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434620,
+              "open": 77397.0,
+              "high": 77397.0,
+              "low": 77362.6,
+              "close": 77386.0,
+              "volume": 26.6756,
+              "is_closed": true
+            },
+            "detail": {
+              "delivery_id": "43f7107453dd4cec8c25c83c5bf4f6c1",
+              "delivery_sequence": 1,
+              "canonical_reconciled": false,
+              "storage_revision": 1,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 58,
+                "barrier": 2,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434679553
+              },
+              "affected_range": {
+                "from_ms": 1793434620000,
+                "to_ms": 1793434620000
+              },
+              "previous_open_ms": 1793434560000
+            }
+          }
+        },
+        {
+          "at": 1793434810.602635,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.live",
+          "event": {
+            "event_type": "bar.amended",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434810602,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434680,
+              "open": 77386.1,
+              "high": 77397.1,
+              "low": 77386.1,
+              "close": 77397.1,
+              "volume": 9.7723,
+              "is_closed": true
+            },
+            "detail": {
+              "source_gap_ids": [
+                "abeb580fc5fb4c7cabcd90d97b4d1762"
+              ],
+              "historical_repair": true,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 69,
+                "barrier": 5,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434810602
+              },
+              "affected_range": {
+                "from_ms": 1793434680000,
+                "to_ms": 1793434680000
+              },
+              "previous_open_ms": 1793434620000
+            }
+          }
+        },
+        {
+          "at": 1793434810.6028109,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.live",
+          "event": {
+            "event_type": "bar.amended",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434810602,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434740,
+              "open": 77397.1,
+              "high": 77473.2,
+              "low": 77397.1,
+              "close": 77460.4,
+              "volume": 84.3044,
+              "is_closed": true
+            },
+            "detail": {
+              "source_gap_ids": [
+                "abeb580fc5fb4c7cabcd90d97b4d1762"
+              ],
+              "historical_repair": true,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 70,
+                "barrier": 6,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434810602
+              },
+              "affected_range": {
+                "from_ms": 1793434740000,
+                "to_ms": 1793434740000
+              },
+              "previous_open_ms": 1793434680000
+            }
+          }
+        },
+        {
+          "at": 1793434859.543854,
+          "phase": "recovering",
+          "kind": "consumer",
+          "label": "okx.live",
+          "event": {
+            "event_type": "bar.closed",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434859535,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434800,
+              "open": 77460.4,
+              "high": 77460.5,
+              "low": 77397.0,
+              "close": 77397.1,
+              "volume": 63.5787,
+              "is_closed": true
+            },
+            "detail": {
+              "delivery_id": "51b955836ac741189900f5dd2af0e5ed",
+              "delivery_sequence": 2,
+              "canonical_reconciled": false,
+              "storage_revision": 4,
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 135,
+                "barrier": 8,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434859535
+              },
+              "affected_range": {
+                "from_ms": 1793434800000,
+                "to_ms": 1793434800000
+              },
+              "previous_open_ms": 1793434740000
+            }
+          }
+        },
+        {
+          "at": 1793434860.5018198,
+          "phase": "verified",
+          "kind": "consumer",
+          "label": "okx.live",
+          "event": {
+            "event_type": "bar.updated",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434860501,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434860,
+              "open": 77397.0,
+              "high": 77397.0,
+              "low": 77397.0,
+              "close": 77397.0,
+              "volume": 0.1058,
+              "is_closed": false
+            },
+            "detail": {
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 137,
+                "barrier": 9,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434860501
+              },
+              "affected_range": {
+                "from_ms": 1793434860000,
+                "to_ms": 1793434860000
+              },
+              "previous_open_ms": 1793434800000
+            }
+          }
+        }
+      ]
+    },
+    "okx.short_strict": {
+      "errors": [
+        {
+          "at": 1793434804.875956,
+          "phase": "recovering",
+          "kind": "consumer_error",
+          "label": "okx.short_strict",
+          "error": "CONSUMER_RESYNC_REQUIRED: source_gap_timeout"
+        }
+      ],
+      "event_counts": {
+        "bar.updated": 1
+      },
+      "closed_amended_and_last_events": [
+        {
+          "at": 1793434680.450956,
+          "phase": "baseline",
+          "kind": "consumer",
+          "label": "okx.short_strict",
+          "event": {
+            "event_type": "bar.updated",
+            "audience": "user",
+            "exchange": "okx",
+            "symbol": "BTC-USDT-SWAP",
+            "interval": "1m",
+            "market_type": "futures",
+            "timestamp_ms": 1793434680450,
+            "provider_id": "okx",
+            "venue": "okx",
+            "asset_class": "crypto",
+            "series_variant": "native",
+            "price_adjustment": "raw",
+            "session_variant": "continuous",
+            "volume_semantics": "base_asset",
+            "bar": {
+              "time": 1793434680,
+              "open": 77386.1,
+              "high": 77386.4,
+              "low": 77386.1,
+              "close": 77386.4,
+              "volume": 0.344,
+              "is_closed": false
+            },
+            "detail": {
+              "stream_version": {
+                "protocol": 1,
+                "epoch": "535edede4d9643aaaf2d5803f262cb8b",
+                "generation": 1,
+                "sequence": 60,
+                "barrier": 3,
+                "series": {
+                  "symbol": "BTC-USDT-SWAP",
+                  "interval": "1m",
+                  "exchange": "okx",
+                  "market_type": "futures",
+                  "provider_id": "okx",
+                  "venue": "okx",
+                  "asset_class": "crypto",
+                  "series_variant": "native",
+                  "price_adjustment": "raw",
+                  "session_variant": "continuous",
+                  "volume_semantics": "base_asset"
+                },
+                "observed_at_ms": 1793434680450
+              },
+              "affected_range": {
+                "from_ms": 1793434680000,
+                "to_ms": 1793434680000
+              },
+              "previous_open_ms": 1793434620000
+            }
+          }
+        }
+      ]
+    }
+  },
+  "backfill": {
+    "submitted": 1,
+    "active": [],
+    "pending": [],
+    "running_chunks": 0,
+    "deferred_chunks": 0,
+    "recent_outcomes": {
+      "6e54cc0def75417a9277902c11bef886": {
+        "status": "completed",
+        "reason": "tail_gap",
+        "priority": 25,
+        "requester": "ingestion_gap",
+        "range_start_ms": 1793434680000,
+        "range_end_ms": 1793434740000,
+        "attempts": 1,
+        "bars_loaded": 2,
+        "verified_contiguous": true,
+        "remaining_missing_bars": 0,
+        "error": null,
+        "terminal_reason": null,
+        "exhausted_before_ms": null,
+        "retryable": false
+      }
+    },
+    "gap_ledger_open": []
+  }
+}

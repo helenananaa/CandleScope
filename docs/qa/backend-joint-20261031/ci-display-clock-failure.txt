@@ -1,0 +1,31 @@
+2026-10-31T07:14:55.5555940Z ✖ failing tests:
+2026-10-31T07:14:55.5584270Z 
+2026-10-31T07:14:55.5629220Z test at src/features/market-data/__tests__/chartDisplaySubscription.test.ts:1:1736
+2026-10-31T07:14:55.5805940Z ✖ both owners admit every event synchronously and render one final tail per frame (177.148092ms)
+2026-10-31T07:14:55.5895560Z   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+2026-10-31T07:14:55.5957690Z   
+2026-10-31T07:14:55.6002080Z   0 !== 1
+2026-10-31T07:14:55.6075200Z   
+2026-10-31T07:14:55.6122830Z       at TestContext.<anonymous> (/Users/runner/work/CandleScope/CandleScope/frontend/src/features/market-data/__tests__/chartDisplaySubscription.test.ts:44:12)
+2026-10-31T07:14:55.6177330Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+2026-10-31T07:14:55.6220300Z       at Test.run (node:internal/test_runner/test:1382:25)
+2026-10-31T07:14:55.7543820Z       at Test.start (node:internal/test_runner/test:1242:17)
+2026-10-31T07:14:55.7874570Z       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+2026-10-31T07:14:55.7958910Z     generatedMessage: true,
+2026-10-31T07:14:55.8069000Z     code: 'ERR_ASSERTION',
+2026-10-31T07:14:55.8168260Z     actual: 0,
+2026-10-31T07:14:55.8448440Z     expected: 1,
+2026-10-31T07:14:55.8484680Z     operator: 'strictEqual',
+2026-10-31T07:14:55.8622390Z     diff: 'simple'
+2026-10-31T07:14:55.8677680Z   }
+2026-10-31T07:14:55.8839420Z 
+2026-10-31T07:14:55.8915760Z [frontend] isolated performance gate: 1 files, concurrency=1
+2026-10-31T07:14:56.8621110Z ✔ 512-entity style, move, and reorder commands finish synchronously below the latency budget (306.962039ms)
+2026-10-31T07:14:56.8648540Z ℹ style/move/reorder attempt 1: median=0.231ms, p95=0.295ms per command
+2026-10-31T07:14:56.8772800Z ℹ tests 1
+2026-10-31T07:14:56.9775250Z ℹ suites 0
+2026-10-31T07:14:57.0205230Z ℹ pass 1
+2026-10-31T07:14:57.0277000Z ℹ fail 0
+2026-10-31T07:14:57.0319340Z ℹ cancelled 0
+2026-10-31T07:14:57.0364370Z ℹ skipped 0
+2026-10-31T07:14:57.0436070Z ℹ todo 0

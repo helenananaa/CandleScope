@@ -1,0 +1,31 @@
+{
+  "main": "bab267477c2c834fd98c1cd77e5d774a4d69b6ea",
+  "joint_code": "01e062ccde830f55354818a6ebc173eb871f1e03",
+  "pr138": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
+  "pr148": "c0f4b5f12ebcba626abfa81c2e6e3697f3e4c8b3",
+  "pr144": "e662cd1ce1738b5490907f851aae3e5daa878a12",
+  "backend_tree": "88ef92a535bcbdb26bebace93dd3c57cbb32f9f3",
+  "frontend_tree": "e2e0698b76e4ef0e00b7f0149f7d026c90359bab",
+  "first_combined_backend_run": {
+    "source": "69f03984f5bc9e76d792043e4d229f68fa674d3a",
+    "passed": 1837,
+    "includes_materialized_clock_fix": false
+  },
+  "materialized_clock_fix": {
+    "source": "fd8f5dc5b50fe2df4608cb5f9fa13fc76f1cadef",
+    "before_failed": 4,
+    "after_passed": 12,
+    "after_log": "output/backend-joint-main-bab-20261031/materialized-clock-after.log"
+  },
+  "frontend_tested_code": "696b164077caf4b826aec703513ce04263efb945",
+  "frontend_unchanged_since_tested": true,
+  "equivalent_product_tree_code": "696b164077caf4b826aec703513ce04263efb945",
+  "backend_tested_code": "ec189fb9371f61b70dcf394108636f698e63cc6c",
+  "native_tested_code": "696b164077caf4b826aec703513ce04263efb945",
+  "viewport_fix": "696b164077caf4b826aec703513ce04263efb945",
+  "native_before_viewport_fix_code": "ec189fb9371f61b70dcf394108636f698e63cc6c",
+  "browser_health_tested_code": "ec189fb9371f61b70dcf394108636f698e63cc6c",
+  "browser_health_relevant_sources_unchanged": true,
+  "browser_history_viewport_tested_code": "696b164077caf4b826aec703513ce04263efb945",
+  "live_backend_tested_code": "ec189fb9371f61b70dcf394108636f698e63cc6c"
+}

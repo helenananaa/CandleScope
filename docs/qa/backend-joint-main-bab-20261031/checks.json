@@ -1,0 +1,36 @@
+{
+  "backend": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "1841",
+    "time": "144.326",
+    "timestamp": "2026-10-31T16:12:51.597032",
+    "hostname": "Ryans-MacBook-Air.local"
+  },
+  "frontend": {
+    "tests": 4633,
+    "desktop_tests": 123,
+    "failed": 0,
+    "skipped": 0,
+    "check_exit": 0,
+    "source": "696b164077caf4b826aec703513ce04263efb945",
+    "existing_lint_warnings": 1,
+    "new_lint_warnings": 0
+  },
+  "materialized_clock": {
+    "before_failed": 4,
+    "after_passed": 12
+  },
+  "browser_history_passed": true,
+  "browser_health_passed": true,
+  "backend_architecture_passed": true,
+  "live_okx_passed": true,
+  "native_passed": true,
+  "native_order_book_passed": true,
+  "native_automated_before_viewport_fix_passed": true,
+  "visual_viewport_before_fix_passed": false,
+  "viewport_browser_after_fix_passed": true,
+  "native_visual_after_fix_passed": true
+}

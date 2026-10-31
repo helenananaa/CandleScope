@@ -12,6 +12,8 @@ and the pytest asyncio, anyio and timeout plugins.
 ```sh
 python3 docs/qa/backend-joint-20261031/run_backend.py
 npm --prefix frontend run check
+npm --prefix frontend run test:frontend-js:browser -- --history-stages \
+  --out ../output/backend-joint-reproduction/browser
 ```
 
 Build the native app with its bundled Python and current frontend, using the
@@ -51,8 +53,15 @@ The fixed-input microbenchmark is reproducible with:
 
 ```sh
 .venv/bin/python backend/scripts/benchmark_custom_history_streaming.py \
-  --repeats 3 --out /tmp/candlescope-history-benchmark.json
+  --repeats 3 --purpose regular --purpose multi-page \
+  --out /tmp/candlescope-history-benchmark.json
 ```
 
 Run it while the machine is otherwise idle. It measures synthetic query execution,
 not provider/disk latency or total process RSS.
+
+The recorded upgrade check used the previously failed isolated 4d test profile,
+with all application processes stopped and SQLite/profile snapshots saved first.
+`native_upgrade.mjs` requires `CANDLE_JOINT_NATIVE_OUTPUT` and a preserved
+`upgrade-before/receipt.json`; it intentionally does not create or clone a data
+owner. Original failure data and the backup stay in the local output directory.

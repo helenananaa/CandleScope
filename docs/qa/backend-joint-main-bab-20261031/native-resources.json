@@ -1,0 +1,29 @@
+{
+  "description": "Sum of process RSS sampled every two seconds; shared pages may be double counted. Not a memory-budget cap or comparative benchmark. Missing phases had no two-second sample.",
+  "phases": {
+    "cold": {
+      "samples": 15,
+      "min_rss_bytes": 1245560832,
+      "max_rss_bytes": 1672953856,
+      "max_processes": 8
+    },
+    "restart": {
+      "samples": 5,
+      "min_rss_bytes": 1334099968,
+      "max_rss_bytes": 1723662336,
+      "max_processes": 8
+    },
+    "final-restart": {
+      "samples": 1,
+      "min_rss_bytes": 1346912256,
+      "max_rss_bytes": 1346912256,
+      "max_processes": 6
+    },
+    "market-settle": {
+      "samples": 10,
+      "min_rss_bytes": 1590788096,
+      "max_rss_bytes": 1719418880,
+      "max_processes": 8
+    }
+  }
+}

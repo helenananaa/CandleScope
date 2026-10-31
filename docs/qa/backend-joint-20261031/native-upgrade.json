@@ -1,0 +1,880 @@
+{
+  "report": {
+    "scope": "Actual packaged macOS app, bundled Python/backend, live public market data, isolated profile; no response stubs",
+    "phases": [
+      {
+        "name": "upgrade-launch",
+        "at": "2026-10-31T06:55:29.073Z",
+        "value": {
+          "pid": 71637,
+          "instanceId": "b02fe6743acb8f2808d1ba216a7f7cf4",
+          "browser": "Chrome/150.0.7871.212"
+        }
+      },
+      {
+        "name": "recovered-existing-profile",
+        "at": "2026-10-31T06:56:02.203Z",
+        "value": [
+          {
+            "id": "chart:cell-1",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "4d"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 129,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [
+              {
+                "value": "4d",
+                "createdAt": 1793427234796,
+                "lastUsedAt": 1793427234796,
+                "usageCount": 1,
+                "pinned": false,
+                "order": 0
+              }
+            ],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 4.840579710144928,
+              "rightOffset": -21,
+              "time": {
+                "from": 1762560000,
+                "to": 1786060800
+              },
+              "rightmostTime": 1786060800,
+              "logical": {
+                "from": 39,
+                "to": 107
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-0-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 110
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-2",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "90m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 130,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [
+              {
+                "value": "4d",
+                "createdAt": 1793427234796,
+                "lastUsedAt": 1793427234796,
+                "usageCount": 1,
+                "pinned": false,
+                "order": 0
+              }
+            ],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.5714285714285716,
+              "rightOffset": 2,
+              "time": {
+                "from": 1792724400,
+                "to": 1793437200
+              },
+              "rightmostTime": 1793437200,
+              "logical": {
+                "from": -1,
+                "to": 131
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-1-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "bindingId": "indicator:control-native-custom-history-1-0",
+                "error": null,
+                "outputPointCount": 111
+              },
+              {
+                "id": "qa-current-main-pine-local",
+                "name": "Pine SMA",
+                "kind": "script",
+                "executionTarget": "local",
+                "script": "//@version=5\nindicator(\"Joint Pine SMA\")\nplot(ta.sma(close,20))",
+                "language": "pine",
+                "securityMode": "safe",
+                "visible": true,
+                "bindingId": "indicator:qa-current-main-pine-local",
+                "error": null,
+                "outputPointCount": 111
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-3",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "2d"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 131,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [
+              {
+                "value": "4d",
+                "createdAt": 1793427234796,
+                "lastUsedAt": 1793427234796,
+                "usageCount": 1,
+                "pinned": false,
+                "order": 0
+              }
+            ],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 57,
+              "rightOffset": -1,
+              "time": {
+                "from": 1792281600,
+                "to": 1793145600
+              },
+              "rightmostTime": 1793145600,
+              "logical": {
+                "from": 124,
+                "to": 129
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-2-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 112
+              }
+            ],
+            "computing": false
+          },
+          {
+            "id": "chart:cell-4",
+            "session": {
+              "exchange": "okx",
+              "marketType": "futures",
+              "symbol": "BTC-USDT-SWAP",
+              "interval": "3d"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 130,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "aggTrade and strict full-depth reconstruction are not exposed by the current OKX plugin",
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [
+              {
+                "value": "4d",
+                "createdAt": 1793427234796,
+                "lastUsedAt": 1793427234796,
+                "usageCount": 1,
+                "pinned": false,
+                "order": 0
+              }
+            ],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 2.395165609725556,
+              "rightOffset": 2,
+              "time": {
+                "from": 1758037592.455807,
+                "to": 1793923200
+              },
+              "rightmostTime": 1793923200,
+              "logical": {
+                "from": -7.447559969880558,
+                "to": 131
+              }
+            },
+            "indicators": [
+              {
+                "id": "control-native-custom-history-3-0",
+                "name": "EMA",
+                "engineName": "EMA",
+                "kind": "builtin",
+                "executionTarget": "local",
+                "params": {
+                  "period": 20
+                },
+                "visible": true,
+                "error": null,
+                "outputPointCount": 111
+              }
+            ],
+            "computing": false
+          }
+        ]
+      },
+      {
+        "name": "upgrade-verified-full-exit",
+        "at": "2026-10-31T06:56:22.954Z",
+        "value": {
+          "pids": [
+            71637,
+            71641,
+            71642,
+            71643,
+            71654,
+            71651,
+            71657,
+            71658
+          ],
+          "remaining": []
+        }
+      }
+    ],
+    "errors": [],
+    "passed": true
+  },
+  "diagnostics": {
+    "bar_delivery": {
+      "mode": "durable",
+      "degraded": false,
+      "pending": 0,
+      "recovery_pending": 0,
+      "failures": 0,
+      "last_error": null,
+      "recovery_error": null,
+      "unconfirmed_receipt": false,
+      "active_submissions": 0,
+      "admission_rejected": 0,
+      "published": 398,
+      "rejected": 168
+    },
+    "memory_budget": {
+      "limit_bytes": 268435456,
+      "estimated_bytes": 1509423,
+      "reserved_bytes": 804864,
+      "over_budget_bytes": 0,
+      "admission_rejections": 0,
+      "owners": {
+        "bar-cache": {
+          "bars": 1445,
+          "series": 8,
+          "estimated_bytes": 836655,
+          "estimate_basis": "record, scalar referents and list slots; conservative",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "realtime-state": {
+          "active_bars": 7,
+          "closed_bars": 8,
+          "components": 18,
+          "queued_snapshots": 0,
+          "queued_components": 0,
+          "estimated_bytes": 33792,
+          "protection": "active and correction state owned by realtime executor",
+          "limit_bytes": 134217728,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "event-delivery": {
+          "journal_events": 624,
+          "queued_events": 0,
+          "estimated_bytes": 638976,
+          "protection": "durable recovery is stored separately in SQLite",
+          "limit_bytes": 33554432,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "durable-delivery": {
+          "submission_payloads": 0,
+          "dispatch_records": 0,
+          "estimated_bytes": 0,
+          "protection": "in-flight delivery is drained; pending recovery stays in SQLite",
+          "limit_bytes": 16777216,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-query": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 0,
+          "over_budget_bytes": 0
+        },
+        "history-backfill": {
+          "estimated_bytes": 0,
+          "limit_bytes": 67108864,
+          "reserved_bytes": 804864,
+          "over_budget_bytes": 0
+        }
+      },
+      "heap_measurement": "not_requested"
+    },
+    "revision_adoption": {
+      "task_alive": true,
+      "last_error": null
+    }
+  },
+  "preserved_before": {
+    "phases": {
+      "pending": 560,
+      "published": 1461,
+      "rejected": 602
+    },
+    "pending": 561
+  }
+}

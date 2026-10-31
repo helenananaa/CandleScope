@@ -1,0 +1,17 @@
+{
+  "viewport": {
+    "source": "ec189fb9371f61b70dcf394108636f698e63cc6c",
+    "automated_native_passed": true,
+    "visual_passed": false,
+    "symptom": "5d rightOffset 67; almost entire viewport showed future whitespace",
+    "reproduction_before": "viewport-before.json",
+    "regression_after": "browser-history-viewport.json",
+    "fix": "696b164077caf4b826aec703513ce04263efb945",
+    "reason": "Session restore raced admitted-but-unpainted source and deferred LWC/carrier range writes during dataset changes. Restore now requires matching painted source ownership and runs after the projection draw. Only successful restores are consumed; restored/user-owned sessions do not schedule new restore frames."
+  },
+  "materialized_clock": {
+    "before_failed": 4,
+    "after_module_passed": 12,
+    "fix": "fd8f5dc5b50fe2df4608cb5f9fa13fc76f1cadef"
+  }
+}

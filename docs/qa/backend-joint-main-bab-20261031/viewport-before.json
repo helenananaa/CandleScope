@@ -1,0 +1,42 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/backend-joint-20261031/CandleScope/output/backend-joint-main-bab-20261031/viewport-final-before",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {}
+    },
+    "exceptionDetails": {
+      "exceptionId": 1,
+      "text": "Uncaught (in promise) Error: Admission/paint viewport mismatch: [{\"initialCount\":0,\"savedRange\":null,\"admitted\":null,\"painted\":{\"barSpacing\":4.526315789473684,\"rightOffset\":131,\"time\":{\"from\":1647136000,\"to\":1704160000},\"rightmostTime\":1704160000,\"logical\":{\"from\":126,\"to\":258}}}]",
+      "lineNumber": 40,
+      "columnNumber": 448925,
+      "scriptId": "4",
+      "stackTrace": {
+        "callFrames": [
+          {
+            "functionName": "GA",
+            "scriptId": "4",
+            "url": "http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js",
+            "lineNumber": 39,
+            "columnNumber": 448924
+          }
+        ]
+      },
+      "exception": {
+        "type": "object",
+        "subtype": "error",
+        "className": "Error",
+        "description": "Error: Admission/paint viewport mismatch: [{\"initialCount\":0,\"savedRange\":null,\"admitted\":null,\"painted\":{\"barSpacing\":4.526315789473684,\"rightOffset\":131,\"time\":{\"from\":1647136000,\"to\":1704160000},\"rightmostTime\":1704160000,\"logical\":{\"from\":126,\"to\":258}}}]\n    at GA (http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js:40:448925)\n    at async window.__frontendScriptCheck (http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js:40:450045)",
+        "objectId": "-7385437341773837189.1.1"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": false,
+  "error": "Error: {\"exceptionId\":1,\"text\":\"Uncaught (in promise) Error: Admission/paint viewport mismatch: [{\\\"initialCount\\\":0,\\\"savedRange\\\":null,\\\"admitted\\\":null,\\\"painted\\\":{\\\"barSpacing\\\":4.526315789473684,\\\"rightOffset\\\":131,\\\"time\\\":{\\\"from\\\":1647136000,\\\"to\\\":1704160000},\\\"rightmostTime\\\":1704160000,\\\"logical\\\":{\\\"from\\\":126,\\\"to\\\":258}}}]\",\"lineNumber\":40,\"columnNumber\":448925,\"scriptId\":\"4\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"GA\",\"scriptId\":\"4\",\"url\":\"http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js\",\"lineNumber\":39,\"columnNumber\":448924}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: Admission/paint viewport mismatch: [{\\\"initialCount\\\":0,\\\"savedRange\\\":null,\\\"admitted\\\":null,\\\"painted\\\":{\\\"barSpacing\\\":4.526315789473684,\\\"rightOffset\\\":131,\\\"time\\\":{\\\"from\\\":1647136000,\\\"to\\\":1704160000},\\\"rightmostTime\\\":1704160000,\\\"logical\\\":{\\\"from\\\":126,\\\"to\\\":258}}}]\\n    at GA (http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js:40:448925)\\n    at async window.__frontendScriptCheck (http://127.0.0.1:59657/assets/history-stages-browser-DfqUenaK.js:40:450045)\",\"objectId\":\"-7385437341773837189.1.1\"}}",
+  "browserExitCode": 0
+}

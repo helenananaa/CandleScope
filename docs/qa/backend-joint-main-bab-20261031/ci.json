@@ -1,0 +1,54 @@
+{
+  "scope": "Latest-main bab26747 joint round; exact PR heads, not earlier baseline runs",
+  "checked_at": "2026-10-31T08:55:25.680Z",
+  "runs": [
+    {
+      "id": 41183637641,
+      "name": "CCXT integration",
+      "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183637641"
+    },
+    {
+      "id": 41183637651,
+      "name": "macOS desktop",
+      "head": "6143c67cb1d0ea602623984e9a3db7d9cbae4204",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183637651"
+    },
+    {
+      "id": 41183274663,
+      "name": "CCXT integration",
+      "head": "c0f4b5f12ebcba626abfa81c2e6e3697f3e4c8b3",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183274663"
+    },
+    {
+      "id": 41183274655,
+      "name": "macOS desktop",
+      "head": "c0f4b5f12ebcba626abfa81c2e6e3697f3e4c8b3",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41183274655"
+    },
+    {
+      "id": 41186077288,
+      "name": "CCXT integration",
+      "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41186077288"
+    },
+    {
+      "id": 41186077290,
+      "name": "macOS desktop",
+      "head": "e662cd1ce1738b5490907f851aae3e5daa878a12",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/helenananaa/CandleScope/actions/runs/41186077290"
+    }
+  ]
+}

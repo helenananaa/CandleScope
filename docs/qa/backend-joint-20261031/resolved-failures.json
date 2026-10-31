@@ -24,5 +24,14 @@
     "url": "https://github.com/helenananaa/CandleScope/actions/runs/41175080152",
     "job_id": 124460904251,
     "description": "Concurrent frontend cache timing test exceeded 100 ms (122.9 ms); obsolete head cancelled by later product fixes. Threshold unchanged; final heads checked separately."
+  },
+  "ci_display_clock": {
+    "url": "https://github.com/helenananaa/CandleScope/actions/runs/41177198896",
+    "job_id": 124467176891,
+    "failed_head": "0d348ab5508ed0f92c3bd5609497b19e59f775d0",
+    "fixed_head": "43df57e3b0553256de7ebb7ba31a0c3acd6f6236",
+    "description": "Simulated RAF used the real clock: a host pause can consume the normal 8 ms budget and defer the second display. The fixture now injects a fixed clock; production code and budget unchanged. All 15 display/scheduler tests pass including the explicit expensive-frame deferral test.",
+    "failure_excerpt": "ci-display-clock-failure.txt",
+    "replacement_run": "https://github.com/helenananaa/CandleScope/actions/runs/41180251420"
   }
 }

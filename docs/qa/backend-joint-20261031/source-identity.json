@@ -1,13 +1,27 @@
 {
   "main": "4bf08e69342b6a9aeece91a9a44991030e1f0b9d",
   "pr138": "54010214b8a2936048b579c773f5201961fcf1e0",
-  "pr148": "0d348ab5508ed0f92c3bd5609497b19e59f775d0",
+  "pr148": "43df57e3b0553256de7ebb7ba31a0c3acd6f6236",
   "pr144": "5a68fe016865878e4f7c7647abd244d122a33be0",
-  "joint_code": "c0ce07cd6b8f70df139946d0c26c37152142ebe8",
+  "joint_code": "8ec3d284f976ff10a059a8f9f7a683f9732ad322",
   "backend_tree": "739ed8b9161d66326c51b1a50c801b8e2b151c63",
   "backend_tested_code": "49b5882dae6cbbafdd899b91581948d2646925fe",
-  "frontend_tested_code": "f80fc1fad8144c91c1f5bbe72108a0fda36cc559",
+  "frontend_tested_code": "8ec3d284f976ff10a059a8f9f7a683f9732ad322",
   "frontend_unchanged_since_tested": true,
+  "frontend_test_only_change": "frontend/src/features/market-data/__tests__/chartDisplaySubscription.test.ts",
+  "frontend_test_change_tested_code": "43df57e3b0553256de7ebb7ba31a0c3acd6f6236",
   "native_tested_code": "49b5882dae6cbbafdd899b91581948d2646925fe",
-  "backend_unchanged_since_tested": true
+  "backend_unchanged_since_tested": true,
+  "benchmark_tested_code": "b1267dcd8137b9ebe1afbdbb6317452cc4636d4b",
+  "benchmark_execution_paths_unchanged": [
+    "backend/scripts/benchmark_custom_history_streaming.py",
+    "backend/app/data_engine/data_manager/cache.py",
+    "backend/app/data_engine/data_manager/config.py",
+    "backend/app/data_engine/data_manager/custom_query.py",
+    "backend/app/data_engine/data_manager/models.py",
+    "backend/app/data_engine/interval_policy.py",
+    "backend/app/data_engine/memory_budget.py"
+  ],
+  "native_frontend_runtime_unchanged_since_tested": true,
+  "frontend_final_check_log": "output/backend-joint-20261031/frontend-final-clock-check.log"
 }

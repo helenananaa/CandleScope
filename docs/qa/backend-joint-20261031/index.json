@@ -4,13 +4,13 @@
   "files": [
     {
       "path": "docs/qa/PR138_144_148_INTEGRATION_20261031.md",
-      "bytes": 10770,
-      "sha256": "e126784cfdc3bd8c96407fdbdf9094f504b0f0b8e3ddc4f2e958c8550a11738a"
+      "bytes": 11864,
+      "sha256": "a41b75a4d2dcf4c5194bda5824070593734cd36f821aa9b14ef3fac578371534"
     },
     {
       "path": "docs/qa/backend-joint-20261031/README.md",
-      "bytes": 2827,
-      "sha256": "5a6f5566cff9d107917bf767c666ae3f0378c68bc1fa4234a39bc9a2b0f2c9a6"
+      "bytes": 3393,
+      "sha256": "44cdc3528243bb46ee574e577ee0a5ed7d27a80c67d78efb9a47b55e198c2b80"
     },
     {
       "path": "docs/qa/backend-joint-20261031/browser-history.json",
@@ -19,13 +19,18 @@
     },
     {
       "path": "docs/qa/backend-joint-20261031/checks.json",
-      "bytes": 585,
-      "sha256": "0dd055e0414458248c842e6821459f02533f3a6caba582ed541cfbb0e38bdf4f"
+      "bytes": 823,
+      "sha256": "5129ba9fd118a44cb5e3f38d3dd89299c0a13dd821be040bb5938fa6472f4750"
+    },
+    {
+      "path": "docs/qa/backend-joint-20261031/ci-display-clock-failure.txt",
+      "bytes": 2080,
+      "sha256": "ad5603f4597016b12a94956c1fb88b935db8ead1da72d7d8fcfefd9cca350f73"
     },
     {
       "path": "docs/qa/backend-joint-20261031/ci.json",
-      "bytes": 3613,
-      "sha256": "9d370a00db7602aa793b508e76ce16ebb9c5aede46a6dc41c4f7e12a750dc240"
+      "bytes": 3655,
+      "sha256": "0304c43caa238dd594473e98eb50dc92ae02b64983b9c1d410f4fb458849f0be"
     },
     {
       "path": "docs/qa/backend-joint-20261031/history-benchmark.json",
@@ -78,6 +83,11 @@
       "sha256": "90ca78d4284cc72dba166ab541d650ae46f7f76052fb7abd78e2e072348a8498"
     },
     {
+      "path": "docs/qa/backend-joint-20261031/native-upgrade.json",
+      "bytes": 26710,
+      "sha256": "8dd43ce4865375168ae477ac26564f534333eb63882b170c26c1ad5319490f90"
+    },
+    {
       "path": "docs/qa/backend-joint-20261031/native.json",
       "bytes": 91400,
       "sha256": "8ae5789f4b69ddff4b7f19b8b9c5f0da5b37b22fa81cb15d0e3252c837e8591a"
@@ -93,9 +103,14 @@
       "sha256": "274e3eef378254753d7ece7db3fc4f04e7f69d1ac2aff5bc3f42358b188392d4"
     },
     {
+      "path": "docs/qa/backend-joint-20261031/native_upgrade.mjs",
+      "bytes": 8816,
+      "sha256": "f09cb7411a9649905328316bf2ba8411cc32c0695e3a644e3a9dd5fe8ab6361f"
+    },
+    {
       "path": "docs/qa/backend-joint-20261031/resolved-failures.json",
-      "bytes": 1424,
-      "sha256": "b0d4aa0c53247175e0a31820570d9e13bcf50ff9980d0537f67172f9993e29ed"
+      "bytes": 2138,
+      "sha256": "2963747501440d08cf402e6ce8f6a1daba8665990b334dd840119dfd0a6db7cf"
     },
     {
       "path": "docs/qa/backend-joint-20261031/run_backend.py",
@@ -104,8 +119,8 @@
     },
     {
       "path": "docs/qa/backend-joint-20261031/source-identity.json",
-      "bytes": 636,
-      "sha256": "bdd1e39cfa3253d87bb60d4325f92963430089332493b162c880d1a65f07fd3e"
+      "bytes": 1479,
+      "sha256": "956065c8ede94c241d2910c3fbb7dd916f3fbc4554c355fc1fbcfeaea1c4f465"
     }
   ]
 }
