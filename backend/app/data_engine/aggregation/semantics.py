@@ -169,7 +169,7 @@ class FieldSummary:
 
     def project(self, *, enhanced_complete: bool = True) -> dict:
         fields = {
-            name: round(float(getattr(self, name)), 8)
+            name: round(getattr(self, name), 8)
             for name in ("open", "high", "low", "close", "volume")
         }
         for name in ("quote_volume", "trades", "taker_buy_base", "taker_buy_quote"):
