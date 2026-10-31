@@ -92,4 +92,5 @@ def test_okx_backfill_paginates_past_exchange_page_cap() -> None:
     result = results[0]
     assert result.bars_count == total_bars
     assert len(transport.requests) == 3
+    assert all(request.history_projection for request in transport.requests)
     assert [bar.open_time for bar in result.bars] == [idx * interval_ms for idx in range(total_bars)]
