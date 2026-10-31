@@ -21,6 +21,21 @@ function fixture(options = {}) {
 }
 const configuration = { requestId: "edit-1", workspaceId: "w", windowId: "main-window", expectedRevision: 0, charts: [] };
 
+test("indicator sandbox navigation preserves workflow readiness and pending commands", async () => {
+  const f = fixture();
+  try {
+    await f.service.call("workspace.configure", configuration);
+    f.contents.emit("did-start-loading");
+    f.contents.emit("did-start-navigation", {}, "about:srcdoc", false, false);
+    f.contents.emit("did-start-navigation", {}, "http://127.0.0.1/index.html#chart", true, true);
+    assert.equal(f.service.capabilities().windows[0].ready, true);
+    assert.equal((await f.service.call("request.get", { requestId: "edit-1" })).final, false);
+    f.service.acceptResult("main-window", { instanceId: f.service.instanceId, id: "edit-1", result: { state: "ready" }, final: true });
+    await Promise.resolve();
+    assert.equal((await f.service.call("request.get", { requestId: "edit-1" })).state, "ready");
+  } finally { await f.service.close(); }
+});
+
 test("generic commands share the receipt ledger; cancellation can reach the renderer during an async action", async () => {
   const f = fixture();
   const params = { requestId: "command-1", windowId: "main-window", groupId: "job", command: "start", expectedContext: "context", args: {} };
@@ -101,7 +116,7 @@ test("window reload and request timeout return an unknown mutation outcome witho
   assert.equal((await f.service.call("request.get", { requestId: "edit-1" })).code, "OUTCOME_UNKNOWN");
   await f.service.call("workspace.configure", configuration);
   assert.equal(f.sent(), 1);
-  f.contents.emit("did-start-loading");
+  f.contents.emit("did-start-navigation", {}, "http://127.0.0.1/index.html", false, true);
   await assert.rejects(f.service.call("workspace.inspect", { windowId: "main-window" }), { code: "WINDOW_UNAVAILABLE" });
   await f.service.close();
 });
@@ -109,7 +124,7 @@ test("renderer loss after application preserves the applied outcome", async () =
   const f = fixture();
   await f.service.call("workspace.configure", configuration);
   f.service.acceptResult("main-window", { instanceId: f.service.instanceId, id: "edit-1", result: { state: "applied", revision: 1 }, final: false });
-  f.contents.emit("did-start-loading"); await Promise.resolve();
+  f.contents.emit("did-start-navigation", {}, "http://127.0.0.1/index.html", false, true); await Promise.resolve();
   const receipt = await f.service.call("request.get", { requestId: "edit-1" });
   assert.equal(receipt.state, "applied"); assert.equal(receipt.readiness, "unverified");
   assert.equal(receipt.final, true); await f.service.close();

@@ -1,12 +1,12 @@
 {
-  "baseCommit": "bab267477c2c834fd98c1cd77e5d774a4d69b6ea",
+  "baseCommit": "128b493246756c6f422138cd03ce7bb312e089ab",
   "scope": "Exact source hashes for production Chromium fixtures; no native installed-package qualification",
   "files": {
     "frontend/package-lock.json": "d0910ab091ff90c7851498c5fb978990755511b7dc095f989f2da47d554991a3",
     "frontend/package.json": "682972d987fdcf9a36487f74ab6f0916fee80d52f8985a8a349347c79e359c4c",
-    "frontend/scripts/frontend-script-integration.mjs": "c672728fac6d846541c848458ae76e65b5da3c4b92edd3b40ba0769e33906e3c",
+    "frontend/scripts/frontend-script-integration.mjs": "6335094f17fd97d208ca78df6667b520d909e83c3854222c2a35c6b9c01cddba",
     "frontend/scripts/indicator-flow-browser.html": "340fa5ec47537c6cfbe756105fe6d0a065557a72e33f3abebab9deb5ae432411",
-    "frontend/src/app/LiveChartCell.tsx": "e271d789baf5fbaafa4531a1487cbde29e9474c3c8b79c3a913d55110bda271a",
+    "frontend/src/app/LiveChartCell.tsx": "21597b1ad64de0b24debf7dc8bbd4de82a726bdaeccdf849a975822e953f3d2f",
     "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "c68bbb7fec79fd40317bb7a6b52e81d75fa159fca8aa7371646424134d20fede",
     "frontend/src/features/indicators/__tests__/indicatorDataManager.test.ts": "5a8b61ff0f465bb400593d7acf90a6fbc446ba71e2cbd4ad270cd8ceb8ed209d",
     "frontend/src/features/indicators/__tests__/indicatorStreamIdentity.test.ts": "0633968d6d9429b3479171f13ffd1a08228d5b065c6ec4e3bd70d2e9f35be5f5",
@@ -24,6 +24,10 @@
     "frontend/src/features/market-data/manager/chartDataFlowManager.ts": "918ab46090e7da79d82d64a49156d6d39f3537fd88e72cd617d43d5e4d0916c5",
     "frontend/src/features/market-data/manager/chartMarketController.ts": "3c53c02d7b02ea53eac996726fdb692aad9780b4cab40fa42383200e6b91725b",
     "frontend/src/features/market-data/marketDataWorkspaceContext.ts": "93ff200a8e3b9ea59ec795b768d9cd5fcd2d15299488daabfafe772727223174",
-    "frontend/src/features/market-data/marketDataWorkspaceLifecycle.ts": "3673f58d78a7276db988f9ad628a0ff04ff0585a69b7409cace6b6604d7d6f2d"
+    "frontend/src/features/market-data/marketDataWorkspaceLifecycle.ts": "3673f58d78a7276db988f9ad628a0ff04ff0585a69b7409cace6b6604d7d6f2d",
+    "frontend/desktop/control-service.mjs": "ac1eaf0a9d686f0eb909af944bace4fc8f593f61adcf3b6c136ea1c487c9c3b7",
+    "frontend/desktop/control-service.test.mjs": "49c0b4349738b594c7c717902f654ed68d4da60a5ffbb87a4a0398440590c51d",
+    "frontend/desktop/control-window-lifecycle.mjs": "7a2bd0bc6cdcb248a3ad82de307d955fb55f353fee7840197943b01803a73222",
+    "frontend/desktop/main.mjs": "1c7146b46a02343154962722a533dc969cf6a4eedd4e1d09c32f7347027ff3e5"
   }
 }

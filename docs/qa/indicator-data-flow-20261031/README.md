@@ -1,11 +1,13 @@
 # Indicator data flow — 2026-10-31
 
-Base: merged #168 (`bab267477c2c834fd98c1cd77e5d774a4d69b6ea`).
+Base: #168 plus integrated #138/#148/#144 (`128b4932` main).
 Source identity: [source-manifest.json](source-manifest.json).
 Contract: [INDICATOR_DATA_FLOW.md](../../architecture/INDICATOR_DATA_FLOW.md).
 
-Full local `npm run check` passed: 4,628 frontend tests, one isolated performance
-gate, 123 desktop tests, architecture/plugin/i18n checks, types, lint and build.
+After integrating main, full local `npm run check` passed: 4,647 frontend tests,
+one isolated performance gate, 123 desktop tests, architecture/plugin/i18n checks,
+types, lint and build. The subsequent native control fix passed all 124 desktop
+tests and changed-file lint.
 The existing `SingleChartPanes` effect-cleanup lint warning and bundle-size
 warnings remain. Dependencies match the reviewed #168 lockfile environment.
 
@@ -52,3 +54,17 @@ revision, and patches an existing current cache instead of discarding output
 outside the returned range. Both added regression cases failed on the original
 PR and pass with the fix; all 20 demand/input-binding/warming tests pass.
 Both production Chromium receipts above were rerun after this correction.
+
+## Native integration correction
+
+The first actual relocated ZIP run exposed workflow control becoming unavailable
+after a frontend JavaScript indicator created its isolated `about:srcdoc` frame.
+Electron's `did-start-loading` also fires for subframes. Both desktop control
+owners now share a lifecycle listener that disconnects only on a new main-document
+navigation or destruction; same-document and sandbox-frame navigation retain
+readiness and pending receipts. The new regression failed before the fix and all
+124 desktop tests pass afterward. Main-document reload still revokes access.
+
+The merged indicator-flow fixture and main's `--history-stages` fixture passed;
+the JavaScript/replay/editor fixture was rerun after integration. Native package
+qualification is recorded separately in the PR with its exact artifact hashes.
