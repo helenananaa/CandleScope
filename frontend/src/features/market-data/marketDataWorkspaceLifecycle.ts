@@ -1,4 +1,5 @@
 export interface MarketDataWorkspaceFinalizableResources {
+  dataFlow?: { dispose(): void };
   indicatorStreamCoordinator: { closeAll(): void } | null;
   requestCoordinator: { closeAll(): void } | null;
   streamCoordinator: { closeAll(): void };
@@ -10,6 +11,7 @@ type EnqueueMicrotask = (callback: () => void) => void;
 export function finalizeMarketDataWorkspaceResources(
   resources: MarketDataWorkspaceFinalizableResources,
 ): void {
+  resources.dataFlow?.dispose();
   resources.streamCoordinator.closeAll();
   resources.requestCoordinator?.closeAll();
   resources.indicatorStreamCoordinator?.closeAll();

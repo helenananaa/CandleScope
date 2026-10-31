@@ -447,6 +447,7 @@ export interface IndicatorReplayContext {
 }
 
 export interface IndicatorComputeRequest {
+  seriesIdentity?: KlineSeriesIdentityInput | undefined;
   mode?: string;
   language?: string;
   securityMode?: string;

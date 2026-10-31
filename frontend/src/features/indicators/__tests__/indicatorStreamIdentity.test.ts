@@ -139,3 +139,16 @@ test("transport generations do not change an otherwise identical configuration i
   assert.equal(isCurrentHostedIndicatorMessage(message, signature, signatures), true);
   assert.equal(isCurrentHostedIndicatorMessage(message, signature, signatures), true);
 });
+
+test("provider and price variants fence every old hosted frame while default identity stays equivalent", () => {
+  const indicator = hostedIndicator();
+  const original = buildCurrentHostedIndicatorSignatures([indicator], context).get(indicator.id)!;
+  for (const seriesIdentity of [{ providerId: "another-provider" }, { priceAdjustment: "split" }, { seriesVariant: "derived" }, { sessionVariant: "regular" }]) {
+    const current = buildCurrentHostedIndicatorSignatures([indicator], { ...context, seriesIdentity });
+    assert.equal(isCurrentHostedIndicatorMessage(clientMessage("indicator.snapshot"), original, current), false);
+    assert.equal(isCurrentHostedIndicatorMessage(clientMessage("indicator.error"), original, current), false);
+  }
+  const explicit = buildCurrentHostedIndicatorSignatures([indicator], { ...context,
+    seriesIdentity: { providerId: "binance", venue: "binance", assetClass: "crypto", priceAdjustment: "raw", seriesVariant: "native" } });
+  assert.equal(explicit.get(indicator.id), original);
+});

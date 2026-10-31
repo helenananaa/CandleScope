@@ -1,3 +1,4 @@
+import { klineSeriesIdentityKey } from "../market-data/klineSeriesIdentity.js";
 import {
   buildIndicatorComputeParams,
   INDICATOR_HISTORY_LIMIT,
@@ -182,6 +183,7 @@ export function buildHostedSubscriptionSignature(
   });
 
   return JSON.stringify({
+    seriesIdentity: klineSeriesIdentityKey(message.exchange, context.seriesIdentity),
     kind: message.kind,
     exchange: message.exchange,
     marketType: message.marketType,

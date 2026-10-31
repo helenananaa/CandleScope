@@ -1,0 +1,49 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "checks": [
+          "two committed React runtimes share one real browser-worker computation",
+          "hover warms enabled JS; selection reuses exact cache without another worker and preserves the other chart viewport",
+          "hosted prewarm uses the bounded HTTP range route without starting an indicator WebSocket",
+          "cancelling one live consumer leaves the other's real worker computation running",
+          "historical correction invalidates warmed input and recomputes only the affected chart"
+        ],
+        "browserExecutions": 4,
+        "hostedExecutions": 1,
+        "diagnostics": {
+          "plans": 2,
+          "warming": 0,
+          "warmed": 2,
+          "rejected": 0,
+          "indicators": {
+            "range": {
+              "pending": 0,
+              "physicalActive": 0,
+              "joined": 0,
+              "totalPhysical": 1,
+              "completed": 1,
+              "consumers": 0
+            },
+            "compute": {
+              "pending": 0,
+              "physicalActive": 0,
+              "joined": 2,
+              "totalPhysical": 4,
+              "completed": 4,
+              "consumers": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

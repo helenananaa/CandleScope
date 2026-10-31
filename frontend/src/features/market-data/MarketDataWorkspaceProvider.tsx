@@ -1,3 +1,5 @@
+import { IndicatorDataManager } from "../indicators/indicatorDataManager.js";
+import { ChartDataFlowManager } from "./manager/chartDataFlowManager.js";
 import {
   useEffect,
   useState,
@@ -53,16 +55,19 @@ export function MarketDataWorkspaceProvider({
         ? new BatchKlineStreamCoordinator()
         : new SharedKlineStreamCoordinator(defaultKlineApi),
     });
+    const indicatorStreamCoordinator = brokerEnabled ? new SharedIndicatorStreamCoordinator({
+      // Fail closed until /indicators/diagnostics advertises its limit.
+      maxSubscriptions: 1, url: getIndicatorStreamUrl,
+    }) : null;
+    const indicatorDataManager = new IndicatorDataManager({
+      cache: dataManager.cache, gate: dataManager.foregroundPreloadGate, streams: indicatorStreamCoordinator,
+    });
     return {
       brokerEnabled,
       dataManager,
-      indicatorStreamCoordinator: brokerEnabled
-        ? new SharedIndicatorStreamCoordinator({
-            // Fail closed until /indicators/diagnostics advertises its limit.
-            maxSubscriptions: 1,
-            url: getIndicatorStreamUrl,
-          })
-        : null,
+      indicatorStreamCoordinator,
+      indicatorDataManager,
+      dataFlow: new ChartDataFlowManager(dataManager, indicatorDataManager),
       klineApi: dataManager,
       requestCoordinator: dataManager.requestCoordinator,
       streamCoordinator: dataManager,
@@ -129,6 +134,7 @@ export function MarketDataWorkspaceProvider({
           seriesStores: resources.windowRegistry.entries().length,
           sharedSeries: resources.windowRegistry.sharedSnapshotDiagnostics(),
           marketDataManager: resources.dataManager.diagnostics(),
+          dataFlow: resources.dataFlow.diagnostics(),
         };
         if (!options.compact) {
           return { ...common, indicator, klineHttp, klineStream, scheduler };
