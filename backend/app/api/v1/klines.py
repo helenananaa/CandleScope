@@ -1052,6 +1052,7 @@ def _history_contract_payload(
         "excluded_ranges": list(getattr(result, "excluded_ranges", ()) or ()),
         "retry_at_ms": metadata.get("backfill_retry_at_ms"),
         "all_rows_final": all_rows_final,
+        "stream_version": metadata.get("stream_version"),
     }
     observed_missing = (
         list(getattr(result, "missing_ranges", ()) or ())

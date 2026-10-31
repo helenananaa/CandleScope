@@ -10,9 +10,12 @@ import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import type { MarketDataService, MarketWarmOptions } from "../marketDataService.js";
 import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
 import { planTargetBarRequest } from "../intervalRequestBudget.js";
+import { MarketHealthRecovery } from "./marketHealthRecovery.js";
+import { MarketWarmStreams } from "./marketWarmStreams.js";
 import { MarketWarmQueue, type MarketWarmLease } from "./marketWarmQueue.js";
 
 interface StreamTransport {
+  readonly reconnects?: boolean;
   subscribe: KlineStreamFactory;
   closeAll(): void;
   diagnostics(): object;
@@ -22,6 +25,7 @@ export interface MarketDataManagerOptions {
   streams: StreamTransport;
   batchHistory?: boolean;
   cache?: MarketCacheOptions;
+  warmStreams?: { maxSeries?: number; ttlMs?: number };
   foregroundPreloadGate?: ForegroundPreloadGate;
 }
 
@@ -43,11 +47,14 @@ export class MarketDataManager implements MarketDataService {
   private readonly sharedStreams: SharedKlineStreamCoordinator;
   private readonly transport: StreamTransport;
   private readonly api: KlineApi;
+  private readonly warmStreams: MarketWarmStreams;
+  private readonly healthRecovery: MarketHealthRecovery;
   private readonly ownsForegroundGate: boolean;
   private closed = false;
   private rejectedRealtime = 0;
   private rangeHits = 0;
   private beforeHits = 0;
+  private historyHits = 0;
 
   constructor(options: MarketDataManagerOptions) {
     this.api = options.api;
@@ -89,27 +96,59 @@ export class MarketDataManager implements MarketDataService {
         }),
     });
     this.sharedStreams = new SharedKlineStreamCoordinator(api, {
+      reconnects: this.transport.reconnects ?? false,
       createPhysicalStream: (series, streamOptions) => {
-        // Fence the physical lease before admission, not only downstream fan-out.
-        // A closed socket may still have a queued message after a reconnect.
+        // Transport socket epochs are fenced by the transport. Lease disposal
+        // is terminal, while a reconnecting transport may reopen this lease.
         let active = true;
+        let connected = true;
+        let intervals = [...(streamOptions.intervals ?? [])];
+        const connect = () => { for (const interval of intervals) this.cache.connect({ ...series, interval }); };
         const current = () => active && !this.closed;
         const controller = this.transport.subscribe(series, {
         ...streamOptions,
-        onOpen: controller => { if (current()) streamOptions.onOpen?.(controller); },
-        onStreamStatus: (event, controller) => { if (current()) streamOptions.onStreamStatus?.(event, controller); },
-        onControlMessage: (event, controller) => { if (current()) streamOptions.onControlMessage?.(event, controller); },
+        onOpen: controller => { if (current()) { connected = true; connect(); streamOptions.onOpen?.(controller); } },
+        onStreamStatus: (event, controller) => {
+          if (!current()) return;
+          if (event.status !== "online" && event.status !== "connected") this.cache.markDisconnected(series);
+          streamOptions.onStreamStatus?.(event, controller);
+        },
+        onControlMessage: (event, controller) => {
+          if (!current() || !connected) return;
+          for (const failure of event.failed ?? []) this.cache.disconnectSeries({ ...series, interval: failure.interval });
+          if (event.type === "unsubscribed") for (const interval of event.intervals ?? event.requested_intervals ?? []) {
+            this.cache.disconnectSeries({ ...series, interval });
+          }
+          if (event.type === "subscribed" && event.active_intervals) for (const interval of intervals) {
+            if (!event.active_intervals.includes(interval)) this.cache.disconnectSeries({ ...series, interval });
+          }
+          if (event.type === "error") this.cache.markDisconnected(series);
+          streamOptions.onControlMessage?.(event, controller);
+        },
         onBackfillCompleted: (event, controller) => {
-          if (!current()) return false;
+          if (!current() || !connected) return false;
           // A new backend completion is not validated by an earlier cache proof.
-          this.cache.markDisconnected(series);
+          const from = event.detail?.range_start_ms ?? event.detail?.request_start_ms;
+          const to = event.detail?.range_end_ms ?? event.detail?.request_end_ms;
+          if (event.interval) this.cache.invalidateRange({ ...series, interval: event.interval },
+            typeof from === "number" && typeof to === "number" && Number.isFinite(from) && Number.isFinite(to) && from <= to
+              ? { from: from / 1000, to: to / 1000 } : undefined, event.stream_version);
+          else this.cache.markDisconnected(series);
+          if (event.interval) this.healthRecovery.request({ ...series, interval: event.interval });
           return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
         },
-        onParseError: (error, event, controller) => { if (current()) streamOptions.onParseError?.(error, event, controller); },
-        onKline: (event, controller) => {
+        onParseError: (error, event, controller) => {
           if (!current()) return;
+          this.cache.markDisconnected(series);
+          streamOptions.onParseError?.(error, event, controller);
+        },
+        onKline: (event, controller) => {
+          if (!current() || !connected) return;
+          this.cache.connect({ ...series, interval: event.interval });
           const accepted = this.cache.admitRealtime({ ...series, interval: event.interval }, event.tick,
-            typeof event.message.event_type === "string" ? event.message.event_type : undefined);
+            typeof event.message.event_type === "string" ? event.message.event_type : undefined,
+            event.message.stream_version, event.message.previous_open_ms);
+          this.healthRecovery.request({ ...series, interval: event.interval });
           if (!accepted.accepted || !accepted.row) { this.rejectedRealtime += 1; return; }
           streamOptions.onKline?.({ ...event, tick: accepted.row, message: { ...event.message, data: accepted.row } }, controller);
         },
@@ -120,7 +159,8 @@ export class MarketDataManager implements MarketDataService {
         },
         onClose: (event, controller) => {
           if (!current()) return;
-          active = false;
+          connected = false;
+          if (!this.transport.reconnects) active = false;
           this.cache.markDisconnected(series);
           streamOptions.onClose?.(event, controller);
         },
@@ -128,11 +168,27 @@ export class MarketDataManager implements MarketDataService {
         return {
           readyState: () => controller.readyState(), isOpen: () => current() && controller.isOpen(),
           send: payload => current() && controller.send(payload), sendPing: () => current() && controller.sendPing(),
-          updateIntervals: intervals => { if (current()) controller.updateIntervals(intervals); },
-          close: () => { active = false; controller.close(); },
+          updateIntervals: next => {
+            if (!current()) return;
+            for (const interval of intervals) if (!next.includes(interval)) this.cache.disconnectSeries({ ...series, interval });
+            intervals = [...next];
+            if (controller.isOpen()) connect();
+            controller.updateIntervals(next);
+          },
+          close: () => {
+            active = false;
+            // Releasing the last stream lease must not cancel another
+            // consumer's independent HTTP lease. It only revokes live health.
+            this.cache.markDisconnected(series, false); controller.close();
+          },
         };
       },
     });
+    this.healthRecovery = new MarketHealthRecovery(series => this.cache.verificationDemand(series),
+      (series, limit, signal) => this.requestCoordinator.fetchKlinesHistory(series.symbol, series.interval, null,
+        series.marketType, series.exchange, { countBack: limit, maxWaitMs: 0, intent: "viewport", seriesIdentity: series,
+          signal, clientContext: { cacheMode: "network-only", priority: 1 } }));
+    this.warmStreams = new MarketWarmStreams(this.subscribe, options.warmStreams?.maxSeries, options.warmStreams?.ttlMs);
   }
 
   readonly subscribe: KlineStreamFactory = (series, options) => {
@@ -142,6 +198,19 @@ export class MarketDataManager implements MarketDataService {
 
   readonly fetchKlinesHistory: KlineApi["fetchKlinesHistory"] = (...args) => {
     const options = args[5];
+    if (this.closed || options.signal?.aborted) return Promise.reject(aborted());
+    if (options.clientContext?.cacheMode === "prefer-cache" && options.countBack
+      && (options.intent === "viewport" || options.intent === "active_hydration")) {
+      const decision = this.cache.planHistory(identity(args[0], args[1], args[3], args[4], options), options.countBack);
+      if (decision.action === "reuse") {
+        this.historyHits += 1;
+        return Promise.resolve({ data: [...decision.snapshot.rows], endpoint: "history", source: "healthy-market-cache",
+          cacheRevision: decision.snapshot.version, marketHealth: decision.health,
+          all_rows_final: true, complete: true, retryable: false, history_state: "ready",
+          verified_contiguous: true, missing_ranges: [], has_tail_gap: false, truncated: false,
+          reached_latest_closed_bar: true, has_more: true });
+      }
+    }
     // count_back overrides days at the HTTP boundary. getBars supplies a
     // derived day fallback even for an exact count request; it is not a
     // different input window and must not prevent the production handoff.
@@ -173,11 +242,19 @@ export class MarketDataManager implements MarketDataService {
   warm(series: MarketSeries, options: MarketWarmOptions): MarketWarmLease {
     const plan = planTargetBarRequest({ interval: series.interval, nativeIntervals: options.nativeIntervals,
       desiredTargetBars: Math.min(500, options.limit ?? 500), sourceRowBudget: 10_000 });
-    return this.warmQueue.request({ series, owner: options.owner, reason: options.reason,
+    if (this.closed) return { done: Promise.resolve("cancelled"), release() {} };
+    const stream = this.warmStreams.acquire(series, options.reason);
+    const lease = this.warmQueue.request({ series, owner: options.owner, reason: options.reason,
       limit: plan.targetBars, estimatedSourceRows: plan.estimatedSourceRows });
+    const done = lease.done.then(outcome => {
+      if (outcome === "warmed" || outcome === "cooldown") stream.retain();
+      stream.release();
+      return outcome;
+    });
+    return { done, release: () => { lease.release(); stream.release(); } };
   }
 
-  prepareForeground(series: MarketSeries) { return this.warmQueue.prepareForeground(series); }
+  prepareForeground(series: MarketSeries) { this.warmStreams.promote(series); return this.warmQueue.prepareForeground(series); }
 
   async recover(series: MarketSeries, options: { from?: number; to?: number; limit?: number; signal?: AbortSignal } = {}): Promise<KlineFetchResult> {
     // Reuse range pagination and endpoint-proof handling. This detached reader
@@ -212,14 +289,16 @@ export class MarketDataManager implements MarketDataService {
   diagnostics() {
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
-      sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits,
-      cache: this.cache.diagnostics(), warming: this.warmQueue.diagnostics() };
+      sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits, historyHits: this.historyHits,
+      cache: this.cache.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 
   closeAll(): void {
     if (this.closed) return;
     this.closed = true;
     this.warmQueue.dispose();
+    this.warmStreams.dispose();
+    this.healthRecovery.dispose();
     if (this.ownsForegroundGate) this.foregroundPreloadGate.dispose();
     this.sharedStreams.closeAll();
     this.transport.closeAll();

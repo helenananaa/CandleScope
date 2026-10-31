@@ -74,6 +74,14 @@ jobs:
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q \
+            tests/test_market_stream_version.py \
+            tests/test_klines_api.py \
+            tests/test_stream_klines_event_filter.py \
+            tests/test_kline_batch_stream.py \
+            tests/test_backfill_coordinator.py \
+            tests/test_public_admission.py \
+            tests/test_backfill_rate_limit.py \
+            tests/test_ccxt_shared_markets.py \
             tests/test_desktop_sidecar.py \
             tests/test_shared_market_inputs.py \
             tests/test_pine_combined_host_inputs.py \

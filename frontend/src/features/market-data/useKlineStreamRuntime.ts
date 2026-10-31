@@ -167,13 +167,14 @@ export function getKlineStreamIntervalStatus(
   state: KlineStreamAcknowledgementState,
   interval: IntervalString,
   nowMs = Date.now(),
+  sharedStreamCurrent = false,
 ): Extract<KlineWebSocketStatus, "connecting" | "loading" | "live" | "fallback"> {
   if (state.activeIntervals.some((candidate) => (
     intervalsSemanticallyEquivalent(candidate, interval)
   ))) {
     const canonical = canonicalizeIntervalValue(interval) || interval;
     const observedAt = state.lastObservedAt[canonical];
-    return observedAt !== undefined && nowMs - observedAt >= 0 && nowMs - observedAt < WS_KLINE_FRESHNESS_MS
+    return sharedStreamCurrent || (observedAt !== undefined && nowMs - observedAt >= 0 && nowMs - observedAt < WS_KLINE_FRESHNESS_MS)
       ? "live" : "loading";
   }
   if (state.rejectedIntervals.some((candidate) => (
@@ -204,6 +205,7 @@ export interface UseKlineStreamRuntimeOptions {
   updateRealtimePrice(closePrice: number): void;
   handleBackfillCompleted(message: BackfillCompletedMessage): boolean;
   setWsStatus: Dispatch<SetStateAction<KlineWebSocketStatus>>;
+  hasCurrentSharedStream?(interval: IntervalString): boolean;
 }
 
 export function useKlineStreamRuntime({
@@ -223,6 +225,7 @@ export function useKlineStreamRuntime({
   updateRealtimePrice,
   handleBackfillCompleted,
   setWsStatus,
+  hasCurrentSharedStream,
 }: UseKlineStreamRuntimeOptions): void {
   const subscriptionRef = useRef<KlineStreamController | null>(null);
   const trackedIntervalsRef = useRef(trackedIntervals);
@@ -336,7 +339,10 @@ export function useKlineStreamRuntime({
         return;
       }
       const currentIntv = intervalRef.current;
-      const status = getKlineStreamIntervalStatus(acknowledgementState, currentIntv);
+      // A newly joined chart can use the owner's still-current observation.
+      // Query it each time; do not manufacture a new per-chart freshness time.
+      const status = getKlineStreamIntervalStatus(acknowledgementState, currentIntv,
+        Date.now(), hasCurrentSharedStream?.(currentIntv) ?? false);
       if (status === "live") {
         stopPolling();
         setTransportStatus("live");
@@ -703,6 +709,7 @@ export function useKlineStreamRuntime({
     exchange,
     getCacheRows,
     handleBackfillCompleted,
+    hasCurrentSharedStream,
     intervalRef,
     marketType,
     nativeIntervalValues,

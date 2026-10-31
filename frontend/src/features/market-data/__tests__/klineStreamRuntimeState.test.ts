@@ -100,6 +100,19 @@ test("local ACK and repeated ACK cannot make silent upstream data live", () => {
   assert.equal(getKlineStreamIntervalStatus(state, "1m", 100_001), "live");
 });
 
+test("a joined chart reuses current shared observations without renewing their age", () => {
+  const state = reduceKlineStreamControlMessage(createKlineStreamAcknowledgementState(),
+    { type: "subscribed", intervals: ["1m"], active_intervals: ["1m"] });
+  assert.equal(getKlineStreamIntervalStatus(state, "1m", 10_000, true), "live");
+  assert.deepEqual(state.lastObservedAt, {});
+  // The shared owner can expire or revoke evidence on the very next check.
+  assert.equal(getKlineStreamIntervalStatus(state, "1m", 10_001, false), "loading");
+  assert.equal(getKlineStreamIntervalStatus(state, "1h", 10_001, true), "connecting");
+  const rejected = reduceKlineStreamControlMessage(state,
+    { type: "subscribed", intervals: [], failed: [{ interval: "1m" }], active_intervals: [] });
+  assert.equal(getKlineStreamIntervalStatus(rejected, "1m", 10_001, true), "fallback");
+});
+
 test("unsubscribe and rejection discard previous freshness before resubscription", () => {
   const observed = acknowledgeKlineStreamInterval(createKlineStreamAcknowledgementState(), "1h", 10_000);
   const messages: KlineStreamControlMessage[] = [

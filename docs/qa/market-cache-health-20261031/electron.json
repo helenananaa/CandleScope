@@ -1,0 +1,26 @@
+{
+  "scope": "Isolated Electron host, production-minified renderer and controlled market transport; not installed-release qualification",
+  "browser": "Chrome/150.0.7871.212",
+  "passed": true,
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "browserExitCode": 0,
+  "date": "2026-10-31",
+  "sourceTreeSha256": "77dc4e8bc9066a6e3e94e2d68efa169b5ba88289c603c127f4384181620dc4d6",
+  "result": {
+    "passed": true,
+    "checks": [
+      "actual initial-load hook switches BTC → warm ETH with zero HTTP/physical subscribe, 500 final bars plus forming tail, sibling unchanged",
+      "lost critical barrier triggers one bounded read; shared HTTP correction updates the actual candle window"
+    ],
+    "requests": [
+      "history:BTCUSDT",
+      "history:ETHUSDT",
+      "history:ETHUSDT"
+    ],
+    "physicalStreamsCreated": 2,
+    "scope": "Production-minified Chromium fixture with real React, initial-load hook and candle renderer; controlled market transport, not installed release acceptance"
+  },
+  "electron": "43.3.0"
+}

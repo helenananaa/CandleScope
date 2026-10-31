@@ -1289,7 +1289,9 @@ class BackfillScheduler:
                     chunk.public_demand = PublicDemand(
                         TrafficClass.INTERACTIVE if foreground_chunk else TrafficClass.BACKGROUND,
                         owner=chunk.parent_id, purpose=chunk.request.reason, defer=True,
-                        alive=lambda: (chunk.chunk_id in self._chunks
+                        # Range merges reuse chunk IDs. Only this exact plan
+                        # instance may retain quota priority while deferred.
+                        alive=lambda: (self._chunks.get(chunk.chunk_id) is chunk
                             and (state := self._requests.get(chunk.parent_id)) is not None
                             and not state.stale and not state.cancel_requested and state.failed is None),
                     )

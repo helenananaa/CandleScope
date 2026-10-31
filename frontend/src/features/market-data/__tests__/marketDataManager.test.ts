@@ -14,9 +14,10 @@ const proof = (rows: KlineBar[]): KlineFetchResult => ({ data: rows, all_rows_fi
   complete: true, retryable: false, history_state: "ready", verified_contiguous: true,
   missing_ranges: [], has_tail_gap: false, truncated: false });
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
-function setup(api: Partial<KlineApi> = {}, gate?: ForegroundPreloadGate) {
+function setup(api: Partial<KlineApi> = {}, gate?: ForegroundPreloadGate, reconnects = false) {
   const streams: Array<{ options: KlineStreamOptions; closed: boolean; intervals: readonly string[]; controller: KlineStreamController }> = [];
   const transport = {
+    reconnects,
     subscribe: (_series: unknown, options: KlineStreamOptions = {}) => {
       const state = { options, closed: false, intervals: options.intervals ?? [], controller: null as unknown as KlineStreamController };
       state.controller = {
@@ -39,6 +40,34 @@ function setup(api: Partial<KlineApi> = {}, gate?: ForegroundPreloadGate) {
   };
   return { manager, streams, tick };
 }
+
+test("a reconnecting transport retains live leases and resumes admission without duplicating streams", async t => {
+  const { manager, streams, tick } = setup({}, undefined, true);
+  t.after(() => manager.closeAll());
+  let opens = 0;
+  const received: number[] = [];
+  const a = manager.subscribe(series, { intervals: ["1m"], onOpen: () => { opens += 1; },
+    onKline: event => received.push(event.tick.close!) });
+  await turn();
+  tick(row(60));
+  const physical = streams[0]!;
+  physical.options.onClose?.({} as CloseEvent, physical.controller);
+  tick(row(120, 20));
+  assert.deepEqual(received, [10], "no admission from the disconnected connection");
+  physical.options.onOpen?.(physical.controller);
+  assert.equal(opens, 2, "the retained lease receives its new transport connection");
+  tick(row(120, 20));
+  assert.deepEqual(received, [10, 20]);
+  assert.equal(manager.read(series).rows.at(-1)!.close, 20);
+  const b = manager.subscribe(series, { intervals: ["1m"] });
+  await turn();
+  assert.equal(streams.length, 1, "a new consumer joins the recovered shared entry");
+  a.close(); b.close();
+  physical.options.onOpen?.(physical.controller);
+  tick(row(180, 30));
+  assert.deepEqual(received, [10, 20], "released leases cannot be resurrected");
+  assert.equal(manager.read(series).rows.at(-1)!.time, 120);
+});
 
 test("promoted viewport warming is admitted once and reused by two foreground feeds across different window scopes", async t => {
   let calls = 0, finish!: (result: KlineFetchResult) => void, signal!: AbortSignal;

@@ -581,6 +581,7 @@ export function useMarketDataRuntime({
   }, [chartDataMeta?.trimmedLeft, setHasMoreLeft]);
 
   const loadData = useChartInitialLoad({
+    sharedCacheOwnsHealth: Boolean(workspaceResources?.dataManager),
     enabled: marketDataReady,
     exchange,
     marketType,
@@ -950,6 +951,12 @@ export function useMarketDataRuntime({
     setLoading,
   ]);
 
+  const hasCurrentSharedStream = useCallback((candidate: IntervalString) => (
+    workspaceResources?.dataManager.cache.hasCurrentStream({
+      ...seriesIdentity, exchange, marketType, symbol, interval: candidate,
+    }) === true
+  ), [exchange, marketType, seriesIdentity, symbol, workspaceResources]);
+
   useKlineStreamRuntime({
     enabled: webSocketReady,
     webSocketEnabled: webSocketReady,
@@ -967,6 +974,7 @@ export function useMarketDataRuntime({
     updateRealtimePrice,
     handleBackfillCompleted,
     setWsStatus,
+    hasCurrentSharedStream,
   });
 
   const foregroundIndicatorRequestCount = indicatorRangeRequests.length;

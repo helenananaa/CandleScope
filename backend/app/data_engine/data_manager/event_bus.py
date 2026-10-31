@@ -64,6 +64,7 @@ from app.core.async_cleanup import apply_thread_guard, finish_cleanup
 from app.data_engine.consumer_recovery import ConsumerRecoveryRequired, RecoveryCallback
 
 from .config import EventBusConfig
+from .stream_version import StreamVersionClock
 from .models import (
     DataEvent,
     DataEventType,
@@ -259,6 +260,7 @@ class DataEventBus:
         self._cfg = config or EventBusConfig()
         if self._cfg.subscriber_queue_size <= 0 or self._cfg.replay_capacity <= 0:
             raise ValueError("event bus queue and replay capacities must be positive")
+        self.stream_versions = StreamVersionClock()
         self._epoch = uuid.uuid4().hex
         self._sequence = 0
         self._journal: OrderedDict[int, _QueuedEvent] = OrderedDict()
@@ -503,6 +505,13 @@ class DataEventBus:
                 self._require_recovery(sub, reason, None)
 
     async def emit(self, event: DataEvent) -> None:
+        ticket = self.stream_versions.begin(event)
+        try:
+            await self._emit_versioned(event)
+        finally:
+            self.stream_versions.finish(ticket)
+
+    async def _emit_versioned(self, event: DataEvent) -> None:
         """Emit an event to all matching subscribers.
 
         The event flows through the middleware chain first.  If any
