@@ -23,7 +23,7 @@ async def until(predicate):
             await asyncio.sleep(.001)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_history_cancellation_retains_physical_rows_and_retracts_queued_work():
     executor = BuiltinHistoryExecutor(max_pending=1, max_input_bars=60)
@@ -61,7 +61,7 @@ async def test_history_cancellation_retains_physical_rows_and_retracts_queued_wo
         os.kill(pid, 0)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_physical_deadline_reaps_only_owned_worker_before_reusing_capacity():
     executor = BuiltinHistoryExecutor(timeout=30)
@@ -81,7 +81,7 @@ async def test_physical_deadline_reaps_only_owned_worker_before_reusing_capacity
         await asyncio.to_thread(executor.close)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_shutdown_interrupts_running_history_before_parent_deadline():
     executor = BuiltinHistoryExecutor(timeout=30)
