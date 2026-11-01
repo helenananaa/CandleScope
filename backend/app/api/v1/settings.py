@@ -478,6 +478,7 @@ async def _build_cache_diagnostics(request: Request) -> dict:
             "behavior_heat": (dm_snapshot or {}).get("behavior_heat", {}),
             "coordinator": (dm_snapshot or {}).get("coordinator", {}),
             "price_cache": (dm_snapshot or {}).get("price_cache", {}),
+            "bar_delivery": (dm_snapshot or {}).get("bar_delivery", {}),
         },
         "storage": {
             "files": storage_files,

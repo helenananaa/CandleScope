@@ -201,13 +201,16 @@ async def _init_data_manager() -> None:
     try:
         from app.alerts.facade import AlertFacade
         from app.alerts.runtime import AlertRuntimeEngine
-        from app.indicator.data_manager_bridge import bridge_indicator_engine
+        from app.indicator.data_manager_bridge import bridge_indicator_engine, shutdown_indicator_engine
         from app.indicator.range_result_service import IndicatorRangeResultService
+        from app.indicator.serial_owner import SerialIndicatorOwner
         from app.indicator.series_revision import SeriesRevisionRegistry
+        from app.core import config
 
         runtime = await extension_factory(app, "data-engine", start_data_engine)()
         runtime.attach_to_app_state(app.state)
 
+        indicator_engine = None
         try:
             revision_registry = SeriesRevisionRegistry()
             indicator_range_service = extension_factory(app, "indicator-range", IndicatorRangeResultService.from_config)(
@@ -221,10 +224,19 @@ async def _init_data_manager() -> None:
                 runtime.data_manager,
                 backfill_coordinator=runtime.backfill_coordinator,
                 result_service=indicator_range_service,
+                isolate_realtime=config.INDICATOR_REALTIME_ISOLATED,
+                execution_mode=config.INDICATOR_REALTIME_EXECUTION,
             )
+            if isinstance(indicator_engine, SerialIndicatorOwner):
+                await indicator_engine.call("list_instances")
             app.state.indicator_engine = indicator_engine
             print("[startup] IndicatorEngine bridged to DataManager [ok]")
         except Exception as exc:
+            if indicator_engine is not None:
+                try:
+                    await shutdown_indicator_engine(indicator_engine)
+                except Exception:
+                    logger.exception("Failed indicator startup cleanup")
             logger.warning("IndicatorEngine bridge failed: %s", exc)
             print(f"[startup] IndicatorEngine bridge failed: {exc}")
 
@@ -921,11 +933,14 @@ async def shutdown_event() -> None:
     indicator_engine = getattr(app.state, "indicator_engine", None)
     if indicator_engine is not None:
         try:
-            indicator_engine.stop()
+            from app.indicator.data_manager_bridge import shutdown_indicator_engine
+            await shutdown_indicator_engine(indicator_engine)
             print("[shutdown] IndicatorEngine shut down [ok]")
         except Exception as exc:
             print(f"[shutdown] IndicatorEngine shutdown error: {exc}")
 
+    from app.indicator.history_worker import shutdown_builtin_history
+    await shutdown_builtin_history()
     indicator_range_service = getattr(app.state, "indicator_range_service", None)
     if indicator_range_service is not None:
         indicator_range_service.unbind_all()

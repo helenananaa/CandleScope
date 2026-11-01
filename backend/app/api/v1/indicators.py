@@ -61,6 +61,8 @@ from app.core.runtime_metrics import ws_runtime_metrics
 from app.data_engine.data_manager.models import BarData
 from app.data_engine.interval_policy import parse_interval_spec
 from app.indicator import registry, IndicatorEngine, create_engine
+from app.indicator.serial_owner import SerialIndicatorOwner
+from app.indicator.history_worker import run_builtin_history
 from app.indicator.custom_store import CustomIndicatorStore
 from app.indicator.script_identity import script_hash, short_script_hash
 from app.indicator.engine import indicator_code_hash
@@ -519,12 +521,12 @@ async def delete_custom_indicator(indicator_id: str):
 
 
 
-def _resolve_runtime_engine(request: Request | None) -> IndicatorEngine:
+def _resolve_runtime_engine(request: Request | None) -> IndicatorEngine | SerialIndicatorOwner:
     """Prefer the app-wide runtime engine when the endpoint is called via ASGI."""
     if request is not None:
         try:
             engine = getattr(request.app.state, "indicator_engine", None)
-            if isinstance(engine, IndicatorEngine):
+            if isinstance(engine, (IndicatorEngine, SerialIndicatorOwner)):
                 return engine
         except Exception:
             pass
@@ -533,7 +535,7 @@ def _resolve_runtime_engine(request: Request | None) -> IndicatorEngine:
 
 def _build_diagnostics_snapshot(
     *,
-    engine: IndicatorEngine,
+    engine: IndicatorEngine | SerialIndicatorOwner,
     store: CustomIndicatorStore,
     range_service: IndicatorRangeResultService | None = None,
     runtime_service: IndicatorRuntimeService | None = None,
@@ -609,7 +611,7 @@ def _resolve_indicator_range_service(request: Request) -> IndicatorRangeResultSe
     )
     request.app.state.indicator_range_service = service
     engine = getattr(request.app.state, "indicator_engine", None)
-    if isinstance(engine, IndicatorEngine):
+    if isinstance(engine, (IndicatorEngine, SerialIndicatorOwner)):
         service.bind_engine(engine)
     return service
 
@@ -1744,6 +1746,12 @@ async def _run_indicator_http_compute(
     func, *args, executor_kind: str = "indicator", **kwargs
 ):
     """Run heavy HTTP indicator work off the event loop with a hard wait cap."""
+    if func is _compute_builtin_once and config.INDICATOR_HISTORY_PROCESS_ENABLED:
+        name, req, bars = args
+        return await asyncio.wait_for(run_builtin_history(name, {
+            "symbol": req.symbol, "interval": req.interval, "market_type": req.market_type,
+            "exchange": req.exchange, "params": req.params,
+        }, bars), timeout=max(float(config.INDICATOR_HTTP_TIMEOUT_SECONDS), .1))
     runner = run_script_wait if executor_kind == "script" else run_indicator
     return await asyncio.wait_for(
         runner(func, *args, **kwargs),

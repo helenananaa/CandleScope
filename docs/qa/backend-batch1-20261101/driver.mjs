@@ -35,7 +35,7 @@ export async function launch() {
       CANDLESCOPE_DESKTOP_USER_DATA:s.root+'/profile',CANDLE_DATA_DIR:s.root+'/profile/data',
       CANDLESCOPE_DESKTOP_UI_PORT:'0',CANDLESCOPE_DESKTOP_BACKEND_PORT:'0',
       CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT:s.root+'/profile/plugins',CANDLESCOPE_LOCAL_DATA_DIR:s.root+'/profile/local-data'},timeout:90000});
-  s.page=await s.app.firstWindow(); attach();
+  s.page=await s.app.firstWindow({timeout:90000}); attach();
   await s.page.waitForFunction(()=>Boolean(window.candlescopeDesktop),null,{timeout:60000});
   s.identity=await s.app.evaluate(({app})=>({packaged:app.isPackaged,pid:process.pid,userData:app.getPath('userData'),resources:process.resourcesPath}));
   s.bootstrap=await s.page.evaluate(()=>window.candlescopeDesktop.getBootstrap());
