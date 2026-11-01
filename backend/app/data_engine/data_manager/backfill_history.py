@@ -79,6 +79,8 @@ class BackfillHistoryPlanner:
             {"start_ms": item.start_ms, "end_ms": item.end_ms}
             for item in plan.fetch_ranges
         ]
+        policy = context if isinstance(context, HistoryAvailabilityPolicy) else getattr(context, "policy", None)
+        page_size = getattr(policy, "max_page_size", None)
         prepared = RepairRequest(
             symbol=request.symbol,
             interval=request.interval,
@@ -93,6 +95,10 @@ class BackfillHistoryPlanner:
             metadata={
                 **request.metadata,
                 "history_fetch_ranges": fetch_ranges,
+                # Carry the admitted provider limit to the physical scheduler.
+                # Sparse seconds count wall-clock slots, not returned candles.
+                "history_page_size": page_size,
+
                 "history_calendar_id": plan.calendar_id,
                 "history_exclusions": [
                     {

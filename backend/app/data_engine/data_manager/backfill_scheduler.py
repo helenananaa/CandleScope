@@ -861,6 +861,9 @@ class BackfillScheduler:
         source_row_budget: int | None = None,
     ) -> IntervalWorkPlan:
         budget = self._chunk_bars if source_row_budget is None else source_row_budget
+        page_size = request.metadata.get("history_page_size")
+        if isinstance(page_size, int) and not isinstance(page_size, bool) and page_size > 0:
+            budget = min(budget, page_size)
         try:
             plan = resolve_interval_work_plan(
                 self._interval_resolver,
@@ -897,15 +900,16 @@ class BackfillScheduler:
                 exc_info=True,
             )
             requested = max(1, int(requested_target_bars))
+            effective = min(requested, max(1, budget))
             return IntervalWorkPlan(
                 requested_target_bars=requested,
-                effective_target_bars=requested,
+                effective_target_bars=effective,
                 base_interval=request.interval,
                 source_factor=1,
                 source_padding_bars=0,
-                planned_source_rows=requested,
+                planned_source_rows=effective,
                 source_row_budget=budget,
-                budget_limited=False,
+                budget_limited=effective < requested,
                 derived=False,
             )
 
