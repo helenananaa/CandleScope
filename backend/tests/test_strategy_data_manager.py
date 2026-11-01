@@ -175,9 +175,11 @@ def test_http_stream_returns_terminal_summary_and_request_errors(service):
 def test_http_disconnect_releases_only_the_view_subscription(service):
     async def check():
         from fastapi import FastAPI
+        from starlette.middleware.gzip import GZipMiddleware
         from app.api.v1.backtests import router
         from app.data_engine.data_manager.core import DataManagerCore
         api = FastAPI()
+        api.add_middleware(GZipMiddleware, minimum_size=1)
         api.include_router(router, prefix="/api/v1")
         core = DataManagerCore()
         core.bind_strategy(service)
@@ -195,10 +197,11 @@ def test_http_disconnect_releases_only_the_view_subscription(service):
         path = f"/api/v1/backtests/runs/{run['run_id']}/events"
         scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": "2.0"},
                  "http_version": "1.1", "method": "GET", "scheme": "http", "path": path,
-                 "raw_path": path.encode(), "query_string": b"", "headers": [],
+                 "raw_path": path.encode(), "query_string": b"", "headers": [(b"accept-encoding", b"gzip")],
                  "client": ("127.0.0.1", 12345), "server": ("test", 80)}
         await asyncio.wait_for(api(scope, receive, send), 3)
-        assert bodies
+        import json
+        assert json.loads(bodies[0])["type"] == "status", "gzip must not buffer the first progress frame"
         assert core.strategy.diagnostics()["subscriptions"] == 0
         assert service.get_run(run["run_id"])["state"] == "QUEUED"
         core.close_strategy()

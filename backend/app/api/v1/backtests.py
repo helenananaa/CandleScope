@@ -441,7 +441,7 @@ async def stream_run_events(request: Request, run_id: str) -> Any:
             subscription.close()
 
     return StreamingResponse(rows(), media_type="application/x-ndjson",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Content-Encoding": "identity"})
 
 
 @router.post("/runs/{run_id}/cancel")
