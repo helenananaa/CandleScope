@@ -57,7 +57,8 @@ async def main():
     with tempfile.TemporaryDirectory() as root:
         output=[await probe(flag,Path(root)/(str(flag)+'.sqlite')) for flag in (False,True)]
     assert len(output[0]['custom_rows'])==2,output
-    assert not output[1]['custom_rows'] and any('changed after acquisition' in e for e in output[1]['errors']),output
+    assert all(len(item['custom_rows'])==2 and not item['errors'] for item in output),output
+    assert output[0]['custom_rows']==output[1]['custom_rows'],output
     print(json.dumps(output,indent=2))
 
 

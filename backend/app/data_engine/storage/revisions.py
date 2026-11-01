@@ -12,6 +12,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
 import threading
+import sqlite3
 
 from app.data_engine.series_identity import KlineSeriesIdentity
 
@@ -22,6 +23,18 @@ IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
 
 class StaleAcquisition(RuntimeError):
     """The input was acquired before a newer canonical mutation; reacquire it."""
+
+
+def _execute_schema(conn, script):
+    """Execute trigger DDL without sqlite3.executescript's implicit commit."""
+    statement = ""
+    for character in script:
+        statement += character
+        if character == ";" and sqlite3.complete_statement(statement):
+            conn.execute(statement)
+            statement = ""
+    if statement.strip():
+        raise ValueError("incomplete revision schema statement")
 
 
 def init_revision_storage(conn):
@@ -66,8 +79,7 @@ def init_revision_storage(conn):
         # automatic projection invalidation. Preserve their conservative floor.
         conn.execute(f"INSERT OR IGNORE INTO kline_delete_permissions SELECT {keys},delete_revision "
                      "FROM kline_series_changes WHERE delete_revision>0")
-    conn.commit()
-    conn.executescript("""
+    _execute_schema(conn, """
         CREATE TRIGGER IF NOT EXISTS manual_history_acquisition
         AFTER INSERT ON manual_history_jobs BEGIN
             INSERT OR IGNORE INTO kline_acquisitions VALUES
@@ -88,7 +100,7 @@ def init_revision_storage(conn):
                  "WHERE source IN ('backfill_aggregated','data_manager_composite_closed',"
                  "'settings_manual_repair','repair_derived_verified','manual_history_derived')")
     changed_key = " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in (*IDENTITY_COLUMNS, "open_time"))
-    conn.executescript(f"""
+    _execute_schema(conn, f"""
         CREATE TRIGGER IF NOT EXISTS kline_identity_immutable BEFORE UPDATE ON klines
         WHEN {changed_key} BEGIN
             SELECT RAISE(ABORT, 'K-line identity changes require delete and insert');
@@ -104,8 +116,8 @@ def init_revision_storage(conn):
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
-        conn.executescript(f"""
-            {('BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS kline_change_delete;' if operation == 'delete' else '')}
+        _execute_schema(conn, f"""
+            {('DROP TRIGGER IF EXISTS kline_change_delete;' if operation == 'delete' else '')}
             CREATE TRIGGER IF NOT EXISTS kline_change_{operation}
             AFTER {operation.upper()} ON klines {condition} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
@@ -121,14 +133,12 @@ def init_revision_storage(conn):
                   ' WHERE (SELECT depth FROM kline_projection_invalidation WHERE singleton=1)=0 '
                   'ON CONFLICT(' + keys + ') DO UPDATE SET revision=excluded.revision;' if operation == 'delete' else '')}
             END;
-            {('COMMIT;' if operation == 'delete' else '')}
         """)
         dependent_family = " AND ".join(f"d.{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mutation_condition = "(" + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ") AND " if operation == "update" else ""
         # Avoid a K-line range scan for every row of an ordinary native import
         # when the semantic family has no registered derived projections.
-        conn.executescript(f"""
-            BEGIN IMMEDIATE;
+        _execute_schema(conn, f"""
             DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
             AFTER {operation.upper()} ON klines
@@ -145,8 +155,8 @@ def init_revision_storage(conn):
                     AND COALESCE(close_time,open_time)>={alias}.open_time;
                 UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
             END;
-            COMMIT;
         """)
+    conn.commit()
 
 
 def current_revision(conn):
@@ -242,6 +252,7 @@ class Acquisition:
     # their initial revision on disk; after restart re-read/recompute inputs.
     accepted: dict[tuple, int] = field(default_factory=dict)
     native_history_views: list = field(default_factory=list, repr=False)
+    derived_target_views: list = field(default_factory=list, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def check(self, conn, values):
@@ -300,14 +311,22 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
                     for row in conn.execute("SELECT * FROM kline_series_changes WHERE " +
                         " AND ".join(f"{name}=?" for name, _ in family), tuple(v for _, v in family))}
         from .native_history_fence import matching_view, matching_empty_view, fingerprint
+        from .derived_history_fence import matching_computation, affected_targets
         view = matching_view(scope, values, native_rows, source) if commit else None
         if view is None and commit and native_empty_ranges is not None:
             view = matching_empty_view(scope, values, native_empty_ranges)
-        if view is None:
+        computation = matching_computation(scope, values, native_rows, source) if commit else None
+        targets = affected_targets(scope, values, native_rows) if view is not None else ()
+        if computation is not None:
+            computation.check(conn, scope)
+            targets = (computation.target,)
+        elif view is None:
             scope.check(conn, values)
         else:
             view.check(conn, scope)
-        before = versions() if view is not None else None
+            for target in targets:
+                target.check(conn, scope)
+        before = versions() if view is not None or computation is not None else None
         yield
         accepted = versions()
         # A native range view does not consume other intervals as input.
@@ -316,11 +335,15 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, n
         if before is not None:
             accepted = {key: rev for key, rev in accepted.items() if before.get(key) != rev}
         digest = fingerprint(conn, values, view.start, view.end) if view else None
+        target_digests = [(target, fingerprint(conn, target.key, target.start, target.end))
+                          for target in targets]
         if commit:
             conn.commit()
             scope.accepted.update(accepted)
             if view is not None:
                 view.digest = digest
+            for target, target_digest in target_digests:
+                target.digest = target_digest
 
 
 def fenced_acquisition(function):
@@ -384,6 +407,20 @@ async def prepare_native_history_views(storage, tasks):
     from .native_history_fence import capture_native_history_views
     await run_storage(capture_native_history_views, getattr(storage, "revision_store", None),
                       _acquisition.get(), tasks)
+
+
+async def prepare_derived_targets(storage, plan):
+    from app.core.executors import run_storage
+    from .derived_history_fence import capture_targets
+    await run_storage(capture_targets, getattr(storage, 'revision_store', None),
+                      _acquisition.get(), plan)
+
+
+async def prepare_derived_inputs(storage, decomp, grouped):
+    from app.core.executors import run_storage
+    from .derived_history_fence import capture_inputs
+    return await run_storage(capture_inputs, getattr(storage, 'revision_store', None),
+                             _acquisition.get(), decomp, grouped)
 
 
 def register_derived(conn, values):

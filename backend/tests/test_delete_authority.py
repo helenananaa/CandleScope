@@ -1,6 +1,7 @@
 """Deletion permission is durable; disposable derived invalidation is separate."""
 import subprocess
 import sys
+import sqlite3
 
 import pytest
 
@@ -79,3 +80,32 @@ def test_old_schema_seeds_conservative_floor_once_only(store):
         assert conn.execute("SELECT delete_revision FROM kline_series_changes WHERE interval='7s'").fetchone()[0]>seeded['7s']
     klines_repo.init_klines_storage()
     assert permissions()==seeded
+
+
+def test_legacy_seed_and_trigger_upgrade_hold_one_physical_writer_lock(store):
+    from app.data_engine.storage.revisions import init_revision_storage
+    write()
+    with klines_repo._connect() as conn:
+        conn.execute('DROP TABLE kline_delete_permissions')
+    attempted=[]
+    with klines_repo._connect() as conn:
+        def interleave(sql):
+            if sql.strip().startswith('CREATE TRIGGER IF NOT EXISTS kline_identity_immutable'):
+                # An offline writer cannot slip a deletion between migration
+                # seeding and replacement of its old physical DELETE trigger.
+                with sqlite3.connect(klines_repo.KLINES_DB_PATH,timeout=0) as other:
+                    try:
+                        other.execute('BEGIN IMMEDIATE')
+                        other.execute("DELETE FROM klines WHERE interval='1s'")
+                    except sqlite3.OperationalError as error:
+                        attempted.append(str(error))
+                    else:
+                        attempted.append('unexpected delete permission gap')
+        conn.set_trace_callback(interleave)
+        init_revision_storage(conn)
+        conn.set_trace_callback(None)
+    assert attempted==['database is locked']
+    assert len(store.query_bars('BTCUSDT','1s'))==1
+    with klines_repo._connect() as conn:
+        conn.execute("DELETE FROM klines WHERE interval='1s'")
+    assert set(permissions())=={'1s'}

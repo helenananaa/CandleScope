@@ -21,10 +21,11 @@ const header=asar.getRawHeader(next);
 const hash=crypto.createHash('sha256').update(header.headerString).digest('hex');
 fs.renameSync(next,path.join(resources,'app.asar'));
 cp.execFileSync('/usr/libexec/PlistBuddy',['-c',`Set :ElectronAsarIntegrity:Resources/app.asar:hash ${hash}`,path.join(app,'Contents/Info.plist')]);
-cp.execFileSync('/usr/bin/codesign',['--force','--deep','--sign','-',app],{stdio:'inherit'});
+// Preserve the accepted nested framework signatures when only resources change.
+cp.execFileSync('/usr/bin/codesign',['--force','--sign','-',app],{stdio:'inherit'});
 cp.execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'inherit'});
 const assembly={at:new Date().toISOString(),sourceCommit:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
- assembly:'Accepted H127 candidate runtime reused; current tracked backend/app already copied and byte-compiled with bundled Python. Current frontend built with VITE_DESKTOP_BUILD=1; app.asar repacked with existing production dependencies and current desktop files, integrity header updated, deep ad-hoc signed and strictly verified. Not a fresh full runtime build.',
+ assembly:'Accepted candidate runtime reused; current tracked backend/app copied and byte-compiled with bundled Python. Current frontend built with VITE_DESKTOP_BUILD=1; app.asar repacked with existing production dependencies and current desktop files, integrity header updated, root ad-hoc signed with accepted nested signatures preserved, deep strictly verified. Not a fresh full runtime build.',
  app,asarHeaderSha256:hash};
 fs.writeFileSync(path.join(out,'assembly.json'),JSON.stringify(assembly,null,2)+'\n');
 fs.rmSync(stage,{recursive:true});
