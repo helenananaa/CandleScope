@@ -11,7 +11,10 @@
     "Windows unqualified"
   ],
   "backend_current_main_201": 199,
-  "frontend_current_main_201": "See frontend-main201.log.gz",
+  "frontend_current_main_201": 37,
   "typecheck_current_main_201": "passed",
-  "plugin_architecture": "passed"
+  "plugin_architecture": "passed",
+  "shared_postcommit_refactor_native_regression": "passed13steps;600bars508fills;same saved report after full owned exit/restart;explicit offline network attempts0",
+  "account_push_native": "pending",
+  "lifecycle_tests": 7
 }
