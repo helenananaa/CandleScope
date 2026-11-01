@@ -5,4 +5,6 @@ import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerC
 export const createReplayMarketDataManager = () => new MarketDataManagerCore();
 
 export const ReplayDataContext = createContext<MarketDataManagerCore | null>(null);
+export const ReplayRunContext = createContext<string | null>(null);
+export const useReplayRunId = () => useContext(ReplayRunContext);
 export const useReplayDataManager = () => useContext(ReplayDataContext);

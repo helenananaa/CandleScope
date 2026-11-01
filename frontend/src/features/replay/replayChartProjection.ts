@@ -133,8 +133,8 @@ export class ReplayChartProjection {
           boundaryMs: tapeObservation?.virtualTimeMs ?? null }),
         loading: loading => this.publish({ ...this.state, loading: loading && this.seriesStore.isEmpty() }),
         error: error => this.publish({ ...this.state, error: error?.message ?? null }),
-        fetcher: (input, init) => this.data.request(signal => (this.fetcher ?? globalThis.fetch)(input,
-          { ...init, signal }), init?.signal ?? undefined),
+        request: this.data.request.bind(this.data),
+        ...(this.fetcher ? { fetcher: this.fetcher } : {}),
       });
       this.tape.update();
       return;

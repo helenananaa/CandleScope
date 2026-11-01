@@ -1,3 +1,4 @@
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../../components/icons/Icon.js";
@@ -5,7 +6,6 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { parseSymbolKey, symbolKey } from "../../../utils/symbolKey.js";
 import type { ReplayCatalog, ReplayCatalogEntry } from "../replayTypes.js";
-import { defaultReplayV2Api } from "../replayV2Api.js";
 import type { ReplayRuntime } from "../useReplayRuntime.js";
 import type { ReplayViewerRuntime } from "../useReplayViewerRuntime.js";
 import type { ReplayTrainingMarketTrack } from "../replayV2Types.js";
@@ -28,6 +28,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
   const locale = useLocale();
   const config = runtime.store.sessionConfig;
   const runId = viewer.viewerState?.run_id ?? null;
+  const { api } = useReplayOperations(runId, "catalog");
   const [catalog, setCatalog] = useState<ReplayCatalog | null>(null);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -46,12 +47,12 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
     if (runId === null) return;
     const controller = new AbortController();
     setCatalogError(null);
-    void defaultReplayV2Api.marketCatalog(runId, controller.signal).then(setCatalog).catch((reason: unknown) => {
+    void api.marketCatalog(runId, controller.signal).then(setCatalog).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
       setCatalogError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.watchlist.catalogFailed"));
     });
     return () => controller.abort();
-  }, [catalogAttempt, runId]);
+  }, [api, catalogAttempt, runId]);
 
   const catalogEntries = useMemo(() => {
     if (config === null) return [];

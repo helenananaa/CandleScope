@@ -312,7 +312,7 @@ test("right-rail trading workstation keeps positions and account history out of 
   assert.match(rail, /replay\.wb\.openOrders/);
   assert.match(rail, /replay\.wb\.orderHistory/);
   assert.match(rail, /TERMINAL_ORDER_STATES\.has/);
-  assert.match(rail, /defaultReplayV2Api\.reportRun/);
+  assert.match(rail, /api\.reportRun/);
   assert.match(rail, /data-replay-action="close-partial"/);
   assert.match(rail, /aria-live="polite"/);
   assert.match(rail, /className="replay-position-card"/);

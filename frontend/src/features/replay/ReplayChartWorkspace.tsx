@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
 import { ReplayIntervalViewportTransfers } from "./replayIntervalViewportTransfers.js";
 import { applyChartLinkGroupPolicyUpdate } from "../chart-workspace/chartWorkspaceLinkModel.js";
@@ -40,7 +41,6 @@ import ReplayTrainingPageShell from "./ReplayTrainingPageShell.js";
 import type { ReplayChartPageFrameProps } from "./ReplayTrainingPageShell.js";
 import type { ReplayTrainingMarketTrack } from "./replayV2Types.js";
 import { t } from "../../i18n/index.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import { useReplayCellViewport } from "./useReplayCellViewport.js";
 import { useReplayWorkspacePreferences } from "./replayWorkspacePreferences.js";
 import { replayWorkspaceDrawingCharts, useReplayWorkspaceDrawings } from "./useReplayWorkspaceDrawings.js";
@@ -216,6 +216,7 @@ export interface ReplayChartWorkspaceProps {
 }
 
 export default function ReplayChartWorkspace({ runId, initialSession, runtime, viewer, pool, chartSettingsRuntime }: ReplayChartWorkspaceProps) {
+  const { api } = useReplayOperations(runId, "viewer");
   const pageExportRef = useRef<HTMLDivElement | null>(null);
   const [pageDrawingExports] = useState(() => new PageDrawingExportRegistry());
   const [repository] = useState(() => createReplayChartWorkspaceRepository(runId, initialSession));
@@ -347,7 +348,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   }, [tracks, viewer, controller.viewerPending, integrity.review, workspace.view.document, workspace.view.layoutCellIds, runtime.phase, runtime.store.hasAuthoritativeSnapshot, runtime.store.sessionId, runtime.store.virtualTimeMs]);
   const openTrack = useCallback(async (trackId: string, target: "current" | "new") => {
     const track = tracks.find((value) => value.track_id === trackId)
-      ?? (await defaultReplayV2Api.tracksRun(runId)).tracks.find((value) => value.track_id === trackId);
+      ?? (await api.tracksRun(runId)).tracks.find((value) => value.track_id === trackId);
     if (!track) throw new Error("Replay market is unavailable");
     const session = {
       ...workspace.view.activeCell.session, exchange: track.exchange, marketType: track.market_type, symbol: track.symbol,
@@ -358,7 +359,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
       }
       workspace.actions.splitCell(workspace.view.activeCellId, "columns", "copy", session);
     } else workspace.actions.updateCellSession(workspace.view.activeCellId, session);
-  }, [runId, tracks, workspace.actions, workspace.view]);
+  }, [api, runId, tracks, workspace.actions, workspace.view.activeCell.session, workspace.view.activeCellId, workspace.view.layoutCellIds.length, workspace.view.layoutLocked, workspace.view.maxCellsPerWindow]);
   const controls = <button type="button" className="workspace-toolbar-trigger" onClick={() => setPanelOpen((value) => !value)}>
     {t("workspace.tab.workspaces")} · {workspace.view.layoutCellIds.length}
   </button>;

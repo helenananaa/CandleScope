@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useReplayOperations } from "./useReplayOperations.js";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { createReplayPublicTimeFormatter } from "./replayPublicTimeModel.js";
 import {
   ReplayPublicTimeProjectionController,
 } from "./replayPublicTimeProjection.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import type { ReplayV2TimeDisclosurePolicy } from "./replayV2Types.js";
 
 export interface ReplayPublicTimeRuntimeOptions {
@@ -29,8 +29,9 @@ export function useReplayPublicTimeRuntime({
   timelineOriginMs,
   timelineMs,
 }: ReplayPublicTimeRuntimeOptions): ReplayPublicTimeRuntime {
-  const [controller] = useState(
-    () => new ReplayPublicTimeProjectionController(defaultReplayV2Api),
+  const { api } = useReplayOperations(runId, "rail");
+  const controller = useMemo(
+    () => new ReplayPublicTimeProjectionController(api), [api],
   );
   const projection = useSyncExternalStore(
     controller.subscribe,

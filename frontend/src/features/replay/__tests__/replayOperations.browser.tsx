@@ -2,7 +2,7 @@ import { StrictMode, act, useEffect, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ReplayDataProvider } from "../ReplayDataProvider.js";
 import { useReplayOperations } from "../useReplayOperations.js";
-import { useReplayDataManager } from "../replayDataContext.js";
+import { ReplayRunContext, useReplayDataManager } from "../replayDataContext.js";
 import type { ReplayDataManager, ReplayOperationLease } from "../replayDataManager.js";
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
@@ -14,8 +14,8 @@ export async function checkReplayRunOperations() {
   const pending: Array<{ signal: AbortSignal; complete(value: number): void }> = [];
   const frames: Array<() => void> = [];
   let stopped = 0, publications = 0, cancellations = 0, received = 0;
-  function Probe({ runId, sessionId }: { runId: string; sessionId: string }) {
-    const { operations } = useReplayOperations(runId, "viewer");
+  function Probe({ sessionId }: { sessionId: string }) {
+    const { operations } = useReplayOperations(undefined, "viewer");
     const rootManager = useReplayDataManager();
     useLayoutEffect(() => { lease = operations; manager = rootManager!.replay; });
     useEffect(() => {
@@ -33,7 +33,9 @@ export async function checkReplayRunOperations() {
     return <span>{sessionId}</span>;
   }
   const render = (runId: string, sessionId: string) => root.render(
-    <StrictMode><ReplayDataProvider><Probe runId={runId} sessionId={sessionId} /></ReplayDataProvider></StrictMode>,
+    <StrictMode><ReplayDataProvider><ReplayRunContext.Provider value={runId}>
+      <Probe sessionId={sessionId} />
+    </ReplayRunContext.Provider></ReplayDataProvider></StrictMode>,
   );
   try {
     await act(async () => render("run-a", "adapter-a"));
@@ -41,6 +43,7 @@ export async function checkReplayRunOperations() {
     assert(activeManager !== null, "provider did not create the manager");
     assert(activeManager!.diagnostics().activeOperations === 1 && activeManager!.diagnostics().streams === 1,
       "StrictMode retained a duplicate operation/stream");
+    assert(activeManager!.diagnostics().operations[0]!.identity?.runId === "run-a", "nested consumer lost owning run context");
     const original = lease, count = pending.length;
     await act(async () => render("run-a", "adapter-b"));
     assert(lease === original && pending.length === count && !pending.at(-1)!.signal.aborted,

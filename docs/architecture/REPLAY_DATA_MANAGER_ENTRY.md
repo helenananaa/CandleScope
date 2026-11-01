@@ -59,11 +59,34 @@ cannot resume after another stream opens on the same operation. Final release
 also stops registered resources even if their owning effect has not cleaned up.
 Diagnostics include active operations, pending/total requests and active streams.
 
+## Remaining frontend API entry points
+
+The run context now reaches nested chart/review/rail consumers before their viewer
+metadata is available. Hub list/create/preparation/storage, initial-market and
+watchlist catalogs, integrity/review/fork/drawings/report, equity/account records,
+public time and trade flow all use typed operation bindings. The Hub acquires its
+lease on start or first actual request, so opening creation before loading the
+list remains supported without retaining resources during construction.
+
+BAR history keeps its original physical-read sharing key and fetcher. Each
+consumer owns the complete read/parse/retry operation, including backoff; releasing
+one consumer does not cancel a sibling's shared physical read. Tape providers and
+canonical indicator calculations enclose their complete retry/compute operation.
+Indicator scope and run replacement cancel old requests and suppress late partial
+results. Standalone injectable providers retain a direct request default; all
+production consumers supply a manager request boundary. Replay capability checks
+opened from a live workspace use that workspace's replay namespace, not live data.
+
+Portfolio export now owns the response body through download preparation. It
+preserves the existing NDJSON endpoint and filename; the browser saves the complete
+Blob after the operation succeeds. This path buffers the export before download.
+The pure URL helper remains available but production UI no longer navigates to it
+to start an unmanaged request.
+
 ## Scope still open
 
-This is not full dual-Manager acceptance. Hub/initial-market preparation, review
-and rail-specific API consumers, indicator/history providers outside the managed
-cell path, and the backend DataManager facade remain follow-up work. Native
+This is not full dual-Manager acceptance. The backend DataManager facade remains
+follow-up work. Native
 saved-cursor/full-exit/restart, disconnect recovery and financial reference
 acceptance also remain open. No #166 checklist is
 declared fully passed by this patch.

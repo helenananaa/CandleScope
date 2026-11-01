@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -20,7 +21,6 @@ import type {
   ReplayHistoryPolicy,
 } from "./replayHistoryProvider.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
   rebuildReplayViewerSeries,
   replayUsesAuthoritativeSourceBucketProjection,
@@ -82,6 +82,7 @@ export function useReplayHistoryRuntime(
   viewportTransfer: SurfaceViewportSnapshot | null = null,
   warmupTargetBars = 0,
 ): ReplayHistoryRuntime {
+  const { api, request: managedRequest } = useReplayOperations(viewer.viewerState?.run_id, "history");
   const retryRequestedRef = useRef(false);
   const [loadGate] = useState(() => new ReplayHistoryLoadGate());
   const tapeObservation = viewer.tapeObservation;
@@ -130,8 +131,8 @@ export function useReplayHistoryRuntime(
   const provider = useMemo(() => (
     !displayReady || sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
-      : createReplayHistoryProvider({ sessionId, trackId, identity, sourceSequence: () => storeRef.current.sourceSequence })
-  ), [dataEpoch, displayReady, identity, sessionId, trackId]);
+      : createReplayHistoryProvider({ request: managedRequest, sessionId, trackId, identity, sourceSequence: () => storeRef.current.sourceSequence })
+  ), [dataEpoch, displayReady, identity, managedRequest, sessionId, trackId]);
   const historyKey = useMemo(() => (
     sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
@@ -514,7 +515,7 @@ export function useReplayHistoryRuntime(
       && runtime.store.virtualTimeMs !== null
       && viewer.viewerState?.selected_track_id !== null
       && viewer.viewerState?.selected_track_id !== undefined) {
-      const response = await defaultReplayV2Api.displayProjectionBySession(
+      const response = await api.displayProjectionBySession(
         runtime.store.sessionId,
         {
           trackId: viewer.viewerState.selected_track_id,
@@ -541,21 +542,7 @@ export function useReplayHistoryRuntime(
     loadingRef.current = { key: historyKey, loading: false };
     setHistoryState(initialReplayHistoryState(historyKey));
     return true;
-  }, [
-    config,
-    displayInterval,
-    historyKey,
-    provider,
-    runtime.replayStore.seriesStore,
-    runtime.store.dataEpoch,
-    runtime.store.sessionId,
-    runtime.store.virtualTimeMs,
-    usesSourceBucketProjection,
-    sourceKind,
-    viewer.actions,
-    viewer.seriesStore,
-    viewer.viewerState,
-  ]);
+  }, [historyKey, config, displayInterval, viewer.seriesStore, viewer.actions, viewer.viewerState?.selected_track_id, provider, sourceKind, usesSourceBucketProjection, runtime.store.sessionId, runtime.store.dataEpoch, runtime.store.virtualTimeMs, runtime.replayStore.seriesStore, api]);
 
   useEffect(() => {
     if (!viewportNeedsLatestRestore) return;

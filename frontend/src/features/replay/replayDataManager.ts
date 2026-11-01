@@ -11,10 +11,15 @@ export interface ReplaySequenceIdentity {
 
 const abortError = () => new DOMException("Replay demand released or superseded", "AbortError");
 
+export type ReplayRequest = <T>(load: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal) => Promise<T>;
+/** Standalone adapters remain injectable; production consumers supply a manager lease. */
+export const directReplayRequest: ReplayRequest = (load, signal) => load(signal ?? new AbortController().signal);
+
 export interface ReplayOperationIdentity {
   readonly runId: string;
   readonly sessionId?: string;
-  readonly purpose: "run-entry" | "viewer" | "adapter";
+  readonly purpose: "run-entry" | "viewer" | "adapter" | "hub" | "review" | "history" | "indicator" | "rail" | "catalog" | "capability";
+  readonly scope?: string;
 }
 type ReplayDemandIdentity = ReplaySequenceIdentity | ReplayOperationIdentity;
 
@@ -159,6 +164,6 @@ export class ReplaySequenceLease extends ReplayDemandLease {
 export class ReplayOperationLease extends ReplayDemandLease {
   constructor(owner: string, manager: ReplayDataManager, identity: ReplayOperationIdentity) {
     super(owner, manager, "operation");
-    this.bindIdentity(identity, JSON.stringify([identity.runId, identity.sessionId, identity.purpose]));
+    this.bindIdentity(identity, JSON.stringify([identity.runId, identity.sessionId, identity.purpose, identity.scope]));
   }
 }

@@ -7,6 +7,8 @@ import type { ReplayStreamControllerOptions } from "../replayStreamController.js
 import { ReplayRuntimeLifecycle } from "../useReplayRuntime.js";
 import { parseReplayCapabilities, parseReplaySessionResponse } from "../replayParser.js";
 import { enabledCapabilities, replaySessionResponse } from "./fixtures.js";
+import { ReplayHistoryProvider } from "../replayHistoryProvider.js";
+import { TrainingHubLifecycle } from "../useTrainingHub.js";
 
 test("operation release fences parsed HTTP completion after headers, without canceling another run", async () => {
   const manager = new ReplayDataManager();
@@ -101,4 +103,102 @@ test("canonical lifecycle startup, restart and disposal register one adapter ope
   assert.equal(manager.diagnostics().streams, 1);
   lifecycle.dispose(); lifecycle.dispose();
   assert.equal(stops, 2); assert.equal(manager.diagnostics().activeOperations, 0);
+});
+
+test("Hub is inert until list/preparation demand and shutdown fences ignored-abort capability completion", async () => {
+  const manager = new ReplayDataManager();
+  let finish!: (value: ReturnType<typeof parseReplayCapabilities>) => void;
+  let signal: AbortSignal | undefined;
+  const hub = new TrainingHubLifecycle({ dataManager: manager, draftStorage: null, api: {
+    capabilities: s => { signal = s; return new Promise(resolve => { finish = resolve; }); },
+    catalog: async () => { throw new Error("canceled preparation must not load catalog"); },
+    listRuns: async () => { throw new Error("list was not requested"); },
+    createRun: async () => { throw new Error("create was not requested"); },
+  } });
+  assert.equal(manager.diagnostics().activeOperations, 0);
+  const pending = hub.openCreate();
+  assert.equal(manager.diagnostics().activeOperations, 1);
+  assert.equal(manager.diagnostics().requests, 1);
+  hub.dispose(); await pending;
+  finish(parseReplayCapabilities(enabledCapabilities()));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(signal?.aborted, true);
+  assert.equal(hub.getSnapshot().phase, "STOPPED");
+  assert.equal(hub.getSnapshot().catalog, null);
+  assert.equal(manager.diagnostics().activeOperations, 0);
+});
+
+test("managed history keeps physical read sharing while releases cancel only their own consumer", async () => {
+  const manager = new ReplayDataManager();
+  const a = manager.createOperations({ runId: "run", purpose: "history", scope: "a" });
+  const b = manager.createOperations({ runId: "run", purpose: "history", scope: "b" });
+  const releaseA = a.retain(), releaseB = b.retain();
+  let reads = 0, physicalSignal: AbortSignal | null | undefined;
+  const fetcher: typeof fetch = (_input, init) => {
+    reads++; physicalSignal = init?.signal;
+    return new Promise(() => {});
+  };
+  const options = { sessionId: "adapter", trackId: "track", fetcher,
+    identity: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", source_kind: "BAR" as const,
+      base_interval: "1m", display_interval: "1m" } };
+  const first = new ReplayHistoryProvider({ ...options, request: a.request.bind(a) });
+  const second = new ReplayHistoryProvider({ ...options, request: b.request.bind(b) });
+  const request = { dataEpoch: `sha256:${"a".repeat(64)}` as const, beforeMs: 120_000, revealedBoundaryMs: 119_999 };
+  const pendingA = first.loadBefore(request), pendingB = second.loadBefore(request);
+  const canceledA = assert.rejects(pendingA, { name: "AbortError" });
+  const canceledB = assert.rejects(pendingB, { name: "AbortError" });
+  assert.equal(reads, 1);
+  releaseA(); await canceledA;
+  assert.equal(physicalSignal?.aborted, false);
+  assert.equal(manager.diagnostics().requests, 1);
+  releaseB(); await canceledB;
+  assert.equal(physicalSignal?.aborted, true);
+  first.cancel(); second.cancel();
+  assert.equal(manager.diagnostics().activeOperations, 0);
+});
+
+test("portfolio download remains owned through the complete NDJSON body", async () => {
+  const manager = new ReplayDataManager();
+  const lease = manager.createOperations({ runId: "run", purpose: "rail" });
+  const release = lease.retain();
+  let finish!: (value: Blob) => void;
+  const client = new ReplayV2ApiClient({ fetcher: async (input, init) => {
+    assert.match(String(input), /\/runs\/run\/portfolio-equity\/export$/);
+    assert.equal(init?.credentials, "same-origin");
+    const response = new Response(null, { headers: { "Content-Type": "application/x-ndjson" } });
+    response.blob = () => new Promise(resolve => { finish = resolve; });
+    return response;
+  } });
+  const pending = managedReplayRunApi(lease, client).portfolioExportRun("run");
+  await Promise.resolve();
+  assert.equal(manager.diagnostics().requests, 1);
+  const canceled = assert.rejects(pending, { name: "AbortError" });
+  release(); await canceled;
+  finish(new Blob(['{"equity":"100"}\n'], { type: "application/x-ndjson" }));
+  assert.equal(manager.diagnostics().requests, 0);
+});
+
+test("releasing history during retry delay drains the complete operation without another read", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const manager = new ReplayDataManager();
+  const lease = manager.createOperations({ runId: "run", purpose: "history" });
+  const release = lease.retain();
+  let reads = 0;
+  const provider = new ReplayHistoryProvider({ sessionId: "adapter", trackId: "track",
+    identity: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", source_kind: "BAR",
+      base_interval: "1m", display_interval: "1m" },
+    request: lease.request.bind(lease), pendingRetryDelaysMs: [1000],
+    fetcher: async () => { reads++; return Response.json({ error: { code: "HISTORY_DOWNLOAD_PENDING" } }, { status: 503 }); },
+  });
+  const pending = provider.loadBefore({ dataEpoch: `sha256:${"a".repeat(64)}`, beforeMs: 120_000, revealedBoundaryMs: 119_999 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 1);
+  assert.equal(manager.diagnostics().requests, 1, "retry backoff retains the operation");
+  const canceled = assert.rejects(pending, { name: "AbortError" });
+  release(); await canceled;
+  t.mock.timers.tick(2000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 1);
+  assert.equal(manager.diagnostics().requests, 0);
+  provider.cancel();
 });

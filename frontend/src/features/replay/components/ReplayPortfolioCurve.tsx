@@ -1,13 +1,15 @@
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import { defaultReplayV2Api } from "../replayV2Api.js";
 import { buildEquityPolyline } from "../replayIntegrityModel.js";
 import type { PortfolioCurveResponse } from "../portfolioCurve.js";
 
 export default function ReplayPortfolioCurve({ runId }: { readonly runId: string | null }) {
+  const { api } = useReplayOperations(runId, "rail");
   const [data, setData] = useState<PortfolioCurveResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -26,7 +28,7 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
     setBusy(true);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.portfolioEquityRun(runId, request.signal);
+      const result = await api.portfolioEquityRun(runId, request.signal);
       if (result.run_id !== runId) throw new Error("portfolio run changed");
       if (active.current === request) setData(result);
     } catch (cause) {
@@ -36,6 +38,24 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
     } finally {
       if (active.current === request) setBusy(false);
     }
+  };
+  const exportSnapshot = async () => {
+    if (runId === null || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const blob = await api.portfolioExportRun(runId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = "portfolio-curve.ndjson";
+      link.click();
+      // The browser consumes the URL asynchronously after the click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
+      }
+    } finally { setExporting(false); }
   };
   return <details className="replay-portfolio-curve">
     <summary>{t("replay.portfolio.title")}</summary>
@@ -51,7 +71,7 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
         <polyline points={points} fill="none" vectorEffect="non-scaling-stroke" />
       </svg>
       <p>{t("replay.portfolio.drawdown")}: {visible.summary?.max_drawdown}</p>
-      {runId !== null && <a href={defaultReplayV2Api.portfolioExportUrl(runId)} download>{t("replay.portfolio.export")}</a>}
+      {runId !== null && <button type="button" disabled={exporting} onClick={() => void exportSnapshot()}>{t("replay.portfolio.export")}</button>}
     </>}
   </details>;
 }

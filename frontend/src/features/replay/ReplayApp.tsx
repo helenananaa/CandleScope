@@ -13,7 +13,7 @@ import {
 import type { ReplayEntry } from "./replayEntry.js";
 import type { TrainingRunCard } from "./replayV2Types.js";
 import { useReplayOperations } from "./useReplayOperations.js";
-import { useReplayDataManager } from "./replayDataContext.js";
+import { useReplayDataManager, ReplayRunContext } from "./replayDataContext.js";
 import { getReplayControllerClientInstanceId } from "./replayControllerIdentity.js";
 import ReplayInitialMarketPicker from "./components/ReplayInitialMarketPicker.js";
 import TrainingHubDialog from "./components/TrainingHubDialog.js";
@@ -187,9 +187,9 @@ function ReplayEntrySurface({ entry, chartSettingsRuntime }: ReplayAppProps & { 
         runId={entry.runId}
       />
     );
-    return import.meta.env?.DEV
+    return <ReplayRunContext.Provider value={entry.runId}>{import.meta.env?.DEV
       ? <Profiler id="replay" onRender={recordReplayCommit}>{workspace}</Profiler>
-      : workspace;
+      : workspace}</ReplayRunContext.Provider>;
   }
   return <ReplayStatusSurface title={t("replay.invalidUrl")} message={entry.message} />;
 }

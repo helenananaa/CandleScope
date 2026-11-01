@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
 import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
 import { ReplayReviewHistory } from "./replayReviewHistory.js";
@@ -56,8 +57,6 @@ import {
   canProjectReplayDisplayInterval,
   replayIntervalUnavailableMessage,
 } from "./replayIntervalPolicy.js";
-import { defaultReplayApi } from "./replayApi.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
   type ReplayHistorySource,
 } from "./replayHistoryProvider.js";
@@ -147,6 +146,7 @@ export default function ReplayTrainingPageShell({
   preparePageDrawingExport,
   cell,
 }: ReplayTrainingPageShellProps) {
+  const { api, adapterApi, request: managedRequest } = useReplayOperations(viewer.viewerState?.run_id, "review");
   const PageFrame = cell?.frame ?? MarketPageFrame;
   const locale = useLocale();
   const [returningToHub, setReturningToHub] = useState(false);
@@ -344,12 +344,12 @@ export default function ReplayTrainingPageShell({
     setReturningToHub(true);
     setReturnToHubError(null);
     try {
-      await returnToTrainingHub(runId, defaultReplayV2Api);
+      await returnToTrainingHub(runId, api);
     } catch (cause) {
       setReturnToHubError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.returnFailed", {}, locale));
       setReturningToHub(false);
     }
-  }, [locale, returningToHub, viewer.viewerState?.run_id]);
+  }, [api, locale, returningToHub, viewer.viewerState?.run_id]);
 
   useEffect(() => {
     setLiveDrawingError(null);
@@ -503,7 +503,7 @@ export default function ReplayTrainingPageShell({
     setReviewChartError(null);
     setReviewChartBounded(false);
     void (async () => {
-      const session = await defaultReplayApi.getSession(
+      const session = await adapterApi.getSession(
         adapterSessionId,
         abort.signal,
       );
@@ -515,6 +515,7 @@ export default function ReplayTrainingPageShell({
         throw new Error(t("replay.shell.reviewIdentityMismatch", {}, locale));
       }
       provider = createReplayHistoryProvider({
+        request: managedRequest,
         sessionId: adapterSessionId,
         trackId: reviewSelectedTrackId,
         sourceSequence: reviewSourceSequence,
@@ -535,7 +536,7 @@ export default function ReplayTrainingPageShell({
         setReviewHasMore(state.hasMore);
         setReviewOlderLoading(state.loading);
         setReviewOlderError(state.error);
-      });
+      }, api.displayProjectionBySession);
       reviewHistoryRef.current = reviewHistory;
       await reviewHistory.initialize(reviewPrefixKey!);
       if (abort.signal.aborted) return;
@@ -564,20 +565,7 @@ export default function ReplayTrainingPageShell({
       if (reviewHistoryRef.current === reviewHistory) reviewHistoryRef.current = null;
       provider?.cancel();
     };
-  }, [
-    reviewCursorVirtualTimeMs,
-    reviewPrefixKey,
-    reviewProjectedInterval,
-    reviewProjectedExchange,
-    reviewProjectedMarketType,
-    reviewProjectedSourceKind,
-    reviewProjectedSymbol,
-    locale,
-    reviewSelectedTrackId,
-    reviewSeriesStore,
-    reviewAdapterSessionId,
-    reviewSourceSequence,
-  ]);
+  }, [reviewCursorVirtualTimeMs, reviewPrefixKey, reviewProjectedInterval, reviewProjectedExchange, reviewProjectedMarketType, reviewProjectedSourceKind, reviewProjectedSymbol, locale, reviewSelectedTrackId, reviewSeriesStore, reviewAdapterSessionId, reviewSourceSequence, adapterApi, managedRequest, api.displayProjectionBySession]);
 
   const displayedSeriesStore = review === null ? viewer.seriesStore : reviewSeriesStore;
   const ensureIndicatorViewport = review === null

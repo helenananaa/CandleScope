@@ -485,6 +485,15 @@ export class ReplayV2ApiClient {
     return `${this.basePath}/runs/${safeSegment(runId, "run id")}/portfolio-equity/export`;
   }
 
+  async portfolioExportRun(runId: string, signal?: AbortSignal): Promise<Blob> {
+    const fetcher = this.fetcher;
+    const response = await fetcher(this.portfolioExportUrl(runId), {
+      credentials: "same-origin", ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) throw new ReplayV2ApiError("REPLAY_V2_TRANSPORT_ERROR", "Portfolio export failed", { status: response.status });
+    return response.blob();
+  }
+
   getRun(runId: string, signal?: AbortSignal): Promise<TrainingRunCardResponse> {
     return this.request(
       `/runs/${safeSegment(runId, "run id")}`,

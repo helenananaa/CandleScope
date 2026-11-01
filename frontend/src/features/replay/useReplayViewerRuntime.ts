@@ -438,7 +438,7 @@ export function useReplayViewerRuntime(
   runtime: ReplayRuntime,
   options: ReplayViewerRuntimeOptions = {},
 ): ReplayViewerRuntime {
-  const { operations, api } = useReplayOperations(options.runId ?? "standalone-viewer", "viewer");
+  const { operations, api, request: managedRequest } = useReplayOperations(options.runId, "viewer");
   const onSelectedSessionChange = options.onSelectedSessionChange;
   const controllerOnly = options.controllerOnly === true;
   const [viewerState, setViewerState] = useState<ReplayViewerState | null>(null);
@@ -709,7 +709,7 @@ export function useReplayViewerRuntime(
       if (!sessionId || !trackId || !dataEpoch || !displayInterval || !baseInterval
         || !sourceExchange || !sourceMarketType || !sourceSymbol) return;
       setTapeStatus({ store: seriesStore, loading: true, observation: null });
-      const tape = new ReplayTapeViewer({ sessionId, trackId, dataEpoch,
+      const tape = new ReplayTapeViewer({ sessionId, trackId, dataEpoch, request: managedRequest,
         identity: { exchange: sourceExchange, market_type: sourceMarketType, symbol: sourceSymbol,
           source_kind: "AGG_TRADE", base_interval: baseInterval, display_interval: displayInterval },
         source: sourceStore, target: seriesStore, authority: () => {
@@ -920,6 +920,7 @@ export function useReplayViewerRuntime(
       pendingSourceDeltas = [];
     };
   }, [
+    managedRequest,
     api,
     controllerOnly,
     baseInterval,
