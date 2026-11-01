@@ -1,5 +1,7 @@
 """Acknowledgement microbatches retain per-event commit/publication order."""
 import asyncio
+import subprocess
+import sys
 import threading
 
 import pytest
@@ -159,3 +161,35 @@ async def test_failed_batch_ack_replays_without_duplicate_live_consumer_events(s
         assert instance.delivery.snapshot()['published'] == 16
     finally:
         await bus.close()
+
+
+@async_test
+async def test_process_exit_after_batch_publication_recovers_same_durable_identities(storage):
+    from app.data_engine.storage import klines_repo
+    enqueue(storage.bar_delivery, 16)
+    script = '\n'.join([
+        'import asyncio, os',
+        'from app.data_engine.storage import klines_repo',
+        'from app.data_engine.data_manager.bar_delivery import DurableBarDelivery',
+        'from pathlib import Path',
+        'klines_repo.KLINES_DB_PATH = Path(' + repr(str(klines_repo.KLINES_DB_PATH)) + ')',
+        'storage = klines_repo.KlinesRepoAdapter()',
+        'seen = []',
+        'async def publish(event):',
+        '    seen.append(event.detail["delivery_id"])',
+        '    if len(seen) == 16: os._exit(23)',
+        'asyncio.run(DurableBarDelivery(lambda: storage, publish, acknowledgement_delay=100).flush())',
+    ])
+    crashed = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=30)
+    assert crashed.returncode == 23, crashed.stderr
+    before = storage.bar_delivery.pending()
+    assert len(before) == 16 and all(row['phase'] == 'committed' for row in before)
+    revisions = {row['event_id']: row['committed_revision'] for row in before}
+    replayed = []
+    async def receive(event):
+        replayed.append(event.detail['delivery_id'])
+    await DurableBarDelivery(lambda: storage, receive).flush()
+    assert replayed == [f'event-{i}' for i in range(16)]
+    assert not storage.bar_delivery.pending()
+    for event_id, revision in revisions.items():
+        assert storage.bar_delivery.commit(event_id)['committed_revision'] == revision
