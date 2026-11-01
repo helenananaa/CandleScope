@@ -193,6 +193,8 @@ class TradingAccountService(JournalService):
         super().__init__(store, snapshot_dir=snapshot_dir, clock=clock, id_factory=id_factory)
         self.market = market
         self._feeds: dict[Instrument, _Feed] = {}
+        self._practice_position_version: tuple[int, int] | None = None
+        self._practice_position_instruments: set[Instrument] = set()
 
     # ══════════════════════════════════════════════════════════
     #  Accounts
@@ -389,9 +391,14 @@ class TradingAccountService(JournalService):
             positions.append(view)
         equity = balance + unrealized
         working = [_order_view(row) for row in self.store.orders(account_id, status="working", limit=500)]
-        instruments = sorted({(row["exchange"], row["marketType"], row["symbol"]) for row in working})
+        instruments = {(row["exchange"], row["marketType"], row["symbol"]) for row in working}
+        if account["kind"] == "practice":
+            instruments.update(
+                (trade.exchange, trade.market_type, trade.symbol)
+                for trade in trades if trade.status == "open"
+            )
         feeds = []
-        for instrument in instruments:
+        for instrument in sorted(instruments):
             feed = self._feed(instrument)
             feeds.append({
                 "exchange": instrument[0],
@@ -1030,7 +1037,30 @@ class TradingAccountService(JournalService):
                 self._mark_flushed(feed, feed.cursor, feed.status, feed.detail, now)
 
     def working_instruments(self) -> list[Instrument]:
-        return self.store.working_instruments()
+        """Market demand for practice orders and still-open positions.
+
+        Reuse the canonical Decimal trade projection per account, never net
+        opposite positions across accounts or infer them from SQLite REAL
+        sums. Only the small set of demanded instruments is retained; price
+        updates and cursor flushes do not rebuild historical trades.
+        """
+        with self.store.locked():
+            version = self.store.practice_position_version()
+            positions = self._practice_position_instruments
+            if version is None or version != self._practice_position_version:
+                positions = set()
+                for account in self.store.accounts():
+                    if account["kind"] != "practice":
+                        continue
+                    positions.update(
+                        (trade.exchange, trade.market_type, trade.symbol)
+                        for trade in self._trades(account["id"])
+                        if trade.status == "open"
+                    )
+                if version is not None:
+                    self._practice_position_instruments = positions
+                    self._practice_position_version = version
+            return sorted(set(self.store.working_instruments()) | positions)
 
     def cursor_start_ms(self, instrument: Instrument) -> int | None:
         feed = self._feed(instrument)

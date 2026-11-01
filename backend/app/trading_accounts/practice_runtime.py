@@ -1,7 +1,7 @@
 """Background loop that drives local practice accounts from live 1m candles.
 
-Each step replays the 1m candles of one instrument with working orders from
-its cursor up to the present. Live matching and catch-up after downtime are
+Each step replays the 1m candles of an instrument with working orders or open
+positions from its cursor up to the present. Live matching and catch-up after downtime are
 the same operation; a history gap pauses the instrument (status
 ``catching_up``) instead of guessing what happened inside it.
 
@@ -9,7 +9,7 @@ Steps are triggered two ways:
 
 - a live 1m update (DataManager ``BAR_*`` event) for an instrument wakes the
   loop at once; bursts coalesce into one step per ``EVENT_MIN_GAP_SECONDS``;
-- a sweep every ``tick_seconds`` syncs streams with the working orders and
+- a sweep every ``tick_seconds`` syncs streams with orders and open positions and
   steps every instrument that had no event-driven step since the last sweep,
   which is the catch-up path when events stop or were dropped.
 
