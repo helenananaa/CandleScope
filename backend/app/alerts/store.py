@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import threading
@@ -40,6 +41,7 @@ class AlertStore:
         "maxTriggers",
         "afterTrigger",
     )
+    _DEFINITION_FIELDS = (*_LIFECYCLE_FIELDS, "enabled", "actions", "name", "description")
 
     def __init__(
         self,
@@ -131,6 +133,13 @@ class AlertStore:
                 "createdAt": int(existing.get("createdAt") or item.get("createdAt") or now),
                 "updatedAt": now,
             }
+            changed_definition = not existing or any(
+                existing.get(field) != record.get(field) for field in self._DEFINITION_FIELDS
+            )
+            record["definitionRevision"] = (uuid.uuid4().hex if changed_definition
+                                            else existing["definitionRevision"])
+            if not changed_definition and "lastAcceptedCursor" in existing:
+                record["lastAcceptedCursor"] = deepcopy(existing["lastAcceptedCursor"])
 
             if existing and (
                 (record["enabled"] and not bool(existing.get("enabled", True)))
@@ -155,6 +164,9 @@ class AlertStore:
                 return None
             was_enabled = bool(rule.get("enabled", True))
             rule["enabled"] = bool(enabled)
+            if bool(enabled) != was_enabled:
+                rule["definitionRevision"] = uuid.uuid4().hex
+                rule.pop("lastAcceptedCursor", None)
             if enabled and not was_enabled:
                 rule["triggerCount"] = 0
                 rule["lastTriggeredAt"] = None
@@ -216,6 +228,16 @@ class AlertStore:
             rule = data["rules"].get(rule_id)
             if not isinstance(rule, dict) or not bool(rule.get("enabled", True)):
                 return None
+            # Async computations carry a definition fence. Manual/legacy
+            # producers without this field retain their existing contract.
+            cursor = None
+            if "expectedDefinitionRevision" in event:
+                if event["expectedDefinitionRevision"] != rule["definitionRevision"]:
+                    return None
+                cursor = self._evaluation_cursor(event.get("evaluationCursor"))
+                previous = self._evaluation_cursor(rule.get("lastAcceptedCursor"))
+                if cursor is None or (previous is not None and cursor <= previous):
+                    return None
             if event.get("id") and any(item.get("id") == event["id"] for item in data["history"]):
                 return None
 
@@ -252,6 +274,8 @@ class AlertStore:
             rule["triggerCount"] = trigger_count
             rule["lastTriggeredAt"] = record["createdAt"]
             rule["updatedAt"] = now
+            if cursor is not None:
+                rule["lastAcceptedCursor"] = dict(zip(("barTime", "observationTime", "ordinal"), cursor))
             if rule.get("afterTrigger", "auto_disable") == "pause" or (
                 rule.get("afterTrigger", "auto_disable") == "auto_disable"
                 and max_triggers is not None
@@ -336,6 +360,9 @@ class AlertStore:
         }
         if not record["ruleId"]:
             raise ValueError("Alert history ruleId is required")
+        if "expectedDefinitionRevision" in event:
+            record["definitionRevision"] = event["expectedDefinitionRevision"]
+            record["evaluationCursor"] = deepcopy(event.get("evaluationCursor"))
         return record
 
     def _load(self) -> dict[str, Any]:
@@ -366,6 +393,16 @@ class AlertStore:
         else:
             raise ValueError(f"Alert store rules have invalid format: {self.path}")
 
+        for rule in rules.values():
+            if not isinstance(rule.get("definitionRevision"), str) or not rule["definitionRevision"]:
+                # Deterministic migration is stable across independent reads;
+                # the next real edit receives a fresh incarnation, including
+                # A -> B -> A changes while a computation is in flight.
+                value = {field: rule.get(field) for field in self._DEFINITION_FIELDS}
+                rule["definitionRevision"] = "legacy:" + hashlib.sha256(
+                    json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
+
         history = raw.get("history", [])
         if not isinstance(history, list):
             raise ValueError(f"Alert store history has invalid format: {self.path}")
@@ -387,6 +424,15 @@ class AlertStore:
         os.replace(tmp_path, self.path)
         self._rules_snapshot = deepcopy(data["rules"])
         self._rules_stamp = self._file_stamp()
+
+    @staticmethod
+    def _evaluation_cursor(value: Any) -> tuple[int, int, int] | None:
+        if not isinstance(value, dict):
+            return None
+        parts = tuple(value.get(key) for key in ("barTime", "observationTime", "ordinal"))
+        if any(type(part) is not int or part < 0 or part > 2**53 - 1 for part in parts):
+            return None
+        return parts
 
     @staticmethod
     def _pick(item: dict[str, Any], existing: dict[str, Any], key: str, default: Any) -> Any:
