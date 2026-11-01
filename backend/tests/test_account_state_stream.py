@@ -162,7 +162,40 @@ def test_stream_route_authenticates_before_subscription_and_releases_on_disconne
             assert json.loads(await anext(response.body_iterator))['type'] == 'snapshot'
             await response.body_iterator.aclose()
             assert manager.diagnostics()['subscriptions'] == 0
+            failed = await stream_state(request)
+            async def send_failed(message):
+                raise OSError('disconnected before first frame')
+            async def receive():
+                await asyncio.Event().wait()
+            from starlette.requests import ClientDisconnect
+            try:
+                await failed({'asgi': {'spec_version': '2.4'}}, receive, send_failed)
+            except ClientDisconnect:
+                pass
+            except BaseExceptionGroup as exc:
+                # Starlette versions before 0.42 propagate send failures through
+                # AnyIO's task group instead of raising ClientDisconnect.
+                assert all(isinstance(error, OSError) for error in exc.exceptions)
+            else:
+                pytest.fail('a failed ASGI send must propagate')
+            assert manager.diagnostics()['subscriptions'] == 0
         finally:
             manager.close()
             await owner.close()
+    asyncio.run(run())
+
+
+
+def test_live_manager_shutdown_closes_account_views_without_stopping_service(tmp_path):
+    async def run():
+        from app.data_engine.data_manager import DataManager
+        owner = ReadOnlyAccountService(tmp_path)
+        manager = DataManager()
+        facade = manager.bind_readonly_account(owner)
+        sub = await facade.subscribe_state()
+        await manager.shutdown()
+        assert sub._updates.closed
+        assert facade.diagnostics()['subscriptions'] == 0
+        assert not owner._closed
+        await owner.close()
     asyncio.run(run())

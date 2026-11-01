@@ -79,7 +79,15 @@ async def stream_state(request: Request):
         finally:
             subscription.close()
 
-    return StreamingResponse(rows(), media_type="application/x-ndjson",
+    class OwnedAccountResponse(StreamingResponse):
+        async def __call__(self, scope, receive, send):
+            # Also release if headers fail before the async generator starts.
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                subscription.close()
+
+    return OwnedAccountResponse(rows(), media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Content-Encoding": "identity"})
 
 
