@@ -299,7 +299,8 @@ class AggregatorWarmStartService:
             exchange=exchange,
             market_type=market_type,
         ):
-            self._cache.upsert(
+            await self._cache.apply_protected(
+                self._cache.upsert,
                 SeriesKey.create(
                     symbol,
                     interval,
@@ -375,7 +376,7 @@ class AggregatorWarmStartService:
             await self._bar_aggregator.publisher.emit_updated(rebuilt_state)
             cached = self._cache.get_latest(key, 1)
             if not cached or cached[-1] != rebuilt_bar:
-                self._cache.upsert(key, rebuilt_bar)
+                await self._cache.apply_protected(self._cache.upsert, key, rebuilt_bar)
 
     @staticmethod
     def _custom_bucket_is_synced(

@@ -1,0 +1,68 @@
+{
+  "source_commit": "8a025927cd8a33608066ca122739ac08ec23f64d",
+  "pull_request": 189,
+  "issue": 187,
+  "platform": "macOS arm64",
+  "result": "passed",
+  "checks": [
+    {
+      "name": "related-backend-regressions",
+      "passed": 129,
+      "source": "1f019e6b",
+      "command": "pytest test_backfill_coordinator.py test_gap_audit_series.py test_maintenance_facade.py test_storage_gap_scan.py test_calendar_gap_integration.py test_manual_gap_audit.py test_gap_ledger_reconciliation_session_races.py"
+    },
+    {
+      "name": "final-coordinator-and-manual-audit-regressions",
+      "passed": 112,
+      "source": "8a025927",
+      "command": "pytest test_manual_gap_audit.py test_backfill_coordinator.py"
+    },
+    {
+      "name": "settings-frontend-regressions",
+      "passed": 24
+    },
+    {
+      "name": "typescript",
+      "result": "passed"
+    },
+    {
+      "name": "architecture",
+      "result": "passed"
+    },
+    {
+      "name": "targeted-eslint",
+      "result": "passed"
+    },
+    {
+      "name": "i18n",
+      "result": "passed",
+      "locales": 30
+    },
+    {
+      "name": "production-desktop-frontend-build",
+      "result": "passed"
+    },
+    {
+      "name": "relocated-package-runtime-links-signature",
+      "result": "passed"
+    },
+    {
+      "name": "source-package-identity",
+      "result": "passed",
+      "source_files": 961,
+      "dist_files": 163,
+      "mismatches": 0
+    },
+    {
+      "name": "native-settings-scan-save-full-exit-restart",
+      "result": "passed"
+    }
+  ],
+  "limits": [
+    "Synthetic continuity fixture is isolated from user data; real bundled backend and settings actions, no substituted API responses.",
+    "Native acceptance covers macOS arm64 only; it is not Windows/x64 acceptance or the full release acceptance matrix.",
+    "Ad-hoc local signature; no notarization or Gatekeeper distribution claim.",
+    "GitHub CI is tracked separately at the final PR head.",
+    "Shared cursors describe each inspected page; receipts deliberately do not claim an entire database has complete historical coverage."
+  ]
+}

@@ -10,15 +10,14 @@ from typing import Any, Protocol
 from app.core.executors import run_storage
 from app.data_engine.bar_aggregator import BarAggregator, BarAggregatorConfig
 from app.data_engine.interval_policy import (
-    STANDARD_INTERVAL_MS,
     compute_bucket_close_ms,
     find_best_base_interval,
     parse_custom_interval,
     parse_interval_ms,
 )
-from app.data_engine.series_identity import KlineSeriesIdentity
+from app.data_engine.series_identity import KlineSeriesIdentity, identity_from_mapping
 
-from .backfill_contracts import RepairRequest
+from .backfill_contracts import RepairRequest, ScanReport
 from .models import BarData, SeriesKey
 
 logger = logging.getLogger("data_manager.maintenance")
@@ -34,9 +33,7 @@ _STORAGE_ROW_FLOAT_FIELDS = (
     "taker_buy_quote",
 )
 _STORAGE_ROW_INT_FIELDS = ("open_time", "close_time", "trades")
-_STANDARD_INTERVALS = set(STANDARD_INTERVAL_MS) - {"1s", "1M"}
 _MAX_STORAGE_GC_BATCH_ROWS = 1_000
-_MAX_GAP_REPAIR_CONCURRENCY = 4
 
 
 class MaintenanceBusyError(RuntimeError):
@@ -173,6 +170,14 @@ class RepairRequester(Protocol):
     """Minimal repair coordinator contract used by maintenance workflows."""
 
     async def request_and_wait(self, request: RepairRequest) -> Any:
+        ...
+
+    async def audit_storage_series(
+        self, series: Iterable[tuple[str, str, str, str]], *,
+        scan_limit: int = 50_000, max_gaps: int = 100, repair: bool = True,
+        tail_series: Iterable[tuple[str, str, str, str]] | None = None,
+        detailed: bool = False, repair_wait_seconds: float = 0,
+    ) -> ScanReport:
         ...
 
 
@@ -518,224 +523,92 @@ class MaintenanceService:
         exchange: str = "binance",
         market_type: str = "spot",
     ) -> dict:
-        """Scan standard intervals for storage gaps and repair them."""
+        """Run one bounded page of the shared storage audit and report its scope."""
         storage = self._storage()
         self._require_backfill(backfill_coordinator)
-        symbols_filter = list(symbols_filter or [])
-
+        assert backfill_coordinator is not None
+        symbols_filter = sorted({str(value).strip().upper() for value in symbols_filter or [] if str(value).strip()})
         if self._lock.locked():
             raise MaintenanceBusyError("修复任务正在运行，请稍后再试")
 
         async with self._lock:
             started_at_ms = int(time.time() * 1000)
-            now_ms = started_at_ms
-
-            series = await run_storage(storage.list_series, False, exchange, market_type)
-            standard_series = [
-                item for item in series
-                if str(item.get("interval", "")) in _STANDARD_INTERVALS
-            ]
-            if symbols_filter:
-                allowed = set(symbols_filter)
-                standard_series = [
-                    item for item in standard_series
-                    if str(item.get("symbol", "")).upper() in allowed
-                ]
-
-            results = []
-            total_bars_filled = 0
-            gaps_found = 0
-            gaps_filled = 0
-
-            for item in standard_series:
-                symbol = str(item["symbol"]).upper()
-                interval = str(item["interval"])
-                try:
-                    latest = item.get("latest_open_time")
-                    total_count = item.get("total_count", 0)
-                    if not latest or not total_count:
+            results: list[dict[str, Any]] = []
+            errors: list[str] = []
+            selected: list[tuple[str, str, str, str]] = []
+            try:
+                inventory = await run_storage(storage.list_series, False, exchange, market_type)
+                for item in inventory:
+                    symbol = str(item.get("symbol", "")).strip().upper()
+                    interval = str(item.get("interval", "")).strip()
+                    if symbols_filter and symbol not in symbols_filter:
                         continue
-
-                    interval_ms = parse_interval_ms(interval) or 60_000
-                    gap_ms = now_ms - latest
-
-                    entry = {
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": interval,
-                        "market_type": market_type,
-                        "total_bars": total_count,
-                        "latest_data": time.strftime(
-                            "%Y-%m-%d %H:%M",
-                            time.localtime(latest / 1000),
-                        ),
-                        "gap_hours": round(gap_ms / 3_600_000, 1),
-                        "bars_filled": 0,
-                        "status": "ok",
-                        "message": "",
-                    }
-
-                    if gap_ms > interval_ms * 3:
-                        gaps_found += 1
-                        entry["status"] = "gap_found"
-                        entry["message"] = f"尾部缺口 {entry['gap_hours']}h"
-
-                        outcome = await backfill_coordinator.request_and_wait(RepairRequest(
-                            symbol=symbol,
-                            interval=interval,
-                            start_ms=int(latest),
-                            end_ms=now_ms,
-                            exchange=exchange,
-                            market_type=market_type,
-                            reason="settings_tail_gap_scan",
-                            metadata={"origin": "settings_gap_scan", "gap_type": "tail"},
-                        ))
-                        bars_written = _outcome_bars_written(outcome)
-
-                        if _outcome_failed(outcome):
-                            errors = _outcome_errors(outcome)
-                            entry["status"] = "error"
-                            entry["message"] = (
-                                "回补失败: " + "; ".join(errors)
-                                if errors else
-                                "回补失败"
-                            )
-                        elif bars_written > 0:
-                            entry["bars_filled"] = bars_written
-                            entry["status"] = "filled"
-                            entry["message"] = f"已补 {bars_written} 条"
-                            total_bars_filled += bars_written
-                            gaps_filled += 1
-                        else:
-                            entry["message"] = "尝试回补但无新数据（可能是网络问题）"
-
-                    rows = await run_storage(
-                        storage.query_bars,
-                        symbol=symbol,
-                        interval=interval,
-                        limit=2000,
-                        order="DESC",
-                        exchange=exchange,
-                        market_type=market_type,
+                    identity = identity_from_mapping(exchange, item)
+                    if not identity.is_legacy_default_for(exchange):
+                        results.append({
+                            "exchange": exchange, "market_type": market_type,
+                            "symbol": symbol, "interval": interval,
+                            "series_identity": identity.to_dict(),
+                            "status": "unsupported", "lane": "interior",
+                            "message": "此数据来源尚未接入共享巡检，未检查或回补",
+                        })
+                        continue
+                    if symbol and interval:
+                        selected.append((exchange, market_type, symbol, interval))
+                if selected:
+                    # As with periodic audits, only live series extend to the
+                    # closed tail. Inventory-only series retain their bounds.
+                    active = set(self._active_targets())
+                    report = await backfill_coordinator.audit_storage_series(
+                        selected, tail_series=[key for key in selected if key in active],
+                        detailed=True, repair_wait_seconds=5,
                     )
-                    if len(rows) >= 2:
-                        times = sorted([int(row["open_time"]) for row in rows])
-                        threshold = interval_ms * 1.5
-                        interior_gaps = []
-                        for idx in range(1, len(times)):
-                            diff = times[idx] - times[idx - 1]
-                            if diff > threshold:
-                                interior_gaps.append((times[idx - 1], times[idx], diff))
+                    errors.extend(report.errors)
+                    for raw_page in report.pages:
+                        page = {key: value for key, value in raw_page.items() if key != "request_ids"}
+                        status = page["status"]
+                        page["message"] = {
+                            "ok": "本次检查范围未发现缺口",
+                            "filled": "本次检查范围已重新读取验证，缺口已补齐",
+                            "empty": "本次范围没有可检查的数据",
+                            "pending": "回补仍在进行，本次范围尚有缺口",
+                            "gap_found": "本次范围尚有缺口",
+                            "unverified": "修复后验证未完成，不能确认完整",
+                            "unscanned": "本次检查预算已用完，此范围尚未检查",
+                            "error": "检查或验证失败",
+                        }.get(status, "检查未完成")
+                        if page.get("error"):
+                            page["message"] += f": {page['error']}"
+                        results.append(page)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                errors.append(str(exc))
 
-                        if interior_gaps:
-                            gaps_found += len(interior_gaps)
-                            gap_errors: list[str] = []
-                            repair_requests: list[RepairRequest] = []
-                            for gap_start, gap_end, _gap_diff in interior_gaps:
-                                missing_start = int(gap_start) + interval_ms
-                                missing_end = int(gap_end) - interval_ms
-                                if missing_start > missing_end:
-                                    continue
-                                repair_requests.append(RepairRequest(
-                                    symbol=symbol,
-                                    interval=interval,
-                                    start_ms=missing_start,
-                                    end_ms=missing_end,
-                                    exchange=exchange,
-                                    market_type=market_type,
-                                    reason="settings_interior_gap_scan",
-                                    metadata={
-                                        "origin": "settings_gap_scan",
-                                        "gap_type": "interior",
-                                    },
-                                ))
-
-                            repair_results = await _request_repairs_bounded(
-                                backfill_coordinator,
-                                repair_requests,
-                                max_concurrency=_MAX_GAP_REPAIR_CONCURRENCY,
-                            )
-                            for succeeded, result in repair_results:
-                                if not succeeded:
-                                    gap_errors.append(str(result))
-                                    continue
-                                outcome = result
-                                if _outcome_failed(outcome):
-                                    gap_errors.extend(_outcome_errors(outcome))
-                                    continue
-
-                                gap_bars = _outcome_bars_written(outcome)
-                                if gap_bars > 0:
-                                    total_bars_filled += gap_bars
-                                    gaps_filled += 1
-                                    entry["bars_filled"] += gap_bars
-
-                            if entry["bars_filled"] > 0:
-                                entry["status"] = "filled"
-                                gap_desc = f"{len(interior_gaps)} 个内部缺口"
-                                if entry["message"]:
-                                    entry["message"] += f" + {gap_desc}"
-                                else:
-                                    entry["message"] = (
-                                        f"发现并修复 {gap_desc}，已补 {entry['bars_filled']} 条"
-                                    )
-                            elif entry["status"] == "ok":
-                                entry["status"] = "gap_found"
-                                entry["message"] = (
-                                    f"发现 {len(interior_gaps)} 个内部缺口但无法补回: "
-                                    + "; ".join(gap_errors)
-                                    if gap_errors else
-                                    f"发现 {len(interior_gaps)} 个内部缺口但无法补回"
-                                )
-
-                    if entry["status"] == "ok":
-                        entry["message"] = "数据完整 ✓"
-
-                    results.append(entry)
-
-                except Exception as exc:
-                    results.append({
-                        "exchange": exchange,
-                        "symbol": symbol,
-                        "interval": interval,
-                        "market_type": market_type,
-                        "total_bars": 0,
-                        "latest_data": "",
-                        "gap_hours": 0,
-                        "bars_filled": 0,
-                        "status": "error",
-                        "message": f"检查失败: {exc}",
-                    })
-
-            elapsed_ms = int(time.time() * 1000) - started_at_ms
-
-            if gaps_found == 0:
-                status = "ok"
-                message = "所有周期数据完整，无缺口 ✓"
-            elif gaps_filled == gaps_found:
-                status = "ok"
-                message = f"发现 {gaps_found} 个缺口，全部已修复 ✓"
-            elif gaps_filled > 0:
+            checked = sum(page.get("scanned_from_ms") is not None for page in results)
+            verified = sum(page["status"] in {"ok", "filled"} for page in results)
+            has_more = any(page.get("truncated") or page["status"] == "unscanned" for page in results)
+            failed = sum(page["status"] == "error" for page in results)
+            if errors or failed:
+                status = "partial" if verified else "error"
+                message = "检查包含失败，不能确认数据完整；请查看范围明细"
+            elif not results or all(page["status"] == "empty" for page in results):
+                status = "empty"
+                message = "所选范围没有可检查的数据"
+            elif has_more or verified != len(results):
                 status = "partial"
-                message = (
-                    f"发现 {gaps_found} 个缺口，修复 {gaps_filled} 个，"
-                    f"{gaps_found - gaps_filled} 个未修复"
-                )
+                message = "本次检查尚未完成或仍有缺口；请查看范围明细并继续检查"
             else:
-                status = "error"
-                message = f"发现 {gaps_found} 个缺口，均未能修复"
-
+                status = "ok"
+                message = "本次列出的检查范围已通过；不代表全部历史覆盖完整"
             return {
-                "status": status,
-                "message": message,
-                "exchange": exchange,
-                "market_type": market_type,
-                "symbols_filter": symbols_filter,
-                "scanned_series": len(results),
-                "gaps_found": gaps_found,
-                "gaps_filled": gaps_filled,
-                "total_bars_filled": total_bars_filled,
-                "elapsed_ms": elapsed_ms,
+                "status": status, "message": message,
+                "exchange": exchange, "market_type": market_type,
+                "symbols_filter": symbols_filter, "scope": "inspected_ranges",
+                "tail_policy": "active_series_only", "has_more": has_more,
+                "scanned_ranges": checked, "verified_ranges": verified,
+                "failed_ranges": failed, "errors": errors,
+                "elapsed_ms": int(time.time() * 1000) - started_at_ms,
                 "results": results,
             }
 
@@ -1603,46 +1476,6 @@ def _outcome_errors(outcome: Any) -> list[str]:
     if error:
         errors.append(str(error))
     return errors
-
-
-async def _request_repairs_bounded(
-    coordinator: RepairRequester,
-    requests: list[RepairRequest],
-    *,
-    max_concurrency: int,
-) -> list[tuple[bool, Any]]:
-    """Run repairs with a fixed worker count and stable result ordering."""
-    if not requests:
-        return []
-    results: list[tuple[bool, Any] | None] = [None] * len(requests)
-    next_index = 0
-
-    async def _worker() -> None:
-        nonlocal next_index
-        while next_index < len(requests):
-            index = next_index
-            next_index += 1
-            try:
-                results[index] = (
-                    True,
-                    await coordinator.request_and_wait(requests[index]),
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                # Fail closed: the caller records the error and never counts
-                # this gap as repaired.
-                results[index] = (False, exc)
-
-    workers = [
-        asyncio.create_task(_worker(), name=f"storage-gap-repair:{index}")
-        for index in range(min(max(1, int(max_concurrency)), len(requests)))
-    ]
-    await asyncio.gather(*workers)
-    return [
-        result if result is not None else (False, RuntimeError("repair did not run"))
-        for result in results
-    ]
 
 
 async def _find_storage_gap_ranges(

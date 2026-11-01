@@ -174,6 +174,17 @@ class EventRouter:
         """Return all registered (symbol, interval) targets."""
         return sorted(self._targets)
 
+    def get_series_targets(self) -> list[tuple[str, str, str, str, KlineSeriesIdentity]]:
+        """Return targets with their complete source/alignment identity."""
+        return [(*key, identity) for key, identities in self._target_identities.items()
+                for identity in identities]
+
+    def has_series_target(
+        self, symbol: str, interval: str, exchange: str, market_type: str,
+        identity: KlineSeriesIdentity,
+    ) -> bool:
+        return identity in self._target_identities.get((exchange, market_type, symbol, interval), ())
+
     def get_symbol_targets(
         self,
         symbol: str,

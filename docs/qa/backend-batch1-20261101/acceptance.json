@@ -1,0 +1,2233 @@
+{
+  "schema": "candlescope.backend-batch1-native/1",
+  "sourceCommit": "99d97c0d93c1ff1623c4029fb56d0b4465a6c3a2",
+  "transport": "packaged bundled backend, real public Binance HTTP and WebSocket, no response substitution",
+  "steps": [
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-01T05:29:53.165Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 75468,
+          "userData": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 75471,
+          "running": true,
+          "startedAt": "2026-11-01T05:29:41.150Z",
+          "readyMs": 11061,
+          "command": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:65491/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "native-js-values",
+      "at": "2026-11-01T05:29:59.706Z",
+      "evidence": [
+        {
+          "cellId": "cell-1",
+          "symbol": "BTCUSDT",
+          "interval": "1m",
+          "bars": 500,
+          "firstClosed": 1793480940,
+          "lastClosed": 1793510880,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-one",
+              "checked": 500,
+              "points": 500,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        },
+        {
+          "cellId": "cell-2",
+          "symbol": "BTCUSDT",
+          "interval": "1m",
+          "bars": 500,
+          "firstClosed": 1793480940,
+          "lastClosed": 1793510880,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-two",
+              "checked": 500,
+              "points": 500,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ui-practice-entry",
+      "at": "2026-11-01T05:30:00.405Z",
+      "evidence": {
+        "account": {
+          "id": "acc_7103b4a5f55a11187124",
+          "kind": "practice",
+          "name": "Batch 1 native practice",
+          "quoteCurrency": "USDT",
+          "settings": {
+            "initialBalance": "10000",
+            "leverage": "10",
+            "makerFeeRate": "0.0002",
+            "slippageBps": "1",
+            "takerFeeRate": "0.0005"
+          },
+          "createdAtMs": 1793511000220,
+          "archived": false,
+          "capabilities": {
+            "placeOrders": true,
+            "manualFills": false,
+            "sync": false
+          }
+        },
+        "order": {
+          "order": {
+            "id": "ord_b5fa617b9af3259e05dd",
+            "accountId": "acc_7103b4a5f55a11187124",
+            "exchange": "binance",
+            "marketType": "spot",
+            "symbol": "BTCUSDT",
+            "side": "buy",
+            "type": "market",
+            "qty": "0.001",
+            "limitPrice": null,
+            "stopPrice": null,
+            "reduceOnly": false,
+            "ocoGroup": null,
+            "tag": "entry",
+            "parentId": null,
+            "bracketStop": null,
+            "bracketTarget": null,
+            "status": "filled",
+            "createdAtMs": 1793511000365,
+            "updatedAtMs": 1793511000365,
+            "fillPrice": "77854.044626",
+            "filledQty": "0.001",
+            "filledAtMs": 1793511000365,
+            "reason": null
+          },
+          "priceSource": "chart",
+          "referencePrice": "77846.26"
+        }
+      }
+    },
+    {
+      "name": "position-only-feed",
+      "at": "2026-11-01T05:30:07.900Z",
+      "evidence": {
+        "summary": {
+          "account": {
+            "id": "acc_7103b4a5f55a11187124",
+            "kind": "practice",
+            "name": "Batch 1 native practice",
+            "quoteCurrency": "USDT",
+            "settings": {
+              "initialBalance": "10000",
+              "leverage": "10",
+              "makerFeeRate": "0.0002",
+              "slippageBps": "1",
+              "takerFeeRate": "0.0005"
+            },
+            "createdAtMs": 1793511000220,
+            "archived": false,
+            "capabilities": {
+              "placeOrders": true,
+              "manualFills": false,
+              "sync": false
+            }
+          },
+          "balance": "9999.961072977687",
+          "equity": "9999.976888351687",
+          "unrealizedPnl": "0.015815374",
+          "usedMargin": "77.86986",
+          "available": "9922.107028351687",
+          "positions": [
+            {
+              "id": "fil_a094bbbe23628de14dfa",
+              "accountId": "acc_7103b4a5f55a11187124",
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "direction": "long",
+              "status": "open",
+              "openedAtMs": 1793511000365,
+              "closedAtMs": null,
+              "openQty": "0.001",
+              "maxQty": "0.001",
+              "entryQty": "0.001",
+              "exitQty": "0",
+              "avgEntryPrice": "77854.044626",
+              "avgExitPrice": null,
+              "realizedPnl": "0",
+              "fees": "0.038927022313",
+              "netPnl": "-0.038927022313",
+              "markPrice": "77869.86",
+              "unrealizedPnl": "0.015815374",
+              "legs": [
+                {
+                  "fillId": "fil_a094bbbe23628de14dfa",
+                  "side": "buy",
+                  "role": "open",
+                  "qty": "0.001",
+                  "price": "77854.044626",
+                  "fee": "0.038927022313",
+                  "tsMs": 1793511000365,
+                  "liquidity": "taker",
+                  "orderId": "ord_b5fa617b9af3259e05dd"
+                }
+              ],
+              "markAtMs": 1793511007621,
+              "markSource": "practice"
+            }
+          ],
+          "workingOrders": [],
+          "feeds": [
+            {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "status": "live",
+              "detail": "",
+              "observedMs": 1793511007621,
+              "lastPrice": "77869.86",
+              "lagMs": 10,
+              "timing": {
+                "queueMs": 0,
+                "queryMs": 8,
+                "applyMs": 0,
+                "bars": 1,
+                "fills": 0,
+                "measuredAtMs": 1793511007630,
+                "wakeMs": 1,
+                "lagMs": 10
+              }
+            }
+          ],
+          "closedTrades": 0
+        },
+        "streamLeases": {
+          "series_count": 1,
+          "consumer_claims": 2,
+          "unique_consumers": 2,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 1,
+          "series": [
+            {
+              "key": "BTCUSDT@1m",
+              "consumer_count": 2
+            }
+          ]
+        },
+        "barDelivery": {
+          "mode": "durable",
+          "degraded": false,
+          "pending": 0,
+          "recovery_pending": 0,
+          "failures": 0,
+          "last_error": null,
+          "recovery_error": null,
+          "unconfirmed_receipt": false,
+          "active_submissions": 0,
+          "admission_rejected": 0,
+          "published": 0,
+          "rejected": 0
+        }
+      }
+    },
+    {
+      "name": "cold-custom-and-native-chart-values",
+      "at": "2026-11-01T05:30:29.192Z",
+      "evidence": [
+        {
+          "cellId": "cell-1",
+          "symbol": "ETHUSDT",
+          "interval": "7m",
+          "bars": 501,
+          "firstClosed": 1793300880,
+          "lastClosed": 1793510460,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-one",
+              "checked": 500,
+              "points": 501,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        },
+        {
+          "cellId": "cell-2",
+          "symbol": "SOLUSDT",
+          "interval": "15m",
+          "bars": 501,
+          "firstClosed": 1793061000,
+          "lastClosed": 1793510100,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-two",
+              "checked": 500,
+              "points": 501,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "position-feed-after-charts-switch",
+      "at": "2026-11-01T05:30:29.771Z",
+      "evidence": {
+        "summary": {
+          "account": {
+            "id": "acc_7103b4a5f55a11187124",
+            "kind": "practice",
+            "name": "Batch 1 native practice",
+            "quoteCurrency": "USDT",
+            "settings": {
+              "initialBalance": "10000",
+              "leverage": "10",
+              "makerFeeRate": "0.0002",
+              "slippageBps": "1",
+              "takerFeeRate": "0.0005"
+            },
+            "createdAtMs": 1793511000220,
+            "archived": false,
+            "capabilities": {
+              "placeOrders": true,
+              "manualFills": false,
+              "sync": false
+            }
+          },
+          "balance": "9999.961072977687",
+          "equity": "9999.977348351687",
+          "unrealizedPnl": "0.016275374",
+          "usedMargin": "77.87032",
+          "available": "9922.107028351687",
+          "positions": [
+            {
+              "id": "fil_a094bbbe23628de14dfa",
+              "accountId": "acc_7103b4a5f55a11187124",
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "direction": "long",
+              "status": "open",
+              "openedAtMs": 1793511000365,
+              "closedAtMs": null,
+              "openQty": "0.001",
+              "maxQty": "0.001",
+              "entryQty": "0.001",
+              "exitQty": "0",
+              "avgEntryPrice": "77854.044626",
+              "avgExitPrice": null,
+              "realizedPnl": "0",
+              "fees": "0.038927022313",
+              "netPnl": "-0.038927022313",
+              "markPrice": "77870.32",
+              "unrealizedPnl": "0.016275374",
+              "legs": [
+                {
+                  "fillId": "fil_a094bbbe23628de14dfa",
+                  "side": "buy",
+                  "role": "open",
+                  "qty": "0.001",
+                  "price": "77854.044626",
+                  "fee": "0.038927022313",
+                  "tsMs": 1793511000365,
+                  "liquidity": "taker",
+                  "orderId": "ord_b5fa617b9af3259e05dd"
+                }
+              ],
+              "markAtMs": 1793511028094,
+              "markSource": "practice"
+            }
+          ],
+          "workingOrders": [],
+          "feeds": [
+            {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "status": "live",
+              "detail": "",
+              "observedMs": 1793511028094,
+              "lastPrice": "77870.32",
+              "lagMs": 221,
+              "timing": {
+                "queueMs": 15,
+                "queryMs": 47,
+                "applyMs": 0,
+                "bars": 1,
+                "fills": 0,
+                "measuredAtMs": 1793511028142,
+                "wakeMs": 158,
+                "lagMs": 221
+              }
+            }
+          ],
+          "closedTrades": 0
+        },
+        "streamLeases": {
+          "series_count": 5,
+          "consumer_claims": 5,
+          "unique_consumers": 3,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 5,
+          "series": [
+            {
+              "key": "BTCUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@7m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@15m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@1m",
+              "consumer_count": 1
+            }
+          ]
+        },
+        "barDelivery": {
+          "mode": "durable",
+          "degraded": false,
+          "pending": 0,
+          "recovery_pending": 0,
+          "failures": 1,
+          "last_error": null,
+          "recovery_error": null,
+          "unconfirmed_receipt": false,
+          "active_submissions": 0,
+          "admission_rejected": 0,
+          "published": 0,
+          "rejected": 0
+        }
+      }
+    },
+    {
+      "name": "real-custom-component-updates",
+      "at": "2026-11-01T05:30:34.034Z",
+      "evidence": {
+        "before": {
+          "enabled": true,
+          "indexed_states": 1,
+          "appends": 2,
+          "tail_replacements": 8,
+          "rebuilds": 1,
+          "rebuilt_components": 1,
+          "summary_nodes": 4,
+          "estimated_bytes": 6144
+        },
+        "after": {
+          "enabled": true,
+          "indexed_states": 1,
+          "appends": 2,
+          "tail_replacements": 9,
+          "rebuilds": 1,
+          "rebuilt_components": 1,
+          "summary_nodes": 4,
+          "estimated_bytes": 6144
+        }
+      }
+    },
+    {
+      "name": "native-memory-gc-preserves-position",
+      "at": "2026-11-01T05:30:34.254Z",
+      "evidence": {
+        "gc": {
+          "generated_at_ms": 1793511034065,
+          "expires_at_ms": 1793511064065,
+          "mode": "execute",
+          "owner": "data-manager-memory",
+          "scoringVersion": 1,
+          "policy": {
+            "cold_idle_seconds": 0,
+            "max_total_bars": null,
+            "max_series": null,
+            "max_victims": 50,
+            "preserve_active": true,
+            "preserve_subscribed": true,
+            "ephemeral_keep_bars": 86400,
+            "max_estimated_bytes": null
+          },
+          "pressure": {
+            "total_bars": 4556,
+            "max_total_bars": 1150000,
+            "over_total_bars": 0,
+            "total_series": 10,
+            "max_series": 200,
+            "over_series": 0,
+            "runtime_hard_pressure": false,
+            "estimated_bytes": 2637924,
+            "over_estimated_bytes": 0
+          },
+          "runtimePressure": {
+            "processMemory": {
+              "available": true,
+              "source": "posix.ps-rss",
+              "rss_bytes": 272596992
+            },
+            "disk": {
+              "available": true,
+              "source": "shutil.disk_usage",
+              "path": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile/data/candlescope.db",
+              "total_bytes": 245107195904,
+              "used_bytes": 226290913280,
+              "free_bytes": 18816282624,
+              "used_ratio": 0.9232324348756791,
+              "free_ratio": 0.0767675651243209
+            }
+          },
+          "protected_count": 5,
+          "degraded_protected_memory": false,
+          "candidate_count": 5,
+          "victims": [
+            {
+              "owner": "data-manager-memory",
+              "key": "XRPUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "XRPUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511003406,
+              "generation": 6,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 30659,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:XRPUSDT|XRPUSDT@*",
+                  "key": "XRPUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "XRPUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:XRPUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993414
+                },
+                {
+                  "id": "price:binance:spot:XRPUSDT|XRPUSDT@*",
+                  "key": "XRPUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "XRPUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:XRPUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993414,
+                  "last_seen_ms": 1793510993414
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              }
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "ADAUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "ADAUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511004171,
+              "generation": 7,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 29894,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:ADAUSDT|ADAUSDT@*",
+                  "key": "ADAUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "ADAUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:ADAUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993481
+                },
+                {
+                  "id": "price:binance:spot:ADAUSDT|ADAUSDT@*",
+                  "key": "ADAUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "ADAUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:ADAUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993482,
+                  "last_seen_ms": 1793510993482
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              }
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "DOGEUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "DOGEUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511004742,
+              "generation": 8,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 29323,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:DOGEUSDT|DOGEUSDT@*",
+                  "key": "DOGEUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "DOGEUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:DOGEUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993504
+                },
+                {
+                  "id": "price:binance:spot:DOGEUSDT|DOGEUSDT@*",
+                  "key": "DOGEUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "DOGEUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:DOGEUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993504,
+                  "last_seen_ms": 1793510993504
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              }
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "LINKUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "LINKUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511005687,
+              "generation": 10,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 28378,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:LINKUSDT|LINKUSDT@*",
+                  "key": "LINKUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "LINKUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:LINKUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993338,
+                  "last_seen_ms": 1793510993524
+                },
+                {
+                  "id": "price:binance:spot:LINKUSDT|LINKUSDT@*",
+                  "key": "LINKUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "LINKUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:LINKUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993524,
+                  "last_seen_ms": 1793510993524
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              }
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "BNBUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BNBUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511006248,
+              "generation": 11,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 27817,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:BNBUSDT|BNBUSDT@*",
+                  "key": "BNBUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "BNBUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:BNBUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993338,
+                  "last_seen_ms": 1793510993537
+                },
+                {
+                  "id": "price:binance:spot:BNBUSDT|BNBUSDT@*",
+                  "key": "BNBUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "BNBUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:BNBUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993537,
+                  "last_seen_ms": 1793510993537
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              }
+            }
+          ],
+          "would_remove_series": 5,
+          "would_trim_series": 0,
+          "would_free_bars": 5,
+          "would_free_estimated_bytes": 2895,
+          "status": "ok",
+          "removed_series": 5,
+          "trimmed_series": 0,
+          "removed_bars": 5,
+          "removed_estimated_bytes": 2895,
+          "skipped_count": 0,
+          "unsupported_count": 0,
+          "results": [
+            {
+              "owner": "data-manager-memory",
+              "key": "XRPUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "XRPUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511003406,
+              "generation": 6,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 30659,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:XRPUSDT|XRPUSDT@*",
+                  "key": "XRPUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "XRPUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:XRPUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993414
+                },
+                {
+                  "id": "price:binance:spot:XRPUSDT|XRPUSDT@*",
+                  "key": "XRPUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "XRPUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:XRPUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993414,
+                  "last_seen_ms": 1793510993414
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              },
+              "removed_bars": 1,
+              "status": "removed"
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "ADAUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "ADAUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511004171,
+              "generation": 7,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 29894,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:ADAUSDT|ADAUSDT@*",
+                  "key": "ADAUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "ADAUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:ADAUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993481
+                },
+                {
+                  "id": "price:binance:spot:ADAUSDT|ADAUSDT@*",
+                  "key": "ADAUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "ADAUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:ADAUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993482,
+                  "last_seen_ms": 1793510993482
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              },
+              "removed_bars": 1,
+              "status": "removed"
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "DOGEUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "DOGEUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511004742,
+              "generation": 8,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 29323,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:DOGEUSDT|DOGEUSDT@*",
+                  "key": "DOGEUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "DOGEUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:DOGEUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993337,
+                  "last_seen_ms": 1793510993504
+                },
+                {
+                  "id": "price:binance:spot:DOGEUSDT|DOGEUSDT@*",
+                  "key": "DOGEUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "DOGEUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:DOGEUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993504,
+                  "last_seen_ms": 1793510993504
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              },
+              "removed_bars": 1,
+              "status": "removed"
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "LINKUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "LINKUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511005687,
+              "generation": 10,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 28378,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:LINKUSDT|LINKUSDT@*",
+                  "key": "LINKUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "LINKUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:LINKUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993338,
+                  "last_seen_ms": 1793510993524
+                },
+                {
+                  "id": "price:binance:spot:LINKUSDT|LINKUSDT@*",
+                  "key": "LINKUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "LINKUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:LINKUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993524,
+                  "last_seen_ms": 1793510993524
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              },
+              "removed_bars": 1,
+              "status": "removed"
+            },
+            {
+              "owner": "data-manager-memory",
+              "key": "BNBUSDT@1m",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BNBUSDT",
+              "interval": "1m",
+              "bars": 1,
+              "estimated_bytes": 579,
+              "earliest_time": 1793491200,
+              "latest_time": 1793491200,
+              "last_access_ms": 1793511006248,
+              "generation": 11,
+              "revision": 1,
+              "access_revision": 1,
+              "idle_ms": 27817,
+              "ephemeral": false,
+              "active": false,
+              "subscribed": false,
+              "subscriber_count": 0,
+              "lease_consumers": [],
+              "tier": "cold",
+              "protected": false,
+              "action": "delete-series",
+              "would_free_bars": 1,
+              "would_free_estimated_bytes": 579,
+              "reason": "cold-non-ephemeral-storage-backed",
+              "behaviorHeat": {},
+              "matchedIntents": [
+                {
+                  "id": "watchlist:spot:BNBUSDT|BNBUSDT@*",
+                  "key": "BNBUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "BNBUSDT",
+                  "interval": "*",
+                  "source": "watchlist:spot:BNBUSDT",
+                  "priority": "normal",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 10000,
+                  "detail": {
+                    "tier": "price",
+                    "scope": "watchlist"
+                  },
+                  "registered_at_ms": 1793510993338,
+                  "last_seen_ms": 1793510993537
+                },
+                {
+                  "id": "price:binance:spot:BNBUSDT|BNBUSDT@*",
+                  "key": "BNBUSDT@*",
+                  "exchange": "binance",
+                  "market_type": "spot",
+                  "symbol": "BNBUSDT",
+                  "interval": "*",
+                  "source": "price:binance:spot:BNBUSDT",
+                  "priority": "weak",
+                  "storage_allowed": true,
+                  "frontend_cache_allowed": false,
+                  "stream_required": false,
+                  "keep_rows": null,
+                  "effective_keep_rows": 1000,
+                  "detail": {
+                    "stream_type": "price"
+                  },
+                  "registered_at_ms": 1793510993537,
+                  "last_seen_ms": 1793510993537
+                }
+              ],
+              "restoreCostReason": "sqlite-reload",
+              "reuseReason": "no-recent-heat",
+              "scores": {
+                "gcValueScore": 10.004,
+                "restoreCostScore": 20,
+                "reuseProbabilityScore": 0,
+                "pressureScore": 10,
+                "finalEvictScore": 0
+              },
+              "removed_bars": 1,
+              "status": "removed"
+            }
+          ]
+        },
+        "streamLeases": {
+          "series_count": 5,
+          "consumer_claims": 5,
+          "unique_consumers": 3,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 5,
+          "series": [
+            {
+              "key": "BTCUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@7m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@15m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@1m",
+              "consumer_count": 1
+            }
+          ]
+        },
+        "cache": {
+          "total_series": 5,
+          "max_series": 200,
+          "max_bars_per_series": 5000,
+          "max_total_bars": 1150000,
+          "total_bars": 4551,
+          "hits": 115,
+          "misses": 41,
+          "evictions": 0,
+          "admission_rejected": 0,
+          "active_read_tokens": 0,
+          "rejected_read_refills": 6,
+          "history": {
+            "max_bars_per_series": 80000,
+            "max_series": 2,
+            "reservation_count": 1,
+            "reservation_requests": 7,
+            "reservation_capped": 0,
+            "reservation_demotions": 0,
+            "reservations": {
+              "ETHUSDT@1m": 10514
+            }
+          },
+          "series": {
+            "SOLUSDT@15m": {
+              "count": 1,
+              "max_bars": 5000,
+              "earliest_time": 1793511000,
+              "latest_time": 1793511000,
+              "last_access_ms": 1793511032427,
+              "generation": 37,
+              "revision": 1,
+              "access_revision": 1
+            },
+            "SOLUSDT@1m": {
+              "count": 330,
+              "max_bars": 5000,
+              "earliest_time": 1793491260,
+              "latest_time": 1793511000,
+              "last_access_ms": 1793511032434,
+              "generation": 36,
+              "revision": 2,
+              "access_revision": 331
+            },
+            "BTCUSDT@1m": {
+              "count": 2,
+              "max_bars": 5000,
+              "earliest_time": 1793510940,
+              "latest_time": 1793511000,
+              "last_access_ms": 1793511033685,
+              "generation": 35,
+              "revision": 3,
+              "access_revision": 9
+            },
+            "ETHUSDT@1m": {
+              "count": 3690,
+              "max_bars": 10514,
+              "earliest_time": 1793289540,
+              "latest_time": 1793511000,
+              "last_access_ms": 1793511033697,
+              "generation": 39,
+              "revision": 2,
+              "access_revision": 3
+            },
+            "ETHUSDT@7m": {
+              "count": 528,
+              "max_bars": 5000,
+              "earliest_time": 1793289540,
+              "latest_time": 1793510880,
+              "last_access_ms": 1793511033721,
+              "generation": 38,
+              "revision": 4,
+              "access_revision": 30
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "saved-workspace",
+      "at": "2026-11-01T05:30:34.267Z",
+      "evidence": {
+        "workspaceId": "workspace-default",
+        "windowId": "main-window",
+        "name": "默认工作区",
+        "revision": 5,
+        "ready": true,
+        "layout": "split-vertical",
+        "layoutLocked": false,
+        "maxCellsPerWindow": 4,
+        "activeCellId": "cell-1",
+        "persistence": {
+          "state": "saved",
+          "mode": "indexeddb",
+          "error": null
+        },
+        "cells": [
+          {
+            "cellId": "cell-1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "ETHUSDT",
+              "interval": "7m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "batch-js-one",
+                "params": {},
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "ETHUSDT",
+                "interval": "7m"
+              },
+              "indicatorSignature": "[[\"batch-js-one\",null,{},\"script\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 501,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                501
+              ],
+              "error": null
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "SOLUSDT",
+              "interval": "15m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "linkGroupId": null,
+            "indicators": [
+              {
+                "id": "batch-js-two",
+                "params": {},
+                "executionTarget": "local"
+              }
+            ],
+            "runtime": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "SOLUSDT",
+                "interval": "15m"
+              },
+              "indicatorSignature": "[[\"batch-js-two\",null,{},\"script\",\"local\",true]]",
+              "marketReady": true,
+              "indicatorsReady": true,
+              "barCount": 501,
+              "loading": false,
+              "initialHistoryPending": false,
+              "loadingMoreLeft": false,
+              "paused": false,
+              "computing": false,
+              "indicatorErrors": [],
+              "indicatorOutputPoints": [
+                501
+              ],
+              "error": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-process-exit",
+      "at": "2026-11-01T05:30:49.646Z",
+      "evidence": {
+        "processes": [
+          {
+            "pid": 75468,
+            "ppid": 75449,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 75469,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 75470,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 75471,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 75507,
+            "ppid": 75471,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 75539,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12304525610 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=65491 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 75542,
+            "ppid": 75471,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(59)"
+          },
+          {
+            "pid": 75543,
+            "ppid": 75471,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=60, pipe_handle=66) --multiprocessing-fork"
+          },
+          {
+            "pid": 75848,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=24 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12337311332 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709008800875870"
+          },
+          {
+            "pid": 75849,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=25 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12339263448 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709009737917719"
+          },
+          {
+            "pid": 75864,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=26 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12339668721 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709010674959568"
+          },
+          {
+            "pid": 75865,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=27 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12340752114 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709011612001417"
+          },
+          {
+            "pid": 75867,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=28 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12341176983 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709012549043266"
+          },
+          {
+            "pid": 75871,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=29 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12342497370 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709013486085115"
+          },
+          {
+            "pid": 75878,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=30 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12345075303 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709014423126964"
+          },
+          {
+            "pid": 75882,
+            "ppid": 75468,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=31 --time-ticks-at-unix-epoch=-1793498687818074 --launch-time-ticks=12346155791 --shared-files --field-trial-handle=1718379636,r,8518056278035316926,6487476321517283363,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,15653403192910161103,11854939606968100109,4 --trace-process-track-uuid=3190709015360168813"
+          }
+        ],
+        "allExited": true,
+        "elapsedMs": 15274
+      }
+    },
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-01T05:31:01.613Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 75979,
+          "userData": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 75985,
+          "running": true,
+          "startedAt": "2026-11-01T05:30:50.020Z",
+          "readyMs": 10402,
+          "command": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:51255/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "restart-chart-values",
+      "at": "2026-11-01T05:31:04.819Z",
+      "evidence": [
+        {
+          "cellId": "cell-1",
+          "symbol": "ETHUSDT",
+          "interval": "7m",
+          "bars": 500,
+          "firstClosed": 1793300880,
+          "lastClosed": 1793510460,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-one",
+              "checked": 500,
+              "points": 500,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        },
+        {
+          "cellId": "cell-2",
+          "symbol": "SOLUSDT",
+          "interval": "15m",
+          "bars": 500,
+          "firstClosed": 1793061000,
+          "lastClosed": 1793510100,
+          "backendRows": 500,
+          "lines": [
+            {
+              "id": "batch-js-two",
+              "checked": 500,
+              "points": 500,
+              "transform": {
+                "scale": 1,
+                "offset": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "restart-position-only-feed",
+      "at": "2026-11-01T05:31:37.907Z",
+      "evidence": {
+        "summary": {
+          "account": {
+            "id": "acc_7103b4a5f55a11187124",
+            "kind": "practice",
+            "name": "Batch 1 native practice",
+            "quoteCurrency": "USDT",
+            "settings": {
+              "initialBalance": "10000",
+              "leverage": "10",
+              "makerFeeRate": "0.0002",
+              "slippageBps": "1",
+              "takerFeeRate": "0.0005"
+            },
+            "createdAtMs": 1793511000220,
+            "archived": false,
+            "capabilities": {
+              "placeOrders": true,
+              "manualFills": false,
+              "sync": false
+            }
+          },
+          "balance": "9999.961072977687",
+          "equity": "9999.977508351687",
+          "unrealizedPnl": "0.016435374",
+          "usedMargin": "77.87048",
+          "available": "9922.107028351687",
+          "positions": [
+            {
+              "id": "fil_a094bbbe23628de14dfa",
+              "accountId": "acc_7103b4a5f55a11187124",
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "direction": "long",
+              "status": "open",
+              "openedAtMs": 1793511000365,
+              "closedAtMs": null,
+              "openQty": "0.001",
+              "maxQty": "0.001",
+              "entryQty": "0.001",
+              "exitQty": "0",
+              "avgEntryPrice": "77854.044626",
+              "avgExitPrice": null,
+              "realizedPnl": "0",
+              "fees": "0.038927022313",
+              "netPnl": "-0.038927022313",
+              "markPrice": "77870.48",
+              "unrealizedPnl": "0.016435374",
+              "legs": [
+                {
+                  "fillId": "fil_a094bbbe23628de14dfa",
+                  "side": "buy",
+                  "role": "open",
+                  "qty": "0.001",
+                  "price": "77854.044626",
+                  "fee": "0.038927022313",
+                  "tsMs": 1793511000365,
+                  "liquidity": "taker",
+                  "orderId": "ord_b5fa617b9af3259e05dd"
+                }
+              ],
+              "markAtMs": 1793511097146,
+              "markSource": "practice"
+            }
+          ],
+          "workingOrders": [],
+          "feeds": [
+            {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "status": "live",
+              "detail": "",
+              "observedMs": 1793511097146,
+              "lastPrice": "77870.48",
+              "lagMs": 432,
+              "timing": {
+                "queueMs": 52,
+                "queryMs": 371,
+                "applyMs": 0,
+                "bars": 0,
+                "fills": 0,
+                "measuredAtMs": 1793511096077,
+                "wakeMs": 9,
+                "lagMs": 432
+              }
+            }
+          ],
+          "closedTrades": 0
+        },
+        "streamLeases": {
+          "series_count": 5,
+          "consumer_claims": 5,
+          "unique_consumers": 3,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 5,
+          "series": [
+            {
+              "key": "BTCUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@7m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@15m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@1m",
+              "consumer_count": 1
+            }
+          ]
+        },
+        "barDelivery": {
+          "mode": "durable",
+          "degraded": false,
+          "pending": 0,
+          "recovery_pending": 0,
+          "failures": 0,
+          "last_error": null,
+          "recovery_error": null,
+          "unconfirmed_receipt": false,
+          "active_submissions": 0,
+          "admission_rejected": 0,
+          "published": 0,
+          "rejected": 0
+        }
+      }
+    },
+    {
+      "name": "final-close-releases-practice-demand",
+      "at": "2026-11-01T05:31:39.862Z",
+      "evidence": {
+        "order": {
+          "order": {
+            "id": "ord_5df041649a93c7e56d10",
+            "accountId": "acc_7103b4a5f55a11187124",
+            "exchange": "binance",
+            "marketType": "spot",
+            "symbol": "BTCUSDT",
+            "side": "sell",
+            "type": "market",
+            "qty": "0.001",
+            "limitPrice": null,
+            "stopPrice": null,
+            "reduceOnly": true,
+            "ocoGroup": null,
+            "tag": "exit",
+            "parentId": null,
+            "bracketStop": null,
+            "bracketTarget": null,
+            "status": "filled",
+            "createdAtMs": 1793511098818,
+            "updatedAtMs": 1793511098818,
+            "fillPrice": "77876.2116",
+            "filledQty": "0.001",
+            "filledAtMs": 1793511098818,
+            "reason": null
+          },
+          "priceSource": "practice_feed",
+          "referencePrice": "77884"
+        },
+        "summary": {
+          "account": {
+            "id": "acc_7103b4a5f55a11187124",
+            "kind": "practice",
+            "name": "Batch 1 native practice",
+            "quoteCurrency": "USDT",
+            "settings": {
+              "initialBalance": "10000",
+              "leverage": "10",
+              "makerFeeRate": "0.0002",
+              "slippageBps": "1",
+              "takerFeeRate": "0.0005"
+            },
+            "createdAtMs": 1793511000220,
+            "archived": false,
+            "capabilities": {
+              "placeOrders": true,
+              "manualFills": false,
+              "sync": false
+            }
+          },
+          "balance": "9999.944301845887",
+          "equity": "9999.944301845887",
+          "unrealizedPnl": "0",
+          "usedMargin": "0",
+          "available": "9999.944301845887",
+          "positions": [],
+          "workingOrders": [],
+          "feeds": [],
+          "closedTrades": 1
+        },
+        "before": {
+          "series_count": 5,
+          "consumer_claims": 5,
+          "unique_consumers": 3,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 5,
+          "series": [
+            {
+              "key": "BTCUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@7m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@15m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@1m",
+              "consumer_count": 1
+            }
+          ]
+        },
+        "after": {
+          "series_count": 4,
+          "consumer_claims": 4,
+          "unique_consumers": 2,
+          "max_active_series": 128,
+          "detail_offset": 0,
+          "detail_limit": 50,
+          "detail_total": 4,
+          "series": [
+            {
+              "key": "ETHUSDT@1m",
+              "consumer_count": 1
+            },
+            {
+              "key": "ETHUSDT@7m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@15m",
+              "consumer_count": 1
+            },
+            {
+              "key": "SOLUSDT@1m",
+              "consumer_count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "integrated-manual-audit",
+      "at": "2026-11-01T05:31:50.131Z",
+      "evidence": {
+        "status": "partial",
+        "message": "本次检查尚未完成或仍有缺口；请查看范围明细并继续检查",
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbols_filter": [
+          "ETHUSDT"
+        ],
+        "scope": "inspected_ranges",
+        "tail_policy": "active_series_only",
+        "has_more": false,
+        "scanned_ranges": 4,
+        "verified_ranges": 1,
+        "failed_ranges": 0,
+        "errors": [],
+        "elapsed_ms": 9014,
+        "results": [
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "ETHUSDT",
+            "interval": "1m",
+            "lane": "tail",
+            "status": "ok",
+            "scanned_from_ms": 1793451060000,
+            "scanned_to_ms": 1793511000000,
+            "scanned_bars": 1000,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "ETHUSDT",
+            "interval": "1m",
+            "lane": "interior",
+            "status": "pending",
+            "scanned_from_ms": 1793056020000,
+            "scanned_to_ms": 1793511000000,
+            "scanned_bars": 5638,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 1,
+            "remaining_gaps": 1,
+            "remaining_missing_bars": 973,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": true,
+            "repair_pending": true,
+            "message": "回补仍在进行，本次范围尚有缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "ETHUSDT",
+            "interval": "7m",
+            "lane": "tail",
+            "status": "gap_found",
+            "scanned_from_ms": 1793090880000,
+            "scanned_to_ms": 1793510460000,
+            "scanned_bars": 583,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 1,
+            "remaining_gaps": 2,
+            "remaining_missing_bars": 278,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 1,
+            "bars_filled": 0,
+            "repair_errors": [
+              "共享回补暂缓此缺口: repairing"
+            ],
+            "verified_after_repair": true,
+            "repair_pending": false,
+            "message": "本次范围尚有缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "ETHUSDT",
+            "interval": "7m",
+            "lane": "interior",
+            "status": "gap_found",
+            "scanned_from_ms": 1793056020000,
+            "scanned_to_ms": 1793510460000,
+            "scanned_bars": 666,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 1,
+            "remaining_gaps": 2,
+            "remaining_missing_bars": 278,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 1,
+            "bars_filled": 0,
+            "repair_errors": [
+              "共享回补暂缓此缺口: repairing"
+            ],
+            "verified_after_repair": true,
+            "repair_pending": false,
+            "message": "本次范围尚有缺口"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-process-exit",
+      "at": "2026-11-01T05:32:05.818Z",
+      "evidence": {
+        "processes": [
+          {
+            "pid": 75979,
+            "ppid": 75449,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 75983,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 75984,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 75985,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 76022,
+            "ppid": 75985,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 76053,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12372799173 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=51255 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 76055,
+            "ppid": 75985,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(69)"
+          },
+          {
+            "pid": 76056,
+            "ppid": 75985,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=76, pipe_handle=78) --multiprocessing-fork"
+          },
+          {
+            "pid": 76234,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=18 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12412019051 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709003178624776"
+          },
+          {
+            "pid": 76238,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=19 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12413548579 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709004115666625"
+          },
+          {
+            "pid": 76243,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=20 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12414868694 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709005052708474"
+          },
+          {
+            "pid": 76244,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=21 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12415459540 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709005989750323"
+          },
+          {
+            "pid": 76249,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=22 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12416563532 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709006926792172"
+          },
+          {
+            "pid": 76252,
+            "ppid": 75979,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-integration-20261101/CandleScope/output/batch1-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=23 --time-ticks-at-unix-epoch=-1793498687816279 --launch-time-ticks=12419489061 --shared-files --field-trial-handle=1718379636,r,2029194123507895438,14039145863128390358,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,4772358298826695816,12839454107528552676,4 --trace-process-track-uuid=3190709007863834021"
+          }
+        ],
+        "allExited": true,
+        "elapsedMs": 15266
+      }
+    }
+  ],
+  "errors": [],
+  "scope": {
+    "pullRequests": [
+      178,
+      188,
+      189,
+      190,
+      191
+    ],
+    "platform": "macOS arm64",
+    "realProvider": "Binance public",
+    "practice": "isolated profile, virtual funds only",
+    "notCovered": [
+      "Windows/x64 installed acceptance",
+      "full 157-item acceptance",
+      "all resource owners from #156",
+      "HEDGE/exchange account execution from #177"
+    ]
+  },
+  "passed": true
+}

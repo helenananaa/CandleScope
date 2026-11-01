@@ -28,7 +28,7 @@ export default function SettingsPanelHost({
   onOpenDataWorkbench,
 }: SettingsPanelHostProps) {
   useLocale();
-  const [dataView, setDataView] = useState<"library" | "storage">("library");
+  const [dataView, setDataView] = useState<"library" | "storage" | "maintenance">("library");
   switch (activeCategory) {
     case "appearance":
       return <ChartAppearancePanel {...panelModel.appearance} />;
@@ -42,10 +42,13 @@ export default function SettingsPanelHost({
           <nav className="settings-data-navigation" aria-label={t("settings.category.data")}>
             <button type="button" aria-pressed={dataView === "library"} onClick={() => setDataView("library")}>{t("ux.dataLibrary")}</button>
             <button type="button" aria-pressed={dataView === "storage"} onClick={() => setDataView("storage")}>{t("ux.storage")}</button>
+            <button type="button" aria-pressed={dataView === "maintenance"} onClick={() => setDataView("maintenance")}>{t("settings.maint.title")}</button>
           </nav>
           <section hidden={dataView !== "library"}>
             <a className="st-btn st-btn-primary" href="/strategy.html?action=import">{t("research.source.openLibrary")}</a>
             <DataWorkbenchLaunchPanel onOpen={onOpenDataWorkbench} />
+          </section>
+          <section hidden={dataView !== "maintenance"}>
             <StorageMaintenancePanel {...panelModel.data.maintenance} />
           </section>
           <section hidden={dataView !== "storage"}>

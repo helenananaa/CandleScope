@@ -256,7 +256,10 @@ export class TrainingHubLifecycle {
   }
 
   refresh(): void {
-    if (this.disposed) return;
+    // PreparationJobsPanel may observe READY before createRun finishes reading
+    // that run. A list refresh must not steal its request token/navigation (or
+    // the token of another foreground dialog operation).
+    if (this.disposed || (this.operation !== null && this.operation !== "list")) return;
     void this.loadRuns(false, null);
   }
 
