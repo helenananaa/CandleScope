@@ -17,7 +17,7 @@ export const sessionSchema = schema<ChartSession>(sessionInput.jsonSchema, (v) =
   if (canonicalizeIntervalValue(parsed.interval) !== parsed.interval) throw new Error("INVALID_INTERVAL");
   return parsed;
 });
-const policyInput = object({ market: optional(bool), interval: optional(bool), crosshair: optional(bool), timeAnchor: optional(bool), dateRange: optional(bool), drawings: optional(bool),
+const policyInput = object({ market: optional(bool), interval: optional(bool), crosshair: optional(bool), timeAnchor: optional(bool), dateRange: optional(bool), drawings: optional(bool), chartStyle: optional(bool),
     indicators: optional(object({ definitions: optional(bool), parameters: optional(bool), visual: optional(bool), paneLayout: optional(bool) })) });
 const policy = schema<ChartLinkGroupSettingsPatch>(policyInput.jsonSchema, (v) => policyInput.parse(v) as ChartLinkGroupSettingsPatch);
 

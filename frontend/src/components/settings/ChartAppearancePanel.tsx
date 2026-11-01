@@ -34,6 +34,7 @@ function priceBoxSizeMode(value: string): PriceBoxSizeMode {
 }
 
 export interface ChartAppearancePanelProps {
+    appearanceScope?: "chart" | "application";
     settings: ChartSettings;
     onUpdate(settings: ChartSettings): void;
 }
@@ -42,7 +43,7 @@ const GREEN = '#22c55e';
 const RED = '#ef4444';
 const sameColor = (a: string | undefined, b: string) => String(a || '').toLowerCase() === b;
 
-export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppearancePanelProps) {
+export default function ChartAppearancePanel({ settings, onUpdate, appearanceScope = "application" }: ChartAppearancePanelProps) {
     useLocale();
     const [loadingLocale, setLoadingLocale] = useState(false);
     const [localeError, setLocaleError] = useState(false);
@@ -91,7 +92,7 @@ export default function ChartAppearancePanel({ settings, onUpdate }: ChartAppear
 
             <div className="st-group">
                 <div className="st-group-title">{t("settings.appearance.themeTitle")}</div>
-                <div className="st-group-desc">{t("settings.appearance.themeDescription")}</div>
+                <div className="st-group-desc">{t(appearanceScope === "chart" ? "settings.appearance.cellThemeDescription" : "settings.appearance.themeDescription")}</div>
                 <div className="st-theme-grid st-appearance-theme-grid">
                     {THEME_OPTIONS.map((theme) => (
                         <button

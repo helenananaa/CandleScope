@@ -27,6 +27,7 @@ interface LocalizationBundle {
 
 interface PaneAppearanceOptions {
   theme?: string;
+  inheritApplicationTheme?: boolean;
   customBg?: string;
   timezone?: string;
   interval?: string;
@@ -176,13 +177,13 @@ export function buildCrosshairOptions(visible = true): DeepPartial<CrosshairOpti
   };
 }
 
-export function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): {
+export function getPaneThemeColors({ theme, customBg, inheritApplicationTheme = true }: PaneAppearanceOptions): {
   bgColor: string;
   textColor: string;
   gridColor: string;
   borderColor: string;
 } {
-  const extension = getExtensionState().theme;
+  const extension = inheritApplicationTheme ? getExtensionState().theme : null;
   const tokens = extension?.tokens;
   theme = extension?.base ?? theme;
   return {
@@ -198,6 +199,7 @@ export function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): 
 export function buildChartPaneOptions({
   container,
   theme,
+  inheritApplicationTheme = true,
   customBg,
   timezone,
   interval,
@@ -211,6 +213,7 @@ export function buildChartPaneOptions({
 }): AdapterChartOptions {
   const loc = buildLocalizationOptions(timezone, interval);
   const { bgColor, textColor, gridColor, borderColor } = getPaneThemeColors({
+    inheritApplicationTheme,
     ...(theme !== undefined ? { theme } : {}),
     ...(customBg !== undefined ? { customBg } : {}),
   });
@@ -264,6 +267,7 @@ export function applyChartPaneAppearance(
   chart: IChartApiBase<ChartTime>,
   {
     theme,
+    inheritApplicationTheme = true,
     customBg,
     timezone,
     interval,
@@ -274,6 +278,7 @@ export function applyChartPaneAppearance(
 ): void {
   const loc = buildLocalizationOptions(timezone, interval);
   const { bgColor, textColor, gridColor, borderColor } = getPaneThemeColors({
+    inheritApplicationTheme,
     ...(theme !== undefined ? { theme } : {}),
     ...(customBg !== undefined ? { customBg } : {}),
   });

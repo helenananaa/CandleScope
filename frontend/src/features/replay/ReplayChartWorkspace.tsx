@@ -1,3 +1,5 @@
+import { applicationSettingsPatch, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
+import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { PageDrawingExportRegistry } from "../export/pageDrawingExport.js";
 import { ReplayIntervalViewportTransfers } from "./replayIntervalViewportTransfers.js";
@@ -150,14 +152,21 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     save: (indicators) => workspace.actions.updateCellIndicators(cell.id, indicators),
   }), [cell.id, cell.indicators, workspace.actions]);
   const indicators = useReplaySharedIndicatorRuntime(runtime, viewer, scope, persistence);
+  const resolvedTheme = useCellChartTheme(cell.chartSettings.theme, globalSettings.resolvedTheme);
   const settings = useMemo<ChartSettingsRuntime>(() => ({
     ...globalSettings,
+    appearanceScope: "chart",
+    inheritApplicationTheme: cell.chartSettings.theme === undefined,
     settings: { ...globalSettings.settings, ...cell.chartSettings },
+    resolvedTheme,
     setSettings: (update) => {
       const current = { ...globalSettings.settings, ...cell.chartSettings };
-      workspace.actions.updateCellChartSettings(cell.id, typeof update === "function" ? update(current) : update);
+      const next = normalizeSettings(typeof update === "function" ? update(current) : update);
+      workspace.actions.updateCellChartSettings(cell.id, nextCellChartSettings(cell.chartSettings, current, next));
+      const applicationPatch = applicationSettingsPatch(current, next);
+      if (Object.keys(applicationPatch).length) globalSettings.setSettings(previous => ({ ...previous, ...applicationPatch }));
     },
-  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions]);
+  }), [cell.chartSettings, cell.id, globalSettings, workspace.actions, resolvedTheme]);
   const cellIntegrity = useMemo<ReplayIntegrityRuntime>(() => integrity.review === null ? integrity : ({
     ...integrity,
     review: {

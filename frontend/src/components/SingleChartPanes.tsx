@@ -319,6 +319,7 @@ export interface SingleChartPanesProps {
   kagiReversalAmount?: number;
   lineBreakNumberOfLines?: number;
   theme: string;
+  inheritApplicationTheme?: boolean;
   customBg: string;
   timezone?: string;
   timeFormatter?: ((timeSeconds: number) => string) | undefined;
@@ -842,6 +843,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   kagiReversalAmount = 1,
   lineBreakNumberOfLines = 3,
   theme,
+  inheritApplicationTheme = true,
   customBg,
   timezone = "Local",
   timeFormatter,
@@ -2599,9 +2601,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     mainSeriesReferenceRef.current = { series, signature };
   }, []);
 
-  const readSurfaceAppearance = useEffectEvent(() => ({ theme, customBg, timezone, upColor, downColor }));
+  const readSurfaceAppearance = useEffectEvent(() => ({ theme, inheritApplicationTheme, customBg, timezone, upColor, downColor }));
   useEffect(() => {
-    const { theme, customBg, timezone, upColor, downColor } = readSurfaceAppearance();
+    const { theme, inheritApplicationTheme, customBg, timezone, upColor, downColor } = readSurfaceAppearance();
     const container = containerRef.current;
     if (!container) return undefined;
     linkedViewportReadyStateRef.current = false;
@@ -2616,6 +2618,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const options = buildChartPaneOptions({
       container,
       theme,
+      inheritApplicationTheme,
       customBg,
       timezone,
       interval: intervalRef.current,
@@ -2993,7 +2996,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         console.warn("[drawing-engine] surface disposal continued after drawing teardown failed closed");
       }
     };
-  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, timezone, upColor]);
+  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, inheritApplicationTheme, timezone, upColor]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -3246,6 +3249,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const applyAppearance = () => {
       applyChartPaneAppearance(chart, {
         theme,
+        inheritApplicationTheme,
         customBg,
         timezone,
         interval,
@@ -3349,7 +3353,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }
     });
     return () => cancelAnimationFrame(frameId);
-  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, extensionTheme, interval, locale, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
+  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, extensionTheme, interval, locale, notifyDrawingFrameInvalidation, theme, inheritApplicationTheme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
 
   // When the loaded window stops short of the newest bars, its last bar is not the
   // current price, so the axis price tag and price line would show a stale value.
@@ -4760,7 +4764,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !indicatorDatasetOwned) return;
-    const bgColor = getPaneThemeColors({ theme, customBg }).bgColor;
+    const bgColor = getPaneThemeColors({ theme, customBg, inheritApplicationTheme }).bgColor;
     const activePaneIds = new Set(paneDescriptors.map((pane) => pane.id));
 
     for (const pane of paneDescriptors) {
@@ -4821,7 +4825,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       clearPaneAuxiliaryRenderState(chart, paneId, state);
       paneRenderStateRef.current.delete(paneId);
     }
-  }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
+  }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme, inheritApplicationTheme]);
 
   useEffect(() => {
     const chart = chartRef.current;

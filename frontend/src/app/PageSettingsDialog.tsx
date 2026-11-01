@@ -59,7 +59,7 @@ export default function PageSettingsDialog({
             </button>
           </div>
           <div className="st-content-body">
-            <ChartAppearancePanel settings={runtime.settings} onUpdate={runtime.setSettings} />
+            <ChartAppearancePanel appearanceScope={runtime.appearanceScope ?? "application"} settings={runtime.settings} onUpdate={runtime.setSettings} />
           </div>
         </main>
       </div>

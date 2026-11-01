@@ -1,6 +1,5 @@
 import {
   CHART_DRAWING_LAYER_SET_IDS,
-  CELL_CHART_SETTING_KEYS,
   type ChartCellCreationMode,
   type ChartCellChartSettings,
   type ChartCellId,
@@ -12,7 +11,7 @@ import {
   type ChartWorkspaceSplitDirection,
   type ChartWorkspaceTemplateId,
 } from "./chartWorkspaceTypes.js";
-import { DEFAULT_SETTINGS } from "../settings/chartAppearanceSettings.js";
+import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import {
   LEGACY_VISIBLE_CELLS_PER_WINDOW,
   MAX_CELLS_PER_APP,
@@ -91,9 +90,7 @@ function blankDrawingLayer(
 }
 
 function blankChartSettings(): ChartCellChartSettings {
-  return Object.fromEntries(
-    CELL_CHART_SETTING_KEYS.map((key) => [key, DEFAULT_SETTINGS[key]]),
-  ) as ChartCellChartSettings;
+  return pickCellChartSettings({});
 }
 
 function blankCell(

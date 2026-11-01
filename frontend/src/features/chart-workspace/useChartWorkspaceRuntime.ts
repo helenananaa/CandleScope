@@ -1,3 +1,4 @@
+import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
 import {
@@ -34,7 +35,6 @@ import {
 } from "./chartWorkspaceRepository.js";
 import {
   CHART_LINK_GROUP_COLORS,
-  CELL_CHART_SETTING_KEYS,
   DEFAULT_CHART_LINK_GROUP_SETTINGS,
   MAX_CHART_LINK_GROUP_DEPTH,
   type ChartCellCreationMode,
@@ -80,6 +80,7 @@ import {
   applyChartLinkGroupPolicyUpdate,
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
+  applyLinkedChartSettingsUpdate,
   assignCellLinkGroup,
   assignCellsLinkGroup,
   chartLinkGroupDepth,
@@ -231,19 +232,6 @@ export interface ScopedChartWorkspaceLayoutEdit {
 
 type ChartWorkspaceLibraryUpdate = ChartWorkspaceLibrarySnapshot
   | ((current: ChartWorkspaceLibrarySnapshot) => ChartWorkspaceLibrarySnapshot);
-
-function pickCellChartSettings(settings: ChartSettings | ChartCellChartSettings): ChartCellChartSettings {
-  return Object.fromEntries(
-    CELL_CHART_SETTING_KEYS.map((key) => [key, settings[key]]),
-  ) as ChartCellChartSettings;
-}
-
-function sameCellChartSettings(
-  left: ChartCellChartSettings,
-  right: ChartCellChartSettings,
-): boolean {
-  return CELL_CHART_SETTING_KEYS.every((key) => left[key] === right[key]);
-}
 
 function sameCellPriceScale(
   left: ChartCellPriceScale,
@@ -930,15 +918,7 @@ export function useChartWorkspaceRuntime(
     settings: ChartSettings | ChartCellChartSettings,
   ) => {
     const chartSettings = pickCellChartSettings(settings);
-    updateActiveDocument((current) => {
-      const cell = chartWorkspaceCell(current, cellId);
-      return sameCellChartSettings(cell.chartSettings, chartSettings)
-        ? current
-        : {
-          ...current,
-          cells: { ...current.cells, [cellId]: { ...cell, chartSettings } },
-        };
-    });
+    updateActiveDocument((current) => applyLinkedChartSettingsUpdate(current, cellId, chartSettings));
   }, [updateActiveDocument]);
 
   const updateCellPriceScale = useCallback((

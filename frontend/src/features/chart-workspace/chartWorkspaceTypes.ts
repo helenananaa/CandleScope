@@ -81,7 +81,12 @@ export const CELL_CHART_SETTING_KEYS = [
 ] as const satisfies readonly (keyof ChartSettings)[];
 
 export type CellChartSettingKey = (typeof CELL_CHART_SETTING_KEYS)[number];
-export type ChartCellChartSettings = Pick<ChartSettings, CellChartSettingKey>;
+export const CELL_CHART_APPEARANCE_KEYS = ["theme", "customBg", "upColor", "downColor"] as const;
+export type CellChartAppearanceKey = (typeof CELL_CHART_APPEARANCE_KEYS)[number];
+// Missing appearance overrides inherit the application preference. Legacy
+// workspaces must not replace a user's saved colors with today's defaults.
+export type ChartCellChartSettings = Pick<ChartSettings, CellChartSettingKey>
+  & Partial<Pick<ChartSettings, CellChartAppearanceKey>>;
 
 export interface ChartCellPriceScale {
   invertScale: boolean;
@@ -117,6 +122,7 @@ export interface ChartLinkGroupSettings {
   timeAnchor: boolean;
   dateRange: boolean;
   drawings: boolean;
+  chartStyle?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -209,6 +215,7 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   timeAnchor: false,
   dateRange: true,
   drawings: false,
+  chartStyle: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,

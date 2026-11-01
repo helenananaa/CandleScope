@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   buildChartPaneOptions,
+  applyChartPaneAppearance,
+  getPaneThemeColors,
   buildLocalizationOptions,
 } from "../chartPaneLifecycle.js";
+import { getExtensionState, publishExtensions } from "../../features/extensions/state.js";
 import { structuralMock } from "../../test/testHelpers.js";
 import { getLocale, setLocale } from "../../i18n/locale.js";
 
@@ -60,4 +63,28 @@ test("CJK date ticks use the locale's own short date instead of day-number pairs
   } finally {
     setLocale(previous);
   }
+});
+
+
+test("explicit chart themes override extension tokens while inherited charts follow the application", () => {
+  const previous = getExtensionState().theme;
+  publishExtensions({ theme: { base: "dark", tokens: { "bg-primary": "#123456", "text-secondary": "#abcdef" } } });
+  try {
+    assert.equal(getPaneThemeColors({ theme: "light" }).bgColor, "#123456");
+    const independent = { theme: "light", inheritApplicationTheme: false };
+    assert.equal(getPaneThemeColors(independent).bgColor, "#ffffff");
+    assert.equal(getPaneThemeColors(independent).textColor, "#1e293b");
+    const options = buildChartPaneOptions({ ...independent,
+      container: structuralMock<HTMLElement>({ clientWidth: 900, clientHeight: 500 }),
+    });
+    const background = options.layout?.background;
+    assert.ok(background && "color" in background);
+    assert.equal(background.color, "#ffffff");
+    const applied: object[] = [];
+    applyChartPaneAppearance(structuralMock({ applyOptions: (value: object) => applied.push(value) }), {
+      theme: "custom", customBg: "#654321", inheritApplicationTheme: false,
+    });
+    assert.equal(structuralMock<{ layout: { background: { color: string } } }>(applied[0]!).layout.background.color, "#654321");
+    assert.equal(getPaneThemeColors({ theme: "dark" }).bgColor, "#123456");
+  } finally { publishExtensions({ theme: previous }); }
 });

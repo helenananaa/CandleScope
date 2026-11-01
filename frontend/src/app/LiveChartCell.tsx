@@ -1,3 +1,5 @@
+import { applicationSettingsPatch, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
+import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
 import { resolveStrategyTesterMode } from "../features/backtest/chart-tester/chartStrategyMode.js";
 import type { NativeStrategyCollection } from "../features/backtest/native/nativeStrategyCollection.js";
@@ -33,6 +35,7 @@ import { useChartSession } from "../features/chart-session/useChartSession.js";
 import type { ChartSession } from "../features/chart-session/chartSessionTypes.js";
 import type {
   ChartCellCreationMode,
+  ChartCellChartSettings,
   ChartCellId,
   ChartCellState,
   ChartStrategyAttachmentRecord,
@@ -183,7 +186,7 @@ export interface LiveChartCellProps {
   onSwapCells(firstCellId: ChartCellId, secondCellId: ChartCellId): void;
   onToggleMaximize(cellId: ChartCellId): void;
   onSessionChange(cellId: ChartCellId, session: ChartSession): void;
-  onChartSettingsChange(cellId: ChartCellId, settings: ReturnType<typeof normalizeSettings>): void;
+  onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
   onPriceScaleChange(cellId: ChartCellId, value: ChartCellState["priceScale"]): void;
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
   strategyPanelOpen: boolean;
@@ -464,6 +467,7 @@ function LiveChartCell({
     ...globalSettings.settings,
     ...cell.chartSettings,
   }), [cell.chartSettings, globalSettings.settings]);
+  const resolvedTheme = useCellChartTheme(cell.chartSettings.theme, globalSettings.resolvedTheme);
   const combinedSettingsRef = useRef(combinedSettings);
   useLayoutEffect(() => {
     combinedSettingsRef.current = combinedSettings;
@@ -471,9 +475,10 @@ function LiveChartCell({
   const setCombinedSettings = useCallback<Dispatch<SetStateAction<ReturnType<typeof normalizeSettings>>>>((action) => {
     const current = combinedSettingsRef.current;
     const next = normalizeSettings(typeof action === "function" ? action(current) : action);
-    onChartSettingsChange(cell.id, next);
-    globalSettings.setSettings(next);
-  }, [cell.id, globalSettings, onChartSettingsChange]);
+    onChartSettingsChange(cell.id, nextCellChartSettings(cell.chartSettings, current, next));
+    const applicationPatch = applicationSettingsPatch(current, next);
+    if (Object.keys(applicationPatch).length) globalSettings.setSettings(previous => ({ ...previous, ...applicationPatch }));
+  }, [cell.id, cell.chartSettings, globalSettings, onChartSettingsChange]);
 
   const priceScale = cell.priceScale;
   const setInvertScale = useCallback((invertScale: boolean) => {
@@ -559,7 +564,7 @@ function LiveChartCell({
   const exportFlow = useExportRuntime({
     indicators: indicators.view.activeIndicators,
     session: chartSession,
-    resolvedTheme: globalSettings.resolvedTheme,
+    resolvedTheme,
     chartSurfaceActions: chartSurface.actions,
     pageExportRef,
     drawings,
@@ -619,7 +624,8 @@ function LiveChartCell({
   const settingsRuntime = useMemo<SettingsShellRuntime>(() => ({
     view: {
       settings: combinedSettings,
-      resolvedTheme: globalSettings.resolvedTheme,
+      appearanceScope: "chart",
+      resolvedTheme,
       isOpen: showSettings,
     },
     actions: {
@@ -631,7 +637,7 @@ function LiveChartCell({
   }), [
     closeSettingsPanel,
     combinedSettings,
-    globalSettings.resolvedTheme,
+    resolvedTheme,
     openSettingsPanel,
     setCombinedSettings,
     showSettings,
@@ -657,7 +663,7 @@ function LiveChartCell({
   ]);
 
   useControlCommands(() => chartCommands({ cellId: cell.id, session: chartSession, indicators,
-    settings: { settings: combinedSettings, setSettings: setCombinedSettings, resolvedTheme: globalSettings.resolvedTheme },
+    settings: { settings: combinedSettings, setSettings: setCombinedSettings, resolvedTheme },
     marketData: sourceMarketData, surface: chartSurface, drawings }));
   useControlCommands(() => drawingCommands(cell.id, chartSurface, drawings, chartSession.view.sessionKey));
   useControlCommands(() => exportCommands(cell.id, exportFlow));
@@ -807,26 +813,29 @@ function LiveChartCell({
     seriesStore: sourceMarketData.view.seriesStore,
     upColor: combinedSettings.upColor,
     downColor: combinedSettings.downColor,
-    themeKey: globalSettings.resolvedTheme,
+    themeKey: resolvedTheme,
   });
   const quickReplayStyle = useMemo(() => ({
     upColor: combinedSettings.upColor,
     downColor: combinedSettings.downColor,
     chartType: combinedSettings.chartType,
-    theme: globalSettings.resolvedTheme,
+    theme: resolvedTheme,
+    inheritApplicationTheme: cell.chartSettings.theme === undefined,
     customBg: combinedSettings.customBg,
   }), [
+    cell.chartSettings.theme,
     combinedSettings.chartType,
     combinedSettings.customBg,
     combinedSettings.downColor,
     combinedSettings.upColor,
-    globalSettings.resolvedTheme,
+    resolvedTheme,
   ]);
 
   const chartModel = useMemo(() => ({
     ...model.chartWorkspace.chart,
     chartProps: {
       ...model.chartWorkspace.chart.chartProps,
+      inheritApplicationTheme: cell.chartSettings.theme === undefined,
       ref: chartSurface.ref,
       ...(workScheduler ? { displayScheduler: { scheduler: workScheduler, cellId: cell.id } } : {}),
       drawingKeyBase: drawingScopeBase,
@@ -845,6 +854,7 @@ function LiveChartCell({
     handleLinkedViewportRangeChange,
     handleChartViewportRangeChange,
     model.chartWorkspace.chart,
+    cell.chartSettings.theme,
   ]);
   const featureSurfaces = useMemo(() => ({
     ...model.lazySurfaces,
