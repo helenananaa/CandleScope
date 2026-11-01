@@ -1,0 +1,987 @@
+{
+  "source_commit": "a4dc6e5374a719a98e9a8e8d797170f4448279aa",
+  "python": "3.12.15",
+  "machine": "arm64",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "workload": "600 seed bars, 2ms paced preview/close pairs; optional 2 x 12000-row BOLL history jobs",
+  "rss_peak_bytes": 79904768,
+  "cases": [
+    {
+      "instances": 1,
+      "history_jobs": 0,
+      "events": 200,
+      "seed_ms": 1.0308329997315013,
+      "wall_ms": 473.3710830000746,
+      "process_cpu_ms": 47.75199999999996,
+      "event_loop_thread": 8283808128,
+      "callback_threads": [
+        8283808128
+      ],
+      "all_callbacks_on_event_loop": true,
+      "loop_lag_ms": {
+        "p50": 0.357749999693624,
+        "p95": 0.4319580002629664,
+        "p99": 0.7828749999134743,
+        "max": 1.047332999860373,
+        "samples": 199
+      },
+      "notifications": {
+        "indicator.preview": 100,
+        "indicator.updated": 100
+      },
+      "final_values_sha256": "5170fa55768acbb8f431da56a8d11db7299fd1a7f7487018ea5e49070e908f3a",
+      "full_recompute_parity": true,
+      "history": [],
+      "event_bus": {
+        "callback_subscriptions": 3,
+        "queue_subscriptions": 0,
+        "middleware_count": 1,
+        "epoch": "1e02881d404b4b969c0bf5da7511ce44",
+        "replay_capacity": 8192,
+        "replay_size": 100,
+        "sequence": 100,
+        "recovery_required_total": 0,
+        "consumer_states": {
+          "5e6a29a95e98": {
+            "state": "live",
+            "confirmed_sequence": 100,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "d469d856ffb5": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "712f56c0083a": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          }
+        },
+        "events_emitted": 200,
+        "events_dropped": 0,
+        "callback_errors": 0,
+        "callback_queue_drops": {},
+        "callback_last_errors": {},
+        "callback_lag": {
+          "5e6a29a95e98": {
+            "queue_size": 0,
+            "queue_max_size": 1000,
+            "delivered": 200,
+            "dropped": 0,
+            "coalesced": 0,
+            "backpressured": 0,
+            "replay_entries": 0,
+            "avg_lag_ms": 0.04,
+            "max_lag_ms": 0.12,
+            "last_lag_ms": 0.03
+          }
+        },
+        "queue_lag": {},
+        "subscribed_keys": [],
+        "direct_subscriptions_by_key": {}
+      },
+      "executors": {
+        "indicator": {
+          "name": "indicator",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "preparation": {
+          "name": "preparation",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "script_wait": {
+          "name": "script_wait",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "storage": {
+          "name": "storage",
+          "max_workers": 4,
+          "max_pending": 128,
+          "max_inflight": 132,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "archive": {
+          "name": "archive",
+          "max_workers": 2,
+          "max_pending": 128,
+          "max_inflight": 130,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        }
+      },
+      "preview": {
+        "run_ms": {
+          "p50": 0.04533299988906947,
+          "p95": 0.06437499996536644,
+          "p99": 0.13866600011169794,
+          "max": 0.21245800007818616,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.14370799999596784,
+          "p95": 0.2119999999194988,
+          "p99": 0.2667090002432815,
+          "max": 0.8201249997910054,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 0.18870799976866692,
+          "p95": 0.28987499990762444,
+          "p99": 0.4053750003549794,
+          "max": 1.0325829998691916,
+          "samples": 100
+        }
+      },
+      "closed": {
+        "run_ms": {
+          "p50": 0.06500000017695129,
+          "p95": 0.08541699980924022,
+          "p99": 0.10033399985331926,
+          "max": 0.11975000006714254,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.14370799999596784,
+          "p95": 0.21345800041672192,
+          "p99": 0.30004100017322344,
+          "max": 0.6114580000939895,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 0.21074999995107646,
+          "p95": 0.2820409999912954,
+          "p99": 0.419791000240366,
+          "max": 0.7117919999473088,
+          "samples": 100
+        }
+      },
+      "subscriptions_after_shutdown": 0
+    },
+    {
+      "instances": 16,
+      "history_jobs": 0,
+      "events": 200,
+      "seed_ms": 59.211458999925526,
+      "wall_ms": 459.77187500011496,
+      "process_cpu_ms": 129.81699999999995,
+      "event_loop_thread": 8283808128,
+      "callback_threads": [
+        8283808128
+      ],
+      "all_callbacks_on_event_loop": true,
+      "loop_lag_ms": {
+        "p50": 0.2302910002072167,
+        "p95": 0.660916000015277,
+        "p99": 0.882625000031112,
+        "max": 0.9664999997767154,
+        "samples": 199
+      },
+      "notifications": {
+        "indicator.preview": 1600,
+        "indicator.updated": 1600
+      },
+      "final_values_sha256": "6336c4a445850dddb2134f4355ff5ba23b5700ded59fc48836ffdb3ed27f22a4",
+      "full_recompute_parity": true,
+      "history": [],
+      "event_bus": {
+        "callback_subscriptions": 3,
+        "queue_subscriptions": 0,
+        "middleware_count": 1,
+        "epoch": "30c84e2ca5334672bf92435081903f00",
+        "replay_capacity": 8192,
+        "replay_size": 100,
+        "sequence": 100,
+        "recovery_required_total": 0,
+        "consumer_states": {
+          "0135a23308f5": {
+            "state": "live",
+            "confirmed_sequence": 100,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "6af71bdbdfa7": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "241fcb196c20": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          }
+        },
+        "events_emitted": 200,
+        "events_dropped": 0,
+        "callback_errors": 0,
+        "callback_queue_drops": {},
+        "callback_last_errors": {},
+        "callback_lag": {
+          "0135a23308f5": {
+            "queue_size": 0,
+            "queue_max_size": 1000,
+            "delivered": 200,
+            "dropped": 0,
+            "coalesced": 0,
+            "backpressured": 0,
+            "replay_entries": 0,
+            "avg_lag_ms": 0.03,
+            "max_lag_ms": 0.11,
+            "last_lag_ms": 0.03
+          }
+        },
+        "queue_lag": {},
+        "subscribed_keys": [],
+        "direct_subscriptions_by_key": {}
+      },
+      "executors": {
+        "indicator": {
+          "name": "indicator",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "preparation": {
+          "name": "preparation",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "script_wait": {
+          "name": "script_wait",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "storage": {
+          "name": "storage",
+          "max_workers": 4,
+          "max_pending": 128,
+          "max_inflight": 132,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "archive": {
+          "name": "archive",
+          "max_workers": 2,
+          "max_pending": 128,
+          "max_inflight": 130,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        }
+      },
+      "preview": {
+        "run_ms": {
+          "p50": 0.3174159996888193,
+          "p95": 0.3817920000983577,
+          "p99": 0.567167000099289,
+          "max": 0.8735409996916133,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.1449999999749707,
+          "p95": 0.2114579997396504,
+          "p99": 0.2425419997962308,
+          "max": 0.4250840001986944,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 0.46708299987585633,
+          "p95": 0.5830000000059954,
+          "p99": 0.7121250000636792,
+          "max": 1.2986249998903077,
+          "samples": 100
+        }
+      },
+      "closed": {
+        "run_ms": {
+          "p50": 0.5836250002175802,
+          "p95": 0.6817500002398447,
+          "p99": 0.8757089999562595,
+          "max": 1.0414589996798895,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.1415000001543376,
+          "p95": 0.1969579998331028,
+          "p99": 0.2357499997742707,
+          "max": 0.27866700020240387,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 0.7281670000338636,
+          "p95": 0.8553329998903791,
+          "p99": 1.04495899995527,
+          "max": 1.1647090000224125,
+          "samples": 100
+        }
+      },
+      "subscriptions_after_shutdown": 0
+    },
+    {
+      "instances": 64,
+      "history_jobs": 0,
+      "events": 200,
+      "seed_ms": 306.002959000125,
+      "wall_ms": 481.5324579999469,
+      "process_cpu_ms": 414.41700000000003,
+      "event_loop_thread": 8283808128,
+      "callback_threads": [
+        8283808128
+      ],
+      "all_callbacks_on_event_loop": true,
+      "loop_lag_ms": {
+        "p50": 0.39325000034295954,
+        "p95": 0.946125000155007,
+        "p99": 1.3876250000066648,
+        "max": 1.510000000052969,
+        "samples": 199
+      },
+      "notifications": {
+        "indicator.preview": 6400,
+        "indicator.updated": 6400
+      },
+      "final_values_sha256": "e44b152bfda28f4601916e5888a5d4f85bf69c63018e66890e2cc2d4ef149b50",
+      "full_recompute_parity": true,
+      "history": [],
+      "event_bus": {
+        "callback_subscriptions": 3,
+        "queue_subscriptions": 0,
+        "middleware_count": 1,
+        "epoch": "6f42adf1cc354e73ba94d280369972f8",
+        "replay_capacity": 8192,
+        "replay_size": 100,
+        "sequence": 100,
+        "recovery_required_total": 0,
+        "consumer_states": {
+          "8b16c270a3f1": {
+            "state": "live",
+            "confirmed_sequence": 100,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "fab447aceb69": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "b08e37ddb6a2": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          }
+        },
+        "events_emitted": 200,
+        "events_dropped": 0,
+        "callback_errors": 0,
+        "callback_queue_drops": {},
+        "callback_last_errors": {},
+        "callback_lag": {
+          "8b16c270a3f1": {
+            "queue_size": 0,
+            "queue_max_size": 1000,
+            "delivered": 200,
+            "dropped": 0,
+            "coalesced": 0,
+            "backpressured": 0,
+            "replay_entries": 0,
+            "avg_lag_ms": 0.03,
+            "max_lag_ms": 0.08,
+            "last_lag_ms": 0.03
+          }
+        },
+        "queue_lag": {},
+        "subscribed_keys": [],
+        "direct_subscriptions_by_key": {}
+      },
+      "executors": {
+        "indicator": {
+          "name": "indicator",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "preparation": {
+          "name": "preparation",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "script_wait": {
+          "name": "script_wait",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "storage": {
+          "name": "storage",
+          "max_workers": 4,
+          "max_pending": 128,
+          "max_inflight": 132,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "archive": {
+          "name": "archive",
+          "max_workers": 2,
+          "max_pending": 128,
+          "max_inflight": 130,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        }
+      },
+      "preview": {
+        "run_ms": {
+          "p50": 1.3161669999135484,
+          "p95": 1.4949159999559924,
+          "p99": 1.5995830003703304,
+          "max": 2.349917000174173,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.13541699991037603,
+          "p95": 0.19029199984288425,
+          "p99": 0.2291250002599554,
+          "max": 0.27116699993712245,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 1.4551660001416167,
+          "p95": 1.693875000000844,
+          "p99": 1.7594589999134769,
+          "max": 2.467750000050728,
+          "samples": 100
+        }
+      },
+      "closed": {
+        "run_ms": {
+          "p50": 2.461999999923137,
+          "p95": 2.69916600018405,
+          "p99": 2.9069580000395945,
+          "max": 3.103584000200499,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.13479200015353854,
+          "p95": 0.18554100006440422,
+          "p99": 0.25979199972425704,
+          "max": 0.2837920001184102,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 2.6170419996560668,
+          "p95": 2.880417000142188,
+          "p99": 3.156916999614623,
+          "max": 3.2715420002205065,
+          "samples": 100
+        }
+      },
+      "subscriptions_after_shutdown": 0
+    },
+    {
+      "instances": 64,
+      "history_jobs": 2,
+      "events": 200,
+      "seed_ms": 337.59858299981715,
+      "wall_ms": 3037.2004999999263,
+      "process_cpu_ms": 2946.395,
+      "event_loop_thread": 8283808128,
+      "callback_threads": [
+        8283808128
+      ],
+      "all_callbacks_on_event_loop": true,
+      "loop_lag_ms": {
+        "p50": 11.767082999995182,
+        "p95": 32.09954200019638,
+        "p99": 40.94433299997036,
+        "max": 43.38820900011342,
+        "samples": 199
+      },
+      "notifications": {
+        "indicator.preview": 6400,
+        "indicator.updated": 6400
+      },
+      "final_values_sha256": "e44b152bfda28f4601916e5888a5d4f85bf69c63018e66890e2cc2d4ef149b50",
+      "full_recompute_parity": true,
+      "history": [
+        {
+          "job": 0,
+          "thread": 6177796096,
+          "queue_ms": 1.9658330002130242,
+          "run_ms": 2745.1870419999977
+        },
+        {
+          "job": 1,
+          "thread": 6194622464,
+          "queue_ms": 27.226292000250396,
+          "run_ms": 2743.675124999754
+        }
+      ],
+      "event_bus": {
+        "callback_subscriptions": 3,
+        "queue_subscriptions": 0,
+        "middleware_count": 1,
+        "epoch": "d190786594a743ecb2361ae7f9272805",
+        "replay_capacity": 8192,
+        "replay_size": 100,
+        "sequence": 100,
+        "recovery_required_total": 0,
+        "consumer_states": {
+          "7ba74efec0f1": {
+            "state": "live",
+            "confirmed_sequence": 100,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "466ff4652ae2": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          },
+          "9332f4aa4cf1": {
+            "state": "live",
+            "confirmed_sequence": 0,
+            "confirmed_delivery_id": null,
+            "replay_next": null,
+            "replayed": 0,
+            "recovery": null,
+            "notification_error": null
+          }
+        },
+        "events_emitted": 200,
+        "events_dropped": 0,
+        "callback_errors": 0,
+        "callback_queue_drops": {},
+        "callback_last_errors": {},
+        "callback_lag": {
+          "7ba74efec0f1": {
+            "queue_size": 0,
+            "queue_max_size": 1000,
+            "delivered": 200,
+            "dropped": 0,
+            "coalesced": 0,
+            "backpressured": 0,
+            "replay_entries": 0,
+            "avg_lag_ms": 6.2,
+            "max_lag_ms": 28.99,
+            "last_lag_ms": 0.03
+          }
+        },
+        "queue_lag": {},
+        "subscribed_keys": [],
+        "direct_subscriptions_by_key": {}
+      },
+      "executors": {
+        "indicator": {
+          "name": "indicator",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 2,
+          "started": 2,
+          "completed": 2,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 9.54,
+          "max_queue_wait_ms": 18.94,
+          "avg_run_ms": 2747.29,
+          "max_run_ms": 2747.31,
+          "recent_slow_operations": [
+            {
+              "sequence": 1,
+              "operation": "case.<locals>.background",
+              "queue_wait_ms": 0.14,
+              "run_ms": 2747.31,
+              "failed": false
+            },
+            {
+              "sequence": 2,
+              "operation": "case.<locals>.background",
+              "queue_wait_ms": 18.94,
+              "run_ms": 2747.26,
+              "failed": false
+            }
+          ]
+        },
+        "preparation": {
+          "name": "preparation",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "script_wait": {
+          "name": "script_wait",
+          "max_workers": 2,
+          "max_pending": 64,
+          "max_inflight": 66,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "storage": {
+          "name": "storage",
+          "max_workers": 4,
+          "max_pending": 128,
+          "max_inflight": 132,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        },
+        "archive": {
+          "name": "archive",
+          "max_workers": 2,
+          "max_pending": 128,
+          "max_inflight": 130,
+          "submitted": 0,
+          "started": 0,
+          "completed": 0,
+          "failed": 0,
+          "cancelled": 0,
+          "rejected": 0,
+          "active": 0,
+          "pending": 0,
+          "queued": 0,
+          "avg_queue_wait_ms": 0.0,
+          "max_queue_wait_ms": 0.0,
+          "avg_run_ms": 0.0,
+          "max_run_ms": 0.0,
+          "recent_slow_operations": []
+        }
+      },
+      "preview": {
+        "run_ms": {
+          "p50": 1.5236249996632978,
+          "p95": 2.0962920002602914,
+          "p99": 2.863040999727673,
+          "max": 3.160834000027535,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.41604200032452354,
+          "p95": 13.008833000185405,
+          "p99": 23.56154199969751,
+          "max": 29.20004199995674,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 3.2790830000521964,
+          "p95": 14.961249999942083,
+          "p99": 25.033499999608466,
+          "max": 30.720332999862876,
+          "samples": 100
+        }
+      },
+      "closed": {
+        "run_ms": {
+          "p50": 2.9322079999474226,
+          "p95": 3.700290999859135,
+          "p99": 5.546542000047339,
+          "max": 5.792165999991994,
+          "samples": 100
+        },
+        "queue_ms": {
+          "p50": 0.3488749998723506,
+          "p95": 14.188082999680773,
+          "p99": 19.204624999929365,
+          "max": 19.803166999736277,
+          "samples": 100
+        },
+        "ready_ms": {
+          "p50": 3.5785410000244156,
+          "p95": 17.723250000017288,
+          "p99": 21.95587500000329,
+          "max": 22.96200000000681,
+          "samples": 100
+        }
+      },
+      "subscriptions_after_shutdown": 0
+    }
+  ],
+  "limitations": "Controlled builtin/EventBus baseline only. No real exchange, Pine/Python runtime, backtest or native UI workload; no performance improvement claimed."
+}
