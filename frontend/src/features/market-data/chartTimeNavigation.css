@@ -1,5 +1,5 @@
-.chart-time-dialog { width: min(440px, calc(100vw - 32px)); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--bg-primary); box-shadow: 0 16px 64px #0006; }
-.chart-time-dialog::backdrop { background: #0007; }
+.chart-time-dialog { width: min(440px, calc(100vw - 32px)); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--bg-primary); box-shadow: var(--shadow-lg); }
+.chart-time-dialog::backdrop { background: var(--backdrop); }
 .chart-time-dialog form { display: grid; gap: 12px; }
 .chart-time-dialog h2, .chart-time-dialog p { margin: 0; }
 .chart-time-dialog h2 { font-size: 18px; }
