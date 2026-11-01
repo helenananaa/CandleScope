@@ -8,6 +8,7 @@ import { loadReplayTapeProjection, type ReplayTapeProjection } from "./replayTap
 import { replayDisplayBarToKline } from "./replaySeriesProjection.js";
 import { ReplayV2ApiClient } from "./replayV2Api.js";
 import type { ReplayDigest } from "./replayTypes.js";
+import { directReplayRequest } from "./replayDataManager.js";
 
 type Options = ReplayHistoryProviderOptions & { sourceSequence?: number | (() => number | null) | undefined };
 export type ReplayTapeWindowRequest = Omit<ReplayHistoryRequest, "beforeMs"> & { beforeMs?: number };
@@ -55,14 +56,14 @@ export class ReplayTapeHistoryProvider implements ReplayHistorySource {
     if (previous) return previous.promise;
     const controller = new AbortController();
     const promise = (async () => {
-      const result = await loadReplayTapeProjection(signal => this.api.tapeProjectionBySession(this.sessionId, {
+      const result = await (this.options.request ?? directReplayRequest)(ownedSignal => loadReplayTapeProjection(signal => this.api.tapeProjectionBySession(this.sessionId, {
         trackId: this.trackId, displayInterval: this.identity.display_interval, sourceSequence,
         dataEpoch: request.dataEpoch, revealedBoundaryMs: request.revealedBoundaryMs,
         limit: Math.min(500, request.limit ?? 500),
         ...(request.beforeMs === undefined ? {} : { beforeMs: request.beforeMs }),
         ...(expectedEpoch === null ? {} : { historyEpoch: expectedEpoch }),
-      }, signal), controller.signal, undefined,
-      this.options.pendingRetryDelaysMs === undefined ? {} : { pendingRetryDelaysMs: this.options.pendingRetryDelaysMs });
+      }, signal), ownedSignal, undefined,
+      this.options.pendingRetryDelaysMs === undefined ? {} : { pendingRetryDelaysMs: this.options.pendingRetryDelaysMs }), controller.signal);
       if (controller.signal.aborted || generation !== this.generation
         || (acceptAdvancedSource ? this.sequence() < sourceSequence : sourceSequence !== this.sequence())) {
         throw new DOMException("tape history source changed", "AbortError");

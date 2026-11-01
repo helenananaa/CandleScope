@@ -1,3 +1,4 @@
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -10,7 +11,7 @@ import {
   REPLAY_ACTIVITY_VIEW_LIMIT,
   replayOwnsController,
 } from "../replayUiModel.js";
-import { defaultReplayV2Api, ReplayV2ApiError } from "../replayV2Api.js";
+import { ReplayV2ApiError } from "../replayV2Api.js";
 import {
   rebaseReplayMaxQuantity,
   replayOrderContextSide,
@@ -120,6 +121,7 @@ function useAccountRecordPages({
   readonly enabled: boolean;
   readonly revision: number;
 }) {
+  const { api } = useReplayOperations(runId, "rail");
   const key = `${runId ?? "none"}:${recordType}:${orderScope}:${revision}`;
   const [state, setState] = useState<AccountRecordPageState>({
     key,
@@ -142,7 +144,7 @@ function useAccountRecordPages({
       loadingMore: false,
       error: null,
     });
-    void defaultReplayV2Api.accountRecordsRun(runId, {
+    void api.accountRecordsRun(runId, {
       recordType,
       orderScope,
       limit: 50,
@@ -170,7 +172,7 @@ function useAccountRecordPages({
       });
     });
     return () => controller.abort();
-  }, [enabled, key, orderScope, recordType, runId]);
+  }, [api, enabled, key, orderScope, recordType, runId]);
   const loadMore = useCallback(async (): Promise<void> => {
     if (runId === null || state.key !== key || state.nextCursor === null
       || state.loading || state.loadingMore) return;
@@ -179,7 +181,7 @@ function useAccountRecordPages({
       ? { ...current, loadingMore: true, error: null }
       : current);
     try {
-      const page = await defaultReplayV2Api.accountRecordsRun(runId, {
+      const page = await api.accountRecordsRun(runId, {
         recordType,
         orderScope,
         cursor,
@@ -199,7 +201,7 @@ function useAccountRecordPages({
         ? { ...current, loadingMore: false, error: commandErrorMessage(error) }
         : current);
     }
-  }, [key, orderScope, recordType, runId, state]);
+  }, [api, key, orderScope, recordType, runId, state.key, state.loading, state.loadingMore, state.nextCursor]);
   const visible = state.key === key ? state : {
     key,
     items: [],
@@ -1482,6 +1484,7 @@ export function ReplayPaperTradingDock({ runtime, viewer }: Pick<ReplayRightRail
 }
 
 export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<ReplayRightRailProps, "runtime" | "viewer" | "formatTime">) {
+  const { api } = useReplayOperations(viewer.viewerState?.run_id, "rail");
   useLocale();
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("positions");
   const [orderSelection, setOrderSelection] = useState<Readonly<{
@@ -1620,7 +1623,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
   useEffect(() => {
     if (runId === null) return undefined;
     const controller = new AbortController();
-    void defaultReplayV2Api.reportRun(runId, controller.signal).then((response) => {
+    void api.reportRun(runId, controller.signal).then((response) => {
       setReportSnapshot({ runId, state: "loaded", trades: response.report.closed_trades });
     }).catch((error: unknown) => {
       if (controller.signal.aborted) return;
@@ -1628,7 +1631,7 @@ export function ReplayTradingWorkbench({ runtime, viewer, formatTime }: Pick<Rep
       setNotice({ tone: "error", message: t("replay.paper.closedSyncFailed", { error: commandErrorMessage(error) }) });
     });
     return () => controller.abort();
-  }, [contract?.history.fills_total, runId, structuredFills.length]);
+  }, [api, contract?.history.fills_total, runId, structuredFills.length]);
 
   useEffect(() => {
     if (positionPanel?.kind !== "close" || positionPanel.trackId !== selectedTrackId) return;

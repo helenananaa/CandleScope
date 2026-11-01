@@ -7,6 +7,7 @@ import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
 import { replayDisplayBarToKline } from "./replaySeriesProjection.js";
 import type { ReplayDigest, ReplayDisplayBar } from "./replayTypes.js";
 import { readReplayHistory } from "./replayHistoryTransport.js";
+import { directReplayRequest, type ReplayRequest } from "./replayDataManager.js";
 import { replayHistoryRetryDelay } from "./replayHistoryRetry.js";
 
 
@@ -74,6 +75,7 @@ export interface ReplayHistoryProviderOptions {
   readonly trackId: string;
   readonly identity: ReplayHistoryIdentity;
   readonly fetcher?: typeof fetch;
+  readonly request?: ReplayRequest;
   readonly apiBase?: string;
   readonly pendingRetryDelaysMs?: readonly number[];
 }
@@ -633,17 +635,19 @@ export class ReplayHistoryProvider {
   readonly identity: ReplayHistoryIdentity;
   private readonly fetcher: typeof fetch;
   private readonly apiBase: string;
+  private readonly request: ReplayRequest;
   private readonly pendingRetryDelaysMs: readonly number[];
   private readonly inflight = new Map<string, { controller: AbortController; promise: Promise<ReplayHistoryPage> }>();
   private epoch: ReplayDigest | null = null;
   private generation = 0;
 
-  constructor({ sessionId, trackId, identity, fetcher = fetch, apiBase,
+  constructor({ sessionId, trackId, identity, fetcher = fetch, apiBase, request = directReplayRequest,
     pendingRetryDelaysMs = PENDING_RETRY_DELAYS_MS }: ReplayHistoryProviderOptions) {
     this.sessionId = sessionId;
     this.trackId = trackId;
     this.identity = identity;
     this.fetcher = fetcher;
+    this.request = request;
     if (pendingRetryDelaysMs.length > 20
       || pendingRetryDelaysMs.some((delay) => !Number.isFinite(delay) || delay < 0 || delay > 30_000)) {
       throw new ReplayHistoryProtocolError("history pending retry delays are invalid");
@@ -696,14 +700,14 @@ export class ReplayHistoryProvider {
       this.identity.exchange, this.identity.market_type, this.identity.symbol,
       this.identity.source_kind, this.identity.base_interval, this.identity.display_interval,
     ]);
-    const promise = (async () => {
+    const promise = this.request(async signal => {
       let pendingAttempts = 0;
       let response: Awaited<ReturnType<typeof readReplayHistory>>;
       while (true) {
-        if (controller.signal.aborted || generation !== this.generation) {
+        if (signal.aborted || generation !== this.generation) {
           throw new DOMException("history request canceled", "AbortError");
         }
-        response = await readReplayHistory(fetcher, url, identityKey, controller.signal);
+        response = await readReplayHistory(fetcher, url, identityKey, signal);
         if (response.ok) break;
         type Failure = { message?: unknown; code?: unknown; details?: unknown };
         const body = response.payload as { detail?: Failure; error?: Failure } | null;
@@ -711,7 +715,7 @@ export class ReplayHistoryProvider {
         const delay = replayHistoryRetryDelay(failure, pendingAttempts, this.pendingRetryDelaysMs);
         if (delay !== undefined) {
           pendingAttempts += 1;
-          await waitForPendingHistory(delay, controller.signal);
+          await waitForPendingHistory(delay, signal);
           continue;
         }
         const message = failure?.message;
@@ -726,13 +730,13 @@ export class ReplayHistoryProvider {
         request,
         expectedHistoryEpoch: expectedEpoch,
       });
-      if (generation !== this.generation) throw new DOMException("history request canceled", "AbortError");
+      if (signal.aborted || generation !== this.generation) throw new DOMException("history request canceled", "AbortError");
       if (this.epoch !== null && page.history_epoch !== this.epoch) {
         throw new ReplayHistoryProtocolError("history epoch changed during the replay session");
       }
       this.epoch = page.history_epoch;
       return page;
-    })().finally(() => {
+    }, controller.signal).finally(() => {
       if (this.inflight.get(key)?.promise === promise) this.inflight.delete(key);
     });
     this.inflight.set(key, { controller, promise });

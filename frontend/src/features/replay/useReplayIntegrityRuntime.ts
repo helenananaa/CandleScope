@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -16,7 +17,6 @@ import {
 } from "./replayIntegrityModel.js";
 import { ReplayRefreshGate } from "./replayRefreshGate.js";
 import { replayEffectiveTrainingState } from "./replayUiModel.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import type {
   ReplayV2Command,
   ReplayV2CommandResult,
@@ -109,6 +109,7 @@ export function useReplayIntegrityRuntime(
   enabled = true,
   forkWorkspace?: () => ReplayWorkspaceSeed,
 ): ReplayIntegrityRuntime {
+  const { api } = useReplayOperations(replayRunId(viewer), "review");
   const forkWorkspaceRef = useRef(forkWorkspace);
   forkWorkspaceRef.current = forkWorkspace;
   const pendingFork = useRef<{ parent: string; event: string; response: ReplayReviewForkResponse; seed: ReplayWorkspaceSeed | undefined } | null>(null);
@@ -172,12 +173,12 @@ export function useReplayIntegrityRuntime(
           nextDrawing,
           nextReport,
         ] = await Promise.all([
-          defaultReplayV2Api.integrityRun(currentRunId),
-          defaultReplayV2Api.rulesRun(currentRunId),
-          defaultReplayV2Api.equityRun(currentRunId, "AUTO", 1_000),
-          defaultReplayV2Api.currentDrawingRun(currentRunId),
+          api.integrityRun(currentRunId),
+          api.rulesRun(currentRunId),
+          api.equityRun(currentRunId, "AUTO", 1_000),
+          api.currentDrawingRun(currentRunId),
           currentState === "ENDED"
-            ? defaultReplayV2Api.reportRun(currentRunId)
+            ? api.reportRun(currentRunId)
             : Promise.resolve(null),
         ]);
         if (requestGeneration !== generation.current
@@ -206,7 +207,7 @@ export function useReplayIntegrityRuntime(
         }
       }
     });
-  }, []);
+  }, [api]);
 
   const refreshEquity = useCallback(async (): Promise<void> => {
     const currentRunId = replayRunId(viewerRef.current);
@@ -214,7 +215,7 @@ export function useReplayIntegrityRuntime(
     return equityRefreshGate.current.run(currentRunId, async () => {
       const requestGeneration = generation.current;
       try {
-        const nextEquity = await defaultReplayV2Api.equityRun(
+        const nextEquity = await api.equityRun(
           currentRunId,
           "AUTO",
           1_000,
@@ -228,7 +229,7 @@ export function useReplayIntegrityRuntime(
         setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       }
     });
-  }, []);
+  }, [api]);
 
   const refreshReport = useCallback(async (): Promise<void> => {
     const currentRunId = replayRunId(viewerRef.current);
@@ -236,7 +237,7 @@ export function useReplayIntegrityRuntime(
     return reportRefreshGate.current.run(currentRunId, async () => {
       const requestGeneration = generation.current;
       try {
-        const nextReport = await defaultReplayV2Api.reportRun(currentRunId);
+        const nextReport = await api.reportRun(currentRunId);
         if (requestGeneration !== generation.current
           || replayRunId(viewerRef.current) !== currentRunId) return;
         setReport(nextReport);
@@ -246,7 +247,7 @@ export function useReplayIntegrityRuntime(
         setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
       }
     });
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     generation.current += 1;
@@ -340,7 +341,7 @@ export function useReplayIntegrityRuntime(
     setOperation("policy");
     setError(null);
     try {
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+      const result = await api.commandRun(command.run_id, command);
       await refresh();
       return result;
     } catch (cause) {
@@ -350,7 +351,7 @@ export function useReplayIntegrityRuntime(
       pendingPolicy.current = false;
       setOperation((current) => current === "policy" ? null : current);
     }
-  }, [buildCommand, refresh]);
+  }, [api, buildCommand, refresh]);
 
   const flushViewActions = useCallback(async () => {
     viewTimer.current = null;
@@ -362,13 +363,13 @@ export function useReplayIntegrityRuntime(
           semantic_key: action.semantic_key,
           value: action.value,
         }, "view");
-        await defaultReplayV2Api.commandRun(command.run_id, command);
+        await api.commandRun(command.run_id, command);
       } catch {
         // View telemetry is outside the domain hash. A cursor race drops this
         // sample instead of interfering with replay controls.
       }
     }
-  }, [buildCommand]);
+  }, [api, buildCommand]);
 
   useEffect(() => () => {
     generation.current += 1;
@@ -395,13 +396,13 @@ export function useReplayIntegrityRuntime(
     setOperation("drawing");
     setError(null);
     try {
-      const response = await defaultReplayV2Api.recordDrawingRun(currentRunId, {
+      const response = await api.recordDrawingRun(currentRunId, {
         command_id: commandId("drawing"),
         document_hash: documentHash,
         document,
         entity_count: entityCount,
       });
-      const hydrated = await defaultReplayV2Api.currentDrawingRun(currentRunId);
+      const hydrated = await api.currentDrawingRun(currentRunId);
       if (hydrated.document_hash !== response.document_hash
         || hydrated.revision !== response.revision) {
         throw new Error("drawing evidence hydration drifted after commit");
@@ -421,7 +422,7 @@ export function useReplayIntegrityRuntime(
     } finally {
       setOperation((current) => current === "drawing" ? null : current);
     }
-  }, []);
+  }, [api]);
 
   const addMarker = useCallback(async (text: string): Promise<void> => {
     const currentRunId = replayRunId(viewerRef.current);
@@ -429,7 +430,7 @@ export function useReplayIntegrityRuntime(
     setOperation("marker");
     setError(null);
     try {
-      const response = await defaultReplayV2Api.recordMarkerRun(
+      const response = await api.recordMarkerRun(
         currentRunId,
         text,
         commandId("marker"),
@@ -441,7 +442,7 @@ export function useReplayIntegrityRuntime(
     } finally {
       setOperation((current) => current === "marker" ? null : current);
     }
-  }, []);
+  }, [api]);
 
   const startReview = useCallback(async (eventId: string | null = null): Promise<ReplayReviewResponse> => {
     const currentRunId = replayRunId(viewerRef.current);
@@ -449,7 +450,7 @@ export function useReplayIntegrityRuntime(
     setOperation("review");
     setError(null);
     try {
-      const response = await defaultReplayV2Api.reviewRun(currentRunId, eventId);
+      const response = await api.reviewRun(currentRunId, eventId);
       setReview(response);
       setRules(response.projection.rules);
       setBudget(response.budget);
@@ -460,7 +461,7 @@ export function useReplayIntegrityRuntime(
     } finally {
       setOperation((current) => current === "review" ? null : current);
     }
-  }, []);
+  }, [api]);
 
   const controlReview = useCallback(async (
     action: "JUMP" | "PREVIOUS" | "NEXT" | "PLAY" | "PAUSE",
@@ -479,7 +480,7 @@ export function useReplayIntegrityRuntime(
     setOperation("review-control");
     setError(null);
     try {
-      const response = await defaultReplayV2Api.controlReviewRun(
+      const response = await api.controlReviewRun(
         currentRunId,
         current.review_id,
         {
@@ -518,7 +519,7 @@ export function useReplayIntegrityRuntime(
         currentOperation === "review-control" ? null : currentOperation
       ));
     }
-  }, [review]);
+  }, [api, review]);
 
   useEffect(() => {
     if (review?.playback_state !== "PLAYING") return;
@@ -553,10 +554,10 @@ export function useReplayIntegrityRuntime(
       const seed = previous?.parent === currentRunId && previous.event === eventId
         ? previous.seed : forkWorkspaceRef.current?.();
       const response = previous?.parent === currentRunId && previous.event === eventId
-        ? previous.response : await defaultReplayV2Api.forkRun(currentRunId, eventId);
+        ? previous.response : await api.forkRun(currentRunId, eventId);
       pendingFork.current = { parent: currentRunId, event: eventId, response, seed };
       if (seed) {
-        const tracks = await defaultReplayV2Api.tracksRun(response.run.run_id);
+        const tracks = await api.tracksRun(response.run.run_id);
         if (!seedForkReplayChartWorkspace(response.run.run_id, seed, tracks)) throw new Error("Replay workspace save failed");
       }
       setForked(response);
@@ -568,7 +569,7 @@ export function useReplayIntegrityRuntime(
     } finally {
       setOperation((current) => current === "fork" ? null : current);
     }
-  }, []);
+  }, [api]);
 
   return {
     runId,

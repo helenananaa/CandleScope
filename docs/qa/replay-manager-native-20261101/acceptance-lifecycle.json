@@ -1,0 +1,1658 @@
+{
+  "schema": "candlescope.replay-manager-native-lifecycle/1",
+  "sourceCommit": "09e5259f35bfd44b8eef1f330a52473666d13b3a",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "launch",
+      "at": "2026-11-01T05:50:57.384Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 20720,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 20723,
+          "running": true,
+          "startedAt": "2026-11-01T05:50:51.786Z",
+          "readyMs": 4998,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:65348/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "resumed-single",
+      "at": "2026-11-01T05:50:57.995Z",
+      "evidence": {
+        "time": 1700050019999,
+        "historyWaitMs": 109,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 367,
+            "first": 1700028000,
+            "last": 1700049960,
+            "closedOHLCVCompared": 367
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 367,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 4,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 1,
+          "activeOperations": 11,
+          "requests": 0,
+          "streams": 2,
+          "bars": 367
+        }
+      }
+    },
+    {
+      "name": "play-pause",
+      "at": "2026-11-01T05:51:01.186Z",
+      "evidence": {
+        "time": 1700050199999,
+        "historyWaitMs": 52,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 370,
+            "first": 1700028000,
+            "last": 1700050140,
+            "closedOHLCVCompared": 370
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 370,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 10,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 8,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 1,
+          "activeOperations": 11,
+          "requests": 0,
+          "streams": 2,
+          "bars": 370
+        }
+      }
+    },
+    {
+      "name": "two-private-sequences",
+      "at": "2026-11-01T05:51:01.405Z",
+      "evidence": {
+        "time": 1700050199999,
+        "historyWaitMs": 99,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 370,
+            "first": 1700028000,
+            "last": 1700050140,
+            "closedOHLCVCompared": 370
+          },
+          {
+            "cellId": "cell-2",
+            "interval": "1m",
+            "bars": 370,
+            "first": 1700028000,
+            "last": 1700050140,
+            "closedOHLCVCompared": 370
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 370,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-window-13",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 370,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 10,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 8,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-15",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-16",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-17",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-18",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-19",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-14",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-2|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 2,
+          "activeOperations": 17,
+          "requests": 0,
+          "streams": 2,
+          "bars": 740
+        }
+      }
+    },
+    {
+      "name": "independent-intervals",
+      "at": "2026-11-01T05:51:01.903Z",
+      "evidence": {
+        "time": 1700050199999,
+        "historyWaitMs": 98,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 370,
+            "first": 1700028000,
+            "last": 1700050140,
+            "closedOHLCVCompared": 370
+          },
+          {
+            "cellId": "cell-2",
+            "interval": "5m",
+            "bars": 74,
+            "first": 1700028000,
+            "last": 1700049900,
+            "closedOHLCVCompared": 0
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 370,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-window-20",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 1,
+                "interval": "5m"
+              },
+              "consumers": 1,
+              "bars": 74,
+              "requests": 0,
+              "totalRequests": 1,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 11,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 8,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-15",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-16",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 1,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-17",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-18",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-19",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-21",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-2|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:5m|mapping:source-bucket-v3|5m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 2,
+          "activeOperations": 17,
+          "requests": 0,
+          "streams": 2,
+          "bars": 444
+        }
+      }
+    },
+    {
+      "name": "offline-observed",
+      "at": "2026-11-01T05:51:07.519Z",
+      "evidence": {
+        "urls": [
+          "ws://127.0.0.1:65348/api/v1/stream/replay/runs/prepared-8767219709d04a1aae2136e3b29e938e?protocol=replay.v3&projection=delta.v1",
+          "ws://127.0.0.1:65348/api/v1/stream/replay/8085be95d5e0419e9084ab1f82b2b212?data_epoch=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595"
+        ],
+        "time": 1700050199999,
+        "networkFailure": true
+      }
+    },
+    {
+      "name": "reconnected-advanced",
+      "at": "2026-11-01T05:51:11.278Z",
+      "evidence": {
+        "time": 1700050259999,
+        "historyWaitMs": 386,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 371,
+            "first": 1700028000,
+            "last": 1700050200,
+            "closedOHLCVCompared": 371
+          },
+          {
+            "cellId": "cell-2",
+            "interval": "5m",
+            "bars": 75,
+            "first": 1700028000,
+            "last": 1700050200,
+            "closedOHLCVCompared": 0
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 6,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 371,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-window-20",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 6,
+                "interval": "5m"
+              },
+              "consumers": 1,
+              "bars": 75,
+              "requests": 0,
+              "totalRequests": 9,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 13,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 14,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-15",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-16",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-17",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-18",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-19",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-21",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-2|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:5m|mapping:source-bucket-v3|5m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 2,
+          "activeOperations": 17,
+          "requests": 0,
+          "streams": 2,
+          "bars": 446
+        }
+      }
+    },
+    {
+      "name": "recovery-duration",
+      "at": "2026-11-01T05:51:11.279Z",
+      "evidence": {
+        "elapsedMs": 3758
+      }
+    },
+    {
+      "name": "portfolio-empty-scope",
+      "at": "2026-11-01T05:51:11.562Z",
+      "evidence": {
+        "reason": "Single-market fixture has no multi-market portfolio interval export link."
+      }
+    },
+    {
+      "name": "closed-one-chart",
+      "at": "2026-11-01T05:51:11.803Z",
+      "evidence": {
+        "time": 1700050259999,
+        "historyWaitMs": 78,
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "interval": "1m",
+            "bars": 371,
+            "first": 1700028000,
+            "last": 1700050200,
+            "closedOHLCVCompared": 371
+          }
+        ],
+        "manager": {
+          "sequences": [
+            {
+              "owner": "replay-window-6",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "trackId": "track-1",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                "generation": 6,
+                "interval": "1m"
+              },
+              "consumers": 1,
+              "bars": 371,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "run-entry"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 2,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-3",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 14,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-2",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                "purpose": "adapter"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 3,
+              "streams": 1,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-4",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "viewer"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-5",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 14,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-8",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-9",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "history"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-10",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "review"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-11",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "review-inactive"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-12",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "rail"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            },
+            {
+              "owner": "replay-operation-7",
+              "identity": {
+                "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                "purpose": "indicator",
+                "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 0,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 1,
+          "activeOperations": 11,
+          "requests": 0,
+          "streams": 2,
+          "bars": 371
+        }
+      }
+    },
+    {
+      "name": "run-resources-released",
+      "at": "2026-11-01T05:51:12.160Z",
+      "evidence": {
+        "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+        "manager": {
+          "sequences": [],
+          "operations": [
+            {
+              "owner": "replay-operation-1",
+              "identity": {
+                "runId": "hub",
+                "purpose": "hub"
+              },
+              "consumers": 1,
+              "bars": 0,
+              "requests": 0,
+              "totalRequests": 1,
+              "streams": 0,
+              "cleanupErrors": 0
+            }
+          ],
+          "activeSequences": 0,
+          "activeOperations": 1,
+          "requests": 0,
+          "streams": 0,
+          "bars": 0
+        }
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:51:12.209Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20720,
+            "ppid": 20707,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20721,
+            "ppid": 20720,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20722,
+            "ppid": 20720,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20723,
+            "ppid": 20720,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20741,
+            "ppid": 20723,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20752,
+            "ppid": 20720,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687870183 --launch-time-ticks=13568980837 --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=65348 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20754,
+            "ppid": 20723,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(64)"
+          },
+          {
+            "pid": 20755,
+            "ppid": 20723,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=65, pipe_handle=67) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T05:51:27.343Z",
+      "evidence": {
+        "elapsedMs": 15134
+      }
+    },
+    {
+      "name": "full-exit",
+      "at": "2026-11-01T05:51:27.390Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20720,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20721,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20722,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20723,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20741,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20752,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687870183 --launch-time-ticks=13568980837 --shared-files --field-trial-handle=1718379636,r,2121604584789578602,4012031093851612891,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14259612954447115290,13133156537992650382,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=65348 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20754,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(64)"
+          },
+          {
+            "pid": 20755,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=65, pipe_handle=67) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true,
+        "elapsedMs": 15228
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

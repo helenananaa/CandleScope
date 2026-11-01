@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -7,7 +8,6 @@ import {
   type ReplayTradeFlowState,
   type ReplayTradeFlowTapeItem,
 } from "./replayTradeFlow.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 
 export interface ReplayTradeFlowRuntime {
   readonly state: ReplayTradeFlowState;
@@ -29,6 +29,7 @@ export function useReplayTradeFlow({
   readonly sourceKind: string | null;
   readonly revealedSequence: number;
 }): ReplayTradeFlowRuntime {
+  const { api } = useReplayOperations(runId, "rail");
   const [view, setView] = useState<ReplayTradeFlowRuntime & { readonly key: string }>({
     key: "unavailable",
     state: "LOADING", tape: [], cvd: "0", pageDelta: "0", fidelity: "--", error: null,
@@ -55,7 +56,7 @@ export function useReplayTradeFlow({
       ? current
       : null;
     const afterSequence = incrementalCursor?.sequence;
-    void defaultReplayV2Api.tradeFlowRun(
+    void api.tradeFlowRun(
       runId,
       {
         trackId,
@@ -108,7 +109,7 @@ export function useReplayTradeFlow({
       });
     });
     return () => abort.abort();
-  }, [key, revealedSequence, runId, sourceKind, trackId]);
+  }, [api, key, revealedSequence, runId, sourceKind, trackId]);
 
   if (sourceKind !== "agg_trade" || runId === null || trackId === null) {
     return {

@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "source": "independent Decimal arithmetic from the finite OHLCV formula, configured 1 bps market slippage and 5 bps taker fees",
+  "initial_index": 826,
+  "exit_mark_index": 830,
+  "quantity": "0.01",
+  "entry": "30057.50545",
+  "exit": "30063.49335",
+  "fees": "0.30060500",
+  "realized_pnl": "0.0598790",
+  "cash_balance": "9999.75927400",
+  "scope": "two deterministic one-way approximate-model market fills; no historical-exact account claim"
+}

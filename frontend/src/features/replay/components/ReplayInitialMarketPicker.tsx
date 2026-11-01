@@ -1,3 +1,4 @@
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -7,7 +8,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayCatalog, ReplayCatalogEntry } from "../replayTypes.js";
 import type { TrainingRunCard } from "../replayV2Types.js";
-import { defaultReplayV2Api, ReplayV2ApiError } from "../replayV2Api.js";
+import { ReplayV2ApiError } from "../replayV2Api.js";
 import {
   prepareReplayInitialMarketSelection,
   ReplayInitialMarketDowngradeRequired,
@@ -114,6 +115,7 @@ export default function ReplayInitialMarketPicker({
   run,
   onInitialized,
 }: ReplayInitialMarketPickerProps) {
+  const { api } = useReplayOperations(run.run_id, "catalog");
   useLocale();
   const [catalog, setCatalog] = useState<ReplayCatalog | null>(null);
   const [query, setQuery] = useState("");
@@ -131,21 +133,21 @@ export default function ReplayInitialMarketPicker({
     setError(null);
     setDowngrade(null);
     setCatalog(null);
-    void defaultReplayV2Api.marketCatalog(run.run_id).then(setCatalog).catch((reason: unknown) => {
+    void api.marketCatalog(run.run_id).then(setCatalog).catch((reason: unknown) => {
       setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.catalogFailed"));
     });
   };
 
   useEffect(() => {
     const abort = new AbortController();
-    void defaultReplayV2Api.marketCatalog(run.run_id, abort.signal)
+    void api.marketCatalog(run.run_id, abort.signal)
       .then(setCatalog)
       .catch((reason: unknown) => {
         if (abort.signal.aborted) return;
         setError(reason instanceof Error ? describeError(reason, reason.message) : t("replay.picker.catalogFailed"));
       });
     return () => abort.abort();
-  }, [run.run_id]);
+  }, [api, run.run_id]);
 
   const marketTypes = useMemo(() => {
     const seen = new Map<string, MarketTypeFilter>();
@@ -200,7 +202,7 @@ export default function ReplayInitialMarketPicker({
       let activeEntry = entry;
       if (!confirmed) {
         const prepared = await prepareReplayInitialMarketSelection({
-          api: defaultReplayV2Api,
+          api: api,
           runId: run.run_id,
           catalog,
           entry,
@@ -215,7 +217,7 @@ export default function ReplayInitialMarketPicker({
         }
       }
       const result = await selectReplayInitialMarketWithEpochRetry({
-        api: defaultReplayV2Api,
+        api: api,
         runId: run.run_id,
         catalog: activeCatalog,
         entry: activeEntry,
