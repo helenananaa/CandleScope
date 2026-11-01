@@ -114,6 +114,20 @@ class BinancePlugin(BuiltinExchangePlugin):
                 ),
             },
             endpoint_rules=(
+                # Server time is a physical dependency of source-finality
+                # checks. It consumes the same documented IP weight as klines.
+                RateLimitRule(
+                    name="binance_spot_server_time",
+                    bucket_key="binance:spot:request_weight:ip",
+                    endpoint="/api/v3/time",
+                    market_types=("spot",),
+                    algorithm="header_weight",
+                    capacity=spot_capacity,
+                    refill_interval_seconds=60.0,
+                    cost=lambda _request: 1,
+                    max_concurrency=spot_concurrency,
+                    cooldown_seconds=backoff,
+                ),
                 RateLimitRule(
                     name="binance_spot_exchange_info",
                     bucket_key="binance:spot:request_weight:ip",
@@ -136,6 +150,20 @@ class BinancePlugin(BuiltinExchangePlugin):
                     refill_interval_seconds=60.0,
                     cost=lambda request: 2,
                     max_concurrency=spot_concurrency,
+                    cooldown_seconds=backoff,
+                ),
+                # Server time is a physical dependency of source-finality
+                # checks. It consumes the same documented IP weight as klines.
+                RateLimitRule(
+                    name="binance_futures_server_time",
+                    bucket_key="binance:futures:request_weight:ip",
+                    endpoint="/fapi/v1/time",
+                    market_types=("futures",),
+                    algorithm="header_weight",
+                    capacity=futures_capacity,
+                    refill_interval_seconds=60.0,
+                    cost=lambda _request: 1,
+                    max_concurrency=futures_concurrency,
                     cooldown_seconds=backoff,
                 ),
                 RateLimitRule(
