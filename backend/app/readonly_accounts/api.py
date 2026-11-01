@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 import uuid
 
 from candlescope_plugin_sdk.platform_v2 import PlatformContractError, loads_strict
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.plugin_security_v2.management import LocalManagementGuard
 from .normalization import AccountDataError
@@ -54,7 +55,32 @@ def failure(exc: Exception) -> JSONResponse:
 @router.get("/status")
 async def get_status(request: Request):
     owner = await service(request)
-    return await owner.state()
+    core = getattr(request.app.state, "data_manager_core", None)
+    manager = getattr(core, "readonly_account", None)
+    return await manager.state() if manager is not None and manager.service is owner else await owner.state()
+
+
+@router.get("/events")
+async def stream_state(request: Request):
+    owner = await service(request)  # Authenticate before reading account state.
+    core = getattr(request.app.state, "data_manager_core", None)
+    manager = getattr(core, "readonly_account", None)
+    if manager is None or manager.service is not owner:
+        raise HTTPException(503, detail={"code": "ACCOUNT_UNAVAILABLE"})
+    try:
+        subscription = await manager.subscribe_state()
+    except AccountDataError as exc:
+        return failure(exc)
+
+    async def rows():
+        try:
+            async for event in subscription.events():
+                yield json.dumps(event, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        finally:
+            subscription.close()
+
+    return StreamingResponse(rows(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Content-Encoding": "identity"})
 
 
 @router.post("/connect")

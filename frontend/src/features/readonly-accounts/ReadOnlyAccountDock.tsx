@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ReadOnlyAccountDataManager } from "./accountDataManager.js";
+import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
 import { t, type MessageKey } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import AccountReconciliation from "./AccountReconciliation.js";
@@ -18,6 +20,9 @@ function rows(value: unknown): Fact[] { return Array.isArray(value) ? value.filt
 
 export default function ReadOnlyAccountDock({ height, onRequestClose, trading }: { height: number; onRequestClose: () => void; trading?: ReadOnlyReviewBinding | undefined }) {
   const locale = useLocale();
+  const workspace = useMarketDataWorkspaceResources();
+  const [localManager] = useState(() => new ReadOnlyAccountDataManager());
+  const accountManager = workspace?.dataManager.readonlyAccount ?? localManager;
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
@@ -35,16 +40,9 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
 
   useEffect(() => {
     if (!available) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async () => {
-      try { const value = await getAccountStatus(controller.signal); if (!controller.signal.aborted) { setStatus(value); setReadError(null); } }
-      catch (failure) { if (!controller.signal.aborted) setReadError(failure instanceof AccountApiError ? failure.code : "ACCOUNT_UNAVAILABLE"); }
-      finally { if (!controller.signal.aborted) timer = setTimeout(() => { void read(); }, 5000); }
-    };
-    void read();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [available]);
+    return accountManager.subscribe((value) => { setStatus(value); setReadError(null); },
+      (code) => { setReadError(code); });
+  }, [available, accountManager]);
   useEffect(() => {
     factRequest.current += 1;
     if (tab === "overview" || tab === "journal" || tab === "reconcile" || tab === "trades" || !available) return;

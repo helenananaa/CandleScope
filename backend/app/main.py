@@ -864,6 +864,9 @@ async def shutdown_event() -> None:
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            core.close_readonly_account()
         await readonly_accounts.close()
     preparation = getattr(app.state, "data_preparation_service", None)
     if preparation is not None:

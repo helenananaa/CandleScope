@@ -1,0 +1,13 @@
+{
+  "stage": "Single-profile OKX read-only committed overview replacement stream. Not full issue176 or177 acceptance.",
+  "backend_initial": 197,
+  "dedicated_stream_tests_after_route_health_additions": 6,
+  "frontend": "25 tests passed before adding replay tests; current combined result pending",
+  "native": "pending",
+  "limitations": [
+    "No two-venue common sync flow",
+    "Not every financial event is delivered; snapshots deliberately coalesce",
+    "No cross-process private-account writer is supported by this in-process notification stage",
+    "Windows unqualified"
+  ]
+}

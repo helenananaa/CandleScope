@@ -97,7 +97,10 @@ export async function accountRequest(path: string, method = "GET", payload?: unk
 }
 
 export async function getAccountStatus(signal?: AbortSignal): Promise<AccountStatus> {
-  const value = await accountRequest("/status", "GET", undefined, signal);
+  return validateAccountStatus(await accountRequest("/status", "GET", undefined, signal));
+}
+
+export function validateAccountStatus(value: unknown): AccountStatus {
   if (!record(value) || value.schemaVersion !== 1 || value.readOnly !== true || value.venue !== "okx"
     || typeof value.available !== "boolean" || !record(value.snapshots) || !record(value.counts)
     || (value.serviceError !== undefined && !nullableString(value.serviceError))
