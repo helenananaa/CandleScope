@@ -574,3 +574,30 @@ async def test_cancelled_shutdown_waits_for_recovery_and_physical_worker_exit():
     assert state['serial_owner']['closed']
     assert state['serial_owner']['executor']['active'] == 0
     assert state['instances'] == []
+
+
+@pytest.mark.asyncio
+async def test_recovery_stays_unavailable_until_source_callbacks_are_ready():
+    from app.indicator.serial_owner import IndicatorGenerationChanged
+    owner = SerialIndicatorOwner()
+    entered, allow_ready = asyncio.Event(), asyncio.Event()
+    async def reconnect_source():
+        entered.set()
+        await allow_ready.wait()
+    recovery = None
+    try:
+        await owner.call('list_instances')
+        recovery = asyncio.create_task(owner.recover({'reason':'source_gap'}, before_ready=reconnect_source))
+        await asyncio.wait_for(entered.wait(), 3)
+        assert owner.snapshot()['serial_owner']['recovering']
+        with pytest.raises(IndicatorGenerationChanged):
+            await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period':5}, bars=bars())
+        allow_ready.set()
+        await recovery
+        assert not owner.snapshot()['serial_owner']['recovering']
+        assert (await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period':5}, bars=bars()))[1]
+    finally:
+        allow_ready.set()
+        if recovery is not None:
+            await asyncio.gather(recovery, return_exceptions=True)
+        await owner.aclose()

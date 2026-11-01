@@ -145,3 +145,29 @@ async def test_cancelled_waiter_keeps_physical_process_capacity_until_resume():
         if pending is not None:
             await asyncio.gather(pending, return_exceptions=True)
         await owner.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
+async def test_shutdown_interrupts_owned_compute_and_drains_capacity():
+    owner = SerialIndicatorOwner(execution_mode='process')
+    task = None
+    try:
+        await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        pid = owner.snapshot()['worker']['pid']
+        os.kill(pid, signal.SIGSTOP)
+        task = asyncio.create_task(owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1]))
+        async with asyncio.timeout(3):
+            while owner.snapshot()['serial_owner']['executor']['active'] != 1:
+                await asyncio.sleep(.001)
+        await asyncio.wait_for(owner.aclose(), 3)
+        with pytest.raises(RuntimeError):
+            await task
+        state = owner.snapshot()['serial_owner']
+        assert state['closed'] and state['input_bars'] == state['inflight'] == 0
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        await owner.aclose()
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)

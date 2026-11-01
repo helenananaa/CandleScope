@@ -58,6 +58,9 @@ class BuiltinHistoryExecutor:
                 self._lane.close()
             self._lane = SerialProcessLane(_dispatch, name='indicator-history', timeout=self._timeout)
             self._process_starts += 1
+        with self._lock:
+            if self._closing:
+                self._lane.request_abort()
         try:
             value, worker = self._lane.call(request)
         finally:
@@ -105,6 +108,8 @@ class BuiltinHistoryExecutor:
     def close(self):
         with self._lock:
             self._closing = True
+            if self._lane is not None:
+                self._lane.request_abort()
         self._executor.shutdown(wait=True, cancel_futures=True)
         if self._lane is not None:
             self._lane.close()

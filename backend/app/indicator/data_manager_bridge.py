@@ -604,23 +604,24 @@ def bridge_indicator_engine(
             tasks = [task for task in pending_backfills.values() if task is not asyncio.current_task()]
             for task in tasks:
                 task.cancel()
+            async def finish_source_recovery():
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                pending_backfills.clear()
+                pending_series_refreshes.clear()
+                completed_backfills.clear()
+                # No ready subscription can exist before these source
+                # callbacks are reattached to deliver subsequent closes.
+                _subscribe_bridge()
             if isolated:
                 if result_service is not None:
                     result_service.invalidate_source_gap()
-                await indicator_engine.recover(error.to_dict())
+                await indicator_engine.recover(error.to_dict(), before_ready=finish_source_recovery)
             else:
                 await call_engine(indicator_engine, "invalidate_source_gap", error.to_dict())
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-            pending_backfills.clear()
-            pending_series_refreshes.clear()
-            completed_backfills.clear()
-            if result_service is not None and not isolated:
-                result_service.invalidate_source_gap()
-            # No warm instance may survive a gap as valid. Existing owners get
-            # a terminal wire signal; reconnect seeds from canonical storage.
-            _subscribe_bridge()
-            if not isolated:
+                if result_service is not None:
+                    result_service.invalidate_source_gap()
+                await finish_source_recovery()
                 await call_engine(indicator_engine, "set_source_delivery_state", {"state": "live", "last_gap": error.to_dict()})
         except Exception as exc:
             for handle in handles:

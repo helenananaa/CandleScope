@@ -37,7 +37,7 @@ async function verify(){
   }catch(error){failure=String(error);return false;}
  },90000).catch(error=>{throw new Error(error.message+'; '+failure);});
 }
-async function launch(){const e=await q.launch();running=true;await q.record('packaged-launch',e);await q.enableControl();}
+async function launch(){try{const e=await q.launch();running=true;await q.record('packaged-launch',e);await q.enableControl();}catch(error){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw error;}}
 async function quit(){await q.quit();await q.exited();running=false;await q.record('full-process-exit',{allExited:true,elapsedMs:Date.now()-q.s.quitStartedAt,processes:q.s.quitPids});}
 function checkProcesses(d){
  assert.equal(d.engine.serial_owner.execution_mode,'process');assert.equal(d.engine.serial_owner.failure,null);
@@ -64,6 +64,7 @@ try{
  const match=owned.match(/^(\d+)\s+(\d+)\s+(.*)$/);assert.ok(match);assert.equal(+match[1],old.realtime);assert.equal(+match[2],old.backend);assert.ok(match[3].includes(q.s.identity.resources+'/python-runtime/'));
  process.kill(old.realtime,'SIGKILL');
  const recovered=await q.until(async()=>{const d=await diag();return d.engine.worker.pid!==old.realtime&&d.engine.serial_owner.generation>old.generation&&!d.engine.serial_owner.failure&&!d.engine.serial_owner.recovering&&active(d).length===2?d:false;},120000);
+ assert.equal(recovered.engine.serial_owner.generation,old.generation+1,'one injected child failure requires one recovery');
  await q.indicatorsReady(2,60000);await q.record('owned-compute-child-recovery',{old,owned,after:checkProcesses(recovered),diagnostics:recovered,values:await verify()});
  await q.ready(2,60000);await q.record('saved-workspace',await q.inspect());await q.screenshot('saved-hosted-indicators');
  const firstProcesses=checkProcesses(await diag());await quit();
@@ -73,6 +74,15 @@ try{
  await q.record('restart-restored-values',{processes:newProcesses,values:await verify(),workspace:await q.inspect()});
  for(const [cell,id] of [['cell-1','owner-ma-one'],['cell-2','owner-ma-two']])assert.equal((await q.execute(cell,'removeIndicator',{indicatorId:id})).state,'applied');
  const released=await q.until(async()=>{const d=await diag();return active(d).length===0&&d.engine.serial_owner.release_targets===0?d:false;},30000);
- await q.record('last-unsubscribe-releases-owner',released);await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
+ await q.record('last-unsubscribe-releases-owner',released);
+ const historyPid=released.executors.indicator_history_process.worker.pid;
+ const historyOwned=cp.execFileSync('ps',['-p',String(historyPid),'-o','pid=,ppid=,args='],{encoding:'utf8'}).trim();
+ const historyMatch=historyOwned.match(/^(\d+)\s+(\d+)\s+(.*)$/);assert.ok(historyMatch);assert.equal(+historyMatch[2],q.s.bootstrap.sidecar.pid);assert.ok(historyMatch[3].includes(q.s.identity.resources+'/python-runtime/'));
+ process.kill(historyPid,'SIGSTOP');
+ const source=(await capture(q))[0].bars.filter(b=>b.is_closed).slice(-100);
+ await q.s.page.evaluate(({url,ohlcv})=>{window.__qaPendingHistory=fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'builtin',name:'BOLL',params:{period:20},exchange:'binance',market_type:'spot',symbol:'BTCUSDT',interval:'1m',ohlcv})}).then(r=>r.json()).catch(e=>String(e));return true;},{url:q.s.backend+'/api/v1/indicators/compute',ohlcv:source});
+ const blocked=await q.until(async()=>{const d=await diag();return d.executors.indicator_history_process.active===1?d:false;},10000);
+ await q.record('quit-with-running-suspended-owned-history',{historyPid,historyOwned,executor:blocked.executors.indicator_history_process});
+ await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){q.s.receipt.failure=String(error.stack||error);process.exitCode=1;if(running)await q.screenshot('failure').catch(()=>{});}
 finally{if(running)try{await quit();}catch(error){q.s.receipt.exitFailure=String(error);}await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure}));}

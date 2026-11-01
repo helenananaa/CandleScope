@@ -18,7 +18,7 @@ try:
 except ImportError:  # Windows packaging uses the same worker protocol.
     resource = None
 import logging
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
 from app.core.process_lane import ProcessMessageTooLarge, SerialProcessLane
@@ -439,6 +439,12 @@ class SerialIndicatorOwner:
     def _execute(self, method: str, args: tuple, kwargs: dict) -> tuple:
         if self._execution_mode == "thread":
             return self._state.execute(method, args, kwargs)
+        if method == 'stop':
+            if self._process_lane is not None:
+                self._process_lane.close(force=True)
+                self._transport_snapshot = self._process_lane.snapshot()
+                self._process_lane = None
+            return None, [], {"started": False, "instances": []}, ()
         # This synchronous transport runs on the dedicated I/O thread, never
         # on the event loop. One worker process owns all mutable instances.
         if method == "__reset_source" and self._process_lane is not None:
@@ -447,6 +453,8 @@ class SerialIndicatorOwner:
         if self._process_lane is None:
             self._process_lane = SerialProcessLane(_process_command, name="indicator-realtime")
             self._process_starts += 1
+        if self._closing:
+            self._process_lane.request_abort()
         try:
             return self._process_lane.call(method, args, kwargs)
         finally:
@@ -593,7 +601,7 @@ class SerialIndicatorOwner:
             self._release_task = asyncio.create_task(drain(), name="indicator-owner-release")
         await drain_control_task(self._release_task)
 
-    async def recover(self, detail: dict) -> None:
+    async def recover(self, detail: dict, *, before_ready: Callable[[], Awaitable[None]] | None = None) -> None:
         """Invalidate old admissions immediately; replace state on its worker.
 
         One reserved control operation can recover even when ordinary admission
@@ -617,6 +625,10 @@ class SerialIndicatorOwner:
                     self._adopt_snapshot(snapshot, keys)
                     self._failure = None
                     self._sequence += 1
+                # Keep new subscriptions fenced until the source owner has
+                # drained old tasks and reattached its input callbacks.
+                if before_ready is not None:
+                    await before_ready()
             except BaseException as error:
                 self._failure = str(error) or type(error).__name__
                 raise
@@ -631,6 +643,8 @@ class SerialIndicatorOwner:
         if self._closed:
             return
         self._closing = True
+        if self._process_lane is not None:
+            self._process_lane.request_abort()
 
         async def stop():
             if self._recovery_task is not None:

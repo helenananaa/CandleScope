@@ -115,6 +115,20 @@ class SerialProcessLane:
     def snapshot(self):
         return dict(self._metrics)
 
+    def request_abort(self):
+        """Interrupt only our child; its transport caller still owns the join.
+
+        Shutdown cannot wait out a long compute deadline before the desktop's
+        parent deadline expires. Killing the peer also unblocks a full send or
+        receive without releasing physical admission before the caller drains.
+        """
+        if self._closed:
+            return
+        try:
+            self._process.kill()
+        except (ValueError, ProcessLookupError):
+            pass  # The transport caller already reaped/closed this child.
+
     def call(self, *request):
         if not self.alive:
             self.close()

@@ -1,6 +1,7 @@
 import asyncio
 import os
 import signal
+import time
 
 import pytest
 
@@ -63,10 +64,11 @@ async def test_history_cancellation_retains_physical_rows_and_retracts_queued_wo
 @pytest.mark.asyncio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_physical_deadline_reaps_only_owned_worker_before_reusing_capacity():
-    executor = BuiltinHistoryExecutor(timeout=2)
+    executor = BuiltinHistoryExecutor(timeout=30)
     try:
         await executor.run(request(), 30)
         pid = executor.snapshot()['worker']['pid']
+        executor._lane._timeout = .2  # Bound the suspended call, not cold process imports.
         os.kill(pid, signal.SIGSTOP)
         with pytest.raises(TimeoutError):
             await executor.run(request(), 30)
@@ -77,3 +79,28 @@ async def test_physical_deadline_reaps_only_owned_worker_before_reusing_capacity
         assert executor.snapshot()['worker']['pid'] != pid
     finally:
         await asyncio.to_thread(executor.close)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
+async def test_shutdown_interrupts_running_history_before_parent_deadline():
+    executor = BuiltinHistoryExecutor(timeout=30)
+    task = None
+    try:
+        await executor.run(request(), 30)
+        pid = executor.snapshot()['worker']['pid']
+        os.kill(pid, signal.SIGSTOP)
+        task = asyncio.create_task(executor.run(request(), 30))
+        await until(lambda: executor.snapshot()['active'] == 1)
+        started = time.monotonic()
+        await asyncio.wait_for(asyncio.to_thread(executor.close), 3)
+        assert time.monotonic() - started < 3
+        with pytest.raises(RuntimeError):
+            await task
+        assert executor.snapshot()['input_bars'] == executor.snapshot()['active'] == 0
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        await asyncio.to_thread(executor.close)
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)
