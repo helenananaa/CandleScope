@@ -69,7 +69,12 @@ def record(symbol, ranges):
                     if overlaps:
                         a = min(a, min(int(row[0]) for row in overlaps))
                         b = max(b, max(int(row[1]) for row in overlaps))
-                        conn.execute('DELETE FROM native_empty_seconds WHERE symbol = ? AND start_ms <= ? AND end_ms >= ?', (symbol, b, a))
+                        mode = conn.execute('SELECT mode FROM kline_mutation_context WHERE singleton=1').fetchone()[0]
+                        conn.execute("UPDATE kline_mutation_context SET mode='native_empty_union' WHERE singleton=1")
+                        try:
+                            conn.execute('DELETE FROM native_empty_seconds WHERE symbol = ? AND start_ms <= ? AND end_ms >= ?', (symbol, b, a))
+                        finally:
+                            conn.execute('UPDATE kline_mutation_context SET mode=? WHERE singleton=1', (mode,))
                     conn.execute('INSERT OR IGNORE INTO native_empty_seconds VALUES (?, ?, ?)', (symbol, a, b))
                     changed = True
                 cursor = value + 1000

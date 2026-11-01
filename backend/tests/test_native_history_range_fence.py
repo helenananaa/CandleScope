@@ -216,3 +216,19 @@ def test_external_delete_after_own_empty_merge_still_cannot_be_resurrected(store
     with acquisition_scope(scope),pytest.raises(StaleAcquisition):
         native_empty_seconds.record('BTCUSDT',[(90000,93000)])
     assert native_empty_seconds.read('BTCUSDT',90000,99000)==[]
+
+
+def test_other_request_monotonically_merging_absence_is_not_candle_deletion(store):
+    from app.data_engine.storage import native_empty_seconds
+    from app.data_engine.storage.revisions import series_values,series_change
+    native_empty_seconds.record('BTCUSDT',[(90000,92000)])
+    scope=capture(store,exchange='upbit')
+    with klines_repo._connect() as conn:
+        before=dict(series_change(conn,series_values('BTCUSDT','1s','upbit','spot')))
+    native_empty_seconds.record('BTCUSDT',[(93000,94000)])
+    with klines_repo._connect() as conn:
+        after=dict(series_change(conn,series_values('BTCUSDT','1s','upbit','spot')))
+    assert after['revision']>before['revision']
+    assert after['delete_revision']==before['delete_revision']
+    with acquisition_scope(scope):assert write(95000,exchange='upbit')==1
+    assert native_empty_seconds.read('BTCUSDT',90000,94000)==[(90000,94000)]

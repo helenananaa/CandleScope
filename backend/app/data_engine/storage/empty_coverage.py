@@ -32,6 +32,13 @@ def init_revision_triggers(conn, table: str, *, native: bool = False) -> None:
                   exchange, exchange, "'crypto'", "'native'", "'raw'", "'continuous'", "'base_asset'")
         head = "(SELECT revision FROM kline_revision_clock WHERE singleton=1)"
         deletion = head if operation == "delete" else "0"
+        if native and operation == "delete":
+            # Atomic union replaces old spans without withdrawing any absence
+            # evidence. It is a content revision, not permission to recreate
+            # deleted candles. Actual clear/delete/invalidation stays fenced.
+            deletion = ("CASE WHEN (SELECT mode FROM kline_mutation_context WHERE singleton=1)="
+                        "'native_empty_union' THEN 0 ELSE " + head + " END")
+            conn.execute(f"DROP TRIGGER IF EXISTS {table}_change_delete")
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
