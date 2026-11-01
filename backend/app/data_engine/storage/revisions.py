@@ -27,7 +27,11 @@ class StaleAcquisition(RuntimeError):
 def init_revision_storage(conn):
     columns = ", ".join(f"{name} TEXT NOT NULL" for name in IDENTITY_COLUMNS)
     keys = ", ".join(IDENTITY_COLUMNS)
-    conn.executescript(f"""
+    # Serialize first-migration detection and seeding with every physical writer.
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    had_delete_permissions = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kline_delete_permissions'").fetchone() is not None
+    schema = f"""
         CREATE TABLE IF NOT EXISTS kline_revision_clock (
             singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL
         );
@@ -46,7 +50,23 @@ def init_revision_storage(conn):
         CREATE TABLE IF NOT EXISTS kline_acquisitions (
             owner TEXT PRIMARY KEY, revision INTEGER NOT NULL
         );
-    """)
+        CREATE TABLE IF NOT EXISTS kline_delete_permissions (
+            {columns}, revision INTEGER NOT NULL, PRIMARY KEY ({keys})
+        );
+        CREATE TABLE IF NOT EXISTS kline_projection_invalidation (
+            singleton INTEGER PRIMARY KEY CHECK(singleton=1), depth INTEGER NOT NULL CHECK(depth>=0)
+        );
+        INSERT OR IGNORE INTO kline_projection_invalidation VALUES (1,0);
+    """
+    for statement in schema.split(";"):
+        if statement.strip():
+            conn.execute(statement)
+    if not had_delete_permissions:
+        # Old pending jobs have no distinction between explicit deletion and
+        # automatic projection invalidation. Preserve their conservative floor.
+        conn.execute(f"INSERT OR IGNORE INTO kline_delete_permissions SELECT {keys},delete_revision "
+                     "FROM kline_series_changes WHERE delete_revision>0")
+    conn.commit()
     conn.executescript("""
         CREATE TRIGGER IF NOT EXISTS manual_history_acquisition
         AFTER INSERT ON manual_history_jobs BEGIN
@@ -85,6 +105,7 @@ def init_revision_storage(conn):
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         family_predicate = " AND ".join(f"{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         conn.executescript(f"""
+            {('BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS kline_change_delete;' if operation == 'delete' else '')}
             CREATE TRIGGER IF NOT EXISTS kline_change_{operation}
             AFTER {operation.upper()} ON klines {condition} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
@@ -96,26 +117,35 @@ def init_revision_storage(conn):
                     delete_revision=MAX(delete_revision,excluded.delete_revision),
                     start_ms=MIN(start_ms,excluded.start_ms), end_ms=MAX(end_ms,excluded.end_ms),
                     operation=excluded.operation;
+                {('INSERT INTO kline_delete_permissions SELECT ' + values + ',' + revision +
+                  ' WHERE (SELECT depth FROM kline_projection_invalidation WHERE singleton=1)=0 '
+                  'ON CONFLICT(' + keys + ') DO UPDATE SET revision=excluded.revision;' if operation == 'delete' else '')}
             END;
+            {('COMMIT;' if operation == 'delete' else '')}
         """)
         dependent_family = " AND ".join(f"d.{name}={alias}.{name}" for name in IDENTITY_COLUMNS if name != "interval")
         mutation_condition = "(" + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) + ") AND " if operation == "update" else ""
         # Avoid a K-line range scan for every row of an ordinary native import
         # when the semantic family has no registered derived projections.
         conn.executescript(f"""
+            BEGIN IMMEDIATE;
+            DROP TRIGGER IF EXISTS kline_dependents_{operation};
             CREATE TRIGGER IF NOT EXISTS kline_dependents_{operation}
             AFTER {operation.upper()} ON klines
             WHEN {mutation_condition}(SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention'
                 AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                 AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {dependent_family} AND d.interval<>{alias}.interval)
             BEGIN
+                UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {family_predicate}
                     AND interval<>{alias}.interval
                     AND EXISTS(SELECT 1 FROM kline_derived_series d WHERE {derived_predicate})
                     AND NOT EXISTS(SELECT 1 FROM kline_derived_series s WHERE {source_derived_predicate})
                     AND open_time<=COALESCE({alias}.close_time,{alias}.open_time)
                     AND COALESCE(close_time,open_time)>={alias}.open_time;
+                UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
             END;
+            COMMIT;
         """)
 
 
@@ -138,6 +168,8 @@ def mark_deleted(conn, values, start_ms=None, end_ms=None):
     conn.execute("UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1")
     revision = current_revision(conn)
     keys = ",".join(IDENTITY_COLUMNS)
+    conn.execute(f"INSERT INTO kline_delete_permissions VALUES ({','.join('?' for _ in range(12))}) "
+                 f"ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision", (*values, revision))
     conn.execute(f"""INSERT INTO kline_series_changes VALUES ({','.join('?' for _ in range(16))})
         ON CONFLICT({keys}) DO UPDATE SET revision=excluded.revision,
         delete_revision=excluded.delete_revision, start_ms=MIN(start_ms,excluded.start_ms),

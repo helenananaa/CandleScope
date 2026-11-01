@@ -38,10 +38,8 @@ def init_revision_triggers(conn, table: str, *, native: bool = False) -> None:
             # deleted candles. Actual clear/delete/invalidation stays fenced.
             deletion = ("CASE WHEN (SELECT mode FROM kline_mutation_context WHERE singleton=1)="
                         "'native_empty_union' THEN 0 ELSE " + head + " END")
-        replace_native_delete = native and operation == "delete"
-        migration_start = (f"BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS {table}_change_delete;"
-                           if replace_native_delete else "")
-        migration_end = "COMMIT;" if replace_native_delete else ""
+        migration_start = f"BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS {table}_change_{operation};"
+        migration_end = "COMMIT;"
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
@@ -56,10 +54,12 @@ def init_revision_triggers(conn, table: str, *, native: bool = False) -> None:
                     delete_revision=MAX(delete_revision,excluded.delete_revision),
                     start_ms=MIN(start_ms,excluded.start_ms), end_ms=MAX(end_ms,excluded.end_ms),
                     operation=excluded.operation;
+                UPDATE kline_projection_invalidation SET depth=depth+1 WHERE singleton=1;
                 DELETE FROM klines WHERE {selected_family} AND
                     EXISTS(SELECT 1 FROM kline_derived_series d WHERE {match} AND {family} AND d.interval<>{interval})
                     AND open_time<={alias}.end_ms AND COALESCE(close_time,open_time)>={alias}.start_ms
                     AND (SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention';
+                UPDATE kline_projection_invalidation SET depth=depth-1 WHERE singleton=1;
             END;
             {migration_end}
         """)
