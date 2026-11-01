@@ -198,6 +198,9 @@ class BarAggregator:
         self._symbol_intervals: dict[
             tuple[str, str, str, KlineSeriesIdentity], set[str]
         ] = {}
+        # Tokens exist only for registered targets. Removal/re-addition changes
+        # identity even when the interval pipeline itself remains resident.
+        self._target_epochs: dict[tuple, object] = {}
 
         # Timeout checker task
         self._timeout_task: asyncio.Task | None = None
@@ -214,6 +217,7 @@ class BarAggregator:
 
     async def stop(self) -> None:
         """Stop background tasks and flush all active bars."""
+        self._target_epochs.clear()
         if self._timeout_task is not None:
             self._timeout_task.cancel()
             try:
@@ -298,6 +302,8 @@ class BarAggregator:
             ),
             set(),
         ).add(interval)
+        self._target_epochs.setdefault((exchange, market_type, symbol, interval,
+                                        resolve_kline_series_identity(exchange, series_identity)), object())
 
     def remove_target(
         self,
@@ -319,6 +325,8 @@ class BarAggregator:
         spec = parse_interval_spec(interval)
         if spec is not None:
             interval = spec.canonical
+        self._target_epochs.pop((exchange, market_type, symbol, interval,
+                                 resolve_kline_series_identity(exchange, series_identity)), None)
         self._router.unregister_target(
             symbol,
             interval,
@@ -363,6 +371,36 @@ class BarAggregator:
     def get_targets(self) -> list[tuple[str, str, str, str]]:
         """Return all registered (symbol, interval) targets."""
         return self._router.get_targets()
+
+    def history_target_token(self, source, interval):
+        """Capture before asynchronous preparation; no token for detached targets."""
+        spec = parse_interval_spec(interval)
+        canonical = spec.canonical if spec is not None else interval
+        key = (source.exchange, source.market_type, source.symbol, canonical, source.identity)
+        epoch = self._target_epochs.get(key)
+        return (key, epoch) if epoch is not None else None
+
+    def adopt_history_prefix(self, prefix, token, *, acquisition_revision):
+        """Loop-owned, synchronous last step after the durable read fence.
+
+        No await separates the target-generation check and builder adoption.
+        The caller publishes the returned detached snapshot through the normal
+        publisher and remains responsible for source revisions during live use.
+        """
+        if token is None:
+            raise ValueError('history initialization target is detached')
+        key, epoch = token
+        if self._target_epochs.get(key) is not epoch:
+            raise ValueError('history initialization target generation expired')
+        exchange, market_type, symbol, interval, identity = key
+        source = prefix.summary.target
+        if (source.exchange, source.market_type, source.symbol, source.identity) != (
+                exchange, market_type, symbol, identity):
+            raise ValueError('history initialization source differs from target')
+        pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
+        state = pipeline.bar_state.adopt_history_prefix(prefix)
+        state.acquisition_revision = acquisition_revision
+        return deepcopy(state)
 
     def get_series_targets(self):
         return self._router.get_series_targets()
@@ -795,7 +833,7 @@ class BarAggregator:
     # ── Public: Snapshot ─────────────────────────────────────
 
     def memory_usage(self):
-        active = closed = components = 0
+        active = closed = components = history_prefixes = 0
         component_index_bytes = 0
         for pipeline in list(self._pipelines.values()):
             engine = pipeline.bar_state
@@ -803,6 +841,8 @@ class BarAggregator:
             closed += len(engine._closed)
             components += sum(len(state.source_snapshots) for state in
                               [*engine._active.values(), *engine._closed.values()])
+            history_prefixes += sum(state._history_prefix is not None for state in
+                                    (*engine._active.values(), *engine._closed.values()))
             component_index_bytes += sum(state._component_accumulator.snapshot()["estimated_bytes"]
                 for state in (*engine._active.values(), *engine._closed.values())
                 if state._component_accumulator is not None)
@@ -810,10 +850,13 @@ class BarAggregator:
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
         queued_components = sum(len(state.source_snapshots) for event in events
                                 for state in (event.bar, event.previous_bar) if state is not None)
+        queued_prefixes = sum(state._history_prefix is not None for event in events
+                              for state in (event.bar, event.previous_bar) if state is not None)
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
                 "component_index_bytes": component_index_bytes,
-                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes,
+                "history_prefixes": history_prefixes,
+                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024,
                 "protection": "active and correction state owned by realtime executor"}
 
     def _memory_roots(self):

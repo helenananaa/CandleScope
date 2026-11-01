@@ -125,7 +125,7 @@ class AggregatorBridge:
             if dm_event.previous_bar is not None:
                 payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
             payload["storage_row"] = bar_state.to_storage_dict()
-            payload["derived"] = bool(bar_state.source_snapshots)
+            payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix)
             if bar_state.acquisition_revision is not None:
                 payload["acquisition_revision"] = bar_state.acquisition_revision
             return await self.delivery.submit(event.delivery_id, payload, key)

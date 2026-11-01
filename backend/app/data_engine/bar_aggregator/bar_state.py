@@ -62,6 +62,11 @@ def has_complete_closed_component_coverage(state: BarState) -> bool:
         state.source_snapshots.values(),
         key=lambda item: (int(item["open_time_ms"]), int(item["close_time_ms"])),
     )
+    if state._history_prefix is not None:
+        prefix = component_accumulator._Summary.history(state._history_prefix)
+        tail = component_accumulator._Summary.batch(ordered) if ordered else None
+        return component_accumulator._combine(prefix, tail).coverage(
+            state.bucket_start_ms, state.bucket_end_ms).closed
     return snapshot_coverage(ordered, state.bucket_start_ms, state.bucket_end_ms).closed
 
 
@@ -190,6 +195,63 @@ class ComponentSnapshotOHLCVMerge:
 
     def __init__(self, *, incremental=True):
         self.incremental = incremental
+
+    def adopt_history_prefix(self, state, prefix):
+        """Synchronous owner operation, after durable and target fences pass.
+
+        Confirmed history and live snapshots occupy disjoint half-open ranges.
+        The caller is responsible for refreshing the prefix on source changes;
+        an input inside the prefix is rejected here instead of double counted.
+        """
+        source = prefix.summary.target
+        if ((source.exchange, source.market_type, source.symbol, source.identity)
+                != (state.exchange, state.market_type, state.symbol, state.identity)
+                or prefix.start_ms != state.bucket_start_ms
+                or prefix.through_ms > state.bucket_end_ms):
+            raise ValueError('history prefix does not belong to the target bucket')
+        head = component_accumulator._Summary.history(prefix)
+        if any(row['open_time_ms'] < prefix.through_ms < row['close_time_ms'] + 1
+               for row in state.source_snapshots.values()):
+            raise ValueError('live component crosses the history seam')
+        snapshots = {key: row for key, row in state.source_snapshots.items()
+                     if row['open_time_ms'] >= prefix.through_ms}
+        if any(row['close_time_ms'] + 1 > state.bucket_end_ms
+               or row['close_time_ms'] + 1 - row['open_time_ms'] != prefix.source_width_ms
+               or row['open_time_ms'] % prefix.source_width_ms for row in snapshots.values()):
+            raise ValueError('live overlay does not match the qualified source grid')
+        ordered = sorted(snapshots.values(), key=lambda row: row['open_time_ms'])
+        tail = component_accumulator._Summary.batch(ordered) if ordered else None
+        result = component_accumulator._combine(head, tail)
+        state.source_snapshots = snapshots
+        state.source_refs = {key: value for key, value in state.source_refs.items() if key in snapshots}
+        state._component_accumulator = None
+        state._history_prefix = prefix
+        return self._project(state, result, is_new=False)
+
+    @staticmethod
+    def _project(state, result, *, is_new):
+        coverage = result.coverage(state.bucket_start_ms, state.bucket_end_ms)
+        summary, raw_enhanced = result.values, result.raw_enhanced
+        fields = summary.project(enhanced_complete=coverage.enhanced_complete)
+        for name in ('open', 'high', 'low', 'close', 'volume'):
+            setattr(state, name, fields[name])
+        state.enhanced_fields = frozenset(name for name in component_accumulator.ENHANCED
+                                         if fields[name] is not None)
+        for name, raw_value in zip(component_accumulator.ENHANCED, raw_enhanced):
+            value = getattr(summary, name)
+            if value is None:
+                value = raw_value
+            if value is None:
+                value = 0
+            setattr(state, name, value if name == 'trades' else round(value, 8))
+        state.tick_count = result.count
+        state.first_input_at_ms, state.last_input_at_ms = result.first, result.last
+        state.last_close_received = result.last_closed
+        now_ms = int(time.time() * 1000)
+        if is_new and state.created_at_ms == 0:
+            state.created_at_ms = now_ms
+        state.updated_at_ms = now_ms
+        return state
 
     def _can_accumulate(self, state, bar_input):
         if not self.incremental or len(state.source_snapshots) > component_accumulator.MAX_COMPONENTS:
@@ -331,6 +393,9 @@ class ComponentSnapshotOHLCVMerge:
         now_ms = int(time.time() * 1000)
         snapshots = state.source_snapshots
 
+        if state._history_prefix is not None and bar_input.open_time_ms < state._history_prefix.through_ms:
+            raise ValueError('covered history input requires prefix revision refresh')
+
         if is_new and snapshots:
             # Closed custom bars may be amended by late backfill components.
             # Keep the existing component history and merge the new snapshot.
@@ -363,6 +428,10 @@ class ComponentSnapshotOHLCVMerge:
                 accumulator = component_accumulator.ComponentAccumulator()
             state._component_accumulator = None
             result = accumulator.update(snapshots, input_key, existing)
+            if state._history_prefix is not None:
+                result = component_accumulator._combine(
+                    component_accumulator._Summary.history(state._history_prefix), result)
+                accumulator.result = result
             state._component_accumulator = accumulator
             coverage = result.coverage(state.bucket_start_ms, state.bucket_end_ms)
             summary, raw_enhanced = result.values, result.raw_enhanced
@@ -384,6 +453,11 @@ class ComponentSnapshotOHLCVMerge:
                                  for name in component_accumulator.ENHANCED)
             first_time, last_time = int(ordered[0]["open_time_ms"]), int(ordered[-1]["open_time_ms"])
             last_closed = bool(ordered[-1]["is_closed"])
+            if state._history_prefix is not None:
+                result = component_accumulator._combine(
+                    component_accumulator._Summary.history(state._history_prefix),
+                    component_accumulator._Summary.batch(ordered))
+                return self._project(state, result, is_new=is_new)
         fields = summary.project(
             enhanced_complete=coverage.enhanced_complete,
         )
@@ -406,7 +480,8 @@ class ComponentSnapshotOHLCVMerge:
             if name != "trades":
                 value = round(value, 8)
             setattr(state, name, value)
-        state.tick_count = len(snapshots)
+        state.tick_count = len(snapshots) + (state._history_prefix.summary.coverage.count
+                                           if state._history_prefix is not None else 0)
         state.first_input_at_ms = first_time
         state.last_input_at_ms = last_time
         state.last_close_received = last_closed
@@ -488,6 +563,24 @@ class BarStateEngine:
         return self._merge_strategy
 
     # ── Public: Core Operation ───────────────────────────────
+
+    def adopt_history_prefix(self, prefix) -> BarState:
+        """Install a qualified prefix while retaining the current live overlay."""
+        source = prefix.summary.target
+        key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
+        if key in self._closed or self._merge_strategy_overridden:
+            raise ValueError('history initialization requires an ordinary forming target')
+        state = self._active.get(key)
+        if state is None:
+            start, end = self._time_bucket.compute_bucket_range(prefix.start_ms)
+            state = BarState(source.symbol, self._interval, start, end, 0, 0, 0, 0, 0,
+                             exchange=source.exchange, market_type=source.market_type,
+                             series_identity=source.identity)
+        self._component_merge_strategy.adopt_history_prefix(state, prefix)
+        self._active[key] = state
+        self._active.move_to_end(key)
+        self._enforce_active_limit(source.exchange, source.market_type, source.symbol)
+        return state
 
     def apply(
         self,

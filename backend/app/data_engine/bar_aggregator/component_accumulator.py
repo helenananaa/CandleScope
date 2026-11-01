@@ -35,6 +35,18 @@ class _Summary:
     count: int
 
     @classmethod
+    def history(cls, prefix):
+        """Project H127's canonical closed components, retaining gap evidence."""
+        summary = prefix.summary
+        ranges = summary.coverage.ranges
+        if (not ranges or not summary.all_authoritative or not summary.revisions_known
+                or ranges[0][0] < prefix.start_ms or ranges[-1][1] > prefix.through_ms):
+            raise ValueError('history prefix requires bounded canonical closed components')
+        return cls(summary.values, tuple(getattr(summary.values, f) for f in ENHANCED),
+                   ranges[0][0], ranges[-1][1] - prefix.source_width_ms,
+                   ranges[-1][1], len(ranges) == 1, True, True, True, summary.coverage.count)
+
+    @classmethod
     def leaf(cls, row):
         start, end = int(row['open_time_ms']), int(row['close_time_ms']) + 1
         values = row.get('aggregation_values')
