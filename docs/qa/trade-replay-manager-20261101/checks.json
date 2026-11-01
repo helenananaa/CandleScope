@@ -1,0 +1,68 @@
+{
+  "sourceCommit": "de8f3782ab387249a8876773f8477f884ff001e9",
+  "scope": "Development qualification; no installed-native or final-main-integration claim",
+  "validation": {
+    "focusedTests": 44,
+    "frontendTests": 4712,
+    "isolatedPerformanceTests": 1,
+    "desktopTests": 127,
+    "architecture": "passed",
+    "plugins": "passed",
+    "i18n": "passed: 30 locales",
+    "typescript": "passed: browser and node projects",
+    "lint": "full passed at c2595c89; all subsequently changed TS/JS files passed at this source",
+    "productionBuild": "passed",
+    "browser": "actual React overlay and chart with deferred controlled history: failed before and passed after; no exceptions or retained workers"
+  },
+  "priorFullRun": {
+    "sourceCommit": "c2595c89371a5ded8daba926366cad1532b773cb",
+    "passed": 4711,
+    "failed": 1,
+    "failure": "stale-reconcile test expected 5 chunks but a real elapsed-time yield produced 6; injected monotonic clock makes this count-based race deterministic without changing production budgets"
+  },
+  "logCapture": {
+    "stepValidationLogHasOneTruncatedToolChunk": true,
+    "finalCountsAndExitCodeCaptured": true,
+    "exitCode": 0
+  },
+  "logs": {
+    "candlescope179-step-focused.log": {
+      "path": "/tmp/candlescope179-step-focused.log",
+      "sha256": "daf6d2775190e87024ec2fd06d6f21da70c075d32c98d5c57b157f61c91dea17"
+    },
+    "candlescope179-step-types.log": {
+      "path": "/tmp/candlescope179-step-types.log",
+      "sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135"
+    },
+    "candlescope179-step-lint.log": {
+      "path": "/tmp/candlescope179-step-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "candlescope179-step-validation.log": {
+      "path": "/tmp/candlescope179-step-validation.log",
+      "sha256": "99d58fdaa5a1ebaac881b49688decffc2d0a4f8178d5a8c91b6e97bfcff1c692"
+    },
+    "candlescope179-managed-final-check.log": {
+      "path": "/tmp/candlescope179-managed-final-check.log",
+      "sha256": "4a730b4068992e5d4b0579600081ddb99dba7fc8183463a079b0d611135fa4d7"
+    }
+  },
+  "files": {
+    "frontend/scripts/frontend-script-integration.mjs": "674d817e2f38fdb76b4f6660d8885bbd8bb030ea7a1215c2a1b96816567bde38",
+    "frontend/scripts/quick-replay-step-browser.html": "752f2ea7fdba930c7879372e921522f80b714238acb2f5e3d4ab69fc288f2de8",
+    "frontend/src/features/drawings/legacy/__tests__/legacyPrimitiveRenderer.test.ts": "a7624f7eaf10d3f1aad1c0c3b0fadea5b531c0db1505d5bcd41346d30c1b143f",
+    "frontend/src/features/trading-accounts/QuickReplayOverlay.tsx": "5f0501f21c9be6421704e8ed96d2826aef14cb80ff741d174727288ed8109334",
+    "frontend/src/features/trading-accounts/README.md": "0ef1c064b32fd8f2dc8683824d6c43acbbdde7652c72cfd22deb7c4bd38da08d",
+    "frontend/src/features/trading-accounts/quickReplayData.test.ts": "129e1fb114e8a7cdf0c20a80768ec9d6b0aeb895e73751e5363539d6683dc3ce",
+    "frontend/src/features/trading-accounts/quickReplayData.ts": "cd64f3f422334eacf13251f20119b2f3e844cc3a82a55c7cad2fb216c5cd7f8c",
+    "frontend/src/features/trading-accounts/quickReplayManager.test.ts": "9108267dcbd7fe2599f884ab2e2c6d89db834998e5274e6a69fcf0b241a1f634",
+    "frontend/src/test/quickReplayStep.browser.tsx": "32cb09b07a9c36b6e55c60f32d0927305864db5b33a431840f06a92b72595743"
+  },
+  "remaining": [
+    "Final main integration and head CI",
+    "Installed native replay qualification",
+    "General per-chart entry and persistent cursor",
+    "Atomic multi-page snapshot identity and update prompt",
+    "Broader indicator and journal boundary acceptance"
+  ]
+}

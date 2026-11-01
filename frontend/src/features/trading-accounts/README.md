@@ -84,6 +84,11 @@ intact. This is a detached capture, not an atomic provider snapshot across pages
 version persistence, update prompts and a general per-chart replay entry remain
 separate work.
 
+Finer candles are bound to the request that loaded them, including their period,
+instrument, window and reload generation. A step change hides the old response
+immediately; until matching finer candles arrive, only complete chart candles
+are exposed. A late response cannot be reinterpreted at an earlier closing time.
+
 Original notes are projected from immutable revisions saved strictly before the
 cursor; later review annotations appear separately with their actual save time.
 The risk plan is hidden until its saved time. Legacy coalesced or unavailable
