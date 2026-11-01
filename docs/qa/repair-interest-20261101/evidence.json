@@ -1,0 +1,36 @@
+{
+  "sourceBase": "5ba61863c89a8ee8406c3368d78ef5afb4720c9d",
+  "nativeFailureSource": "854e77e926acb177a68406966ac5161658cb8a2e",
+  "nativeFailure": "cold 5m stays empty/pending for 60s while merged 1555-chunk history retains foreground identity",
+  "nativeSnapshotCount": 47,
+  "reproduction": {
+    "initial": {
+      "failed": 3
+    },
+    "mixedMaintenance": {
+      "failed": 12,
+      "passed": 12
+    }
+  },
+  "fix": "retain scheduling identity per scoped and persistent interest; recompute surviving priority/reasons/owner on release, supersession and revocation; rekey pending work; internal latest maintenance permits existing reserve while API latest remains interactive",
+  "validation": {
+    "tests": 163,
+    "passed": 163,
+    "seconds": 17.23,
+    "suites": [
+      "backfill_interest_priority",
+      "backfill_coordinator",
+      "public_admission",
+      "interval_admission_contract",
+      "history_archive_admission"
+    ],
+    "persistentCompletionFollowup": {
+      "passed": 24,
+      "seconds": 6.37,
+      "checks": "persistent task completes all three original chunks after foreground departure; every release path, merge order and surviving-consumer combination"
+    }
+  },
+  "nativeFixedCandidatePending": true,
+  "CI": "pending",
+  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve"
+}

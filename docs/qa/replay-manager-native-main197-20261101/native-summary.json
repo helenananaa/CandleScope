@@ -1,0 +1,1924 @@
+{
+  "qualification": {
+    "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+    "stages": [
+      {
+        "name": "basic",
+        "startedAt": "2026-11-01T08:22:26.832983+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "lifecycle",
+        "startedAt": "2026-11-01T08:23:57.002305+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "indicator",
+        "startedAt": "2026-11-01T08:24:50.961053+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "download",
+        "startedAt": "2026-11-01T08:26:16.079421+00:00",
+        "exitCode": 0
+      }
+    ],
+    "passed": true
+  },
+  "rawEvidenceDirectory": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-main197-native-20261101",
+  "package": {
+    "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+    "zipSha256": "99bde79034554719ca03cf8da8146cb69818de1bddc3e6f9bf3efcad931a8f66",
+    "asarSha256": "f0c48d38bf4c7a819117c169477095b20a59bc45c7e562e41025b976e42b1bc2",
+    "mismatches": []
+  },
+  "sourceFiles": 3103,
+  "distFiles": 162,
+  "financialOracle": {
+    "passed": true,
+    "source": "independent Decimal arithmetic from the finite OHLCV formula, configured 1 bps market slippage and 5 bps taker fees",
+    "initial_index": 826,
+    "exit_mark_index": 830,
+    "quantity": "0.01",
+    "entry": "30057.50545",
+    "exit": "30063.49335",
+    "fees": "0.30060500",
+    "realized_pnl": "0.0598790",
+    "cash_balance": "9999.75927400",
+    "scope": "two deterministic one-way approximate-model market fills; no historical-exact account claim"
+  },
+  "checks": {
+    "basic": {
+      "schema": "candlescope.replay-manager-native-acceptance/1",
+      "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+      "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+      "steps": [
+        {
+          "name": "packaged-launch",
+          "at": "2026-11-01T08:23:02.178Z",
+          "evidence": {}
+        },
+        {
+          "name": "created-paused",
+          "at": "2026-11-01T08:23:10.496Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "buy-filled",
+          "at": "2026-11-01T08:23:12.627Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "closed-cycle",
+          "at": "2026-11-01T08:23:15.261Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "saved-hub",
+          "at": "2026-11-01T08:23:16.153Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:23:16.207Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:23:31.745Z",
+          "evidence": {
+            "elapsedMs": 15538
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:23:31.858Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart",
+          "at": "2026-11-01T08:23:38.890Z",
+          "evidence": {}
+        },
+        {
+          "name": "restored-paused",
+          "at": "2026-11-01T08:23:40.876Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "continued-after-restart",
+          "at": "2026-11-01T08:23:41.458Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "See hashed raw stage receipt."
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:23:41.534Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:23:56.708Z",
+          "evidence": {
+            "elapsedMs": 15174
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:23:56.810Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ],
+      "errors": [],
+      "passed": true
+    },
+    "lifecycle": {
+      "schema": "candlescope.replay-manager-native-lifecycle/1",
+      "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+      "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:24:08.833Z",
+          "evidence": {}
+        },
+        {
+          "name": "resumed-single",
+          "at": "2026-11-01T08:24:11.300Z",
+          "evidence": {
+            "time": 1700050019999,
+            "historyWaitMs": 181,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "closedOHLCVCompared": 367,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 48
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 367,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 1,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 4,
+                  "totalRequests": 4,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 1,
+              "activeOperations": 11,
+              "requests": 5,
+              "streams": 2,
+              "bars": 367
+            }
+          }
+        },
+        {
+          "name": "play-pause",
+          "at": "2026-11-01T08:24:18.402Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 260,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 370,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 7,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 7,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 1,
+              "activeOperations": 11,
+              "requests": 0,
+              "streams": 2,
+              "bars": 370
+            }
+          }
+        },
+        {
+          "name": "two-private-sequences",
+          "at": "2026-11-01T08:24:19.037Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 294,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700048940,
+                  "to": 1700051340
+                },
+                "logical": {
+                  "from": 349.375,
+                  "to": 388.625
+                },
+                "visibleBars": 21
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 370,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-window-13",
+                  "consumers": 1,
+                  "bars": 370,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 7,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 1,
+                  "totalRequests": 8,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-15",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-16",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-17",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-18",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-19",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-14",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 2,
+              "activeOperations": 17,
+              "requests": 1,
+              "streams": 2,
+              "bars": 740
+            }
+          }
+        },
+        {
+          "name": "independent-intervals-default-view",
+          "at": "2026-11-01T08:24:20.404Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 138,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 74,
+                "first": 1700028000,
+                "last": 1700049900,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700048700,
+                  "to": 1700051400
+                },
+                "logical": {
+                  "from": 69.875,
+                  "to": 77.725
+                },
+                "visibleBars": 5
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 370,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-window-20",
+                  "consumers": 1,
+                  "bars": 74,
+                  "requests": 0,
+                  "totalRequests": 1,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 9,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 9,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-15",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-16",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 1,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-17",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-18",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-19",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-21",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 2,
+              "activeOperations": 17,
+              "requests": 0,
+              "streams": 2,
+              "bars": 444
+            }
+          }
+        },
+        {
+          "name": "independent-intervals",
+          "at": "2026-11-01T08:24:21.625Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 182,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050140
+                },
+                "logical": {
+                  "from": 129.99999999999997,
+                  "to": 369
+                },
+                "visibleBars": 241
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 74,
+                "first": 1700028000,
+                "last": 1700049900,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700049900
+                },
+                "logical": {
+                  "from": 26,
+                  "to": 73
+                },
+                "visibleBars": 48
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 370,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-window-20",
+                  "consumers": 1,
+                  "bars": 74,
+                  "requests": 0,
+                  "totalRequests": 1,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 10,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 11,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-15",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-16",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 1,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-17",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-18",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-19",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-21",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 2,
+              "activeOperations": 17,
+              "requests": 0,
+              "streams": 2,
+              "bars": 444
+            }
+          }
+        },
+        {
+          "name": "offline-observed",
+          "at": "2026-11-01T08:24:27.275Z",
+          "evidence": {
+            "time": 1700050199999,
+            "networkFailure": true
+          }
+        },
+        {
+          "name": "controller-reacquired",
+          "at": "2026-11-01T08:24:32.705Z",
+          "evidence": {}
+        },
+        {
+          "name": "reconnected-advanced",
+          "at": "2026-11-01T08:24:33.976Z",
+          "evidence": {
+            "time": 1700050259999,
+            "historyWaitMs": 807,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 371,
+                "first": 1700028000,
+                "last": 1700050200,
+                "closedOHLCVCompared": 371,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 129.99998333454133,
+                  "to": 369.9999833345413
+                },
+                "visibleBars": 242
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 75,
+                "first": 1700028000,
+                "last": 1700050200,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700035500,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 25.99999666690826,
+                  "to": 73.99999666690826
+                },
+                "visibleBars": 50
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 371,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-window-20",
+                  "consumers": 1,
+                  "bars": 75,
+                  "requests": 0,
+                  "totalRequests": 10,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 14,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 16,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-15",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-16",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-17",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-18",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-19",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-21",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 2,
+              "activeOperations": 17,
+              "requests": 0,
+              "streams": 2,
+              "bars": 446
+            }
+          }
+        },
+        {
+          "name": "recovery-duration",
+          "at": "2026-11-01T08:24:33.980Z",
+          "evidence": {
+            "elapsedMs": 6704
+          }
+        },
+        {
+          "name": "portfolio-empty-scope",
+          "at": "2026-11-01T08:24:34.393Z",
+          "evidence": {
+            "reason": "Single-market fixture has no multi-market portfolio interval export link."
+          }
+        },
+        {
+          "name": "closed-one-chart",
+          "at": "2026-11-01T08:24:34.735Z",
+          "evidence": {
+            "time": 1700050259999,
+            "historyWaitMs": 112,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 371,
+                "first": 1700028000,
+                "last": 1700050200,
+                "closedOHLCVCompared": 371,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 129.99998333454127,
+                  "to": 369.9999833345413
+                },
+                "visibleBars": 242
+              }
+            ],
+            "manager": {
+              "sequences": [
+                {
+                  "owner": "replay-window-6",
+                  "consumers": 1,
+                  "bars": 371,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 2,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-3",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 1,
+                  "totalRequests": 15,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-2",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 3,
+                  "streams": 1,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-4",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-5",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 17,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-8",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-9",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-10",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-11",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-12",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                },
+                {
+                  "owner": "replay-operation-7",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 0,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 1,
+              "activeOperations": 11,
+              "requests": 1,
+              "streams": 2,
+              "bars": 371
+            }
+          }
+        },
+        {
+          "name": "run-resources-released",
+          "at": "2026-11-01T08:24:35.187Z",
+          "evidence": {
+            "runId": "prepared-2a158e20650746ce827d4994a700c50a",
+            "manager": {
+              "sequences": [],
+              "operations": [
+                {
+                  "owner": "replay-operation-1",
+                  "consumers": 1,
+                  "bars": 0,
+                  "requests": 0,
+                  "totalRequests": 1,
+                  "streams": 0,
+                  "cleanupErrors": 0
+                }
+              ],
+              "activeSequences": 0,
+              "activeOperations": 1,
+              "requests": 0,
+              "streams": 0,
+              "bars": 0
+            }
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:24:35.254Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:24:50.478Z",
+          "evidence": {
+            "elapsedMs": 15224
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:24:50.672Z",
+          "evidence": {
+            "allExited": true,
+            "elapsedMs": 15482
+          }
+        }
+      ],
+      "errors": [],
+      "passed": true
+    },
+    "indicator": {
+      "schema": "candlescope.replay-manager-native-indicator/1",
+      "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+      "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:25:17.010Z",
+          "evidence": {}
+        },
+        {
+          "name": "indicator-precondition",
+          "at": "2026-11-01T08:25:17.028Z",
+          "evidence": {
+            "state": "ready"
+          }
+        },
+        {
+          "name": "initial-ma20",
+          "at": "2026-11-01T08:25:17.964Z",
+          "evidence": {
+            "cursor": 1700050259999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 352,
+                "visibleCompared": 240,
+                "aggregateCompared": 0,
+                "points": 352,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30056
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "independent-period-ma20",
+          "at": "2026-11-01T08:25:20.296Z",
+          "evidence": {
+            "cursor": 1700050259999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 352,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 352,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30056
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050500
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.4625
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "advanced-ma20",
+          "at": "2026-11-01T08:25:23.688Z",
+          "evidence": {
+            "cursor": 1700050319999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 353,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 353,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050260
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050260,
+                  "value": 30058
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.2125
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:25:24.454Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:25:39.650Z",
+          "evidence": {
+            "elapsedMs": 15196
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:25:39.829Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart",
+          "at": "2026-11-01T08:25:58.543Z",
+          "evidence": {}
+        },
+        {
+          "name": "restored-ma20",
+          "at": "2026-11-01T08:26:00.552Z",
+          "evidence": {
+            "cursor": 1700050319999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 353,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 353,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050260
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050260,
+                  "value": 30058
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.2125
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:26:00.628Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:26:15.840Z",
+          "evidence": {
+            "elapsedMs": 15212
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:26:16.007Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ],
+      "errors": [],
+      "passed": true
+    },
+    "download": {
+      "schema": "candlescope.native-export-download/1",
+      "sourceCommit": "2d16a083119cc1fbd268c975e81a1522cc391490",
+      "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:26:34.765Z",
+          "evidence": {}
+        },
+        {
+          "name": "curve-availability",
+          "at": "2026-11-01T08:26:36.459Z",
+          "evidence": {
+            "available": false,
+            "samples": 0
+          }
+        },
+        {
+          "name": "probe-scope",
+          "at": "2026-11-01T08:26:36.476Z",
+          "evidence": {
+            "method": "Real native bridge and DownloadItem stream; destination selected by the harness. Empty single-market export; nonempty curve UI and OS save dialog are not qualified."
+          }
+        },
+        {
+          "name": "download",
+          "at": "2026-11-01T08:26:39.174Z",
+          "evidence": {
+            "state": "completed",
+            "receivedBytes": 509,
+            "totalBytes": 509,
+            "path": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-main197-native-20261101/native-export-probe.ndjson",
+            "mime": "application/x-ndjson",
+            "bytes": 509,
+            "records": 2,
+            "terminal": {
+              "kind": "complete",
+              "records": 1,
+              "sha256": "ca5eff5fbb0a3e89bcfab1181a09d34cefcc7ed6fe4c10770002758364e5109f"
+            },
+            "sha256": "ceefd5aefa978ccb1cdb18a7d92c668f087776a016ac3fbd267a40bee16344dc"
+          }
+        },
+        {
+          "name": "native-events",
+          "at": "2026-11-01T08:26:39.179Z",
+          "evidence": [
+            {
+              "kind": "download",
+              "url": "http://127.0.0.1:60346/api/v1/replay/runs/prepared-2a158e20650746ce827d4994a700c50a/portfolio-equity/export"
+            }
+          ]
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:26:39.306Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:26:54.699Z",
+          "evidence": {
+            "elapsedMs": 15393
+          }
+        },
+        {
+          "name": "exit",
+          "at": "2026-11-01T08:26:54.926Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ],
+      "errors": [],
+      "passed": true
+    }
+  },
+  "receiptSha256": {
+    "chain-status.json": "805062dcbd9577a0be427afd1c1c2a9d08e366b9804d5a9f8bbad6e79cebe5cf",
+    "acceptance-basic.json": "a55c15c724df0629e3df2c5253bbf947a1a07dc13882fedab049619c1a88e899",
+    "acceptance-lifecycle.json": "97a1c275d2e9bced7062bee0207fef4d4db73ed318056a2fa025af9c610fe900",
+    "acceptance-indicator.json": "4fb34338909d9beb72411ccab74aa2191288c48da22d92216edf7cb3edac0607",
+    "acceptance-download.json": "c4c85a82ee4a2d571a723d8c2292977eefa349a428e33220017ee726770b2450",
+    "financial-oracle.json": "dae68a54afee793489d28fc2fffe30d29b263beb206a934bef9d4564d5ef0bce",
+    "signature-before.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature-after.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source-package-manifest.json": "70c188fe005f3954bd7288bd60f5c03ec0a2c805fc0dee9ccf7b17e3d0f31a00"
+  },
+  "localValidation": {
+    "applicationIdenticalHead": "12a7d71aab711924292341e77631af285c7d6f04",
+    "backend": "146 passed, zero skipped; /tmp/candlescope180-main197-backend-corrected.log",
+    "frontend": "Byte-identical to b288a36c; prior full check 4704 functional + 1 isolated performance + 127 desktop tests; all static checks and production build passed."
+  },
+  "limitations": [
+    "Finite synthetic archive and six-hour history; ALL_AVAILABLE cold performance remains open.",
+    "Single-market export has no equity samples; actual native transfer verified, OS save dialog not exercised.",
+    "Long controller disconnection, Windows, and full 157-item acceptance remain open."
+  ]
+}
