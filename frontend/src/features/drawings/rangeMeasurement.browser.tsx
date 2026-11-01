@@ -14,6 +14,10 @@ const measurementColor = "#33aaee";
 
 /** Real charts, pointer handlers and IndexedDB; no replacement drawing engine. */
 export async function checkRangeMeasurements() {
+  const controls = document.createElement("div");
+  controls.className = "chart-cell-drawing-controls";
+  controls.style.cssText = "width:500px;height:28px;display:flex";
+  document.body.append(controls);
   const host = document.createElement("div");
   host.style.cssText = "width:1000px;height:420px;position:relative;display:flex";
   document.body.append(host);
@@ -42,6 +46,7 @@ export async function checkRangeMeasurements() {
   const objects = () => api()?.objects?.getObjectDocument();
   const render = () => root.render(<>
     <div data-qa="left" style={{ width: 500, height: 420, position: "relative", display: "flex" }}><SingleChartPanes ref={left}
+      drawingControlsHost={controls}
       seriesStore={interval === "1m" ? store : coarse} symbol="FIXTURE" drawingKeyBase={`${key}:left`} interval={interval} datasetKey={`${key}:${interval}`}
       theme="dark" customBg="" upColor="#00aa00" downColor="#aa0000" subPanes={[]}
       drawingTool={tool} onDrawingToolChange={(value) => { tool = value; render(); }} drawingSnapEnabled={false} /></div>
@@ -63,6 +68,14 @@ export async function checkRangeMeasurements() {
     await until(() => !!api()?.control?.isReady(), "Drawing control not ready");
     await click(180, 220); await click(340, 120);
     await until(() => objects()?.entities.size === 1, "Two clicks did not create a ruler");
+    const trigger = controls.querySelector<HTMLButtonElement>(".drawing-object-trigger");
+    assert(trigger, "Drawing objects were not mounted in the owning header");
+    assert(trigger.getBoundingClientRect().bottom <= host.getBoundingClientRect().top, "Permanent object control overlaps the plot");
+    assert(!host.querySelector('[data-qa="left"] .drawing-object-trigger'), "Duplicate object control remains over the plot");
+    await act(async () => trigger.click()); await settle();
+    assert(controls.querySelector("dialog")?.open, "Portalled object list did not open");
+    await act(async () => controls.querySelector<HTMLButtonElement>(".drawing-properties-header button")!.click()); await settle();
+    assert(globalThis.document.activeElement === trigger, "Object list did not restore keyboard focus to header");
     let document = objects()!;
     const created = exportDrawingDocument(document)!;
     const drawing = created[0]; assert(drawing?.type === "range-measure", "Wrong saved drawing kind");
@@ -93,5 +106,5 @@ export async function checkRangeMeasurements() {
     await act(async () => { assert(api()?.objects?.deleteObject(drawing.id!), "Delete rejected"); }); await settle();
     assert(objects()?.entities.size === 0, "Delete did not remove ruler");
     return { status: "PASS", created, saved, measurement, scope: "Real Chromium pointer creation, document history, style/lock, interval switch, IndexedDB remount, export and delete" };
-  } finally { await act(async () => root.unmount()); host.remove(); }
+  } finally { await act(async () => root.unmount()); host.remove(); controls.remove(); }
 }
