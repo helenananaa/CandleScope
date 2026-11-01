@@ -48,7 +48,7 @@ class SourceGap:
                 "gap_id": self.id, "range_start_ms": self.start_ms,
                 "range_end_ms": self.end_ms,
                 "state": "resolved" if resolved else "failed" if self.error else "recovering",
-                "missing_bars": len(self.expected - self.repaired.keys()),
+                "missing_bars": 0 if self.completed_at is not None else len(self.expected - self.repaired.keys()),
                 "error": self.error,
             },
         )
@@ -184,6 +184,26 @@ class SourceGapRegistry:
             gap.fail("source_stream_closed")
         self.gaps.clear()
         self._changed.set()
+
+    def resolve_verified(self, gap: SourceGap, bars: list[BarData], absent: set[int]) -> bool:
+        """Adopt a complete, revision-checked snapshot including proven absence.
+
+        The owner must read canonical rows and empty evidence together under its
+        cache adoption fence. Unknown or partial absence never completes a gap.
+        Empty positions generate no fabricated candle or close event.
+        """
+        if self.gaps.get(gap.id) is not gap or gap.error or gap.completed_at is not None:
+            return False
+        repaired = {bar.time_ms: deepcopy(bar) for bar in bars
+                    if bar.is_closed and bar.trusted_final and bar.time_ms in gap.expected}
+        if not gap.expected <= repaired.keys() | absent:
+            return False
+        gap.repaired = repaired
+        gap.completed_at = time.monotonic()
+        if not gap.future.done():
+            gap.future.set_result(None)
+        self._changed.set()
+        return True
 
 
 class ContinuityConsumer:
