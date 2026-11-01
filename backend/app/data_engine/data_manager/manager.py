@@ -454,6 +454,12 @@ class DataManager:
         self.shared_blocks = SharedBlockManager(budget=self.memory_budget,
             max_bytes=self._cfg.memory_owner_budgets.get("aggregation-blocks", 16 * 1024 * 1024))
         self.query_engine.shared_blocks = self.shared_blocks
+        from app.core.config import HISTORY_PREFIX_ENABLED
+        from .history_prefix_runtime import HistoryPrefixRuntime
+        self.history_prefix_runtime = (HistoryPrefixRuntime(self.query_engine, self.bar_aggregator,
+                                      self.aggregator_bridge._require_recovery) if HISTORY_PREFIX_ENABLED else None)
+        self.bar_aggregator.history_prefix_runtime = self.history_prefix_runtime
+        self.warm_start.history_prefix_runtime = self.history_prefix_runtime
 
         # Wire BarAggregator output → DataManager → Cache + EventBus
         self.bar_aggregator.set_source_component_reader(self.aggregator_bridge.read_source_components)
@@ -876,6 +882,8 @@ class DataManager:
         if self._started:
             return
         self.shared_blocks.reopen()
+        if self.history_prefix_runtime is not None:
+            self.history_prefix_runtime.closing = False
         self._started = True
         self._cache_access_loop = asyncio.get_running_loop()
         self._cache_access_stopping = False
@@ -919,6 +927,8 @@ class DataManager:
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
+        if self.history_prefix_runtime is not None:
+            await self.history_prefix_runtime.close()
         self.shared_blocks.close()
         if not self._started:
             return
@@ -3424,6 +3434,7 @@ class DataManager:
             "stream_leases": self.stream_lease_snapshot(),
             "bar_aggregator": self.bar_aggregator.snapshot(),
             "bar_delivery": self.aggregator_bridge.delivery.snapshot(),
+            "history_prefix": self.history_prefix_runtime.snapshot() if self.history_prefix_runtime else {"enabled": False},
             "retention": self.retention.snapshot(),
             "storage_intents": self.storage_intents.snapshot(),
             "behavior_heat": self.cache_behavior_snapshot(),

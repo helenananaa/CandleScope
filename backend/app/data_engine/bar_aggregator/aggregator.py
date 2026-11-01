@@ -61,6 +61,7 @@ Architecture::
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import asynccontextmanager
 
 import json
 from app.data_engine.series_identity import (
@@ -201,6 +202,7 @@ class BarAggregator:
         # Tokens exist only for registered targets. Removal/re-addition changes
         # identity even when the interval pipeline itself remains resident.
         self._target_epochs: dict[tuple, object] = {}
+        self.history_prefix_runtime = None
 
         # Timeout checker task
         self._timeout_task: asyncio.Task | None = None
@@ -217,7 +219,6 @@ class BarAggregator:
 
     async def stop(self) -> None:
         """Stop background tasks and flush all active bars."""
-        self._target_epochs.clear()
         if self._timeout_task is not None:
             self._timeout_task.cancel()
             try:
@@ -228,6 +229,7 @@ class BarAggregator:
 
         # Flush all active bars
         await self._flush_all()
+        self._target_epochs.clear()
         await self._publisher.close_all_subscribers()
         logger.info("BarAggregator stopped")
 
@@ -327,6 +329,9 @@ class BarAggregator:
             interval = spec.canonical
         self._target_epochs.pop((exchange, market_type, symbol, interval,
                                  resolve_kline_series_identity(exchange, series_identity)), None)
+        if self.history_prefix_runtime is not None:
+            self.history_prefix_runtime.detach((exchange, market_type, symbol, interval,
+                resolve_kline_series_identity(exchange, series_identity)))
         self._router.unregister_target(
             symbol,
             interval,
@@ -398,9 +403,15 @@ class BarAggregator:
                 exchange, market_type, symbol, identity):
             raise ValueError('history initialization source differs from target')
         pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
+        previous = pipeline.bar_state.get_state(exchange, market_type, symbol, prefix.start_ms)
+        overlay_floor = previous.acquisition_revision if previous is not None else None
         state = pipeline.bar_state.adopt_history_prefix(prefix, refresh=refresh)
         state.acquisition_revision = (prefix.acquisition_revision if acquisition_revision is None
                                       else min(acquisition_revision, prefix.acquisition_revision))
+        if state.source_snapshots:
+            # A fresh historical prefix cannot relabel a retained live tail
+            # acquired before a deletion. Preserve the oldest acquisition.
+            state.acquisition_revision = min(state.acquisition_revision, overlay_floor or 0)
         return deepcopy(state)
 
     def get_series_targets(self):
@@ -853,11 +864,14 @@ class BarAggregator:
                                 for state in (event.bar, event.previous_bar) if state is not None)
         queued_prefixes = sum(state._history_prefix is not None for event in events
                               for state in (event.bar, event.previous_bar) if state is not None)
+        handoff = self.history_prefix_runtime
+        handoff_bytes = len(handoff.targets) * 1024 + len(handoff.tasks) * 8192 if handoff else 0
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
                 "component_index_bytes": component_index_bytes,
                 "history_prefixes": history_prefixes,
-                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024,
+                "history_handoff_bytes": handoff_bytes,
+                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes + (history_prefixes + queued_prefixes) * 32 * 1024 + handoff_bytes,
                 "protection": "active and correction state owned by realtime executor"}
 
     def _memory_roots(self):
@@ -865,7 +879,8 @@ class BarAggregator:
         # callers must not retain or mutate the owner-private roots.
         return [*[list(engine._active.values()) + list(engine._closed.values())
                   for pipeline in list(self._pipelines.values()) for engine in [pipeline.bar_state]],
-                *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)]]
+                *[list(queue._queue) for queue, _ in list(self._publisher._subscribers)],
+                list(self.history_prefix_runtime.targets.values()) if self.history_prefix_runtime else []]
 
     def snapshot(self) -> dict:
         """Full diagnostic snapshot of the entire aggregator."""
@@ -887,7 +902,26 @@ class BarAggregator:
 
     # ── Internal: Core Processing ────────────────────────────
 
-    async def _handle_bar_input(
+    async def _handle_bar_input(self, exchange, market_type, symbol, interval,
+                                bar_input, emit_events=True):
+        runtime = self.history_prefix_runtime
+        if runtime is None:
+            return await self._apply_bar_input(exchange, market_type, symbol, interval,
+                                               bar_input, emit_events)
+        if runtime.closing:
+            from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
+            raise BarDeliveryUnavailable('history/live owner is shutting down')
+        async with runtime.hold(exchange, market_type, symbol, interval, bar_input.identity) as slot:
+            if slot is not None:
+                pipeline = self._pipelines[self._pipeline_key(interval, exchange, bar_input.identity)]
+                if not await runtime.before_input(slot, pipeline, bar_input, emit_events=emit_events):
+                    return
+                if not runtime._current(slot):
+                    raise RuntimeError('history target detached before input adoption')
+            return await self._apply_bar_input(exchange, market_type, symbol, interval,
+                                               bar_input, emit_events, target_token=slot.token if slot else None)
+
+    async def _apply_bar_input(
         self,
         exchange: str,
         market_type: str,
@@ -895,6 +929,7 @@ class BarAggregator:
         interval: str,
         bar_input: BarInput,
         emit_events: bool = True,
+        target_token=None,
     ) -> None:
         """Core processing callback: L1 → L2 → L3 → L4 → L5.
 
@@ -907,6 +942,11 @@ class BarAggregator:
         if pipeline is None:
             logger.warning("No pipeline for interval %s", interval)
             return
+
+        def check_target():
+            if target_token is not None and self._target_epochs.get(target_token[0]) is not target_token[1]:
+                from app.data_engine.aggregation.blocks import BlockRevisionChanged
+                raise BlockRevisionChanged('history target detached during input')
 
         revision_provider = getattr(self, "acquisition_revision_provider", None)
         acquisition_revision = revision_provider() if revision_provider is not None else None
@@ -928,6 +968,7 @@ class BarAggregator:
             components = await self._source_component_reader(
                 bar_input.extra["source_ref"]["series"], bucket_start_ms, bucket_end_ms,
             )
+            check_target()
             for component in components:
                 data = component["data"]
                 if data["open_time"] == bar_input.open_time_ms:
@@ -954,6 +995,7 @@ class BarAggregator:
             bar_input,
             emit_events=emit_events,
         )
+        check_target()
 
         # L3: Apply input to bar state
         state, change = pipeline.bar_state.apply(
@@ -966,6 +1008,7 @@ class BarAggregator:
         # Drain eviction buffers — emit events for bars that were
         # force-closed or expired during apply() due to limit enforcement.
         await self._drain_eviction_buffers(pipeline, emit_events=emit_events)
+        check_target()
 
         # L5: Emit lifecycle events
         if emit_events:
@@ -975,6 +1018,7 @@ class BarAggregator:
                 await self._publisher.emit_updated(state)
             elif change == BarStateChange.AMENDED:
                 await self._publisher.emit_amended(state)
+        check_target()
 
         # L4: Check if this bar should be finalized
         is_backfill = bar_input.source == BarInputSource.BACKFILL
@@ -1070,6 +1114,30 @@ class BarAggregator:
                     await self._publisher.emit_expired(bar)
             pipeline.bar_state.evicted_expired.clear()
 
+    @asynccontextmanager
+    async def _validated_active_state(self, pipeline, state):
+        runtime = self.history_prefix_runtime
+        if runtime is None:
+            yield state
+            return
+        if runtime.closing:
+            # Shutdown already drained all physical history reads. Do not
+            # revive their summaries after the shared source has closed.
+            if state._history_prefix is not None:
+                pipeline.bar_state.expire_bar(state.exchange, state.market_type,
+                                              state.symbol, state.bucket_start_ms)
+                yield None
+            else:
+                yield state
+            return
+        async with runtime.hold(state.exchange, state.market_type, state.symbol,
+                                state.interval, state.identity) as slot:
+            current = pipeline.bar_state.get_active(state.exchange, state.market_type,
+                                                    state.symbol, state.bucket_start_ms)
+            if current is not None and slot is not None:
+                current = await runtime._refresh(slot, pipeline, current, emit_events=True)
+            yield current
+
     # ── Internal: Timeout Loop ───────────────────────────────
 
     async def _timeout_loop(self) -> None:
@@ -1089,27 +1157,30 @@ class BarAggregator:
         for interval, pipeline in self._pipelines.items():
             # Get all active bars across all symbols
             for key, state in list(pipeline.bar_state._active.items()):
-                trigger = FinalizeTrigger(
-                    trigger_type="timer",
-                    current_time_ms=int(time.time() * 1000),
-                )
-                close_event = pipeline.finalizer.check(state, trigger)
-                if close_event is not None:
-                    closed = pipeline.bar_state.close_bar(
-                        state.exchange, state.market_type, state.symbol, state.bucket_start_ms,
+                async with self._validated_active_state(pipeline, state) as state:
+                    if state is None:
+                        continue
+                    trigger = FinalizeTrigger(
+                        trigger_type="timer",
+                        current_time_ms=int(time.time() * 1000),
                     )
-                    if closed is not None:
-                        await self._publisher.emit_closed(closed)
-                elif pipeline.finalizer.should_expire_unconfirmed(state, trigger):
-                    state.close_reason = "timeout_unconfirmed"
-                    expired = pipeline.bar_state.expire_bar(
-                        state.exchange,
-                        state.market_type,
-                        state.symbol,
-                        state.bucket_start_ms,
-                    )
-                    if expired is not None:
-                        await self._publisher.emit_expired(expired)
+                    close_event = pipeline.finalizer.check(state, trigger)
+                    if close_event is not None:
+                        closed = pipeline.bar_state.close_bar(
+                            state.exchange, state.market_type, state.symbol, state.bucket_start_ms,
+                        )
+                        if closed is not None:
+                            await self._publisher.emit_closed(closed)
+                    elif pipeline.finalizer.should_expire_unconfirmed(state, trigger):
+                        state.close_reason = "timeout_unconfirmed"
+                        expired = pipeline.bar_state.expire_bar(
+                            state.exchange,
+                            state.market_type,
+                            state.symbol,
+                            state.bucket_start_ms,
+                        )
+                        if expired is not None:
+                            await self._publisher.emit_expired(expired)
 
     # ── Internal: Flush ──────────────────────────────────────
 
@@ -1126,23 +1197,26 @@ class BarAggregator:
                 )
                 if state is None:
                     continue
-                event = pipeline.finalizer.flush(state)
-                if event.event_type == BarEventType.CLOSED:
-                    closed = pipeline.bar_state.close_bar(
-                        exchange,
-                        market_type,
-                        symbol,
-                        bucket_start,
-                    )
-                    if closed is not None:
-                        await self._publisher.emit_closed(closed)
-                else:
-                    expired = pipeline.bar_state.expire_bar(
-                        exchange,
-                        market_type,
-                        symbol,
-                        bucket_start,
-                    )
-                    if expired is not None:
-                        await self._publisher.emit_expired(expired)
+                async with self._validated_active_state(pipeline, state) as state:
+                    if state is None:
+                        continue
+                    event = pipeline.finalizer.flush(state)
+                    if event.event_type == BarEventType.CLOSED:
+                        closed = pipeline.bar_state.close_bar(
+                            exchange,
+                            market_type,
+                            symbol,
+                            bucket_start,
+                        )
+                        if closed is not None:
+                            await self._publisher.emit_closed(closed)
+                    else:
+                        expired = pipeline.bar_state.expire_bar(
+                            exchange,
+                            market_type,
+                            symbol,
+                            bucket_start,
+                        )
+                        if expired is not None:
+                            await self._publisher.emit_expired(expired)
         logger.info("Flushed all active bars")

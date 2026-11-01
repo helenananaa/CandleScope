@@ -21,6 +21,10 @@ MAX_PREFIX_ROWS = 65_536
 PREFIX_BYTES = 32 * 1024
 
 
+class EmptyHistoryPrefix(BlockUnavailable):
+    """Qualified canonical range contains no accepted candle; never a zero bar."""
+
+
 @dataclass(frozen=True, slots=True)
 class HistoryPrefix:
     summary: AggregateSummary
@@ -109,7 +113,9 @@ class HistoryPrefixReader:
                     cursor = receipt.continuation
                     if cursor is None:
                         break
-                if summary is None or (require_complete and not summary.is_authoritative(start_ms, through_ms)):
+                if summary is None:
+                    raise EmptyHistoryPrefix('history prefix has no canonical components')
+                if require_complete and not summary.is_authoritative(start_ms, through_ms):
                     raise BlockUnavailable("history prefix cannot prove closed coverage")
                 prefix = HistoryPrefix(summary, start_ms, through_ms, spec.nominal_ms,
                                        pages, storage_rows, cache_hits, acquisition_revision,
