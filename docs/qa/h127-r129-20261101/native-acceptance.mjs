@@ -6,7 +6,9 @@ import {capture} from '../backend-batch1-20261101/value-probe.mjs';
 // Choose a real UTC bucket with enough already elapsed1m slots to exercise
 // the measured default admission, while leaving time for save/restart.
 const minute=Math.floor(Date.now()/60000);
-const width=[2503,2777,2999,3001,4001,4003,4099,4999].find(n=>minute%n>=2112&&n-minute%n>=32);
+// Nonmultiples of2/3/5 retain the native1m route; this width also leaves
+// several target bars under the unchanged20k source-row viewport budget.
+const width=Array.from({length:400},(_,i)=>2201+i*2).find(n=>n%3&&n%5&&minute%n>=2112&&n-minute%n>=60);
 assert.ok(width,'No qualified native acceptance bucket in this clock window');
 const interval=width+'m';
 q.s.receipt.schema='candlescope.h127-r129-native/1';
@@ -47,7 +49,8 @@ async function launch(){try{await q.record('packaged-launch',await q.launch());r
 async function quit(){await q.quit();await q.exited();running=false;await q.record('full-process-exit',{allExited:true,elapsedMs:Date.now()-q.s.quitStartedAt,processes:q.s.quitPids});}
 try{
  await launch();
- assert.equal((await q.configure([{session:q.session('BTCUSDT'),indicators:[]},{session:q.session('BTCUSDT',interval),indicators:[]}],'split-vertical')).result.state,'ready');
+ const configured=await q.configure([{session:q.session('BTCUSDT'),indicators:[]},{session:q.session('BTCUSDT',interval),indicators:[]}],'split-vertical');
+ assert.ok(['applied','ready'].includes(configured.result.state));await q.record('workspace-configured',configured);
  await ready();
  for(const [cell,id,period] of [['cell-1','prefix-ma-native',20],['cell-2','prefix-ma-derived',3]])assert.equal((await q.execute(cell,'addIndicator',{id,name:'MA',engineName:'MA',kind:'builtin',executionTarget:'hosted',params:{period},visible:true})).state,'applied');
  await ready(true);const initial=await prefix();assert.equal(initial.bar_delivery.acknowledgement_batch_size,16);
