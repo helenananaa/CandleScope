@@ -607,7 +607,11 @@ def test_live_update_fills_limit_within_a_second_and_reports_lag(tmp_path):
             await wait_for(lambda: dm.handles and market.calls, 2.0)
             market.history = [bar(minute, "100", "100", "98.5", "98.7")]
             await dm.emit("BTCUSDT", minute)
-            return await wait_for(lambda: service.store.order(order["id"])["status"] == "filled", 1.0)
+            elapsed = await wait_for(lambda: service.store.order(order["id"])["status"] == "filled", 1.0)
+            await runtime.tick()
+            assert dm.released == []  # the filled entry still owns an open position
+            assert service.account_summary(account["id"])["feeds"][0]["symbol"] == "BTCUSDT"
+            return elapsed
         finally:
             await runtime.stop()
 
@@ -615,12 +619,138 @@ def test_live_update_fills_limit_within_a_second_and_reports_lag(tmp_path):
         elapsed = asyncio.run(scenario())
         assert elapsed < 1.0
         assert service.store.order(order["id"])["fill_price"] == D("99")
-        # The order is done, so the feed is no longer listed; read it directly.
+        # The completed entry still needs its feed for position valuation.
         timing = service._feed(FUTURES).timing
         assert timing["fills"] == 1 and 0 <= timing["lagMs"] < 1_000
         assert {"wakeMs", "queueMs", "queryMs", "applyMs"} <= timing.keys()
     finally:
         service.store.close()
+
+
+def test_position_only_runtime_keeps_valuation_and_releases_after_last_close(tmp_path):
+    service, market = live_service(tmp_path)
+    minute = int(time.time()) // 60 * 60
+    market.bar = bar(minute, "100", "100", "100", "100")
+    market.history = [market.bar]
+    account = service.create_account({"kind": "practice", "name": "Positions", "settings": {"slippageBps": "0"}})
+    for symbol in ("BTCUSDT", "ETHUSDT"):
+        service.place_order(account["id"], {**INSTRUMENT, "symbol": symbol, "side": "buy", "type": "market", "qty": "1"})
+    assert service.store.orders(account["id"], status="working") == []
+    dm = FakeDataManager()
+    runtime = PracticeRuntime(service, dm, tick_seconds=60, market=market)
+
+    async def scenario():
+        await runtime.tick()
+        assert sorted(dm.ensured) == ["BTCUSDT", "ETHUSDT"]
+        market.history = [bar(minute, "100", "110", "100", "110")]
+        await dm.emit("BTCUSDT", minute)
+        await runtime.drain_events()
+        summary = service.account_summary(account["id"])
+        assert summary["unrealizedPnl"] == "10"
+        assert {feed["symbol"] for feed in summary["feeds"]} == {"BTCUSDT", "ETHUSDT"}
+        service.place_order(account["id"], {**INSTRUMENT, "side": "sell", "type": "market", "qty": "1", "reduceOnly": True})
+        await runtime.tick()
+        assert dm.released == ["BTCUSDT"]
+        assert {symbol for symbol, _ in dm.handles.values()} == {"ETHUSDT"}
+        service.place_order(account["id"], {**INSTRUMENT, "symbol": "ETHUSDT", "side": "sell", "type": "market", "qty": "1", "reduceOnly": True})
+        await runtime.tick()
+        assert sorted(dm.released) == ["BTCUSDT", "ETHUSDT"]
+        assert dm.handles == {}
+        await runtime.stop()
+    try:
+        asyncio.run(scenario())
+    finally:
+        service.store.close()
+
+
+def test_position_demands_do_not_net_across_accounts_or_start_manual_account_feeds(service):
+    service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
+    long = service.create_account({"kind": "practice", "name": "Long"})
+    short = service.create_account({"kind": "practice", "name": "Short"})
+    manual = service.create_account({"kind": "manual", "name": "Notes"})
+    for account, side in ((long, "buy"), (short, "sell")):
+        service.place_order(account["id"], {**INSTRUMENT, "side": side, "type": "market", "qty": "0.3"})
+    service.add_fill(manual["id"], {**INSTRUMENT, "symbol": "ETHUSDT", "side": "buy", "qty": "1", "price": "100", "tsMs": T0})
+    assert service.working_instruments() == [FUTURES]
+    # Hiding an account does not silently stop valuation of its open position.
+    service.update_account(short["id"], {"archived": True})
+    service.place_order(long["id"], {**INSTRUMENT, "side": "sell", "type": "market", "qty": "0.3", "reduceOnly": True})
+    assert service.working_instruments() == [FUTURES]
+    service.update_account(short["id"], {"archived": False})
+    service.place_order(short["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": "0.3", "reduceOnly": True})
+    assert service.working_instruments() == []
+
+
+def test_position_demands_restore_from_persisted_fills_without_orders(tmp_path):
+    service, market = live_service(tmp_path)
+    minute = int(time.time()) // 60 * 60
+    market.bar = bar(minute, "100", "100", "100", "100")
+    market.history = [market.bar]
+    account = service.create_account({"kind": "practice", "name": "Restart"})
+    for qty in ("0.1", "0.2"):
+        service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": qty})
+    service.flush_feeds()
+    service.store.close()
+    reopened = TradingAccountService(TradingStore(tmp_path / "live.sqlite3"), snapshot_dir=tmp_path / "snaps", market=market)
+    dm = FakeDataManager()
+    runtime = PracticeRuntime(reopened, dm, tick_seconds=60, market=market)
+    async def scenario():
+        await runtime.tick()
+        assert dm.ensured == ["BTCUSDT"]
+        assert reopened.cursor_start_ms(FUTURES) == minute * 1000
+        reopened.place_order(account["id"], {**INSTRUMENT, "side": "sell", "type": "market", "qty": "0.3", "reduceOnly": True})
+        await runtime.tick()
+        assert dm.released == ["BTCUSDT"]
+        assert reopened.working_instruments() == []  # no binary-float dust demand
+        await runtime.stop()
+    try:
+        asyncio.run(scenario())
+    finally:
+        reopened.store.close()
+
+
+def test_position_demand_does_not_rebuild_ledgers_on_price_or_cursor_updates(service, monkeypatch):
+    minute = T0 // 1000
+    service.test_market.bar = bar(minute, "100", "100", "100", "100")
+    account = service.create_account({"kind": "practice", "name": "Cached demand"})
+    service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
+    reads = []
+    trades = service._trades
+    def read_trades(account_id):
+        reads.append(account_id)
+        return trades(account_id)
+    monkeypatch.setattr(service, "_trades", read_trades)
+    assert service.working_instruments() == [FUTURES]
+    assert reads == [account["id"]]
+    for _ in range(3):
+        service.test_clock.now += CURSOR_FLUSH_MS
+        service.apply_market_bars(FUTURES, [bar(minute, "100", "101", "100", "101")], observed_ms=service.test_clock.now)
+        service.flush_feeds()
+        assert service.working_instruments() == [FUTURES]
+    assert reads == [account["id"]]
+    service.place_order(account["id"], {**INSTRUMENT, "side": "sell", "type": "market", "qty": "1", "reduceOnly": True})
+    reads.clear()
+    assert service.working_instruments() == []
+    assert reads == [account["id"]]
+    assert service.working_instruments() == []
+    assert reads == [account["id"]]
+
+
+def test_position_demand_does_not_adopt_rolled_back_sequence(service):
+    service.test_market.bar = bar(T0 // 1000, "100", "100", "100", "100")
+    account = service.create_account({"kind": "practice", "name": "Rollback"})
+    service.place_order(account["id"], {**INSTRUMENT, "side": "buy", "type": "market", "qty": "1"})
+    original = service.store.fills(account["id"])[0]
+    original.pop("seq")
+    assert service.working_instruments() == [FUTURES]
+    with pytest.raises(RuntimeError, match="rollback"):
+        with service.store.transaction() as conn:
+            service.store.insert(conn, "fills", {**original, "id": "fil_rollback", "symbol": "ETHUSDT"})
+            assert ("binance", "futures", "ETHUSDT") in service.working_instruments()
+            raise RuntimeError("rollback")
+    with service.store.transaction() as conn:
+        service.store.insert(conn, "fills", {**original, "id": "fil_committed", "symbol": "SOLUSDT"})
+    assert service.working_instruments() == [FUTURES, ("binance", "futures", "SOLUSDT")]
 
 
 # ── statistics ─────────────────────────────────────────────────

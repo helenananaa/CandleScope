@@ -750,6 +750,43 @@ test("automatic BAR preparation accepts an empty archive and submits the frozen 
   assert.deepEqual(calls, [`${draft.symbol}:${draft.requestedStartMs}`, "navigate:run-1"]);
 });
 
+test("background job completion refresh cannot supersede automatic creation navigation", async context => {
+  let finish!: () => void;
+  let listCalls = 0;
+  const navigated: string[] = [];
+  const lifecycle = new TrainingHubLifecycle({
+    draftStorage: null,
+    api: {
+      async listRuns() { listCalls += 1; return parseTrainingRunListResponse(listResponse([])); },
+      async capabilities() { return parseReplayCapabilities(enabledCapabilities()); },
+      async preparationCapabilities() { return { enabled: true, replay_sources: { BAR: true, AGG_TRADE: false } }; },
+      async catalog() { return { ...hedgeCatalog(), entries: [] }; },
+      async createRun() { throw new Error("unexpected direct creation"); },
+      async prepareReplay() {
+        await new Promise<void>(resolve => { finish = resolve; });
+        return parseTrainingRunMutationResponse(mutationResponse());
+      },
+    },
+    navigateToRun: id => navigated.push(id),
+  });
+  context.after(() => lifecycle.dispose());
+  await lifecycle.openCreate();
+  const creating = lifecycle.createRun(lifecycle.getSnapshot().draft!);
+  assert.equal(lifecycle.getSnapshot().operation, "create");
+  // The summary panel sees READY before the create observer finishes its run read.
+  lifecycle.refresh();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  finish();
+  await creating;
+  assert.deepEqual(navigated, ["run-1"]);
+  assert.equal(listCalls, 0);
+  assert.equal(lifecycle.getSnapshot().operation, null);
+  // Normal hub refresh remains available after the foreground operation ends.
+  lifecycle.refresh();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(listCalls, 1);
+});
+
 for (const [failure, code] of [
   [new Error("connection lost after submission"), "TRAINING_HUB_ERROR"],
   [new PreparationApiError("INSTRUMENT_METADATA_UNAVAILABLE", "Instrument identity is not ready", 200),

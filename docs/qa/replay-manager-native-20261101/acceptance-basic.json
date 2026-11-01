@@ -1,0 +1,3404 @@
+{
+  "schema": "candlescope.replay-manager-native-acceptance/1",
+  "sourceCommit": "09e5259f35bfd44b8eef1f330a52473666d13b3a",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-01T05:49:40.797Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 20281,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 20298,
+          "running": true,
+          "startedAt": "2026-11-01T05:49:32.553Z",
+          "readyMs": 8017,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:63676/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "created-paused",
+      "at": "2026-11-01T05:49:48.202Z",
+      "evidence": {
+        "run": {
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "kind": "V2",
+          "name": "回放训练",
+          "state": "PAUSED",
+          "source_kind": "BAR",
+          "integrity_mode": "CHALLENGE",
+          "time_disclosure_policy": "NONE",
+          "last_symbol": "BTCUSDT",
+          "subscribed_track_count": 1,
+          "progress": {
+            "source_sequence": 0
+          },
+          "equity": "10000",
+          "equity_status": "CURRENT",
+          "settlement_asset": "USDT",
+          "updated_at_ms": 1793512187927,
+          "compatibility": "READY",
+          "resume_action": "OPEN_ADAPTER",
+          "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+          "status": {
+            "code": "READY",
+            "message": "训练可继续"
+          },
+          "report_available": false,
+          "review_available": true
+        },
+        "tracks": {
+          "protocol": "replay.v3",
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "ordering_version": "replay.global-order.v1",
+          "launch_context": {
+            "schema_version": "replay.launch-context.v1",
+            "source": "DIRECT_HUB",
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "display_interval": "1m",
+            "watchlist_snapshot": {
+              "schema_version": "replay.watchlist-snapshot.v1",
+              "groups": []
+            }
+          },
+          "viewer_state": {
+            "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+            "selected_track_id": "track-1",
+            "display_interval": "1m",
+            "chart_type": "candles",
+            "visible_range": null,
+            "pane_layout": {},
+            "rail_layout": {},
+            "semantic_view_revision": 1
+          },
+          "tracks": [
+            {
+              "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+              "track_id": "track-1",
+              "stable_ordinal": 1,
+              "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BTCUSDT",
+              "settlement_asset": "USDT",
+              "state": "READY",
+              "source_kind": "BAR",
+              "subscription_tier": "FULL",
+              "cursor": {
+                "virtual_time_ms": 1700049600000,
+                "source_sequence": 0,
+                "revision": 1
+              },
+              "forced_full_reasons": [
+                "VIEWED"
+              ],
+              "capabilities": {
+                "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+                "BASIS": "UNSUPPORTED_NO_HISTORY",
+                "FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+                "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "INDICATORS": "AVAILABLE_EXACT",
+                "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+                "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "OHLCV": "AVAILABLE_EXACT",
+                "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+                "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+              },
+              "public_price": "30054.5",
+              "position": {
+                "entry_price": null,
+                "mark_price": "30054.5",
+                "notional": "0",
+                "quantity": "0",
+                "realized_pnl": "0",
+                "unrealized_pnl": "0"
+              },
+              "open_order_count": 0,
+              "degraded_reason": null,
+              "account": {
+                "available_equity": "10000",
+                "cash_balance": "10000",
+                "equity": "10000",
+                "fees_paid": "0",
+                "margin_used": "0",
+                "quote_asset": "USDT",
+                "realized_pnl": "0",
+                "reserved_margin": "0",
+                "unrealized_pnl": "0"
+              },
+              "historical_book": {
+                "mode": "OFF",
+                "capability_state": "UNSUPPORTED_NO_HISTORY",
+                "status": "OFF",
+                "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+                "queue_exact": false,
+                "as_of_virtual_time_ms": null,
+                "last_update_id": null,
+                "bids": [],
+                "asks": [],
+                "book_hash": null,
+                "message": "历史盘口模式未启用"
+              }
+            }
+          ],
+          "portfolio": {
+            "schema_version": "replay.training.portfolio.v2",
+            "account_model": "TOUCH_OR_TAPE_V2",
+            "execution_model": "TOUCH_OR_TAPE_V2",
+            "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+            "settlement_account_shared": true,
+            "position_mode": "ONE_WAY",
+            "margin_mode": "CROSS",
+            "funding_mode": "OFF",
+            "status": "ACTIVE",
+            "initial_equity": "10000",
+            "cash_balance": "10000",
+            "equity": "10000",
+            "available_equity": "10000",
+            "reserved_margin": "0",
+            "margin_used": "0",
+            "maintenance_margin": "0",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0",
+            "fees_paid": "0",
+            "funding_cashflow": "0",
+            "liquidation_fees_paid": "0",
+            "risk_ratio": null,
+            "positions": [],
+            "orders": [],
+            "fills": [],
+            "history": {
+              "orders_total": 0,
+              "active_orders": 0,
+              "historical_orders": 0,
+              "fills_total": 0,
+              "ledger_entries_total": 1,
+              "page_limit_max": 200
+            },
+            "active_fee_policy": {
+              "revision": 1,
+              "effective_virtual_time_ms": 1700049600000,
+              "maker_fee_bps": "2",
+              "taker_fee_bps": "5",
+              "liquidation_fee_bps": null,
+              "policy_version": null,
+              "account_tier": null,
+              "source_kind": null,
+              "source_id": null,
+              "source_event_sequence": null,
+              "extension_hash": null,
+              "policy_hash": "sha256:02e643ff045b206252033d87ffeaa0b44f22fd52fd72f6feb74ca8113a8bbeba",
+              "fidelity": "CONFIGURED_POLICY_EXACT"
+            },
+            "instrument_rules": [
+              {
+                "track_id": "track-1",
+                "revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule": {
+                  "contract_size": "1",
+                  "effective_virtual_time_ms": 1700049600000,
+                  "liquidation_fee_bps": "50",
+                  "maintenance_tiers": [
+                    {
+                      "maintenance_deduction": "0",
+                      "maintenance_rate": "0.005",
+                      "notional_cap": "30000"
+                    }
+                  ],
+                  "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                  "max_leverage": "3",
+                  "max_notional": "30000",
+                  "max_quantity": "1000000000",
+                  "min_notional": "0.01",
+                  "min_quantity": "0.00000001",
+                  "price_tick": "0.00000001",
+                  "quantity_step": "0.00000001",
+                  "quote_step": "0.00000001",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                  "source_kind": "BAR",
+                  "track_id": "track-1"
+                }
+              }
+            ],
+            "isolated_allocations": {},
+            "next_funding_time_ms": null,
+            "liquidations": [],
+            "liquidation_recoveries": [],
+            "hedge_state": {
+              "schema_version": "replay.hedge-relational-state.v1",
+              "position_legs": [],
+              "leg_accounting": [],
+              "margin_buckets": [],
+              "risk_snapshots": [],
+              "liquidation_leg_price_proofs": [],
+              "liquidation_book_executions": [],
+              "liquidation_book_snapshots": [],
+              "insurance_funds": [],
+              "insurance_postings": [],
+              "adl_snapshots": [],
+              "adl_candidates": [],
+              "adl_events": [],
+              "adl_selections": [],
+              "adl_counterparty_ledger": [],
+              "liquidation_case_hashes": [],
+              "state_hash": "sha256:eeadb59be79d7756a5cb5aff602222a8ffde5a43edf3130992096015d7d9b41d"
+            },
+            "hedge_inputs": null,
+            "account_history": {
+              "mode": "APPROX_PROXY",
+              "status": "ACTIVE",
+              "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+              "archive_proof_hash": null,
+              "bindings": [],
+              "auditor": {
+                "status": "NOT_RUN",
+                "proof_hash": null,
+                "differences": []
+              }
+            },
+            "liquidation_channels": {
+              "simulated_account": {
+                "label": "模拟账户强平",
+                "source": "MODELLED_ACCOUNT",
+                "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+              },
+              "historical_market": {
+                "label": "历史市场爆仓",
+                "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                "fidelity": "UNSUPPORTED_NO_HISTORY"
+              }
+            },
+            "ledger": {
+              "chain_version": "replay.training.contract-ledger.v1",
+              "entry_count": 1,
+              "tail_hash": "sha256:7351c8f52db3aed6fd068882348680c40b63e21349196671da41419b39f38bf8",
+              "cash_total": "10000",
+              "reconciliation_delta": "0",
+              "entries": []
+            },
+            "fidelity": {
+              "hedge_public_history_ref": null,
+              "simulation_manifest_ref": null,
+              "simulation_contract_hash": null,
+              "simulation_model_version": null,
+              "account": null,
+              "insurance_adl": null,
+              "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "maintenance_tier_extrapolation": {
+                "applied": false,
+                "position_count": 0,
+                "liquidation_projection_count": 0,
+                "reason": null,
+                "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+              },
+              "fees": "CONFIGURED_POLICY_EXACT",
+              "funding": "OFF",
+              "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+              "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+              "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+            }
+          },
+          "global_clock": {
+            "contract": "replay.playback.v1",
+            "mode": "ORDERED",
+            "state": "PAUSED",
+            "basis": "BASE_BAR",
+            "rate": 1,
+            "speed": 1,
+            "display_interval": null,
+            "viewer_revision": null,
+            "profile_revision": 0,
+            "reason": null,
+            "generation": 0,
+            "tick": 0,
+            "supported_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT",
+              "VIRTUAL_TIME"
+            ],
+            "playback_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT"
+            ],
+            "max_count": 100000,
+            "virtual_time_quantum_ms": 60000
+          }
+        },
+        "manager": {
+          "replay": {
+            "sequences": [
+              {
+                "owner": "replay-window-6",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "trackId": "track-1",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                  "generation": 1,
+                  "interval": "1m"
+                },
+                "consumers": 1,
+                "bars": 360,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "run-entry"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 2,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-3",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-2",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "purpose": "adapter"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-4",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-5",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 4,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-8",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-9",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "history"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-10",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-11",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "review-inactive"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-12",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "rail"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-7",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 1,
+            "activeOperations": 11,
+            "requests": 0,
+            "streams": 2,
+            "bars": 360
+          }
+        },
+        "ui": {
+          "class": "status-bar replay-status-bar",
+          "id": "status-bar",
+          "data-runtime-source": "replay",
+          "data-connection-status": "connected",
+          "data-market-shell-owner": "status-bar",
+          "data-replay-generation": "1",
+          "data-replay-session-state": "PAUSED",
+          "data-replay-adapter-state": "PAUSED",
+          "data-replay-source-sequence": "0",
+          "data-replay-revision": "1",
+          "data-replay-state-hash": "sha256:b0ed0c03061890ed4d1e9a1e8efb54c494ef3d8cd594d8005a689ebd7b87a9a9",
+          "data-replay-cursor-ms": "1700049600000",
+          "data-replay-max-bar-ms": "1700049540000",
+          "data-replay-source-bar-count": "360",
+          "data-replay-source-series-version": "2",
+          "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+          "data-replay-viewer-bar-count": "360",
+          "data-replay-viewer-series-version": "1",
+          "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+          "data-replay-viewer-error": "",
+          "data-replay-viewer-loading": "false",
+          "data-replay-viewer-state-ready": "true",
+          "data-replay-base-interval": "1m",
+          "data-replay-source-interval-seconds": "60",
+          "data-replay-last-bar-closed": "true",
+          "data-replay-order-count": "0",
+          "data-replay-fill-count": "0",
+          "data-replay-revealed": "false",
+          "data-replay-history-epoch": "",
+          "data-replay-history-right-truncated": "false",
+          "data-replay-history-can-restore-latest": "false",
+          "data-replay-view-interval": "1m",
+          "data-replay-view-revision": "1",
+          "data-replay-clock-basis": "BASE_BAR",
+          "data-replay-clock-rate": "1",
+          "data-replay-control-pending": "",
+          "data-replay-integrity-operation": "",
+          "data-replay-time-disclosure-policy": "NONE",
+          "data-replay-result-label": "START_TIME_KNOWN",
+          "data-replay-public-time-projections": "0",
+          "data-replay-public-time-state": "ready",
+          "data-replay-review-read-only": "false",
+          "data-replay-review-timeline-sequence": "",
+          "data-replay-review-chart-fidelity": "",
+          "data-replay-review-original-verified": ""
+        }
+      }
+    },
+    {
+      "name": "buy-filled",
+      "at": "2026-11-01T05:49:49.708Z",
+      "evidence": {
+        "run": {
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "kind": "V2",
+          "name": "回放训练",
+          "state": "PAUSED",
+          "source_kind": "BAR",
+          "integrity_mode": "CHALLENGE",
+          "time_disclosure_policy": "NONE",
+          "last_symbol": "BTCUSDT",
+          "subscribed_track_count": 1,
+          "progress": {
+            "source_sequence": 1
+          },
+          "equity": "9999.85965797",
+          "equity_status": "CURRENT",
+          "settlement_asset": "USDT",
+          "updated_at_ms": 1793512189399,
+          "compatibility": "READY",
+          "resume_action": "OPEN_ADAPTER",
+          "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+          "status": {
+            "code": "READY",
+            "message": "训练可继续"
+          },
+          "report_available": false,
+          "review_available": true
+        },
+        "tracks": {
+          "protocol": "replay.v3",
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "ordering_version": "replay.global-order.v1",
+          "launch_context": {
+            "schema_version": "replay.launch-context.v1",
+            "source": "DIRECT_HUB",
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "display_interval": "1m",
+            "watchlist_snapshot": {
+              "schema_version": "replay.watchlist-snapshot.v1",
+              "groups": []
+            }
+          },
+          "viewer_state": {
+            "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+            "selected_track_id": "track-1",
+            "display_interval": "1m",
+            "chart_type": "candles",
+            "visible_range": null,
+            "pane_layout": {},
+            "rail_layout": {},
+            "semantic_view_revision": 1
+          },
+          "tracks": [
+            {
+              "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+              "track_id": "track-1",
+              "stable_ordinal": 1,
+              "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BTCUSDT",
+              "settlement_asset": "USDT",
+              "state": "READY",
+              "source_kind": "BAR",
+              "subscription_tier": "FULL",
+              "cursor": {
+                "virtual_time_ms": 1700049659999,
+                "source_sequence": 1,
+                "revision": 3
+              },
+              "forced_full_reasons": [
+                "LIQUIDATION_RISK",
+                "OPEN_POSITION",
+                "VIEWED"
+              ],
+              "capabilities": {
+                "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+                "BASIS": "UNSUPPORTED_NO_HISTORY",
+                "FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+                "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "INDICATORS": "AVAILABLE_EXACT",
+                "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+                "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "OHLCV": "AVAILABLE_EXACT",
+                "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+                "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+              },
+              "public_price": "30058.5",
+              "position": {
+                "entry_price": "30057.50545",
+                "mark_price": "30058.5",
+                "notional": "300.585",
+                "quantity": "0.01",
+                "realized_pnl": "0",
+                "unrealized_pnl": "0.0099455"
+              },
+              "open_order_count": 0,
+              "degraded_reason": null,
+              "account": {
+                "available_equity": "9899.66465797",
+                "cash_balance": "9999.84971247",
+                "equity": "9999.85965797",
+                "fees_paid": "0.15028753",
+                "margin_used": "100.195",
+                "quote_asset": "USDT",
+                "realized_pnl": "0",
+                "reserved_margin": "0",
+                "unrealized_pnl": "0.0099455"
+              },
+              "historical_book": {
+                "mode": "OFF",
+                "capability_state": "UNSUPPORTED_NO_HISTORY",
+                "status": "OFF",
+                "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+                "queue_exact": false,
+                "as_of_virtual_time_ms": null,
+                "last_update_id": null,
+                "bids": [],
+                "asks": [],
+                "book_hash": null,
+                "message": "历史盘口模式未启用"
+              }
+            }
+          ],
+          "portfolio": {
+            "schema_version": "replay.training.portfolio.v2",
+            "account_model": "TOUCH_OR_TAPE_V2",
+            "execution_model": "TOUCH_OR_TAPE_V2",
+            "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+            "settlement_account_shared": true,
+            "position_mode": "ONE_WAY",
+            "margin_mode": "CROSS",
+            "funding_mode": "OFF",
+            "status": "ACTIVE",
+            "initial_equity": "10000",
+            "cash_balance": "9999.84971247",
+            "equity": "9999.85965797",
+            "available_equity": "9899.66465797",
+            "reserved_margin": "0",
+            "margin_used": "100.195",
+            "maintenance_margin": "1.502925",
+            "realized_pnl": "0",
+            "unrealized_pnl": "0.0099455",
+            "fees_paid": "0.15028753",
+            "funding_cashflow": "0",
+            "liquidation_fees_paid": "0",
+            "risk_ratio": "6653.598588066603456592977028",
+            "positions": [
+              {
+                "track_id": "track-1",
+                "symbol": "BTCUSDT",
+                "position": {
+                  "entry_price": "30057.50545",
+                  "mark_price": "30058.5",
+                  "notional": "300.585",
+                  "quantity": "0.01",
+                  "realized_pnl": "0",
+                  "unrealized_pnl": "0.0099455"
+                },
+                "leverage": "3",
+                "initial_margin": "100.195",
+                "maintenance_margin": "1.502925",
+                "isolated_margin": "0",
+                "isolated_allocation_key": "track-1",
+                "account_notional": "300.585",
+                "risk_tier": 1,
+                "margin_equity": "9999.85965797",
+                "risk_ratio": "6653.598588066603456592977028",
+                "rule_revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                "maintenance_margin_proof": {
+                  "schema_version": "replay.maintenance-margin-proof.v1",
+                  "rule_revision": 1,
+                  "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "risk_tier": 1,
+                  "last_tier_notional_cap": "30000",
+                  "position_notional": "300.585",
+                  "position_tier_extrapolated": false,
+                  "liquidation_price_notional": null,
+                  "liquidation_tier_extrapolated": false,
+                  "fidelity": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+                  "explanation": null,
+                  "proof_hash": "sha256:3c1a15e96d4dd11558dfb8d73d1accc64727493eeb55f974142511815939d334"
+                }
+              }
+            ],
+            "orders": [],
+            "fills": [],
+            "history": {
+              "orders_total": 1,
+              "active_orders": 0,
+              "historical_orders": 1,
+              "fills_total": 1,
+              "ledger_entries_total": 2,
+              "page_limit_max": 200
+            },
+            "active_fee_policy": {
+              "revision": 1,
+              "effective_virtual_time_ms": 1700049600000,
+              "maker_fee_bps": "2",
+              "taker_fee_bps": "5",
+              "liquidation_fee_bps": null,
+              "policy_version": null,
+              "account_tier": null,
+              "source_kind": null,
+              "source_id": null,
+              "source_event_sequence": null,
+              "extension_hash": null,
+              "policy_hash": "sha256:02e643ff045b206252033d87ffeaa0b44f22fd52fd72f6feb74ca8113a8bbeba",
+              "fidelity": "CONFIGURED_POLICY_EXACT"
+            },
+            "instrument_rules": [
+              {
+                "track_id": "track-1",
+                "revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule": {
+                  "contract_size": "1",
+                  "effective_virtual_time_ms": 1700049600000,
+                  "liquidation_fee_bps": "50",
+                  "maintenance_tiers": [
+                    {
+                      "maintenance_deduction": "0",
+                      "maintenance_rate": "0.005",
+                      "notional_cap": "30000"
+                    }
+                  ],
+                  "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                  "max_leverage": "3",
+                  "max_notional": "30000",
+                  "max_quantity": "1000000000",
+                  "min_notional": "0.01",
+                  "min_quantity": "0.00000001",
+                  "price_tick": "0.00000001",
+                  "quantity_step": "0.00000001",
+                  "quote_step": "0.00000001",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                  "source_kind": "BAR",
+                  "track_id": "track-1"
+                }
+              }
+            ],
+            "isolated_allocations": {},
+            "next_funding_time_ms": null,
+            "liquidations": [],
+            "liquidation_recoveries": [],
+            "hedge_state": {
+              "schema_version": "replay.hedge-relational-state.v1",
+              "position_legs": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "signed_quantity": "0.01",
+                  "absolute_quantity": "0.01",
+                  "entry_price": "30057.50545",
+                  "mark_price": "30058.5",
+                  "notional": "300.585",
+                  "realized_pnl": "0",
+                  "unrealized_pnl": "0.0099455",
+                  "initial_margin": "100.195",
+                  "maintenance_margin": "1.502925",
+                  "leverage": "3",
+                  "margin_mode": "CROSS",
+                  "isolated_wallet": "0",
+                  "liquidation_price": "0",
+                  "bankruptcy_price": "0",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "risk_tier": 1,
+                  "rule_revision": 1,
+                  "protection_json": "{\"orders\":[]}",
+                  "component_revision": 2,
+                  "component_hash": "sha256:89b78a7119be3f1867b6cd771b777b2105062b8b63aa2750dbe879bba487eaca",
+                  "created_at_ms": 1793512188527,
+                  "updated_at_ms": 1793512189399
+                }
+              ],
+              "leg_accounting": [
+                {
+                  "schema_version": "replay.hedge-leg-accounting.v1",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "funding_settlement_count": 0,
+                  "fee_entry_count": 0,
+                  "mutation_entry_count": 0,
+                  "ledger_entry_count": 0,
+                  "last_ledger_sequence": null,
+                  "last_ledger_hash": null,
+                  "position_component_hash": "sha256:89b78a7119be3f1867b6cd771b777b2105062b8b63aa2750dbe879bba487eaca"
+                }
+              ],
+              "margin_buckets": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "cross:USDT",
+                  "bucket_kind": "CROSS",
+                  "track_id": null,
+                  "position_side": null,
+                  "asset": "USDT",
+                  "wallet_balance": "9999.84971247",
+                  "initial_margin": "100.195",
+                  "maintenance_margin": "1.502925",
+                  "reserved_margin": "0",
+                  "available_balance": "9899.66465797",
+                  "component_revision": 2,
+                  "component_hash": "sha256:1ae2f5763d3dc2e2fb23b63809964604aeea16d09c9868d9d0eb9fb695902874",
+                  "updated_at_ms": 1793512189399
+                },
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "position:track-1:LONG",
+                  "bucket_kind": "POSITION",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "asset": "USDT",
+                  "wallet_balance": "0",
+                  "initial_margin": "100.195",
+                  "maintenance_margin": "1.502925",
+                  "reserved_margin": "0",
+                  "available_balance": "0",
+                  "component_revision": 2,
+                  "component_hash": "sha256:52da27e3784b36798f407587f7ee445dc8ee9181737113011b8d63def20f6f34",
+                  "updated_at_ms": 1793512189399
+                }
+              ],
+              "risk_snapshots": [],
+              "liquidation_leg_price_proofs": [],
+              "liquidation_book_executions": [],
+              "liquidation_book_snapshots": [],
+              "insurance_funds": [],
+              "insurance_postings": [],
+              "adl_snapshots": [],
+              "adl_candidates": [],
+              "adl_events": [],
+              "adl_selections": [],
+              "adl_counterparty_ledger": [],
+              "liquidation_case_hashes": [],
+              "state_hash": "sha256:e956a61bbcb7306cbf19e7a3598b47227169286d9eccd8a90934f624fb1147ed"
+            },
+            "hedge_inputs": null,
+            "account_history": {
+              "mode": "APPROX_PROXY",
+              "status": "ACTIVE",
+              "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+              "archive_proof_hash": null,
+              "bindings": [],
+              "auditor": {
+                "status": "NOT_RUN",
+                "proof_hash": null,
+                "differences": []
+              }
+            },
+            "liquidation_channels": {
+              "simulated_account": {
+                "label": "模拟账户强平",
+                "source": "MODELLED_ACCOUNT",
+                "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+              },
+              "historical_market": {
+                "label": "历史市场爆仓",
+                "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                "fidelity": "UNSUPPORTED_NO_HISTORY"
+              }
+            },
+            "ledger": {
+              "chain_version": "replay.training.contract-ledger.v1",
+              "entry_count": 2,
+              "tail_hash": "sha256:d55f81ffc6c3652a6dc6433a6eb05e6e0cf958b021ecfbf2537b120ee641641a",
+              "cash_total": "9999.84971247",
+              "reconciliation_delta": "0",
+              "entries": []
+            },
+            "fidelity": {
+              "hedge_public_history_ref": null,
+              "simulation_manifest_ref": null,
+              "simulation_contract_hash": null,
+              "simulation_model_version": null,
+              "account": null,
+              "insurance_adl": null,
+              "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "maintenance_tier_extrapolation": {
+                "applied": false,
+                "position_count": 0,
+                "liquidation_projection_count": 0,
+                "reason": null,
+                "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+              },
+              "fees": "CONFIGURED_POLICY_EXACT",
+              "funding": "OFF",
+              "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+              "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+              "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+            }
+          },
+          "global_clock": {
+            "contract": "replay.playback.v1",
+            "mode": "ORDERED",
+            "state": "PAUSED",
+            "basis": "BASE_BAR",
+            "rate": 1,
+            "speed": 1,
+            "display_interval": null,
+            "viewer_revision": null,
+            "profile_revision": 0,
+            "reason": null,
+            "generation": 0,
+            "tick": 0,
+            "supported_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT",
+              "VIRTUAL_TIME"
+            ],
+            "playback_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT"
+            ],
+            "max_count": 100000,
+            "virtual_time_quantum_ms": 60000
+          }
+        },
+        "manager": {
+          "replay": {
+            "sequences": [
+              {
+                "owner": "replay-window-6",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "trackId": "track-1",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                  "generation": 1,
+                  "interval": "1m"
+                },
+                "consumers": 1,
+                "bars": 361,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "run-entry"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 2,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-3",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 8,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-2",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "purpose": "adapter"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-4",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-5",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 7,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-8",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-9",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "history"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-10",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-11",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "review-inactive"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-12",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "rail"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-7",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 1,
+            "activeOperations": 11,
+            "requests": 0,
+            "streams": 2,
+            "bars": 361
+          }
+        },
+        "ui": {
+          "class": "status-bar replay-status-bar",
+          "id": "status-bar",
+          "data-runtime-source": "replay",
+          "data-connection-status": "connected",
+          "data-market-shell-owner": "status-bar",
+          "data-replay-generation": "1",
+          "data-replay-session-state": "PAUSED",
+          "data-replay-adapter-state": "PAUSED",
+          "data-replay-source-sequence": "1",
+          "data-replay-revision": "3",
+          "data-replay-state-hash": "sha256:d28293fa18fd98527d8fe1b2537c2533f1db7b41ba213886f9eed23749220830",
+          "data-replay-cursor-ms": "1700049659999",
+          "data-replay-max-bar-ms": "1700049600000",
+          "data-replay-source-bar-count": "361",
+          "data-replay-source-series-version": "3",
+          "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+          "data-replay-viewer-bar-count": "361",
+          "data-replay-viewer-series-version": "2",
+          "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+          "data-replay-viewer-error": "",
+          "data-replay-viewer-loading": "false",
+          "data-replay-viewer-state-ready": "true",
+          "data-replay-base-interval": "1m",
+          "data-replay-source-interval-seconds": "60",
+          "data-replay-last-bar-closed": "true",
+          "data-replay-order-count": "1",
+          "data-replay-fill-count": "1",
+          "data-replay-revealed": "false",
+          "data-replay-history-epoch": "",
+          "data-replay-history-right-truncated": "false",
+          "data-replay-history-can-restore-latest": "false",
+          "data-replay-view-interval": "1m",
+          "data-replay-view-revision": "1",
+          "data-replay-clock-basis": "BASE_BAR",
+          "data-replay-clock-rate": "1",
+          "data-replay-control-pending": "",
+          "data-replay-integrity-operation": "",
+          "data-replay-time-disclosure-policy": "NONE",
+          "data-replay-result-label": "START_TIME_KNOWN",
+          "data-replay-public-time-projections": "0",
+          "data-replay-public-time-state": "ready",
+          "data-replay-review-read-only": "false",
+          "data-replay-review-timeline-sequence": "",
+          "data-replay-review-chart-fidelity": "",
+          "data-replay-review-original-verified": ""
+        }
+      }
+    },
+    {
+      "name": "closed-cycle",
+      "at": "2026-11-01T05:49:52.356Z",
+      "evidence": {
+        "run": {
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "kind": "V2",
+          "name": "回放训练",
+          "state": "PAUSED",
+          "source_kind": "BAR",
+          "integrity_mode": "CHALLENGE",
+          "time_disclosure_policy": "NONE",
+          "last_symbol": "BTCUSDT",
+          "subscribed_track_count": 1,
+          "progress": {
+            "source_sequence": 6
+          },
+          "equity": "9999.759274",
+          "equity_status": "CURRENT",
+          "settlement_asset": "USDT",
+          "updated_at_ms": 1793512192058,
+          "compatibility": "READY",
+          "resume_action": "OPEN_ADAPTER",
+          "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+          "status": {
+            "code": "READY",
+            "message": "训练可继续"
+          },
+          "report_available": false,
+          "review_available": true
+        },
+        "tracks": {
+          "protocol": "replay.v3",
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "ordering_version": "replay.global-order.v1",
+          "launch_context": {
+            "schema_version": "replay.launch-context.v1",
+            "source": "DIRECT_HUB",
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "display_interval": "1m",
+            "watchlist_snapshot": {
+              "schema_version": "replay.watchlist-snapshot.v1",
+              "groups": []
+            }
+          },
+          "viewer_state": {
+            "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+            "selected_track_id": "track-1",
+            "display_interval": "1m",
+            "chart_type": "candles",
+            "visible_range": null,
+            "pane_layout": {},
+            "rail_layout": {},
+            "semantic_view_revision": 1
+          },
+          "tracks": [
+            {
+              "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+              "track_id": "track-1",
+              "stable_ordinal": 1,
+              "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BTCUSDT",
+              "settlement_asset": "USDT",
+              "state": "READY",
+              "source_kind": "BAR",
+              "subscription_tier": "FULL",
+              "cursor": {
+                "virtual_time_ms": 1700049959999,
+                "source_sequence": 6,
+                "revision": 9
+              },
+              "forced_full_reasons": [
+                "VIEWED"
+              ],
+              "capabilities": {
+                "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+                "BASIS": "UNSUPPORTED_NO_HISTORY",
+                "FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+                "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "INDICATORS": "AVAILABLE_EXACT",
+                "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+                "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "OHLCV": "AVAILABLE_EXACT",
+                "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+                "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+              },
+              "public_price": "30061.5",
+              "position": {
+                "entry_price": null,
+                "mark_price": "30061.5",
+                "notional": "0",
+                "quantity": "0",
+                "realized_pnl": "0.059879",
+                "unrealized_pnl": "0"
+              },
+              "open_order_count": 0,
+              "degraded_reason": null,
+              "account": {
+                "available_equity": "9999.759274",
+                "cash_balance": "9999.759274",
+                "equity": "9999.759274",
+                "fees_paid": "0.300605",
+                "margin_used": "0",
+                "quote_asset": "USDT",
+                "realized_pnl": "0.059879",
+                "reserved_margin": "0",
+                "unrealized_pnl": "0"
+              },
+              "historical_book": {
+                "mode": "OFF",
+                "capability_state": "UNSUPPORTED_NO_HISTORY",
+                "status": "OFF",
+                "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+                "queue_exact": false,
+                "as_of_virtual_time_ms": null,
+                "last_update_id": null,
+                "bids": [],
+                "asks": [],
+                "book_hash": null,
+                "message": "历史盘口模式未启用"
+              }
+            }
+          ],
+          "portfolio": {
+            "schema_version": "replay.training.portfolio.v2",
+            "account_model": "TOUCH_OR_TAPE_V2",
+            "execution_model": "TOUCH_OR_TAPE_V2",
+            "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+            "settlement_account_shared": true,
+            "position_mode": "ONE_WAY",
+            "margin_mode": "CROSS",
+            "funding_mode": "OFF",
+            "status": "ACTIVE",
+            "initial_equity": "10000",
+            "cash_balance": "9999.759274",
+            "equity": "9999.759274",
+            "available_equity": "9999.759274",
+            "reserved_margin": "0",
+            "margin_used": "0",
+            "maintenance_margin": "0",
+            "realized_pnl": "0.059879",
+            "unrealized_pnl": "0",
+            "fees_paid": "0.300605",
+            "funding_cashflow": "0",
+            "liquidation_fees_paid": "0",
+            "risk_ratio": null,
+            "positions": [],
+            "orders": [],
+            "fills": [],
+            "history": {
+              "orders_total": 2,
+              "active_orders": 0,
+              "historical_orders": 2,
+              "fills_total": 2,
+              "ledger_entries_total": 4,
+              "page_limit_max": 200
+            },
+            "active_fee_policy": {
+              "revision": 1,
+              "effective_virtual_time_ms": 1700049600000,
+              "maker_fee_bps": "2",
+              "taker_fee_bps": "5",
+              "liquidation_fee_bps": null,
+              "policy_version": null,
+              "account_tier": null,
+              "source_kind": null,
+              "source_id": null,
+              "source_event_sequence": null,
+              "extension_hash": null,
+              "policy_hash": "sha256:02e643ff045b206252033d87ffeaa0b44f22fd52fd72f6feb74ca8113a8bbeba",
+              "fidelity": "CONFIGURED_POLICY_EXACT"
+            },
+            "instrument_rules": [
+              {
+                "track_id": "track-1",
+                "revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule": {
+                  "contract_size": "1",
+                  "effective_virtual_time_ms": 1700049600000,
+                  "liquidation_fee_bps": "50",
+                  "maintenance_tiers": [
+                    {
+                      "maintenance_deduction": "0",
+                      "maintenance_rate": "0.005",
+                      "notional_cap": "30000"
+                    }
+                  ],
+                  "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                  "max_leverage": "3",
+                  "max_notional": "30000",
+                  "max_quantity": "1000000000",
+                  "min_notional": "0.01",
+                  "min_quantity": "0.00000001",
+                  "price_tick": "0.00000001",
+                  "quantity_step": "0.00000001",
+                  "quote_step": "0.00000001",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                  "source_kind": "BAR",
+                  "track_id": "track-1"
+                }
+              }
+            ],
+            "isolated_allocations": {},
+            "next_funding_time_ms": null,
+            "liquidations": [],
+            "liquidation_recoveries": [],
+            "hedge_state": {
+              "schema_version": "replay.hedge-relational-state.v1",
+              "position_legs": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "signed_quantity": "0.01",
+                  "absolute_quantity": "0.01",
+                  "entry_price": "30057.50545",
+                  "mark_price": "30066.5",
+                  "notional": "300.665",
+                  "realized_pnl": "0",
+                  "unrealized_pnl": "0.0899455",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "leverage": "3",
+                  "margin_mode": "CROSS",
+                  "isolated_wallet": "0",
+                  "liquidation_price": "0",
+                  "bankruptcy_price": "0",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "risk_tier": 1,
+                  "rule_revision": 1,
+                  "protection_json": "{\"orders\":[]}",
+                  "component_revision": 6,
+                  "component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934",
+                  "created_at_ms": 1793512188527,
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "leg_accounting": [
+                {
+                  "schema_version": "replay.hedge-leg-accounting.v1",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "funding_settlement_count": 0,
+                  "fee_entry_count": 0,
+                  "mutation_entry_count": 0,
+                  "ledger_entry_count": 0,
+                  "last_ledger_sequence": null,
+                  "last_ledger_hash": null,
+                  "position_component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934"
+                }
+              ],
+              "margin_buckets": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "cross:USDT",
+                  "bucket_kind": "CROSS",
+                  "track_id": null,
+                  "position_side": null,
+                  "asset": "USDT",
+                  "wallet_balance": "9999.84971247",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "9899.7179913",
+                  "component_revision": 6,
+                  "component_hash": "sha256:018690a39d3777e2dda9620c59f20c5658aea3892e55b0a9fe4a80ce9f5c7da5",
+                  "updated_at_ms": 1793512190966
+                },
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "position:track-1:LONG",
+                  "bucket_kind": "POSITION",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "asset": "USDT",
+                  "wallet_balance": "0",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "0",
+                  "component_revision": 6,
+                  "component_hash": "sha256:1ef894b050fe77e443f8dc229fcf4f82f1c7edb1895cfc455880a53a5bc5d98c",
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "risk_snapshots": [],
+              "liquidation_leg_price_proofs": [],
+              "liquidation_book_executions": [],
+              "liquidation_book_snapshots": [],
+              "insurance_funds": [],
+              "insurance_postings": [],
+              "adl_snapshots": [],
+              "adl_candidates": [],
+              "adl_events": [],
+              "adl_selections": [],
+              "adl_counterparty_ledger": [],
+              "liquidation_case_hashes": [],
+              "state_hash": "sha256:b942b0beaee83acec1014088614216d10a2d9141c187631edef76ccb53e1e851"
+            },
+            "hedge_inputs": null,
+            "account_history": {
+              "mode": "APPROX_PROXY",
+              "status": "ACTIVE",
+              "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+              "archive_proof_hash": null,
+              "bindings": [],
+              "auditor": {
+                "status": "NOT_RUN",
+                "proof_hash": null,
+                "differences": []
+              }
+            },
+            "liquidation_channels": {
+              "simulated_account": {
+                "label": "模拟账户强平",
+                "source": "MODELLED_ACCOUNT",
+                "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+              },
+              "historical_market": {
+                "label": "历史市场爆仓",
+                "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                "fidelity": "UNSUPPORTED_NO_HISTORY"
+              }
+            },
+            "ledger": {
+              "chain_version": "replay.training.contract-ledger.v1",
+              "entry_count": 4,
+              "tail_hash": "sha256:5e6f4ad63845253bc6b29ae55d8df6ba7d93db08b771cae1bd84672b8d3bfa2c",
+              "cash_total": "9999.759274",
+              "reconciliation_delta": "0",
+              "entries": []
+            },
+            "fidelity": {
+              "hedge_public_history_ref": null,
+              "simulation_manifest_ref": null,
+              "simulation_contract_hash": null,
+              "simulation_model_version": null,
+              "account": null,
+              "insurance_adl": null,
+              "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "maintenance_tier_extrapolation": {
+                "applied": false,
+                "position_count": 0,
+                "liquidation_projection_count": 0,
+                "reason": null,
+                "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+              },
+              "fees": "CONFIGURED_POLICY_EXACT",
+              "funding": "OFF",
+              "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+              "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+              "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+            }
+          },
+          "global_clock": {
+            "contract": "replay.playback.v1",
+            "mode": "ORDERED",
+            "state": "PAUSED",
+            "basis": "BASE_BAR",
+            "rate": 1,
+            "speed": 1,
+            "display_interval": null,
+            "viewer_revision": null,
+            "profile_revision": 0,
+            "reason": null,
+            "generation": 0,
+            "tick": 0,
+            "supported_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT",
+              "VIRTUAL_TIME"
+            ],
+            "playback_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT"
+            ],
+            "max_count": 100000,
+            "virtual_time_quantum_ms": 60000
+          }
+        },
+        "manager": {
+          "replay": {
+            "sequences": [
+              {
+                "owner": "replay-window-6",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "trackId": "track-1",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                  "generation": 1,
+                  "interval": "1m"
+                },
+                "consumers": 1,
+                "bars": 366,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "run-entry"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 2,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-3",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 17,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-2",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "purpose": "adapter"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-4",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-5",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 13,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-8",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-9",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "history"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-10",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-11",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "review-inactive"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-12",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "rail"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-7",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 1,
+            "activeOperations": 11,
+            "requests": 0,
+            "streams": 2,
+            "bars": 366
+          }
+        },
+        "ui": {
+          "class": "status-bar replay-status-bar",
+          "id": "status-bar",
+          "data-runtime-source": "replay",
+          "data-connection-status": "connected",
+          "data-market-shell-owner": "status-bar",
+          "data-replay-generation": "1",
+          "data-replay-session-state": "PAUSED",
+          "data-replay-adapter-state": "PAUSED",
+          "data-replay-source-sequence": "6",
+          "data-replay-revision": "9",
+          "data-replay-state-hash": "sha256:6bd704e1767c330636837685dac9a629d65658afbab7a006a658f8a277532792",
+          "data-replay-cursor-ms": "1700049959999",
+          "data-replay-max-bar-ms": "1700049900000",
+          "data-replay-source-bar-count": "366",
+          "data-replay-source-series-version": "8",
+          "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+          "data-replay-viewer-bar-count": "366",
+          "data-replay-viewer-series-version": "7",
+          "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+          "data-replay-viewer-error": "",
+          "data-replay-viewer-loading": "false",
+          "data-replay-viewer-state-ready": "true",
+          "data-replay-base-interval": "1m",
+          "data-replay-source-interval-seconds": "60",
+          "data-replay-last-bar-closed": "true",
+          "data-replay-order-count": "2",
+          "data-replay-fill-count": "2",
+          "data-replay-revealed": "false",
+          "data-replay-history-epoch": "",
+          "data-replay-history-right-truncated": "false",
+          "data-replay-history-can-restore-latest": "false",
+          "data-replay-view-interval": "1m",
+          "data-replay-view-revision": "1",
+          "data-replay-clock-basis": "BASE_BAR",
+          "data-replay-clock-rate": "1",
+          "data-replay-control-pending": "",
+          "data-replay-integrity-operation": "",
+          "data-replay-time-disclosure-policy": "NONE",
+          "data-replay-result-label": "START_TIME_KNOWN",
+          "data-replay-public-time-projections": "0",
+          "data-replay-public-time-state": "ready",
+          "data-replay-review-read-only": "false",
+          "data-replay-review-timeline-sequence": "",
+          "data-replay-review-chart-fidelity": "",
+          "data-replay-review-original-verified": ""
+        }
+      }
+    },
+    {
+      "name": "saved-hub",
+      "at": "2026-11-01T05:49:53.702Z",
+      "evidence": {
+        "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+        "manager": {
+          "replay": {
+            "sequences": [],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "hub",
+                  "purpose": "hub"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 1,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 0,
+            "activeOperations": 1,
+            "requests": 0,
+            "streams": 0,
+            "bars": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:49:53.755Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20281,
+            "ppid": 20132,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20296,
+            "ppid": 20281,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20297,
+            "ppid": 20281,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20298,
+            "ppid": 20281,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20358,
+            "ppid": 20298,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20376,
+            "ppid": 20281,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687871705 --launch-time-ticks=13492773418 --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=63676 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20393,
+            "ppid": 20298,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(60)"
+          },
+          {
+            "pid": 20394,
+            "ppid": 20298,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=61, pipe_handle=63) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T05:50:09.047Z",
+      "evidence": {
+        "elapsedMs": 15292
+      }
+    },
+    {
+      "name": "full-exit",
+      "at": "2026-11-01T05:50:09.104Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20281,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20296,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20297,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20298,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20358,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20376,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687871705 --launch-time-ticks=13492773418 --shared-files --field-trial-handle=1718379636,r,6382532531905288596,14769822807110163370,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5923077253276237133,12275071358177180081,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=63676 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20393,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(60)"
+          },
+          {
+            "pid": 20394,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=61, pipe_handle=63) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    },
+    {
+      "name": "restart",
+      "at": "2026-11-01T05:50:13.726Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 20533,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 20538,
+          "running": true,
+          "startedAt": "2026-11-01T05:50:09.469Z",
+          "readyMs": 4048,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:64556/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "restored-paused",
+      "at": "2026-11-01T05:50:14.668Z",
+      "evidence": {
+        "run": {
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "kind": "V2",
+          "name": "回放训练",
+          "state": "PAUSED",
+          "source_kind": "BAR",
+          "integrity_mode": "CHALLENGE",
+          "time_disclosure_policy": "NONE",
+          "last_symbol": "BTCUSDT",
+          "subscribed_track_count": 1,
+          "progress": {
+            "source_sequence": 6
+          },
+          "equity": "9999.759274",
+          "equity_status": "CURRENT",
+          "settlement_asset": "USDT",
+          "updated_at_ms": 1793512214445,
+          "compatibility": "READY",
+          "resume_action": "OPEN_ADAPTER",
+          "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+          "status": {
+            "code": "READY",
+            "message": "训练可继续"
+          },
+          "report_available": false,
+          "review_available": true
+        },
+        "tracks": {
+          "protocol": "replay.v3",
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "ordering_version": "replay.global-order.v1",
+          "launch_context": {
+            "schema_version": "replay.launch-context.v1",
+            "source": "DIRECT_HUB",
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "display_interval": "1m",
+            "watchlist_snapshot": {
+              "schema_version": "replay.watchlist-snapshot.v1",
+              "groups": []
+            }
+          },
+          "viewer_state": {
+            "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+            "selected_track_id": "track-1",
+            "display_interval": "1m",
+            "chart_type": "candles",
+            "visible_range": null,
+            "pane_layout": {},
+            "rail_layout": {},
+            "semantic_view_revision": 1
+          },
+          "tracks": [
+            {
+              "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+              "track_id": "track-1",
+              "stable_ordinal": 1,
+              "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BTCUSDT",
+              "settlement_asset": "USDT",
+              "state": "READY",
+              "source_kind": "BAR",
+              "subscription_tier": "FULL",
+              "cursor": {
+                "virtual_time_ms": 1700049959999,
+                "source_sequence": 6,
+                "revision": 10
+              },
+              "forced_full_reasons": [
+                "VIEWED"
+              ],
+              "capabilities": {
+                "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+                "BASIS": "UNSUPPORTED_NO_HISTORY",
+                "FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+                "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "INDICATORS": "AVAILABLE_EXACT",
+                "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+                "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "OHLCV": "AVAILABLE_EXACT",
+                "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+                "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+              },
+              "public_price": "30061.5",
+              "position": {
+                "entry_price": null,
+                "mark_price": "30061.5",
+                "notional": "0",
+                "quantity": "0",
+                "realized_pnl": "0.059879",
+                "unrealized_pnl": "0"
+              },
+              "open_order_count": 0,
+              "degraded_reason": null,
+              "account": {
+                "available_equity": "9999.759274",
+                "cash_balance": "9999.759274",
+                "equity": "9999.759274",
+                "fees_paid": "0.300605",
+                "margin_used": "0",
+                "quote_asset": "USDT",
+                "realized_pnl": "0.059879",
+                "reserved_margin": "0",
+                "unrealized_pnl": "0"
+              },
+              "historical_book": {
+                "mode": "OFF",
+                "capability_state": "UNSUPPORTED_NO_HISTORY",
+                "status": "OFF",
+                "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+                "queue_exact": false,
+                "as_of_virtual_time_ms": null,
+                "last_update_id": null,
+                "bids": [],
+                "asks": [],
+                "book_hash": null,
+                "message": "历史盘口模式未启用"
+              }
+            }
+          ],
+          "portfolio": {
+            "schema_version": "replay.training.portfolio.v2",
+            "account_model": "TOUCH_OR_TAPE_V2",
+            "execution_model": "TOUCH_OR_TAPE_V2",
+            "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+            "settlement_account_shared": true,
+            "position_mode": "ONE_WAY",
+            "margin_mode": "CROSS",
+            "funding_mode": "OFF",
+            "status": "ACTIVE",
+            "initial_equity": "10000",
+            "cash_balance": "9999.759274",
+            "equity": "9999.759274",
+            "available_equity": "9999.759274",
+            "reserved_margin": "0",
+            "margin_used": "0",
+            "maintenance_margin": "0",
+            "realized_pnl": "0.059879",
+            "unrealized_pnl": "0",
+            "fees_paid": "0.300605",
+            "funding_cashflow": "0",
+            "liquidation_fees_paid": "0",
+            "risk_ratio": null,
+            "positions": [],
+            "orders": [],
+            "fills": [],
+            "history": {
+              "orders_total": 2,
+              "active_orders": 0,
+              "historical_orders": 2,
+              "fills_total": 2,
+              "ledger_entries_total": 4,
+              "page_limit_max": 200
+            },
+            "active_fee_policy": {
+              "revision": 1,
+              "effective_virtual_time_ms": 1700049600000,
+              "maker_fee_bps": "2",
+              "taker_fee_bps": "5",
+              "liquidation_fee_bps": null,
+              "policy_version": null,
+              "account_tier": null,
+              "source_kind": null,
+              "source_id": null,
+              "source_event_sequence": null,
+              "extension_hash": null,
+              "policy_hash": "sha256:02e643ff045b206252033d87ffeaa0b44f22fd52fd72f6feb74ca8113a8bbeba",
+              "fidelity": "CONFIGURED_POLICY_EXACT"
+            },
+            "instrument_rules": [
+              {
+                "track_id": "track-1",
+                "revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule": {
+                  "contract_size": "1",
+                  "effective_virtual_time_ms": 1700049600000,
+                  "liquidation_fee_bps": "50",
+                  "maintenance_tiers": [
+                    {
+                      "maintenance_deduction": "0",
+                      "maintenance_rate": "0.005",
+                      "notional_cap": "30000"
+                    }
+                  ],
+                  "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                  "max_leverage": "3",
+                  "max_notional": "30000",
+                  "max_quantity": "1000000000",
+                  "min_notional": "0.01",
+                  "min_quantity": "0.00000001",
+                  "price_tick": "0.00000001",
+                  "quantity_step": "0.00000001",
+                  "quote_step": "0.00000001",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                  "source_kind": "BAR",
+                  "track_id": "track-1"
+                }
+              }
+            ],
+            "isolated_allocations": {},
+            "next_funding_time_ms": null,
+            "liquidations": [],
+            "liquidation_recoveries": [],
+            "hedge_state": {
+              "schema_version": "replay.hedge-relational-state.v1",
+              "position_legs": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "signed_quantity": "0.01",
+                  "absolute_quantity": "0.01",
+                  "entry_price": "30057.50545",
+                  "mark_price": "30066.5",
+                  "notional": "300.665",
+                  "realized_pnl": "0",
+                  "unrealized_pnl": "0.0899455",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "leverage": "3",
+                  "margin_mode": "CROSS",
+                  "isolated_wallet": "0",
+                  "liquidation_price": "0",
+                  "bankruptcy_price": "0",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "risk_tier": 1,
+                  "rule_revision": 1,
+                  "protection_json": "{\"orders\":[]}",
+                  "component_revision": 6,
+                  "component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934",
+                  "created_at_ms": 1793512188527,
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "leg_accounting": [
+                {
+                  "schema_version": "replay.hedge-leg-accounting.v1",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "funding_settlement_count": 0,
+                  "fee_entry_count": 0,
+                  "mutation_entry_count": 0,
+                  "ledger_entry_count": 0,
+                  "last_ledger_sequence": null,
+                  "last_ledger_hash": null,
+                  "position_component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934"
+                }
+              ],
+              "margin_buckets": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "cross:USDT",
+                  "bucket_kind": "CROSS",
+                  "track_id": null,
+                  "position_side": null,
+                  "asset": "USDT",
+                  "wallet_balance": "9999.84971247",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "9899.7179913",
+                  "component_revision": 6,
+                  "component_hash": "sha256:018690a39d3777e2dda9620c59f20c5658aea3892e55b0a9fe4a80ce9f5c7da5",
+                  "updated_at_ms": 1793512190966
+                },
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "position:track-1:LONG",
+                  "bucket_kind": "POSITION",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "asset": "USDT",
+                  "wallet_balance": "0",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "0",
+                  "component_revision": 6,
+                  "component_hash": "sha256:1ef894b050fe77e443f8dc229fcf4f82f1c7edb1895cfc455880a53a5bc5d98c",
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "risk_snapshots": [],
+              "liquidation_leg_price_proofs": [],
+              "liquidation_book_executions": [],
+              "liquidation_book_snapshots": [],
+              "insurance_funds": [],
+              "insurance_postings": [],
+              "adl_snapshots": [],
+              "adl_candidates": [],
+              "adl_events": [],
+              "adl_selections": [],
+              "adl_counterparty_ledger": [],
+              "liquidation_case_hashes": [],
+              "state_hash": "sha256:b942b0beaee83acec1014088614216d10a2d9141c187631edef76ccb53e1e851"
+            },
+            "hedge_inputs": null,
+            "account_history": {
+              "mode": "APPROX_PROXY",
+              "status": "ACTIVE",
+              "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+              "archive_proof_hash": null,
+              "bindings": [],
+              "auditor": {
+                "status": "NOT_RUN",
+                "proof_hash": null,
+                "differences": []
+              }
+            },
+            "liquidation_channels": {
+              "simulated_account": {
+                "label": "模拟账户强平",
+                "source": "MODELLED_ACCOUNT",
+                "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+              },
+              "historical_market": {
+                "label": "历史市场爆仓",
+                "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                "fidelity": "UNSUPPORTED_NO_HISTORY"
+              }
+            },
+            "ledger": {
+              "chain_version": "replay.training.contract-ledger.v1",
+              "entry_count": 4,
+              "tail_hash": "sha256:5e6f4ad63845253bc6b29ae55d8df6ba7d93db08b771cae1bd84672b8d3bfa2c",
+              "cash_total": "9999.759274",
+              "reconciliation_delta": "0",
+              "entries": []
+            },
+            "fidelity": {
+              "hedge_public_history_ref": null,
+              "simulation_manifest_ref": null,
+              "simulation_contract_hash": null,
+              "simulation_model_version": null,
+              "account": null,
+              "insurance_adl": null,
+              "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "maintenance_tier_extrapolation": {
+                "applied": false,
+                "position_count": 0,
+                "liquidation_projection_count": 0,
+                "reason": null,
+                "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+              },
+              "fees": "CONFIGURED_POLICY_EXACT",
+              "funding": "OFF",
+              "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+              "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+              "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+            }
+          },
+          "global_clock": {
+            "contract": "replay.playback.v1",
+            "mode": "ORDERED",
+            "state": "PAUSED",
+            "basis": "BASE_BAR",
+            "rate": 1,
+            "speed": 1,
+            "display_interval": null,
+            "viewer_revision": null,
+            "profile_revision": 0,
+            "reason": null,
+            "generation": 0,
+            "tick": 0,
+            "supported_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT",
+              "VIRTUAL_TIME"
+            ],
+            "playback_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT"
+            ],
+            "max_count": 100000,
+            "virtual_time_quantum_ms": 60000
+          }
+        },
+        "manager": {
+          "replay": {
+            "sequences": [
+              {
+                "owner": "replay-window-6",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "trackId": "track-1",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                  "generation": 1,
+                  "interval": "1m"
+                },
+                "consumers": 1,
+                "bars": 366,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "run-entry"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 2,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-3",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-2",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "purpose": "adapter"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-4",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-5",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 4,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-8",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-9",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "history"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-10",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-11",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "review-inactive"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-12",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "rail"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-7",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 1,
+            "activeOperations": 11,
+            "requests": 0,
+            "streams": 2,
+            "bars": 366
+          }
+        },
+        "ui": {
+          "class": "status-bar replay-status-bar",
+          "id": "status-bar",
+          "data-runtime-source": "replay",
+          "data-connection-status": "connected",
+          "data-market-shell-owner": "status-bar",
+          "data-replay-generation": "1",
+          "data-replay-session-state": "PAUSED",
+          "data-replay-adapter-state": "PAUSED",
+          "data-replay-source-sequence": "6",
+          "data-replay-revision": "10",
+          "data-replay-state-hash": "sha256:6bd704e1767c330636837685dac9a629d65658afbab7a006a658f8a277532792",
+          "data-replay-cursor-ms": "1700049959999",
+          "data-replay-max-bar-ms": "1700049900000",
+          "data-replay-source-bar-count": "366",
+          "data-replay-source-series-version": "2",
+          "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+          "data-replay-viewer-bar-count": "366",
+          "data-replay-viewer-series-version": "1",
+          "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+          "data-replay-viewer-error": "",
+          "data-replay-viewer-loading": "false",
+          "data-replay-viewer-state-ready": "true",
+          "data-replay-base-interval": "1m",
+          "data-replay-source-interval-seconds": "60",
+          "data-replay-last-bar-closed": "true",
+          "data-replay-order-count": "2",
+          "data-replay-fill-count": "2",
+          "data-replay-revealed": "false",
+          "data-replay-history-epoch": "",
+          "data-replay-history-right-truncated": "false",
+          "data-replay-history-can-restore-latest": "false",
+          "data-replay-view-interval": "1m",
+          "data-replay-view-revision": "1",
+          "data-replay-clock-basis": "BASE_BAR",
+          "data-replay-clock-rate": "1",
+          "data-replay-control-pending": "",
+          "data-replay-integrity-operation": "",
+          "data-replay-time-disclosure-policy": "NONE",
+          "data-replay-result-label": "START_TIME_KNOWN",
+          "data-replay-public-time-projections": "0",
+          "data-replay-public-time-state": "ready",
+          "data-replay-review-read-only": "false",
+          "data-replay-review-timeline-sequence": "",
+          "data-replay-review-chart-fidelity": "",
+          "data-replay-review-original-verified": ""
+        }
+      }
+    },
+    {
+      "name": "continued-after-restart",
+      "at": "2026-11-01T05:50:14.847Z",
+      "evidence": {
+        "run": {
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "kind": "V2",
+          "name": "回放训练",
+          "state": "PAUSED",
+          "source_kind": "BAR",
+          "integrity_mode": "CHALLENGE",
+          "time_disclosure_policy": "NONE",
+          "last_symbol": "BTCUSDT",
+          "subscribed_track_count": 1,
+          "progress": {
+            "source_sequence": 7
+          },
+          "equity": "9999.759274",
+          "equity_status": "CURRENT",
+          "settlement_asset": "USDT",
+          "updated_at_ms": 1793512214788,
+          "compatibility": "READY",
+          "resume_action": "OPEN_ADAPTER",
+          "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+          "status": {
+            "code": "READY",
+            "message": "训练可继续"
+          },
+          "report_available": false,
+          "review_available": true
+        },
+        "tracks": {
+          "protocol": "replay.v3",
+          "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+          "ordering_version": "replay.global-order.v1",
+          "launch_context": {
+            "schema_version": "replay.launch-context.v1",
+            "source": "DIRECT_HUB",
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "display_interval": "1m",
+            "watchlist_snapshot": {
+              "schema_version": "replay.watchlist-snapshot.v1",
+              "groups": []
+            }
+          },
+          "viewer_state": {
+            "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+            "selected_track_id": "track-1",
+            "display_interval": "1m",
+            "chart_type": "candles",
+            "visible_range": null,
+            "pane_layout": {},
+            "rail_layout": {},
+            "semantic_view_revision": 1
+          },
+          "tracks": [
+            {
+              "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+              "track_id": "track-1",
+              "stable_ordinal": 1,
+              "adapter_session_id": "8085be95d5e0419e9084ab1f82b2b212",
+              "exchange": "binance",
+              "market_type": "spot",
+              "symbol": "BTCUSDT",
+              "settlement_asset": "USDT",
+              "state": "READY",
+              "source_kind": "BAR",
+              "subscription_tier": "FULL",
+              "cursor": {
+                "virtual_time_ms": 1700050019999,
+                "source_sequence": 7,
+                "revision": 11
+              },
+              "forced_full_reasons": [
+                "VIEWED"
+              ],
+              "capabilities": {
+                "AGG_TRADE_TAPE": "UNSUPPORTED_SOURCE_MODE",
+                "BASIS": "UNSUPPORTED_NO_HISTORY",
+                "FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FEE_POLICY": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_FUNDING": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_INSTRUMENT_RULE": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_L2": "UNSUPPORTED_NO_HISTORY",
+                "HISTORICAL_MARK_INDEX": "UNSUPPORTED_NO_HISTORY",
+                "INDEX_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "INDICATORS": "AVAILABLE_EXACT",
+                "MARKET_LIQUIDATIONS": "UNSUPPORTED_NO_HISTORY",
+                "MARK_PRICE": "UNSUPPORTED_NO_HISTORY",
+                "OHLCV": "AVAILABLE_EXACT",
+                "OPEN_INTEREST": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_BOOK": "UNSUPPORTED_NO_HISTORY",
+                "ORDER_FLOW": "UNSUPPORTED_SOURCE_MODE",
+                "SIMULATED_ADL_COHORT": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_INSURANCE_FUND": "UNSUPPORTED_NO_HISTORY",
+                "SIMULATED_LIQUIDATION": "AVAILABLE_APPROX"
+              },
+              "public_price": "30070.5",
+              "position": {
+                "entry_price": null,
+                "mark_price": "30070.5",
+                "notional": "0",
+                "quantity": "0",
+                "realized_pnl": "0.059879",
+                "unrealized_pnl": "0"
+              },
+              "open_order_count": 0,
+              "degraded_reason": null,
+              "account": {
+                "available_equity": "9999.759274",
+                "cash_balance": "9999.759274",
+                "equity": "9999.759274",
+                "fees_paid": "0.300605",
+                "margin_used": "0",
+                "quote_asset": "USDT",
+                "realized_pnl": "0.059879",
+                "reserved_margin": "0",
+                "unrealized_pnl": "0"
+              },
+              "historical_book": {
+                "mode": "OFF",
+                "capability_state": "UNSUPPORTED_NO_HISTORY",
+                "status": "OFF",
+                "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+                "queue_exact": false,
+                "as_of_virtual_time_ms": null,
+                "last_update_id": null,
+                "bids": [],
+                "asks": [],
+                "book_hash": null,
+                "message": "历史盘口模式未启用"
+              }
+            }
+          ],
+          "portfolio": {
+            "schema_version": "replay.training.portfolio.v2",
+            "account_model": "TOUCH_OR_TAPE_V2",
+            "execution_model": "TOUCH_OR_TAPE_V2",
+            "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+            "settlement_account_shared": true,
+            "position_mode": "ONE_WAY",
+            "margin_mode": "CROSS",
+            "funding_mode": "OFF",
+            "status": "ACTIVE",
+            "initial_equity": "10000",
+            "cash_balance": "9999.759274",
+            "equity": "9999.759274",
+            "available_equity": "9999.759274",
+            "reserved_margin": "0",
+            "margin_used": "0",
+            "maintenance_margin": "0",
+            "realized_pnl": "0.059879",
+            "unrealized_pnl": "0",
+            "fees_paid": "0.300605",
+            "funding_cashflow": "0",
+            "liquidation_fees_paid": "0",
+            "risk_ratio": null,
+            "positions": [],
+            "orders": [],
+            "fills": [],
+            "history": {
+              "orders_total": 2,
+              "active_orders": 0,
+              "historical_orders": 2,
+              "fills_total": 2,
+              "ledger_entries_total": 4,
+              "page_limit_max": 200
+            },
+            "active_fee_policy": {
+              "revision": 1,
+              "effective_virtual_time_ms": 1700049600000,
+              "maker_fee_bps": "2",
+              "taker_fee_bps": "5",
+              "liquidation_fee_bps": null,
+              "policy_version": null,
+              "account_tier": null,
+              "source_kind": null,
+              "source_id": null,
+              "source_event_sequence": null,
+              "extension_hash": null,
+              "policy_hash": "sha256:02e643ff045b206252033d87ffeaa0b44f22fd52fd72f6feb74ca8113a8bbeba",
+              "fidelity": "CONFIGURED_POLICY_EXACT"
+            },
+            "instrument_rules": [
+              {
+                "track_id": "track-1",
+                "revision": 1,
+                "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule": {
+                  "contract_size": "1",
+                  "effective_virtual_time_ms": 1700049600000,
+                  "liquidation_fee_bps": "50",
+                  "maintenance_tiers": [
+                    {
+                      "maintenance_deduction": "0",
+                      "maintenance_rate": "0.005",
+                      "notional_cap": "30000"
+                    }
+                  ],
+                  "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                  "max_leverage": "3",
+                  "max_notional": "30000",
+                  "max_quantity": "1000000000",
+                  "min_notional": "0.01",
+                  "min_quantity": "0.00000001",
+                  "price_tick": "0.00000001",
+                  "quantity_step": "0.00000001",
+                  "quote_step": "0.00000001",
+                  "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                  "source_kind": "BAR",
+                  "track_id": "track-1"
+                }
+              }
+            ],
+            "isolated_allocations": {},
+            "next_funding_time_ms": null,
+            "liquidations": [],
+            "liquidation_recoveries": [],
+            "hedge_state": {
+              "schema_version": "replay.hedge-relational-state.v1",
+              "position_legs": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "signed_quantity": "0.01",
+                  "absolute_quantity": "0.01",
+                  "entry_price": "30057.50545",
+                  "mark_price": "30066.5",
+                  "notional": "300.665",
+                  "realized_pnl": "0",
+                  "unrealized_pnl": "0.0899455",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "leverage": "3",
+                  "margin_mode": "CROSS",
+                  "isolated_wallet": "0",
+                  "liquidation_price": "0",
+                  "bankruptcy_price": "0",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "risk_tier": 1,
+                  "rule_revision": 1,
+                  "protection_json": "{\"orders\":[]}",
+                  "component_revision": 6,
+                  "component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934",
+                  "created_at_ms": 1793512188527,
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "leg_accounting": [
+                {
+                  "schema_version": "replay.hedge-leg-accounting.v1",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "accumulated_funding": "0",
+                  "trading_fees": "0",
+                  "liquidation_fees": "0",
+                  "funding_settlement_count": 0,
+                  "fee_entry_count": 0,
+                  "mutation_entry_count": 0,
+                  "ledger_entry_count": 0,
+                  "last_ledger_sequence": null,
+                  "last_ledger_hash": null,
+                  "position_component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934"
+                }
+              ],
+              "margin_buckets": [
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "cross:USDT",
+                  "bucket_kind": "CROSS",
+                  "track_id": null,
+                  "position_side": null,
+                  "asset": "USDT",
+                  "wallet_balance": "9999.84971247",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "9899.7179913",
+                  "component_revision": 6,
+                  "component_hash": "sha256:018690a39d3777e2dda9620c59f20c5658aea3892e55b0a9fe4a80ce9f5c7da5",
+                  "updated_at_ms": 1793512190966
+                },
+                {
+                  "run_id": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "bucket_id": "position:track-1:LONG",
+                  "bucket_kind": "POSITION",
+                  "track_id": "track-1",
+                  "position_side": "LONG",
+                  "asset": "USDT",
+                  "wallet_balance": "0",
+                  "initial_margin": "100.22166667",
+                  "maintenance_margin": "1.503325",
+                  "reserved_margin": "0",
+                  "available_balance": "0",
+                  "component_revision": 6,
+                  "component_hash": "sha256:1ef894b050fe77e443f8dc229fcf4f82f1c7edb1895cfc455880a53a5bc5d98c",
+                  "updated_at_ms": 1793512190966
+                }
+              ],
+              "risk_snapshots": [],
+              "liquidation_leg_price_proofs": [],
+              "liquidation_book_executions": [],
+              "liquidation_book_snapshots": [],
+              "insurance_funds": [],
+              "insurance_postings": [],
+              "adl_snapshots": [],
+              "adl_candidates": [],
+              "adl_events": [],
+              "adl_selections": [],
+              "adl_counterparty_ledger": [],
+              "liquidation_case_hashes": [],
+              "state_hash": "sha256:b942b0beaee83acec1014088614216d10a2d9141c187631edef76ccb53e1e851"
+            },
+            "hedge_inputs": null,
+            "account_history": {
+              "mode": "APPROX_PROXY",
+              "status": "ACTIVE",
+              "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+              "archive_proof_hash": null,
+              "bindings": [],
+              "auditor": {
+                "status": "NOT_RUN",
+                "proof_hash": null,
+                "differences": []
+              }
+            },
+            "liquidation_channels": {
+              "simulated_account": {
+                "label": "模拟账户强平",
+                "source": "MODELLED_ACCOUNT",
+                "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+              },
+              "historical_market": {
+                "label": "历史市场爆仓",
+                "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                "fidelity": "UNSUPPORTED_NO_HISTORY"
+              }
+            },
+            "ledger": {
+              "chain_version": "replay.training.contract-ledger.v1",
+              "entry_count": 4,
+              "tail_hash": "sha256:5e6f4ad63845253bc6b29ae55d8df6ba7d93db08b771cae1bd84672b8d3bfa2c",
+              "cash_total": "9999.759274",
+              "reconciliation_delta": "0",
+              "entries": []
+            },
+            "fidelity": {
+              "hedge_public_history_ref": null,
+              "simulation_manifest_ref": null,
+              "simulation_contract_hash": null,
+              "simulation_model_version": null,
+              "account": null,
+              "insurance_adl": null,
+              "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+              "maintenance_tier_extrapolation": {
+                "applied": false,
+                "position_count": 0,
+                "liquidation_projection_count": 0,
+                "reason": null,
+                "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+              },
+              "fees": "CONFIGURED_POLICY_EXACT",
+              "funding": "OFF",
+              "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+              "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+              "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+            }
+          },
+          "global_clock": {
+            "contract": "replay.playback.v1",
+            "mode": "ORDERED",
+            "state": "PAUSED",
+            "basis": "BASE_BAR",
+            "rate": 1,
+            "speed": 1,
+            "display_interval": null,
+            "viewer_revision": null,
+            "profile_revision": 0,
+            "reason": null,
+            "generation": 0,
+            "tick": 0,
+            "supported_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT",
+              "VIRTUAL_TIME"
+            ],
+            "playback_bases": [
+              "DISPLAY_BAR",
+              "BASE_BAR",
+              "SOURCE_EVENT"
+            ],
+            "max_count": 100000,
+            "virtual_time_quantum_ms": 60000
+          }
+        },
+        "manager": {
+          "replay": {
+            "sequences": [
+              {
+                "owner": "replay-window-6",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "trackId": "track-1",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "dataEpoch": "sha256:a7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595",
+                  "generation": 1,
+                  "interval": "1m"
+                },
+                "consumers": 1,
+                "bars": 367,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "operations": [
+              {
+                "owner": "replay-operation-1",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "run-entry"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 2,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-3",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 4,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-2",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "sessionId": "8085be95d5e0419e9084ab1f82b2b212",
+                  "purpose": "adapter"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 3,
+                "streams": 1,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-4",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "viewer"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-5",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 4,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-8",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-9",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "history"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-10",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "review"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-11",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "review-inactive"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-12",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "rail"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              },
+              {
+                "owner": "replay-operation-7",
+                "identity": {
+                  "runId": "prepared-8767219709d04a1aae2136e3b29e938e",
+                  "purpose": "indicator",
+                  "scope": "replay:prepared-8767219709d04a1aae2136e3b29e938e:workspace-default:cell-1|track-1|binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3|1m"
+                },
+                "consumers": 1,
+                "bars": 0,
+                "requests": 0,
+                "totalRequests": 0,
+                "streams": 0,
+                "cleanupErrors": 0
+              }
+            ],
+            "activeSequences": 1,
+            "activeOperations": 11,
+            "requests": 0,
+            "streams": 2,
+            "bars": 367
+          }
+        },
+        "ui": {
+          "class": "status-bar replay-status-bar",
+          "id": "status-bar",
+          "data-runtime-source": "replay",
+          "data-connection-status": "connected",
+          "data-market-shell-owner": "status-bar",
+          "data-replay-generation": "1",
+          "data-replay-session-state": "PAUSED",
+          "data-replay-adapter-state": "PAUSED",
+          "data-replay-source-sequence": "7",
+          "data-replay-revision": "11",
+          "data-replay-state-hash": "sha256:b16ecfd6f3405a6a1672842f91c5dff4cef5896a10e98118951e12bef1f97d4e",
+          "data-replay-cursor-ms": "1700050019999",
+          "data-replay-max-bar-ms": "1700049960000",
+          "data-replay-source-bar-count": "367",
+          "data-replay-source-series-version": "3",
+          "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+          "data-replay-viewer-bar-count": "367",
+          "data-replay-viewer-series-version": "2",
+          "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=8085be95d5e0419e9084ab1f82b2b212::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+          "data-replay-viewer-error": "",
+          "data-replay-viewer-loading": "false",
+          "data-replay-viewer-state-ready": "true",
+          "data-replay-base-interval": "1m",
+          "data-replay-source-interval-seconds": "60",
+          "data-replay-last-bar-closed": "true",
+          "data-replay-order-count": "2",
+          "data-replay-fill-count": "2",
+          "data-replay-revealed": "false",
+          "data-replay-history-epoch": "",
+          "data-replay-history-right-truncated": "false",
+          "data-replay-history-can-restore-latest": "false",
+          "data-replay-view-interval": "1m",
+          "data-replay-view-revision": "1",
+          "data-replay-clock-basis": "BASE_BAR",
+          "data-replay-clock-rate": "1",
+          "data-replay-control-pending": "",
+          "data-replay-integrity-operation": "",
+          "data-replay-time-disclosure-policy": "NONE",
+          "data-replay-result-label": "START_TIME_KNOWN",
+          "data-replay-public-time-projections": "0",
+          "data-replay-public-time-state": "ready",
+          "data-replay-review-read-only": "false",
+          "data-replay-review-timeline-sequence": "",
+          "data-replay-review-chart-fidelity": "",
+          "data-replay-review-original-verified": ""
+        }
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:50:14.891Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20533,
+            "ppid": 20132,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20536,
+            "ppid": 20533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20537,
+            "ppid": 20533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20538,
+            "ppid": 20533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20545,
+            "ppid": 20538,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20546,
+            "ppid": 20533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687871049 --launch-time-ticks=13525745095 --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=64556 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20548,
+            "ppid": 20538,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 20549,
+            "ppid": 20538,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=64, pipe_handle=70) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T05:50:30.074Z",
+      "evidence": {
+        "elapsedMs": 15183
+      }
+    },
+    {
+      "name": "final-exit",
+      "at": "2026-11-01T05:50:30.107Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20536,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20537,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20538,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20545,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20546,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687871049 --launch-time-ticks=13525745095 --shared-files --field-trial-handle=1718379636,r,14120241231319708607,403432147781298127,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3201953162048688699,12594340869117750977,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=64556 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20548,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 20549,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=64, pipe_handle=70) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

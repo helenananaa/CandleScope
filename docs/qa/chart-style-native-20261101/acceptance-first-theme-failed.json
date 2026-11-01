@@ -1,0 +1,149 @@
+{
+  "schema": "candlescope.chart-style-native/1",
+  "sourceCommit": "36b876a938ede5e05d148c9d14f066fcc5b08c1b",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "live-canvas-before-assertion",
+      "at": "2026-11-01T05:52:23.618Z",
+      "evidence": {
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#0f172a",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "dark",
+            "inheritApplicationTheme": true,
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#e2e8f0",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#0a0e17"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:52:23.809Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 21402,
+            "ppid": 20791,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 21404,
+            "ppid": 21402,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/profile-fresh --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14221511062865123905,8278053572366287577,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2673692531950973270,8888872849183274342,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 21405,
+            "ppid": 21402,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/profile-fresh --shared-files --field-trial-handle=1718379636,r,14221511062865123905,8278053572366287577,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2673692531950973270,8888872849183274342,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 21406,
+            "ppid": 21402,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 21423,
+            "ppid": 21406,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/profile-fresh/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 21444,
+            "ppid": 21402,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/profile-fresh --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687868594 --launch-time-ticks=13647111553 --shared-files --field-trial-handle=1718379636,r,14221511062865123905,8278053572366287577,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2673692531950973270,8888872849183274342,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=50977 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 21461,
+            "ppid": 21406,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(81)"
+          },
+          {
+            "pid": 21462,
+            "ppid": 21406,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=82, pipe_handle=84) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T05:52:38.988Z",
+      "evidence": {
+        "elapsedMs": 15179
+      }
+    }
+  ],
+  "errors": [],
+  "passed": false,
+  "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ '#0a0e17'\n- '#ffffff'\n\n    at exercise (file:///Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/run-style.mjs:32:94)\n    at async file:///Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-20261101/run-style.mjs:40:13"
+}

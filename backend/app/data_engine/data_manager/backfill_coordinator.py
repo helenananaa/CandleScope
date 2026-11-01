@@ -178,6 +178,7 @@ class BackfillCoordinator:
         self._gap_audit_cursors: dict[tuple[str, str, str, str], int] = {}
         self._gap_audit_tail_cursors: dict[tuple[str, str, str, str], int] = {}
         self._gap_audit_series_rotation = 0
+        self._gap_audit_lock = asyncio.Lock()
         self._ledger_pending_upserts: OrderedDict[str, RepairRequest] = OrderedDict()
         self._ledger_pending_operations: deque[tuple[Callable[..., Any], tuple[Any, ...]]] = deque()
         self._ledger_write_task: asyncio.Task | None = None
@@ -754,6 +755,29 @@ class BackfillCoordinator:
         max_gaps: int = 100,
         repair: bool = True,
         tail_series: Iterable[tuple[str, str, str, str]] | None = None,
+        detailed: bool = False,
+        repair_wait_seconds: float = 0,
+    ) -> ScanReport:
+        # Manual and periodic audits advance the same bounded cursors. They
+        # share the repair scheduler, never create a second repair queue.
+        async with self._gap_audit_lock:
+            report = await self._audit_storage_series(
+                series, scan_limit=scan_limit, max_gaps=max_gaps,
+                repair=repair, tail_series=tail_series, detailed=detailed,
+            )
+        if detailed and repair:
+            await self._verify_audit_repairs(report, wait_seconds=repair_wait_seconds)
+        return report
+
+    async def _audit_storage_series(
+        self,
+        series: Iterable[tuple[str, str, str, str]],
+        *,
+        scan_limit: int,
+        max_gaps: int,
+        repair: bool,
+        tail_series: Iterable[tuple[str, str, str, str]] | None,
+        detailed: bool,
     ) -> ScanReport:
         """Scan exact series and optionally queue repairs.
 
@@ -809,6 +833,9 @@ class BackfillCoordinator:
             lane: str,
         ) -> int | None:
             nonlocal queued
+            page = self._audit_page(scan, exchange, market_type, symbol, interval, lane) if detailed else None
+            if page is not None:
+                report.pages.append(page)
             priority = priority_for_reason(
                 "tail_gap" if lane == "tail" else "background_gap_audit"
             )
@@ -816,6 +843,9 @@ class BackfillCoordinator:
                 if not isinstance(gap, dict):
                     continue
                 if queued >= max_gaps:
+                    if page is not None:
+                        page["next_cursor_ms"] = int(gap["start_ms"])
+                        page["truncated"] = True
                     return int(gap["start_ms"])
                 request = RepairRequest(
                     symbol=symbol,
@@ -833,10 +863,24 @@ class BackfillCoordinator:
                         "gap_type": gap.get("reason", "unknown"),
                     },
                 )
-                if await self._should_skip_audited_gap(request):
+                decision: dict[str, Any] = {}
+                skip = (
+                    await self._should_skip_audited_gap(request, decision=decision)
+                    if detailed else await self._should_skip_audited_gap(request)
+                )
+                if skip:
+                    if page is not None:
+                        page["suppressed_gaps"] += 1
+                        page["repair_errors"].append(
+                            "共享回补暂缓此缺口: " + str(decision.get("status", "unknown"))
+                            + (f"; {decision['error']}" if decision.get("error") else "")
+                            + (f"; next_retry_at={decision['next_retry_at']}" if decision.get("next_retry_at") else "")
+                        )
                     continue
                 if repair:
                     canonical_id = self.request(request)
+                    if page is not None:
+                        page["request_ids"].append(canonical_id)
                     # Scheduler dedupe/merge returns the already-owned parent
                     # id.  It did not consume another queue slot, so it must
                     # not consume this audit's gap budget either.
@@ -888,6 +932,12 @@ class BackfillCoordinator:
         for exchange, market_type, symbol, interval in normalized_series:
             series_key = (exchange, market_type, symbol, interval)
             if self._shutdown:
+                if detailed:
+                    report.errors.append("Audit stopped during shutdown")
+                    for unscanned in normalized_series[processed_series:]:
+                        page = self._audit_error_page(unscanned, "interior", "Audit stopped during shutdown")
+                        page["status"] = "unscanned"
+                        report.pages.append(page)
                 return report
             if queued >= max_gaps:
                 break
@@ -1058,7 +1108,13 @@ class BackfillCoordinator:
                                             series_key,
                                             None,
                                         )
+                                if detailed:
+                                    report.pages[-1]["next_cursor_ms"] = self._gap_audit_tail_cursors.get(series_key)
                                 if queued >= max_gaps:
+                                    if detailed:
+                                        page = self._audit_error_page(series_key, "interior", "Audit budget reached; series not scanned")
+                                        page["status"] = "unscanned"
+                                        report.pages.append(page)
                                     continue
                         except asyncio.CancelledError:
                             raise
@@ -1068,6 +1124,8 @@ class BackfillCoordinator:
                                 f"{exchange}:{market_type}:{symbol}@{interval} "
                                 f"tail: {tail_exc}"
                             )
+                            if detailed:
+                                report.pages.append(self._audit_error_page(series_key, "tail", tail_exc))
                             logger.warning(
                                 "Background tail audit failed for %s:%s:%s@%s: %s",
                                 exchange,
@@ -1126,6 +1184,8 @@ class BackfillCoordinator:
                         self._gap_audit_cursors[series_key] = resume_value
                     else:
                         self._gap_audit_cursors.pop(series_key, None)
+                if detailed:
+                    report.pages[-1]["next_cursor_ms"] = self._gap_audit_cursors.get(series_key)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -1133,6 +1193,8 @@ class BackfillCoordinator:
                 report.errors.append(
                     f"{exchange}:{market_type}:{symbol}@{interval}: {exc}"
                 )
+                if detailed:
+                    report.pages.append(self._audit_error_page(series_key, "interior", exc))
                 logger.warning(
                     "Background gap audit failed for %s:%s:%s@%s: %s",
                     exchange,
@@ -1147,6 +1209,12 @@ class BackfillCoordinator:
                 start_index + max(1, processed_series)
             ) % len(normalized_series)
 
+        if detailed:
+            for series_key in normalized_series[processed_series:]:
+                page = self._audit_error_page(series_key, "interior", "Audit budget reached; series not scanned")
+                page["status"] = "unscanned"
+                report.pages.append(page)
+
         ledger_report = await self.reconcile_gap_ledger(
             limit=max_gaps,
             scan_limit=scan_limit,
@@ -1160,6 +1228,119 @@ class BackfillCoordinator:
         if ledger_report.errors:
             report.errors.extend(ledger_report.errors)
         return report
+
+    @staticmethod
+    def _audit_error_page(
+        series_key: tuple[str, str, str, str], lane: str, error: object,
+    ) -> dict[str, Any]:
+        exchange, market_type, symbol, interval = series_key
+        return {
+            "exchange": exchange, "market_type": market_type,
+            "symbol": symbol, "interval": interval, "lane": lane,
+            "status": "error", "error": str(error), "scanned_bars": 0,
+        }
+
+    @staticmethod
+    def _audit_page(
+        scan: dict[str, Any], exchange: str, market_type: str,
+        symbol: str, interval: str, lane: str,
+    ) -> dict[str, Any]:
+        start_ms = scan.get("start_ms")
+        if start_ms is None:
+            start_ms = scan.get("first_open_time")
+        # A truncated scan has inspected only through the last returned bar,
+        # even if the requested end was much later.
+        end_ms = scan.get("last_open_time") if scan.get("truncated") else scan.get("end_ms")
+        if end_ms is None:
+            end_ms = scan.get("last_open_time")
+        gaps = scan.get("gaps", [])
+        scanned_bars = int(scan.get("scanned_bars", 0))
+        return {
+            "exchange": exchange, "market_type": market_type,
+            "symbol": symbol, "interval": interval, "lane": lane,
+            "status": "gap_found" if gaps else "ok" if scanned_bars else "empty",
+            "scanned_from_ms": start_ms, "scanned_to_ms": end_ms,
+            "scanned_bars": scanned_bars, "calendar_id": scan.get("calendar_id"),
+            "gaps_found": len(gaps), "remaining_gaps": len(gaps),
+            "remaining_missing_bars": int(scan.get("missing_bars", 0)),
+            "truncated": bool(scan.get("truncated")), "next_cursor_ms": None,
+            "suppressed_gaps": 0, "request_ids": [], "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": False,
+        }
+
+    async def _verify_audit_repairs(self, report: ScanReport, *, wait_seconds: float) -> None:
+        """Bound interactive waiting, then verify the actual inspected range.
+
+        A write count or a successful worker outcome is not completeness
+        evidence. Timeout cancels only this waiter, never the shared repair.
+        """
+        deadline = asyncio.get_running_loop().time() + max(0, wait_seconds)
+        outcomes: dict[str, RepairOutcome | None] = {}
+        for page in report.pages:
+            if page.get("status") != "gap_found":
+                continue
+            pending = False
+            repair_errors: list[str] = list(page.get("repair_errors", []))
+            for request_id in dict.fromkeys(page["request_ids"]):
+                if request_id not in outcomes:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    try:
+                        outcomes[request_id] = (
+                            await asyncio.wait_for(self.wait_for_request(request_id), timeout=remaining)
+                            if remaining > 0 else self._outcomes.get(self._canonical_request_id(request_id))
+                        )
+                    except TimeoutError:
+                        outcomes[request_id] = None
+                outcome = outcomes[request_id]
+                if outcome is None:
+                    pending = True
+                    continue
+                if outcome.error:
+                    repair_errors.append(outcome.error)
+                repair_errors.extend(str(value) for value in getattr(outcome.report, "errors", []) or [])
+                if outcome.terminal_reason:
+                    repair_errors.append(outcome.terminal_reason)
+                reconcile = getattr(outcome.report, "reconcile_result", None)
+                page["bars_filled"] += int(getattr(reconcile, "bars_written", 0) or 0)
+            page["repair_pending"] = pending
+            if repair_errors:
+                page["repair_errors"] = repair_errors
+            start_ms, end_ms = page["scanned_from_ms"], page["scanned_to_ms"]
+            if start_ms is None or end_ms is None:
+                page["status"] = "unverified"
+                continue
+            try:
+                verification = await run_storage(
+                    self._storage.scan_gaps,
+                    symbol=page["symbol"], interval=page["interval"],
+                    exchange=page["exchange"], market_type=page["market_type"],
+                    start_ms=start_ms, end_ms=end_ms, limit=50_000,
+                )
+                if not isinstance(verification, dict) or verification.get("error"):
+                    raise ValueError(verification.get("error") if isinstance(verification, dict) else "Malformed verification result")
+                if verification.get("truncated"):
+                    # Repairs can increase the page size. Do not certify the
+                    # unseen remainder when the verification budget runs out.
+                    page["status"] = "unverified"
+                    page["remaining_gaps"] = None
+                    page["remaining_missing_bars"] = None
+                    continue
+                remaining_gaps = len(verification.get("gaps", []))
+                page["remaining_gaps"] = remaining_gaps
+                page["remaining_missing_bars"] = int(verification.get("missing_bars", 0))
+                page["verified_after_repair"] = True
+                if not remaining_gaps and int(verification.get("scanned_bars", 0)) > 0:
+                    page["status"] = "filled"
+                else:
+                    page["status"] = "pending" if pending else "gap_found"
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                page["status"] = "error"
+                page["error"] = f"Repair verification failed: {exc}"
+                report.failed += 1
+                report.errors.append(page["error"])
 
     async def reconcile_gap_ledger(
         self,
@@ -3093,7 +3274,9 @@ class BackfillCoordinator:
         _, _, end_exclusive_ms = target_range
         return end_exclusive_ms <= int(now_ms)
 
-    async def _should_skip_audited_gap(self, request: RepairRequest) -> bool:
+    async def _should_skip_audited_gap(
+        self, request: RepairRequest, *, decision: dict[str, Any] | None = None,
+    ) -> bool:
         if self._gap_ledger is None:
             return False
         now_ms = int(time.time() * 1000)
@@ -3120,6 +3303,9 @@ class BackfillCoordinator:
             return False
         if not status:
             return False
+        if decision is not None:
+            decision.update({key: status.get(key) for key in ("status", "next_retry_at")})
+            decision["error"] = status.get("last_error") or status.get("error")
         status_value = str(status.get("status") or "")
 
         next_retry_at = status.get("next_retry_at")

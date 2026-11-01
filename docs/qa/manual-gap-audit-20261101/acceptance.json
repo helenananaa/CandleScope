@@ -1,0 +1,471 @@
+{
+  "schema": "candlescope.manual-gap-audit-native/1",
+  "sourceCommit": "8a025927cd8a33608066ca122739ac08ec23f64d",
+  "fixture": "50,020 contiguous synthetic BTCUSDT 1m rows in an isolated profile; real bundled backend and actual settings actions; no response substitution",
+  "steps": [
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-01T04:49:08.268Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 34590,
+          "userData": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 34794,
+          "running": true,
+          "startedAt": "2026-11-01T04:48:50.650Z",
+          "readyMs": 15803,
+          "command": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:52968/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "manual-scan-0",
+      "at": "2026-11-01T04:49:18.028Z",
+      "evidence": {
+        "status": "partial",
+        "message": "本次检查尚未完成或仍有缺口；请查看范围明细并继续检查",
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbols_filter": [
+          "BTCUSDT"
+        ],
+        "scope": "inspected_ranges",
+        "tail_policy": "active_series_only",
+        "has_more": true,
+        "scanned_ranges": 2,
+        "verified_ranges": 2,
+        "failed_ranges": 0,
+        "errors": [],
+        "elapsed_ms": 3502,
+        "results": [
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "tail",
+            "status": "filled",
+            "scanned_from_ms": 1793448540000,
+            "scanned_to_ms": 1793508480000,
+            "scanned_bars": 997,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 1,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 3,
+            "repair_errors": [],
+            "verified_after_repair": true,
+            "repair_pending": false,
+            "message": "本次检查范围已重新读取验证，缺口已补齐"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "interior",
+            "status": "ok",
+            "scanned_from_ms": 1790507160000,
+            "scanned_to_ms": 1793507100000,
+            "scanned_bars": 50000,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": true,
+            "next_cursor_ms": 1793507160000,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          }
+        ]
+      }
+    },
+    {
+      "name": "manual-scan-1",
+      "at": "2026-11-01T04:49:18.664Z",
+      "evidence": {
+        "status": "ok",
+        "message": "本次列出的检查范围已通过；不代表全部历史覆盖完整",
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbols_filter": [
+          "BTCUSDT"
+        ],
+        "scope": "inspected_ranges",
+        "tail_policy": "active_series_only",
+        "has_more": false,
+        "scanned_ranges": 4,
+        "verified_ranges": 4,
+        "failed_ranges": 0,
+        "errors": [],
+        "elapsed_ms": 267,
+        "results": [
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1h",
+            "lane": "tail",
+            "status": "ok",
+            "scanned_from_ms": 1791705600000,
+            "scanned_to_ms": 1793502000000,
+            "scanned_bars": 500,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1h",
+            "lane": "interior",
+            "status": "ok",
+            "scanned_from_ms": 1791705600000,
+            "scanned_to_ms": 1793502000000,
+            "scanned_bars": 500,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "tail",
+            "status": "ok",
+            "scanned_from_ms": 1793448540000,
+            "scanned_to_ms": 1793508480000,
+            "scanned_bars": 1000,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "interior",
+            "status": "ok",
+            "scanned_from_ms": 1793507160000,
+            "scanned_to_ms": 1793508480000,
+            "scanned_bars": 23,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          }
+        ]
+      }
+    },
+    {
+      "name": "saved-settings",
+      "at": "2026-11-01T04:49:19.557Z",
+      "evidence": {
+        "locale": "en",
+        "saved": true
+      }
+    },
+    {
+      "name": "full-exit",
+      "at": "2026-11-01T04:49:34.962Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 34590,
+            "ppid": 34344,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0"
+          },
+          {
+            "pid": 34754,
+            "ppid": 34590,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,4202887965057957953,18156328747729143713,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2721198179035400324,12143569017158162292,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=39"
+          },
+          {
+            "pid": 34756,
+            "ppid": 34590,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --shared-files --field-trial-handle=1718379636,r,4202887965057957953,18156328747729143713,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2721198179035400324,12143569017158162292,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=42"
+          },
+          {
+            "pid": 34794,
+            "ppid": 34590,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 38854,
+            "ppid": 34794,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 40048,
+            "ppid": 34590,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688169638 --launch-time-ticks=9858609187 --shared-files --field-trial-handle=1718379636,r,4202887965057957953,18156328747729143713,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2721198179035400324,12143569017158162292,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=52968 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit --seatbelt-client=66"
+          },
+          {
+            "pid": 40050,
+            "ppid": 34794,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(45)"
+          },
+          {
+            "pid": 40052,
+            "ppid": 34794,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=52, pipe_handle=60) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    },
+    {
+      "name": "packaged-launch",
+      "at": "2026-11-01T04:49:44.543Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 41037,
+          "userData": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 41045,
+          "running": true,
+          "startedAt": "2026-11-01T04:49:35.956Z",
+          "readyMs": 7775,
+          "command": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:53642/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "restart-settings-and-maintenance",
+      "at": "2026-11-01T04:49:45.317Z",
+      "evidence": {
+        "locale": "en",
+        "advancedMaintenanceVisible": true
+      }
+    },
+    {
+      "name": "restart-manual-scan",
+      "at": "2026-11-01T04:49:46.360Z",
+      "evidence": {
+        "status": "partial",
+        "message": "本次检查尚未完成或仍有缺口；请查看范围明细并继续检查",
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbols_filter": [
+          "BTCUSDT"
+        ],
+        "scope": "inspected_ranges",
+        "tail_policy": "active_series_only",
+        "has_more": true,
+        "scanned_ranges": 4,
+        "verified_ranges": 4,
+        "failed_ranges": 0,
+        "errors": [],
+        "elapsed_ms": 613,
+        "results": [
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1h",
+            "lane": "tail",
+            "status": "ok",
+            "scanned_from_ms": 1791705600000,
+            "scanned_to_ms": 1793502000000,
+            "scanned_bars": 500,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1h",
+            "lane": "interior",
+            "status": "ok",
+            "scanned_from_ms": 1791705600000,
+            "scanned_to_ms": 1793502000000,
+            "scanned_bars": 500,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "tail",
+            "status": "ok",
+            "scanned_from_ms": 1793448540000,
+            "scanned_to_ms": 1793508480000,
+            "scanned_bars": 1000,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": false,
+            "next_cursor_ms": null,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          },
+          {
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "lane": "interior",
+            "status": "ok",
+            "scanned_from_ms": 1790507160000,
+            "scanned_to_ms": 1793507100000,
+            "scanned_bars": 50000,
+            "calendar_id": "crypto.24x7.utc",
+            "gaps_found": 0,
+            "remaining_gaps": 0,
+            "remaining_missing_bars": 0,
+            "truncated": true,
+            "next_cursor_ms": 1793507160000,
+            "suppressed_gaps": 0,
+            "bars_filled": 0,
+            "repair_errors": [],
+            "verified_after_repair": false,
+            "message": "本次检查范围未发现缺口"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-exit",
+      "at": "2026-11-01T04:50:01.887Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 41037,
+            "ppid": 34344,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0"
+          },
+          {
+            "pid": 41043,
+            "ppid": 41037,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,4454632225916632961,5119771591504520061,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6087814117691848092,11296232875886475979,4 --trace-process-track-uuid=3190708988185955192 --seatbelt-client=39"
+          },
+          {
+            "pid": 41044,
+            "ppid": 41037,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --shared-files --field-trial-handle=1718379636,r,4454632225916632961,5119771591504520061,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6087814117691848092,11296232875886475979,4 --trace-process-track-uuid=3190708989122997041 --seatbelt-client=41"
+          },
+          {
+            "pid": 41045,
+            "ppid": 41037,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 41065,
+            "ppid": 41045,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 41087,
+            "ppid": 41037,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688169463 --launch-time-ticks=9895669483 --shared-files --field-trial-handle=1718379636,r,4454632225916632961,5119771591504520061,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6087814117691848092,11296232875886475979,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=53642 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit --seatbelt-client=68"
+          },
+          {
+            "pid": 41089,
+            "ppid": 41045,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(66)"
+          },
+          {
+            "pid": 41090,
+            "ppid": 41045,
+            "args": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=67, pipe_handle=69) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "e03cc42cb5bed5de7b5f9ca769511510d40e4998",
+  "frontendTests": 4705,
+  "isolatedPerformanceTests": 1,
+  "desktopTests": 127,
+  "architecture": "passed",
+  "plugins": "passed",
+  "i18n": "30 locales passed",
+  "typescript": "passed",
+  "lint": "passed",
+  "productionBuild": "passed",
+  "checkLog": "/tmp/candlescope181-integrated-final-check.log",
+  "nativeStyle": true,
+  "nativeViewport": true,
+  "nativeSaveQuitRestart": true,
+  "cloudCI": "pending exact final head"
+}
