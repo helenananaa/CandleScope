@@ -2,16 +2,14 @@ import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
-import { defaultBacktestApi, type ChartContextResolution } from "../backtest/backtestApi.js";
+import { type ChartContextResolution } from "../backtest/backtestApi.js";
 import {
-  chartStrategyResultCache,
   type ChartStrategyResultBundle,
 } from "../backtest/chart-tester/chartStrategyResultCache.js";
 import {
   ChartStrategyRunError,
   chartStrategyRunDiagnostics,
   qualitySummaryFromImportedManifest,
-  runResearchBacktest,
 } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 import { ChartStrategyTesterRuntime } from "../backtest/chart-tester/ChartStrategyTesterRuntime.js";
 import type {
@@ -23,7 +21,7 @@ import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStra
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
-import { pollBacktestRunToTerminal } from "../backtest/backtestRunClient.js";
+import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
 
 export function sessionFromResearchSource(
@@ -60,6 +58,9 @@ export function useStrategyResearchRun(input: {
   onRunId(runId: string | null): void;
 }) {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
+  const dataManager = useMemo(() => new MarketDataManagerCore(), []);
+  const managerLifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
+  useEffect(() => managerLifecycle.mount({ dispose: () => dataManager.closeAll() }), [dataManager, managerLifecycle]);
   const [, setTesterVersion] = useState(0);
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,17 +76,12 @@ export function useStrategyResearchRun(input: {
     if (!runId || tester.snapshot().activeRunId === runId) return;
     const controller = new AbortController();
     setRestoringRun(true);
-    void defaultBacktestApi.getRun(runId, controller.signal).then(async (record) => {
-      const terminal = record.state === "QUEUED" || record.state === "RUNNING"
-        ? await pollBacktestRunToTerminal({ api: defaultBacktestApi, runId, signal: controller.signal }) : record;
-      if (terminal.state !== "COMPLETED") throw new Error(`Backtest ${terminal.state}: ${terminal.failure_code ?? runId}`);
-      return chartStrategyResultCache.load(defaultBacktestApi, runId, controller.signal);
-    }).then((bundle) => {
+    void dataManager.strategy.restoreRun(runId, controller.signal).then((bundle) => {
       if (!controller.signal.aborted) setResult(bundle);
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); })
       .finally(() => { if (!controller.signal.aborted) setRestoringRun(false); });
     return () => controller.abort();
-  }, [input.restoreRunId, tester]);
+  }, [dataManager, input.restoreRunId, tester]);
 
   useEffect(() => tester.subscribe(() => setTesterVersion((value) => value + 1)), [tester]);
   // StrictMode replays this effect immediately; the guard ignores the
@@ -195,8 +191,7 @@ export function useStrategyResearchRun(input: {
       if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > imported.last_open_ms + 1)) {
         throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "The selected dates exceed the imported data coverage", { next_step: "choose dates within the data coverage" });
       }
-      const outcome = await runResearchBacktest({
-        api: defaultBacktestApi,
+      const outcome = await dataManager.strategy.runResearch({
         request,
         source: researchSource,
         signal: controller.signal,
@@ -207,6 +202,10 @@ export function useStrategyResearchRun(input: {
             token,
             status: resolution.status === "NEEDS_DATA" ? "NEEDS_DATA" : "RESOLVING",
           });
+        },
+        onRunUpdate(run) {
+          if (!stillCurrent()) return;
+          tester.dispatch({ type: "REQUEST_STATUS", token, status: run.state === "QUEUED" ? "QUEUED" : "RUNNING", activeRunId: run.run_id });
         },
         onRunCreated(run, identity) {
           if (!stillCurrent()) return;
@@ -236,8 +235,7 @@ export function useStrategyResearchRun(input: {
         return;
       }
       tester.dispatch({ type: "REQUEST_COMPLETED", token, identity: outcome.identity });
-      const bundle = await chartStrategyResultCache.load(
-        defaultBacktestApi,
+      const bundle = await dataManager.strategy.loadResult(
         outcome.run.run_id,
         controller.signal,
       );
@@ -256,7 +254,7 @@ export function useStrategyResearchRun(input: {
     } finally {
       untrack();
     }
-  }, [configuration, input, tester]);
+  }, [configuration, dataManager, input, tester]);
 
   const onRun = useCallback((request: ChartStrategyRunRequest) => {
     void execute(request, null);

@@ -21,10 +21,11 @@ from app.backtest.request_contracts import (
 from app.core.config import getenv as app_getenv
 
 import base64
+import json
 from typing import Any
 
 from fastapi import APIRouter, Header, Request, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core.operator_origin import (
     effective_python_runtime_mode,
@@ -47,6 +48,13 @@ router.include_router(external_provider_router)
 
 
 def _service(request: Request) -> BacktestService:
+    core = getattr(request.app.state, "data_manager_core", None)
+    if core is not None:
+        if core.strategy is None:
+            raise BacktestError("FLAG_DISABLED", "strategy data manager is not started")
+        return core.strategy.control_plane()
+    # Standalone service hosts retain the existing explicit service port. The
+    # production LIVE and LOCAL_OFFLINE composition roots bind DataManagerCore.
     service = getattr(request.app.state, "backtest_service", None)
     if service is None:
         raise BacktestError("FLAG_DISABLED", "backtest control plane is not started")
@@ -54,14 +62,18 @@ def _service(request: Request) -> BacktestService:
 
 
 def _runtime(request: Request) -> BacktestRuntime:
-    runtime = getattr(request.app.state, "backtest_runtime", None)
+    core = getattr(request.app.state, "data_manager_core", None)
+    runtime = (getattr(getattr(core, "strategy", None), "runtime", None) if core is not None
+               else getattr(request.app.state, "backtest_runtime", None))
     if runtime is None:
         raise BacktestError("FLAG_DISABLED", "backtest worker runtime is not started")
     return runtime
 
 
 def _optional_runtime(request: Request) -> BacktestRuntime | None:
-    runtime = getattr(request.app.state, "backtest_runtime", None)
+    core = getattr(request.app.state, "data_manager_core", None)
+    runtime = (getattr(getattr(core, "strategy", None), "runtime", None) if core is not None
+               else getattr(request.app.state, "backtest_runtime", None))
     return runtime if isinstance(runtime, BacktestRuntime) else None
 
 
@@ -408,6 +420,28 @@ def get_run(request: Request, run_id: str) -> dict[str, Any]:
         return _service(request).get_run(run_id)
     except BacktestError as exc:
         return _error(exc)
+
+
+@router.get("/runs/{run_id}/events", response_model=None)
+async def stream_run_events(request: Request, run_id: str) -> Any:
+    core = getattr(request.app.state, "data_manager_core", None)
+    manager = getattr(core, "strategy", None)
+    if manager is None:
+        return _error(BacktestError("FLAG_DISABLED", "strategy data manager is not started"))
+    try:
+        subscription = await manager.subscribe_run(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+    async def rows():
+        try:
+            async for event in subscription.events():
+                yield json.dumps(event, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        finally:
+            subscription.close()
+
+    return StreamingResponse(rows(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Content-Encoding": "identity"})
 
 
 @router.post("/runs/{run_id}/cancel")
