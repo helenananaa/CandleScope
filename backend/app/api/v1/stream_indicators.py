@@ -4,7 +4,9 @@ from __future__ import annotations
 from app.indicator.series_reference import identity_for_meta
 
 import asyncio
+from copy import deepcopy
 import json
+import logging
 import time
 from typing import Any
 
@@ -39,12 +41,16 @@ from app.indicator import registry as indicator_registry
 from app.indicator.events import IndicatorEvent
 from app.indicator.resume import plan_indicator_resume
 from app.indicator.runtime_routes import IndicatorRuntimeRoutesError
+from app.indicator.serial_owner import IndicatorInputChanged, SerialIndicatorOwner, call_engine, drain_control_task
 from app.indicator.serialization import (
     build_indicator_snapshot_payload,
     build_ws_error_payload,
 )
 
+logger = logging.getLogger("candlescope.indicator.stream")
+
 _INDICATOR_SEED_REVISION_ATTEMPTS = 2
+_INDICATOR_SUBSCRIBE_PENDING_MESSAGES = 16
 
 
 def _revision_token(revision: dict[str, Any] | None) -> str:
@@ -145,7 +151,7 @@ async def stream_indicators(
 
     loop = asyncio.get_running_loop()
 
-    def _listener(event: IndicatorEvent) -> None:
+    def _deliver_event(event: IndicatorEvent) -> None:
         if ws_closed or getattr(queue, "_resync_required", False):
             return
         for client_id, key in list(subscribed.items()):
@@ -156,19 +162,29 @@ async def stream_indicators(
             if msg is not None:
                 range_service = getattr(indicator_engine, "indicator_range_service", None)
                 if range_service is not None:
-                    msg["dataRevision"] = range_service.data_revision_for_meta(meta)
+                    current_revision = range_service.data_revision_for_meta(meta)
+                    input_revision = event.detail.get("dataRevision")
+                    if isinstance(input_revision, dict) and _revision_token(input_revision) != _revision_token(current_revision):
+                        msg = {"type": "resync_required"}
+                    else:
+                        msg["dataRevision"] = input_revision or current_revision
                 if event.detail.get("resyncRequired"):
                     msg = {"type": "resync_required"}
-                # One bounded queue, no task per critical frame. A saturated
-                # socket must reconnect instead of accumulating blocked puts.
-                try:
-                    in_owner_loop = asyncio.get_running_loop() is loop
-                except RuntimeError:
-                    in_owner_loop = False
-                if in_owner_loop:
-                    _queue_indicator_message(queue, msg)
-                else:
-                    loop.call_soon_threadsafe(_queue_indicator_message, queue, msg)
+                pending = meta.get("_pendingMessages")
+                _queue_indicator_message(pending if pending is not None else queue, msg)
+
+    def _listener(event: IndicatorEvent) -> None:
+        # Subscription tables and range revisions belong to this loop. The
+        # production owner already delivers here; retain a detached fallback
+        # for explicitly standalone engines supplied by embedding callers.
+        try:
+            in_owner_loop = asyncio.get_running_loop() is loop
+        except RuntimeError:
+            in_owner_loop = False
+        if in_owner_loop:
+            _deliver_event(event)
+        else:
+            loop.call_soon_threadsafe(_deliver_event, deepcopy(event))
 
     indicator_engine.add_listener(_listener)
 
@@ -200,9 +216,11 @@ async def stream_indicators(
             return False
 
     async def _forwarder() -> None:
+        nonlocal ws_closed
         while not ws_closed:
             msg = await queue.get()
             if msg.get("type") == "resync_required":
+                ws_closed = True
                 await close_for_resync(websocket)
                 return
             if not await _safe_send_json(msg):
@@ -307,21 +325,23 @@ async def stream_indicators(
         except (asyncio.CancelledError, Exception):
             pass
         indicator_engine.remove_listener(_listener)
-        client_ids = set(subscribed) | set(custom_handles) | set(custom_tasks) | set(client_meta)
-        for client_id in list(client_ids):
-            await _unsubscribe_indicator_client(
-                client_id,
-                dm=dm,
-                indicator_engine=indicator_engine,
-                subscribed=subscribed,
-                custom_handles=custom_handles,
-                custom_tasks=custom_tasks,
-                client_meta=client_meta,
-            )
-        subscribed.clear()
-        custom_handles.clear()
-        custom_tasks.clear()
-        client_meta.clear()
+        async def dispose_connection():
+            client_ids = set(subscribed) | set(custom_handles) | set(custom_tasks) | set(client_meta)
+            for client_id in list(client_ids):
+                await _unsubscribe_indicator_client(
+                    client_id,
+                    dm=dm,
+                    indicator_engine=indicator_engine,
+                    subscribed=subscribed,
+                    custom_handles=custom_handles,
+                    custom_tasks=custom_tasks,
+                    client_meta=client_meta,
+                )
+            subscribed.clear()
+            custom_handles.clear()
+            custom_tasks.clear()
+            client_meta.clear()
+        await drain_control_task(asyncio.create_task(dispose_connection(), name="indicator-ws-dispose"))
 
 
 async def _handle_indicator_subscribe(
@@ -338,6 +358,7 @@ async def _handle_indicator_subscribe(
     msg: dict,
     runtime_service=None,
     script_correction_state: dict[str, Any] | None = None,
+    _builtin_seed_attempt: int = 0,
 ) -> None:
     client_id = str(msg.get("clientId") or "").strip()
     symbol = str(msg.get("symbol") or "BTCUSDT").upper().strip()
@@ -674,7 +695,22 @@ async def _handle_indicator_subscribe(
             break
 
         seed_bars = confirmed_indicator_seed_bars(query_bars)[-history_limit:]
-        key, result = indicator_engine.subscribe(
+        def adopt_subscription(pair):
+            subscribed_key, _ = pair
+            subscribed[client_id] = subscribed_key
+            client_meta[client_id] = {
+                "kind": "builtin", "exchange": exchange, "symbol": symbol,
+                "interval": interval, "market_type": market_type,
+                "name": indicator_name, "params": params,
+                "indicatorId": subscribed_key.uid, "streamConsumerId": consumer_id,
+                "historyLimit": history_limit, "_seedQueryCache": seed_query_cache,
+                "_pendingMessages": asyncio.Queue(maxsize=_INDICATOR_SUBSCRIBE_PENDING_MESSAGES),
+                **({"_engineGeneration": indicator_engine.generation}
+                   if isinstance(indicator_engine, SerialIndicatorOwner) else {}),
+            }
+
+        key, result = await call_engine(
+            indicator_engine, "subscribe",
             symbol=symbol,
             interval=interval,
             market_type=market_type,
@@ -684,33 +720,37 @@ async def _handle_indicator_subscribe(
             exchange=exchange,
             data_revision=current_revision,
             desired_seed_bars=history_limit,
+            adopt=adopt_subscription,
         )
-        subscribed[client_id] = key
-        client_meta[client_id] = {
-            "kind": "builtin",
-            "exchange": exchange,
-            "symbol": symbol,
-            "interval": interval,
-            "market_type": market_type,
-            "name": indicator_name,
-            "params": params,
-            "indicatorId": key.uid,
-            "streamConsumerId": consumer_id,
-            "historyLimit": history_limit,
-            "_seedQueryCache": seed_query_cache,
-        }
-    except Exception as exc:
-        if client_id in subscribed:
-            indicator_engine.unsubscribe(subscribed.pop(client_id))
-        client_meta.pop(client_id, None)
+    except BaseException as exc:
         if stream_ensured:
-            await _release_indicator_stream(dm, {
-                "exchange": exchange,
-                "market_type": market_type,
-                "symbol": symbol,
-                "interval": interval,
+            client_meta.setdefault(client_id, {
+                "exchange": exchange, "market_type": market_type,
+                "symbol": symbol, "interval": interval,
                 "streamConsumerId": consumer_id,
             })
+        await _unsubscribe_indicator_client(
+            client_id, dm, indicator_engine, subscribed, custom_handles, custom_tasks, client_meta,
+        )
+        if not isinstance(exc, Exception):
+            raise
+        if isinstance(exc, IndicatorInputChanged) and _builtin_seed_attempt + 1 < _INDICATOR_SEED_REVISION_ATTEMPTS:
+            seed_query_cache.pop(seed_cache_key, None)
+            await _handle_indicator_subscribe(
+                websocket=websocket, dm=dm, indicator_engine=indicator_engine,
+                subscribed=subscribed, custom_handles=custom_handles, custom_tasks=custom_tasks,
+                queue=queue, client_meta=client_meta, seed_query_cache=seed_query_cache,
+                send_json=send_json, msg=msg, runtime_service=runtime_service,
+                script_correction_state=script_correction_state,
+                _builtin_seed_attempt=_builtin_seed_attempt + 1,
+            )
+            return
+        if isinstance(exc, IndicatorInputChanged):
+            # A reconnect can reach us while the owned process is still
+            # rebuilding. Keep the client in its bounded reconnect protocol;
+            # STREAM_UNAVAILABLE would permanently switch it to HTTP fallback.
+            _queue_indicator_message(queue, {"type": "resync_required"})
+            return
         await send_json(_indicator_stream_failure(
             client_id=client_id,
             requested_interval=requested_interval,
@@ -719,117 +759,139 @@ async def _handle_indicator_subscribe(
         ))
         return
 
-    subscribed_payload = {
-        "type": "indicator.subscribed",
-        "ok": True,
-        "clientId": client_id,
-        "indicatorId": key.uid,
-        "kind": "builtin",
-        "exchange": key.exchange,
-        "symbol": symbol,
-        "interval": interval,
-        "requestedInterval": requested_interval,
-        "canonicalInterval": interval,
-        "subscriptionStatus": "accepted",
-        "realtimeStatus": "live",
-        "market_type": market_type,
-        "name": indicator_name,
-        "seeded": result is not None,
-        "seedBars": len(seed_bars),
-    }
-    range_service = getattr(indicator_engine, "indicator_range_service", None)
-    resume_patch = None
-    initial_preview = None
-    if range_service is not None:
-        data_revision = _indicator_subscription_revision(
-            range_service,
-            client_meta[client_id],
-            client_server_epoch=msg.get("serverEpoch") or msg.get("server_epoch"),
-            client_correction_revision=(
-                msg.get("correctionRevision")
-                if msg.get("correctionRevision") is not None
-                else msg.get("correction_revision")
-            ),
-        )
-        interval_ms = parse_interval_ms(interval)
-        resume_plan = plan_indicator_resume(
-            resume_from=msg.get("resumeFrom") or msg.get("resume_from"),
-            client_server_epoch=msg.get("serverEpoch") or msg.get("server_epoch"),
-            client_correction_revision=(
-                msg.get("correctionRevision")
-                if msg.get("correctionRevision") is not None
-                else msg.get("correction_revision")
-            ),
-            data_revision=data_revision,
-            closed_bar_times=(int(bar.time) for bar in seed_bars),
-            max_patch_bars=max(0, int(config.INDICATOR_WS_RESUME_MAX_BARS)),
-            interval_seconds=(max(interval_ms // 1000, 1) if interval_ms else None),
-        )
-        subscribed_payload["dataRevision"] = data_revision
-        subscribed_payload["resumeStatus"] = resume_plan.status
-        subscribed_payload["resumeReason"] = resume_plan.reason
-        if resume_plan.start is not None and resume_plan.end is not None:
-            subscribed_payload["resumeRange"] = {
-                "start": resume_plan.start,
-                "end": resume_plan.end,
-            }
-        if resume_plan.status == "patch" and result is not None:
-            snapshot = build_indicator_snapshot_payload(
-                client_id=client_id,
-                indicator_id=key.uid,
-                exchange=key.exchange,
-                symbol=symbol,
-                interval=interval,
-                market_type=market_type,
-                name=indicator_name,
-                params=params,
-                result=result,
+    try:
+        subscribed_payload = {
+            "type": "indicator.subscribed",
+            "ok": True,
+            "clientId": client_id,
+            "indicatorId": key.uid,
+            "kind": "builtin",
+            "exchange": key.exchange,
+            "symbol": symbol,
+            "interval": interval,
+            "requestedInterval": requested_interval,
+            "canonicalInterval": interval,
+            "subscriptionStatus": "accepted",
+            "realtimeStatus": "live",
+            "market_type": market_type,
+            "name": indicator_name,
+            "seeded": result is not None,
+            "seedBars": len(seed_bars),
+        }
+        range_service = getattr(indicator_engine, "indicator_range_service", None)
+        resume_patch = None
+        initial_preview = None
+        if range_service is not None:
+            data_revision = _indicator_subscription_revision(
+                range_service,
+                client_meta[client_id],
+                client_server_epoch=msg.get("serverEpoch") or msg.get("server_epoch"),
+                client_correction_revision=(
+                    msg.get("correctionRevision")
+                    if msg.get("correctionRevision") is not None
+                    else msg.get("correction_revision")
+                ),
             )
-            resume_patch = _patch_from_snapshot(
-                snapshot,
-                reason="ws-resume",
-                start_s=int(resume_plan.start),
-                end_s=int(resume_plan.end),
+            interval_ms = parse_interval_ms(interval)
+            resume_plan = plan_indicator_resume(
+                resume_from=msg.get("resumeFrom") or msg.get("resume_from"),
+                client_server_epoch=msg.get("serverEpoch") or msg.get("server_epoch"),
+                client_correction_revision=(
+                    msg.get("correctionRevision")
+                    if msg.get("correctionRevision") is not None
+                    else msg.get("correction_revision")
+                ),
+                data_revision=data_revision,
+                closed_bar_times=(int(bar.time) for bar in seed_bars),
+                max_patch_bars=max(0, int(config.INDICATOR_WS_RESUME_MAX_BARS)),
+                interval_seconds=(max(interval_ms // 1000, 1) if interval_ms else None),
             )
-            resume_patch["dataRevision"] = data_revision
+            subscribed_payload["dataRevision"] = data_revision
+            subscribed_payload["resumeStatus"] = resume_plan.status
+            subscribed_payload["resumeReason"] = resume_plan.reason
+            if resume_plan.start is not None and resume_plan.end is not None:
+                subscribed_payload["resumeRange"] = {
+                    "start": resume_plan.start,
+                    "end": resume_plan.end,
+                }
+            if resume_plan.status == "patch" and result is not None:
+                snapshot = build_indicator_snapshot_payload(
+                    client_id=client_id,
+                    indicator_id=key.uid,
+                    exchange=key.exchange,
+                    symbol=symbol,
+                    interval=interval,
+                    market_type=market_type,
+                    name=indicator_name,
+                    params=params,
+                    result=result,
+                )
+                resume_patch = _patch_from_snapshot(
+                    snapshot,
+                    reason="ws-resume",
+                    start_s=int(resume_plan.start),
+                    end_s=int(resume_plan.end),
+                )
+                resume_patch["dataRevision"] = data_revision
 
-    # The seed intentionally excludes the forming bar so its values never
-    # become durable history.  Still, a newly opened/reconnected chart should
-    # not have to wait for another market tick before its realtime VOL (or
-    # other hosted indicator) gets the current point.  Compute this one
-    # non-committing preview directly and send it *after* the acknowledgement
-    # (and any resume patch) to keep the client-side subscription state ordered.
-    forming_bar = next(
-        (
-            bar
-            for bar in reversed(query_bars)
-            if not getattr(bar, "is_closed", True)
-            and (not seed_bars or int(bar.time) > int(seed_bars[-1].time))
-        ),
-        None,
-    )
-    preview_for_key = getattr(indicator_engine, "preview_for_key", None)
-    if forming_bar is not None and callable(preview_for_key):
-        preview_values = preview_for_key(key, forming_bar)
-        if preview_values:
-            initial_preview = {
-                "type": "indicator.preview",
-                "clientId": client_id,
-                "indicatorId": key.uid,
-                "exchange": key.exchange,
-                "symbol": symbol,
-                "interval": interval,
-                "market_type": market_type,
-                "barTime": int(forming_bar.time),
-                "timestampMs": int(time.time() * 1000),
-                "values": preview_values,
-                "bar": forming_bar.to_dict(),
-            }
-    await send_json(subscribed_payload)
-    if resume_patch is not None:
-        await send_json(resume_patch)
-    if initial_preview is not None:
-        await send_json(initial_preview)
+        # The seed intentionally excludes the forming bar so its values never
+        # become durable history.  Still, a newly opened/reconnected chart should
+        # not have to wait for another market tick before its realtime VOL (or
+        # other hosted indicator) gets the current point.  Compute this one
+        # non-committing preview directly and send it *after* the acknowledgement
+        # (and any resume patch) to keep the client-side subscription state ordered.
+        forming_bar = next(
+            (
+                bar
+                for bar in reversed(query_bars)
+                if not getattr(bar, "is_closed", True)
+                and (not seed_bars or int(bar.time) > int(seed_bars[-1].time))
+            ),
+            None,
+        )
+        preview_for_key = getattr(indicator_engine, "preview_for_key", None)
+        if forming_bar is not None and (callable(preview_for_key) or isinstance(indicator_engine, SerialIndicatorOwner)):
+            try:
+                preview_values = await call_engine(indicator_engine, "preview_for_key", key, forming_bar,
+                    expected_generation=client_meta[client_id].get("_engineGeneration"),
+                    input_revision=current_revision)
+            except IndicatorInputChanged:
+                raise IndicatorInputChanged("Initial preview revision changed")
+            if preview_values:
+                initial_preview = {
+                    "type": "indicator.preview",
+                    "clientId": client_id,
+                    "indicatorId": key.uid,
+                    "exchange": key.exchange,
+                    "symbol": symbol,
+                    "interval": interval,
+                    "market_type": market_type,
+                    "barTime": int(forming_bar.time),
+                    "timestampMs": int(time.time() * 1000),
+                    "values": preview_values,
+                    "bar": forming_bar.to_dict(),
+                }
+        if isinstance(indicator_engine, SerialIndicatorOwner) and client_meta[client_id].get("_engineGeneration") != indicator_engine.generation:
+            raise IndicatorInputChanged("Subscription generation changed")
+        if range_service is not None and _revision_token(current_revision) != _revision_token(range_service.data_revision_for_meta(series_meta)):
+            raise IndicatorInputChanged("Subscription revision changed before acknowledgement")
+        await send_json(subscribed_payload)
+        if resume_patch is not None:
+            await send_json(resume_patch)
+        if initial_preview is not None:
+            await send_json(initial_preview)
+        pending = client_meta[client_id].pop("_pendingMessages", None)
+        if pending is not None:
+            while not pending.empty():
+                _queue_indicator_message(queue, pending.get_nowait())
+    except BaseException as exc:
+        await _unsubscribe_indicator_client(
+            client_id, dm, indicator_engine, subscribed, custom_handles, custom_tasks, client_meta,
+        )
+        if isinstance(exc, IndicatorInputChanged):
+            _queue_indicator_message(queue, {"type": "resync_required"})
+            return
+        raise
 
 
 def _indicator_subscription_revision(
@@ -877,11 +939,35 @@ async def _unsubscribe_indicator_client(
     client_meta: dict[str, dict],
 ) -> None:
     meta = client_meta.get(client_id)
+    if not any(client_id in table for table in (subscribed, custom_handles, custom_tasks, client_meta)):
+        return
+    task = (meta or {}).get("_disposeTask")
+    if task is None:
+        if meta is not None:
+            meta["_disposed"] = True
+        task = asyncio.create_task(_dispose_indicator_client(
+            client_id, dm, indicator_engine, subscribed, custom_handles, custom_tasks, client_meta,
+        ), name="indicator-client-dispose")
+        if meta is not None:
+            meta["_disposeTask"] = task
+    await drain_control_task(task)
+
+
+async def _dispose_indicator_client(
+    client_id, dm, indicator_engine, subscribed, custom_handles, custom_tasks, client_meta,
+) -> None:
+    meta = client_meta.get(client_id)
     if meta is not None:
         meta["_disposed"] = True
     key = subscribed.pop(client_id, None)
     if key is not None and indicator_engine is not None:
-        indicator_engine.unsubscribe(key)
+        try:
+            await call_engine(indicator_engine, "unsubscribe", key,
+                              expected_generation=(meta or {}).get("_engineGeneration"))
+        except Exception:
+            # Owner failure already invalidates the generation. External
+            # leases and script handles still have to be released.
+            logger.exception("Indicator owner release failed")
 
     raw_handles = custom_handles.pop(client_id, None)
     handles = (

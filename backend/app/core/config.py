@@ -894,6 +894,16 @@ SCRIPT_HTTP_THREAD_WORKERS = int(os.getenv("SCRIPT_HTTP_THREAD_WORKERS", "2"))
 STORAGE_THREAD_WORKERS = int(os.getenv("STORAGE_THREAD_WORKERS", "4"))
 # Admission is immediate: running + queued calls may not exceed workers + pending.
 INDICATOR_THREAD_PENDING = int(os.getenv("INDICATOR_THREAD_PENDING", "64"))
+# The shared realtime engine has its own serial owner; historical requests
+# retain their independent executor. The fallback supports controlled rollout.
+INDICATOR_HISTORY_PROCESS_ENABLED = os.getenv("INDICATOR_HISTORY_PROCESS_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+INDICATOR_HISTORY_PENDING = max(0, int(os.getenv("INDICATOR_HISTORY_PENDING", "32")))
+INDICATOR_HISTORY_INPUT_BARS = max(1, int(os.getenv("INDICATOR_HISTORY_INPUT_BARS", "500000")))
+INDICATOR_HISTORY_PROCESS_TIMEOUT_SECONDS = max(.1, float(os.getenv("INDICATOR_HISTORY_PROCESS_TIMEOUT_SECONDS", "30")))
+INDICATOR_REALTIME_EXECUTION = os.getenv("INDICATOR_REALTIME_EXECUTION", "process").strip().lower()
+INDICATOR_REALTIME_ISOLATED = os.getenv("INDICATOR_REALTIME_ISOLATED", "1").strip().lower() not in {"0", "false", "no", "off"}
+INDICATOR_REALTIME_PENDING = max(0, int(os.getenv("INDICATOR_REALTIME_PENDING", "64")))
+INDICATOR_REALTIME_INPUT_BARS = max(1, int(os.getenv("INDICATOR_REALTIME_INPUT_BARS", "500000")))
 SCRIPT_HTTP_THREAD_PENDING = int(os.getenv("SCRIPT_HTTP_THREAD_PENDING", "64"))
 STORAGE_THREAD_PENDING = int(os.getenv("STORAGE_THREAD_PENDING", "128"))
 PREPARATION_THREAD_WORKERS = int(os.getenv("PREPARATION_THREAD_WORKERS", "2"))

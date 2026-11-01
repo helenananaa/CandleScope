@@ -18,6 +18,7 @@ from app.api.v1.stream_indicator_payloads import (
     _validate_builtin_compute_bars,
     _validated_builtin_warmup_bars,
 )
+from app.indicator.history_worker import run_builtin_history_range
 from app.core import config
 from app.core.executors import run_indicator
 from app.data_engine.interval_policy import parse_interval_ms
@@ -193,7 +194,9 @@ async def compute_indicator_range_batch_async(
                     ),
                     adapt_failure=_raise_plugin_runtime_failure,
                 )
-            return await run_indicator(
+            return await (run_builtin_history_range(
+                job.client_id, job.meta, job.start, job.end, bars, job.reason, target_bars,
+            ) if config.INDICATOR_HISTORY_PROCESS_ENABLED else run_indicator(
                 _compute_builtin_range_patch_from_bars,
                 job.client_id,
                 job.meta,
@@ -202,7 +205,7 @@ async def compute_indicator_range_batch_async(
                 bars,
                 job.reason,
                 target_bars,
-            )
+            ))
 
         snapshot, cache_hit, data_revision = await range_service.get_or_compute(
             meta=job.meta,
