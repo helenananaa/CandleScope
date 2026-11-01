@@ -394,14 +394,20 @@ class AlertStore:
             raise ValueError(f"Alert store rules have invalid format: {self.path}")
 
         for rule in rules.values():
+            fingerprint = self._definition_fingerprint(rule)
             if not isinstance(rule.get("definitionRevision"), str) or not rule["definitionRevision"]:
                 # Deterministic migration is stable across independent reads;
                 # the next real edit receives a fresh incarnation, including
                 # A -> B -> A changes while a computation is in flight.
-                value = {field: rule.get(field) for field in self._DEFINITION_FIELDS}
-                rule["definitionRevision"] = "legacy:" + hashlib.sha256(
-                    json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+                rule["definitionRevision"] = "legacy:" + fingerprint
+            elif rule.get("definitionFingerprint", fingerprint) != fingerprint:
+                # External JSON edits are supported too. A stored fingerprint
+                # prevents an edited definition from retaining a live fence.
+                rule["definitionRevision"] = "external:" + hashlib.sha256(
+                    (rule["definitionRevision"] + ":" + fingerprint).encode()
                 ).hexdigest()
+                rule.pop("lastAcceptedCursor", None)
+            rule["definitionFingerprint"] = fingerprint
 
         history = raw.get("history", [])
         if not isinstance(history, list):
@@ -411,6 +417,8 @@ class AlertStore:
 
     def _save(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        for rule in data["rules"].values():
+            rule["definitionFingerprint"] = self._definition_fingerprint(rule)
         payload = {
             "schemaVersion": 1,
             "rules": sorted(data["rules"].values(), key=lambda item: item.get("updatedAt", 0), reverse=True),
@@ -433,6 +441,11 @@ class AlertStore:
         if any(type(part) is not int or part < 0 or part > 2**53 - 1 for part in parts):
             return None
         return parts
+
+    @classmethod
+    def _definition_fingerprint(cls, rule: dict[str, Any]) -> str:
+        value = {field: rule.get(field) for field in cls._DEFINITION_FIELDS}
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     @staticmethod
     def _pick(item: dict[str, Any], existing: dict[str, Any], key: str, default: Any) -> Any:

@@ -98,3 +98,19 @@ def test_legacy_definition_is_stable_and_noop_edits_preserve_cursor(tmp_path):
     assert unchanged['definitionRevision'] == first
     assert unchanged['triggerCount'] == 1
     assert store.append_history_if_eligible(event(first, event_id='duplicate')) is None
+
+
+def test_external_definition_edits_cannot_retain_an_inflight_fence(tmp_path):
+    import json
+    path = tmp_path / 'alerts.json'
+    store = AlertStore(path)
+    revision = rule(store)['definitionRevision']
+    assert store.append_history_if_eligible(event(revision))
+    data = json.loads(path.read_text())
+    data['rules'][0]['expression']['right']['value'] = 90
+    path.write_text(json.dumps(data))
+    refreshed = store.list_rules()[0]
+    assert refreshed['definitionRevision'] != revision
+    assert refreshed['triggerCount'] == 1
+    assert AlertStore(path).get_rule('r')['definitionRevision'] == refreshed['definitionRevision']
+    assert store.append_history_if_eligible(event(revision, 180)) is None
