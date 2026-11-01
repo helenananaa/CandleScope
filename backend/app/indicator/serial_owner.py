@@ -14,6 +14,7 @@ from typing import Any, Callable
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
 from app.data_engine.data_manager.models import BarData
 from app.indicator.engine import indicator_code_hash
+from app.indicator.events import IndicatorEvent, IndicatorEventType
 from app.indicator.types import IndicatorKey
 
 logger = logging.getLogger("candlescope.indicator.owner")
@@ -23,6 +24,10 @@ class IndicatorInputChanged(RuntimeError):
     """A queued history snapshot no longer covers the owner's state."""
 
     code = "INDICATOR_INPUT_CHANGED"
+
+
+class IndicatorGenerationChanged(IndicatorInputChanged):
+    code = "INDICATOR_GENERATION_CHANGED"
 
 
 def _argument(args: tuple, kwargs: dict, index: int, name: str, default=None):
@@ -91,6 +96,22 @@ def _bar_count(value: Any) -> int:
     return 0
 
 
+async def _drain_control(task: asyncio.Task) -> None:
+    cancelled = False
+    while True:
+        try:
+            await asyncio.shield(task)
+            break
+        except asyncio.CancelledError:
+            if task.done():
+                task.result()
+                cancelled = True
+                break
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+
+
 class SerialIndicatorOwner:
     """One physical worker; finite commands and retained input rows.
 
@@ -122,6 +143,13 @@ No engine or mutable indicator instance is exposed through this facade.
         self._rejected = self._cancelled_queued = self._cancelled_running = 0
         self._closing = self._closed = False
         self._failure: str | None = None
+        self._generation = 0
+        self._recovering = False
+        self._recovery_task: asyncio.Task | None = None
+        self._close_task: asyncio.Task | None = None
+        self._release_task: asyncio.Task | None = None
+        self._pending_releases: dict[tuple[int, IndicatorKey], int] = {}
+        self._known_keys: tuple[IndicatorKey, ...] = ()
         self._listeners: list[Callable] = []
         self._snapshot: dict[str, Any] = {"started": False, "instances": []}
 
@@ -139,9 +167,34 @@ No engine or mutable indicator instance is exposed through this facade.
         if listener in self._listeners:
             self._listeners.remove(listener)
 
+    @property
+    def generation(self) -> int:
+        self._assert_loop()
+        return self._generation
+
+    def _publish(self, events) -> None:
+        for event in events:
+            for listener in tuple(self._listeners):
+                try:
+                    listener(event)
+                except Exception:
+                    logger.exception("Indicator listener failed")
+
+    def _notify_resync(self, detail: dict) -> None:
+        self._publish(IndicatorEvent(IndicatorEventType.INDICATOR_ERROR, key,
+            detail={**detail, "resyncRequired": True, "ownerGeneration": self._generation})
+            for key in self._known_keys)
+
+    def fail_recovery(self, error: Exception) -> None:
+        self._assert_loop()
+        self._failure = str(error) or type(error).__name__
+        self._notify_resync({"error": "Indicator source recovery failed"})
+
     def snapshot(self) -> dict[str, Any]:
         self._assert_loop()
+        state = ("recovering" if self._recovering else "recovery_failed" if self._failure else None)
         return {**deepcopy(self._snapshot), "listener_count": len(self._listeners),
+                **({"source_delivery": {"state": state, "error": self._failure}} if state else {}),
                 "serial_owner": {"sequence": self._sequence, "inflight": self._inflight,
                     "max_inflight": self._max_inflight, "input_bars": self._input_bars,
                     "max_input_bars": self._max_input_bars, "rejected": self._rejected,
@@ -149,9 +202,18 @@ No engine or mutable indicator instance is exposed through this facade.
                     "cancelled_running": self._cancelled_running,
                     "closing": self._closing, "closed": self._closed,
                     "failure": self._failure,
+                    "generation": self._generation, "recovering": self._recovering,
+                    "release_targets": len(self._pending_releases),
                     "executor": self._executor.snapshot()}}
 
     def _execute(self, method: str, args: tuple, kwargs: dict) -> tuple:
+        if method == "__reset_source":
+            if self._engine is not None:
+                try:
+                    self._engine.stop()
+                except Exception:
+                    logger.exception("Discarding failed indicator engine")
+            self._engine = None
         if self._engine is None:
             if self._factory is None:
                 from app.indicator import create_engine
@@ -167,13 +229,19 @@ No engine or mutable indicator instance is exposed through this facade.
             events.append(deepcopy(event))
         engine.add_listener(capture)
         try:
-            if method == "set_source_delivery_state":
+            if method == "__reset_source":
+                result = None
+            elif method == "__release_many":
+                for key, count in args[0].items():
+                    engine.unsubscribe(key, count=count)
+                result = None
+            elif method == "set_source_delivery_state":
                 engine.source_delivery_state = dict(args[0])
                 result = None
             else:
                 result = getattr(engine, method)(*args, **kwargs)
             snapshot = engine.snapshot()
-            return deepcopy(result), events, snapshot
+            return deepcopy(result), events, snapshot, tuple(engine._instances)
         finally:
             engine.remove_listener(capture)
 
@@ -201,12 +269,22 @@ No engine or mutable indicator instance is exposed through this facade.
                 continue
 
     async def call(self, method: str, *args: Any,
-                   adopt: Callable[[Any], None] | None = None, **kwargs: Any) -> Any:
+                   adopt: Callable[[Any], None] | None = None,
+                   expected_generation: int | None = None, **kwargs: Any) -> Any:
         self._assert_loop()
         if method not in self.METHODS:
             raise ValueError(f"Unsupported indicator owner operation: {method}")
+        if method == "unsubscribe":
+            return await self.release(_argument(args, kwargs, 0, "key"), expected_generation=expected_generation)
         if self._closing:
             raise RuntimeError("Indicator owner is closing")
+        generation = self._generation if expected_generation is None else expected_generation
+        if generation != self._generation:
+            if method == "unsubscribe":
+                return None  # The old generation's engine has been discarded.
+            raise IndicatorGenerationChanged("Indicator input generation changed; reload canonical history")
+        if self._recovering:
+            raise IndicatorGenerationChanged("Indicator input generation is recovering")
         if self._failure is not None:
             raise RuntimeError("Indicator owner failed; rebuild from canonical history")
         count = _bar_count(args) + _bar_count(kwargs)
@@ -221,11 +299,15 @@ No engine or mutable indicator instance is exposed through this facade.
             async with self._lock:
                 if self._closing:
                     raise RuntimeError("Indicator owner is closing")
+                if generation != self._generation or self._recovering:
+                    if method == "unsubscribe":
+                        return None
+                    raise IndicatorGenerationChanged("Indicator input generation changed while queued")
                 if self._failure is not None:
                     raise RuntimeError("Indicator owner failed; rebuild from canonical history")
                 started = True
                 try:
-                    (result, events, snapshot), cancelled = await self._physical(method, args, kwargs)
+                    (result, events, snapshot, keys), cancelled = await self._physical(method, args, kwargs)
                 except IndicatorInputChanged:
                     # Rejected before any mutation; the caller can fetch a
                     # fresh canonical snapshot without poisoning valid state.
@@ -234,19 +316,22 @@ No engine or mutable indicator instance is exposed through this facade.
                     # An unexpected worker failure may have partially changed
                     # state. Never continue issuing apparently valid results.
                     self._failure = str(error) or type(error).__name__
+                    self._notify_resync({"error": "Indicator calculation failed; reload canonical history"})
                     raise
+                if generation != self._generation or self._recovering:
+                    # Recovery owns disposal of the old engine, including any
+                    # subscription which completed after its caller became old.
+                    raise IndicatorGenerationChanged("Indicator input generation changed while running")
                 self._sequence += 1
                 self._snapshot = snapshot
+                self._known_keys = keys
                 # Adoption is synchronous on the loop, before a subsequent
                 # command or listener can observe the new subscription.
                 if adopt is not None:
                     adopt(result)
                 for event in events:
-                    for listener in tuple(self._listeners):
-                        try:
-                            listener(event)
-                        except Exception:
-                            logger.exception("Indicator listener failed")
+                    event.detail["ownerGeneration"] = generation
+                self._publish(events)
                 if cancelled:
                     raise asyncio.CancelledError
                 return result
@@ -258,28 +343,106 @@ No engine or mutable indicator instance is exposed through this facade.
             self._inflight -= 1
             self._input_bars -= count
 
+    async def release(self, key: IndicatorKey, *, expected_generation: int | None = None) -> None:
+        """Coalesce cleanup by existing target; never compete with new work.
+
+        There is one drain task and at most one counter per resident target,
+        even if many clients disconnect while ordinary admission is full.
+        """
+        self._assert_loop()
+        generation = self._generation if expected_generation is None else expected_generation
+        if self._closing or generation != self._generation or self._recovering or key not in self._known_keys:
+            return
+        claim = generation, key
+        self._pending_releases[claim] = self._pending_releases.get(claim, 0) + 1
+
+        async def drain():
+            while self._pending_releases:
+                async with self._lock:
+                    generation = self._generation
+                    batch = {key: count for (epoch, key), count in self._pending_releases.items() if epoch == generation}
+                    self._pending_releases.clear()
+                    if not batch:
+                        continue
+                    try:
+                        (_, events, snapshot, keys), _ = await self._physical("__release_many", (batch,), {})
+                    except BaseException as error:
+                        self._failure = str(error) or type(error).__name__
+                        self._notify_resync({"error": "Indicator release failed; reload canonical history"})
+                        raise
+                    if generation == self._generation and not self._recovering:
+                        self._snapshot, self._known_keys = snapshot, keys
+                        self._sequence += 1
+                        self._publish(events)
+
+        if self._release_task is None or self._release_task.done():
+            self._release_task = asyncio.create_task(drain(), name="indicator-owner-release")
+        await _drain_control(self._release_task)
+
+    async def recover(self, detail: dict) -> None:
+        """Invalidate old admissions immediately; replace state on its worker.
+
+        One reserved control operation can recover even when ordinary admission
+        is full. Old subscriptions are terminal; new clients seed from storage.
+        """
+        self._assert_loop()
+        if self._closing:
+            raise RuntimeError("Indicator owner is closing")
+        if self._recovering:
+            raise ExecutorBusyError("indicator_realtime_recovery")
+        self._recovering = True
+        self._generation += 1
+        self._pending_releases.clear()
+        self._notify_resync(detail)
+
+        async def reset():
+            try:
+                async with self._lock:
+                    (_, _, snapshot, keys), _ = await self._physical("__reset_source", (), {})
+                    self._snapshot, self._known_keys = snapshot, keys
+                    self._failure = None
+                    self._sequence += 1
+            except BaseException as error:
+                self._failure = str(error) or type(error).__name__
+                raise
+            finally:
+                self._recovering = False
+
+        task = self._recovery_task = asyncio.create_task(reset(), name="indicator-owner-recovery")
+        await _drain_control(task)
+
     async def aclose(self) -> None:
         self._assert_loop()
         if self._closed:
             return
         self._closing = True
-        async with self._lock:
-            if self._closed:
-                return
-            (_, _, snapshot), cancelled = await self._physical("stop", (), {})
-            self._snapshot = snapshot
-            self._listeners.clear()
-            self._executor.shutdown(wait=False)
-            self._closed = True
-            if cancelled:
-                raise asyncio.CancelledError
+
+        async def stop():
+            if self._recovery_task is not None:
+                await asyncio.gather(self._recovery_task, return_exceptions=True)
+            if self._release_task is not None:
+                await asyncio.gather(self._release_task, return_exceptions=True)
+            async with self._lock:
+                try:
+                    (_, _, snapshot, _), _ = await self._physical("stop", (), {})
+                    self._snapshot = snapshot
+                finally:
+                    self._listeners.clear()
+                    self._known_keys = ()
+                    self._executor.shutdown(wait=False)
+                    self._closed = True
+
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(stop(), name="indicator-owner-close")
+        await _drain_control(self._close_task)
 
 
 async def call_engine(engine: Any, method: str, *args: Any,
-                      adopt: Callable[[Any], None] | None = None, **kwargs: Any) -> Any:
+                      adopt: Callable[[Any], None] | None = None,
+                      expected_generation: int | None = None, **kwargs: Any) -> Any:
     """Support explicit standalone synchronous engines in isolated computations."""
     if isinstance(engine, SerialIndicatorOwner):
-        return await engine.call(method, *args, adopt=adopt, **kwargs)
+        return await engine.call(method, *args, adopt=adopt, expected_generation=expected_generation, **kwargs)
     if method == "set_source_delivery_state":
         engine.source_delivery_state = dict(args[0])
         return None

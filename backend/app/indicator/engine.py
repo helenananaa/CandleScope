@@ -352,12 +352,14 @@ class IndicatorEngine:
 
         return key, result
 
-    def unsubscribe(self, key: IndicatorKey) -> None:
+    def unsubscribe(self, key: IndicatorKey, *, count: int = 1) -> None:
         """Unsubscribe, keeping a bounded zero-ref instance warm when enabled."""
         if key not in self._refcounts:
             return
 
-        self._refcounts[key] -= 1
+        if count < 1:
+            raise ValueError("Subscription release count must be positive")
+        self._refcounts[key] -= count
         if self._refcounts[key] <= 0:
             self._refcounts[key] = 0
             self._detach_from_stream(key)

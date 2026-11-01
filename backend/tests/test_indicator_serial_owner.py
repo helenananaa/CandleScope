@@ -297,3 +297,224 @@ async def test_old_left_extension_subscription_cannot_roll_existing_instance_bac
         assert owner.snapshot()['instances'][0]['refcount'] == 1
     finally:
         await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_actual_data_manager_bridge_runs_compute_on_owner_and_publishes_on_loop(monkeypatch):
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
+    from app.indicator import data_manager_bridge as bridge
+    from app.indicator.range_result_service import IndicatorRangeResultService
+
+    threads, delivered = [], []
+    loop_thread = threading.get_ident()
+    def factory():
+        engine = create_engine()
+        original = engine.on_bar_closed
+        def observed(*args, **kwargs):
+            threads.append(threading.get_ident())
+            return original(*args, **kwargs)
+        engine.on_bar_closed = observed
+        return engine
+    monkeypatch.setattr(bridge, 'create_engine', factory)
+    dm = DataManager()
+    service = IndicatorRangeResultService.from_config()
+    owner = bridge.bridge_indicator_engine(dm, result_service=service, isolate_realtime=True)
+    owner.add_listener(lambda event: delivered.append((threading.get_ident(), event.event_type)))
+    source = bars()
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        close = replace(source[-1], time=1860, close=150)
+        await dm.event_bus.emit(DataEvent(event_type=DataEventType.BAR_CLOSED, key=SeriesKey('BTCUSDT', '1m'), bar=close))
+        await eventually(lambda: owner.snapshot()['instances'][0]['last_committed'] == 1860)
+        assert threads and all(thread != loop_thread for thread in threads)
+        assert delivered and all(thread == loop_thread for thread, _ in delivered)
+        assert any(kind == IndicatorEventType.INDICATOR_UPDATED for _, kind in delivered)
+        assert (await owner.call('get_result', key)).get_latest()
+        assert dm.event_bus.snapshot()['callback_errors'] == 0
+    finally:
+        await owner.shutdown_bridge()
+        await dm.event_bus.close()
+        service.unbind_all()
+        await owner.aclose()
+        await dm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_recovery_at_full_admission_discards_old_work_and_late_unsubscribe():
+    from app.indicator.serial_owner import IndicatorGenerationChanged
+    entered, release = threading.Event(), threading.Event()
+    def factory():
+        engine = create_engine()
+        original = engine.on_bar_closed
+        def blocked(*args, **kwargs):
+            entered.set()
+            assert release.wait(3)
+            return original(*args, **kwargs)
+        engine.on_bar_closed = blocked
+        return engine
+    owner = SerialIndicatorOwner(factory=factory, max_pending=1)
+    source, events = bars(), []
+    owner.add_listener(events.append)
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        old_generation = owner.generation
+        running = asyncio.create_task(owner.call('on_bar_closed', 'BTCUSDT', '1m', replace(source[-1], time=1860)))
+        await eventually(entered.is_set)
+        queued = asyncio.create_task(owner.call('get_result', key))
+        await eventually(lambda: owner.snapshot()['serial_owner']['inflight'] == 2)
+        recovering = asyncio.create_task(owner.recover({'reason': 'source_gap'}))
+        await eventually(lambda: owner.generation > old_generation)
+        recovering.cancel()
+        await asyncio.sleep(0)
+        assert not recovering.done()
+        release.set()
+        for task in [running, queued]:
+            with pytest.raises(IndicatorGenerationChanged):
+                await task
+        with pytest.raises(asyncio.CancelledError):
+            await recovering
+        assert not any(event.event_type == IndicatorEventType.INDICATOR_UPDATED for event in events)
+        assert any(event.detail.get('resyncRequired') for event in events)
+        assert await owner.call('list_instances') == []
+        new_key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        assert new_key == key
+        await owner.call('unsubscribe', key, expected_generation=old_generation)
+        assert owner.snapshot()['instances'][0]['refcount'] == 1
+        assert owner.snapshot()['serial_owner']['failure'] is None
+    finally:
+        release.set()
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_worker_state_is_replaced_before_fresh_history_subscription():
+    creations = 0
+    def factory():
+        nonlocal creations
+        creations += 1
+        engine = create_engine()
+        if creations == 1:
+            def failed(*args, **kwargs):
+                raise RuntimeError('state transition failed')
+            engine.on_bar_closed = failed
+        return engine
+    owner = SerialIndicatorOwner(factory=factory)
+    events = []
+    owner.add_listener(events.append)
+    try:
+        await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        with pytest.raises(RuntimeError, match='transition failed'):
+            await owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1])
+        assert any(event.detail.get('resyncRequired') for event in events)
+        await owner.recover({'reason': 'callback_failed'})
+        assert creations == 2
+        assert owner.snapshot()['instances'] == []
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        await owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1])
+        assert (await owner.call('get_result', key)).get_latest()
+    finally:
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_release_remains_available_when_regular_admission_is_full():
+    entered, release = threading.Event(), threading.Event()
+    def factory():
+        engine = create_engine()
+        original = engine.on_bar_closed
+        def blocked(*args, **kwargs):
+            entered.set()
+            assert release.wait(3)
+            return original(*args, **kwargs)
+        engine.on_bar_closed = blocked
+        return engine
+    owner = SerialIndicatorOwner(factory=factory, max_pending=0)
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        running = asyncio.create_task(owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1]))
+        await eventually(entered.is_set)
+        cleanup = asyncio.create_task(owner.call('unsubscribe', key, expected_generation=owner.generation))
+        await asyncio.sleep(0)
+        assert not cleanup.done(), 'release must wait for ownership instead of rejecting and leaking a reference'
+        release.set()
+        await running
+        await cleanup
+        assert owner.snapshot()['instances'][0]['refcount'] == 0
+    finally:
+        release.set()
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_actual_bridge_recovers_failed_worker_and_accepts_fresh_generation(monkeypatch):
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
+    from app.indicator import data_manager_bridge as bridge
+    from app.indicator.range_result_service import IndicatorRangeResultService
+    creations = 0
+    def factory():
+        nonlocal creations
+        creations += 1
+        engine = create_engine()
+        if creations == 1:
+            def fail(*args, **kwargs):
+                raise RuntimeError('injected transition failure')
+            engine.on_bar_closed = fail
+        return engine
+    monkeypatch.setattr(bridge, 'create_engine', factory)
+    dm = DataManager()
+    service = IndicatorRangeResultService.from_config()
+    owner = bridge.bridge_indicator_engine(dm, result_service=service, isolate_realtime=True)
+    try:
+        await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        event = DataEvent(event_type=DataEventType.BAR_CLOSED, key=SeriesKey('BTCUSDT', '1m'), bar=bars(31)[-1])
+        await dm.event_bus.emit(event)
+        await eventually(lambda: owner.generation == 1 and not owner.snapshot()['serial_owner']['recovering'])
+        assert creations == 2 and owner.snapshot()['serial_owner']['failure'] is None
+        assert dm.event_bus.snapshot()['callback_subscriptions'] == 3
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        await dm.event_bus.emit(event)
+        await eventually(lambda: owner.snapshot()['instances'][0]['last_committed'] == event.bar.time)
+        assert (await owner.call('get_result', key)).get_latest()
+    finally:
+        await owner.shutdown_bridge()
+        await dm.event_bus.close()
+        service.unbind_all()
+        await owner.aclose()
+        await dm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_shutdown_waits_for_recovery_and_physical_worker_exit():
+    from app.indicator.serial_owner import IndicatorGenerationChanged
+    entered, release = threading.Event(), threading.Event()
+    def factory():
+        engine = create_engine()
+        original = engine.on_bar_closed
+        def blocked(*args, **kwargs):
+            entered.set()
+            assert release.wait(3)
+            return original(*args, **kwargs)
+        engine.on_bar_closed = blocked
+        return engine
+    owner = SerialIndicatorOwner(factory=factory)
+    running = asyncio.create_task(owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(1)[0]))
+    await eventually(entered.is_set)
+    recovering = asyncio.create_task(owner.recover({'reason': 'source_gap'}))
+    await eventually(lambda: owner.generation == 1)
+    closing = asyncio.create_task(owner.aclose())
+    await eventually(lambda: owner.snapshot()['serial_owner']['closing'])
+    closing.cancel()
+    await asyncio.sleep(0)
+    assert not closing.done()
+    release.set()
+    with pytest.raises(IndicatorGenerationChanged):
+        await running
+    await recovering
+    with pytest.raises(asyncio.CancelledError):
+        await closing
+    state = owner.snapshot()
+    assert state['serial_owner']['closed']
+    assert state['serial_owner']['executor']['active'] == 0
+    assert state['instances'] == []

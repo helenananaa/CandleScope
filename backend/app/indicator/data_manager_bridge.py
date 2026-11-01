@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .series_reference import identity_kwargs, meta_from_key, series_reference
+from .serial_owner import IndicatorInputChanged, SerialIndicatorOwner, call_engine
 
 import asyncio
 import logging
@@ -124,7 +125,7 @@ def _indicator_refresh_limit(
     return max(budget_limit, required or 0)
 
 
-def _engine_correction_plan(
+async def _engine_correction_plan(
     indicator_engine: Any,
     event: Any,
     *,
@@ -132,13 +133,15 @@ def _engine_correction_plan(
     dirty_range: dict[str, int],
 ) -> dict[str, Any]:
     planner = getattr(indicator_engine, "plan_series_correction", None)
-    if not callable(planner):
+    if not callable(planner) and not isinstance(indicator_engine, SerialIndicatorOwner):
         return {
             "hasActive": True,
             "requiresRecompute": True,
             "requiredTargetBars": None,
         }
-    return planner(
+    return await call_engine(
+        indicator_engine,
+        "plan_series_correction",
         event.key.symbol,
         interval,
         market_type=event.key.market_type,
@@ -153,9 +156,13 @@ def bridge_indicator_engine(
     *,
     backfill_coordinator: Any | None = None,
     result_service: Any | None = None,
+    isolate_realtime: bool = False,
 ) -> Any:
     """Create an IndicatorEngine and subscribe it to DataManager events."""
-    indicator_engine = create_engine()
+    indicator_engine = (
+        SerialIndicatorOwner(factory=create_engine)
+        if isolate_realtime else create_engine()
+    )
     # The WebSocket Script path observes the same completion events as this
     # bridge.  Expose the authoritative parent-request future so it can wait
     # for every written range before rebuilding an incremental snapshot.
@@ -187,7 +194,8 @@ def bridge_indicator_engine(
                     series_key=series_reference(meta_from_key(event.key)),
                     closed_through=int(bar.time),
                 )
-            indicator_engine.on_bar_closed(
+            await call_engine(
+                indicator_engine, "on_bar_closed",
                 symbol,
                 interval,
                 bar,
@@ -196,7 +204,8 @@ def bridge_indicator_engine(
                 **identity_kwargs(meta_from_key(event.key)),
             )
         elif event.event_type == DataEventType.BAR_UPDATED:
-            indicator_engine.on_bar_updated(
+            await call_engine(
+                indicator_engine, "on_bar_updated",
                 symbol,
                 interval,
                 bar,
@@ -241,7 +250,7 @@ def bridge_indicator_engine(
                 else 1
             )
             for snapshot_attempt in range(snapshot_attempts):
-                correction_plan = _engine_correction_plan(
+                correction_plan = await _engine_correction_plan(
                     indicator_engine,
                     event,
                     interval=interval,
@@ -255,8 +264,9 @@ def bridge_indicator_engine(
                         "on_series_correction_invalidated",
                         None,
                     )
-                    if callable(notify_invalidated):
-                        notify_invalidated(
+                    if callable(notify_invalidated) or isinstance(indicator_engine, SerialIndicatorOwner):
+                        await call_engine(
+                            indicator_engine, "on_series_correction_invalidated",
                             symbol,
                             interval,
                             market_type=market_type,
@@ -336,7 +346,7 @@ def bridge_indicator_engine(
                 observed_closed = int(
                     (observed_revision or {}).get("closedThrough") or 0
                 )
-                replanned = _engine_correction_plan(
+                replanned = await _engine_correction_plan(
                     indicator_engine,
                     event,
                     interval=interval,
@@ -373,16 +383,22 @@ def bridge_indicator_engine(
                     for field in ("dirtyRange", "historyInvalid"):
                         if field in data_revision:
                             emitted_revision[field] = data_revision[field]
-                indicator_engine.on_bars_backfilled(
-                    symbol,
-                    interval,
-                    confirmed_bars,
-                    market_type=market_type,
-                    exchange=exchange,
-                    dirty_range=dirty_range,
-                    data_revision=emitted_revision,
-                    **identity_kwargs(meta_from_key(event.key)),
-                )
+                try:
+                    await call_engine(
+                        indicator_engine, "on_bars_backfilled",
+                        symbol,
+                        interval,
+                        confirmed_bars,
+                        market_type=market_type,
+                        exchange=exchange,
+                        dirty_range=dirty_range,
+                        data_revision=emitted_revision,
+                        **identity_kwargs(meta_from_key(event.key)),
+                    )
+                except IndicatorInputChanged:
+                    if snapshot_attempt + 1 >= snapshot_attempts:
+                        return False
+                    continue
                 return True
             return False
         except Exception as exc:
@@ -439,11 +455,19 @@ def bridge_indicator_engine(
             return
         raw_request_id = detail.get("request_id")
         request_id = str(raw_request_id).strip() if raw_request_id else None
+        resident_intervals = None
+        if isinstance(indicator_engine, SerialIndicatorOwner) and event.event_type == DataEventType.BAR_AMENDED:
+            resident_intervals = await call_engine(
+                indicator_engine, "resident_series_intervals", event.key.symbol,
+                market_type=event.key.market_type, exchange=event.key.exchange,
+                **identity_kwargs(meta_from_key(event.key)),
+            )
         for interval, dirty_range in _backfill_refresh_targets(
             event,
             indicator_engine=indicator_engine,
             data_manager=data_manager,
             result_service=result_service,
+            engine_resident_intervals=resident_intervals,
         ):
             series_key = series_reference(meta_from_key(event.key, interval))
             completion_key = (
@@ -465,7 +489,7 @@ def bridge_indicator_engine(
             ):
                 continue
 
-            correction_plan = _engine_correction_plan(
+            correction_plan = await _engine_correction_plan(
                 indicator_engine,
                 event,
                 interval=interval,
@@ -495,8 +519,9 @@ def bridge_indicator_engine(
                     "on_series_correction_invalidated",
                     None,
                 )
-                if callable(notify_invalidated):
-                    notify_invalidated(
+                if callable(notify_invalidated) or isinstance(indicator_engine, SerialIndicatorOwner):
+                    await call_engine(
+                        indicator_engine, "on_series_correction_invalidated",
                         event.key.symbol,
                         interval,
                         market_type=event.key.market_type,
@@ -558,33 +583,44 @@ def bridge_indicator_engine(
         if resetting or (error.subscription_id and not any(h.id == error.subscription_id for h in handles)):
             return
         resetting = True
-        indicator_engine.source_delivery_state = {"state": "recovering", "gap": error.to_dict()}
+        isolated = isinstance(indicator_engine, SerialIndicatorOwner)
         try:
+            if not isolated:
+                await call_engine(indicator_engine, "set_source_delivery_state", {"state": "recovering", "gap": error.to_dict()})
             for handle in handles:
                 data_manager.unsubscribe(handle)
             handles.clear()
-            indicator_engine.invalidate_source_gap(error.to_dict())
             tasks = [task for task in pending_backfills.values() if task is not asyncio.current_task()]
             for task in tasks:
                 task.cancel()
+            if isolated:
+                if result_service is not None:
+                    result_service.invalidate_source_gap()
+                await indicator_engine.recover(error.to_dict())
+            else:
+                await call_engine(indicator_engine, "invalidate_source_gap", error.to_dict())
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
             pending_backfills.clear()
             pending_series_refreshes.clear()
             completed_backfills.clear()
-            if result_service is not None:
+            if result_service is not None and not isolated:
                 result_service.invalidate_source_gap()
             # No warm instance may survive a gap as valid. Existing owners get
             # a terminal wire signal; reconnect seeds from canonical storage.
             _subscribe_bridge()
-            indicator_engine.source_delivery_state = {"state": "live", "last_gap": error.to_dict()}
+            if not isolated:
+                await call_engine(indicator_engine, "set_source_delivery_state", {"state": "live", "last_gap": error.to_dict()})
         except Exception as exc:
             for handle in handles:
                 data_manager.unsubscribe(handle)
             handles.clear()
-            indicator_engine.source_delivery_state = {
-                "state": "recovery_failed", "gap": error.to_dict(), "error": str(exc),
-            }
+            if isolated:
+                indicator_engine.fail_recovery(exc)
+            else:
+                await call_engine(indicator_engine, "set_source_delivery_state", {
+                    "state": "recovery_failed", "gap": error.to_dict(), "error": str(exc),
+                })
             raise
         finally:
             resetting = False
@@ -600,6 +636,21 @@ def bridge_indicator_engine(
             ))
 
     _subscribe_bridge()
+
+    async def _shutdown_bridge() -> None:
+        for handle in handles:
+            data_manager.unsubscribe(handle)
+        handles.clear()
+        tasks = [task for task in pending_backfills.values() if task is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        pending_backfills.clear()
+        pending_series_refreshes.clear()
+        completed_backfills.clear()
+
+    indicator_engine.shutdown_bridge = _shutdown_bridge
 
     return indicator_engine
 
@@ -785,6 +836,7 @@ def _backfill_refresh_targets(
     indicator_engine: Any | None = None,
     data_manager: Any | None = None,
     result_service: Any | None = None,
+    engine_resident_intervals: tuple[str, ...] | None = None,
 ) -> list[tuple[str, dict[str, int]]]:
     """Expand a base completion into every affected derived indicator series."""
     targets: list[tuple[str, dict[str, int]]] = [
@@ -836,7 +888,9 @@ def _backfill_refresh_targets(
                 None,
             )
         candidate_intervals: set[str] = set()
-        if callable(resident_intervals):
+        if engine_resident_intervals is not None:
+            candidate_intervals.update(engine_resident_intervals)
+        elif callable(resident_intervals):
             candidate_intervals.update(
                 resident_intervals(
                     event.key.symbol,
