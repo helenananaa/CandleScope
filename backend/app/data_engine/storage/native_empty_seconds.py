@@ -46,6 +46,7 @@ def record(symbol, ranges):
     from .klines_repo import _connect
     from .revisions import guarded_write, series_values, IDENTITY_COLUMNS
     global _revision
+    changed = False
     with _connect() as conn, guarded_write(conn, series_values(symbol, '1s', 'upbit', 'spot')):
         # Serialize with bar writers; never hide a candle already in storage.
         for start, end in ranges:
@@ -60,13 +61,18 @@ def record(symbol, ranges):
                 if cursor < value:
                     a, b = cursor, value - 1000
                     overlaps = conn.execute('SELECT start_ms, end_ms FROM native_empty_seconds WHERE symbol = ? AND start_ms <= ? AND end_ms >= ?', (symbol, b + 1000, a - 1000)).fetchall()
+                    if any(int(row[0]) <= a and int(row[1]) >= b for row in overlaps):
+                        cursor = value + 1000
+                        continue
                     if overlaps:
                         a = min(a, min(int(row[0]) for row in overlaps))
                         b = max(b, max(int(row[1]) for row in overlaps))
                         conn.execute('DELETE FROM native_empty_seconds WHERE symbol = ? AND start_ms <= ? AND end_ms >= ?', (symbol, b, a))
                     conn.execute('INSERT OR IGNORE INTO native_empty_seconds VALUES (?, ?, ?)', (symbol, a, b))
+                    changed = True
                 cursor = value + 1000
-    _revision += 1
+    if changed:
+        _revision += 1
 
 
 def clear(conn, symbol, start_ms=None, end_ms=None):

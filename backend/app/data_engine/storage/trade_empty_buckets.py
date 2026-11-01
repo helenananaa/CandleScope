@@ -49,6 +49,7 @@ def record(exchange, market_type, symbol, interval, ranges):
     width = fixed_trade_spec(interval).nominal_ms
     key = (exchange, market_type, symbol, interval)
     values = series_values(symbol, interval, exchange, market_type)
+    changed = False
     with _connect() as conn, guarded_write(conn, values):
         for start, end in ranges:
             if start % width or end % width or start > end:
@@ -62,13 +63,18 @@ def record(exchange, market_type, symbol, interval, ranges):
                 if cursor < value:
                     a, b = cursor, value - width
                     overlaps = conn.execute('SELECT start_ms, end_ms FROM trade_empty_buckets WHERE exchange=? AND market_type=? AND symbol=? AND interval=? AND start_ms<=? AND end_ms>=?', (*key, b + width, a - width)).fetchall()
+                    if any(int(row[0]) <= a and int(row[1]) >= b for row in overlaps):
+                        cursor = value + width
+                        continue
                     if overlaps:
                         a = min(a, min(int(row[0]) for row in overlaps))
                         b = max(b, max(int(row[1]) for row in overlaps))
                         conn.execute('DELETE FROM trade_empty_buckets WHERE exchange=? AND market_type=? AND symbol=? AND interval=? AND start_ms<=? AND end_ms>=?', (*key, b, a))
                     conn.execute('INSERT OR IGNORE INTO trade_empty_buckets VALUES (?, ?, ?, ?, ?, ?)', (*key, a, b))
+                    changed = True
                 cursor = value + width
-    invalidate()
+    if changed:
+        invalidate()
 
 
 def clear(conn, exchange, market_type, symbol, interval, start_ms=None, end_ms=None):

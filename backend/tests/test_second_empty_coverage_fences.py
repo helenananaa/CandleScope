@@ -77,3 +77,12 @@ def test_record_is_atomic_when_later_range_is_invalid(coverage):
         record([(START, START + 1000), (START + 2001, START + 3000)])
     assert read() == []
     assert store.revision_store.head() == revision
+
+
+def test_repeated_empty_receipt_does_not_invalidate_unchanged_coverage(coverage):
+    store, _, _, record, read, _ = coverage
+    record([(START, START + 9000)])
+    revision = store.revision_store.head()
+    record([(START, START + 9000), (START + 3000, START + 5000)])
+    assert read() == [(START, START + 9000)]
+    assert store.revision_store.head() == revision
