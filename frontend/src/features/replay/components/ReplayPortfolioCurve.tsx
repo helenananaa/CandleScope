@@ -1,3 +1,4 @@
+import { requestNativePortfolioDownload } from "../portfolioDownload.js";
 import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -53,7 +54,12 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
       </svg>
       <p>{t("replay.portfolio.drawdown")}: {visible.summary?.max_drawdown}</p>
       {/* Downloads are browser-owned streams; do not buffer an unbounded export in the chart renderer. */}
-      {runId !== null && <a href={api.portfolioExportUrl(runId)} download>{t("replay.portfolio.export")}</a>}
+      {runId !== null && <a href={api.portfolioExportUrl(runId)} download onClick={event => {
+        const native = requestNativePortfolioDownload(runId);
+        if (native === null) return;
+        event.preventDefault();
+        void native.catch(cause => setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad")));
+      }}>{t("replay.portfolio.export")}</a>}
     </>}
   </details>;
 }
