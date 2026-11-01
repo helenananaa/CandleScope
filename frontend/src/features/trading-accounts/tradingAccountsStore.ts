@@ -1,5 +1,8 @@
 import { ApiError } from "../../services/api.js";
 import { tradingApi } from "./tradingApi.js";
+import { tradingAccountDataPool, type TradingAccountData } from "./tradingAccountDataPool.js";
+import { tradingErrorMessage } from "./tradingErrors.js";
+export { tradingErrorMessage } from "./tradingErrors.js";
 import type {
   AccountSummary,
   JournalEntry,
@@ -9,8 +12,6 @@ import type {
 } from "./tradingTypes.js";
 
 const SELECTED_ACCOUNT_KEY = "candlescope-trading-selected-account-v1";
-const ACTIVE_POLL_MS = 2_000;
-const IDLE_POLL_MS = 15_000;
 const ACCOUNTS_RETRY_MS = 5_000;
 
 export interface TradingAccountsState {
@@ -42,29 +43,9 @@ function writeSelected(accountId: string | null): void {
   }
 }
 
-export function tradingErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    try {
-      const parsed = JSON.parse(error.detail) as { message?: unknown };
-      if (typeof parsed.message === "string") return parsed.message;
-    } catch {
-      // detail is plain text
-    }
-    return error.detail;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isActive(summary: AccountSummary | null): boolean {
-  return summary !== null
-    && summary.account.kind === "practice"
-    && (summary.positions.length > 0 || summary.workingOrders.length > 0);
-}
-
 /**
- * One copy of the selected account's data for the whole window: the rail
- * panel and every chart cell's overlay read it, and polling runs once while
- * any of them is retained.
+ * Account catalog and panel selection. Data belongs to the per-account pool,
+ * so pinned charts do not change panel selection or duplicate its polling.
  */
 class TradingAccountsStore {
   private allAccounts: TradingAccount[] = [];
@@ -86,8 +67,9 @@ class TradingAccountsStore {
   private accountsFailed = false;
   private accountsRetry: ReturnType<typeof setTimeout> | null = null;
   private dataAccountId: string | null = null;
-  private controller: AbortController | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private data: TradingAccountData | null = null;
+  private releaseData: (() => void) | null = null;
+  private unsubscribeData: (() => void) | null = null;
 
   getSnapshot = (): TradingAccountsState => this.state;
 
@@ -149,36 +131,16 @@ class TradingAccountsStore {
   }
 
   async refresh(): Promise<void> {
-    const accountId = this.dataAccountId;
-    if (accountId === null) return;
-    this.patch({ loading: true });
-    try {
-      await Promise.all([this.loadAccountData(accountId), this.refreshJournal()]);
-      if (this.dataAccountId === accountId) this.patch({ error: null });
-    } catch (cause) {
-      // An account switch or the last consumer leaving aborts requests; not an error.
-      const aborted = cause instanceof DOMException && cause.name === "AbortError";
-      if (!aborted && this.dataAccountId === accountId) this.patch({ error: tradingErrorMessage(cause) });
-    } finally {
-      if (this.dataAccountId === accountId) {
-        this.patch({ loading: false });
-        this.schedulePoll();
-      }
-    }
+    await this.data?.refreshAfterPending();
   }
 
   async refreshJournal(): Promise<void> {
-    const accountId = this.dataAccountId;
-    if (accountId === null) return;
-    try {
-      const response = await tradingApi.journal(accountId);
-      if (this.dataAccountId === accountId) this.patch({ entries: response.entries });
-    } catch (cause) {
-      this.patch({ error: tradingErrorMessage(cause) });
-    }
+    // The pool shares this refresh with every chart using the account.
+    await this.data?.refreshAfterPending();
   }
 
   clearError(): void {
+    this.data?.clearError();
     this.patch({ error: null });
   }
 
@@ -201,42 +163,21 @@ class TradingAccountsStore {
     const nextId = selected?.id ?? null;
     const changed = nextId !== this.dataAccountId;
     this.patch({ accounts, selected });
-    if (changed) {
-      this.controller?.abort();
-      this.controller = null;
-      this.dataAccountId = nextId;
-      this.patch({ summary: null, trades: [], entries: [], loading: false });
-    } else if (!firstConsumer) {
-      return;
-    }
+    if (!changed && !firstConsumer) return;
     this.stopPolling();
-    if (nextId !== null && this.consumers > 0) void this.refresh();
-  }
-
-  private async loadAccountData(accountId: string): Promise<void> {
-    this.controller ??= new AbortController();
-    const signal = this.controller.signal;
-    const [summary, trades] = await Promise.all([
-      tradingApi.summary(accountId, signal),
-      tradingApi.trades(accountId, signal),
-    ]);
-    if (this.dataAccountId !== accountId) return;
-    this.patch({ summary, trades: trades.trades });
-  }
-
-  private schedulePoll(): void {
-    if (this.timer !== null) clearTimeout(this.timer);
-    this.timer = null;
-    const accountId = this.dataAccountId;
-    if (accountId === null || this.consumers === 0) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      void this.loadAccountData(accountId)
-        .catch(() => undefined)
-        .finally(() => {
-          if (this.dataAccountId === accountId) this.schedulePoll();
-        });
-    }, isActive(this.state.summary) ? ACTIVE_POLL_MS : IDLE_POLL_MS);
+    this.dataAccountId = nextId;
+    this.patch({ summary: null, trades: [], entries: [], loading: false, error: null });
+    if (nextId === null || this.consumers === 0) return;
+    const data = tradingAccountDataPool.account(nextId);
+    this.data = data;
+    const syncData = () => {
+      if (this.data !== data || this.dataAccountId !== nextId) return;
+      const { summary, trades, entries, loading, error } = data.getSnapshot();
+      this.patch({ summary, trades, entries, loading, error });
+    };
+    this.unsubscribeData = data.subscribe(syncData);
+    this.releaseData = data.retain();
+    syncData();
   }
 
   private scheduleAccountsRetry(): void {
@@ -248,15 +189,17 @@ class TradingAccountsStore {
   }
 
   private stopPolling(): void {
-    if (this.timer !== null) clearTimeout(this.timer);
-    this.timer = null;
-    if (this.consumers === 0) {
-      this.controller?.abort();
-      this.controller = null;
-      if (this.accountsRetry !== null) clearTimeout(this.accountsRetry);
+    this.unsubscribeData?.();
+    this.unsubscribeData = null;
+    this.releaseData?.();
+    this.releaseData = null;
+    this.data = null;
+    if (this.consumers === 0 && this.accountsRetry !== null) {
+      clearTimeout(this.accountsRetry);
       this.accountsRetry = null;
     }
   }
+
 }
 
 export const tradingAccountsStore = new TradingAccountsStore();

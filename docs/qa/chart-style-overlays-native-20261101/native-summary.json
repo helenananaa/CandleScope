@@ -1,0 +1,3949 @@
+{
+  "applicationSource": "bc1997639ddb3e0cec09e8319a9d381ecb5838c2",
+  "chain": {
+    "sourceCommit": "bc1997639ddb3e0cec09e8319a9d381ecb5838c2",
+    "passed": true,
+    "stages": [
+      {
+        "name": "basic",
+        "startedAt": "2026-11-01T08:32:32.235931+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "style",
+        "startedAt": "2026-11-01T08:35:18.160554+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "viewport",
+        "startedAt": "2026-11-01T08:37:34.581715+00:00",
+        "exitCode": 0
+      },
+      {
+        "name": "overlays",
+        "startedAt": "2026-11-01T08:38:30.101907+00:00",
+        "exitCode": 0
+      }
+    ]
+  },
+  "rawEvidenceDirectory": "/Users/ryanliang/.codex/worktrees/chart-account-overlays-20261101/CandleScope/output/issue181-account-overlays-native-20261101",
+  "package": {
+    "sourceCommit": "bc1997639ddb3e0cec09e8319a9d381ecb5838c2",
+    "zipSha256": "f8d5d5beba6f75c16bc724fbdaeec3a3d9ea7e28c089e132babb69cf5b22c9f8",
+    "asarSha256": "b0d328c3afa8d89a9334d258c96e071b4753a6f0875e4889bf277213bdf71354",
+    "mismatches": []
+  },
+  "sourceFiles": 3114,
+  "distFiles": 162,
+  "checks": {
+    "basic": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "packaged-launch",
+          "at": "2026-11-01T08:34:10.696Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "created-paused",
+          "at": "2026-11-01T08:34:20.322Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "buy-filled",
+          "at": "2026-11-01T08:34:22.163Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "closed-cycle",
+          "at": "2026-11-01T08:34:24.164Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "saved-hub",
+          "at": "2026-11-01T08:34:25.253Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:34:25.359Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:34:40.639Z",
+          "evidence": {
+            "elapsedMs": 15280
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:34:40.743Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart",
+          "at": "2026-11-01T08:34:57.528Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "restored-paused",
+          "at": "2026-11-01T08:34:59.906Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "continued-after-restart",
+          "at": "2026-11-01T08:35:02.625Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:35:02.707Z",
+          "evidence": {
+            "assertionsPassed": true,
+            "details": "Hashed raw receipt"
+          }
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:35:17.905Z",
+          "evidence": {
+            "elapsedMs": 15198
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:35:18.007Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    },
+    "style": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "live-canvas-before-assertion",
+          "at": "2026-11-01T08:35:57.829Z",
+          "evidence": {
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#0f172a",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 502,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#0a0e17"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "dark",
+                "inheritApplicationTheme": true,
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 502,
+                "css": {
+                  "--text-primary": "#e2e8f0",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#0a0e17"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "live-independent",
+          "at": "2026-11-01T08:35:58.210Z",
+          "evidence": {
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#0f172a",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 502,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#0a0e17"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "dark",
+                "inheritApplicationTheme": true,
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 502,
+                "css": {
+                  "--text-primary": "#e2e8f0",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#0a0e17"
+                }
+              }
+            ],
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "live-linked",
+          "at": "2026-11-01T08:36:01.002Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": true,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 705,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 0,
+                    "to": 506
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 705,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#223344"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:36:03.103Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:36:18.454Z",
+          "evidence": {
+            "elapsedMs": 15351
+          }
+        },
+        {
+          "name": "live-exit",
+          "at": "2026-11-01T08:36:18.669Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "live-restarted",
+          "at": "2026-11-01T08:36:37.128Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": -7,
+                    "to": 499
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 500,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": -7,
+                    "to": 499
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 500,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "formal-canvas-before-assertion",
+          "at": "2026-11-01T08:36:39.852Z",
+          "evidence": {
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 319.375,
+                    "to": 410.625
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#0f172a",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#0a0e17"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 346.375,
+                    "to": 385.625
+                  }
+                },
+                "theme": "dark",
+                "inheritApplicationTheme": true,
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#e2e8f0",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#0a0e17"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "formal-independent",
+          "at": "2026-11-01T08:36:40.138Z",
+          "evidence": {
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 319.375,
+                    "to": 410.625
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#0f172a",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#0a0e17"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 346.375,
+                    "to": 385.625
+                  }
+                },
+                "theme": "dark",
+                "inheritApplicationTheme": true,
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#e2e8f0",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#0a0e17"
+                }
+              }
+            ],
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "formal-linked",
+          "at": "2026-11-01T08:36:41.208Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": true,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 319.375,
+                    "to": 410.625
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 346.375,
+                    "to": 385.625
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#223344"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "formal-financial-invariance",
+          "at": "2026-11-01T08:36:42.329Z",
+          "evidence": {
+            "clock": {
+              "contract": "replay.playback.v1",
+              "mode": "ORDERED",
+              "state": "PAUSED",
+              "basis": "BASE_BAR",
+              "rate": 1,
+              "speed": 1,
+              "display_interval": null,
+              "viewer_revision": null,
+              "profile_revision": 0,
+              "reason": null,
+              "generation": 0,
+              "tick": 0,
+              "supported_bases": [
+                "DISPLAY_BAR",
+                "BASE_BAR",
+                "SOURCE_EVENT",
+                "VIRTUAL_TIME"
+              ],
+              "playback_bases": [
+                "DISPLAY_BAR",
+                "BASE_BAR",
+                "SOURCE_EVENT"
+              ],
+              "max_count": 100000,
+              "virtual_time_quantum_ms": 60000
+            },
+            "portfolio": {
+              "schema_version": "replay.training.portfolio.v2",
+              "account_model": "TOUCH_OR_TAPE_V2",
+              "execution_model": "TOUCH_OR_TAPE_V2",
+              "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+              "settlement_account_shared": true,
+              "position_mode": "ONE_WAY",
+              "margin_mode": "CROSS",
+              "funding_mode": "OFF",
+              "status": "ACTIVE",
+              "initial_equity": "10000",
+              "cash_balance": "9999.759274",
+              "equity": "9999.759274",
+              "available_equity": "9999.759274",
+              "reserved_margin": "0",
+              "margin_used": "0",
+              "maintenance_margin": "0",
+              "realized_pnl": "0.059879",
+              "unrealized_pnl": "0",
+              "fees_paid": "0.300605",
+              "funding_cashflow": "0",
+              "liquidation_fees_paid": "0",
+              "risk_ratio": null,
+              "positions": [],
+              "orders": [],
+              "fills": [],
+              "history": {
+                "orders_total": 2,
+                "active_orders": 0,
+                "historical_orders": 2,
+                "fills_total": 2,
+                "ledger_entries_total": 4,
+                "page_limit_max": 200
+              },
+              "active_fee_policy": {
+                "revision": 1,
+                "effective_virtual_time_ms": 1700049600000,
+                "maker_fee_bps": "2",
+                "taker_fee_bps": "5",
+                "liquidation_fee_bps": null,
+                "policy_version": null,
+                "account_tier": null,
+                "source_kind": null,
+                "source_id": null,
+                "source_event_sequence": null,
+                "extension_hash": null,
+                "policy_hash": "sha256:37f5deb570ed1f4f8420880fe9a9733100768301eb4af3315468dc7affa9d727",
+                "fidelity": "CONFIGURED_POLICY_EXACT"
+              },
+              "instrument_rules": [
+                {
+                  "track_id": "track-1",
+                  "revision": 1,
+                  "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+                  "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                  "rule": {
+                    "contract_size": "1",
+                    "effective_virtual_time_ms": 1700049600000,
+                    "liquidation_fee_bps": "50",
+                    "maintenance_tiers": [
+                      {
+                        "maintenance_deduction": "0",
+                        "maintenance_rate": "0.005",
+                        "notional_cap": "30000"
+                      }
+                    ],
+                    "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                    "max_leverage": "3",
+                    "max_notional": "30000",
+                    "max_quantity": "1000000000",
+                    "min_notional": "0.01",
+                    "min_quantity": "0.00000001",
+                    "price_tick": "0.00000001",
+                    "quantity_step": "0.00000001",
+                    "quote_step": "0.00000001",
+                    "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                    "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                    "source_kind": "BAR",
+                    "track_id": "track-1"
+                  }
+                }
+              ],
+              "isolated_allocations": {},
+              "next_funding_time_ms": null,
+              "liquidations": [],
+              "liquidation_recoveries": [],
+              "hedge_state": {
+                "schema_version": "replay.hedge-relational-state.v1",
+                "position_legs": [
+                  {
+                    "run_id": "prepared-0f37f49336a94f08855fc3b6d8b65f39",
+                    "track_id": "track-1",
+                    "position_side": "LONG",
+                    "signed_quantity": "0.01",
+                    "absolute_quantity": "0.01",
+                    "entry_price": "30057.50545",
+                    "mark_price": "30066.5",
+                    "notional": "300.665",
+                    "realized_pnl": "0",
+                    "unrealized_pnl": "0.0899455",
+                    "initial_margin": "100.22166667",
+                    "maintenance_margin": "1.503325",
+                    "leverage": "3",
+                    "margin_mode": "CROSS",
+                    "isolated_wallet": "0",
+                    "liquidation_price": "0",
+                    "bankruptcy_price": "0",
+                    "accumulated_funding": "0",
+                    "trading_fees": "0",
+                    "liquidation_fees": "0",
+                    "risk_tier": 1,
+                    "rule_revision": 1,
+                    "protection_json": "{\"orders\":[]}",
+                    "component_revision": 6,
+                    "component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934",
+                    "created_at_ms": 1793522061294,
+                    "updated_at_ms": 1793522063010
+                  }
+                ],
+                "leg_accounting": [
+                  {
+                    "schema_version": "replay.hedge-leg-accounting.v1",
+                    "track_id": "track-1",
+                    "position_side": "LONG",
+                    "accumulated_funding": "0",
+                    "trading_fees": "0",
+                    "liquidation_fees": "0",
+                    "funding_settlement_count": 0,
+                    "fee_entry_count": 0,
+                    "mutation_entry_count": 0,
+                    "ledger_entry_count": 0,
+                    "last_ledger_sequence": null,
+                    "last_ledger_hash": null,
+                    "position_component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934"
+                  }
+                ],
+                "margin_buckets": [
+                  {
+                    "run_id": "prepared-0f37f49336a94f08855fc3b6d8b65f39",
+                    "bucket_id": "cross:USDT",
+                    "bucket_kind": "CROSS",
+                    "track_id": null,
+                    "position_side": null,
+                    "asset": "USDT",
+                    "wallet_balance": "9999.84971247",
+                    "initial_margin": "100.22166667",
+                    "maintenance_margin": "1.503325",
+                    "reserved_margin": "0",
+                    "available_balance": "9899.7179913",
+                    "component_revision": 6,
+                    "component_hash": "sha256:018690a39d3777e2dda9620c59f20c5658aea3892e55b0a9fe4a80ce9f5c7da5",
+                    "updated_at_ms": 1793522063010
+                  },
+                  {
+                    "run_id": "prepared-0f37f49336a94f08855fc3b6d8b65f39",
+                    "bucket_id": "position:track-1:LONG",
+                    "bucket_kind": "POSITION",
+                    "track_id": "track-1",
+                    "position_side": "LONG",
+                    "asset": "USDT",
+                    "wallet_balance": "0",
+                    "initial_margin": "100.22166667",
+                    "maintenance_margin": "1.503325",
+                    "reserved_margin": "0",
+                    "available_balance": "0",
+                    "component_revision": 6,
+                    "component_hash": "sha256:1ef894b050fe77e443f8dc229fcf4f82f1c7edb1895cfc455880a53a5bc5d98c",
+                    "updated_at_ms": 1793522063010
+                  }
+                ],
+                "risk_snapshots": [],
+                "liquidation_leg_price_proofs": [],
+                "liquidation_book_executions": [],
+                "liquidation_book_snapshots": [],
+                "insurance_funds": [],
+                "insurance_postings": [],
+                "adl_snapshots": [],
+                "adl_candidates": [],
+                "adl_events": [],
+                "adl_selections": [],
+                "adl_counterparty_ledger": [],
+                "liquidation_case_hashes": [],
+                "state_hash": "sha256:3ec37948f24eb09981cb7536f7e681081e59910e003c98de6f6de7fd66683c67"
+              },
+              "hedge_inputs": null,
+              "account_history": {
+                "mode": "APPROX_PROXY",
+                "status": "ACTIVE",
+                "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+                "archive_proof_hash": null,
+                "bindings": [],
+                "auditor": {
+                  "status": "NOT_RUN",
+                  "proof_hash": null,
+                  "differences": []
+                }
+              },
+              "liquidation_channels": {
+                "simulated_account": {
+                  "label": "模拟账户强平",
+                  "source": "MODELLED_ACCOUNT",
+                  "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+                },
+                "historical_market": {
+                  "label": "历史市场爆仓",
+                  "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+                  "fidelity": "UNSUPPORTED_NO_HISTORY"
+                }
+              },
+              "ledger": {
+                "chain_version": "replay.training.contract-ledger.v1",
+                "entry_count": 4,
+                "tail_hash": "sha256:c1ac26528f27f7177d89d40e870c5f6145802fa2c03fb2f8a7861e1bd1c612ef",
+                "cash_total": "9999.759274",
+                "reconciliation_delta": "0",
+                "entries": []
+              },
+              "fidelity": {
+                "hedge_public_history_ref": null,
+                "simulation_manifest_ref": null,
+                "simulation_contract_hash": null,
+                "simulation_model_version": null,
+                "account": null,
+                "insurance_adl": null,
+                "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+                "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+                "maintenance_tier_extrapolation": {
+                  "applied": false,
+                  "position_count": 0,
+                  "liquidation_projection_count": 0,
+                  "reason": null,
+                  "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+                },
+                "fees": "CONFIGURED_POLICY_EXACT",
+                "funding": "OFF",
+                "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+                "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+                "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+              }
+            }
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:36:43.039Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:36:58.332Z",
+          "evidence": {
+            "elapsedMs": 15293
+          }
+        },
+        {
+          "name": "formal-exit",
+          "at": "2026-11-01T08:36:58.411Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "formal-restarted",
+          "at": "2026-11-01T08:37:18.427Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 319.375,
+                    "to": 410.625
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 346.375,
+                    "to": 385.625
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:37:18.823Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:37:34.329Z",
+          "evidence": {
+            "elapsedMs": 15506
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:37:34.461Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    },
+    "viewport": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "live-visible-style",
+          "at": "2026-11-01T08:38:09.740Z",
+          "evidence": {
+            "before": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 439,
+                    "to": 499
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 500,
+                "first": 1793492280,
+                "last": 1793522220,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 1439,
+                    "to": 1499
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 1500,
+                "first": 1793432280,
+                "last": 1793522220,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ],
+            "after": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 439,
+                    "to": 499
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 500,
+                "first": 1793492280,
+                "last": 1793522220,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 1439,
+                    "to": 1499
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 1500,
+                "first": 1793432280,
+                "last": 1793522220,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "formal-visible-style",
+          "at": "2026-11-01T08:38:14.286Z",
+          "evidence": {
+            "before": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#223344"
+                    },
+                    "textColor": "#94a3b8",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 306,
+                    "to": 366
+                  }
+                },
+                "theme": "custom",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "css": {
+                  "--text-primary": "#94a3b8",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#223344"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 306,
+                    "to": 366
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ],
+            "after": [
+              {
+                "cellId": "cell-1",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 306,
+                    "to": 366
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#ef4444",
+                "downColor": "#22c55e",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#ef4444",
+                  "--text-down": "#22c55e",
+                  "--bg-primary": "#ffffff"
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "canvas": {
+                  "layout": {
+                    "background": {
+                      "type": "solid",
+                      "color": "#ffffff"
+                    },
+                    "textColor": "#1e293b",
+                    "fontSize": 12,
+                    "fontFamily": "'Inter', sans-serif",
+                    "panes": {
+                      "enableResize": true,
+                      "separatorColor": "rgba(148, 163, 184, 0.28)",
+                      "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                    },
+                    "attributionLogo": false,
+                    "colorSpace": "srgb",
+                    "colorParsers": []
+                  },
+                  "range": {
+                    "from": 306,
+                    "to": 366
+                  }
+                },
+                "theme": "light",
+                "inheritApplicationTheme": false,
+                "customBg": "#223344",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "css": {
+                  "--text-primary": "#1e293b",
+                  "--text-up": "#22c55e",
+                  "--text-down": "#ef4444",
+                  "--bg-primary": "#ffffff"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:38:14.651Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:38:29.860Z",
+          "evidence": {
+            "elapsedMs": 15209
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:38:30.074Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    },
+    "overlays": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "fixture-created",
+          "at": "2026-11-01T08:38:44.416Z",
+          "evidence": {
+            "fixture": {
+              "accounts": [
+                {
+                  "id": "acc_5b8242460d864f777506",
+                  "kind": "manual",
+                  "name": "Overlay A",
+                  "quoteCurrency": "USDT",
+                  "settings": {},
+                  "createdAtMs": 1793522324331,
+                  "archived": false,
+                  "capabilities": {
+                    "placeOrders": false,
+                    "manualFills": true,
+                    "sync": false
+                  }
+                },
+                {
+                  "id": "acc_0409e79beb91bedf2358",
+                  "kind": "manual",
+                  "name": "Overlay B",
+                  "quoteCurrency": "USDT",
+                  "settings": {},
+                  "createdAtMs": 1793522324350,
+                  "archived": false,
+                  "capabilities": {
+                    "placeOrders": false,
+                    "manualFills": true,
+                    "sync": false
+                  }
+                }
+              ],
+              "createdAgainst": {
+                "time": 1793522220,
+                "open": 78209.33,
+                "high": 78209.34,
+                "low": 78172.81,
+                "close": 78185.39,
+                "volume": 6.88142,
+                "is_closed": true,
+                "quote_volume": 538031.9914545,
+                "trades": 1780,
+                "taker_buy_base": 3.67906,
+                "taker_buy_quote": 287636.0680923,
+                "order_flow": {
+                  "taker_sell_base": 3.20236,
+                  "volume_delta_base": 0.4767,
+                  "taker_buy_ratio_base": 0.53463675,
+                  "cvd_contribution_base": 0.4767
+                }
+              },
+              "scope": "Only isolated QA manual accounts; never exchange order execution"
+            },
+            "ledger": {
+              "acc_5b8242460d864f777506": {
+                "trades": [
+                  {
+                    "id": "fil_bee8d795c0f12e60931b",
+                    "accountId": "acc_5b8242460d864f777506",
+                    "legs": [
+                      {
+                        "fillId": "fil_bee8d795c0f12e60931b",
+                        "side": "buy",
+                        "role": "open",
+                        "qty": "1",
+                        "price": "78185.39",
+                        "fee": "0",
+                        "tsMs": 1793521860000,
+                        "liquidity": "manual",
+                        "orderId": null
+                      }
+                    ],
+                    "status": "open",
+                    "openQty": "1",
+                    "avgEntryPrice": "78185.39",
+                    "fees": "0",
+                    "realizedPnl": "0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "id": "je_7e68dba51ec8307d46c4",
+                    "accountId": "acc_5b8242460d864f777506",
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "kind": "quick",
+                    "tradeId": null,
+                    "createdAtMs": 1793522324345,
+                    "updatedAtMs": 1793522324345,
+                    "marketTimeMs": 1793521980000,
+                    "templateId": null,
+                    "templateVersion": null,
+                    "tags": [],
+                    "fields": {},
+                    "body": "Overlay A native note",
+                    "revisionCount": 1,
+                    "stage": "pre",
+                    "reviewNote": true,
+                    "fieldTiming": {},
+                    "plan": null,
+                    "snapshots": []
+                  }
+                ]
+              },
+              "acc_0409e79beb91bedf2358": {
+                "trades": [
+                  {
+                    "id": "fil_d0348d17bcf3c3cc917c",
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "legs": [
+                      {
+                        "fillId": "fil_d0348d17bcf3c3cc917c",
+                        "side": "buy",
+                        "role": "open",
+                        "qty": "2",
+                        "price": "78177.571461",
+                        "fee": "0",
+                        "tsMs": 1793521860000,
+                        "liquidity": "manual",
+                        "orderId": null
+                      }
+                    ],
+                    "status": "open",
+                    "openQty": "2",
+                    "avgEntryPrice": "78177.571461",
+                    "fees": "0",
+                    "realizedPnl": "0"
+                  }
+                ],
+                "entries": [
+                  {
+                    "id": "je_12059e3337d5d0b3375d",
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "kind": "quick",
+                    "tradeId": null,
+                    "createdAtMs": 1793522324359,
+                    "updatedAtMs": 1793522324359,
+                    "marketTimeMs": 1793521980000,
+                    "templateId": null,
+                    "templateVersion": null,
+                    "tags": [],
+                    "fields": {},
+                    "body": "Overlay B native note",
+                    "revisionCount": 1,
+                    "stage": "pre",
+                    "reviewNote": true,
+                    "fieldTiming": {},
+                    "plan": null,
+                    "snapshots": []
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "independent-overlays",
+          "at": "2026-11-01T08:38:46.820Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": null,
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#ef4444",
+                    "text": "买 2 @ 78177.571461",
+                    "size": 1.2
+                  },
+                  {
+                    "id": "trading-live:note:je_12059e3337d5d0b3375d",
+                    "time": 1793521980,
+                    "position": "aboveBar",
+                    "shape": "circle",
+                    "color": "#ef4444",
+                    "text": "复盘补记",
+                    "size": 0.8
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_d0348d17bcf3c3cc917c",
+                    "price": 78177.571461,
+                    "color": "#3b82f6",
+                    "title": "做多 2",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#22c55e",
+                    "text": "买 1 @ 78185.39",
+                    "size": 1.2
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_bee8d795c0f12e60931b",
+                    "price": 78185.39,
+                    "color": "#3b82f6",
+                    "title": "做多 1",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "independent-visibility",
+          "at": "2026-11-01T08:38:47.316Z",
+          "evidence": {
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:note:je_12059e3337d5d0b3375d",
+                    "time": 1793521980,
+                    "position": "aboveBar",
+                    "shape": "circle",
+                    "color": "#ef4444",
+                    "text": "复盘补记",
+                    "size": 0.8
+                  }
+                ],
+                "lines": []
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#22c55e",
+                    "text": "买 1 @ 78185.39",
+                    "size": 1.2
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_bee8d795c0f12e60931b",
+                    "price": 78185.39,
+                    "color": "#3b82f6",
+                    "title": "做多 1",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "linked-and-unlinked",
+          "at": "2026-11-01T08:38:51.206Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_5b8242460d864f777506",
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#ef4444",
+                    "text": "买 2 @ 78177.571461",
+                    "size": 1.2
+                  },
+                  {
+                    "id": "trading-live:note:je_12059e3337d5d0b3375d",
+                    "time": 1793521980,
+                    "position": "aboveBar",
+                    "shape": "circle",
+                    "color": "#ef4444",
+                    "text": "复盘补记",
+                    "size": 0.8
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_d0348d17bcf3c3cc917c",
+                    "price": 78177.571461,
+                    "color": "#3b82f6",
+                    "title": "做多 2",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 1500,
+                "last": {
+                  "time": 1793522220,
+                  "open": 78209.33,
+                  "high": 78209.34,
+                  "low": 78172.81,
+                  "close": 78185.39,
+                  "volume": 6.88142,
+                  "is_closed": true,
+                  "quote_volume": 538031.9914545,
+                  "trades": 1780,
+                  "taker_buy_base": 3.67906,
+                  "taker_buy_quote": 287636.0680923,
+                  "order_flow": {
+                    "taker_sell_base": 3.20236,
+                    "volume_delta_base": 0.4767,
+                    "taker_buy_ratio_base": 0.53463675,
+                    "cvd_contribution_base": 0.4767
+                  }
+                },
+                "visible": {
+                  "from": 1793518620,
+                  "to": 1793522220
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#22c55e",
+                    "text": "买 1 @ 78185.39",
+                    "size": 1.2
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_bee8d795c0f12e60931b",
+                    "price": 78185.39,
+                    "color": "#3b82f6",
+                    "title": "做多 1",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:38:51.877Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:39:07.152Z",
+          "evidence": {
+            "elapsedMs": 15275
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:39:07.216Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart-persistence",
+          "at": "2026-11-01T08:39:21.239Z",
+          "evidence": {
+            "workspace": {
+              "revision": null,
+              "layout": null,
+              "cells": {
+                "cell-1": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344",
+                    "upColor": "#ef4444",
+                    "downColor": "#22c55e"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-2": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "light",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_5b8242460d864f777506",
+                    "trades": true,
+                    "positions": true,
+                    "notes": false
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1m",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-3": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "4h",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                },
+                "cell-4": {
+                  "chartSettings": {
+                    "chartType": "candlestick",
+                    "renkoBoxSizeMode": "atr",
+                    "renkoAtrLength": 14,
+                    "renkoBoxSize": 1,
+                    "pointFigureBoxSizeMode": "atr",
+                    "pointFigureAtrLength": 14,
+                    "pointFigureBoxSize": 1,
+                    "pointFigureReversalAmount": 3,
+                    "kagiReversalMode": "atr",
+                    "kagiAtrLength": 14,
+                    "kagiReversalAmount": 1,
+                    "lineBreakNumberOfLines": 3,
+                    "theme": "custom",
+                    "customBg": "#223344"
+                  },
+                  "accountOverlay": {
+                    "accountId": "acc_0409e79beb91bedf2358",
+                    "trades": true,
+                    "positions": true,
+                    "notes": true
+                  },
+                  "session": {
+                    "exchange": "binance",
+                    "marketType": "spot",
+                    "symbol": "BTCUSDT",
+                    "interval": "1d",
+                    "providerId": "binance",
+                    "venue": "binance",
+                    "assetClass": "crypto",
+                    "seriesVariant": "native",
+                    "priceAdjustment": "raw",
+                    "sessionVariant": "continuous",
+                    "volumeSemantics": "base_asset"
+                  }
+                }
+              },
+              "linkGroups": {
+                "group-primary": {
+                  "id": "group-primary",
+                  "name": "主控组",
+                  "color": "#4f7cff",
+                  "parentId": null,
+                  "peerPolicy": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  },
+                  "receiveFromParent": {
+                    "market": true,
+                    "interval": false,
+                    "crosshair": true,
+                    "timeAnchor": false,
+                    "dateRange": true,
+                    "chartStyle": false,
+                    "accountSource": false,
+                    "tradingOverlays": false,
+                    "noteOverlays": false,
+                    "drawings": false,
+                    "indicators": {
+                      "definitions": true,
+                      "parameters": true,
+                      "visual": false,
+                      "paneLayout": false
+                    }
+                  }
+                }
+              }
+            },
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 500,
+                "last": {
+                  "time": 1793522280,
+                  "open": 78185.39,
+                  "high": 78190.91,
+                  "low": 78180.41,
+                  "close": 78180.42,
+                  "volume": 2.46741,
+                  "is_closed": true,
+                  "quote_volume": 192921.3867776,
+                  "trades": 516,
+                  "taker_buy_base": 1.10897,
+                  "taker_buy_quote": 86706.690473,
+                  "order_flow": {
+                    "taker_sell_base": 1.35844,
+                    "volume_delta_base": -0.24947,
+                    "taker_buy_ratio_base": 0.44944699,
+                    "cvd_contribution_base": -0.24947
+                  }
+                },
+                "visible": {
+                  "from": 1793518680,
+                  "to": 1793522280
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#ef4444",
+                    "text": "买 2 @ 78177.571461",
+                    "size": 1.2
+                  },
+                  {
+                    "id": "trading-live:note:je_12059e3337d5d0b3375d",
+                    "time": 1793521980,
+                    "position": "aboveBar",
+                    "shape": "circle",
+                    "color": "#ef4444",
+                    "text": "复盘补记",
+                    "size": 0.8
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_d0348d17bcf3c3cc917c",
+                    "price": 78177.571461,
+                    "color": "#3b82f6",
+                    "title": "做多 2",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 500,
+                "last": {
+                  "time": 1793522280,
+                  "open": 78185.39,
+                  "high": 78190.91,
+                  "low": 78180.41,
+                  "close": 78180.42,
+                  "volume": 2.46741,
+                  "is_closed": true,
+                  "quote_volume": 192921.3867776,
+                  "trades": 516,
+                  "taker_buy_base": 1.10897,
+                  "taker_buy_quote": 86706.690473,
+                  "order_flow": {
+                    "taker_sell_base": 1.35844,
+                    "volume_delta_base": -0.24947,
+                    "taker_buy_ratio_base": 0.44944699,
+                    "cvd_contribution_base": -0.24947
+                  }
+                },
+                "visible": {
+                  "from": 1793518680,
+                  "to": 1793522280
+                },
+                "markers": [
+                  {
+                    "id": "trading-live:fill:1793521860:buy",
+                    "time": 1793521860,
+                    "position": "belowBar",
+                    "shape": "arrowUp",
+                    "color": "#22c55e",
+                    "text": "买 1 @ 78185.39",
+                    "size": 1.2
+                  }
+                ],
+                "lines": [
+                  {
+                    "id": "trading:entry:fil_bee8d795c0f12e60931b",
+                    "price": 78185.39,
+                    "color": "#3b82f6",
+                    "title": "做多 1",
+                    "style": "solid",
+                    "width": 2
+                  }
+                ]
+              }
+            ],
+            "tradingWrites": []
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:39:21.343Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:39:36.626Z",
+          "evidence": {
+            "elapsedMs": 15283
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:39:36.740Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    }
+  },
+  "receiptSha256": {
+    "chain-status.json": "d4e303ae8035bbb3d7348180ffbf89f1bf413f1909720ac18aee17218c8e5726",
+    "source-package-manifest.json": "5809b8b10c0a3beb0c03de11168493b8f21c2c8b0d1c532239fafbfb4c2eec31",
+    "financial-oracle.json": "dae68a54afee793489d28fc2fffe30d29b263beb206a934bef9d4564d5ef0bce",
+    "signature-before.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature-after.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "acceptance-basic.json": "dffccac687f78f8481ca571cf4abc8c11503ffe45d3d6b4b4c78c3db715dc859",
+    "acceptance-style.json": "b2885ce06e31042dbb56991a1bbe6b3031719b1a750d9ee162a51a02836a6a86",
+    "acceptance-viewport.json": "884769da50e6305b5c0d734bc99fa7d115160bffcb5c6b5883007f1f8d2eae4a",
+    "acceptance-overlays.json": "086036981fff0f66cacf42283ebe3e72bf6b135efe7c3d06ab65f89376869e53",
+    "run-style.mjs": "717d8c7b2b834f683a3526d13c191c6389261497834f5a602d6a8e7187939eac",
+    "run-style-viewport.mjs": "c6c995c417747c33ec2909f2959c810be29a0ad4f8cf06272fe2880906e7e1e9",
+    "run-overlays.mjs": "76d95fb1a0ebfb1a3764925724bd75e7daa46e76b39c1134b415c6d648968f26",
+    "restored-account-overlays.png": "2f7d28d04b2bf4d81b7ab864c39b18c98ce3386aa811c9b3516e6e111483d791",
+    "final-account-overlays.png": "190daf8e602bc9775bf722c6bfd0c9e7cb2ce1a47fa9ee8a43b0f18298fad418"
+  },
+  "limits": [
+    "macOS arm64 official ZIP only; Windows/x64 installed acceptance remains separate.",
+    "Account overlay test uses two isolated QA manual accounts, not exchange execution or real-account reconciliation.",
+    "Account and journal overlays cover live charts; formal replay, independent note/tag sources and future-cursor filtering are outside this change.",
+    "Finite replay smoke with synthetic archived bars; not ALL_AVAILABLE performance or full 157-item release acceptance."
+  ]
+}
