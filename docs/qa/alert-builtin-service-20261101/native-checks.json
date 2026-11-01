@@ -1,0 +1,135 @@
+{
+  "schema": "candlescope.alert-numeric-native/1",
+  "at": "2026-11-01T09:31:24.442573+00:00",
+  "source": "24503897cc05a1483e18bbbef4f6cefdb018bb84",
+  "passed": true,
+  "steps": 16,
+  "platform": "macOS arm64",
+  "source_match": {
+    "files": 980,
+    "dist": 163,
+    "mismatches": []
+  },
+  "strict_signature_before_and_after": true,
+  "real_source": "Binance spot BTCUSDT 1m, no substituted upstream responses",
+  "checks": [
+    "Two compatible rules create exactly two numeric subscriptions",
+    "Three real-close events, all 3 aliases match frozen pre-migration oracle over exact 250 canonical confirmed rows",
+    "All 3 in-app dispatch receipts report toast_rendered",
+    "Closing BTC chart and opening ETH preserves independent BTC rule stream; paused A stops while B continues",
+    "Subscription count 2\u21921\u21920 with actual rule actions",
+    "Save and three owned normal full-process exits; restart preserves definition/cursor/history and acknowledgement without historical duplicate triggers"
+  ],
+  "exit_ms": [
+    16184,
+    15691,
+    15373
+  ],
+  "renderer_errors": [],
+  "sidecar_log": "No ASGI traceback or shutdown-deadline text; this is not a claim that all root logger warnings/errors were captured. Runtime status reported evaluationErrors=0.",
+  "assembly": "APFS cloned existing accepted runtime, current tracked backend and unchanged desktop/frontend; not a fresh full runtime build",
+  "prior_attempt": "Attempt1 failed subscription-count assertion, prompted lifecycle race fix; all retained evidence remains failed, not counted as accepted",
+  "limitations": [
+    "Fixed existing RSI14/MACD12,26,9 histogram/MA20 aliases only",
+    "No whole-app latency SLA; component public cost still exceeds old shared calculator",
+    "No arbitrary parameterized alert UI, Python/Pine expressions, external webhook or exactly-once channel claim",
+    "Windows and full157 release acceptance not covered"
+  ],
+  "artifacts": [
+    {
+      "path": "native/assembly.json.gz",
+      "raw_sha256": "e36af409b35aa5563b7887a799ee3a52dc41a460aefe1af4506f2e0d268752d5",
+      "raw_bytes": 775
+    },
+    {
+      "path": "native/source-package-manifest.json.gz",
+      "raw_sha256": "262890887be2f5bd94fc828f2f6a4413133c297c40e0cbbd308a4c4c818e15f1",
+      "raw_bytes": 135669
+    },
+    {
+      "path": "native/restored-alert-history.png",
+      "raw_sha256": "15bb658c1d36c05cb8763dda8939e30ede2ed1f6c17ce0fec694961c6c1f1a0b",
+      "raw_bytes": 645879
+    },
+    {
+      "path": "native/traffic.json.gz",
+      "raw_sha256": "f555a7e23fd1f7d0da4bab8b2c28b4267f09bc67959da50c9b20d07227a1472b",
+      "raw_bytes": 129908
+    },
+    {
+      "path": "native/latest-diagnostics.json.gz",
+      "raw_sha256": "dbc3590dea66e8f4cc7143d881b1bfa2721ba645b97983c83a316f7128f31cc3",
+      "raw_bytes": 26204
+    },
+    {
+      "path": "native/acceptance.json.gz",
+      "raw_sha256": "d6c6317b75656fc11ae21337abeed5ec17566b22979367baef4fb9e6318a171a",
+      "raw_bytes": 987779
+    },
+    {
+      "path": "native/background-alert-history.png",
+      "raw_sha256": "51a00f2e036940a9060d522f80393b2de2b6a8facde1b2de92615f0639344e60",
+      "raw_bytes": 772027
+    },
+    {
+      "path": "native/real-close-alert-history.png",
+      "raw_sha256": "9fc237ef8f2802955d81ac9e1595c34f97ebc3a0c5ed1758a513fccce5aa526b",
+      "raw_bytes": 559940
+    },
+    {
+      "path": "native/backend-sidecar.log.gz",
+      "raw_sha256": "a65ad6047eff99b169298df43bcdabe69f230fd0066413f9635e8e0fa921040f",
+      "raw_bytes": 65960
+    },
+    {
+      "path": "native/attempt1-acceptance.json.gz",
+      "raw_sha256": "8086fd4dac3b5beb05ea0086dd1d0540cfe8b1081c0516c249fe9261723cf85a",
+      "raw_bytes": 128878
+    },
+    {
+      "path": "native/attempt1-traffic.json.gz",
+      "raw_sha256": "65392013f1d15e10c59fbbcb6287dfdc1594ba11a7f485450dde3eceb7fbb3c8",
+      "raw_bytes": 107405
+    },
+    {
+      "path": "native/attempt1-assembly.json.gz",
+      "raw_sha256": "809ac3957889fc86859aa9e382607ace670c3d18e2c053ca50f72ecb3ad4ac21",
+      "raw_bytes": 500
+    },
+    {
+      "path": "native/attempt1-failure.png",
+      "raw_sha256": "ef5f2be87cba221119a8dfca06aa0d062de7e9f124077be39d08982bbdcff9bc",
+      "raw_bytes": 572160
+    },
+    {
+      "path": "native/attempt1-latest-diagnostics.json.gz",
+      "raw_sha256": "139a24a5080d341e50d66d18438414cf7f8768d1b560892e67022a476322125b",
+      "raw_bytes": 51363
+    },
+    {
+      "path": "native/source-match-lifecycle.log.gz",
+      "raw_sha256": "acbded68e04e3763502a323b71f6d93589cfeb4628c9ee74f96bde1e528e74ab",
+      "raw_bytes": 110
+    },
+    {
+      "path": "native/source-match-final.log.gz",
+      "raw_sha256": "acbded68e04e3763502a323b71f6d93589cfeb4628c9ee74f96bde1e528e74ab",
+      "raw_bytes": 110
+    },
+    {
+      "path": "native/native-post-signature.log.gz",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_bytes": 0
+    },
+    {
+      "path": "native/native-run.log.gz",
+      "raw_sha256": "896c11dcdd62e8eebcab1faf0a641a82d03acf401c5a7001744dacba7586f72a",
+      "raw_bytes": 394
+    },
+    {
+      "path": "native/native-run2.log.gz",
+      "raw_sha256": "1ea63e7fda68e7ce49b013af8410102e9228f7591e79ef602dd23d95556d03bc",
+      "raw_bytes": 16
+    }
+  ]
+}
