@@ -85,3 +85,30 @@ test("persistence failure, indicator failure and disposal cannot report ready", 
   const disposed = fixture(); disposed.controller.dispose();
   assert.equal((await disposed.controller.execute(disposed.request, () => {})).code, "WINDOW_UNAVAILABLE");
 });
+
+
+test("restored default series metadata does not supersede an identical no-op configuration", async () => {
+  const f = fixture();
+  f.request.params.charts[0]!.indicators = [];
+  const cell = f.state.view.document.cells[f.state.view.activeCellId]!;
+  cell.session = { ...f.request.params.charts[0]!.session, providerId: "binance", venue: "binance",
+    assetClass: "crypto", seriesVariant: "native", priceAdjustment: "raw",
+    sessionVariant: "continuous", volumeSemantics: "base_asset" };
+  cell.indicators = [];
+  f.observe({ session: f.request.params.charts[0]!.session });
+  assert.equal((await f.controller.execute(f.request, () => {})).state, "ready");
+});
+
+test("real session and series changes still supersede the pending target", async () => {
+  for (const patch of [{ symbol: "ETHUSDT" }, { interval: "15m" }, { providerId: "alternate" },
+    { venue: "alternate" }, { assetClass: "equity" }, { seriesVariant: "adjusted" },
+    { priceAdjustment: "split" }, { sessionVariant: "regular" }, { volumeSemantics: "quote_asset" }]) {
+    const f = fixture();
+    const result = await f.controller.execute(f.request, () => {
+      const cell = f.state.view.document.cells[f.state.view.activeCellId]!;
+      cell.session = { ...cell.session, ...patch };
+      f.observe();
+    });
+    assert.equal(result.code, "TARGET_CHANGED", JSON.stringify(patch));
+  }
+});

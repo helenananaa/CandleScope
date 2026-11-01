@@ -1,3 +1,4 @@
+import { buildChartSessionKey } from "../chart-session/chartSessionTransition.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
 import { indicatorSignature, parseControlConfiguration, type ControlCellObservation, type ControlRequest, type ControlResult } from "./controlModel.js";
 
@@ -54,7 +55,7 @@ export class AppControlController {
         appliedRevision ??= receipt.revision;
         if (!applied) {
           applied = true;
-          targets = receipt.cellIds.map((cellId, index) => ({ cellId, session: JSON.stringify(command.charts[index]!.session),
+          targets = receipt.cellIds.map((cellId, index) => ({ cellId, session: buildChartSessionKey(command.charts[index]!.session),
             indicators: indicatorSignature(command.charts[index]!.indicators) }));
           progress({ state: "applied", revision: appliedRevision, cellIds: receipt.cellIds });
         }
@@ -62,7 +63,7 @@ export class AppControlController {
       if (applied) {
         if (view.activeWorkspaceId !== command.workspaceId || (command.layout && view.layout !== command.layout)
           || targets.some((target) => !view.layoutCellIds.includes(target.cellId)
-            || JSON.stringify(view.document.cells[target.cellId]?.session) !== target.session
+            || !view.document.cells[target.cellId] || buildChartSessionKey(view.document.cells[target.cellId]!.session) !== target.session
             || indicatorSignature(view.document.cells[target.cellId]?.indicators ?? []) !== target.indicators)) {
           return { state: "applied", code: "TARGET_CHANGED", readiness: "superseded", revision: appliedRevision };
         }
@@ -70,7 +71,7 @@ export class AppControlController {
         const allReady = targets.every(({ cellId }) => {
           const cell = view.document.cells[cellId];
           const runtime = this.cells.get(cellId);
-          return cell && runtime && Object.entries(runtime.session).every(([key, value]) => cell.session[key as keyof typeof runtime.session] === value)
+          return cell && runtime && buildChartSessionKey(runtime.session) === buildChartSessionKey(cell.session)
             && runtime.indicatorSignature === indicatorSignature(cell.indicators) && runtime.marketReady && runtime.indicatorsReady && !runtime.error;
         });
         if (status.saveState === "saved" && allReady) return { state: "ready", revision: appliedRevision, cellIds: targets.map(({ cellId }) => cellId), snapshot: this.inspect() };
