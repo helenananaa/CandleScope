@@ -95,12 +95,16 @@ class _SchedulingInterest:
     reason: str
     requester: str
     metadata: dict[str, Any]
+    api_latest: bool = False
 
     @classmethod
     def from_request(cls, request: RepairRequest) -> _SchedulingInterest:
         return cls(int(request.priority or 100), request.reason, request.requester,
                    {key: request.metadata[key] for key in _INTEREST_METADATA_KEYS
-                    if key in request.metadata})
+                    if key in request.metadata},
+                   bool(request.metadata.get("_api_latest_interest")) or (
+                       "latest_refresh" in request.reason.split("+")
+                       and request.requester == "klines_latest"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +317,7 @@ class BackfillScheduler:
                 state.demand_leases.update(incoming_leases)
                 if not incoming_leases:
                     self._remember_persistent_interest(state, request)
+                state.request.metadata["_api_latest_interest"] = self._api_latest_interest(state)
                 self._replace_pending_chunks(state)
                 self._on_queued(state.request)
                 self._publish_progress(state, status="merged")
@@ -351,6 +356,7 @@ class BackfillScheduler:
         state.demand_leases.update(incoming_leases)
         if not incoming_leases:
             self._remember_persistent_interest(state, request)
+        state.request.metadata["_api_latest_interest"] = self._api_latest_interest(state)
         current_requires_trusted_finality = repair_requires_trusted_finality(
             state.request.metadata,
             reason=state.request.reason,
@@ -413,6 +419,7 @@ class BackfillScheduler:
             chunk.request.requester = state.request.requester
             if requires_trusted_finality:
                 chunk.request.metadata["requires_trusted_finality"] = True
+            chunk.request.metadata["_api_latest_interest"] = state.request.metadata["_api_latest_interest"]
             if promoted:
                 chunk.request.priority = incoming_priority
             if promoted and chunk_id not in self._tasks:
@@ -436,6 +443,13 @@ class BackfillScheduler:
             winner.priority, "+".join(reasons),
             previous.requester if previous.requester == incoming.requester else "mixed",
             winner.metadata,
+            previous.api_latest or incoming.api_latest,
+        )
+
+    @staticmethod
+    def _api_latest_interest(state: _RequestState) -> bool:
+        return bool(state.persistent_scheduling and state.persistent_scheduling.api_latest) or any(
+            lease.scheduling and lease.scheduling.api_latest for lease in state.demand_leases.values()
         )
 
     def _restore_remaining_interest(self, state: _RequestState) -> None:
@@ -455,6 +469,7 @@ class BackfillScheduler:
         for key in _INTEREST_METADATA_KEYS:
             state.request.metadata.pop(key, None)
         state.request.metadata.update(winner.metadata)
+        state.request.metadata["_api_latest_interest"] = self._api_latest_interest(state)
         pending = {key for key in state.chunk_ids if key in self._chunks and key not in self._tasks}
         self._ready = [entry for entry in self._ready if entry[3] not in pending]
         heapq.heapify(self._ready)
@@ -468,6 +483,7 @@ class BackfillScheduler:
             for key in _INTEREST_METADATA_KEYS:
                 chunk.request.metadata.pop(key, None)
             chunk.request.metadata.update(winner.metadata)
+            chunk.request.metadata["_api_latest_interest"] = state.request.metadata["_api_latest_interest"]
             if chunk_id in self._tasks:
                 self._active_foreground_chunks.discard(chunk_id)
                 self._active_background_chunks.discard(chunk_id)
@@ -1204,7 +1220,7 @@ class BackfillScheduler:
         # must not consume the single maintenance reserve.
         return (
             "latest_refresh" in reasons
-            and request.requester == "klines_latest"
+            and (request.requester == "klines_latest" or bool(request.metadata.get("_api_latest_interest")))
         )
 
     @classmethod
