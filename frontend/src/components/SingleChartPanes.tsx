@@ -2489,9 +2489,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
   }, [paneCrosshairStore, publishMainLegendCrosshair]);
 
-  const setLinkedVisibleTimeAnchor = useCallback((time: number): boolean => {
+  const positionVisibleTime = useCallback((time: number, center: boolean, savedViewport?: ChartSurfaceVisibleRange): boolean => {
     if (!Number.isFinite(time)) return false;
-    const currentRange = captureVisibleRange();
+    const painted = paintedSourceRef.current;
+    if (center && (!seriesStore || painted?.store !== seriesStore
+      || painted.version !== seriesStore.version || painted.datasetKey !== datasetKeyRef.current
+      || !seriesStore.hasTime(time))) return false;
+    const currentRange = savedViewport ?? captureVisibleRange();
     const logical = currentRange?.logical;
     if (!logical) return false;
     const span = logical.to - logical.from;
@@ -2501,8 +2505,8 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     isSyncingRef.current = true;
     try {
       if (!viewportControllerRef.current?.restoreProjectionRange({
-        from: targetIndex - span,
-        to: targetIndex,
+        from: targetIndex - (center ? span / 2 : span),
+        to: targetIndex + (center ? span / 2 : 0),
       }, {
         ...(currentRange?.barSpacing === undefined
           ? {}
@@ -2516,13 +2520,18 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
     markLinkedViewportApplied();
     hasRestoredRangeRef.current = true;
-    lastViewportRestoreSourceRef.current = "linked-time-anchor";
+    lastViewportRestoreSourceRef.current = center ? "date-seek" : "linked-time-anchor";
     const visibleRange = captureVisibleRange();
     if (visibleRange?.time) ensureLinkedHistoryFill(visibleRange.time);
     publishViewportRangeChange(visibleRange);
     scheduleVisibleRangeSave(visibleRange);
     return true;
-  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave, seriesStore]);
+
+  const setLinkedVisibleTimeAnchor = useCallback((time: number) => positionVisibleTime(time, false), [positionVisibleTime]);
+  const centerVisibleTime = useCallback((time: number, viewport?: ChartSurfaceVisibleRange) => (
+    positionVisibleTime(time, true, viewport)
+  ), [positionVisibleTime]);
 
   const setLinkedVisibleTimeRange = useCallback((
     range: ChartSurfaceLinkedTimeRange,
@@ -5285,6 +5294,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     getVisibleRange: captureVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,
@@ -5357,6 +5367,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     seriesReady,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,

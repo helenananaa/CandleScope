@@ -1,6 +1,19 @@
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
+  "chartTime.title": "跳转到日期",
+  "chartTime.shortcut": "跳转到日期（Alt+G）",
+  "chartTime.input": "日期和时间（UTC）",
+  "chartTime.hint": "保留当前周期和缩放。开启时间联动的图表会按各自周期定位同一目标。",
+  "chartTime.invalid": "请输入有效的 UTC 日期和时间，不能晚于现在。",
+  "chartTime.loading": "正在加载目标区间…可以提交新的日期。",
+  "chartTime.located": "已定位：{time} UTC。",
+  "chartTime.nearest": "该时刻没有 K 线，已定位最近可用 K 线：{time} UTC。",
+  "chartTime.empty": "目标附近未找到 K 线，请选择其他日期。",
+  "chartTime.unavailable": "未能定位该时刻。加载失败时保留原视图，请重试。",
+  "chartTime.linkFailed": "部分联动图表未能定位目标。",
+  "chartTime.close": "关闭",
+  "chartTime.go": "跳转",
   "research.book.help": "上传与当前图表市场、区间一致的聚合逐笔和盘口观测。宿主校验 OHLCV、连续性和可见深度后，将文件与快照一起冻结。盘口模式使用自身的容量规则。",
   "research.book.invalid": "盘口文件无效。请上传不超过 32 MiB 的 JSON，包含 symbol、exchange、market_type、provenance 和有序 events，以及聚合逐笔来源序号和盘口观测。",
   "research.book.loading": "正在读取固定行情数据…",

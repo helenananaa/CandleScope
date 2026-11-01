@@ -58,6 +58,8 @@ import {
 import { useMarketDataWorkspaceResources } from "./marketDataWorkspaceContext.js";
 import { buildSeriesWindowKey } from "./window/seriesWindowKey.js";
 import { resolveSharedInitialRows } from "./manager/initialMarketRows.js";
+import { planChartTimeSeek, type ChartTimeSeekResult } from "./chartTimeNavigation.js";
+import { seekChartTimeWindow } from "./seekChartTimeWindow.js";
 import {
   planRightWindowPage,
   rightWindowPageReachedLatest,
@@ -355,6 +357,7 @@ export function useMarketDataRuntime({
   const rightWindowRestoreInFlightRef = useRef<{
     requestId: number;
     sessionKey: string;
+    kind: "latest" | "date";
     promise: Promise<boolean>;
   } | null>(null);
   const [restoringLatestWindow, setRestoringLatestWindowState] = useState(false);
@@ -630,6 +633,7 @@ export function useMarketDataRuntime({
     enabled: backgroundPrefetchEnabled
       && !indicatorPreparationHeld
       && activeChartReady
+      && activeSeriesStore?.rightTruncated !== true
       && marketDataReady
       && !loading
       && !initialHistoryPending,
@@ -792,7 +796,7 @@ export function useMarketDataRuntime({
       return Promise.resolve(false);
     }
     const currentRequest = rightWindowRestoreInFlightRef.current;
-    if (currentRequest?.sessionKey === sessionKey) return currentRequest.promise;
+    if (currentRequest?.sessionKey === sessionKey && currentRequest.kind === "latest") return currentRequest.promise;
     rightWindowPageAbortRef.current?.abort();
     rightWindowPageAbortRef.current = null;
     rightWindowPageInFlightRef.current = null;
@@ -825,6 +829,7 @@ export function useMarketDataRuntime({
     const owner = {
       requestId,
       sessionKey,
+      kind: "latest" as const,
       promise: Promise.resolve(false),
     };
     rightWindowRestoreInFlightRef.current = owner;
@@ -911,6 +916,65 @@ export function useMarketDataRuntime({
     symbol,
     updateLastPrice,
   ]);
+
+  const seekToTime = useCallback((requestedTimeMs: number): Promise<ChartTimeSeekResult> => {
+    const plan = planChartTimeSeek(interval, requestedTimeMs, Date.now());
+    if (!plan) return Promise.resolve({ status: "invalid", requestedTimeMs });
+    const demand = requestDemandRef.current;
+    if (!marketDataReady || loading || activeSessionKeyRef.current !== sessionKey
+      || !demand?.ready || demand.sessionKey !== sessionKey) {
+      return Promise.resolve({ status: "unavailable", requestedTimeMs });
+    }
+    backgroundPrefetchPriority.yieldToForeground();
+    resetPagination();
+    rightWindowPageAbortRef.current?.abort();
+    rightWindowPageAbortRef.current = null;
+    rightWindowPageInFlightRef.current = null;
+    setLoadingMoreRight(false);
+    rightWindowRestoreAbortRef.current?.abort();
+    const controller = new AbortController();
+    rightWindowRestoreAbortRef.current = controller;
+    const series = activeSeries;
+    const epoch = seriesDataFeed.beginEpoch(series);
+    const owner = { requestId: ++rightWindowRestoreRequestIdRef.current, sessionKey,
+      kind: "date" as const, promise: Promise.resolve(false) };
+    rightWindowRestoreInFlightRef.current = owner;
+    setRestoringLatestWindow(true);
+    const ownsRequest = () => {
+      const current = requestDemandRef.current;
+      return rightWindowRestoreInFlightRef.current === owner && current?.ready === true
+        && current.sessionKey === sessionKey && current.scope === demand.scope
+        && current.generation === demand.generation && shouldCommitRightWindowRestore({
+          aborted: controller.signal.aborted, active: seriesDataFeed.shouldCommitActive(series),
+          currentEpoch: seriesDataFeed.currentEpoch(series), currentSessionKey: activeSessionKeyRef.current,
+          expectedEpoch: epoch, expectedSessionKey: sessionKey,
+        });
+    };
+    const promise = seekChartTimeWindow({
+      plan, series, feed: seriesDataFeed, signal: controller.signal, ownsRequest,
+      hasCachedRange: workspaceResources?.dataManager.read(series, { from: plan.start, to: plan.end }).complete === true,
+      commit: (result) => {
+        replaceChartData(symbol, interval, result.data ?? [], {
+          source: "date-seek", rightEdgeCurrent: rightWindowPageReachedLatest(result, plan),
+          ...(result.quality ? { quality: result.quality } : {}),
+        });
+        // The quote remains live while the chart displays a historical window.
+        setHasMoreLeft(true);
+        setDataSource(result.source || "date-seek");
+        setError(null);
+      },
+    }).finally(() => {
+      if (rightWindowRestoreInFlightRef.current === owner) {
+        rightWindowRestoreInFlightRef.current = null;
+        setRestoringLatestWindow(false);
+      }
+      if (rightWindowRestoreAbortRef.current === controller) rightWindowRestoreAbortRef.current = null;
+    });
+    owner.promise = promise.then((result) => result.status === "located");
+    return promise;
+  }, [activeSeries, backgroundPrefetchPriority, interval, loading, marketDataReady, replaceChartData,
+    resetPagination, seriesDataFeed, sessionKey, setHasMoreLeft, setLoadingMoreRight,
+    setRestoringLatestWindow, symbol, workspaceResources]);
 
   const getSeriesCacheRows = useCallback((series: MarketSeries) => getCache(series.symbol, series.interval, {
     marketType: series.marketType,
@@ -1264,6 +1328,7 @@ export function useMarketDataRuntime({
       loadMoreLeft: loadMoreLeftWithPriority,
       loadMoreRight,
       restoreLatestWindow,
+      seekToTime,
       onCrosshairMove: publishCrosshairData,
       onVisibleRangeChange: handleMarketVisibleRangeChange,
       consumeIndicatorRangeRequest,

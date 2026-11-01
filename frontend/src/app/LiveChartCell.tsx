@@ -1,3 +1,4 @@
+import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavigation.js";
 import { applicationSettingsPatch, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
 import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
@@ -121,6 +122,7 @@ import type { ChartStrategyTesterEntryState } from "../features/backtest/chart-t
 import type { ChartStrategyResultMarkerSource } from "../features/backtest/chart-tester/chartStrategyResultMarkerSource.js";
 import { Icon } from "../components/icons/Icon.js";
 
+const ChartTimeNavigationDialog = lazy(() => import("../features/market-data/ChartTimeNavigationDialog.js"));
 const ExportPanel = lazy(() => import("../features/export/ExportPanel.js"));
 const DrawingToolbar = lazy(() => {
   preloadDrawingEngineHost();
@@ -775,6 +777,9 @@ function LiveChartCell({
 
 
   const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
+  const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && quickReplay === null,
+    cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
+    marketData: sourceMarketData, surface: chartSurface.actions, links: linkCoordinator });
   const exitQuickReplay = useCallback(() => setQuickReplay(null), []);
   const lastClose = sourceMarketData.view.lastPrice?.close;
   const tradingBinding = useMemo<TradingRailBinding>(() => ({
@@ -1076,6 +1081,8 @@ function LiveChartCell({
           extensionControls={(
             <>
               {workspaceControls}
+              {timeNavigation.available && <button type="button" className="ui-control"
+                title={t("chartTime.shortcut")} onClick={() => timeNavigation.setOpen(true)}>{t("chartTime.title")}</button>}
               <PluginUiErrorBoundary>
                 <PluginPlatformToolbar runtime={plugins} />
               </PluginUiErrorBoundary>
@@ -1115,6 +1122,9 @@ function LiveChartCell({
       {active && portalHosts.featureSurfaces && createPortal(
         <>
           <LazyFeatureSurfaces surfaces={featureSurfaces} />
+          {timeNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog
+            key={chartSession.view.sessionKey} cellId={cell.id} onClose={() => timeNavigation.setOpen(false)}
+            onSubmit={timeNavigation.submit} /></Suspense>}
           <PluginUiErrorBoundary>
             <PluginLiveControl runtime={plugins} />
           </PluginUiErrorBoundary>

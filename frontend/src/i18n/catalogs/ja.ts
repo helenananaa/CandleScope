@@ -6,6 +6,19 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...workbenchEnglish,
   "research.book.help": "現在のチャートの市場と期間に一致する、順序付きの集約約定と板観測をアップロードしてください。ホストは OHLCV、連続性、利用可能な板の厚さを検証し、ファイルをスナップショットとともに固定します。板モードでは独自の約定容量規則を使用します。",
   "research.book.invalid": "板ファイルが無効です。symbol、exchange、market_type、provenance、順序付き events、集約約定の元データ番号と板観測を含む、32 MiB 以下の JSON を指定してください。",

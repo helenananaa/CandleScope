@@ -53,6 +53,40 @@ function hierarchicalDocument() {
   return document;
 }
 
+test("explicit date navigation loads each time-linked target once, with no upward propagation", async () => {
+  const document = hierarchicalDocument();
+  const coordinator = new ChartLinkCoordinator(document);
+  const calls: string[] = [];
+  for (const cellId of ["cell-1", "cell-2", "cell-3", "cell-4"]) {
+    coordinator.registerTimeNavigator(cellId, async (timeMs) => {
+      calls.push(cellId);
+      return { status: "located", requestedTimeMs: timeMs, actualTimeMs: timeMs, exact: true };
+    });
+  }
+  await coordinator.seekToTime("cell-1", 120_000);
+  assert.deepEqual(calls, ["cell-1", "cell-2", "cell-3", "cell-4"]);
+  calls.length = 0;
+  await coordinator.seekToTime("cell-3", 180_000);
+  assert.deepEqual(calls, ["cell-3", "cell-4"]);
+  calls.length = 0;
+  document.linkGroups["group-child"]!.peerPolicy.dateRange = false;
+  coordinator.updateDocument(document);
+  await coordinator.seekToTime("cell-3", 240_000);
+  assert.deepEqual(calls, ["cell-3"]);
+});
+
+test("date navigation isolates failed targets and unregisters disabled sources", async () => {
+  const coordinator = new ChartLinkCoordinator(hierarchicalDocument());
+  coordinator.registerTimeNavigator("cell-1", async (requestedTimeMs) => ({ status: "empty", requestedTimeMs }));
+  coordinator.registerTimeNavigator("cell-2", async () => { throw new Error("offline"); });
+  const unregister = coordinator.registerTimeNavigator("cell-3", async () => { throw new Error("must not call"); });
+  unregister();
+  const outcomes = await coordinator.seekToTime("cell-1", 120_000);
+  assert.deepEqual(outcomes.map(({ cellId, result }) => [cellId, result.status]), [
+    ["cell-1", "empty"], ["cell-2", "unavailable"],
+  ]);
+});
+
 test("transient events fan out to source peers and descendants but never upward", () => {
   const document = hierarchicalDocument();
   const coordinator = new ChartLinkCoordinator(document);

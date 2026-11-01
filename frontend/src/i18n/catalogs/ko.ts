@@ -5,6 +5,19 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...workbenchEnglish,
   "research.book.help": "현재 차트의 시장과 기간에 맞는 순서대로 정렬된 집계 체결 및 호가 관측을 업로드하세요. 호스트가 OHLCV, 연속성과 가용 잔량을 검사한 뒤 파일을 스냅샷과 함께 고정합니다. 호가 모드는 자체 체결 용량 규칙을 사용합니다.",
   "research.book.invalid": "호가 파일이 유효하지 않습니다. symbol, exchange, market_type, provenance, 정렬된 events와 집계 체결 출처 번호 및 호가 관측이 포함된 32 MiB 이하의 JSON을 업로드하세요.",
