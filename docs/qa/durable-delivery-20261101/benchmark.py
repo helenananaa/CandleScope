@@ -110,6 +110,7 @@ async def case(count, contention):
                     competing_transaction_ms=writer_times,
                     canonical_sha256=hashlib.sha256(json.dumps(records).encode()).hexdigest(),
                     delivery_order_sha256=hashlib.sha256(json.dumps(delivered).encode()).hexdigest(),
+                    delivery_diagnostics=delivery.snapshot(),
                     phases=phases, pending=journal.pending_count(),
                     wal_bytes=(Path(str(klines_repo.KLINES_DB_PATH) + '-wal').stat().st_size
                                if Path(str(klines_repo.KLINES_DB_PATH) + '-wal').exists() else 0))
@@ -125,6 +126,7 @@ async def main():
     results = [await case(n, contention) for n, contention in
                [(1, False), (64, False), (256, False), (256, True)]]
     result = dict(source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+        benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         cases=results, process_lifetime_peak_rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         limits='Controlled backlog, isolated real SQLite, one shared-host run. Publication includes fresh canonical read. Journal traces include trigger trace callbacks; competing lock-hold time is injected, not a disk-speed measurement. No native, power-loss or all-writer fairness qualification.')
     args.output.write_text(json.dumps(result, indent=2) + '\n')
