@@ -14,9 +14,9 @@
   },
   "fix": "retain scheduling identity per scoped and persistent interest; recompute surviving priority/reasons/owner on release, supersession and revocation; rekey pending work; internal latest maintenance permits existing reserve while API latest remains interactive",
   "validation": {
-    "tests": 163,
-    "passed": 163,
-    "seconds": 17.23,
+    "tests": 164,
+    "passed": 164,
+    "seconds": 24.18,
     "suites": [
       "backfill_interest_priority",
       "backfill_coordinator",
@@ -28,9 +28,11 @@
       "passed": 24,
       "seconds": 6.37,
       "checks": "persistent task completes all three original chunks after foreground departure; every release path, merge order and surviving-consumer combination"
-    }
+    },
+    "previousCombinedCount": 163
   },
   "nativeFixedCandidatePending": true,
   "CI": "pending",
-  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve"
+  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve",
+  "apiLatestIdentity": "A remaining API latest observer retains foreground identity after unrelated observers leave, including merged requester labels; independent regression reproduced failure before this correction."
 }

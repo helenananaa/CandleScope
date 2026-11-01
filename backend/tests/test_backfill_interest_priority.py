@@ -84,3 +84,51 @@ def test_persistent_history_releases_foreground_reserve_after_observer_leaves(re
             assert calls.count('1m') == 3
 
     asyncio.run(run())
+
+
+def test_remaining_api_latest_interest_keeps_its_foreground_identity():
+    async def run():
+        entered, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append(kwargs['intervals'][0])
+                if len(calls) == 1:
+                    entered.set()
+                    await finish.wait()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(), max_concurrency=1)
+        async def verified(request, **kwargs):
+            return {'verified_contiguous': True, 'remaining_missing_bars': 0}
+        coordinator._verify_request_range = verified
+        background = _request(0, 0, request_id='shared-latest-maintenance')
+        background.reason, background.priority = 'background_gap_audit', 90
+        parent = coordinator.request(background)
+        await entered.wait()
+        latest = _request(0, 0, request_id='api-latest')
+        latest.reason, latest.requester, latest.priority = 'latest_refresh', 'klines_latest', 20
+        latest.metadata['demand_owner_id'] = 'latest-view'
+        assert coordinator.request(latest) == parent
+        other = _request(0, 0, request_id='other-view')
+        other.reason, other.priority = 'visible_range_gap', 30
+        other.metadata['demand_owner_id'] = 'other-view'
+        assert coordinator.request(other) == parent
+        await coordinator.revoke_demand_owner('other-view', reason='view_closed')
+        cold = _request(0, 0, request_id='another-cold-period')
+        cold.interval, cold.reason = '5m', 'visible_range_gap'
+        cold_id = coordinator.request(cold)
+        try:
+            # Drain reserves tasks synchronously: a still-observed API latest
+            # is foreground and cannot be treated as maintenance by a sibling.
+            assert coordinator.snapshot()['running_chunks'] == 1
+            await coordinator.revoke_demand_owner('latest-view', reason='view_closed')
+            assert (await asyncio.wait_for(coordinator.wait_for_request(cold_id), 1)).status == 'completed'
+        finally:
+            finish.set()
+            await asyncio.wait_for(asyncio.gather(coordinator.wait_for_request(parent), coordinator.wait_for_request(cold_id)), 5)
+
+    asyncio.run(run())
