@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "8c5eb02bc027d42d8afdb60171193972520068b3",
+  "zipSha256": "623b8c839a7ecdb4c156f3cf74c0c585ba698b12b914f1f6abf1a929ad6061d8",
+  "asarSha256": "b4bb89b5e1ae424eb3df8bd01c0a67b8c39af1bfe67c4c420da8e07bd7f4279e",
+  "mismatches": [],
+  "architecture": "darwin-arm64",
+  "sourceTree": "1a619e7ccb078d61d89f18655fc67ccfcab4d09b",
+  "sourceFiles": 3079,
+  "distFiles": 163,
+  "fullManifestSha256": "a1a77ea391aaaf150e256c60b2472aee2d72a23fced0bd98a929fa5109b1f377",
+  "buildEnvironment": {
+    "VITE_DESKTOP_BUILD": "1",
+    "gitBuildLabel": "8c5eb02bc027"
+  },
+  "verification": "All 163 packaged dist files match a clean desktop-mode rebuild. Packaged backend and desktop source bytes match checkout. codesign --verify --deep --strict passed.",
+  "changedSourceFiles": {
+    "frontend/scripts/frontend-script-integration.mjs": "7823048865e8ec191b2ee4273ad157a75c7cc3584f5fee22bc9092ce6c15455f",
+    "frontend/scripts/indicator-flow-browser.html": "924142335c20e5f6cee6b4939060b9275b28ad01e7c71b5e5143d195bb15bb3a",
+    "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "485cf7c4690f7cc1f9f8b1ba441a4935d1527eff97e0220c904b8b5497d8a269",
+    "frontend/src/chart-adapter/__tests__/indicatorHydration.browser.tsx": "eb7514452660aaf652a5800ca1f97c0140658e8e52ddbf6286c86011ec32ff60",
+    "frontend/src/components/SingleChartPanes.tsx": "090ee3cb212a90e30e49752914355835cd28e0e9aa12d00fa4b05e5e891db6bf",
+    "frontend/src/features/indicators/__tests__/indicatorInputRanges.test.ts": "3fb199fc0439d19ef244de864b2d3f4fcc6d0a5c47564e86210ede3328ba58ea",
+    "frontend/src/features/indicators/indicatorDataManager.ts": "0a8377d4b535e48fe6cd8715178f1661307734f4a34b6688c74e2208ac74f073",
+    "frontend/src/features/indicators/indicatorInputRanges.ts": "af47eda7fa8af7f68eec5bdbff6bc44048695e481f1803af771a2bf7e685d8e4",
+    "frontend/src/features/indicators/useFrontendScriptWindow.ts": "cba1d53d54a9102386d4645234aba7c81699e92b71fc50baf943d21a49b7a652",
+    "frontend/src/features/indicators/useIndicatorRuntime.ts": "6344090090a571d8429b5a9632e7755aa3c6e107e2a692fa0127da69906d857f"
+  },
+  "originalFailedPackage": {
+    "sourceCommit": "0dcb049a055068dcdd6442897e47dab5e56247d0",
+    "zipSha256": "a58ebbbcb1be04f6e088fc6aa999f430d24f55baa072f1b3f36d5505e71035b1",
+    "asarSha256": "9710771062634292b0dfb851e39bb808e5b5e007ab9798ef2de6ded72aa8ab4e"
+  },
+  "comparedBundleSourceFiles": 959,
+  "postAcceptanceCodeSignatureVerified": true
+}
