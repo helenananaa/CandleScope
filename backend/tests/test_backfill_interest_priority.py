@@ -2,6 +2,7 @@
 import asyncio
 
 import pytest
+from app.exchanges.public_admission import current_demand, TrafficClass
 
 from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
 from tests.test_backfill_coordinator import _DataManager, _Storage, _RepairReport, _request
@@ -15,11 +16,13 @@ def test_persistent_history_releases_foreground_reserve_after_observer_leaves(re
     async def run():
         entered, finish = asyncio.Event(), asyncio.Event()
         calls = []
+        active_demands = []
 
         class Engine:
             async def run(self, **kwargs):
                 calls.append(kwargs['intervals'][0])
                 if len(calls) == 1:
+                    active_demands.append(current_demand())
                     entered.set()
                     await finish.wait()
                 return _RepairReport(status='completed')
@@ -47,6 +50,7 @@ def test_persistent_history_releases_foreground_reserve_after_observer_leaves(re
         background_id = coordinator.request(first)
         await entered.wait()
         assert coordinator.request(second) == background_id
+        assert active_demands[0].priority() == TrafficClass.INTERACTIVE
         if other_observer:
             sibling = _request(0, 120_000, request_id='sibling-chart')
             sibling.priority = 30
@@ -64,6 +68,8 @@ def test_persistent_history_releases_foreground_reserve_after_observer_leaves(re
             assert active['demand_count'] == 1 and not active['cancel_requested']
             assert active['priority'] == 30
             await coordinator.revoke_demand_owner('other-chart', reason='other_chart_unmounted')
+        if background_reason == 'background_gap_audit':
+            assert active_demands[0].priority() == TrafficClass.BACKGROUND
         cold = _request(0, 0, request_id='cold-5m')
         cold.interval = '5m'
         cold.reason = 'visible_range_gap'
@@ -130,5 +136,53 @@ def test_remaining_api_latest_interest_keeps_its_foreground_identity():
         finally:
             finish.set()
             await asyncio.wait_for(asyncio.gather(coordinator.wait_for_request(parent), coordinator.wait_for_request(cold_id)), 5)
+
+    asyncio.run(run())
+
+
+def test_narrow_foreground_interest_does_not_promote_unrelated_history_chunks():
+    async def run():
+        entered, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                calls.append((kwargs['intervals'][0], kwargs['range_start_ms']))
+                if len(calls) == 1:
+                    entered.set()
+                    await finish.wait()
+                return _RepairReport(status='completed')
+
+        dm = _DataManager()
+        coordinator = BackfillCoordinator(storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(), loop=asyncio.get_running_loop(),
+            max_concurrency=1, chunk_bars=1)
+        async def verified(request, **kwargs):
+            return {'verified_contiguous': True, 'remaining_missing_bars': 0}
+        coordinator._verify_request_range = verified
+        background = _request(0, 120_000, request_id='wide-persistent-history')
+        background.reason, background.priority = 'background_gap_audit', 90
+        parent = coordinator.request(background)
+        await entered.wait()
+        visible = _request(120_000, 120_000, request_id='narrow-visible-window')
+        visible.reason, visible.priority = 'visible_range_gap', 20
+        visible.metadata['demand_owner_id'] = 'still-visible-chart'
+        assert coordinator.request(visible) == parent
+        cold = _request(0, 0, request_id='cold-other-period')
+        cold.interval, cold.reason, cold.priority = '5m', 'visible_range_gap', 20
+        cold_id = coordinator.request(cold)
+        try:
+            # The running old chunk is outside the visible observer's range.
+            # It remains maintenance even though another chunk of this parent
+            # has current foreground demand.
+            assert coordinator.snapshot()['running_chunks'] == 2
+            assert (await asyncio.wait_for(coordinator.wait_for_request(cold_id), 1)).status == 'completed'
+            assert calls == [('1m', 0), ('5m', 0)]
+        finally:
+            finish.set()
+            original, _ = await asyncio.wait_for(asyncio.gather(
+                coordinator.wait_for_request(parent), coordinator.wait_for_request(cold_id)), 5)
+            assert original.status == 'completed'
+            assert sorted(start for interval, start in calls if interval == '1m') == [0, 60_000, 120_000]
 
     asyncio.run(run())
