@@ -16,6 +16,7 @@ from app.api.v1.stream_utils import normalize_exchange
 from app.data_engine.bar_aggregator.models import BarInput, BarInputSource, MergeMode
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.config import DataManagerConfig
+from app.data_engine.interval_resolution import IntervalPurpose
 from app.data_engine.storage import klines_repo
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -56,7 +57,11 @@ async def case(root, count, events):
     manager.set_storage(klines_repo.KlinesRepoAdapter())
     agg = manager.bar_aggregator
     agg.config.update_throttle_ms = 0  # explicit every-publication workload
-    interval = f'{count + 1}m'
+    # These targets do not divide by a coarser Binance native interval.
+    interval = f'{count + 3}m'
+    route = manager.interval_resolver.resolve(exchange='binance', market_type='spot',
+        interval=interval, purpose=IntervalPurpose.REALTIME)
+    assert route.base_interval == '1m', route
     agg.add_target('BTCUSDT', interval)
     real_clock = time.time
     time.time = lambda: count * 60 + 30
@@ -108,7 +113,8 @@ async def case(root, count, events):
         values = {name: getattr(final, name) for name in expected}
         assert all(abs(values[name] - value) < 1e-8 for name, value in expected.items()), (values, expected)
         snapshot = manager.history_prefix_runtime.snapshot() if manager.history_prefix_runtime else None
-        return dict(history_rows=count, live_events=events, warm_ms=warm_ms,
+        return dict(history_rows=count, target_interval=interval, source_interval=route.base_interval,
+                    live_events=events, warm_ms=warm_ms,
                     update_ms=dict(p50=percentile(timings, .5), p95=percentile(timings, .95), max=max(timings)),
                     correction_ms=correction_ms, cpu_ms=(time.process_time() - cpu) * 1000,
                     loop_lag_ms=dict(p95=percentile(lag, .95), max=max(lag)),
