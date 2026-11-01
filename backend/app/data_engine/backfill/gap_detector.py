@@ -310,7 +310,7 @@ class GapDetector:
         )
         if last_closed_ms is None:
             return []
-        reference_ms = min(reference_ms, last_closed_ms)
+        reference_ms = min(reference_ms, last_closed_ms, range_end_ms)
 
         # Query storage boundaries
         db_earliest = await self._storage.get_earliest_time(
@@ -350,12 +350,12 @@ class GapDetector:
             return await self._apply_filter_and_notify(gaps)
 
         # ── Case 2: Head gap — DB starts later than requested range ──
-        first_expected = calendar.first_expected_open(
-            range_start_ms,
-            min(reference_ms, db_earliest - 1),
-            interval,
-        )
-        head_end = calendar.previous_expected_open(db_earliest, interval)
+        # Storage may start years after a historical viewport. The request's
+        # end still bounds repair; the storage edge must not expand one page
+        # into the entire missing archive (and exceed memory admission).
+        head_limit = min(reference_ms, db_earliest - 1)
+        first_expected = calendar.first_expected_open(range_start_ms, head_limit, interval)
+        head_end = calendar.last_expected_open(range_start_ms, head_limit, interval)
         if (
             first_expected is not None
             and head_end is not None
