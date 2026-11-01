@@ -57,6 +57,10 @@ try{
  await q.record('qualified-multipage-prefix-and-live-values',{diagnostics:initial,values:await verify(),workspace:await q.inspect()});
  const before=(await indicators()).engine.instances.find(i=>i.refcount>0&&i.interval==='1m').last_committed;
  await q.until(async()=>{const d=await indicators();return d.engine.instances.some(i=>i.refcount>0&&i.interval==='1m'&&i.last_committed>before)?d:false;},120000);
+ // The native indicator commit and derived-prefix refresh are independent
+ // delivery consumers. Wait for both acknowledgements, without assuming an
+ // ordering between them or accepting an old complete-prefix diagnostic.
+ await q.until(async()=>{const d=await diag();return d.history_prefix.refreshes>0?d:false;},120000);
  const advanced=await prefix();assert.ok(advanced.history_prefix.refreshes>0);
  await q.record('new-native-close-with-prefix-refresh',{diagnostics:advanced,values:await verify()});
  await ready(true);await q.record('saved-workspace',await q.inspect());await q.screenshot('saved-prefix-handoff');await quit();

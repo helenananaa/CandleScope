@@ -367,7 +367,7 @@ export function releasePendingInitialIndicatorWindow(
       source,
       ...(settledResult?.quality ? { quality: settledResult.quality } : {}),
       deferIndicatorWindow: false,
-      ...(owner ? { indicatorWindowOwner: owner } : {}),
+      ...(owner ? { indicatorWindowOwner: owner, indicatorWindowEpoch: pendingInitial.indicatorWindowEpoch } : {}),
       ...historyProof,
     },
   );
@@ -614,7 +614,7 @@ export function useChartInitialLoad({
           interval: intv,
           countBack: initialViewportCountBack,
           ...(historyResult.indicatorWindowOwner
-            ? { indicatorWindowOwner: historyResult.indicatorWindowOwner }
+            ? { indicatorWindowOwner: historyResult.indicatorWindowOwner, indicatorWindowEpoch: historyResult.indicatorWindowEpoch }
             : {}),
           range: historyResult.start_ms != null && historyResult.end_ms != null
             ? numericRange(historyResult.start_ms, historyResult.end_ms)
@@ -735,7 +735,7 @@ export function useChartInitialLoad({
         source: "initial-history",
         deferIndicatorWindow: repairPending && !terminalFailed,
         ...(historyResult?.indicatorWindowOwner
-          ? { indicatorWindowOwner: historyResult.indicatorWindowOwner }
+          ? { indicatorWindowOwner: historyResult.indicatorWindowOwner, indicatorWindowEpoch: historyResult.indicatorWindowEpoch }
           : {}),
         ...historyProof,
       };

@@ -7,7 +7,7 @@ import pytest
 
 from app.data_engine.bar_aggregator import BarAggregator
 from app.data_engine.bar_aggregator.models import MergeMode
-from app.data_engine.data_manager.history_prefix_runtime import HistoryPrefixRuntime
+from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
 from tests.test_shared_blocks_integration import dm, write, read_rows, KEY, DAY
 from tests.test_history_prefix_overlay import component, equal, state
 from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
@@ -24,7 +24,8 @@ def runtime(dm, monkeypatch):
     agg = BarAggregator()
     agg.add_target('BTCUSDT', '121d', market_type='futures')
     recovery = []
-    service = HistoryPrefixRuntime(dm.query_engine, agg, recovery.append)
+    from app.data_engine.data_manager.history_prefix import HistoryPrefixReader
+    service = HistoryPrefixRuntime(HistoryPrefixReader(dm.query_engine), agg, recovery.append)
     agg.history_prefix_runtime = service
     return agg, service, recovery
 

@@ -16,7 +16,7 @@ from app.api.v1.stream_utils import normalize_exchange
 from app.data_engine.bar_aggregator.models import BarInput, BarInputSource, MergeMode
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.config import DataManagerConfig
-from app.data_engine.data_manager.history_prefix_runtime import HistoryPrefixRuntime
+from app.data_engine.bar_aggregator.history_prefix_runtime import HistoryPrefixRuntime
 from app.data_engine.interval_resolution import IntervalPurpose
 from app.data_engine.storage import klines_repo
 

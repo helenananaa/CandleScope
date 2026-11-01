@@ -415,3 +415,21 @@ test("settled history proof must cover the complete pending initial range", () =
     historyValidatedCountBack: 1_500,
   });
 });
+
+test("obsolete epoch callbacks cannot reopen a settled window or release current siblings", () => {
+  const buffer = new IndicatorWindowCommitBuffer();
+  buffer.record("series", [], { epoch: 1, ownerToken: "old", pending: true });
+  buffer.record("series", [], { epoch: 2, ownerToken: "new-a", pending: true });
+  buffer.record("series", [], { epoch: 2, ownerToken: "new-b", pending: true });
+  buffer.record("series", [], { epoch: 2, ownerToken: "new-a", pending: false });
+  assert.equal(buffer.hasPending("series"), true);
+  buffer.record("series", [], { epoch: 1, ownerToken: "old", pending: false });
+  assert.equal(buffer.hasOwner("series", "new-b"), true);
+  buffer.record("series", [], { epoch: 2, ownerToken: "new-b", pending: false });
+  assert.equal(buffer.hasPending("series"), false);
+  buffer.record("series", [], { epoch: 1, ownerToken: "old", pending: true });
+  assert.equal(buffer.hasPending("series"), false);
+  buffer.discard("series");
+  buffer.record("series", [], { epoch: 1, ownerToken: "fresh-lifecycle", pending: true });
+  assert.equal(buffer.hasPending("series"), true);
+});

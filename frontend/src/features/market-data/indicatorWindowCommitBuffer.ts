@@ -47,10 +47,12 @@ export interface IndicatorWindowCommitResult {
 export interface IndicatorWindowCommitOptions {
   ownerToken?: string | null | undefined;
   pending?: boolean;
+  epoch?: number | undefined;
 }
 
 interface IndicatorWindowSeriesState {
   owners: Set<string>;
+  epoch?: number | undefined;
   ranges: WindowChangedRange[];
 }
 
@@ -63,18 +65,27 @@ export class IndicatorWindowCommitBuffer {
     {
       ownerToken = null,
       pending = false,
+      epoch,
     }: IndicatorWindowCommitOptions = {},
   ): IndicatorWindowCommitResult {
     const current = this.pending.get(seriesKey);
-    const owners = new Set(current?.owners || []);
+    const suppliedEpoch = Number.isSafeInteger(epoch) && Number(epoch) >= 0 ? epoch : undefined;
+    if (suppliedEpoch !== undefined && current?.epoch !== undefined && suppliedEpoch < current.epoch) {
+      return { deferred: current.owners.size > 0, lifecycleChanged: false, publish: false, ranges: [] };
+    }
+    const superseded = suppliedEpoch !== undefined && current?.epoch !== undefined && suppliedEpoch > current.epoch;
+    // Feed epochs cancel their old requests and repair callbacks. Preserve the
+    // accumulated changed ranges, but do not await owners that cannot settle.
+    const owners = new Set(superseded ? [] : current?.owners || []);
+    const activeEpoch = suppliedEpoch ?? current?.epoch;
     const normalizedOwner = String(ownerToken || "").trim();
-    let lifecycleChanged = false;
+    let lifecycleChanged = superseded && (current?.owners.size || 0) > 0;
     if (normalizedOwner) {
       if (pending) {
-        lifecycleChanged = !owners.has(normalizedOwner);
+        lifecycleChanged = !owners.has(normalizedOwner) || lifecycleChanged;
         owners.add(normalizedOwner);
       } else {
-        lifecycleChanged = owners.delete(normalizedOwner);
+        lifecycleChanged = owners.delete(normalizedOwner) || lifecycleChanged;
       }
     }
     const ranges = boundRangesWithoutDroppingCoverage(mergeIndicatorWindowChangedRanges(
@@ -82,10 +93,11 @@ export class IndicatorWindowCommitBuffer {
       changedRanges,
     ));
     if (owners.size > 0) {
-      this.pending.set(seriesKey, { owners, ranges });
+      this.pending.set(seriesKey, { owners, ranges, epoch: activeEpoch });
       return { deferred: true, lifecycleChanged, publish: false, ranges };
     }
-    this.pending.delete(seriesKey);
+    if (activeEpoch === undefined) this.pending.delete(seriesKey);
+    else this.pending.set(seriesKey, { owners, ranges: [], epoch: activeEpoch });
     return {
       deferred: false,
       lifecycleChanged,
