@@ -22,6 +22,8 @@ import { buildIndicatorOhlcv } from "../../features/indicators/indicatorComputeR
 import type { IndicatorRuntime } from "../../features/indicators/indicatorRuntimeContract.js";
 import type { EpochSeconds, KlineBar } from "../../features/market-data/marketDataTypes.js";
 import type { KlineApi, KlineFetchResult, KlineStreamController } from "../../features/market-data/klineContracts.js";
+import type { MarketDataRuntimeContract } from "../../features/market-data/marketDataRuntimeContract.js";
+import { structuralMock } from "../../test/testHelpers.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -137,6 +139,7 @@ export async function checkIndicatorDataFlow() {
   const latest = new Map<string, IndicatorRuntime>();
   const rootHost = document.createElement("div"); document.body.append(rootHost); const root = createRoot(rootHost);
   const controller = new ChartMarketController({ owner: "chart:left", data: dataFlow.forChart("chart:left"), hoverDwellMs: 0 });
+  const windows = hosts.map(host => resources.windowRegistry.createWindow(host.id));
   function Cell({ index, symbol, revision }: { index: number; symbol: string; revision: number }) {
     const host = hosts[index]!;
     const streamIdentity = useMemo(() => ({ cellId: host.id, workspaceId: "flow", windowId: "browser" }), [host.id]);
@@ -144,9 +147,17 @@ export async function checkIndicatorDataFlow() {
       void revision; // Explicit fixture publication boundary after source admission.
       return [...market.cache.read(identity(symbol), { limit: 2000 }).rows];
     }, [symbol, revision]);
+    const owned = windows[index]!;
+    const selection = useMemo(() => owned.prepareSelection(symbol), [owned, symbol]);
+    const reader = useMemo(() => {
+      owned.activate(selection);
+      return owned.transact(selection, () => owned.getOrCreate(symbol, { intervalSeconds: 60 }))!;
+    }, [owned, selection, symbol]);
+    useLayoutEffect(() => { owned.transact(selection, () => owned.apply(symbol, { type: "replace", rows })); }, [owned, rows, selection, symbol]);
     const meta = useMemo(() => ({ status: "ready" as const, version: revision, source: "fixture", committedAt: 1 }), [revision]);
     const runtime = useIndicatorRuntime({ chartData: rows, chartDataMeta: meta, ...identity(symbol), datasetKey: symbol, sessionKey: symbol,
       autoAddVolume: false, indicatorPersistence: persistence[index]!, candleUpColor: "#0f0", candleDownColor: "#f00",
+      marketData: structuralMock<MarketDataRuntimeContract>({ view: { seriesStore: reader } }),
       streamIdentity });
     useLayoutEffect(() => { latest.set(host.id, runtime); });
     useEffect(() => { host.candle.setData(rows.map(row => ({ time: Number(row.time) as UTCTimestamp, open: row.open!, high: row.high!, low: row.low!, close: row.close! }))); }, [host, rows]);
@@ -160,6 +171,7 @@ export async function checkIndicatorDataFlow() {
   try {
     render(); await until(() => value("left") === 10 && value("right") === 10, "initial two-chart JS did not publish");
     assert(browserExecutions === 1, `same chart input computed ${browserExecutions} times`);
+    assert(indicators.inputs.diagnostics().subscriptions === 2, "real runtimes did not retain explicit shared input ranges");
     checks.push("two committed React runtimes share one real browser-worker computation");
     hosts[1]!.chart.timeScale().setVisibleRange({ from: (start + 60 * 30) as UTCTimestamp, to: (start + 60 * 180) as UTCTimestamp });
     // Lightweight Charts applies this command on its render frame. Capture the
@@ -190,10 +202,11 @@ export async function checkIndicatorDataFlow() {
     checks.push("cancelling one live consumer leaves the other's real worker computation running");
     const corrected = { ...corpus.get("ETHUSDT")![0]!, close: 77 };
     sequence.set("ETHUSDT", 2); market.cache.admitRealtime(identity("ETHUSDT"), corrected, "bar.amended", wire("ETHUSDT"), null);
-    render("ETHUSDT", 2);
     await until(() => latest.get("left")?.view.activeIndicators[0]?.lines?.[0]?.data[0]?.value === 77, "correction retained stale prewarmed output");
+    assert(windows[0]!.get("ETHUSDT")!.first()?.close === 20, "test accidentally supplied the corrected private chart window");
+    render("ETHUSDT", 2);
     assert(value("right") === 10 && JSON.stringify(hosts[1]!.chart.timeScale().getVisibleRange()) === viewport, "correction changed unrelated chart");
-    checks.push("historical correction invalidates warmed input and recomputes only the affected chart");
+    checks.push("shared cache range notification recomputes corrected JS values before private window publication; unrelated chart stays unchanged");
     const beforeFailure = browserExecutions;
     flushSync(() => {
       latest.get("left")!.actions.addIndicator({ id: "offline-ema", engineName: "EMA", executionTarget: "local", params: { period: 20 } });
@@ -275,6 +288,8 @@ export async function checkIndicatorDataFlow() {
     return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics(), streams: streams.diagnostics() };
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();
+    assert(indicators.inputs.diagnostics().subscriptions === 0, "unmounted runtimes retained input range leases");
+    windows.forEach(window => window.close());
     dataFlow.dispose(); streams.closeAll(); market.closeAll(); gate.dispose(); unregister();
     hosts.forEach(host => { host.chart.remove(); host.element.remove(); });
   }

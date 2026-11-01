@@ -134,6 +134,7 @@ app.on("window-all-closed",()=>app.quit());
   receipt.remainingWorkers = targets.targetInfos.filter(item => ["worker", "shared_worker"].includes(item.type));
   receipt.exceptions = page.events.filter(item => item.method === "Runtime.exceptionThrown");
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+  if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
   if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });

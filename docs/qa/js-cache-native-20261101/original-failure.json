@@ -1,0 +1,32 @@
+{
+  "sourceCommit": "0dcb049a055068dcdd6442897e47dab5e56247d0",
+  "passed": false,
+  "failure": {
+    "trigger": "Unlinked left chart at historical viewport switches from BTCUSDT/1m to cold ETHUSDT/5m or SOLUSDT/15m with JS close overlay",
+    "observed": "Left ChartErrorBoundary displays chart rendering error; right chart survives; control runtime can still report readiness",
+    "message": "Value is null",
+    "stack": "LWC line barStyle -> SeriesPaneViewBase option update during chart refresh",
+    "reproducedColdTargets": [
+      "ETHUSDT/5m",
+      "SOLUSDT/15m"
+    ],
+    "screenshots": [
+      "05-switch-observation.png",
+      "06-second-cold-switch-error.png"
+    ]
+  },
+  "passedAreas": [
+    "ZIP install, ad-hoc signature and source/bundle hash verification",
+    "Two independent JS cache input leases; one shared market subscription",
+    "Closed OHLCV and JS values compared with bundled backend rows",
+    "Independent script/parameters and history viewport",
+    "Single input release and reacquire",
+    "128915 ms offline/minimized recovery",
+    "Saved dual-chart scripts/parameters restored after complete process exit"
+  ],
+  "limits": [
+    "Original missing-chart probe was rejected and replaced by an explicit two-surface assertion",
+    "Controlled hydration browser fixture did not reproduce the native cold-switch error; native rerun is required",
+    "Local macOS arm64 only; no x64/Windows qualification"
+  ]
+}

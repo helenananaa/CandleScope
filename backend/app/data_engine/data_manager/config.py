@@ -205,6 +205,7 @@ class DataManagerConfig:
         "event-delivery": 32 * 1024 * 1024, "history-query": 64 * 1024 * 1024,
         "history-backfill": 64 * 1024 * 1024,
         "durable-delivery": 16 * 1024 * 1024,
+        "aggregation-blocks": 16 * 1024 * 1024,
     })
 
     def snapshot(self) -> dict:

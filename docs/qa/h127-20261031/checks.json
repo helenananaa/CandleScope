@@ -1,0 +1,31 @@
+{
+  "base_commit": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+  "dependency_pr": "https://github.com/helenananaa/CandleScope/pull/174",
+  "source_sha256": {
+    "backend/app/data_engine/data_manager/history_blocks.py": "dfb9f157152e84602843e1cff6389052dc69ea1f96f21a8efc5f3b967f241d45",
+    "backend/app/data_engine/data_manager/query.py": "9200ce8a4c633b97d7e05025883b973ec6527de81e5dc19757506a07eb2667f2",
+    "backend/app/data_engine/data_manager/manager.py": "20be4954b0ca8d93ec3e631fadc3eaaaf7fc846af025dcd9fa8632a1bdcf2361",
+    "backend/tests/test_history_block_reader.py": "e6b73755b163d69fdd4e15650d7f33f4a5688cd447d6f51c8c9311e90d9dcbf7",
+    "backend/scripts/ccxt_contracts/integration.py": "5656e2db6a01872a0398d0f055fdf7f83cee217a9b3ab0e00f31154f2f97b9ab"
+  },
+  "suite": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "2049",
+    "time": "190.890",
+    "timestamp": "2026-10-31T22:36:08.505294",
+    "hostname": "Ryans-MacBook-Air.local"
+  },
+  "modules": 118,
+  "h127_tests": 63,
+  "b130_tests": 92,
+  "command": ".venv/bin/python docs/qa/h127-20261031/run_backend.py",
+  "ci_policy": "Not awaited for development PR; required checks must be verified before a main merge.",
+  "environment": {
+    "python": "3.12.15",
+    "ccxt": "4.5.60",
+    "pytest": "7.4.4"
+  }
+}
