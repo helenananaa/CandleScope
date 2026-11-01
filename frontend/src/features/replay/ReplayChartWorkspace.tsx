@@ -142,8 +142,8 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
       submitTrade: async (type, payload) => {
         return assertTradeAuthority().actions.submitTrade(type, payload);
       },
-      previewOrder: (...args) => assertTradeAuthority().actions.previewOrder(...args),
-      orderCapacity: (...args) => assertTradeAuthority().actions.orderCapacity(...args),
+      previewOrder: async (...args) => assertTradeAuthority().actions.previewOrder(...args),
+      orderCapacity: async (...args) => assertTradeAuthority().actions.orderCapacity(...args),
     },
   }), [active, bound, cell, controller, onOpenTrack, projection.error, projection.loading, projection.seriesStore, projection.historyBootstrapBeforeMs, projection.tapeObservation, projection.restoreLatest, track.track_id, workspace.actions, workspace.view.document, intervalTransfers, assertTradeAuthority]);
   const persistence = useMemo<ActiveIndicatorPersistence>(() => ({
