@@ -1,3 +1,4 @@
+import { normalizeChartAccountOverlay } from "./chartAccountOverlaySettings.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyCollection.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
@@ -49,6 +50,7 @@ import {
   visibleCellIds,
 } from "./chartWorkspaceLayout.js";
 
+export const CHART_WORKSPACE_V9_STORAGE_KEY = "candlescope-chart-workspace-v9";
 export const CHART_WORKSPACE_V8_STORAGE_KEY = "candlescope-chart-workspace-v8";
 export const CHART_WORKSPACE_V7_STORAGE_KEY = "candlescope-chart-workspace-v7";
 
@@ -171,6 +173,9 @@ function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
     timeAnchor: dateRange ? false : requestedTimeAnchor,
     dateRange,
     chartStyle: source.chartStyle === true,
+    accountSource: source.accountSource === true,
+    tradingOverlays: source.tradingOverlays === true,
+    noteOverlays: source.noteOverlays === true,
     drawings: typeof source.drawings === "boolean" ? source.drawings : DEFAULT_CHART_LINK_GROUP_SETTINGS.drawings,
     indicators: {
       definitions: typeof indicatorSource.definitions === "boolean"
@@ -216,6 +221,7 @@ function defaultCell(
     drawingLayerSet: "1",
     session: { ...baseSession, interval: index === 0 ? baseSession.interval : interval },
     chartSettings: { ...chartSettings },
+    accountOverlay: normalizeChartAccountOverlay(),
     priceScale: { invertScale: false, priceScaleMode: 0 },
     indicators: indicators.map((indicator) => ({ ...indicator })),
     strategyAttachment: null,
@@ -447,6 +453,7 @@ function normalizeCellState(
     drawingLayerSet: normalizeDrawingLayerSet(source.drawingLayerSet),
     session: normalizeSession(source.session, fallback.session),
     chartSettings: normalizeCellChartSettings(source.chartSettings),
+    accountOverlay: normalizeChartAccountOverlay(source.accountOverlay),
     priceScale: normalizePriceScale(source.priceScale),
     indicators: normalizeIndicators(source.indicators),
     ...(source.strategyTesterMode === "NATIVE" || source.strategyTesterMode === "CANDLESCOPE" ? { strategyTesterMode: source.strategyTesterMode } : {}),
@@ -490,7 +497,7 @@ function failResult(
 
 function normalizeCurrentChartWorkspace(
   value: Record<string, unknown>,
-  migratedFromSchemaVersion: 7 | null,
+  migratedFromSchemaVersion: 7 | 8 | null,
 ): NormalizeChartWorkspaceResult {
   const fallback = createDefaultChartWorkspace();
   const diagnostics: ChartWorkspaceNormalizationDiagnostic[] = [];
@@ -612,8 +619,8 @@ export function normalizeChartWorkspaceWithDiagnostics(
   if (rawSchemaVersion === CHART_WORKSPACE_SCHEMA_VERSION) {
     return normalizeCurrentChartWorkspace(value, null);
   }
-  if (rawSchemaVersion === 7) {
-    return normalizeCurrentChartWorkspace(value, 7);
+  if (rawSchemaVersion === 7 || rawSchemaVersion === 8) {
+    return normalizeCurrentChartWorkspace(value, rawSchemaVersion);
   }
   return failResult(fallback, [{ code: "unsupported-schema", path: "schemaVersion" }]);
 }
@@ -644,6 +651,7 @@ export function loadChartWorkspace(
   if (!storage) return createDefaultChartWorkspace();
   try {
     const stored = loadRawWorkspace(storage, [
+      CHART_WORKSPACE_V9_STORAGE_KEY,
       CHART_WORKSPACE_V8_STORAGE_KEY,
       CHART_WORKSPACE_V7_STORAGE_KEY,
     ]);
@@ -660,7 +668,7 @@ export function saveChartWorkspace(
   if (!storage) return;
   try {
     void Promise.resolve(storage.setItem(
-      CHART_WORKSPACE_V8_STORAGE_KEY,
+      CHART_WORKSPACE_V9_STORAGE_KEY,
       JSON.stringify(normalizeChartWorkspace(workspace)),
     )).catch(() => {});
   } catch {

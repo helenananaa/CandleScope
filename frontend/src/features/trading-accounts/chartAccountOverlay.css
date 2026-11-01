@@ -1,0 +1,9 @@
+.chart-account-overlay-trigger { border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-secondary); color: var(--text-secondary); padding: 3px 6px; white-space: nowrap; font-size: 11px; cursor: pointer; }
+.chart-account-overlay-trigger[aria-expanded="true"] { color: var(--text-primary); border-color: var(--accent-blue); }
+.chart-account-overlay-trigger[data-error="true"] { border-color: var(--color-danger); }
+.chart-account-overlay-menu { position: fixed; z-index: 1400; width: 280px; max-height: calc(100vh - 16px); overflow: auto; display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 8px 28px #0006; font-size: 13px; }
+.chart-account-overlay-menu > label { display: grid; gap: 6px; }
+.chart-account-overlay-menu select { width: 100%; min-width: 0; padding: 6px; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; }
+.chart-account-overlay-menu > .chart-account-overlay-toggle { display: flex; align-items: center; gap: 8px; }
+.chart-account-overlay-menu > button { justify-self: end; padding: 4px 10px; }
+.chart-account-overlay-menu > p { margin: 0; overflow-wrap: anywhere; }

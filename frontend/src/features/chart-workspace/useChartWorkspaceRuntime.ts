@@ -1,3 +1,4 @@
+import type { ChartAccountOverlaySettings } from "./chartAccountOverlaySettings.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
@@ -81,6 +82,7 @@ import {
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   applyLinkedChartSettingsUpdate,
+  applyLinkedAccountOverlayUpdate,
   assignCellLinkGroup,
   assignCellsLinkGroup,
   chartLinkGroupDepth,
@@ -177,6 +179,7 @@ export interface ChartWorkspaceRuntime {
     setLayoutRatio(splitId: string, ratio: number): void;
     updateCellSession(cellId: ChartCellId, session: ChartSession): void;
     updateCellChartSettings(cellId: ChartCellId, settings: ChartSettings | ChartCellChartSettings): void;
+    updateCellAccountOverlay(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
     updateCellPriceScale(cellId: ChartCellId, priceScale: ChartCellPriceScale): void;
     updateCellIndicators(cellId: ChartCellId, indicators: IndicatorDefinition[]): void;
     updateCellStrategyTesterMode(cellId: ChartCellId, mode: "NATIVE" | "CANDLESCOPE"): void;
@@ -921,6 +924,10 @@ export function useChartWorkspaceRuntime(
     updateActiveDocument((current) => applyLinkedChartSettingsUpdate(current, cellId, chartSettings));
   }, [updateActiveDocument]);
 
+  const updateCellAccountOverlay = useCallback((cellId: ChartCellId, settings: ChartAccountOverlaySettings) => {
+    updateActiveDocument(current => applyLinkedAccountOverlayUpdate(current, cellId, settings));
+  }, [updateActiveDocument]);
+
   const updateCellPriceScale = useCallback((
     cellId: ChartCellId,
     priceScale: ChartCellPriceScale,
@@ -1151,6 +1158,7 @@ export function useChartWorkspaceRuntime(
       setLayoutRatio,
       updateCellSession,
       updateCellChartSettings,
+      updateCellAccountOverlay,
       updateCellPriceScale,
       updateCellIndicators,
       updateCellStrategyAttachment,

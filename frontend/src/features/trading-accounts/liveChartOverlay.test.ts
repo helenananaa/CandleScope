@@ -3,14 +3,45 @@ import test from "node:test";
 import {
   addDecimalStrings,
   liveFillLegs,
+  liveJournalEntries,
   positionPriceLines,
   sameInstrument,
 } from "./liveChartOverlay.js";
-import { fillMarkerGroups } from "./replayMarkerSource.js";
-import type { PracticeOrder, Trade, TradeLeg } from "./tradingTypes.js";
+import { createReplayMarkerSource, fillMarkerGroups } from "./replayMarkerSource.js";
+import type { JournalEntry, PracticeOrder, Trade, TradeLeg } from "./tradingTypes.js";
+import { floorIntervalTime } from "../../utils/intervalTimeline.js";
+import { structuralMock } from "../../test/testHelpers.js";
 
 const BTC = { exchange: "binance", marketType: "futures", symbol: "BTCUSDT" };
 const HOUR = 3_600;
+
+test("live notes and fills use the loaded calendar bucket, including monthly, weekly and DST boundaries", () => {
+  for (const [interval, event, expectedOpen] of [
+    ["1M", "2023-02-28T12:00:00Z", "2023-02-01T00:00:00Z"],
+    ["1w", "2023-11-16T12:00:00Z", "2023-11-13T00:00:00Z"],
+    ["1d~c1~America/New_York", "2023-03-12T18:00:00Z", "2023-03-12T05:00:00Z"],
+  ]) {
+    const eventMs = Date.parse(event!), open = Date.parse(expectedOpen!) / 1000;
+    const bucketTime = (time: number) => {
+      const bucket = floorIntervalTime(interval, time);
+      return bucket === open ? bucket : null; // Only this candle is loaded.
+    };
+    const note = structuralMock<JournalEntry>({ id: "note", accountId: "acc", ...BTC,
+      createdAtMs: eventMs + 86400000, marketTimeMs: eventMs, reviewNote: true });
+    const excluded = { ...note, id: "different-market", symbol: "ETHUSDT" };
+    const notes = liveJournalEntries([excluded, note], BTC, bucketTime);
+    assert.deepEqual(notes, [note]);
+    assert.deepEqual(liveJournalEntries([note], BTC, () => null), []);
+    const fills = liveFillLegs([trade("t", [leg("f", "buy", "entry", "1", "100", eventMs / 1000)])], BTC,
+      { firstSec: open, lastSec: open }, 60, 200, bucketTime);
+    assert.equal(fills.length, 1);
+    const source = createReplayMarkerSource({ up: "green", down: "red", note: "blue" }, "calendar-live");
+    source.update({ legs: fills, notes, intervalSec: 60, bucketTime, cursorSec: Infinity, lastVisibleSec: open,
+      labels: { buy: "Buy", sell: "Sell", note: "Note", reviewNote: "Review note" } });
+    assert.deepEqual(source.getSnapshot().markers.map(marker => Number(marker.time)), [open, open]);
+    assert.equal(source.getSnapshot().markers.find(marker => marker.shape === "circle")!.text, "Review note");
+  }
+});
 
 function leg(fillId: string, side: "buy" | "sell", role: TradeLeg["role"], qty: string, price: string, tsSec: number): TradeLeg {
   return { fillId, side, role, qty, price, fee: "0", tsMs: tsSec * 1000, liquidity: "taker", orderId: null };

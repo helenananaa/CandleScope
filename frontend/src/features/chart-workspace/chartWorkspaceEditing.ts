@@ -1,3 +1,4 @@
+import { normalizeChartAccountOverlay } from "./chartAccountOverlaySettings.js";
 import {
   CHART_DRAWING_LAYER_SET_IDS,
   type ChartCellCreationMode,
@@ -110,6 +111,7 @@ function blankCell(
     nativeStrategies: { activeId: "default", items: [{ id: "default", name: "", language: "pine", drafts: {}, runs: {} }] },
     drawingLayerSet: blankDrawingLayer(source, existing),
     chartSettings: blankChartSettings(),
+    accountOverlay: normalizeChartAccountOverlay(),
   };
 }
 

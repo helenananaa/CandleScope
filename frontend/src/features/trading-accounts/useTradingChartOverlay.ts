@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ExternalMarkerSource } from "../../chart-adapter/externalMarkerSource.js";
 import {
   createPriceLineSource,
@@ -7,14 +7,18 @@ import {
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
+import { floorIntervalTime } from "../../utils/intervalTimeline.js";
 import type { SeriesWindowView } from "../market-data/window/seriesWindowView.js";
-import { liveFillLegs, positionPriceLines, type PositionLineKind } from "./liveChartOverlay.js";
+import { liveFillLegs, liveJournalEntries, positionPriceLines, MAX_LIVE_FILL_MARKERS, type PositionLineKind } from "./liveChartOverlay.js";
+import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
+import { tradingAccountDataPool, type TradingAccountDataState } from "./tradingAccountDataPool.js";
 import { createReplayMarkerSource } from "./replayMarkerSource.js";
 import { tradingAccountsStore } from "./tradingAccountsStore.js";
 import { formatQty, tokenColor } from "./tradingFormat.js";
 
 export interface TradingChartOverlayInput {
   enabled: boolean;
+  settings?: ChartAccountOverlaySettings;
   exchange: string;
   marketType: string;
   symbol: string;
@@ -29,6 +33,7 @@ export interface TradingChartOverlayInput {
 export interface TradingChartOverlay {
   markerSource: ExternalMarkerSource;
   priceLineSource: ExternalPriceLineSource;
+  error: string | null;
 }
 
 type LoadedRange = { firstSec: number; lastSec: number } | null;
@@ -43,12 +48,14 @@ function useLoadedRange(seriesStore: SeriesWindowView | null): LoadedRange {
     }
     let firstSec: number | null = null;
     let lastSec: number | null = null;
+    let axisRevision: number | null = null;
     const read = () => {
       const first = seriesStore.first();
       const last = seriesStore.last();
       const nextFirst = first ? Number(first.time) : null;
       const nextLast = last ? Number(last.time) : null;
-      if (nextFirst === firstSec && nextLast === lastSec) return;
+      if (nextFirst === firstSec && nextLast === lastSec && seriesStore.axisRevision === axisRevision) return;
+      axisRevision = seriesStore.axisRevision;
       firstSec = nextFirst;
       lastSec = nextLast;
       setRange(nextFirst !== null && nextLast !== null ? { firstSec: nextFirst, lastSec: nextLast } : null);
@@ -67,6 +74,10 @@ const LABEL_KEYS = {
   takeProfit: "trading.chart.takeProfit",
 } as const satisfies Record<PositionLineKind, string>;
 
+const EMPTY_ACCOUNT: TradingAccountDataState = { accountId: "", summary: null, trades: [], entries: [], loading: false, error: null };
+const noSubscribe = () => () => {};
+const emptyAccount = () => EMPTY_ACCOUNT;
+
 /**
  * Read-only overlay of the selected trading account on a live chart: its
  * fills on this instrument and the open position's entry, stop and target.
@@ -75,8 +86,15 @@ const LABEL_KEYS = {
 export function useTradingChartOverlay(input: TradingChartOverlayInput): TradingChartOverlay {
   const { enabled, exchange, marketType, symbol, interval, seriesStore, upColor, downColor, themeKey } = input;
   const locale = useLocale();
-  const { summary, trades } = useSyncExternalStore(tradingAccountsStore.subscribe, tradingAccountsStore.getSnapshot);
-  useEffect(() => (enabled ? tradingAccountsStore.retain() : undefined), [enabled]);
+  const settings = normalizeChartAccountOverlay(input.settings);
+  const needsAccount = enabled && (settings.trades || settings.positions || settings.notes);
+  const followsPanel = settings.accountId === null;
+  const selected = useSyncExternalStore(tradingAccountsStore.subscribe, tradingAccountsStore.getSnapshot).selected;
+  useEffect(() => (needsAccount && followsPanel ? tradingAccountsStore.retain() : undefined), [needsAccount, followsPanel]);
+  const accountId = settings.accountId ?? selected?.id ?? null;
+  const data = useMemo(() => needsAccount && accountId ? tradingAccountDataPool.account(accountId) : null, [accountId, needsAccount]);
+  const { summary, trades, entries, error } = useSyncExternalStore(data?.subscribe ?? noSubscribe, data?.getSnapshot ?? emptyAccount);
+  useEffect(() => data?.retain(), [data]);
   const loaded = useLoadedRange(enabled ? seriesStore : null);
 
   const markerSource = useMemo(() => createReplayMarkerSource({
@@ -86,22 +104,29 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
   }, "trading-live"), [downColor, upColor]);
   const priceLineSource = useMemo(() => createPriceLineSource(), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const intervalSec = parseIntervalSeconds(interval);
     const instrument = { exchange, marketType, symbol };
-    const legs = enabled && intervalSec ? liveFillLegs(trades, instrument, loaded, intervalSec) : [];
+    const bucketTime = (time: number) => {
+      const bucket = floorIntervalTime(interval, time);
+      return bucket !== null && seriesStore?.hasTime(bucket) ? bucket : null;
+    };
+    const legs = enabled && settings.trades && intervalSec
+      ? liveFillLegs(trades, instrument, loaded, intervalSec, MAX_LIVE_FILL_MARKERS, bucketTime) : [];
+    const notes = enabled && settings.notes ? liveJournalEntries(entries, instrument, bucketTime) : [];
     markerSource.update({
       legs,
-      notes: [],
+      notes,
       cursorSec: Number.POSITIVE_INFINITY,
       intervalSec: intervalSec ?? 60,
+      bucketTime,
       lastVisibleSec: loaded?.lastSec ?? null,
-      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: "" },
+      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.note"), reviewNote: t("trading.journal.reviewNote") },
     });
-  }, [enabled, exchange, interval, loaded, locale, marketType, markerSource, symbol, trades]);
+  }, [enabled, entries, exchange, interval, loaded, locale, marketType, markerSource, seriesStore, settings.notes, settings.trades, symbol, trades]);
 
-  useEffect(() => {
-    if (!enabled) {
+  useLayoutEffect(() => {
+    if (!enabled || !settings.positions) {
       priceLineSource.setLines([]);
       return;
     }
@@ -116,7 +141,7 @@ export function useTradingChartOverlay(input: TradingChartOverlayInput): Trading
       colors,
       (kind, qty) => t(LABEL_KEYS[kind], { qty: formatQty(qty) }),
     ));
-  }, [enabled, exchange, locale, marketType, priceLineSource, summary, symbol, themeKey]);
+  }, [enabled, exchange, locale, marketType, priceLineSource, settings.positions, summary, symbol, themeKey]);
 
-  return useMemo(() => ({ markerSource, priceLineSource }), [markerSource, priceLineSource]);
+  return useMemo(() => ({ markerSource, priceLineSource, error }), [markerSource, priceLineSource, error]);
 }

@@ -1,3 +1,5 @@
+import ChartAccountOverlayMenu from "../features/trading-accounts/ChartAccountOverlayMenu.js";
+import type { ChartAccountOverlaySettings } from "../features/chart-workspace/chartAccountOverlaySettings.js";
 import { applicationSettingsPatch, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
 import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
@@ -187,6 +189,7 @@ export interface LiveChartCellProps {
   onToggleMaximize(cellId: ChartCellId): void;
   onSessionChange(cellId: ChartCellId, session: ChartSession): void;
   onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
+  onAccountOverlayChange(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
   onPriceScaleChange(cellId: ChartCellId, value: ChartCellState["priceScale"]): void;
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
   strategyPanelOpen: boolean;
@@ -232,6 +235,7 @@ function LiveChartCell({
   onToggleMaximize,
   onSessionChange,
   onChartSettingsChange,
+  onAccountOverlayChange,
   onPriceScaleChange,
   onIndicatorsChange,
   strategyPanelOpen,
@@ -806,6 +810,7 @@ function LiveChartCell({
   ]);
   const tradingOverlay = useTradingChartOverlay({
     enabled: true,
+    ...(cell.accountOverlay ? { settings: cell.accountOverlay } : {}),
     exchange: chartSession.view.exchange,
     marketType: chartSession.view.marketType,
     symbol: chartSession.view.symbol,
@@ -978,6 +983,8 @@ function LiveChartCell({
               {linkGroupName}
             </span>
           ))}
+          <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
+            onChange={settings => onAccountOverlayChange(cell.id, settings)} />
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
             layoutCellIds={layoutCellIds}
