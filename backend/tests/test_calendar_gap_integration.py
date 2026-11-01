@@ -124,6 +124,19 @@ def test_gap_detector_skips_weekend_and_reports_only_missing_session_bar() -> No
     asyncio.run(_run())
 
 
+def test_historical_head_stops_at_last_requested_session_before_weekend() -> None:
+    async def _run() -> None:
+        friday = _ms(2024, 1, 5, 9)
+        detector = GapDetector(BackfillConfig(gap_tolerance_bars=0),
+            _Storage({_ms(2024, 1, 9, 9)}),
+            calendar_resolver=lambda exchange, market_type, symbol: _weekday_calendar())
+        gaps = await detector.detect("ABC", intervals=["30m"], range_start_ms=friday,
+            range_end_ms=_ms(2024, 1, 7), exchange="test", market_type="stock")
+        assert [(gap.start_ms, gap.end_ms, gap.missing_bars) for gap in gaps] == [
+            (friday, _ms(2024, 1, 5, 9, 30), 2)]
+    asyncio.run(_run())
+
+
 def test_storage_gap_scan_uses_adapter_calendar_resolver(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "klines.sqlite")
     klines_repo.init_klines_storage()
