@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DEFAULT_SETTINGS, normalizeSettings } from "../../settings/chartAppearanceSettings.js";
+import { applicationSettingsPatch, nextCellChartSettings } from "../chartWorkspaceChartSettings.js";
+import { applyLinkedChartSettingsUpdate, cloneChartLinkSettings } from "../chartWorkspaceLinkModel.js";
+import { createDefaultChartWorkspace, normalizeChartWorkspaceWithDiagnostics } from "../chartWorkspaceStorage.js";
+import { DEFAULT_CHART_LINK_GROUP_ID, DEFAULT_CHART_LINK_GROUP_SETTINGS } from "../chartWorkspaceTypes.js";
+
+test("legacy workspaces inherit saved global colors without manufacturing appearance overrides", () => {
+  for (const schemaVersion of [7, 8]) {
+    const original = { ...createDefaultChartWorkspace(), schemaVersion };
+    const result = normalizeChartWorkspaceWithDiagnostics(original);
+    assert.equal(result.usedFallback, false);
+    const cell = result.document.cells['cell-1']!;
+    assert.equal(Object.hasOwn(cell.chartSettings, 'theme'), false);
+    assert.equal(Object.hasOwn(cell.chartSettings, 'upColor'), false);
+    const global = { ...DEFAULT_SETTINGS, theme: 'light' as const, upColor: '#123456' };
+    assert.equal({ ...global, ...cell.chartSettings }.upColor, '#123456');
+    assert.equal({ ...global, ...cell.chartSettings }.theme, 'light');
+  }
+});
+
+test("application preference edits do not freeze inherited chart appearance", () => {
+  const cell = createDefaultChartWorkspace().cells['cell-1']!.chartSettings;
+  const current = { ...DEFAULT_SETTINGS, ...cell, upColor: '#123456' };
+  const next = { ...current, locale: 'en' as const, frontendCacheBudgetBytes: 128 * 1024 * 1024 };
+  assert.deepEqual(nextCellChartSettings(cell, current, next), cell);
+  assert.deepEqual(applicationSettingsPatch(current, next), {
+    locale: 'en', frontendCacheBudgetBytes: 128 * 1024 * 1024,
+  });
+  const local = { ...current, upColor: '#abcdef', theme: 'light' as const, chartType: 'line' as const };
+  const changed = nextCellChartSettings(cell, current, local);
+  assert.equal(changed.upColor, '#abcdef');
+  assert.equal(changed.theme, 'light');
+  assert.equal(changed.downColor, undefined);
+  assert.deepEqual(applicationSettingsPatch(current, normalizeSettings(local)), {});
+});
+
+test("unlinked chart appearance persists and leaves all sibling settings untouched", () => {
+  const document = createDefaultChartWorkspace();
+  const source = document.cells['cell-1']!;
+  const next = applyLinkedChartSettingsUpdate(document, source.id, {
+    ...source.chartSettings, theme: 'custom', customBg: '#123456', upColor: '#abcdef', downColor: '#fedcba',
+  });
+  assert.equal(next.cells['cell-2'], document.cells['cell-2']);
+  assert.equal(next.cells['cell-3'], document.cells['cell-3']);
+  const restored = normalizeChartWorkspaceWithDiagnostics(JSON.parse(JSON.stringify(next)));
+  assert.equal(restored.usedFallback, false);
+  assert.deepEqual(restored.document.cells['cell-1']!.chartSettings, next.cells['cell-1']!.chartSettings);
+  assert.equal(restored.document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.chartStyle, false);
+});
+
+test("style edits follow only selected directed links and preserve unrelated configuration", () => {
+  const document = createDefaultChartWorkspace();
+  document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.chartStyle = true;
+  document.linkGroups.child = { id: 'child', name: 'Child', color: '#123456',
+    parentId: DEFAULT_CHART_LINK_GROUP_ID,
+    peerPolicy: { ...cloneChartLinkSettings(DEFAULT_CHART_LINK_GROUP_SETTINGS), chartStyle: true },
+    receiveFromParent: { ...cloneChartLinkSettings(DEFAULT_CHART_LINK_GROUP_SETTINGS), chartStyle: true } };
+  document.cells['cell-3']!.linkGroupId = 'child';
+  document.cells['cell-4']!.linkGroupId = null;
+  document.cells['cell-2']!.chartSettings.downColor = '#112233';
+  const source = document.cells['cell-1']!;
+  const next = applyLinkedChartSettingsUpdate(document, source.id, { ...source.chartSettings, upColor: '#abcdef' });
+  for (const id of ['cell-1', 'cell-2', 'cell-3']) assert.equal(next.cells[id]!.chartSettings.upColor, '#abcdef');
+  assert.equal(next.cells['cell-4'], document.cells['cell-4']);
+  assert.equal(next.cells['cell-2']!.chartSettings.downColor, '#112233');
+  for (const id of Object.keys(document.cells)) {
+    assert.equal(next.cells[id]!.session, document.cells[id]!.session);
+    assert.equal(next.cells[id]!.indicators, document.cells[id]!.indicators);
+    assert.equal(next.cells[id]!.strategyAttachment, document.cells[id]!.strategyAttachment);
+  }
+  const fromChild = applyLinkedChartSettingsUpdate(next, 'cell-3', { ...next.cells['cell-3']!.chartSettings, theme: 'light' });
+  assert.equal(fromChild.cells['cell-1'], next.cells['cell-1']);
+  assert.equal(fromChild.cells['cell-2'], next.cells['cell-2']);
+  assert.equal(applyLinkedChartSettingsUpdate(fromChild, 'cell-3', fromChild.cells['cell-3']!.chartSettings), fromChild);
+  document.linkGroups.child.receiveFromParent.chartStyle = false;
+  const blocked = applyLinkedChartSettingsUpdate(document, source.id, { ...source.chartSettings, upColor: '#abcdef' });
+  assert.equal(blocked.cells['cell-3'], document.cells['cell-3']);
+});

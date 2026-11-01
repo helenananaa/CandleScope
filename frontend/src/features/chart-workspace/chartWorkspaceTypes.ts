@@ -3,7 +3,7 @@ import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { ChartSettings } from "../settings/chartAppearanceSettings.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 
-export const CHART_WORKSPACE_SCHEMA_VERSION = 8 as const;
+export const CHART_WORKSPACE_SCHEMA_VERSION = 9 as const;
 export const CHART_WORKSPACE_RECORD_SCHEMA_VERSION = 1 as const;
 export type ChartCellId = string;
 export type ChartWindowId = string;
@@ -81,7 +81,12 @@ export const CELL_CHART_SETTING_KEYS = [
 ] as const satisfies readonly (keyof ChartSettings)[];
 
 export type CellChartSettingKey = (typeof CELL_CHART_SETTING_KEYS)[number];
-export type ChartCellChartSettings = Pick<ChartSettings, CellChartSettingKey>;
+export const CELL_CHART_APPEARANCE_KEYS = ["theme", "customBg", "upColor", "downColor"] as const;
+export type CellChartAppearanceKey = (typeof CELL_CHART_APPEARANCE_KEYS)[number];
+// Missing appearance overrides inherit the application preference. Legacy
+// workspaces must not replace a user's saved colors with today's defaults.
+export type ChartCellChartSettings = Pick<ChartSettings, CellChartSettingKey>
+  & Partial<Pick<ChartSettings, CellChartAppearanceKey>>;
 
 export interface ChartCellPriceScale {
   invertScale: boolean;
@@ -117,6 +122,10 @@ export interface ChartLinkGroupSettings {
   timeAnchor: boolean;
   dateRange: boolean;
   drawings: boolean;
+  chartStyle?: boolean;
+  accountSource?: boolean;
+  tradingOverlays?: boolean;
+  noteOverlays?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -142,6 +151,7 @@ export interface ChartCellState {
   drawingLayerSet: ChartDrawingLayerSetId;
   session: ChartSession;
   chartSettings: ChartCellChartSettings;
+  accountOverlay?: import("./chartAccountOverlaySettings.js").ChartAccountOverlaySettings;
   priceScale: ChartCellPriceScale;
   indicators: IndicatorDefinition[];
   strategyAttachment: ChartStrategyAttachmentRecord | null;
@@ -209,6 +219,10 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   timeAnchor: false,
   dateRange: true,
   drawings: false,
+  chartStyle: false,
+  accountSource: false,
+  tradingOverlays: false,
+  noteOverlays: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,

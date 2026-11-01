@@ -67,6 +67,7 @@ function createRuntime(): ChartWorkspaceRuntime {
       setLayoutRatio: () => undefined,
       updateCellSession: () => undefined,
       updateCellChartSettings: () => undefined,
+      updateCellAccountOverlay: () => undefined,
       updateCellPriceScale: () => undefined,
       updateCellIndicators: () => undefined,
       updateCellNativeStrategies: () => undefined,

@@ -35,6 +35,7 @@ export interface QuickReplayChartStyle {
   downColor: string;
   chartType?: string;
   theme: string;
+  inheritApplicationTheme?: boolean;
   customBg: string;
 }
 
@@ -350,7 +351,7 @@ export default function QuickReplayOverlay({
               upColor={style.upColor}
               downColor={style.downColor}
               {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}
-              theme={style.theme}
+              theme={style.theme} inheritApplicationTheme={style.inheritApplicationTheme ?? true}
               customBg={style.customBg}
               followLatest
               canLoadMoreLeft={false}

@@ -86,7 +86,7 @@ test("an empty v7 database is seeded without consulting an old store", async () 
   const repository = createChartWorkspaceRepository({ adapter, storage: null, now: () => 100 });
   const loaded = await repository.loadLibrary();
   assert.equal(loaded.persistenceMode, "indexeddb");
-  assert.equal(loaded.workspaces[0]!.document.schemaVersion, 8);
+  assert.equal(loaded.workspaces[0]!.document.schemaVersion, 9);
   assert.equal(adapter.writeCount, 1);
 });
 
@@ -100,7 +100,7 @@ test("existing v7 records load without a seed write", async () => {
   const adapter = new MemoryV7Adapter([legacy]);
   const loaded = await createChartWorkspaceRepository({ adapter, storage: null }).loadLibrary();
   assert.equal(loaded.workspaces[0]!.id, "v7");
-  assert.equal(loaded.workspaces[0]!.document.schemaVersion, 8);
+  assert.equal(loaded.workspaces[0]!.document.schemaVersion, 9);
   assert.ok(Object.values(loaded.workspaces[0]!.document.cells)
     .every((cell) => cell.strategyAttachment === null));
   assert.equal(adapter.writeCount, 0);

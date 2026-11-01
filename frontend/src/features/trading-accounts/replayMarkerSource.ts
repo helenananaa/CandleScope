@@ -20,8 +20,9 @@ export interface ReplayMarkerSource extends ExternalMarkerSource {
     notes: readonly JournalEntry[];
     cursorSec: number;
     intervalSec: number;
+    bucketTime?: (time: number) => number | null;
     lastVisibleSec: number | null;
-    labels: { buy: string; sell: string; note: string };
+    labels: { buy: string; sell: string; note: string; reviewNote?: string };
   }): void;
 }
 
@@ -43,10 +44,13 @@ function decimals(value: string): number {
  * Same-side fills in one candle become one marker: lightweight-charts stacks
  * markers on a bar, so a scaled entry would otherwise print a column of labels.
  */
-export function fillMarkerGroups(legs: readonly TradeLeg[], intervalSec: number): FillMarkerGroup[] {
+export function fillMarkerGroups(legs: readonly TradeLeg[], intervalSec: number,
+  bucketTime: (time: number) => number | null = time => floorTo(time, intervalSec),
+): FillMarkerGroup[] {
   const groups = new Map<string, { time: number; side: TradeLeg["side"]; legs: TradeLeg[] }>();
   for (const leg of legs) {
-    const time = floorTo(Math.floor(leg.tsMs / 1000), intervalSec);
+    const time = bucketTime(Math.floor(leg.tsMs / 1000));
+    if (time === null) continue;
     const key = `${time}:${leg.side}`;
     const group = groups.get(key);
     if (group) group.legs.push(leg);
@@ -84,10 +88,10 @@ export function createReplayMarkerSource(
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    update({ legs, notes, cursorSec, intervalSec, lastVisibleSec, labels }) {
+    update({ legs, notes, cursorSec, intervalSec, lastVisibleSec, labels, bucketTime = time => floorTo(time, intervalSec) }) {
       const markers: ExternalSeriesMarker[] = [];
       const visible = (time: number) => lastVisibleSec !== null && time <= lastVisibleSec;
-      for (const group of fillMarkerGroups(legsBefore(legs, cursorSec), intervalSec)) {
+      for (const group of fillMarkerGroups(legsBefore(legs, cursorSec), intervalSec, bucketTime)) {
         if (!visible(group.time)) continue;
         const buy = group.side === "buy";
         const count = group.count > 1 ? ` ×${group.count}` : "";
@@ -102,15 +106,15 @@ export function createReplayMarkerSource(
         });
       }
       for (const note of notesBefore(notes, cursorSec)) {
-        const time = floorTo(Math.floor((note.marketTimeMs ?? note.createdAtMs) / 1000), intervalSec);
-        if (!visible(time)) continue;
+        const time = bucketTime(Math.floor((note.marketTimeMs ?? note.createdAtMs) / 1000));
+        if (time === null || !visible(time)) continue;
         markers.push({
           id: `${idPrefix}:note:${note.id}`,
           time: time as EpochSeconds,
           position: "aboveBar",
           shape: "circle",
           color: colors.note,
-          text: labels.note,
+          text: note.reviewNote || note.marketTimeMs !== null ? labels.reviewNote ?? labels.note : labels.note,
           size: 0.8,
         });
       }
