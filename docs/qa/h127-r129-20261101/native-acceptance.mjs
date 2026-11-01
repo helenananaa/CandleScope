@@ -36,12 +36,22 @@ async function verify(){
    const period=chart.interval==='1m'?20:3,bars=chart.bars.filter(b=>b.is_closed);
    assert.ok(bars.length>=(period===20?499:3));assert.equal(chart.lines.length,1);
    const points=new Map(chart.lines[0].data.map(p=>[Number(p.time),p.value]));assert.equal(points.size,chart.lines[0].data.length);
-   let checked=0,maxError=0;
+   // Hosted history is explicitly viewport-first. Loaded market rows can
+   // include thousands of offscreen source repairs; they do not all demand
+   // an indicator range. Check every available comparable point, and require
+   // every paintable closed point in the independently queried viewport.
+   const view=(await q.query(chart.cellId)).snapshot.visibleRange?.time;
+   assert.ok(view&&Number.isFinite(view.from)&&Number.isFinite(view.to),'visible range missing');
+   let checked=0,visibleChecked=0,maxError=0;
    for(let i=period-1;i<bars.length;i++){
     const expected=bars.slice(i-period+1,i+1).reduce((n,b)=>n+b.close,0)/period,actual=points.get(bars[i].time);
-    assert.ok(actual!==undefined,`${chart.interval} missing ${bars[i].time}`);const error=Math.abs(actual-expected);assert.ok(error<1e-7);maxError=Math.max(maxError,error);checked++;
+    const visible=bars[i].time>=view.from&&bars[i].time<=view.to;
+    if(visible)assert.ok(actual!==undefined,`${chart.interval} missing visible ${bars[i].time}`);
+    if(actual===undefined)continue;
+    const error=Math.abs(actual-expected);assert.ok(error<1e-7);maxError=Math.max(maxError,error);checked++;if(visible)visibleChecked++;
    }
-   evidence.push({cellId:chart.cellId,interval:chart.interval,period,bars:chart.bars.length,closed:bars.length,checked,maxError,lastClosed:bars.at(-1).time});
+   assert.ok(visibleChecked>=(period===20?100:1),`${chart.interval} insufficient visible closed samples`);
+   evidence.push({cellId:chart.cellId,interval:chart.interval,period,bars:chart.bars.length,closed:bars.length,checked,visibleChecked,view,maxError,lastClosed:bars.at(-1).time});
   }return evidence;
  }catch(error){failure=String(error);return false;}},90000).catch(error=>{throw new Error(error.message+'; '+failure);});
 }
@@ -55,6 +65,11 @@ try{
  for(const [cell,id,period] of [['cell-1','prefix-ma-native',20],['cell-2','prefix-ma-derived',3]])assert.equal((await q.execute(cell,'addIndicator',{id,name:'MA',engineName:'MA',kind:'builtin',executionTarget:'hosted',params:{period},visible:true})).state,'applied');
  await ready(true);const initial=await prefix();assert.equal(initial.bar_delivery.acknowledgement_batch_size,16);
  await q.record('qualified-multipage-prefix-and-live-values',{diagnostics:initial,values:await verify(),workspace:await q.inspect()});
+ const latestButton=q.s.page.locator('[data-chart-cell-id="cell-1"]').getByRole('button',{name:'回到实时',exact:true});
+ if(await latestButton.isVisible())await latestButton.click();
+ await q.until(async()=>{const chart=(await capture(q)).find(c=>c.interval==='1m');const view=(await q.query('cell-1')).snapshot.visibleRange?.time;
+  return chart&&view&&view.to>=chart.bars.filter(b=>b.is_closed).at(-1).time?true:false;},30000);
+ await q.record('visible-latest-range-values',{values:await verify()});
  const before=(await indicators()).engine.instances.find(i=>i.refcount>0&&i.interval==='1m').last_committed;
  await q.until(async()=>{const d=await indicators();return d.engine.instances.some(i=>i.refcount>0&&i.interval==='1m'&&i.last_committed>before)?d:false;},120000);
  // The native indicator commit and derived-prefix refresh are independent
