@@ -23,7 +23,12 @@
       "public_admission",
       "interval_admission_contract",
       "history_archive_admission"
-    ]
+    ],
+    "persistentCompletionFollowup": {
+      "passed": 24,
+      "seconds": 6.37,
+      "checks": "persistent task completes all three original chunks after foreground departure; every release path, merge order and surviving-consumer combination"
+    }
   },
   "nativeFixedCandidatePending": true,
   "CI": "pending",

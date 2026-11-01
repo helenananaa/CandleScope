@@ -78,6 +78,9 @@ def test_persistent_history_releases_foreground_reserve_after_observer_leaves(re
             assert not finish.is_set()
         finally:
             finish.set()
-            await asyncio.wait_for(asyncio.gather(coordinator.wait_for_request(background_id), cold_task), 5)
+            background_result, _ = await asyncio.wait_for(
+                asyncio.gather(coordinator.wait_for_request(background_id), cold_task), 5)
+            assert background_result.status == 'completed'
+            assert calls.count('1m') == 3
 
     asyncio.run(run())
