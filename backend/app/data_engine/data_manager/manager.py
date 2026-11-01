@@ -304,7 +304,11 @@ class DataManager:
         self.interval_resolver = IntervalResolver()
 
         # ── Core components ──────────────────────────────────
-        self.cache = BarCache(self._cfg.cache)
+        self.cache = BarCache(
+            self._cfg.cache,
+            protection_lock=self._storage_gc_guard,
+            is_protected=self._cache_series_is_protected,
+        )
         self.event_bus = DataEventBus(
             self._cfg.event_bus,
             protection_lock=self._storage_gc_guard,
@@ -2245,7 +2249,7 @@ class DataManager:
     ) -> None:
         with self._storage_gc_guard:
             new_keys = tuple(key for key in keys if key not in self._stream_leases)
-            maximum = max(1, int(self._cfg.coordinator.max_active_series))
+            maximum = self._stream_lease_limit()
             projected = len(self._stream_leases) + len(new_keys)
             if projected > maximum:
                 raise StreamCapacityError(
@@ -2261,6 +2265,12 @@ class DataManager:
                 changed = changed or len(lease.consumers) != before
             if changed:
                 self._mark_storage_gc_protection_changed()
+
+    def _stream_lease_limit(self) -> int:
+        return min(
+            max(1, int(self._cfg.coordinator.max_active_series)),
+            max(0, int(self._cfg.cache.max_series)),
+        )
 
     def _release_stream_leases(
         self,
@@ -2649,9 +2659,12 @@ class DataManager:
     ) -> dict[str, Any]:
         """Plan asynchronously, then conditionally execute on the event loop."""
         plan = await self.plan_memory_gc_async(policy)
-        report = execute_memory_gc_plan(self, plan)
+        report = await self.execute_memory_gc_plan_async(plan)
         self._memory_gc_last_report = report
         return report
+
+    async def execute_memory_gc_plan_async(self, plan: dict[str, Any]) -> dict[str, Any]:
+        return await self._apply_gc_protected(execute_memory_gc_plan, self, plan)
 
     async def run_auto_gc(self, policy: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute one conservative automatic GC pass."""
@@ -3269,7 +3282,7 @@ class DataManager:
             if not bars:
                 return
         else:
-            self.cache.bulk_load(key, bars)
+            await self.cache.apply_protected(self.cache.bulk_load, key, bars)
 
         # Resolve only actual, trusted final rows from storage. A successful
         # job/status alone is not evidence that all missing bars were repaired.
@@ -3510,10 +3523,7 @@ class DataManager:
                     len(lease.consumers) for lease in self._stream_leases.values()
                 ),
                 "unique_consumers": len(unique_consumers),
-                "max_active_series": max(
-                    1,
-                    int(self._cfg.coordinator.max_active_series),
-                ),
+                "max_active_series": self._stream_lease_limit(),
                 "detail_offset": safe_offset,
                 "detail_limit": safe_limit,
                 "detail_total": len(ordered),
@@ -3555,9 +3565,25 @@ class DataManager:
             for info in self.coordinator.get_all_streams():
                 if info.status in (StreamStatus.ACTIVE, StreamStatus.STARTING):
                     keys.add(info.key)
-            for exchange, market_type, symbol, interval in self.bar_aggregator.get_targets():
-                keys.add(SeriesKey(symbol, interval, exchange=exchange, market_type=market_type))
+            for exchange, market_type, symbol, interval, identity in self.bar_aggregator.get_series_targets():
+                keys.add(SeriesKey.create(symbol, interval, exchange=exchange,
+                                          market_type=market_type, identity=identity))
             return keys
+
+    def _cache_series_is_protected(self, key: SeriesKey) -> bool:
+        """Called under the shared protection guard at cache eviction claim."""
+        if key in self._stream_leases or self.event_bus.get_direct_subscriber_count(key):
+            return True
+        info = self.coordinator.get_stream_info(
+            key.symbol, key.interval, exchange=key.exchange,
+            market_type=key.market_type, series_identity=key.identity,
+        )
+        return bool(
+            (info is not None and info.status in (StreamStatus.ACTIVE, StreamStatus.STARTING))
+            or self.bar_aggregator.has_series_target(
+                key.symbol, key.interval, key.exchange, key.market_type, key.identity,
+            )
+        )
 
     def _storage_gc_planning_snapshot(self) -> tuple[set[SeriesKey], Any, dict, int]:
         """Capture protection inputs and their diagnostic epoch atomically."""
@@ -3886,7 +3912,7 @@ class DataManager:
         try:
             while True:
                 await asyncio.sleep(interval)
-                evicted = self.cache.evict_idle()
+                evicted = await self.cache.apply_protected(self.cache.evict_idle)
                 if evicted:
                     logger.debug("TTL eviction: removed %d series", evicted)
         except asyncio.CancelledError:

@@ -25,6 +25,8 @@ from app.data_engine.aggregation.adapters import (
     snapshot_aggregation_values, snapshot_coverage, snapshot_field_summary,
 )
 from app.data_engine.aggregation.semantics import sum_additive
+from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
+from . import component_accumulator
 
 import logging
 import time
@@ -53,6 +55,9 @@ logger = logging.getLogger("bar_aggregator.L3_BarState")
 
 def has_complete_closed_component_coverage(state: BarState) -> bool:
     """Return whether component snapshots authoritatively cover the bucket."""
+    accumulator = state._component_accumulator
+    if accumulator is not None and accumulator.current(state.source_snapshots):
+        return accumulator.result.coverage(state.bucket_start_ms, state.bucket_end_ms).closed
     ordered = sorted(
         state.source_snapshots.values(),
         key=lambda item: (int(item["open_time_ms"]), int(item["close_time_ms"])),
@@ -179,9 +184,18 @@ class ComponentSnapshotOHLCVMerge:
       * missing earlier components may arrive later via backfill
       * the same source bar may be re-sent with fresher OHLCV
 
-    To keep custom bars correct, we store the latest snapshot for each
-    source component and rebuild the custom bar from those snapshots.
+    Accepted snapshots remain the correction authority. Fixed grids update a
+    compact prefix/tail index; earlier corrections rebuild from these inputs.
     """
+
+    def __init__(self, *, incremental=True):
+        self.incremental = incremental
+
+    def _can_accumulate(self, state, bar_input):
+        if not self.incremental or len(state.source_snapshots) > component_accumulator.MAX_COMPONENTS:
+            return False
+        specs = (parse_interval_spec(state.interval), parse_interval_spec(bar_input.source_interval))
+        return all(spec is not None and spec.alignment is IntervalAlignment.FIXED_EPOCH for spec in specs)
 
     @staticmethod
     def _snapshot_from_input(bar_input: BarInput) -> ReadonlyFields:
@@ -343,20 +357,33 @@ class ComponentSnapshotOHLCVMerge:
             return state
 
         snapshots[input_key] = candidate
-        ordered = sorted(
-            snapshots.values(),
-            key=lambda snap: (
-                int(snap["open_time_ms"]),
-                int(snap["close_time_ms"]),
-                int(snap["sequence"]) if snap.get("sequence") is not None else -1,
-            ),
-        )
-
-        first = ordered[0]
-        last = ordered[-1]
-
-        coverage = snapshot_coverage(ordered, state.bucket_start_ms, state.bucket_end_ms)
-        summary = snapshot_field_summary(ordered)
+        if self._can_accumulate(state, bar_input):
+            accumulator = state._component_accumulator
+            if accumulator is None:
+                accumulator = component_accumulator.ComponentAccumulator()
+            state._component_accumulator = None
+            result = accumulator.update(snapshots, input_key, existing)
+            state._component_accumulator = accumulator
+            coverage = result.coverage(state.bucket_start_ms, state.bucket_end_ms)
+            summary, raw_enhanced = result.values, result.raw_enhanced
+            first_time, last_time, last_closed = result.first, result.last, result.last_closed
+        else:
+            state._component_accumulator = None
+            ordered = sorted(
+                snapshots.values(),
+                key=lambda snap: (
+                    int(snap["open_time_ms"]),
+                    int(snap["close_time_ms"]),
+                    int(snap["sequence"]) if snap.get("sequence") is not None else -1,
+                ),
+            )
+            coverage = snapshot_coverage(ordered, state.bucket_start_ms, state.bucket_end_ms)
+            summary = snapshot_field_summary(ordered)
+            raw_enhanced = tuple(sum_additive((row[name] for row in ordered), integer=name == "trades")
+                                 if getattr(summary, name) is None else getattr(summary, name)
+                                 for name in component_accumulator.ENHANCED)
+            first_time, last_time = int(ordered[0]["open_time_ms"]), int(ordered[-1]["open_time_ms"])
+            last_closed = bool(ordered[-1]["is_closed"])
         fields = summary.project(
             enhanced_complete=coverage.enhanced_complete,
         )
@@ -366,17 +393,23 @@ class ComponentSnapshotOHLCVMerge:
         state.enhanced_fields = frozenset(name for name in enhanced if fields[name] is not None)
         # Preserve legacy diagnostic counters behind the mask. They are not
         # eligible fields: K130 and published records retain None for unknown.
-        for name in enhanced:
+        for name, raw_value in zip(enhanced, raw_enhanced):
             value = getattr(summary, name)
             if value is None:
-                value = sum_additive((row[name] for row in ordered), integer=name == "trades")
+                value = raw_value
+            # Missing raw enhancements are legal. Only the masked diagnostic
+            # counter uses zero; published/storage fields remain explicitly
+            # unknown via enhanced_fields. The batch path previously rounded
+            # None here and failed before producing a result.
+            if value is None:
+                value = 0
             if name != "trades":
                 value = round(value, 8)
             setattr(state, name, value)
-        state.tick_count = len(ordered)
-        state.first_input_at_ms = int(first["open_time_ms"])
-        state.last_input_at_ms = int(last["open_time_ms"])
-        state.last_close_received = bool(last["is_closed"])
+        state.tick_count = len(snapshots)
+        state.first_input_at_ms = first_time
+        state.last_input_at_ms = last_time
+        state.last_close_received = last_closed
         if is_new and state.created_at_ms == 0:
             state.created_at_ms = now_ms
         state.updated_at_ms = now_ms
@@ -409,7 +442,7 @@ class BarStateEngine:
         # Input semantics, not the target interval's global spelling, choose
         # snapshot replacement versus component accumulation.
         self._merge_strategy: BarMergeStrategy = StandardOHLCVMerge()
-        self._component_merge_strategy = ComponentSnapshotOHLCVMerge()
+        self._component_merge_strategy = ComponentSnapshotOHLCVMerge(incremental=config.incremental_components)
         self._merge_strategy_overridden = False
 
         # Active (FORMING) bars: {(exchange, market_type, symbol, bucket_start_ms) → BarState}
@@ -743,6 +776,9 @@ class BarStateEngine:
 
     def snapshot(self) -> dict:
         """Return a JSON-serializable snapshot of engine state."""
+        indices = [state._component_accumulator.snapshot()
+                   for state in (*self._active.values(), *self._closed.values())
+                   if state._component_accumulator is not None]
         return {
             "engine": "BarStateEngine",
             "interval": self._interval,
@@ -751,6 +787,13 @@ class BarStateEngine:
             "closed_bars": len(self._closed),
             "max_active": self._cfg.max_active_bars,
             "max_closed": self._cfg.max_closed_bars_in_memory,
+            "component_execution": {
+                "enabled": self._component_merge_strategy.incremental,
+                "indexed_states": len(indices),
+                **{name: sum(item[name] for item in indices) for name in (
+                    "appends", "tail_replacements", "rebuilds", "rebuilt_components",
+                    "summary_nodes", "estimated_bytes")},
+            },
         }
 
     # ── Internal: Eviction ───────────────────────────────────

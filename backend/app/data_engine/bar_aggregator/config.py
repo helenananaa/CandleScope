@@ -176,6 +176,12 @@ class BarAggregatorConfig:
         default_factory=lambda: _env_str("BAR_AGG_EXCHANGE", "binance"),
     )
 
+    # Appended for positional compatibility. 129-A fixed-grid execution;
+    # false retains batch reduction for controlled comparison and rollback.
+    incremental_components: bool = field(
+        default_factory=lambda: _env_bool("BAR_AGG_INCREMENTAL_COMPONENTS", True),
+    )
+
     # ── Methods ──────────────────────────────────────────────
 
     def update(self, **kwargs) -> None:

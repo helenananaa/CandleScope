@@ -1,0 +1,77 @@
+{
+  "recorded_at_utc": "2026-11-01T02:50:34.552582+00:00",
+  "scope": "129-A single-target COMPONENT execution and 120-P0 execution baseline; development delivery only",
+  "base_commit": "a4dc6e5374a719a98e9a8e8d797170f4448279aa",
+  "tested_source_identity": "Working-tree product hashes below; final commit also contains this receipt and documentation.",
+  "environment": {
+    "python": "3.12.15",
+    "machine": "arm64",
+    "platform": "macOS-26.6.2-arm64-arm-64bit"
+  },
+  "joint_regression": {
+    "tests": 2103,
+    "new_tests": 54,
+    "test_modules": 119,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "warnings": 27,
+    "seconds": 157.236,
+    "junit_sha256": "3af3b46f54fe83e7f9450581d3517a1f00a00a8dd7c000a16336f97be65587db",
+    "selection_sha256": "adde2a87b8a8b90be846ef6723d7b660f1f0158959fcc69b776c7b7b28526676",
+    "command": ".venv/bin/python docs/qa/r129-20261101/run_backend.py"
+  },
+  "checks": {
+    "changed_python_ast_parse": "passed",
+    "git_diff_check": "passed"
+  },
+  "product_and_test_sha256": {
+    "backend/app/data_engine/bar_aggregator/aggregator.py": "57a3995d42df804d46a1a8e380e65f5e2b28efc7f63612bf0933eabc67d4b49c",
+    "backend/app/data_engine/bar_aggregator/bar_state.py": "abe9ecf17de2c12fb0cc98c6d8783d34a3a452535669f7f61a31cbc17f89fd73",
+    "backend/app/data_engine/bar_aggregator/component_accumulator.py": "48d1c7d724939e98fc065fac5ed7a6da0ec04c75e2a9adfcf3133eb505343b30",
+    "backend/app/data_engine/bar_aggregator/config.py": "e2b13128c3c3d2f68c958a5a2235520ef79b4e939aa1d01f542854e492b794d4",
+    "backend/app/data_engine/bar_aggregator/models.py": "2dd3861a6d7645f990a9f6bb5b846271ff7178c0545d88ba4a38ea39d71881c7",
+    "backend/scripts/ccxt_contracts/integration.py": "7e63135a3954d7f56ad516d8857b72724e6047b309f9289a134b8aec35c1fb6d",
+    "backend/tests/test_component_incremental.py": "44e2d620a63f61259eb9faa1b66e3c65fa6f50d09643b8bd64b90c1e0339802f"
+  },
+  "probe_sha256": {
+    "docs/qa/r129-20261101/benchmark.py": "c1f4a86b8e299d9d7d72565182796d01fffdc155fcddf681a122660974c4c336",
+    "docs/qa/r129-20261101/indicator_baseline.py": "f2a36a066e77810f2044844f87c561547dd014f4d13cb2b7c232c023a4ca84c4",
+    "docs/qa/r129-20261101/run_backend.py": "0f1a2f5fbd75ba28f5201375b745a10a5a71cd4a57f6d0a4a997c61b1ba63b84"
+  },
+  "unchanged_120_execution_source_sha256": {
+    "backend/app/indicator/data_manager_bridge.py": "1513067fc91ce1945ced198bec8cd993473cb1e34f516de6532ca0bd886cc3dd",
+    "backend/app/indicator/engine.py": "44019d72e05e648ab553e7eb1cd129a07846e6c46f1cbed42af9c9b424f77b68",
+    "backend/app/data_engine/data_manager/event_bus.py": "3d574cc6040998c34da4c43fdf9e7804739fe113857de8b02ff8ca0bc9a0ebf2",
+    "backend/app/core/executors.py": "0a0df3fdc4dd79b3b87ee9b6c0c69a2dd7af0eb4786a661249814bcf610a05c8"
+  },
+  "receipt_sha256": {
+    "benchmark.json": "5c3a2e20bf9efccd3ed1b25c7e836414b740c78d426110e6d73197740b5af08b",
+    "indicator-baseline.json": "a9336a1398f7e23415e0c2bd8e351f29d27ad186dbedfb50451b2e500bfa69ab"
+  },
+  "public_recording_sha256": "900095946177f206d2765773b93a6d49fba478fa397c4491dd0c64bed235b204",
+  "prior_merges": [
+    {
+      "pr": 174,
+      "head": "2182ead34e93047c1fcb10f0cfd3332ed78a6583",
+      "merge": "9d043c9b6fcfb0181b1e2de6181342a05848c92f",
+      "checks": [
+        "https://github.com/helenananaa/CandleScope/actions/runs/41203764479",
+        "https://github.com/helenananaa/CandleScope/actions/runs/41203764480"
+      ],
+      "acceptance": "backend and arm64/x64 exact-head jobs successful; actual merge tree bda4578f6311d280633e34ef128627e80cb83a43 matches previously native-qualified candidate 533b0a07"
+    },
+    {
+      "pr": 183,
+      "head": "a96b5b3a961c0a0f5aab71794bff9fb3aca65904",
+      "merge": "a4dc6e5374a719a98e9a8e8d797170f4448279aa",
+      "checks": [
+        "https://github.com/helenananaa/CandleScope/actions/runs/41211377891",
+        "https://github.com/helenananaa/CandleScope/actions/runs/41211377877"
+      ],
+      "acceptance": "retargeted to main; backend and arm64/x64 exact-head jobs successful; actual merge tree 3165625d435b2f2a1100b7f710aa76932e714b57 passed 2049 tests and public recording 104 blocks / 936 fields"
+    }
+  ],
+  "merge_gate_remaining": "For the new 129-A PR: fresh-main integration, exact-head CI, and default-path native save/full-exit/restart acceptance before merge. Development does not wait for CI.",
+  "limitations": "Timing receipts are controlled local runs; no live-provider/native UI or general throughput claim. 129-B/C/D/J and #120 execution isolation remain open."
+}

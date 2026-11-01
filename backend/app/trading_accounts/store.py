@@ -296,6 +296,22 @@ class TradingStore:
         )
         return [(row["exchange"], row["market_type"], row["symbol"]) for row in rows]
 
+    def practice_position_version(self) -> tuple[int, int] | None:
+        """Cheap invalidation for the append-only practice-fill projection.
+
+        Practice fills cannot be edited/deleted through the account API; new
+        fills advance the indexed sequence. Manual edits do not affect this
+        projection. A commit from another connection invalidates it too.
+        Caller holds ``locked()`` while rebuilding the dependent projection.
+        Uncommitted reads cannot be cached: rollback may reuse a sequence.
+        """
+        with self._lock:
+            if self._conn.in_transaction:
+                return None
+            last_seq = self._conn.execute("SELECT COALESCE(MAX(seq), 0) FROM fills").fetchone()[0]
+            external_version = self._conn.execute("PRAGMA data_version").fetchone()[0]
+            return int(last_seq), int(external_version)
+
     def fills(self, account_id: str) -> list[dict[str, Any]]:
         return self.all(
             "SELECT * FROM fills WHERE account_id = ? ORDER BY ts_ms, seq",

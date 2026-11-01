@@ -9,7 +9,7 @@ import type {
 
 function getRepairResultClassName(status: string | undefined): string {
     if (status === 'ok') return 'st-result-ok';
-    if (status === 'partial' || status === 'warning') return 'st-result-warn';
+    if (status === 'partial' || status === 'warning' || status === 'empty') return 'st-result-warn';
     return 'st-result-fail';
 }
 
@@ -47,23 +47,36 @@ function renderGapScanDetails(result: MaintenanceResult): ReactNode {
     if (!Array.isArray(result.results) || result.results.length === 0) return null;
     return (
         <div className="st-series-list">
-            {result.results.map((item) => (
-                <div key={item.interval} className="st-series-item">
+            {result.results.map((item, index) => (
+                <div key={`${item.exchange}-${item.market_type}-${item.symbol}-${item.interval}-${item.lane}-${index}`} className="st-series-item">
                     <div className="st-series-line">
                         <span className="st-series-name">
-                            {item.interval}
-                            {item.total_bars && <span className="st-series-meta"> · {item.total_bars}</span>}
-                            {item.latest_data && <span className="st-series-meta"> · {item.latest_data}</span>}
+                            {item.symbol} · {item.interval}
                         </span>
                         <span className={`st-series-badge st-badge-${item.status === 'filled' ? 'ok' : item.status === 'ok' ? 'info' : 'fail'}`}>
-                            {item.status === 'ok' ? <Icon name="check" size={12} /> : item.status === 'filled' ? `+${item.bars_filled}` : '!'}
+                            {item.status === 'ok' || item.status === 'filled' ? <Icon name="check" size={12} /> : '!'}
                         </span>
                     </div>
                     <div className="st-series-msg">{item.message}</div>
+                    <div className="st-series-msg">{t("settings.maint.inspectedRange", {
+                        from: auditTime(item.scanned_from_ms), to: auditTime(item.scanned_to_ms),
+                    })}</div>
+                    <div className="st-series-msg">{t("settings.maint.remainingGaps", {
+                        count: item.remaining_gaps ?? t("strategyCompare.unknown"),
+                    })}</div>
+                    {(item.truncated || item.status === 'unscanned') && (
+                        <div className="st-series-msg">{t("settings.maint.continueFrom", { time: auditTime(item.next_cursor_ms) })}</div>
+                    )}
+                    {item.repair_errors?.map((error, errorIndex) => <div key={errorIndex} className="st-series-msg">{error}</div>)}
                 </div>
             ))}
         </div>
     );
+}
+
+function auditTime(value: number | null | undefined): string {
+    if (value == null || !Number.isFinite(value)) return t("strategyCompare.unknown");
+    return new Date(value).toISOString().replace('T', ' ').replace('.000Z', '');
 }
 
 function exchangeLabel(exchange: string | null | undefined): string {
@@ -127,7 +140,7 @@ export default function StorageMaintenancePanel({
                     <button
                         className="st-btn st-btn-warn"
                         onClick={() => onStorageRepair('current')}
-                        disabled={storageRepairLoading || currentScopeSymbols.length === 0}
+                        disabled={storageRepairLoading || gapScanLoading || currentScopeSymbols.length === 0}
                         style={{ flex: 1 }}
                     >
                         {storageRepairLoading && maintenanceScope === 'current'
@@ -137,7 +150,7 @@ export default function StorageMaintenancePanel({
                     <button
                         className="st-btn st-btn-secondary"
                         onClick={() => onStorageRepair('watchlist')}
-                        disabled={storageRepairLoading || watchlistScopeSymbols.length === 0}
+                        disabled={storageRepairLoading || gapScanLoading || watchlistScopeSymbols.length === 0}
                         style={{ flex: 1 }}
                     >
                         {storageRepairLoading && maintenanceScope === 'watchlist'
@@ -191,6 +204,8 @@ export default function StorageMaintenancePanel({
                     >
                         {gapScanLoading && maintenanceScope === 'current'
                             ? t("settings.maint.scanning")
+                            : gapScanResult?.has_more && maintenanceScope === 'current'
+                            ? t("settings.maint.continueScan")
                             : t("settings.maint.currentChart", { symbol: currentSymbol || '-' })}
                     </button>
                     <button
@@ -201,6 +216,8 @@ export default function StorageMaintenancePanel({
                     >
                         {gapScanLoading && maintenanceScope === 'watchlist'
                             ? t("settings.maint.scanning")
+                            : gapScanResult?.has_more && maintenanceScope === 'watchlist'
+                            ? t("settings.maint.continueScan")
                             : t("settings.maint.watchlistCurrent", { count: watchlistScopeSymbols.length })}
                     </button>
                 </div>
@@ -220,11 +237,12 @@ export default function StorageMaintenancePanel({
                             : ''}
                     </div>
                     <div className="st-result-stats">
-                        <span>{t("settings.maint.gapsFound", { count: gapScanResult.gaps_found || 0 })}</span>
-                        <span>{t("settings.maint.gapsFilled", { count: gapScanResult.gaps_filled || 0 })}</span>
-                        <span>{t("settings.maint.barsFilled", { count: gapScanResult.total_bars_filled || 0 })}</span>
+                        <span>{t("settings.maint.checked", { count: gapScanResult.scanned_ranges || 0 })}</span>
+                        <span>{t("settings.maint.passedCount", { count: gapScanResult.verified_ranges || 0 })}</span>
+                        <span>{t("settings.maint.failedCount", { count: gapScanResult.failed_ranges || 0 })}</span>
                         <span>{t("settings.maint.elapsed", { seconds: ((gapScanResult.elapsed_ms || 0) / 1000).toFixed(1) })}</span>
                     </div>
+                    {gapScanResult.errors?.map((error, index) => <div key={index} className="st-series-msg">{error}</div>)}
                     {renderGapScanDetails(gapScanResult)}
                 </div>
             )}
