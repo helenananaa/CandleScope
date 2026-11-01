@@ -38,11 +38,15 @@ def init_revision_triggers(conn, table: str, *, native: bool = False) -> None:
             # deleted candles. Actual clear/delete/invalidation stays fenced.
             deletion = ("CASE WHEN (SELECT mode FROM kline_mutation_context WHERE singleton=1)="
                         "'native_empty_union' THEN 0 ELSE " + head + " END")
-            conn.execute(f"DROP TRIGGER IF EXISTS {table}_change_delete")
+        replace_native_delete = native and operation == "delete"
+        migration_start = (f"BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS {table}_change_delete;"
+                           if replace_native_delete else "")
+        migration_end = "COMMIT;" if replace_native_delete else ""
         family = " AND ".join(f"d.{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         selected_family = " AND ".join(f"{name}={value}" for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval")
         match = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
         conn.executescript(f"""
+            {migration_start}
             CREATE TRIGGER IF NOT EXISTS {table}_change_{operation}
             AFTER {operation.upper()} ON {table} BEGIN
                 UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1;
@@ -57,6 +61,7 @@ def init_revision_triggers(conn, table: str, *, native: bool = False) -> None:
                     AND open_time<={alias}.end_ms AND COALESCE(close_time,open_time)>={alias}.start_ms
                     AND (SELECT mode FROM kline_mutation_context WHERE singleton=1)<>'retention';
             END;
+            {migration_end}
         """)
 
 

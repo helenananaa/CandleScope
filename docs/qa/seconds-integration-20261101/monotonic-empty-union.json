@@ -11,6 +11,12 @@
     {
       "path": "monotonic-after.log.gz",
       "sha256": "b8ee243a70c7bfbc5194a1c7bf5b1676c68ee740b2cb5e621fb27e24ca15f621"
+    },
+    {
+      "path": "atomic-trigger-migration.log.gz",
+      "sha256": "9ee2b285bf581d5042cc3902431b3d0eb7718d6bbb9f0708d4007a1901b31ca5"
     }
-  ]
+  ],
+  "migration": "Replace the native-empty deletion trigger inside one BEGIN IMMEDIATE/COMMIT schema transaction so other physical writers never observe a committed untracked interval.",
+  "migration_tests": "40 range and deletion-fence checks pass after atomic replacement change."
 }
