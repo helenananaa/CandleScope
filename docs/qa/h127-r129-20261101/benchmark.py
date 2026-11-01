@@ -103,7 +103,8 @@ async def case(root, count, events):
         corrected['taker_buy_quote'] = corrected['open']
         klines_repo.upsert_klines('BTCUSDT', '1m', [corrected], source='repair_binance_rest_verified')
         started = time.perf_counter()
-        await agg.ingest_bar_input('binance', 'spot', 'BTCUSDT', interval, incoming(corrected, closed=True))
+        await agg.ingest_bar_input('binance', 'spot', 'BTCUSDT', interval,
+                                  incoming(corrected, closed=True, sequence=corrected['open_time'] + 1))
         correction_ms = (time.perf_counter() - started) * 1000
         source[count // 3] = corrected
         expected = dict(open=source[0]['open'], high=max(r['high'] for r in [*source, tail]),
@@ -145,7 +146,7 @@ def main():
                   benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   prefix_enabled=config.HISTORY_PREFIX_ENABLED, cases=cases,
                   process_peak_rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-                  limits='Isolated real SQLite and actual DataManager warm/bridge/cache path, controlled canonical rows, no network/native UI. Every-update publication throttle explicitly disabled in both modes;64 updates paced2ms. Source correction invalidates shared source blocks. Busy shared host, not an SLA. CPU includes preparation after the timer starts, not fixture creation. No background provider or revision poll tasks.')
+                  limits='Isolated real SQLite and actual DataManager warm/bridge/cache path, controlled canonical rows, no network/native UI. Every-update publication throttle explicitly disabled in both modes;64 updates paced2ms. Correction is committed to SQLite and supplied with an explicitly newer freshness sequence; it invalidates shared source blocks. Busy shared host, not an SLA. CPU includes preparation after the timer starts, not fixture creation. No background provider or revision poll tasks.')
     Path(args.out).write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report))
 
