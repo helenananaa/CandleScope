@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Any
 from copy import deepcopy
 import time
 
@@ -20,13 +21,12 @@ from app.data_engine.bar_aggregator.models import BarStatus
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import IntervalAlignment, parse_interval_spec
 from app.data_engine.memory_budget import MemoryBudgetExceeded
-from .history_prefix import HistoryPrefixReader, EmptyHistoryPrefix, PREFIX_BYTES, MAX_PREFIX_ROWS
-from .models import SeriesKey
+from app.data_engine.aggregation.history_prefix import EmptyHistoryPrefix, PREFIX_BYTES, MAX_PREFIX_ROWS
 
 
 @dataclass
 class _Target:
-    source: SeriesKey
+    source: Any
     token: tuple
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     recovering: bool = False
@@ -40,9 +40,9 @@ class HistoryPrefixRuntime:
     # prefixes. Small histories keep the lower-cost existing component path.
     MIN_ROWS = 2048
 
-    def __init__(self, engine, aggregator, require_recovery):
-        self.engine, self.aggregator = engine, aggregator
-        self.reader = HistoryPrefixReader(engine)
+    def __init__(self, reader, aggregator, require_recovery):
+        self.aggregator = aggregator
+        self.reader = reader
         self.require_recovery = require_recovery
         self.targets = {}
         self.tasks = set()
@@ -73,9 +73,7 @@ class HistoryPrefixRuntime:
     def failed(self, slot):
         if self._current(slot):
             self.metrics['failures'] += 1
-            self.require_recovery(SeriesKey.create(slot.source.symbol, slot.token[0][3],
-                exchange=slot.source.exchange, market_type=slot.source.market_type,
-                identity=slot.source.identity))
+            self.require_recovery(replace(slot.source, interval=slot.token[0][3]))
 
     @asynccontextmanager
     async def _task(self):
@@ -84,7 +82,7 @@ class HistoryPrefixRuntime:
             raise BarDeliveryUnavailable('history/live handoff is closed or at capacity')
         if task in self.tasks:
             raise RuntimeError('history/live handoff cannot reenter its owner')
-        with self.engine.memory_budget.reserve('realtime-state', 8192) as lease:
+        with self.reader.memory_budget.reserve('realtime-state', 8192) as lease:
             lease.retain(8192, lambda: self.tasks.add(task))
         try:
             yield
@@ -112,7 +110,7 @@ class HistoryPrefixRuntime:
             raise BlockRevisionChanged('history target detached before adoption')
         result = None
         allowance = 0 if refresh else PREFIX_BYTES
-        with self.engine.memory_budget.reserve('realtime-state', allowance) as lease:
+        with self.reader.memory_budget.reserve('realtime-state', allowance) as lease:
             def commit():
                 nonlocal result
                 result = self.aggregator.adopt_history_prefix(prefix, slot.token, refresh=refresh)
@@ -150,22 +148,21 @@ class HistoryPrefixRuntime:
             return False
         if slot is None:
             slot = _Target(source, token)
-            with self.engine.memory_budget.reserve('realtime-state', 1024) as lease:
+            with self.reader.memory_budget.reserve('realtime-state', 1024) as lease:
                 lease.retain(1024, lambda: self.targets.__setitem__(key, slot))
         self.seeding.add(key)
         try:
             # Qualification runs on a storage worker even at an empty new
             # bucket. Never fall back to an unbounded previous-bucket read.
             async with self._task():
-                await run_storage(self.engine.history_blocks._qualify, source)
+                await run_storage(self.reader.qualify, source)
             if through_ms <= start_ms:
                 return True
             async with self._task(), self.reader.stage(source, start_ms, through_ms, require_complete=False) as prefix:
                 async with slot.lock:
                     if not self._current(slot):
                         return True  # Detached caller must not run a late legacy seed.
-                    await run_storage(self.reader.validate, prefix, storage=self.engine.storage,
-                                      manager=self.engine.shared_blocks, policy=self.engine.history_policy)
+                    await run_storage(self.reader.validate_bound, prefix)
                     if not self._current(slot):
                         return True
                     pipeline = self.aggregator._pipelines[self.aggregator._pipeline_key(interval, source.exchange, source.identity)]
@@ -181,8 +178,7 @@ class HistoryPrefixRuntime:
                 current = pipeline.bar_state.get_state(source.exchange, source.market_type, source.symbol, start_ms)
                 if current is not None and current._history_prefix is not None:
                     pipeline.bar_state.expire_bar(source.exchange, source.market_type, source.symbol, start_ms)
-                    self.require_recovery(SeriesKey.create(source.symbol, interval, exchange=source.exchange,
-                                          market_type=source.market_type, identity=source.identity))
+                    self.require_recovery(replace(source, interval=interval))
             return True
         except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded):
             self.metrics['failures'] += 1
@@ -193,8 +189,7 @@ class HistoryPrefixRuntime:
             pipeline = self.aggregator._pipelines.get(self.aggregator._pipeline_key(interval, source.exchange, source.identity))
             state = pipeline.bar_state.get_state(source.exchange, source.market_type, source.symbol, start_ms) if pipeline else None
             if state is not None and state._history_prefix is not None:
-                self.require_recovery(SeriesKey.create(source.symbol, interval, exchange=source.exchange,
-                                      market_type=source.market_type, identity=source.identity))
+                self.require_recovery(replace(source, interval=interval))
                 return True
             self.detach(key)
             return False
@@ -207,8 +202,7 @@ class HistoryPrefixRuntime:
             return state
         valid = False
         try:
-            await run_storage(self.reader.validate, prefix, storage=self.engine.storage,
-                              manager=self.engine.shared_blocks, policy=self.engine.history_policy)
+            await run_storage(self.reader.validate_bound, prefix)
             self.metrics['validations'] += 1
             if not self._current(slot):
                 raise BlockRevisionChanged('history target detached during validation')
@@ -236,15 +230,13 @@ class HistoryPrefixRuntime:
                                                    state.symbol, state.bucket_start_ms)
             self.metrics['empty'] += 1
             slot.recovering = True
-            self.require_recovery(SeriesKey.create(state.symbol, state.interval, exchange=state.exchange,
-                                  market_type=state.market_type, identity=state.identity))
+            self.require_recovery(replace(slot.source, interval=state.interval))
             if emit_events and expired is not None:
                 await self.aggregator.publisher.emit_expired(expired)
             return None
         self.metrics['refreshes'] += 1
         if previous.status == BarStatus.CLOSED and adopted.status != BarStatus.CLOSED:
-            self.require_recovery(SeriesKey.create(state.symbol, state.interval, exchange=state.exchange,
-                                  market_type=state.market_type, identity=state.identity))
+            self.require_recovery(replace(slot.source, interval=state.interval))
         if emit_events:
             if adopted.status == BarStatus.CLOSED:
                 await self.aggregator.publisher.emit_amended(adopted, previous)

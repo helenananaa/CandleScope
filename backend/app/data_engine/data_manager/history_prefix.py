@@ -8,38 +8,17 @@ owner must still fence its target generation and live overlay before adoption.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 import threading
 
 from app.core.executors import run_storage
 from app.data_engine.aggregation.blocks import BlockRevisionChanged, BlockUnavailable
-from app.data_engine.aggregation.core import AggregateSummary, combine
+from app.data_engine.aggregation.core import combine
 from app.data_engine.memory_budget import MemoryBudgetExceeded, retained_size
 
 
-MAX_PREFIX_ROWS = 65_536
-PREFIX_BYTES = 32 * 1024
-
-
-class EmptyHistoryPrefix(BlockUnavailable):
-    """Qualified canonical range contains no accepted candle; never a zero bar."""
-
-
-@dataclass(frozen=True, slots=True)
-class HistoryPrefix:
-    summary: AggregateSummary
-    start_ms: int
-    through_ms: int
-    source_width_ms: int
-    pages: int
-    storage_rows: int
-    cache_hits: int
-    acquisition_revision: int = 0
-    binding: tuple[int, int, int] = ()
-
-    @property
-    def complete(self):
-        return self.summary.is_authoritative(self.start_ms, self.through_ms)
+from app.data_engine.aggregation.history_prefix import (
+    EmptyHistoryPrefix, HistoryPrefix, MAX_PREFIX_ROWS, PREFIX_BYTES,
+)
 
 
 class HistoryPrefixReader:
@@ -52,6 +31,18 @@ class HistoryPrefixReader:
 
     def __init__(self, engine):
         self.engine = engine
+
+    @property
+    def memory_budget(self):
+        return self.engine.memory_budget
+
+    def qualify(self, source):
+        return self.engine.history_blocks._qualify(source)
+
+    def validate_bound(self, prefix):
+        engine = self.engine
+        return self.validate(prefix, storage=engine.storage, manager=engine.shared_blocks,
+                             policy=engine.history_policy)
 
     def _read_page(self, source, start, end, prefix, cursor, page_rows, cancel, require_complete):
         with self.engine.history_blocks.read(source, start, end, max_rows=page_rows,
