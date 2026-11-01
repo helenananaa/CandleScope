@@ -22,7 +22,8 @@ export async function streamAccountState(signal: AbortSignal, update: (status: A
   const invalid = (): never => { throw new AccountApiError("ACCOUNT_RESPONSE_INVALID"); };
   const frame = (line: string) => {
     if (line.length > limit) invalid();
-    const event: unknown = JSON.parse(line);
+    let event: unknown;
+    try { event = JSON.parse(line); } catch { return invalid(); }
     if (!record(event) || event.schema !== "candlescope.readonly-account-state/1") return invalid();
     if (event.type === "heartbeat") return;
     if (event.type !== "snapshot" || event.replacement !== true || !record(event.identity) || !record(event.cursor)) return invalid();

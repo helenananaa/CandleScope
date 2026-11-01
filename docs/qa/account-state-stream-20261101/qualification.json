@@ -9,5 +9,9 @@
     "Not every financial event is delivered; snapshots deliberately coalesce",
     "No cross-process private-account writer is supported by this in-process notification stage",
     "Windows unqualified"
-  ]
+  ],
+  "backend_current_main_201": 199,
+  "frontend_current_main_201": "See frontend-main201.log.gz",
+  "typecheck_current_main_201": "passed",
+  "plugin_architecture": "passed"
 }
