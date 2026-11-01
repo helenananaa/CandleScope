@@ -1,0 +1,13 @@
+# PR 180: native replay qualification for b288a36c
+
+Application source `b288a36c30e57a707a1ee8bc9eff2b3ee8b1d963` was built by the official macOS arm64 packaging hooks, extracted from its retained ZIP into a fresh installation, and verified against 3,100 source hashes and 162 built renderer files. Strict code-signature checks passed before and after native execution. The accompanying manifest identifies the exact ZIP and ASAR.
+
+The isolated application and bundled backend passed creation, paper buy/sell, an independent Decimal financial oracle, save, full process exit, restart and continued playback. Splitting the restored chart retained 51 visible one-minute bars without a manual viewport correction. The subsequent two-period disconnect/reconnect preserved all prior closed OHLCV rows; recovery took 15.500 seconds, with 242 and 49 visible bars. Closing one chart and leaving the run released resources from two sequences to one and then zero.
+
+MA20 was checked numerically, including all eligible visible points and two complete five-minute aggregates. After a separate full exit/restart, 353 one-minute and 55 five-minute closed points were compared, with 241 and 48 eligible visible points. Saved indicator outputs and the clock matched. Native DownloadItem completed a 509-byte NDJSON transfer with a valid terminal record and hash. All successful stage receipts contain zero renderer exceptions, and owned application/backend processes exited normally.
+
+The original chain stopped because its setup attempted to remove an indicator absent from the fresh profile. That failure and script are preserved. The corrected script inspects the existing indicators, conditionally removes its own indicator, and requires addIndicator to succeed; all numerical and restart checks were rerun against the unchanged binary. `native-summary.json` records the exact successful stage receipts instead of relabeling the original chain.
+
+This is a finite synthetic archive qualification (4,000 one-minute bars per symbol and six-hour visible history), not full release acceptance. ALL_AVAILABLE cold performance, extended controller-disconnect behavior, Windows, and the full 157-item matrix remain open. The single-market export contains no equity samples; the native stream and terminal record are verified, while a nonempty curve and the operating-system save dialog are outside this run.
+
+Local `npm run check` passed 4,704 frontend tests, the separately isolated drawing performance test, 127 desktop tests, architecture/plugin/i18n/type/lint checks and the production build. Corresponding head CI remains a separate merge gate.

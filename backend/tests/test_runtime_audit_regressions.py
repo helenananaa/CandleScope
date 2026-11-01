@@ -151,7 +151,7 @@ def test_native_list_reads_only_independent_summary(native):
 def test_incremental_replay_never_builds_prefix_and_restores_without_runtime(native):
     service, run_id, bars = native
     replay = service.replay
-    replay._worker = lambda *args: SimpleNamespace(advance=lambda count, _: output(bars[:count]))
+    replay._worker = lambda *args, external=False: SimpleNamespace(advance=lambda count, _: output(bars[:count]))
     replay._prefix = lambda *args: pytest.fail("incremental path must not copy historical prefixes")
     created = replay.create(run_id)
     key = created["replay_id"]
@@ -167,7 +167,7 @@ def test_incremental_replay_never_builds_prefix_and_restores_without_runtime(nat
     replay.shutdown()
     service.replay = replay = NativeReplay(service)
     assert replay.get(key)["result"] == first["result"]
-    replay._worker = lambda *args: SimpleNamespace(advance=lambda count, _: output(bars[:count]))
+    replay._worker = lambda *args, external=False: SimpleNamespace(advance=lambda count, _: output(bars[:count]))
     replay.command(key, replay.get(key)["revision"], "seek", len(bars))
     final = settled(replay, key)
     assert final["result"] == service.get(run_id)["result"]

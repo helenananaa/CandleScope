@@ -1,0 +1,516 @@
+{
+  "schema": "candlescope.durable-delivery-qualification/1",
+  "source_commit": "cbe39d467458dd74eb79b0c1560162f143f32136",
+  "collection_commit": "cbe39d467458dd74eb79b0c1560162f143f32136",
+  "scope": "Finite #121 stage: batch publication acknowledgements only; canonical commit/publication remain sequential.",
+  "tests": {
+    "journal_bridge": "45 passed",
+    "source_revision_consumer_contracts": "74 passed",
+    "latest_acknowledgements": "14 passed including actual OS process exit after16 publications before acknowledgement",
+    "counting": "Overlapping selections; not an additive test total."
+  },
+  "performance_runs": {
+    "baseline": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 35.789249999652384,
+        "cpu_ms": 32.51500000000007,
+        "publication_ms": {
+          "p50": 29.868125002394663,
+          "p95": 29.868125002394663,
+          "p99": 29.868125002394663
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 192,
+        "drain_ms": 1409.3150000007881,
+        "cpu_ms": 940.9030000000005,
+        "publication_ms": {
+          "p50": 925.0376659983885,
+          "p95": 1355.5596670012164,
+          "p99": 1395.8812919991033
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 768,
+        "drain_ms": 5107.2722079989035,
+        "cpu_ms": 3888.0099999999993,
+        "publication_ms": {
+          "p50": 3234.4990000019607,
+          "p95": 4965.083582999796,
+          "p99": 5078.161292000004
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 768,
+        "drain_ms": 3988.4087499995076,
+        "cpu_ms": 3884.2490000000007,
+        "publication_ms": {
+          "p50": 2628.944500000216,
+          "p95": 3856.0884170001373,
+          "p99": 3960.9144999994896
+        },
+        "acknowledgement_batches": null
+      }
+    ],
+    "candidate": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 34.55708399997093,
+        "cpu_ms": 26.067000000001173,
+        "publication_ms": {
+          "p50": 29.537667000113288,
+          "p95": 29.537667000113288,
+          "p99": 29.537667000113288
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 140,
+        "drain_ms": 919.024916998751,
+        "cpu_ms": 800.0720000000001,
+        "publication_ms": {
+          "p50": 654.0519169975596,
+          "p95": 890.017291996628,
+          "p99": 910.1919169988832
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 562,
+        "drain_ms": 3924.951166001847,
+        "cpu_ms": 3207.376999999999,
+        "publication_ms": {
+          "p50": 2480.117250001058,
+          "p95": 3811.3071670013596,
+          "p99": 3905.1559170002292
+        },
+        "acknowledgement_batches": null
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 565,
+        "drain_ms": 4643.1570000022475,
+        "cpu_ms": 3401.577999999999,
+        "publication_ms": {
+          "p50": 2843.3289999993576,
+          "p95": 4526.575084000797,
+          "p99": 4639.542499997333
+        },
+        "acknowledgement_batches": null
+      }
+    ],
+    "baseline2": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 51.29016699720523,
+        "cpu_ms": 30.956999999999013,
+        "publication_ms": {
+          "p50": 38.219333000597544,
+          "p95": 38.219333000597544,
+          "p99": 38.219333000597544
+        },
+        "acknowledgement_batches": 1
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 192,
+        "drain_ms": 1716.04141699936,
+        "cpu_ms": 1026.2600000000007,
+        "publication_ms": {
+          "p50": 790.7807090014103,
+          "p95": 1626.419749998604,
+          "p99": 1685.5030420010735
+        },
+        "acknowledgement_batches": 64
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 768,
+        "drain_ms": 10114.657500002068,
+        "cpu_ms": 4265.342000000001,
+        "publication_ms": {
+          "p50": 6825.035458001366,
+          "p95": 10019.789040998148,
+          "p99": 10077.844957999332
+        },
+        "acknowledgement_batches": 256
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 768,
+        "drain_ms": 11159.804916002031,
+        "cpu_ms": 4437.932999999997,
+        "publication_ms": {
+          "p50": 8003.064624997933,
+          "p95": 10935.107624998636,
+          "p99": 11209.53875000123
+        },
+        "acknowledgement_batches": 256
+      }
+    ],
+    "candidate2": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 81.48741600234644,
+        "cpu_ms": 26.265000000000427,
+        "publication_ms": {
+          "p50": 78.86470800076495,
+          "p95": 78.86470800076495,
+          "p99": 78.86470800076495
+        },
+        "acknowledgement_batches": 1
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 141,
+        "drain_ms": 1101.3534999983676,
+        "cpu_ms": 814.0830000000001,
+        "publication_ms": {
+          "p50": 703.6832500016317,
+          "p95": 1044.7265000002517,
+          "p99": 1083.9416250018985
+        },
+        "acknowledgement_batches": 13
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 561,
+        "drain_ms": 3961.854624998523,
+        "cpu_ms": 3231.333000000001,
+        "publication_ms": {
+          "p50": 3027.008124998247,
+          "p95": 3826.647457997751,
+          "p99": 3907.7279999983148
+        },
+        "acknowledgement_batches": 49
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 562,
+        "drain_ms": 3905.8677079992776,
+        "cpu_ms": 3340.999999999999,
+        "publication_ms": {
+          "p50": 3339.0932920010528,
+          "p95": 3909.21674999845,
+          "p99": 3966.3814999985334
+        },
+        "acknowledgement_batches": 50
+      }
+    ],
+    "candidate3": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 47.867833000054816,
+        "cpu_ms": 26.875000000000426,
+        "publication_ms": {
+          "p50": 36.86750000269967,
+          "p95": 36.86750000269967,
+          "p99": 36.86750000269967
+        },
+        "acknowledgement_batches": 1
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 140,
+        "drain_ms": 1155.0897909983178,
+        "cpu_ms": 817.6729999999992,
+        "publication_ms": {
+          "p50": 951.1370830005035,
+          "p95": 1142.4628329987172,
+          "p99": 1144.8388749995502
+        },
+        "acknowledgement_batches": 12
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 573,
+        "drain_ms": 6370.020874997863,
+        "cpu_ms": 3338.596000000001,
+        "publication_ms": {
+          "p50": 4924.653709000268,
+          "p95": 6272.598332998314,
+          "p99": 6400.157249998301
+        },
+        "acknowledgement_batches": 61
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 564,
+        "drain_ms": 4669.918750001671,
+        "cpu_ms": 3292.368,
+        "publication_ms": {
+          "p50": 3298.6509170004865,
+          "p95": 4558.881417000521,
+          "p99": 4654.3783329980215
+        },
+        "acknowledgement_batches": 52
+      }
+    ],
+    "baseline3": [
+      {
+        "events": 1,
+        "contention": false,
+        "journal_transactions": 3,
+        "drain_ms": 26.58920799876796,
+        "cpu_ms": 24.86899999999892,
+        "publication_ms": {
+          "p50": 25.614124999265186,
+          "p95": 25.614124999265186,
+          "p99": 25.614124999265186
+        },
+        "acknowledgement_batches": 1
+      },
+      {
+        "events": 64,
+        "contention": false,
+        "journal_transactions": 192,
+        "drain_ms": 1548.0804170001647,
+        "cpu_ms": 939.8049999999998,
+        "publication_ms": {
+          "p50": 1092.8724170007627,
+          "p95": 1525.140375000774,
+          "p99": 1539.8059170001943
+        },
+        "acknowledgement_batches": 64
+      },
+      {
+        "events": 256,
+        "contention": false,
+        "journal_transactions": 768,
+        "drain_ms": 7108.1261670005915,
+        "cpu_ms": 3802.2980000000002,
+        "publication_ms": {
+          "p50": 4313.059832998988,
+          "p95": 6823.834124999848,
+          "p99": 6952.384750002238
+        },
+        "acknowledgement_batches": 256
+      },
+      {
+        "events": 256,
+        "contention": true,
+        "journal_transactions": 768,
+        "drain_ms": 9544.331042001431,
+        "cpu_ms": 3963.614999999999,
+        "publication_ms": {
+          "p50": 5418.511040999874,
+          "p95": 9263.147457997547,
+          "p99": 9510.49200000125
+        },
+        "acknowledgement_batches": 256
+      }
+    ]
+  },
+  "measurement_order": [
+    "baseline (old source)",
+    "candidate (overlapped own regression test)",
+    "baseline2 batch1",
+    "candidate2 batch16",
+    "candidate3 batch16",
+    "baseline3 batch1"
+  ],
+  "measurement_limits": [
+    "All six raw runs retained, including first contention wall regression3988->4643ms.",
+    "The first candidate overlapped this task regression tests. Four later counterbalanced runs were sequential with no other heavy owned work launched, but user/shared-host processes remained active.",
+    "Counterbalanced256 without contention:768->561–573 journal transactions; CPU3802–4265->3231–3339ms. Shared-host wall time varies; no fixed speedup or latency SLA.",
+    "Single-record delivery keeps3 journal transactions; batching benefits a backlog, not every isolated close.",
+    "Real SQLite WAL with synchronous=NORMAL and busytimeout1000ms; injected competing lock holds, not a disk-speed or all-writer fairness qualification.",
+    "Enqueue is outside drain timing and remains durable. SQL trace count includes trigger callbacks."
+  ],
+  "native": {
+    "passed": true,
+    "platform": "macOS arm64",
+    "steps": 10,
+    "source_files": 965,
+    "dist_files": 163,
+    "assembly": "APFS clone of accepted PR194 local native bundle; current tracked backend/app copied, byte-compiled with bundled Python, deep ad-hoc signed and strictly verified. Frontend/runtime reused unchanged; not a fresh full runtime build.",
+    "exit_ms": [
+      15961,
+      16134
+    ],
+    "backend_exceptions": 0,
+    "controlled_records": 64,
+    "acknowledgement_batches": 25,
+    "checks": [
+      "Real public Binance BTC/ETH1m charts and independent MA20 numerical oracle",
+      "Real new close",
+      "64 controlled committed-publication recovery receipts for existing real candles",
+      "Canonical candle hashes unchanged and receipts published",
+      "Saved workspace, full owned process-tree exit, restart restores values and receipts",
+      "Second full owned process-tree exit"
+    ],
+    "limits": "Recovery receipts are controlled replay, not64 extra exchange emissions; source/runtime assembly reused accepted frontend and runtime."
+  },
+  "rollback": "BAR_DELIVERY_ACK_BATCH_SIZE=1 on restart; no persistent schema change.",
+  "recovery_contract": "At most16 unconfirmed publications per default batch may replay after a crash; same durableIDs, existing live bus deduplication, restart remains at-least-once.50ms is checked between records, not a preemptive deadline.",
+  "not_qualified": [
+    "Windows installed acceptance",
+    "power loss",
+    "all SQLite writer fairness",
+    "removing idle submit flush",
+    "batching canonical writes",
+    "full issue121",
+    "full157 release acceptance"
+  ],
+  "artifacts": [
+    {
+      "file": "baseline.json.gz",
+      "sha256": "b4cfdc561b67cf77a5866abf6fdba9e3987e72573a87303d78bcffea57987ae9",
+      "uncompressed_bytes": 6100
+    },
+    {
+      "file": "baseline.log.gz",
+      "sha256": "b4cfdc561b67cf77a5866abf6fdba9e3987e72573a87303d78bcffea57987ae9",
+      "uncompressed_bytes": 6100
+    },
+    {
+      "file": "candidate.json.gz",
+      "sha256": "17d9a509cfd9d1a2c46672a70602b066ef2706b66a15d9411db43fbeda2b3f1f",
+      "uncompressed_bytes": 6084
+    },
+    {
+      "file": "candidate.log.gz",
+      "sha256": "17d9a509cfd9d1a2c46672a70602b066ef2706b66a15d9411db43fbeda2b3f1f",
+      "uncompressed_bytes": 6084
+    },
+    {
+      "file": "baseline2.json.gz",
+      "sha256": "d73837e8f83bec69784951226310eadd98aee90a8e268f8fe6bfcf581f2c03a2",
+      "uncompressed_bytes": 8362
+    },
+    {
+      "file": "baseline2.log.gz",
+      "sha256": "d73837e8f83bec69784951226310eadd98aee90a8e268f8fe6bfcf581f2c03a2",
+      "uncompressed_bytes": 8362
+    },
+    {
+      "file": "candidate2.json.gz",
+      "sha256": "c86019f870cb41c40998f946a0969a5f3ccffa45a38b936d007220190128698a",
+      "uncompressed_bytes": 8355
+    },
+    {
+      "file": "candidate2.log.gz",
+      "sha256": "c86019f870cb41c40998f946a0969a5f3ccffa45a38b936d007220190128698a",
+      "uncompressed_bytes": 8355
+    },
+    {
+      "file": "candidate3.json.gz",
+      "sha256": "842b69a89b0c1e613f5e820acf5af25765b0334522f239e549e6f6c0345c64d8",
+      "uncompressed_bytes": 8340
+    },
+    {
+      "file": "candidate3.log.gz",
+      "sha256": "842b69a89b0c1e613f5e820acf5af25765b0334522f239e549e6f6c0345c64d8",
+      "uncompressed_bytes": 8340
+    },
+    {
+      "file": "baseline3.json.gz",
+      "sha256": "0117f7068ed9891428681f5ff69b2f51fa60a189a175978ad04072d9a7e57d1c",
+      "uncompressed_bytes": 8351
+    },
+    {
+      "file": "baseline3.log.gz",
+      "sha256": "0117f7068ed9891428681f5ff69b2f51fa60a189a175978ad04072d9a7e57d1c",
+      "uncompressed_bytes": 8351
+    },
+    {
+      "file": "native-acceptance.json.gz",
+      "sha256": "28fbe2a599728b8fcb72011bcae766cbe475a6871d29264bc4cca49974677c21",
+      "uncompressed_bytes": 29408
+    },
+    {
+      "file": "native-traffic.json.gz",
+      "sha256": "3619f2d7f6fd8ecb00e47e666cb79b5873362ef4c7ef76ef32e2acdd9434cf2f",
+      "uncompressed_bytes": 213565
+    },
+    {
+      "file": "native-assembly.json.gz",
+      "sha256": "c0b48a671039a442ace69027a892129e45d6fe708481da6d7d0c90d7e560e876",
+      "uncompressed_bytes": 683
+    },
+    {
+      "file": "native-source-package-manifest.json.gz",
+      "sha256": "56d4c0f4cc332721b8f6cf0ae99e6fd04ca0012c506e52f18d51979da65dc12f",
+      "uncompressed_bytes": 133819
+    },
+    {
+      "file": "native-controlled-receipts.json.gz",
+      "sha256": "872e9fac521117c94572dff41c1bc6925f54cf3388c89cc3cac23994244a7f80",
+      "uncompressed_bytes": 54126
+    },
+    {
+      "file": "native-native.log.gz",
+      "sha256": "1ea63e7fda68e7ce49b013af8410102e9228f7591e79ef602dd23d95556d03bc",
+      "uncompressed_bytes": 16
+    },
+    {
+      "file": "native-backend.log.gz",
+      "sha256": "6bcf6904cea5ff46c2d39badf03414d05cc764a388db070d507a0636708a682c",
+      "uncompressed_bytes": 42392
+    },
+    {
+      "file": "baseline-regression.log.gz",
+      "sha256": "5cadccb63c436dfe7a3740963b909f88f0cb7dc3f5dae5f6fd2feec121e186d2",
+      "uncompressed_bytes": 100
+    },
+    {
+      "file": "ack-tests.log.gz",
+      "sha256": "80282f7b9454699760c4b8fce818d6a0f5093edd9aaf5e30710b5b5d2e06e9ed",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "ack-final-tests.log.gz",
+      "sha256": "f2487a266898f8c4a729006e00c99e35c21d6861059d7aff0c491a56b032759b",
+      "uncompressed_bytes": 100
+    },
+    {
+      "file": "ack-bus-tests.log.gz",
+      "sha256": "9d67f936a51cfeef218dd35fca5f7859b587ffba1f3cae8e1e904321656d73f5",
+      "uncompressed_bytes": 113
+    },
+    {
+      "file": "delivery-contract-tests.log.gz",
+      "sha256": "570dbc5b0078ecedbbc5d54a7ad4a664b1bd929c7ce1bb4cfc0121f89e32203f",
+      "uncompressed_bytes": 180
+    },
+    {
+      "file": "ack-crash-tests.log.gz",
+      "sha256": "6277e8c0629b0066f4d45d928045945da79e2fa602e411e4b2e6b5d47dc0cf39",
+      "uncompressed_bytes": 99
+    }
+  ]
+}
