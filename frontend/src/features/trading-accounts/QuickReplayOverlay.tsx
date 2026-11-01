@@ -9,8 +9,9 @@ import { parseIntervalSeconds } from "../../utils/intervals.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
+import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
-import { loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
+import { createManagedReplayHistoryReader, loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
 import {
   STANDARD_STEPS,
   initialCursor,
@@ -58,6 +59,8 @@ export default function QuickReplayOverlay({
   onExit(): void;
 }) {
   useLocale();
+  const dataManager = useMarketDataWorkspaceResources()?.dataManager ?? null;
+  const historyReader = useMemo(() => createManagedReplayHistoryReader(dataManager), [dataManager]);
   const { trade } = request;
   const api = request.api ?? tradingApi;
   const intervalSec = parseIntervalSeconds(request.interval) ?? 900;
@@ -90,7 +93,7 @@ export default function QuickReplayOverlay({
     setChartBars([]);
     setLoadFailed(false);
     setError(null);
-    loadReplayBars({ ...instrument, interval: request.interval }, window_.startSec, window_.endSec, controller.signal)
+    loadReplayBars({ ...instrument, interval: request.interval }, window_.startSec, window_.endSec, controller.signal, historyReader)
       .then((result) => {
         if (controller.signal.aborted) return;
         setChartBars(result.bars);
@@ -105,7 +108,7 @@ export default function QuickReplayOverlay({
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
     return () => controller.abort();
-  }, [api, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
+  }, [api, historyReader, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
   useEffect(() => {
     if (stepSec >= intervalSec) {
@@ -115,11 +118,11 @@ export default function QuickReplayOverlay({
     const controller = new AbortController();
     // Finer candles only for the holding period, where partial candles matter.
     const start = Math.floor(trade.openedAtMs / 1000) - intervalSec * 4;
-    loadReplayBars({ ...instrument, interval: step }, start, window_.endSec, controller.signal)
+    loadReplayBars({ ...instrument, interval: step }, start, window_.endSec, controller.signal, historyReader)
       .then((result) => { if (!controller.signal.aborted) setFineBars(result.bars); })
       .catch(() => { if (!controller.signal.aborted) setFineBars(null); });
     return () => controller.abort();
-  }, [instrument, intervalSec, step, stepSec, trade.openedAtMs, window_.endSec]);
+  }, [historyReader, instrument, intervalSec, step, stepSec, trade.openedAtMs, window_.endSec]);
 
   const minCursor = (chartBars[0]?.time ?? window_.startSec) + intervalSec * 30;
   // The range API returns closed candles only, so a trade inside the forming
