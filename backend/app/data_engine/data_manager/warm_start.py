@@ -187,6 +187,11 @@ class AggregatorWarmStartService:
             if prev_bucket_start_ms is not None
             else bucket_start_ms
         )
+        if (self.history_prefix_runtime is not None and base_spec is not None
+                and self.history_prefix_runtime.owns_target(source, interval)):
+            # A subsequent small/new current bucket can use ordinary fine
+            # components. Do not expand/replay its already-owned old prefix.
+            fetch_start_ms = bucket_start_ms
 
         rows = storage.query_bars(
             symbol=symbol,

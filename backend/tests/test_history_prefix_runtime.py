@@ -13,6 +13,11 @@ from tests.test_history_prefix_overlay import component, equal, state
 from app.data_engine.bar_aggregator.bar_state import ComponentSnapshotOHLCVMerge
 
 
+@pytest.fixture(autouse=True)
+def small_controlled_prefix(monkeypatch):
+    monkeypatch.setattr(HistoryPrefixRuntime, 'MIN_ROWS', 64)
+
+
 @pytest.fixture
 def runtime(dm, monkeypatch):
     monkeypatch.setattr('time.time', lambda: 120 * DAY / 1000 + 30)
@@ -186,6 +191,9 @@ def test_actual_data_manager_warm_start_uses_bounded_storage_pages_and_cache(dm,
 
 def test_large_new_bucket_and_partial_history_do_not_query_previous_full_bucket(dm, monkeypatch):
     monkeypatch.setattr('time.time', lambda: 30)
+    # An already admitted large prefix can become empty after deletion; that
+    # recovery behavior is independent of the default size selection policy.
+    monkeypatch.setattr(HistoryPrefixRuntime, 'MIN_ROWS', 0)
     original = dm.query_engine.storage.query_bars
     calls = []
     def query(*args, **kwargs):
@@ -206,4 +214,34 @@ def test_large_new_bucket_and_partial_history_do_not_query_previous_full_bucket(
         assert current is not None and current._history_prefix is not None
         assert not current._history_prefix.complete
         assert calls and all(call.get('limit', 1000000) <= 257 for call in calls)
+    asyncio.run(check())
+
+
+def test_default_size_selection_keeps_small_histories_on_legacy_path(dm, runtime, monkeypatch):
+    agg, service, _ = runtime
+    monkeypatch.setattr(HistoryPrefixRuntime, 'MIN_ROWS', 2048)
+    async def check():
+        assert not await service.seed(KEY, '121d', 0, 120 * DAY)
+        assert not service.targets and actual(agg) is None
+        await service.close()
+    asyncio.run(check())
+
+
+def test_new_bucket_warm_fallback_does_not_expand_an_owned_previous_prefix(dm, monkeypatch):
+    monkeypatch.setattr('time.time', lambda: 120 * DAY / 1000 + 30)
+    original = dm.query_engine.storage.query_bars
+    calls = []
+    def query(*args, **kwargs):
+        calls.append(kwargs)
+        return original(*args, **kwargs)
+    async def check():
+        dm.bar_aggregator.add_target('BTCUSDT', '121d', market_type='futures')
+        await dm.warm_start.seed_if_needed('BTCUSDT', '121d', exchange='binance',
+                                          market_type='futures', had_stream=True)
+        assert actual(dm.bar_aggregator)._history_prefix is not None
+        monkeypatch.setattr('time.time', lambda: 121 * DAY / 1000 + 30)
+        monkeypatch.setattr(dm.query_engine.storage, 'query_bars', query)
+        await dm.warm_start.seed_if_needed('BTCUSDT', '121d', exchange='binance',
+                                          market_type='futures', had_stream=True)
+        assert calls and all(call['start_ms'] >= 121 * DAY for call in calls)
     asyncio.run(check())

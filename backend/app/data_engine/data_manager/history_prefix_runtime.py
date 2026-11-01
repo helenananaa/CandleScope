@@ -36,7 +36,9 @@ class HistoryPrefixRuntime:
     MAX_TARGETS = 128
     MAX_TASKS = 64
     MAX_SEEDS = 8
-    MIN_ROWS = 64
+    # Measurements favor compact retention/loop responsiveness for large
+    # prefixes. Small histories keep the lower-cost existing component path.
+    MIN_ROWS = 2048
 
     def __init__(self, engine, aggregator, require_recovery):
         self.engine, self.aggregator = engine, aggregator
@@ -46,12 +48,13 @@ class HistoryPrefixRuntime:
         self.tasks = set()
         self.seeding = set()
         self.closing = False
-        self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0)
+        self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0,
+                            adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0)
 
     def snapshot(self):
         return {**self.metrics, 'targets': len(self.targets), 'tasks': len(self.tasks),
                 'seeding': len(self.seeding), 'max_targets': self.MAX_TARGETS,
-                'max_tasks': self.MAX_TASKS, 'closing': self.closing}
+                'max_tasks': self.MAX_TASKS, 'minimum_prefix_rows': self.MIN_ROWS, 'closing': self.closing}
 
     def _current(self, slot):
         return (not self.closing and self.targets.get(slot.token[0]) is slot
@@ -59,6 +62,11 @@ class HistoryPrefixRuntime:
 
     def detach(self, key):
         self.targets.pop(key, None)
+
+    def owns_target(self, source, interval):
+        token = self.aggregator.history_target_token(source, interval)
+        slot = self.targets.get(token[0]) if token is not None else None
+        return slot is not None and slot.token == token and self._current(slot)
 
     @asynccontextmanager
     async def _task(self):
@@ -101,6 +109,9 @@ class HistoryPrefixRuntime:
                 result = self.aggregator.adopt_history_prefix(prefix, slot.token, refresh=refresh)
             lease.retain(allowance, commit)
         self.metrics['adoptions'] += 1
+        self.metrics['adopted_pages'] += prefix.pages
+        self.metrics['adopted_storage_rows'] += prefix.storage_rows
+        self.metrics['adopted_cache_hits'] += prefix.cache_hits
         return result
 
     async def seed(self, source, interval, start_ms, through_ms):
@@ -112,7 +123,8 @@ class HistoryPrefixRuntime:
                 or target.alignment is not IntervalAlignment.FIXED_EPOCH
                 or target.phase_ms != 0 or target.nominal_ms % base.nominal_ms
                 or target.nominal_ms // base.nominal_ms > MAX_PREFIX_ROWS
-                or target.nominal_ms // base.nominal_ms < self.MIN_ROWS):
+                or target.nominal_ms // base.nominal_ms < self.MIN_ROWS
+                or (through_ms - start_ms) // base.nominal_ms < self.MIN_ROWS):
             return False
         key = token[0]
         slot = self.targets.get(key)

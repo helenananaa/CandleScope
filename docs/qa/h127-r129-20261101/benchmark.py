@@ -16,6 +16,7 @@ from app.api.v1.stream_utils import normalize_exchange
 from app.data_engine.bar_aggregator.models import BarInput, BarInputSource, MergeMode
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.config import DataManagerConfig
+from app.data_engine.data_manager.history_prefix_runtime import HistoryPrefixRuntime
 from app.data_engine.interval_resolution import IntervalPurpose
 from app.data_engine.storage import klines_repo
 
@@ -144,7 +145,8 @@ def main():
         cases = asyncio.run(run())
     report = dict(source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                   benchmark_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  prefix_enabled=config.HISTORY_PREFIX_ENABLED, cases=cases,
+                  prefix_enabled=config.HISTORY_PREFIX_ENABLED,
+                  minimum_prefix_rows=HistoryPrefixRuntime.MIN_ROWS, cases=cases,
                   process_peak_rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                   limits='Isolated real SQLite and actual DataManager warm/bridge/cache path, controlled canonical rows, no network/native UI. Every-update publication throttle explicitly disabled in both modes;64 updates paced2ms. Correction is committed to SQLite and supplied with an explicitly newer freshness sequence; it invalidates shared source blocks. Busy shared host, not an SLA. CPU includes preparation after the timer starts, not fixture creation. No background provider or revision poll tasks.')
     Path(args.out).write_text(json.dumps(report, indent=2) + '\n')
