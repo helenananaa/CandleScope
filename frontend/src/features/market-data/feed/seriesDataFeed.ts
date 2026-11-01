@@ -2426,6 +2426,29 @@ export class SeriesDataFeed {
     return { ...result, plan };
   }
 
+  async getRecoveryHistory(
+    series: MarketSeries,
+    { countBack, source = "ws-reconnect-history" }: { countBack: number; source?: string },
+  ): Promise<AppliedKlineResult> {
+    const result = await this.getHistory(series, { countBack, source });
+    const owner = result.indicatorWindowOwner;
+    const epoch = result.indicatorWindowEpoch;
+    if (!result.stale && result.active !== false && owner && epoch !== undefined
+      && isKlineResultRepairPending(result)) {
+      // Reconnection has no initial-load callback to settle this owner. Exact
+      // proof is still required even when the returned timestamps look dense.
+      this.trackPendingResultRepair(series, result, (settled) => {
+        if (!this.isCurrent(series, epoch) || !this.shouldCommitActive(series)
+          || !hasVerifiedRangeCoverage(settled)) return;
+        this.commitMergedChartData(series.symbol, series.interval, [], {
+          source: `${source}-settled`, deferIndicatorWindow: false,
+          indicatorWindowOwner: owner, indicatorWindowEpoch: epoch,
+        });
+      });
+    }
+    return result;
+  }
+
   async getHistory(
     series: MarketSeries,
     {

@@ -151,11 +151,13 @@ class HistoryPrefixRuntime:
             with self.reader.memory_budget.reserve('realtime-state', 1024) as lease:
                 lease.retain(1024, lambda: self.targets.__setitem__(key, slot))
         self.seeding.add(key)
+        qualified = False
         try:
             # Qualification runs on a storage worker even at an empty new
             # bucket. Never fall back to an unbounded previous-bucket read.
             async with self._task():
                 await run_storage(self.reader.qualify, source)
+                qualified = True
             if through_ms <= start_ms:
                 return True
             async with self._task(), self.reader.stage(source, start_ms, through_ms, require_complete=False) as prefix:
@@ -180,7 +182,7 @@ class HistoryPrefixRuntime:
                     pipeline.bar_state.expire_bar(source.exchange, source.market_type, source.symbol, start_ms)
                     self.require_recovery(replace(source, interval=interval))
             return True
-        except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded):
+        except (ValueError, BlockUnavailable, BlockRevisionChanged, MemoryBudgetExceeded) as error:
             self.metrics['failures'] += 1
             if not self._current(slot):
                 return True
@@ -190,6 +192,14 @@ class HistoryPrefixRuntime:
             state = pipeline.bar_state.get_state(source.exchange, source.market_type, source.symbol, start_ms) if pipeline else None
             if state is not None and state._history_prefix is not None:
                 self.require_recovery(replace(source, interval=interval))
+                return True
+            if qualified and isinstance(error, BlockRevisionChanged):
+                # A cold backfill can change the revision while the first
+                # bounded page set is being staged. Keep this admitted owner;
+                # the next confirmed source input retries canonical staging.
+                # Detaching here permanently lost the compact path, because
+                # ordinary live input does not call warm-start again.
+                slot.recovering = True
                 return True
             self.detach(key)
             return False
@@ -280,6 +290,7 @@ class HistoryPrefixRuntime:
                     async with self.reader.stage(slot.source, start, through, require_complete=False) as prefix:
                         current = pipeline.bar_state.get_state(incoming.exchange, incoming.market_type, incoming.symbol, start)
                         adopted = self._adopt(slot, prefix, refresh=bool(current and current._history_prefix))
+                        slot.recovering = False
                 except EmptyHistoryPrefix:
                     return False
                 if emit_events:
