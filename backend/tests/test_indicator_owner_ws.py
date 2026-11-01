@@ -191,6 +191,8 @@ async def test_live_events_wait_for_ack_and_pending_overflow_requires_resync(upd
             self.closed = asyncio.Event()
 
         async def receive_text(self):
+            if self.closed.is_set():
+                raise RuntimeError('WebSocket is not connected')
             if self.first:
                 self.first = False
                 return json.dumps({'action': 'subscribe', 'clientId': 'ema', 'name': 'EMA',

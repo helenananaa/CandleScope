@@ -216,9 +216,11 @@ async def stream_indicators(
             return False
 
     async def _forwarder() -> None:
+        nonlocal ws_closed
         while not ws_closed:
             msg = await queue.get()
             if msg.get("type") == "resync_required":
+                ws_closed = True
                 await close_for_resync(websocket)
                 return
             if not await _safe_send_json(msg):

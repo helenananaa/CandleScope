@@ -18,6 +18,24 @@ def bars(count=30):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['thread', 'process'])
+async def test_warm_resubscribe_keeps_logical_key_diagnostic_frontier(mode):
+    owner = SerialIndicatorOwner(execution_mode=mode)
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        await owner.call('unsubscribe', key)
+        resumed, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=bars())
+        before = owner.snapshot()
+        await owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1])
+        assert owner.generation == 0
+        assert before['instances'][0]['last_committed'] == 1800
+        assert owner.snapshot()['instances'][0]['last_committed'] == 1860
+        assert (await owner.call('get_result', resumed)).get_latest()
+    finally:
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
 async def test_process_owns_builtin_state_and_shutdown_reaps_owned_process():
     owner = SerialIndicatorOwner(execution_mode='process')
     events = []

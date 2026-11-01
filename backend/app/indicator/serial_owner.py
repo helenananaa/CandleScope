@@ -268,9 +268,17 @@ class _IndicatorState:
             else:
                 snapshot = engine.snapshot()
                 self._worker_rows = {id(key): index for index, key in enumerate(engine._instances)}
+                # A warm instance retains its original dictionary key, while
+                # reattaching its stream may install a new equal key object.
+                # Resolve these aliases once at structural boundaries, keeping
+                # the hot tick path free of repeated parameter hashing.
+                key_ids = tuple(self._worker_rows)
+                rows_by_key = {key: index for index, key in enumerate(engine._instances)}
+                for stream_keys in engine._stream_keys.values():
+                    for key in stream_keys:
+                        self._worker_rows[id(key)] = rows_by_key[key]
                 self._applied_revisions = {key: revision for key, revision in self._applied_revisions.items()
                                            if key in engine._instances}
-                key_ids = tuple(self._worker_rows)
                 if key_ids != self._worker_key_ids:
                     self._worker_key_ids = key_ids
                     self._worker_keys = deepcopy(tuple(engine._instances))
@@ -346,6 +354,8 @@ class SerialIndicatorOwner:
         self._rejected = self._cancelled_queued = self._cancelled_running = 0
         self._closing = self._closed = False
         self._failure: str | None = None
+        self._last_failure = None
+        self._last_recovery = None
         self._generation = 0
         self._recovering = False
         self._recovery_task: asyncio.Task | None = None
@@ -405,6 +415,8 @@ class SerialIndicatorOwner:
                     "cancelled_running": self._cancelled_running,
                     "closing": self._closing, "closed": self._closed,
                     "failure": self._failure,
+                    "last_failure": deepcopy(self._last_failure),
+                    "last_recovery": deepcopy(self._last_recovery),
                     "generation": self._generation, "recovering": self._recovering,
                     "release_targets": len(self._pending_releases),
                     "process_starts": self._process_starts,
@@ -517,6 +529,8 @@ class SerialIndicatorOwner:
                     # An unexpected worker failure may have partially changed
                     # state. Never continue issuing apparently valid results.
                     self._failure = str(error) or type(error).__name__
+                    self._last_failure = {"method": method, "error": self._failure,
+                                          "generation": generation, "at_ms": int(time.time() * 1000)}
                     self._notify_resync({"error": "Indicator calculation failed; reload canonical history"})
                     raise
                 if generation != self._generation or self._recovering:
@@ -591,6 +605,7 @@ class SerialIndicatorOwner:
         if self._recovering:
             raise ExecutorBusyError("indicator_realtime_recovery")
         self._recovering = True
+        self._last_recovery = {"detail": deepcopy(detail), "at_ms": int(time.time() * 1000)}
         self._generation += 1
         self._pending_releases.clear()
         self._notify_resync(detail)

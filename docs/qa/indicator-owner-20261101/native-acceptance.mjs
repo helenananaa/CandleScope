@@ -51,10 +51,11 @@ try{
  await q.ready(2,180000);
  for(const [cell,id] of [['cell-1','owner-ma-one'],['cell-2','owner-ma-two']])assert.equal((await q.execute(cell,'addIndicator',definition(id))).state,'applied');
  await q.indicatorsReady(2,90000);await q.record('hosted-MA-values',await verify());
- const initial=await diag(),processes=checkProcesses(initial);assert.equal(active(initial).length,1);
+ const initial=await diag(),processes=checkProcesses(initial);assert.equal(active(initial).length,1);assert.equal(initial.engine.serial_owner.generation,0);
  await q.record('deduplicated-owned-processes',{processes,diagnostics:initial});
  const closed=active(initial)[0].last_committed;
  const advanced=await q.until(async()=>{const d=await diag();return active(d).some(i=>i.last_committed>closed)?d:false;},90000);
+ assert.equal(advanced.engine.serial_owner.generation,0,'normal shared/warm subscriptions must not require recovery');
  await q.record('real-provider-new-close',{before:closed,diagnostics:advanced,values:await verify()});
  assert.equal((await q.execute('cell-2','indicatorParams',{indicatorId:'owner-ma-two',params:{period:5}})).state,'applied');periods['owner-ma-two']=5;
  await q.indicatorsReady(2,60000);await q.record('independent-parameters',await verify());
