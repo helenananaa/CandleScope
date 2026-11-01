@@ -96,6 +96,8 @@ class _SchedulingInterest:
     requester: str
     metadata: dict[str, Any]
     api_latest: bool = False
+    start_ms: int | None = None
+    end_ms: int | None = None
 
     @classmethod
     def from_request(cls, request: RepairRequest) -> _SchedulingInterest:
@@ -104,7 +106,12 @@ class _SchedulingInterest:
                     if key in request.metadata},
                    bool(request.metadata.get("_api_latest_interest")) or (
                        "latest_refresh" in request.reason.split("+")
-                       and request.requester == "klines_latest"))
+                       and request.requester == "klines_latest"),
+                   request.start_ms, request.end_ms)
+
+    def overlaps_chunk(self, request: RepairRequest) -> bool:
+        return (self.start_ms is None or request.end_ms is None or self.start_ms <= request.end_ms) and (
+            self.end_ms is None or request.start_ms is None or self.end_ms >= request.start_ms)
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +326,7 @@ class BackfillScheduler:
                     self._remember_persistent_interest(state, request)
                 state.request.metadata["_api_latest_interest"] = self._api_latest_interest(state)
                 self._replace_pending_chunks(state)
+                self._restore_remaining_interest(state)
                 self._on_queued(state.request)
                 self._publish_progress(state, status="merged")
                 self.merged += 1
@@ -375,56 +383,14 @@ class BackfillScheduler:
         )
         if requires_trusted_finality:
             state.request.metadata["requires_trusted_finality"] = True
-        reasons = [
-            part.strip()
-            for raw in (state.request.reason, request.reason)
-            for part in str(raw or "").split("+")
-            if part.strip()
-        ]
-        state.request.reason = "+".join(dict.fromkeys(reasons))
-        if state.request.requester != request.requester:
-            state.request.requester = "mixed"
-        incoming_priority = int(request.priority or 100)
-        current_priority = int(state.request.priority or 100)
-        promoted = incoming_priority < current_priority
-        if promoted:
-            state.request.priority = incoming_priority
-            self.priority_promotions += 1
-        chunk_ids: Iterable[str] = state.chunk_ids
-        if promoted and self._newest_first(state.request):
-            chunk_ids = reversed(state.chunk_ids)
-        if promoted:
-            # Priority queues do not support an in-place key update.  Remove
-            # each old heap item before inserting the promoted chunk; leaving
-            # both entries inflates ready diagnostics and can repeatedly skip
-            # the same physical chunk while its series is active.
-            promoted_chunk_ids = {
-                chunk_id
-                for chunk_id in state.chunk_ids
-                if chunk_id not in self._tasks and chunk_id in self._chunks
-            }
-            if promoted_chunk_ids:
-                self._ready = [
-                    item for item in self._ready if item[3] not in promoted_chunk_ids
-                ]
-                heapq.heapify(self._ready)
-        for chunk_id in chunk_ids:
-            if chunk_id in self._tasks and not self._is_background(state.request):
-                self._active_background_chunks.discard(chunk_id)
-                self._active_foreground_chunks.add(chunk_id)
+        previous_priority = int(state.request.priority or 100)
+        for chunk_id in state.chunk_ids:
             chunk = self._chunks.get(chunk_id)
-            if chunk is None:
-                continue
-            chunk.request.reason = state.request.reason
-            chunk.request.requester = state.request.requester
-            if requires_trusted_finality:
+            if chunk is not None and requires_trusted_finality:
                 chunk.request.metadata["requires_trusted_finality"] = True
-            chunk.request.metadata["_api_latest_interest"] = state.request.metadata["_api_latest_interest"]
-            if promoted:
-                chunk.request.priority = incoming_priority
-            if promoted and chunk_id not in self._tasks:
-                self._push_ready(chunk)
-        if promoted:
+        self._restore_remaining_interest(state)
+        if int(state.request.priority or 100) < previous_priority:
+            self.priority_promotions += 1
             self._publish_progress(state, status="priority_promoted")
         return upgraded_finality
 
@@ -444,6 +410,8 @@ class BackfillScheduler:
             previous.requester if previous.requester == incoming.requester else "mixed",
             winner.metadata,
             previous.api_latest or incoming.api_latest,
+            min(previous.start_ms, incoming.start_ms) if previous.start_ms is not None and incoming.start_ms is not None else None,
+            max(previous.end_ms, incoming.end_ms) if previous.end_ms is not None and incoming.end_ms is not None else None,
         )
 
     @staticmethod
@@ -459,32 +427,25 @@ class BackfillScheduler:
             interests.append(state.persistent_scheduling)
         if not interests:
             return
-        winner = min(interests, key=lambda item: item.priority)
-        reasons = "+".join(dict.fromkeys(part for item in interests
-                                       for part in item.reason.split("+") if part))
-        requesters = {item.requester for item in interests}
-        state.request.priority = winner.priority
-        state.request.reason = reasons
-        state.request.requester = next(iter(requesters)) if len(requesters) == 1 else "mixed"
-        for key in _INTEREST_METADATA_KEYS:
-            state.request.metadata.pop(key, None)
-        state.request.metadata.update(winner.metadata)
-        state.request.metadata["_api_latest_interest"] = self._api_latest_interest(state)
+        previous_priority = int(state.request.priority or 100)
+        self._apply_scheduling_interest(state.request, interests)
+        promoted = int(state.request.priority or 100) < previous_priority
         pending = {key for key in state.chunk_ids if key in self._chunks and key not in self._tasks}
         self._ready = [entry for entry in self._ready if entry[3] not in pending]
         heapq.heapify(self._ready)
-        for chunk_id in state.chunk_ids:
+        chunk_ids = reversed(state.chunk_ids) if promoted and self._newest_first(state.request) else state.chunk_ids
+        for chunk_id in chunk_ids:
             chunk = self._chunks.get(chunk_id)
             if chunk is None:
                 continue
-            chunk.request.priority = state.request.priority
-            chunk.request.reason = reasons
-            chunk.request.requester = state.request.requester
-            for key in _INTEREST_METADATA_KEYS:
-                chunk.request.metadata.pop(key, None)
-            chunk.request.metadata.update(winner.metadata)
-            chunk.request.metadata["_api_latest_interest"] = state.request.metadata["_api_latest_interest"]
+            self._apply_scheduling_interest(chunk.request, [item for item in interests if item.overlaps_chunk(chunk.request)])
             if chunk_id in self._tasks:
+                if chunk.public_demand is not None:
+                    chunk.public_demand.traffic_class = (
+                        TrafficClass.BACKGROUND if self._is_background(chunk.request)
+                        else TrafficClass.INTERACTIVE
+                    )
+                    chunk.public_demand.purpose = chunk.request.reason
                 self._active_foreground_chunks.discard(chunk_id)
                 self._active_background_chunks.discard(chunk_id)
                 (self._active_background_chunks if self._is_background(chunk.request)
@@ -493,9 +454,25 @@ class BackfillScheduler:
                 if chunk.public_demand is not None:
                     get_public_admission().forget(chunk.public_demand)
                     chunk.public_demand = None
-                self._push_ready(chunk, preserve_sequence=True)
+                self._push_ready(chunk, preserve_sequence=not promoted)
         self._publish_progress(state, status="interest_changed")
         self._drain()
+
+    @staticmethod
+    def _apply_scheduling_interest(request: RepairRequest, interests: list[_SchedulingInterest]) -> None:
+        # A coalesced parent's envelope may contain chunks outside every live
+        # observer. Keep that planned work, but do not lend it foreground rank.
+        if not interests:
+            interests = [_SchedulingInterest(100, "background_gap_audit", "shared_history", {})]
+        winner = min(interests, key=lambda item: item.priority)
+        request.priority = winner.priority
+        request.reason = "+".join(dict.fromkeys(part for item in interests for part in item.reason.split("+") if part))
+        requesters = {item.requester for item in interests}
+        request.requester = next(iter(requesters)) if len(requesters) == 1 else "mixed"
+        for key in _INTEREST_METADATA_KEYS:
+            request.metadata.pop(key, None)
+        request.metadata.update(winner.metadata)
+        request.metadata["_api_latest_interest"] = any(item.api_latest for item in interests)
 
     @staticmethod
     def _demand_leases_from_request(

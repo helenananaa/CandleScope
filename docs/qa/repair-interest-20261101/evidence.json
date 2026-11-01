@@ -14,9 +14,9 @@
   },
   "fix": "retain scheduling identity per scoped and persistent interest; recompute surviving priority/reasons/owner on release, supersession and revocation; rekey pending work; internal latest maintenance permits existing reserve while API latest remains interactive",
   "validation": {
-    "tests": 164,
-    "passed": 164,
-    "seconds": 24.18,
+    "tests": 165,
+    "passed": 165,
+    "seconds": 15.12,
     "suites": [
       "backfill_interest_priority",
       "backfill_coordinator",
@@ -33,6 +33,19 @@
   },
   "nativeFixedCandidatePending": true,
   "CI": "pending",
-  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve",
-  "apiLatestIdentity": "A remaining API latest observer retains foreground identity after unrelated observers leave, including merged requester labels; independent regression reproduced failure before this correction."
+  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve; original planned chunks complete after observer release and narrow-range sponsorship",
+  "apiLatestIdentity": "A remaining API latest observer retains foreground identity after unrelated observers leave, including merged requester labels; independent regression reproduced failure before this correction.",
+  "rangeFollowup": {
+    "nativeSource": "6233c8cf04dfc085ef4e33bcfde680d06a8554df",
+    "initialCold5m": "501 rows within 6 health samples",
+    "linkedHistorical5m": "failed after 20 explicit user-command retries; not qualified",
+    "cause": "narrow foreground interest promoted unrelated chunks of a coalesced 1555-chunk parent",
+    "fix": "retain individual interest bounds; only overlapping chunks receive foreground sponsorship; update running public demand traffic class without cancelling shared work",
+    "beforeFix": {
+      "rangeReproFailed": 1,
+      "quotaIdentityFailed": 12,
+      "quotaIdentityPassed": 12
+    },
+    "nativeReplacementPending": true
+  }
 }
