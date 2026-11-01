@@ -36,7 +36,7 @@
     "scope": "12 backend test files; not the 157-item product acceptance matrix"
   },
   "CI": "new regression added to bundled Python macOS matrix; current head checks pending",
-  "nativeFixedCandidatePending": true,
+  "nativeFixedCandidatePending": false,
   "viewerHistoryRegression": {
     "problem": "cache prepare on a forward cursor discarded closed server display history preceding the bounded base window",
     "before": {
@@ -50,9 +50,11 @@
       "scope": "frontend replay test files"
     },
     "fix": "reuse carriedRevealedProjectionRows for preserved cache rebuilds; retain causal closed history, existing rewind/reset and forming-tail behavior unchanged",
-    "nativePackagePending": true,
+    "nativePackagePending": false,
     "typesBoth": true,
     "lint": "0 errors; existing hook warning",
-    "productionBuild": true
-  }
+    "productionBuild": true,
+    "causalityClarification": "The latent cache-rebuild regression is independently demonstrated, but was not proven to cause the native indicator point-count difference. Captured chart bars remained equal. Native difference came from visible-range-priority output windows; matched explicit viewport produced identical complete indicator outputs."
+  },
+  "nativeFixedCandidate": "native-final.json"
 }

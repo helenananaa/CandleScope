@@ -1,0 +1,58 @@
+{
+  "sourceCommit": "5e132188cd33433691414a84c27f2456346b0f4a",
+  "passed": true,
+  "scope": "official packaged macOS arm64; default ALL_AVAILABLE with finite local 4000-bar archive; 1m/5m MA20, causal complete 5m aggregation, Decimal financial oracle, normal full exit/restart; no online-cold/provider-completeness or Windows claim",
+  "package": {
+    "zipSha256": "abe9835f016e52f9cb8d18324bf9b73992dd90638c2c7e5df7042f97688c3984",
+    "asarSha256": "4d838503f8311579468f69fa0da5d27b918590718230c26656a2aef0ebffad76"
+  },
+  "sourceFiles": 3142,
+  "distFiles": 161,
+  "mismatches": [],
+  "strictSignatureBeforeAfter": true,
+  "basicPassed": true,
+  "indicatorFinalDriverPassed": true,
+  "financialOracle": {
+    "passed": true,
+    "source": "independent Decimal arithmetic from the finite OHLCV formula, configured 1 bps market slippage and 5 bps taker fees",
+    "initial_index": 826,
+    "exit_mark_index": 830,
+    "quantity": "0.01",
+    "entry": "30057.50545",
+    "exit": "30063.49335",
+    "fees": "0.30060500",
+    "realized_pnl": "0.0598790",
+    "cash_balance": "9999.75927400",
+    "scope": "two deterministic one-way approximate-model market fills; no historical-exact account claim"
+  },
+  "restoration": [
+    {
+      "cellId": "cell-1",
+      "interval": "1m",
+      "sharedBars": 529,
+      "beforeLoadedBars": 529,
+      "afterLoadedBars": 529,
+      "fullIndicatorPointsEqual": true,
+      "viewportEqual": true
+    },
+    {
+      "cellId": "cell-2",
+      "interval": "5m",
+      "sharedBars": 506,
+      "beforeLoadedBars": 506,
+      "afterLoadedBars": 506,
+      "fullIndicatorPointsEqual": true,
+      "viewportEqual": true
+    }
+  ],
+  "rendererErrors": 0,
+  "qualificationProvenance": "Basic passed in the fresh corrected-viewport profile. An extra full-memory-cache equality assertion then failed because lazy restored history has fewer cached pages. That attempt was archived; corrected indicator-only driver ran again on the same owned saved profile, with no application-source/binary changes, and passed through both normal full exits. Original failed chain is preserved, not relabelled PASS.",
+  "retainedFailures": [
+    "provider-origin failure before backend fix",
+    "unaligned viewport output-window equality failure",
+    "control command before cold history ready",
+    "harness full-group-ID vs cell-ID mismatch timeout",
+    "overbroad full-memory-cache equality assertion"
+  ],
+  "applicability": "Existing e066 per-case native receipts remain baseline evidence; candidate runtime differences are explicitly enumerated."
+}
