@@ -795,14 +795,11 @@ async def scan_and_fill_gaps(
     market_type: str = "spot",
     exchange: str = "binance",
 ) -> dict:
-    """Scan all standard intervals for data gaps and fill them from Binance REST.
+    """Inspect a bounded page through the shared audit/repair coordinator.
 
-    This is a manual "repair all gaps" button.  Unlike the startup scan
-    (which only checks prewarm intervals), this endpoint checks every
-    standard interval that has data in storage and fills any gap larger than
-    3 intervals.
-
-    Returns a detailed report with per-interval results.
+    Reports exact inspected ranges, pagination, outstanding repairs and
+    failures. Only active series extend to the closed tail; inventory-only
+    series retain their stored bounds. No whole-history completeness claim.
     """
     exchange = _normalize_exchange(exchange)
     market_type = _normalize_market_type(market_type)
