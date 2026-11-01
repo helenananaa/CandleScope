@@ -1,0 +1,30 @@
+{
+  "sourceCommit": "6847f1c017a6498553a7b904f994e1691bef75dd",
+  "mainIntegrated": "a4dc6e5374a719a98e9a8e8d797170f4448279aa",
+  "fullFrontendCheck": {
+    "passed": true,
+    "tests": 4673,
+    "isolatedPerformanceGate": 1,
+    "desktopTests": 124,
+    "includes": [
+      "architecture",
+      "plugins",
+      "i18n",
+      "typecheck",
+      "lint",
+      "production build"
+    ]
+  },
+  "backendIntegration": {
+    "passed": true,
+    "tests": 155,
+    "files": [
+      "test_history_block_reader.py",
+      "test_shared_aggregation_blocks.py",
+      "test_shared_blocks_integration.py"
+    ]
+  },
+  "nativeAcceptance": "passed",
+  "nativeSourceCommit": "6847f1c017a6498553a7b904f994e1691bef75dd",
+  "postRunStrictSignature": "passed"
+}
