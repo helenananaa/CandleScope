@@ -7,7 +7,7 @@
     "Successful envelopes only, checksum validation, atomic bounded compact write; old files preserved and ignored"
   ],
   "tests": "29 local API/service/import jobs +23research/offline/pinned dataset regressions; architecture0allowlist; failed-before cross-view/service-restart probe retained",
-  "native": "pending; no native acceptance claimed",
+  "native": "Passed 12-step finite macOS arm64 native qualification at27715c02; see native-checks.json for precise scope and previous failures",
   "limitations": [
     "No physical migration of immutable bars or results to candlescope.db",
     "No live/custom/Pine/Python result persistence, checkpoints or incremental-range reuse",
