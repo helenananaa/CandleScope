@@ -1,0 +1,6 @@
+{
+  "intent": "Requalify actual Python live chart starter/editor/save/newclosedbar/full-owned-exit/restart after generic input-domain and cache fixes, onmain208.",
+  "viewport": "Use actual visible Return to realtime button when present, then require latestclosedbar is in view. Preserve visible latest500-window SMA20 comparisons/min10points, independentfull500/481numeric oracle, actualnewclose and durable savedpreset checks. Older views outside declaredwindow are not qualified by this run.",
+  "build": "Current H127 frontend recovery source differs from priorcandidate1d90; rebuilt desktop currentfrontend before packaging.",
+  "native_status": "Not yet run; prior sixfailed attempts retained"
+}
