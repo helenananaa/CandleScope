@@ -9,7 +9,6 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
   const { api } = useReplayOperations(runId, "rail");
   const [data, setData] = useState<PortfolioCurveResponse | null>(null);
   const [busy, setBusy] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -39,24 +38,6 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
       if (active.current === request) setBusy(false);
     }
   };
-  const exportSnapshot = async () => {
-    if (runId === null || exporting) return;
-    setExporting(true);
-    setError(null);
-    try {
-      const blob = await api.portfolioExportRun(runId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url; link.download = "portfolio-curve.ndjson";
-      link.click();
-      // The browser consumes the URL asynchronously after the click.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-        setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad"));
-      }
-    } finally { setExporting(false); }
-  };
   return <details className="replay-portfolio-curve">
     <summary>{t("replay.portfolio.title")}</summary>
     <p>{t("replay.portfolio.hint")}</p>
@@ -71,7 +52,8 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
         <polyline points={points} fill="none" vectorEffect="non-scaling-stroke" />
       </svg>
       <p>{t("replay.portfolio.drawdown")}: {visible.summary?.max_drawdown}</p>
-      {runId !== null && <button type="button" disabled={exporting} onClick={() => void exportSnapshot()}>{t("replay.portfolio.export")}</button>}
+      {/* Downloads are browser-owned streams; do not buffer an unbounded export in the chart renderer. */}
+      {runId !== null && <a href={api.portfolioExportUrl(runId)} download>{t("replay.portfolio.export")}</a>}
     </>}
   </details>;
 }

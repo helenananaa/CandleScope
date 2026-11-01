@@ -26,7 +26,6 @@ export function managedReplayRunApi(lease: ReplayOperationLease, api: ManagedRep
     prepareIndex: (runId, signal, clientInstanceId) => lease.request(s => api.prepareIndex(runId, s, clientInstanceId), signal),
     portfolioEquityRun: (runId, signal) => lease.request(s => api.portfolioEquityRun(runId, s), signal),
     portfolioExportUrl: run => api.portfolioExportUrl(run),
-    portfolioExportRun: (run, signal) => lease.request(s => api.portfolioExportRun(run, s), signal),
     getRun: (runId, signal) => lease.request(s => api.getRun(runId, s), signal),
     returnToHub: (runId, signal) => lease.request(s => api.returnToHub(runId, s), signal),
     viewerBySession: (sessionId, signal) => lease.request(s => api.viewerBySession(sessionId, s), signal),

@@ -157,24 +157,19 @@ test("managed history keeps physical read sharing while releases cancel only the
   assert.equal(manager.diagnostics().activeOperations, 0);
 });
 
-test("portfolio download remains owned through the complete NDJSON body", async () => {
+test("export navigation remains browser-owned after the transient chart lease is released", () => {
   const manager = new ReplayDataManager();
   const lease = manager.createOperations({ runId: "run", purpose: "rail" });
   const release = lease.retain();
-  let finish!: (value: Blob) => void;
-  const client = new ReplayV2ApiClient({ fetcher: async (input, init) => {
-    assert.match(String(input), /\/runs\/run\/portfolio-equity\/export$/);
-    assert.equal(init?.credentials, "same-origin");
-    const response = new Response(null, { headers: { "Content-Type": "application/x-ndjson" } });
-    response.blob = () => new Promise(resolve => { finish = resolve; });
-    return response;
+  const client = new ReplayV2ApiClient({ fetcher: async () => {
+    throw new Error("An export must stream through the browser download, never a renderer Blob");
   } });
-  const pending = managedReplayRunApi(lease, client).portfolioExportRun("run");
-  await Promise.resolve();
-  assert.equal(manager.diagnostics().requests, 1);
-  const canceled = assert.rejects(pending, { name: "AbortError" });
-  release(); await canceled;
-  finish(new Blob(['{"equity":"100"}\n'], { type: "application/x-ndjson" }));
+  const api = managedReplayRunApi(lease, client);
+  const url = api.portfolioExportUrl("run");
+  assert.match(url, /\/runs\/run\/portfolio-equity\/export$/);
+  release();
+  assert.equal(api.portfolioExportUrl("run"), url);
+  assert.equal(manager.diagnostics().activeOperations, 0);
   assert.equal(manager.diagnostics().requests, 0);
 });
 
