@@ -1,0 +1,4793 @@
+{
+  "schema": "candlescope.js-cache-input-native-acceptance/1",
+  "sourceCommit": "6847f1c017a6498553a7b904f994e1691bef75dd",
+  "transport": "packaged bundled backend, real public Binance HTTP and WebSocket, no response substitution",
+  "steps": [
+    {
+      "name": "integrated-package-launch",
+      "at": "2026-11-01T04:56:42.732Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 49037,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 49040,
+          "running": true,
+          "startedAt": "2026-11-01T04:56:33.196Z",
+          "readyMs": 9045,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:60581/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "dual-js-baseline",
+      "at": "2026-11-01T04:56:52.096Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1500,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508900,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 500,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508900,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793478960,
+              "to": 1793509200
+            },
+            "checked": {
+              "start": 1793478960,
+              "end": 1793508900
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1500,
+                    "first": 1793418960,
+                    "last": 1793508900,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793478960,
+              "to": 1793509200
+            },
+            "checked": {
+              "start": 1793478960,
+              "end": 1793508900
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 500,
+                    "first": 1793478960,
+                    "last": 1793508900,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 10,
+          "seriesStores": 3,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 13,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 7,
+              "klines": 0,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 2,
+              "bars": 1500,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 0
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 4,
+                "completed": 4,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 31,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 31,
+            "totalPhysical": 31
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 7,
+              "klines": 0,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "independent-params",
+      "at": "2026-11-01T04:56:54.308Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1500,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508900,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 500,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508900,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 500,
+                "transform": {
+                  "scale": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "independent-script",
+      "at": "2026-11-01T04:56:56.748Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1500,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508900,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 500,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508900,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 500,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "historical-cold-switch-ETHUSDT-5m",
+      "at": "2026-11-01T04:57:05.712Z",
+      "evidence": {
+        "requested": {
+          "from": 1793424960,
+          "to": 1793430960
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "ETHUSDT",
+            "interval": "5m",
+            "bars": 1501,
+            "firstClosed": 1793058900,
+            "lastClosed": 1793508600,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "5m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:ETHUSDT:5m",
+              "symbol": "ETHUSDT"
+            },
+            "view": {
+              "from": 1793358900,
+              "to": 1793510400
+            },
+            "checked": {
+              "start": 1793358900,
+              "end": 1793508600
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793058900,
+                    "last": 1793508900,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 32,
+          "seriesStores": 4,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 30,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-3"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 22,
+              "klines": 11,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 4,
+              "bars": 3005,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 15,
+                "completed": 15,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 54,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 54,
+            "totalPhysical": 54
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 22,
+              "klines": 11,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T04:57:08.112Z",
+      "evidence": {
+        "requested": {
+          "from": 1793088900,
+          "to": 1793118900
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508960,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793424960,
+              "to": 1793430960
+            },
+            "checked": {
+              "start": 1793424960,
+              "end": 1793430960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793418960,
+                    "last": 1793508960,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 37,
+          "seriesStores": 4,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 32,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 27,
+              "klines": 13,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 2,
+            "cache": {
+              "series": 5,
+              "bars": 3005,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 1,
+                "physicalActive": 1,
+                "joined": 0,
+                "totalPhysical": 18,
+                "completed": 17,
+                "consumers": 1
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 54,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 54,
+            "totalPhysical": 54
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 27,
+              "klines": 13,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-SOLUSDT-15m",
+      "at": "2026-11-01T04:57:15.788Z",
+      "evidence": {
+        "requested": {
+          "from": 1793424960,
+          "to": 1793430960
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "SOLUSDT",
+            "interval": "15m",
+            "bars": 1501,
+            "firstClosed": 1792158300,
+            "lastClosed": 1793507400,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "15m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:SOLUSDT:15m",
+              "symbol": "SOLUSDT"
+            },
+            "view": {
+              "from": 1793058300,
+              "to": 1793511000
+            },
+            "checked": {
+              "start": 1793058300,
+              "end": 1793507400
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1792158300,
+                    "last": 1793508300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 48,
+          "seriesStores": 5,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 41,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-4"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 36,
+              "klines": 18,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 2,
+            "cache": {
+              "series": 7,
+              "bars": 4507,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 25,
+                "completed": 25,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 68,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 68,
+            "totalPhysical": 68
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 36,
+              "klines": 18,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T04:57:18.201Z",
+      "evidence": {
+        "requested": {
+          "from": 1792248300,
+          "to": 1792338300
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508960,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793424960,
+              "to": 1793430960
+            },
+            "checked": {
+              "start": 1793424960,
+              "end": 1793430960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1502,
+                    "first": 1793418960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 54,
+          "seriesStores": 5,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 43,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 43,
+              "klines": 22,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 4,
+            "cache": {
+              "series": 8,
+              "bars": 4507,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 27,
+                "completed": 27,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 68,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 68,
+            "totalPhysical": 68
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 43,
+              "klines": 22,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-XRPUSDT-3m",
+      "at": "2026-11-01T04:57:24.881Z",
+      "evidence": {
+        "requested": {
+          "from": 1793424960,
+          "to": 1793430960
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "XRPUSDT",
+            "interval": "3m",
+            "bars": 1501,
+            "firstClosed": 1793239020,
+            "lastClosed": 1793508840,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "3m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:XRPUSDT:3m",
+              "symbol": "XRPUSDT"
+            },
+            "view": {
+              "from": 1793419020,
+              "to": 1793509920
+            },
+            "checked": {
+              "start": 1793419020,
+              "end": 1793508840
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793239020,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 64,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 48,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-5"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 56,
+              "klines": 31,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 4,
+            "cache": {
+              "series": 10,
+              "bars": 6009,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 38,
+                "completed": 38,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 76,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 76,
+            "totalPhysical": 76
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 56,
+              "klines": 31,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T04:57:27.071Z",
+      "evidence": {
+        "requested": {
+          "from": 1793257020,
+          "to": 1793275020
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508960,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793424960,
+              "to": 1793430960
+            },
+            "checked": {
+              "start": 1793424960,
+              "end": 1793430960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1502,
+                    "first": 1793418960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793478960,
+                    "last": 1793509020,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 68,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 50,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 60,
+              "klines": 32,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6009,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 41,
+                "completed": 41,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 76,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 76,
+            "totalPhysical": 76
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 60,
+              "klines": 32,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "single-input-release",
+      "at": "2026-11-01T04:57:27.287Z",
+      "evidence": {
+        "surviving": [
+          {
+            "id": "qa-js-right",
+            "name": "JS Close qa-js-right",
+            "params": {
+              "scale": 2
+            },
+            "kind": "script",
+            "executionTarget": "local",
+            "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+            "language": "frontend-js",
+            "securityMode": "safe",
+            "visible": true,
+            "bindingId": "indicator:qa-js-right",
+            "error": null,
+            "outputPointCount": 502
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 68,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 50,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 60,
+              "klines": 32,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6009,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 3
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 41,
+                "completed": 41,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 1
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 76,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 76,
+            "totalPhysical": 76
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 60,
+              "klines": 32,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "input-reacquire",
+      "at": "2026-11-01T04:57:29.092Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508960,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "offline-minimized-start",
+      "at": "2026-11-01T04:57:30.795Z",
+      "evidence": {
+        "before": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793508960,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793508960,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "urls": [
+          "ws://127.0.0.1:60581/api/v1/stream/order-book",
+          "ws://127.0.0.1:60581/api/v1/stream/prices",
+          "ws://127.0.0.1:60581/api/v1/stream/klines_batch"
+        ]
+      }
+    },
+    {
+      "name": "offline-minimized-observed",
+      "at": "2026-11-01T04:59:35.820Z",
+      "evidence": {
+        "durationMs": 125021,
+        "offlineFetch": "network failure",
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 72,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 50,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 0,
+            "open": false,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "absent": 1
+            },
+            "activeLogicalSubscriptions": 0,
+            "counts": {
+              "messages": 62,
+              "klines": 34,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 29,
+              "retriesScheduled": 29,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6009,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 44,
+                "completed": 44,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 326,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 326,
+            "totalPhysical": 326
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 0,
+            "open": false,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 0,
+            "counts": {
+              "messages": 62,
+              "klines": 34,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 29,
+              "retriesScheduled": 29,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": false
+          }
+        }
+      }
+    },
+    {
+      "name": "offline-recovered",
+      "at": "2026-11-01T04:59:53.348Z",
+      "evidence": {
+        "elapsedMs": 16831,
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1504,
+            "firstClosed": 1793418960,
+            "lastClosed": 1793509080,
+            "backendRows": 1503,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1503,
+                "points": 1504,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 504,
+            "firstClosed": 1793478960,
+            "lastClosed": 1793509080,
+            "backendRows": 503,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 503,
+                "points": 504,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793424960,
+              "to": 1793430960
+            },
+            "checked": {
+              "start": 1793424960,
+              "end": 1793430960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1504,
+                    "first": 1793418960,
+                    "last": 1793509140,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793484960,
+              "to": 1793496960
+            },
+            "checked": {
+              "start": 1793484960,
+              "end": 1793496960
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 504,
+                    "first": 1793478960,
+                    "last": 1793509140,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 1,
+          "displayCommits": 102,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 0,
+            "hydratedBars": 0,
+            "publishes": 67,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 1
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 75,
+              "klines": 40,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 29,
+              "retriesScheduled": 29,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6011,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 63,
+                "completed": 61,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 352,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 353,
+            "totalPhysical": 352
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 75,
+              "klines": 40,
+              "closed": 2,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 29,
+              "retriesScheduled": 29,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "saved-before-exit",
+      "at": "2026-11-01T04:59:53.358Z",
+      "evidence": {
+        "charts": [
+          {
+            "state": "ready",
+            "contextToken": "nknl8qtxua:66",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 1504,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 3.386138613861386,
+                "rightOffset": -1303,
+                "time": {
+                  "from": 1793424960,
+                  "to": 1793430960
+                },
+                "rightmostTime": 1793430960,
+                "logical": {
+                  "from": 100,
+                  "to": 200
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-left",
+                  "name": "JS Close qa-js-left",
+                  "params": {
+                    "scale": 1
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)),{pane:\"main\",color:\"#f59e0b\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-left",
+                  "error": null,
+                  "outputPointCount": 1504
+                }
+              ],
+              "computing": false
+            }
+          },
+          {
+            "state": "ready",
+            "contextToken": "nknl8qtxua:25",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 504,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 1.6616915422885572,
+                "rightOffset": -203,
+                "time": {
+                  "from": 1793484960,
+                  "to": 1793496960
+                },
+                "rightmostTime": 1793496960,
+                "logical": {
+                  "from": 100,
+                  "to": 300
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-right",
+                  "name": "JS Close qa-js-right",
+                  "params": {
+                    "scale": 2
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-right",
+                  "error": null,
+                  "outputPointCount": 504
+                }
+              ],
+              "computing": false
+            }
+          }
+        ],
+        "workspace": {
+          "workspaceId": "workspace-default",
+          "windowId": "main-window",
+          "name": "默认工作区",
+          "revision": 13,
+          "ready": true,
+          "layout": "split-vertical",
+          "layoutLocked": false,
+          "maxCellsPerWindow": 4,
+          "activeCellId": "cell-1",
+          "persistence": {
+            "state": "saved",
+            "mode": "indexeddb",
+            "error": null
+          },
+          "cells": [
+            {
+              "cellId": "cell-1",
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m",
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "qa-js-left",
+                  "params": {
+                    "scale": 1
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "indicatorSignature": "[[\"qa-js-left\",null,{\"scale\":1},\"script\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 1504,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  1504
+                ],
+                "error": null
+              }
+            },
+            {
+              "cellId": "cell-2",
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "qa-js-right",
+                  "params": {
+                    "scale": 2
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "indicatorSignature": "[[\"qa-js-right\",null,{\"scale\":2},\"script\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 504,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  504
+                ],
+                "error": null
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "previous-processes-absent",
+      "at": "2026-11-01T05:02:48.867Z",
+      "evidence": {
+        "allAbsent": true,
+        "priorExitDuration": "not qualified: 30s timeout with manually retained Playwright debugger"
+      }
+    },
+    {
+      "name": "restart-launch-0",
+      "at": "2026-11-01T05:03:03.173Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 54141,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 54146,
+          "running": true,
+          "startedAt": "2026-11-01T05:02:49.732Z",
+          "readyMs": 12195,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:54934/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "restart-restored-0",
+      "at": "2026-11-01T05:03:13.525Z",
+      "evidence": {
+        "charts": [
+          {
+            "state": "ready",
+            "contextToken": "0rzcgku3kq5m:2",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 1500,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 3.386138613861386,
+                "rightOffset": 0,
+                "time": {
+                  "from": 1793503320,
+                  "to": 1793509320
+                },
+                "rightmostTime": 1793509320,
+                "logical": {
+                  "from": 1399,
+                  "to": 1499
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-left",
+                  "name": "JS Close qa-js-left",
+                  "params": {
+                    "scale": 1
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)),{pane:\"main\",color:\"#f59e0b\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-left",
+                  "error": null,
+                  "outputPointCount": 1500
+                }
+              ],
+              "computing": false
+            }
+          },
+          {
+            "state": "ready",
+            "contextToken": "0rzcgku3kq5m:1",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 500,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 1.661691542288557,
+                "rightOffset": 0,
+                "time": {
+                  "from": 1793497320,
+                  "to": 1793509320
+                },
+                "rightmostTime": 1793509320,
+                "logical": {
+                  "from": 299,
+                  "to": 499
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-right",
+                  "name": "JS Close qa-js-right",
+                  "params": {
+                    "scale": 2
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-right",
+                  "error": null,
+                  "outputPointCount": 500
+                }
+              ],
+              "computing": false
+            }
+          }
+        ],
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1500,
+            "firstClosed": 1793419380,
+            "lastClosed": 1793509320,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 500,
+            "firstClosed": 1793479380,
+            "lastClosed": 1793509320,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 500,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793503320,
+              "to": 1793509320
+            },
+            "checked": {
+              "start": 1793503320,
+              "end": 1793509320
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1500,
+                    "first": 1793419380,
+                    "last": 1793509320,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793497320,
+              "to": 1793509320
+            },
+            "checked": {
+              "start": 1793497320,
+              "end": 1793509320
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 500,
+                    "first": 1793479380,
+                    "last": 1793509320,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "viewportPolicy": "latest bar on reopening, saved zoom retained"
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:03:13.842Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 54141,
+            "ppid": 54118,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 54143,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 54144,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 54146,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 54218,
+            "ppid": 54146,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 54285,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10694098915 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=54934 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 54289,
+            "ppid": 54146,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(58)"
+          },
+          {
+            "pid": 54290,
+            "ppid": 54146,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=61, pipe_handle=64) --multiprocessing-fork"
+          },
+          {
+            "pid": 54297,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10698108187 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708990997080739"
+          },
+          {
+            "pid": 54320,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=7 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10701385990 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708992871164437"
+          },
+          {
+            "pid": 54322,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=8 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10701815758 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708993808206286"
+          },
+          {
+            "pid": 54323,
+            "ppid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=9 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10702406236 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708994745248135"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-exit-0",
+      "at": "2026-11-01T05:03:32.378Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 54141,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 54143,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 54144,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 54146,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 54218,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 54285,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10694098915 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=54934 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 54289,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(58)"
+          },
+          {
+            "pid": 54290,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=61, pipe_handle=64) --multiprocessing-fork"
+          },
+          {
+            "pid": 54297,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10698108187 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708990997080739"
+          },
+          {
+            "pid": 54320,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=7 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10701385990 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708992871164437"
+          },
+          {
+            "pid": 54322,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=8 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10701815758 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708993808206286"
+          },
+          {
+            "pid": 54323,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=9 --time-ticks-at-unix-epoch=-1793498688010492 --launch-time-ticks=10702406236 --shared-files --field-trial-handle=1718379636,r,14527359836157683205,9377178139149300015,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,10083881201812051955,216747207455145837,4 --trace-process-track-uuid=3190708994745248135"
+          }
+        ],
+        "allExited": true,
+        "portClosed": true,
+        "elapsedMs": 18654,
+        "method": "Playwright app.close: app.quit followed by debugger detach; no signals"
+      }
+    },
+    {
+      "name": "restart-launch-1",
+      "at": "2026-11-01T05:03:47.079Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 54532,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 54535,
+          "running": true,
+          "startedAt": "2026-11-01T05:03:32.845Z",
+          "readyMs": 13011,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:56672/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "restart-restored-1",
+      "at": "2026-11-01T05:03:54.287Z",
+      "evidence": {
+        "charts": [
+          {
+            "state": "ready",
+            "contextToken": "v51c252ar3:1",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 1500,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 3.386138613861386,
+                "rightOffset": 0,
+                "time": {
+                  "from": 1793503320,
+                  "to": 1793509320
+                },
+                "rightmostTime": 1793509320,
+                "logical": {
+                  "from": 1399,
+                  "to": 1499
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-left",
+                  "name": "JS Close qa-js-left",
+                  "params": {
+                    "scale": 1
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)),{pane:\"main\",color:\"#f59e0b\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-left",
+                  "error": null,
+                  "outputPointCount": 1500
+                }
+              ],
+              "computing": false
+            }
+          },
+          {
+            "state": "ready",
+            "contextToken": "v51c252ar3:2",
+            "snapshot": {
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "settings": {
+                "theme": "dark",
+                "customBg": "#0f172a",
+                "upColor": "#22c55e",
+                "downColor": "#ef4444",
+                "chartType": "candlestick",
+                "renkoBoxSizeMode": "atr",
+                "renkoAtrLength": 14,
+                "renkoBoxSize": 1,
+                "pointFigureBoxSizeMode": "atr",
+                "pointFigureAtrLength": 14,
+                "pointFigureBoxSize": 1,
+                "pointFigureReversalAmount": 3,
+                "kagiReversalMode": "atr",
+                "kagiAtrLength": 14,
+                "kagiReversalAmount": 1,
+                "lineBreakNumberOfLines": 3,
+                "cachePreset": "standard",
+                "cacheLimits": {
+                  "minutes": 200000,
+                  "hours": 50000,
+                  "daily": 0
+                },
+                "ephemeralCacheBars": 86400,
+                "frontendCacheBudgetBytes": 67108864,
+                "sqliteStorageBudgetBytes": null,
+                "storageRowLimitsEnabled": false,
+                "locale": "zh-CN"
+              },
+              "barCount": 500,
+              "loading": false,
+              "sessionCapabilities": {
+                "exchangeCatalogStatus": "ready",
+                "exchangeLimitations": [
+                  "All physical public market-data I/O is owned by pinned CCXT",
+                  "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+                ],
+                "exchangeCapabilityAvailable": true,
+                "historyIntervalAvailable": true,
+                "realtimeIntervalAvailable": true,
+                "marketDataReady": true,
+                "webSocketReady": true
+              },
+              "nativeIntervals": [
+                {
+                  "value": "1s",
+                  "label": "1s",
+                  "seconds": 1
+                },
+                {
+                  "value": "1m",
+                  "label": "1m",
+                  "seconds": 60
+                },
+                {
+                  "value": "3m",
+                  "label": "3m",
+                  "seconds": 180
+                },
+                {
+                  "value": "5m",
+                  "label": "5m",
+                  "seconds": 300
+                },
+                {
+                  "value": "15m",
+                  "label": "15m",
+                  "seconds": 900
+                },
+                {
+                  "value": "30m",
+                  "label": "30m",
+                  "seconds": 1800
+                },
+                {
+                  "value": "1h",
+                  "label": "1H",
+                  "seconds": 3600
+                },
+                {
+                  "value": "2h",
+                  "label": "2H",
+                  "seconds": 7200
+                },
+                {
+                  "value": "4h",
+                  "label": "4H",
+                  "seconds": 14400
+                },
+                {
+                  "value": "6h",
+                  "label": "6H",
+                  "seconds": 21600
+                },
+                {
+                  "value": "8h",
+                  "label": "8H",
+                  "seconds": 28800
+                },
+                {
+                  "value": "12h",
+                  "label": "12H",
+                  "seconds": 43200
+                },
+                {
+                  "value": "1d",
+                  "label": "1D",
+                  "seconds": 86400
+                },
+                {
+                  "value": "3d",
+                  "label": "3D",
+                  "seconds": 259200
+                },
+                {
+                  "value": "1w",
+                  "label": "1W",
+                  "seconds": 604800
+                },
+                {
+                  "value": "1M",
+                  "label": "1M",
+                  "seconds": 2592000
+                }
+              ],
+              "customIntervals": [],
+              "exchangeMarketTypes": [
+                "spot",
+                "futures"
+              ],
+              "error": null,
+              "status": {
+                "initialHistoryPending": false,
+                "activeChartReady": true,
+                "hasMoreLeft": true,
+                "loadingMoreLeft": false,
+                "loadingMoreRight": false,
+                "canLoadMoreLeft": true,
+                "canLoadMoreRight": false,
+                "canRestoreLatestWindow": true
+              },
+              "visibleRange": {
+                "barSpacing": 1.661691542288557,
+                "rightOffset": 0,
+                "time": {
+                  "from": 1793497320,
+                  "to": 1793509320
+                },
+                "rightmostTime": 1793509320,
+                "logical": {
+                  "from": 299,
+                  "to": 499
+                }
+              },
+              "indicators": [
+                {
+                  "id": "qa-js-right",
+                  "name": "JS Close qa-js-right",
+                  "params": {
+                    "scale": 2
+                  },
+                  "kind": "script",
+                  "executionTarget": "local",
+                  "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+                  "language": "frontend-js",
+                  "securityMode": "safe",
+                  "visible": true,
+                  "bindingId": "indicator:qa-js-right",
+                  "error": null,
+                  "outputPointCount": 500
+                }
+              ],
+              "computing": false
+            }
+          }
+        ],
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1500,
+            "firstClosed": 1793419380,
+            "lastClosed": 1793509320,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1500,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 500,
+            "firstClosed": 1793479380,
+            "lastClosed": 1793509320,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 500,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793503320,
+              "to": 1793509320
+            },
+            "checked": {
+              "start": 1793503320,
+              "end": 1793509320
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1500,
+                    "first": 1793419380,
+                    "last": 1793509320,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793497320,
+              "to": 1793509320
+            },
+            "checked": {
+              "start": 1793497320,
+              "end": 1793509320
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 500,
+                    "first": 1793479380,
+                    "last": 1793509320,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "viewportPolicy": "latest bar on reopening, saved zoom retained"
+      }
+    },
+    {
+      "name": "final-input-release",
+      "at": "2026-11-01T05:03:54.944Z",
+      "evidence": {
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 13,
+          "seriesStores": 2,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 256,
+            "publishes": 15,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-1"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 3,
+              "klines": 0,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 1,
+              "bars": 1500,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 2
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 0
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 2,
+                "completed": 2,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 0
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 15,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 16,
+            "totalPhysical": 15
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 3,
+              "klines": 0,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        },
+        "workers": [
+          "http://127.0.0.1:60580/assets/drawing.worker-DfyP7YVq.js",
+          "http://127.0.0.1:60580/assets/drawing.worker-DfyP7YVq.js"
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:03:55.056Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 54532,
+            "ppid": 54118,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 54533,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 54534,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 54535,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 54589,
+            "ppid": 54535,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 54630,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10737998381 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=56672 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 54648,
+            "ppid": 54535,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(72)"
+          },
+          {
+            "pid": 54649,
+            "ppid": 54535,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=73, pipe_handle=75) --multiprocessing-fork"
+          },
+          {
+            "pid": 54658,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10741281877 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708990997080739"
+          },
+          {
+            "pid": 54679,
+            "ppid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=6 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10742295371 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708991934122588"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-exit-1",
+      "at": "2026-11-01T05:04:10.749Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 54532,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 54533,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 54534,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 54535,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 54589,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 54630,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10737998381 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=56672 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 54648,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(72)"
+          },
+          {
+            "pid": 54649,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=73, pipe_handle=75) --multiprocessing-fork"
+          },
+          {
+            "pid": 54658,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10741281877 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708990997080739"
+          },
+          {
+            "pid": 54679,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=6 --time-ticks-at-unix-epoch=-1793498688009822 --launch-time-ticks=10742295371 --shared-files --field-trial-handle=1718379636,r,4120763737099355338,1064846817806733434,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2493758704565640991,9356577335054961652,4 --trace-process-track-uuid=3190708991934122588"
+          }
+        ],
+        "allExited": true,
+        "portClosed": true,
+        "elapsedMs": 15799,
+        "method": "Playwright app.close: app.quit followed by debugger detach; no signals"
+      }
+    }
+  ],
+  "errors": [],
+  "recovery": {
+    "startedAt": 1793509176392,
+    "samples": [
+      {
+        "elapsedMs": 2321,
+        "lastClosed": [
+          1793508960,
+          1793508960
+        ]
+      },
+      {
+        "elapsedMs": 4571,
+        "lastClosed": [
+          1793508960,
+          1793508960
+        ]
+      },
+      {
+        "elapsedMs": 8769,
+        "lastClosed": [
+          1793509020,
+          1793509080
+        ]
+      },
+      {
+        "elapsedMs": 10754,
+        "lastClosed": [
+          1793509020,
+          1793509080
+        ]
+      },
+      {
+        "elapsedMs": 12851,
+        "lastClosed": [
+          1793509020,
+          1793509080
+        ]
+      },
+      {
+        "elapsedMs": 16824,
+        "lastClosed": [
+          1793509080,
+          1793509080
+        ]
+      }
+    ]
+  },
+  "passed": true,
+  "previousHarnessFailure": "Error: Timed out waiting for acceptance state\n    at until (file:///Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/acceptance-driver.mjs:27:9)\n    at async file:///Users/ryanliang/.codex/worktrees/frontend-178-integration-20261101/CandleScope/output/pr178-main-integration-20261101/run-native.mjs:55:62"
+}
