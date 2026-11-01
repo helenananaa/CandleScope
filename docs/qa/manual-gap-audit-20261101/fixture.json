@@ -1,0 +1,11 @@
+{
+  "count": 50020,
+  "first": 1790507160000,
+  "last": 1793508300000,
+  "bounds": {
+    "earliest_open_time": 1790507160000,
+    "latest_open_time": 1793508300000,
+    "total_count": 50020
+  },
+  "db": "/Users/ryanliang/.codex/worktrees/backend-batch1-20261101/CandleScope/output/issue187-native-20261101/profile/data/candlescope.db"
+}
