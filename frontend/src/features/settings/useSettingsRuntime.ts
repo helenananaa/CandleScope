@@ -15,6 +15,7 @@ export { SETTINGS_CATEGORIES };
 
 export interface UseSettingsRuntimeOptions {
   isOpen: boolean;
+  appearanceScope?: "chart" | "application";
   settings: ChartSettings;
   onUpdate(settings: ChartSettings): void;
   currentSymbol?: string;
@@ -37,6 +38,7 @@ export function useSettingsRuntime({
   isOpen,
   settings,
   onUpdate,
+  appearanceScope = "application",
   currentSymbol = "",
   currentMarketType = "spot",
   currentExchange = "binance",
@@ -71,6 +73,7 @@ export function useSettingsRuntime({
 
   const view: SettingsRuntime["view"] = {
       appearance: {
+        appearanceScope,
         settings,
         onUpdate,
       },

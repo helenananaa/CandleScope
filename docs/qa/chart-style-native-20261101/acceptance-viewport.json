@@ -1,0 +1,445 @@
+{
+  "schema": "candlescope.chart-style-native/1",
+  "sourceCommit": "e03cc42cb5bed5de7b5f9ca769511510d40e4998",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "live-visible-style",
+      "at": "2026-11-01T06:12:47.889Z",
+      "evidence": {
+        "before": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 439,
+                "to": 499
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 500,
+            "first": 1793483520,
+            "last": 1793513460,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 1439,
+                "to": 1499
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 1500,
+            "first": 1793423520,
+            "last": 1793513460,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ],
+        "after": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 439,
+                "to": 499
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 500,
+            "first": 1793483520,
+            "last": 1793513460,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 1439,
+                "to": 1499
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 1500,
+            "first": 1793423520,
+            "last": 1793513460,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "formal-visible-style",
+      "at": "2026-11-01T06:12:51.008Z",
+      "evidence": {
+        "before": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 46,
+                "to": 106
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "first": 1700043600,
+            "last": 1700049960,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#223344"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 46,
+                "to": 106
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "first": 1700043600,
+            "last": 1700049960,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ],
+        "after": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 46,
+                "to": 106
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "first": 1700043600,
+            "last": 1700049960,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 46,
+                "to": 106
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "first": 1700043600,
+            "last": 1700049960,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T06:12:51.250Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 29989,
+            "ppid": 29978,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 30001,
+            "ppid": 29989,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 30002,
+            "ppid": 29989,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 30008,
+            "ppid": 29989,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 30029,
+            "ppid": 30008,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 30076,
+            "ppid": 29989,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687844166 --launch-time-ticks=14871492255 --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=51385 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 30085,
+            "ppid": 30008,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(60)"
+          },
+          {
+            "pid": 30086,
+            "ppid": 30008,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=64, pipe_handle=67) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T06:13:06.486Z",
+      "evidence": {
+        "elapsedMs": 15236
+      }
+    },
+    {
+      "name": "final-exit",
+      "at": "2026-11-01T06:13:06.597Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 29989,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 30001,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 30002,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 30008,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 30029,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 30076,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687844166 --launch-time-ticks=14871492255 --shared-files --field-trial-handle=1718379636,r,14873476561967390709,3506633830961137701,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7329391920134169650,10330580155699532051,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=51385 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 30085,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(60)"
+          },
+          {
+            "pid": 30086,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=64, pipe_handle=67) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

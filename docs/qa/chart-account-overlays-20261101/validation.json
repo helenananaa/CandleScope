@@ -1,0 +1,172 @@
+{
+  "sourceCommit": "e46b1a802c4ee391989d2674baf4f15d8423fde6",
+  "scope": "Live online chart per-account overlays; native package qualification pending",
+  "fullFunctionalRun": {
+    "tests": 4723,
+    "initialPassed": 4721,
+    "initialFailed": 2,
+    "failures": [
+      "menu raw z-index instead of shared token",
+      "Portuguese protection-line wording mixed English"
+    ],
+    "fixesVerifiedBy": {
+      "designTokens": {
+        "passed": 5,
+        "failed": 0
+      },
+      "i18n": {
+        "passed": 40,
+        "failed": 0
+      }
+    },
+    "remainingFailures": 0,
+    "note": "Original nonzero full-run log retained. Only CSS tokens and a translated string changed after these two failures; their complete owning suites were rerun."
+  },
+  "performance": {
+    "passed": 1,
+    "medianMs": 0.286,
+    "p95Ms": 0.377,
+    "thresholdMs": 1
+  },
+  "desktop": {
+    "passed": 127,
+    "failed": 0
+  },
+  "gates": {
+    "architecture": "passed",
+    "plugins": "passed",
+    "i18n": "30 locales, 5274 keys, 976 source files",
+    "finalTypescriptBrowserAndNode": "passed",
+    "lint": "zero errors; one pre-existing cleanup-ref warning in SingleChartPanes",
+    "productionBuild": "passed, 29.98 seconds"
+  },
+  "readPool": {
+    "passed": 7,
+    "includes": [
+      "shared per-account reads",
+      "independent cancellation",
+      "stale response fencing",
+      "mismatched account rejection",
+      "read-after-write refresh",
+      "no revival after release",
+      "journal outage preserves trading data"
+    ]
+  },
+  "logs": {
+    "/tmp/candlescope181-overlay-full-check.log": {
+      "sha256": "a45dd16ccdc6647c91ddc15d7874ec699af85e5d205e1c072cdeffd0eb34f260"
+    },
+    "/tmp/candlescope181-overlay-token-final.log": {
+      "sha256": "06746d4fa5cf337de4768bec58a45dd64c49677e6b827de493924ab33cd24e6e"
+    },
+    "/tmp/candlescope181-overlay-i18n-final.log": {
+      "sha256": "c873bc65dd6fc275b36b23a9e0143dd3ea4942be754d07bc2a0696687beea019"
+    },
+    "/tmp/candlescope181-overlay-final-gates.log": {
+      "sha256": "3ca30e227878d905bc8e2d64bfee605ab2ba6ac847b46bed7f407efb82a59947"
+    },
+    "/tmp/candlescope181-overlay-partial-read-check.log": {
+      "sha256": "2f62c2ea9cda86948c046fb1dcae2076947b6d363957482016b03bd71840b699"
+    }
+  },
+  "browser": {
+    "scope": "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification",
+    "output": "/Users/ryanliang/.codex/worktrees/chart-account-overlays-20261101/CandleScope/output/issue181-account-overlays-integrated-20261101",
+    "browser": "Chrome/156.0.8078.74",
+    "result": {
+      "result": {
+        "type": "object",
+        "value": {
+          "name": "real chart account pinning, visibility, note holes, source errors and release",
+          "status": "PASS",
+          "requests": [
+            {
+              "path": "/api/v1/trading/accounts",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/summary",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/trades",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/journal",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/summary",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/trades",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/journal",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/summary",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/trades",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/a/journal",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/broken/summary",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/broken/trades",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/broken/journal",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/summary",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/trades",
+              "method": "GET"
+            },
+            {
+              "path": "/api/v1/trading/accounts/b/journal",
+              "method": "GET"
+            }
+          ]
+        }
+      }
+    },
+    "immediateWorkerCount": 0,
+    "remainingWorkers": [],
+    "exceptions": [],
+    "editor": {
+      "result": {
+        "type": "object",
+        "value": {
+          "status": "PASS",
+          "scope": "account overlay regression"
+        }
+      }
+    },
+    "passed": true,
+    "browserExitCode": 0
+  },
+  "limitations": [
+    "Installed native save/full exit/restart not yet run",
+    "Browser uses controlled GET account responses; it does not qualify production backend ledger behavior",
+    "formal/strategy/light replay overlay sources and historic note filtering outside this increment",
+    "Windows and full 157-item acceptance remain open"
+  ]
+}

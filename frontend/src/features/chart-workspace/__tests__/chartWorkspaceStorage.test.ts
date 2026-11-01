@@ -5,6 +5,7 @@ import { activeChartWorkspaceWindow, chartWorkspaceCell } from "../chartWorkspac
 import { cloneChartLinkSettings } from "../chartWorkspaceLinkModel.js";
 import {
   CHART_WORKSPACE_V7_STORAGE_KEY,
+  CHART_WORKSPACE_V9_STORAGE_KEY,
   CHART_WORKSPACE_V8_STORAGE_KEY,
   createDefaultChartWorkspace,
   loadChartWorkspace,
@@ -27,7 +28,7 @@ function memoryStorage(initial: Record<string, string> = {}) {
   return { storage, values };
 }
 
-test("workspace defaults to schema v8 with a dynamic root group and no strategy attachment", () => {
+test("workspace defaults to schema v9 with a dynamic root group and no strategy attachment", () => {
   const workspace = createDefaultChartWorkspace();
   assert.equal(workspace.schemaVersion, CHART_WORKSPACE_SCHEMA_VERSION);
   assert.equal(workspace.revision, 0);
@@ -39,7 +40,7 @@ test("workspace defaults to schema v8 with a dynamic root group and no strategy 
   assert.equal(activeChartWorkspaceWindow(workspace).activeCellId, "cell-1");
 });
 
-test("v8 persistence keeps groups, indicators, cell membership, and strategy attachment", () => {
+test("v9 persistence keeps groups, indicators, cell membership, and strategy attachment", () => {
   const { storage, values } = memoryStorage();
   const workspace = createDefaultChartWorkspace();
   workspace.revision = 7;
@@ -75,7 +76,7 @@ test("v8 persistence keeps groups, indicators, cell membership, and strategy att
     .source = "must not enter workspace JSON";
 
   saveChartWorkspace(workspace, storage);
-  assert.deepEqual([...values.keys()], [CHART_WORKSPACE_V8_STORAGE_KEY]);
+  assert.deepEqual([...values.keys()], [CHART_WORKSPACE_V9_STORAGE_KEY]);
   const restored = loadChartWorkspace(storage);
   assert.equal(restored.revision, 7);
   assert.equal(restored.linkGroups["group-child"]!.parentId, DEFAULT_CHART_LINK_GROUP_ID);
@@ -128,7 +129,7 @@ test("workspace persistence keeps a Twelve Data K-line series identity", () => {
   });
 });
 
-test("schema v7 migrates to v8 without changing existing chart state", () => {
+test("schema v7 migrates to v9 without changing existing chart state", () => {
   const current = createDefaultChartWorkspace();
   chartWorkspaceCell(current, "cell-1").session.interval = "5m";
   chartWorkspaceCell(current, "cell-1").drawingLayerSet = "3";
@@ -141,7 +142,7 @@ test("schema v7 migrates to v8 without changing existing chart state", () => {
 
   assert.equal(result.usedFallback, false);
   assert.equal(result.migratedFromSchemaVersion, 7);
-  assert.equal(result.document.schemaVersion, 8);
+  assert.equal(result.document.schemaVersion, 9);
   assert.equal(chartWorkspaceCell(result.document, "cell-1").session.interval, "5m");
   assert.equal(chartWorkspaceCell(result.document, "cell-1").drawingLayerSet, "3");
   assert.deepEqual(chartWorkspaceCell(result.document, "cell-1").indicators, [{ id: "legacy-sma" }]);
@@ -157,7 +158,7 @@ test("schemas older than v7 are rejected instead of guessed", () => {
   assert.equal(result.document.schemaVersion, CHART_WORKSPACE_SCHEMA_VERSION);
 });
 
-test("malformed v8 strategy attachments fail closed", () => {
+test("malformed v9 strategy attachments fail closed", () => {
   const malformed = createDefaultChartWorkspace();
   (chartWorkspaceCell(malformed, "cell-1") as unknown as Record<string, unknown>)
     .strategyAttachment = {
