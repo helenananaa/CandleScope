@@ -348,3 +348,42 @@ test("new feed epoch retires obsolete indicator owners without settling current 
   await h.feed.getHistory(series, { countBack: 1500 });
   assert.equal(buffer.hasPending("active"), false, "settled current owner must not wait on stale epochs");
 });
+
+for (const empty of [false, true]) {
+  test(`reconnect history owns exact repair and settles its indicator gate (empty=${empty})`, async () => {
+    const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+    const buffer = new IndicatorWindowCommitBuffer();
+    const h = harness();
+    const closed = [{ time: epochSeconds(60), close: 2, is_closed: true },
+      { time: epochSeconds(120), close: 3, is_closed: true }];
+    let verified = false;
+    h.feed.configure({
+      api: { ...h.api,
+        fetchKlinesHistory: async () => ({ data: empty ? [] : closed,
+          start_ms: 60_000, end_ms: 120_000, complete: false,
+          retryable: true, history_state: "pending", verified_contiguous: false }),
+        fetchKlinesRange: async () => ({ data: closed, start_ms: 60_000, end_ms: 120_000,
+          complete: verified, retryable: !verified, history_state: verified ? "ready" : "pending",
+          verified_contiguous: verified, all_rows_final: true, has_tail_gap: false,
+          missing_ranges: [], truncated: false }),
+      },
+      commitMergedChartData: (_s, _i, _rows, meta) => {
+        buffer.record("active", [], { ownerToken: meta?.indicatorWindowOwner,
+          pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch });
+      },
+    });
+    h.feed.beginEpoch(series);
+    const pending = await h.feed.getRecoveryHistory(series, { countBack: 2 });
+    // Empty histories do not commit rows; a held nonempty reconnect is the
+    // actual UI stall. Both cases must keep discoverable exact repair demand.
+    assert.equal(buffer.hasPending("active"), !empty);
+    assert.equal(h.feed.pendingRepairCount(series), 1);
+    await h.feed.pollPendingRepairs(series, { force: true });
+    assert.equal(buffer.hasPending("active"), true);
+    verified = true;
+    await h.feed.pollPendingRepairs(series, { force: true });
+    assert.equal(h.feed.pendingRepairCount(series), 0);
+    assert.equal(buffer.hasOwner("active", pending.indicatorWindowOwner!), false);
+    assert.equal(buffer.hasPending("active"), false);
+  });
+}
