@@ -14,23 +14,25 @@ const proof: KlineFetchResult = {
   history_state: "ready",
 };
 
-function harness(read: () => Promise<KlineFetchResult>) {
+function harness(read: () => Promise<KlineFetchResult>, readLatest = read) {
   const calls: unknown[][] = [];
   const commits: number[][] = [];
   const committedRows: KlineBar[][] = [];
+  const patches: KlineBar[][] = [];
   const api: KlineApi = {
     getMultiStreamUrl: () => "ws://test",
-    fetchKlinesHistory: read, fetchKlinesBefore: read, fetchLatestKlines: read,
+    fetchKlinesHistory: read, fetchKlinesBefore: read, fetchLatestKlines: readLatest,
     fetchKlinesRange: (...args) => { calls.push(args); return read(); },
   };
   const feed = new SeriesDataFeed({
     api, getActiveSeries: () => series,
+    commitPatchedChartData: (_s, _i, rows) => { patches.push(rows); },
     commitMergedChartData: (_s, _i, rows) => {
       commits.push(rows.map((row) => Number(row.time)));
       committedRows.push(rows);
     },
   });
-  return { feed, calls, commits, committedRows };
+  return { feed, calls, commits, committedRows, patches };
 }
 
 test("gap recovery waits for subscribe acknowledgement and reloads the entire held range", async () => {
@@ -205,4 +207,76 @@ test("declared exhausted readback stops automatic requests without pretending re
   assert.equal(recovery.required, true);
   await recovery.recover(feed, () => true);
   assert.equal(calls.length, 2); assert.equal(recovery.required, false);
+});
+
+const version = (changes: Record<string, unknown> = {}) => ({
+  protocol: 1, epoch: "server-a", generation: 2, sequence: 10, barrier: 3,
+  observed_at_ms: 1_000_000, stable: true,
+  series: { exchange: "binance", market_type: "spot", symbol: "BTCUSDT", interval: "1m",
+    provider_id: "binance", venue: "binance", asset_class: "crypto", series_variant: "native",
+    price_adjustment: "raw", session_variant: "continuous", volume_semantics: "base_asset" },
+  ...changes,
+});
+const forming = { time: epochSeconds(240), close: 7, is_closed: false };
+const capped = { ...proof, reached_latest_closed_bar: true, effective_end_ms: 180_000,
+  query_end_ms: 180_000, stream_version: version() };
+const tail = { data: [held.at(-1)!, forming], all_rows_final: false,
+  stream_version: version({ sequence: 11, observed_at_ms: 1_000_001 }) };
+
+for (const onlyForming of [false, true]) {
+  test(`closed-range proof plus a fenced forming snapshot completes recovery (onlyForming=${onlyForming})`, async () => {
+    const { feed, calls, patches } = harness(async () => capped, async () => tail);
+    const recovery = new KlineConsumerRecovery();
+    recovery.capture(feed, series, onlyForming ? [forming] : [...held, forming]);
+    await recovery.recover(feed, () => true);
+    assert.equal(recovery.required, false);
+    assert.deepEqual(calls[0]?.slice(2, 4), [onlyForming ? 180 : 60, 240]);
+    assert.deepEqual(patches, [[forming]]);
+    assert.equal(patches[0]![0]!.is_closed, false);
+  });
+}
+const rejectedTails: Array<[string, KlineFetchResult]> = [
+  ["unversioned", { ...tail, stream_version: undefined }],
+  ["unstable", { ...tail, stream_version: version({ stable: false }) }],
+  ["other incarnation", { ...tail, stream_version: version({ generation: 3 }) }],
+  ["amendment barrier", { ...tail, stream_version: version({ barrier: 4 }) }],
+  ["older sequence", { ...tail, stream_version: version({ sequence: 9 }) }],
+  ["older observation", { ...tail, stream_version: version({ observed_at_ms: 999_999 }) }],
+  ["different series", { ...tail, stream_version: version({ series: { ...version().series, provider_id: "other" } }) }],
+  ["forming already closed", { ...tail, data: [{ ...forming, is_closed: true }] }],
+  ["next bucket", { ...tail, data: [{ ...forming, time: epochSeconds(300) }] }],
+];
+for (const [name, latest] of rejectedTails) {
+  test(`a ${name} tail cannot replace missing historical proof`, async () => {
+    const { feed, patches } = harness(async () => capped, async () => latest);
+    const recovery = new KlineConsumerRecovery();
+    recovery.capture(feed, series, [...held, forming]);
+    await recovery.recover(feed, () => true);
+    assert.equal(recovery.required, true);
+    assert.deepEqual(patches, []);
+  });
+}
+
+test("a held final row cannot be downgraded by a capped range and forming tail", async () => {
+  const { feed, patches } = harness(async () => capped, async () => tail);
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, [...held, { ...forming, is_closed: true }]);
+  recovery.capture(feed, series, [...held, forming]);
+  await recovery.recover(feed, () => true);
+  assert.equal(recovery.required, true);
+  assert.deepEqual(patches, []);
+});
+
+test("navigation while the forming proof is in flight fences its commit", async () => {
+  let finish!: (value: KlineFetchResult) => void;
+  const { feed, patches } = harness(async () => capped, () => new Promise(resolve => { finish = resolve; }));
+  const recovery = new KlineConsumerRecovery();
+  recovery.capture(feed, series, [...held, forming]);
+  const running = recovery.recover(feed, () => true);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(typeof finish, "function");
+  feed.beginEpoch(series);
+  finish(tail);
+  await running;
+  assert.deepEqual(patches, []);
 });

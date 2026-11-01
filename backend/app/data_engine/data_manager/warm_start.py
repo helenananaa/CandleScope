@@ -58,6 +58,7 @@ class AggregatorWarmStartService:
         self._storage_provider = storage_provider
         self._backfill_trigger_provider = backfill_trigger_provider
         self._interval_resolver = interval_resolver or IntervalResolver()
+        self.history_prefix_runtime = None
         self._tail_repair_buckets: dict[
             tuple[str, str, str, str],
             int,
@@ -163,12 +164,34 @@ class AggregatorWarmStartService:
         bucket_start_ms = self._bar_aggregator.compute_bucket(interval, now_ms)
         if bucket_start_ms is None:
             return
+        if self.history_prefix_runtime is not None and base_spec is not None:
+            source = SeriesKey.create(symbol, base_interval, exchange=exchange,
+                                      market_type=market_type, identity=series_identity)
+            if await self.history_prefix_runtime.seed(source, interval, bucket_start_ms,
+                                                       base_spec.floor_ms(now_ms)):
+                # Match legacy warm-start's cache fallback when the bridge is
+                # not yet started, or its preview was throttled. Preserve a
+                # better canonical cached bar through ordinary arbitration.
+                current = self._bar_aggregator.get_bucket_state(symbol, interval, bucket_start_ms,
+                    exchange=exchange, market_type=market_type, series_identity=series_identity)
+                if current is not None:
+                    key = SeriesKey.create(symbol, interval, exchange=exchange,
+                                           market_type=market_type, identity=series_identity)
+                    bar = BarData.from_bar_state(current)
+                    if self._cache.get_latest(key, 1) != [bar]:
+                        await self._cache.apply_protected(self._cache.upsert_if_accepted, key, bar)
+                return
         prev_bucket_start_ms = self._bar_aggregator.previous_bucket(interval, bucket_start_ms)
         fetch_start_ms = (
             prev_bucket_start_ms
             if prev_bucket_start_ms is not None
             else bucket_start_ms
         )
+        if (self.history_prefix_runtime is not None and base_spec is not None
+                and self.history_prefix_runtime.owns_target(source, interval)):
+            # A subsequent small/new current bucket can use ordinary fine
+            # components. Do not expand/replay its already-owned old prefix.
+            fetch_start_ms = bucket_start_ms
 
         rows = storage.query_bars(
             symbol=symbol,

@@ -47,3 +47,19 @@ test("control input rejects scripts, unknown keys, noncanonical intervals and ou
   raw.charts[0]!.session.interval = "60m";
   assert.throws(() => parseControlConfiguration(raw), /canonical/);
 });
+
+
+test("control resets nondefault series semantics instead of retaining a different restored series", () => {
+  const original = createDefaultChartWorkspaceRecord(1).document;
+  const cellId = visibleCellIds(original.windows["main-window"]!.layoutTree)[0]!;
+  const cell = original.cells[cellId]!;
+  cell.session = { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "5m", priceAdjustment: "split" };
+  cell.indicators = [];
+  const command = parseControlConfiguration({ requestId: "reset-series", workspaceId: "workspace-1",
+    windowId: "main-window", expectedRevision: original.revision, charts: [{ cellId,
+      session: { exchange: "binance", marketType: "spot", symbol: "BTCUSDT", interval: "5m" }, indicators: [] }] });
+  const result = applyControlWorkspaceCommand(original, command, {});
+  assert.equal(result.document.revision, original.revision + 1);
+  assert.equal(result.document.cells[cellId]!.session.priceAdjustment, undefined);
+  assert.equal(original.cells[cellId]!.session.priceAdjustment, "split");
+});

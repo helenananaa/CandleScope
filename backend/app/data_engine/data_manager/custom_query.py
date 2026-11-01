@@ -54,6 +54,10 @@ logger = logging.getLogger("data_manager.custom_query")
 
 
 _MAX_CUSTOM_BASE_PAGES = 32
+# Streaming also holds the target boundary/output allowance. A full 10k
+# source page plus its nested D126 read reservation can exceed the default
+# 64MiB owner budget for a valid small viewport of a large fixed interval.
+_STREAM_SOURCE_PAGE_ROWS = 4096
 _IO_COUNT_FIELDS = (
     "storage_reads",
     "storage_rows",
@@ -1464,7 +1468,7 @@ class CustomIntervalQueryService:
         exchange: str,
         market_type: str,
         requested_auto_backfill: bool | None,
-        initial_read: Callable[[], QueryResult] | None = None,
+        initial_read: Callable[[int], QueryResult] | None = None,
     ) -> tuple[QueryResult, list[BarData], list[BarData]]:
         """Pull one source page at a time, retaining only quality summaries.
 
@@ -1501,7 +1505,8 @@ class CustomIntervalQueryService:
         page_capacity = max(1, target_limit)
         if lower_bound_ms is not None:
             page_capacity = max(page_capacity, (max(0, before_ms - lower_bound_ms) + source_ms - 1) // source_ms)
-        requested_max_pages = max(2, (page_capacity + self._cfg.max_limit - 1) // self._cfg.max_limit + 4)
+        source_page_rows = min(self._cfg.max_limit, _STREAM_SOURCE_PAGE_ROWS)
+        requested_max_pages = max(2, (page_capacity + source_page_rows - 1) // source_page_rows + 4)
         max_pages = min(requested_max_pages, _MAX_CUSTOM_BASE_PAGES)
         # Admit before the first source read. Reserve a conservative ceiling
         # for decoded-page containers, the cross-page bucket, sparse target
@@ -1509,8 +1514,8 @@ class CustomIntervalQueryService:
         # per source row, so dividing this allowance by the factor is unsafe.
         # The outer D126 query scope holds it through materialization and the
         # final revision check, including fallback, errors and cancellation.
-        source_capacity = min(target_limit + max_pages, max_pages * self._cfg.max_limit)
-        page_rows = min(target_limit, self._cfg.max_limit)
+        source_capacity = min(target_limit + max_pages, max_pages * source_page_rows)
+        page_rows = min(target_limit, source_page_rows)
         boundary_rows = min(source_capacity, target_seconds * 1000 // source_ms)
         reserved_bytes = (2 * (page_rows + boundary_rows + source_capacity) + max_pages) * 1024
         budget = self._memory_budget_provider() if self._memory_budget_provider else None
@@ -1525,23 +1530,22 @@ class CustomIntervalQueryService:
                 previous = summaries[-1]
                 if not previous.has_more and not previous.retryable and not previous.missing_ranges:
                     break
-            page_limit = min(self._cfg.max_limit, max(1, target_limit - stream.unique_rows))
+            page_limit = min(source_page_rows, max(1, target_limit - stream.unique_rows))
             if lower_bound_ms is not None:
                 remaining_span = max(1, (max(0, cursor_ms - lower_bound_ms) + source_ms - 1) // source_ms)
                 page_limit = min(page_limit, remaining_span)
             is_seed = not summaries and initial_read is not None
-            # The range seed keeps its existing limit; later reads obey the
-            # remaining span. Each read must finish and be reduced before the
-            # next read is admitted (synchronous pull/backpressure).
+            # Bound the range seed as well as later reads. Each read must
+            # finish and be reduced before the next page is admitted.
             if is_seed:
-                page_limit = min(self._cfg.max_limit, target_limit)
+                page_limit = min(source_page_rows, target_limit)
             page = self._run_base_window_flight(
                 series=(exchange.strip().lower(), market_type.strip().lower(), symbol.strip().upper(), interval),
                 start_ms=cursor_ms - page_limit * source_ms,
                 end_ms=cursor_ms - 1,
                 target_limit=page_limit,
                 requested_auto_backfill=requested_auto_backfill,
-                compute=initial_read if is_seed else lambda: self._base_query_before(
+                compute=(lambda: initial_read(page_limit)) if is_seed else lambda: self._base_query_before(
                     symbol, interval, cursor_ms, page_limit,
                     exchange=exchange, market_type=market_type, auto_backfill=False,
                 ),
@@ -1599,6 +1603,7 @@ class CustomIntervalQueryService:
             "base_window_flight_role": "join" if owned_pages == 0 else "owner",
             "base_streaming": True,
             "base_stream_reserved_bytes": reserved_bytes if budget is not None else 0,
+            "base_stream_page_rows": source_page_rows,
             "base_stream_peak_buffered_rows": stream.peak_buffered_rows,
             "base_stream_boundary_rows": len(boundary),
             "base_stream_aggregation_ms": aggregation_seconds * 1000,
@@ -1898,9 +1903,9 @@ class CustomIntervalQueryService:
                     aggregation_lower_bound_ms=None if open_ended_latest else window_start_ms,
                     exchange=exchange, market_type=market_type,
                     requested_auto_backfill=auto_backfill,
-                    initial_read=lambda: self._base_query(
+                    initial_read=lambda page_limit: self._base_query(
                         symbol, base_interval, start_ms=seed_start_ms,
-                        end_ms=base_end_ms, limit=seed_limit, exchange=exchange,
+                        end_ms=base_end_ms, limit=page_limit, exchange=exchange,
                         market_type=market_type, auto_backfill=False,
                     ),
                 )

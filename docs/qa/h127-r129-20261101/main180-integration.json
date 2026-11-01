@@ -1,0 +1,7 @@
+{
+  "base": "5ba61863c89a8ee8406c3368d78ef5afb4720c9d",
+  "resolved": "preserved H127 source gap tests and applied pytest.anyio entry point to all async owner tests; no product conflict",
+  "tests": "41 owner / WS / process / history-worker / process-lane passed, 0 skipped",
+  "native": "existing H127 native applies to H127 application source a12b8350; imported replay has own official native main197 evidence. This merge has not had new joint native validation",
+  "at": "2026-11-01T09:50:48.404952+00:00"
+}
