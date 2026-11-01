@@ -2249,10 +2249,7 @@ class DataManager:
     ) -> None:
         with self._storage_gc_guard:
             new_keys = tuple(key for key in keys if key not in self._stream_leases)
-            maximum = min(
-                max(1, int(self._cfg.coordinator.max_active_series)),
-                max(0, int(self._cfg.cache.max_series)),
-            )
+            maximum = self._stream_lease_limit()
             projected = len(self._stream_leases) + len(new_keys)
             if projected > maximum:
                 raise StreamCapacityError(
@@ -2268,6 +2265,12 @@ class DataManager:
                 changed = changed or len(lease.consumers) != before
             if changed:
                 self._mark_storage_gc_protection_changed()
+
+    def _stream_lease_limit(self) -> int:
+        return min(
+            max(1, int(self._cfg.coordinator.max_active_series)),
+            max(0, int(self._cfg.cache.max_series)),
+        )
 
     def _release_stream_leases(
         self,
@@ -3520,10 +3523,7 @@ class DataManager:
                     len(lease.consumers) for lease in self._stream_leases.values()
                 ),
                 "unique_consumers": len(unique_consumers),
-                "max_active_series": max(
-                    1,
-                    int(self._cfg.coordinator.max_active_series),
-                ),
+                "max_active_series": self._stream_lease_limit(),
                 "detail_offset": safe_offset,
                 "detail_limit": safe_limit,
                 "detail_total": len(ordered),
