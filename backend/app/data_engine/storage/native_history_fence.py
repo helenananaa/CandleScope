@@ -42,7 +42,7 @@ class NativeHistoryView:
         row = series_change(conn, self.key)
         floor = scope.revision if scope.delete_revision is None else scope.delete_revision
         # Own writes never grant permission over an intervening deletion.
-        if row is not None and int(row["delete_revision"]) > floor:
+        if row is not None and int(row["delete_revision"]) > max(floor, scope.accepted.get(self.key, 0)):
             raise StaleAcquisition("native history was deleted after request permission")
         if fingerprint(conn, self.key, self.start, self.end) != self.digest:
             raise StaleAcquisition("native history window changed during acquisition")
@@ -83,5 +83,15 @@ def matching_view(scope, key, rows, source):
         return None
     start = min(row["open_time"] for row in rows)
     end = max(row["open_time"] for row in rows)
+    return next((view for view in scope.native_history_views
+                 if view.key == key and view.start <= start <= end <= view.end), None)
+
+
+def matching_empty_view(scope, key, ranges):
+    # Only the existing Upbit REST negative-evidence owner can use this path.
+    # No trade-derived, custom identity, or unknown-source absence is granted.
+    if not ranges or key != series_values(key[2], '1s', 'upbit', 'spot'):
+        return None
+    start, end = min(a for a, _ in ranges), max(b for _, b in ranges)
     return next((view for view in scope.native_history_views
                  if view.key == key and view.start <= start <= end <= view.end), None)

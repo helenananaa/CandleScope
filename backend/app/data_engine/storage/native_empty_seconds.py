@@ -47,7 +47,9 @@ def record(symbol, ranges):
     from .revisions import guarded_write, series_values, IDENTITY_COLUMNS
     global _revision
     changed = False
-    with _connect() as conn, guarded_write(conn, series_values(symbol, '1s', 'upbit', 'spot')):
+    ranges = list(ranges)
+    with _connect() as conn, guarded_write(conn, series_values(symbol, '1s', 'upbit', 'spot'),
+                                         native_empty_ranges=ranges):
         # Serialize with bar writers; never hide a candle already in storage.
         for start, end in ranges:
             if start % 1000 or end % 1000 or start > end:

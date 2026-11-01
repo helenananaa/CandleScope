@@ -179,3 +179,40 @@ def test_real_engine_captures_window_before_transport_and_commits_history(store)
         assert len([r for r in store.query_bars('BTCUSDT','1s') if 90000 <= r['open_time'] <= 99000]) == 10
         await engine.close()
     asyncio.run(run())
+
+
+def test_prefetched_upbit_absence_survives_disjoint_live_append_and_own_span_merge(store):
+    from app.data_engine.storage import native_empty_seconds
+    write(101000,exchange='upbit')
+    scope=capture(store,exchange='upbit')
+    write(102000,exchange='upbit')
+    with acquisition_scope(scope):
+        native_empty_seconds.record('BTCUSDT',[(90000,92000)])
+        native_empty_seconds.record('BTCUSDT',[(93000,94000)])
+        assert write(95000,exchange='upbit')==1
+    assert native_empty_seconds.read('BTCUSDT',90000,99000)==[(90000,94000)]
+
+
+@pytest.mark.parametrize('mutation',['delete','correct','outside'])
+def test_negative_evidence_retains_deletion_correction_and_window_fences(store,mutation):
+    from app.data_engine.storage import native_empty_seconds
+    scope=capture(store,exchange='upbit')
+    if mutation=='delete':
+        store.delete_bars('BTCUSDT','1s',90000,99000,exchange='upbit')
+    elif mutation=='correct':
+        write(91000,exchange='upbit')
+    else:
+        write(102000,exchange='upbit')
+    with acquisition_scope(scope),pytest.raises(StaleAcquisition):
+        native_empty_seconds.record('BTCUSDT',[(89000,89000)] if mutation=='outside' else [(90000,92000)])
+    assert native_empty_seconds.read('BTCUSDT',89000,99000)==[]
+
+
+def test_external_delete_after_own_empty_merge_still_cannot_be_resurrected(store):
+    from app.data_engine.storage import native_empty_seconds
+    scope=capture(store,exchange='upbit')
+    with acquisition_scope(scope):native_empty_seconds.record('BTCUSDT',[(90000,92000)])
+    store.delete_bars('BTCUSDT','1s',90000,99000,exchange='upbit')
+    with acquisition_scope(scope),pytest.raises(StaleAcquisition):
+        native_empty_seconds.record('BTCUSDT',[(90000,93000)])
+    assert native_empty_seconds.read('BTCUSDT',90000,99000)==[]

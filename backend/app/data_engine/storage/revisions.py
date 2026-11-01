@@ -251,7 +251,7 @@ def acquisition_scope(acquisition):
 
 
 @contextmanager
-def guarded_write(conn, values, *, commit=True, native_rows=None, source=None):
+def guarded_write(conn, values, *, commit=True, native_rows=None, source=None, native_empty_ranges=None):
     """Hold optimistic check and SQL write in one SQLite writer transaction."""
     scope = _acquisition.get()
     if not conn.in_transaction:
@@ -267,8 +267,10 @@ def guarded_write(conn, values, *, commit=True, native_rows=None, source=None):
             return {tuple(row[name] for name in IDENTITY_COLUMNS): int(row["revision"])
                     for row in conn.execute("SELECT * FROM kline_series_changes WHERE " +
                         " AND ".join(f"{name}=?" for name, _ in family), tuple(v for _, v in family))}
-        from .native_history_fence import matching_view, fingerprint
+        from .native_history_fence import matching_view, matching_empty_view, fingerprint
         view = matching_view(scope, values, native_rows, source) if commit else None
+        if view is None and commit and native_empty_ranges is not None:
+            view = matching_empty_view(scope, values, native_empty_ranges)
         if view is None:
             scope.check(conn, values)
         else:
