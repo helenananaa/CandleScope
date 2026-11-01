@@ -27,6 +27,7 @@ interface LocalizationBundle {
 
 interface PaneAppearanceOptions {
   theme?: string;
+  inheritApplicationTheme?: boolean;
   customBg?: string;
   timezone?: string;
   interval?: string;
@@ -176,13 +177,13 @@ export function buildCrosshairOptions(visible = true): DeepPartial<CrosshairOpti
   };
 }
 
-export function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): {
+export function getPaneThemeColors({ theme, customBg, inheritApplicationTheme = true }: PaneAppearanceOptions): {
   bgColor: string;
   textColor: string;
   gridColor: string;
   borderColor: string;
 } {
-  const extension = getExtensionState().theme;
+  const extension = inheritApplicationTheme ? getExtensionState().theme : null;
   const tokens = extension?.tokens;
   theme = extension?.base ?? theme;
   return {
@@ -195,9 +196,33 @@ export function getPaneThemeColors({ theme, customBg }: PaneAppearanceOptions): 
   };
 }
 
+/** DOM legends and pane controls share the canvas palette, scoped to one chart. */
+export function chartPaneCssVariables(options: PaneAppearanceOptions & {
+  upColor: string; downColor: string;
+}): Record<`--${string}`, string> {
+  const colors = getPaneThemeColors(options);
+  return {
+    "--text-up": options.upColor,
+    "--text-down": options.downColor,
+    ...(options.inheritApplicationTheme === false ? {
+      "--text-primary": colors.textColor,
+      "--text-secondary": colors.textColor,
+      "--text-muted": colors.textColor,
+      "--bg-primary": colors.bgColor,
+      "--bg-secondary": colors.bgColor,
+      "--surface-0": colors.bgColor,
+      "--surface-1": colors.bgColor,
+      "--surface-2": colors.bgColor,
+      "--surface-3": colors.bgColor,
+      "--border-color": colors.borderColor,
+    } : {}),
+  };
+}
+
 export function buildChartPaneOptions({
   container,
   theme,
+  inheritApplicationTheme = true,
   customBg,
   timezone,
   interval,
@@ -211,6 +236,7 @@ export function buildChartPaneOptions({
 }): AdapterChartOptions {
   const loc = buildLocalizationOptions(timezone, interval);
   const { bgColor, textColor, gridColor, borderColor } = getPaneThemeColors({
+    inheritApplicationTheme,
     ...(theme !== undefined ? { theme } : {}),
     ...(customBg !== undefined ? { customBg } : {}),
   });
@@ -264,6 +290,7 @@ export function applyChartPaneAppearance(
   chart: IChartApiBase<ChartTime>,
   {
     theme,
+    inheritApplicationTheme = true,
     customBg,
     timezone,
     interval,
@@ -274,6 +301,7 @@ export function applyChartPaneAppearance(
 ): void {
   const loc = buildLocalizationOptions(timezone, interval);
   const { bgColor, textColor, gridColor, borderColor } = getPaneThemeColors({
+    inheritApplicationTheme,
     ...(theme !== undefined ? { theme } : {}),
     ...(customBg !== undefined ? { customBg } : {}),
   });

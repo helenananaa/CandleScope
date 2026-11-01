@@ -30,6 +30,7 @@ export interface IndicatorShellRuntime {
 
 export interface SettingsShellRuntime {
   view: {
+    appearanceScope?: "chart" | "application";
     settings: ChartSettings;
     resolvedTheme: string;
     isOpen: boolean;
