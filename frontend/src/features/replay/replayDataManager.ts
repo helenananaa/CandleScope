@@ -152,10 +152,20 @@ class ReplayDemandLease {
 
 export class ReplaySequenceLease extends ReplayDemandLease {
   readonly store = new SeriesWindowStore();
+  private windowIdentity: ReplaySequenceIdentity | null = null;
   constructor(owner: string, manager: ReplayDataManager) { super(owner, manager, "sequence"); }
-  bind(identity: ReplaySequenceIdentity): void {
+  bind(identity: ReplaySequenceIdentity, { preserveWindow = false } = {}): void {
+    const previous = this.windowIdentity;
+    const canPreserve = preserveWindow && previous !== null
+      && identity.generation > previous.generation
+      && identity.runId === previous.runId && identity.trackId === previous.trackId
+      && identity.sessionId === previous.sessionId && identity.dataEpoch === previous.dataEpoch
+      && identity.interval === previous.interval;
     if (this.bindIdentity(identity, JSON.stringify([identity.runId, identity.trackId, identity.sessionId,
-      identity.dataEpoch, identity.generation, identity.interval]))) this.store.clear({ source: "replay-manager-identity-change" });
+      identity.dataEpoch, identity.generation, identity.interval])) && !canPreserve) {
+      this.store.clear({ source: "replay-manager-identity-change" });
+    }
+    this.windowIdentity = { ...identity };
   }
   override diagnostics() { return { ...super.diagnostics(), bars: this.store.barCount }; }
 }

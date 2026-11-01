@@ -288,6 +288,9 @@ class ScanReport:
     ledger_compacted: int = 0
     ledger_skipped: int = 0
     ledger_failed: int = 0
+    # Optional bounded page receipts for interactive maintenance. Background
+    # audits keep the original counters without retaining per-gap payloads.
+    pages: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {

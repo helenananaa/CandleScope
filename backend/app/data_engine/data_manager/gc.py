@@ -221,7 +221,7 @@ def execute_memory_gc_plan(data_manager: Any, plan: dict[str, Any]) -> dict[str,
                 count, outcome = 0, "unsupported"
             removed_series += 1 if count else 0
             removed_bars += count
-            if outcome in {"stale", "unsupported"}:
+            if outcome in {"stale", "unsupported", "protected-at-execute"}:
                 skipped_count += 1
             if outcome == "unsupported":
                 unsupported_count += 1
@@ -244,7 +244,7 @@ def execute_memory_gc_plan(data_manager: Any, plan: dict[str, Any]) -> dict[str,
                 count, outcome = 0, "unsupported"
             trimmed_series += 1 if count else 0
             removed_bars += count
-            if outcome in {"stale", "unsupported"}:
+            if outcome in {"stale", "unsupported", "protected-at-execute"}:
                 skipped_count += 1
             if outcome == "unsupported":
                 unsupported_count += 1
@@ -495,10 +495,17 @@ def _active_keys(data_manager: Any) -> set[SeriesKey]:
             key = getattr(info, "key", None)
             if isinstance(key, SeriesKey):
                 keys.add(key)
-    get_targets = getattr(getattr(data_manager, "bar_aggregator", None), "get_targets", None)
-    if callable(get_targets):
-        for exchange, market_type, symbol, interval in get_targets():
-            keys.add(SeriesKey(symbol, interval, exchange=exchange, market_type=market_type))
+    aggregator = getattr(data_manager, "bar_aggregator", None)
+    get_series_targets = getattr(aggregator, "get_series_targets", None)
+    if callable(get_series_targets):
+        for exchange, market_type, symbol, interval, identity in get_series_targets():
+            keys.add(SeriesKey.create(symbol, interval, exchange=exchange,
+                                      market_type=market_type, identity=identity))
+    else:
+        get_targets = getattr(aggregator, "get_targets", None)
+        if callable(get_targets):
+            for exchange, market_type, symbol, interval in get_targets():
+                keys.add(SeriesKey(symbol, interval, exchange=exchange, market_type=market_type))
     return keys
 
 

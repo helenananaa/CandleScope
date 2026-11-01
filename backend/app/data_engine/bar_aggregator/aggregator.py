@@ -364,6 +364,12 @@ class BarAggregator:
         """Return all registered (symbol, interval) targets."""
         return self._router.get_targets()
 
+    def get_series_targets(self):
+        return self._router.get_series_targets()
+
+    def has_series_target(self, symbol, interval, exchange, market_type, identity) -> bool:
+        return self._router.has_series_target(symbol, interval, exchange, market_type, identity)
+
     # ── Public: Data Ingestion ───────────────────────────────
 
     async def on_market_event(self, event: Any) -> None:
@@ -790,19 +796,24 @@ class BarAggregator:
 
     def memory_usage(self):
         active = closed = components = 0
+        component_index_bytes = 0
         for pipeline in list(self._pipelines.values()):
             engine = pipeline.bar_state
             active += len(engine._active)
             closed += len(engine._closed)
             components += sum(len(state.source_snapshots) for state in
                               [*engine._active.values(), *engine._closed.values()])
+            component_index_bytes += sum(state._component_accumulator.snapshot()["estimated_bytes"]
+                for state in (*engine._active.values(), *engine._closed.values())
+                if state._component_accumulator is not None)
         events = [event for queue, _ in list(self._publisher._subscribers)
                   for event in list(queue._queue) if isinstance(event, BarEvent)]
         queued_components = sum(len(state.source_snapshots) for event in events
                                 for state in (event.bar, event.previous_bar) if state is not None)
         return {"active_bars": active, "closed_bars": closed, "components": components,
                 "queued_snapshots": len(events), "queued_components": queued_components,
-                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024,
+                "component_index_bytes": component_index_bytes,
+                "estimated_bytes": (active + closed + len(events)) * 1024 + (components + queued_components) * 1024 + component_index_bytes,
                 "protection": "active and correction state owned by realtime executor"}
 
     def _memory_roots(self):

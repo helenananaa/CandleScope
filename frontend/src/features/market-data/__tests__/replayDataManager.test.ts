@@ -58,6 +58,20 @@ test("one consumer's cancellation preserves siblings, including same-identity AB
   nextA(); releaseB(); assert.throws(() => a.retain(), /closed/);
 });
 
+test("window preservation only permits a newer transport generation of the identical replay dataset", async () => {
+  for (const change of [{}, { runId: "run-b" }, { trackId: "eth-track" }, { sessionId: "adapter-b" },
+    { dataEpoch: "epoch-2" }, { interval: "5m" }]) {
+    const manager = new ReplayDataManager(), sequence = manager.createSequence();
+    const release = sequence.retain(); sequence.bind(identity); sequence.store.replace([row(60)]);
+    const pending = sequence.request(() => new Promise(() => {}));
+    const rejected = assert.rejects(pending, { name: "AbortError" });
+    sequence.bind({ ...identity, generation: 2, ...change }, { preserveWindow: true });
+    await rejected;
+    assert.equal(sequence.store.barCount, Object.keys(change).length === 0 ? 1 : 0);
+    release(); manager.dispose();
+  }
+});
+
 test("replay namespace never reads or mutates the live cache and its root has no live IO fallback", () => {
   const forbidden = (): never => { throw new Error("Unexpected live IO"); };
   const manager = new MarketDataManager({ api: {

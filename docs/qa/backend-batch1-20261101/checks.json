@@ -1,0 +1,131 @@
+{
+  "schema": "candlescope.backend-batch1-checks/1",
+  "sourceCommit": "99d97c0d93c1ff1623c4029fb56d0b4465a6c3a2",
+  "baseMain": "a4dc6e5374a719a98e9a8e8d797170f4448279aa",
+  "includedPullRequests": {
+    "178": "ebd8d3d820e86b5fc3305a59160383eca3774fd7",
+    "188": "876ac7ec2440b1c665d8bc6746e1055fbe96114d",
+    "189": "4d0304784c0a6d6f2e7cd4f37a4964f4a0315430",
+    "190": "6a38f3554c182d590508221e5826443e5d758096",
+    "191": "ca6b2cd0bb529948a0a948cf36257bb7219d328e"
+  },
+  "backendJoint": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "1",
+    "tests": "2184",
+    "time": "244.752",
+    "timestamp": "2026-11-01T13:05:08.125934",
+    "hostname": "Ryans-MacBook-Air.local"
+  },
+  "backendJointSource": "d5ba2b8ff0cb303ef2dff8f6fe0f168247409c96",
+  "laterRuntimeChange": "Only effective stream admission ceiling reporting, covered by 16 protection tests again at 94d9995f. Later merge adds independent PR178 QA evidence only.",
+  "additionalValidation": {
+    "finalAdmissionTests": 16,
+    "frontendFocusedTests": 44,
+    "typescript": "passed",
+    "architecture": "passed, zero allowlist entries",
+    "i18n": "passed, 30 locales, 5257 keys",
+    "desktopViteBuild": "passed, existing chunk-size warnings"
+  },
+  "native": {
+    "passed": true,
+    "platform": "macOS arm64",
+    "relocated": true,
+    "signature": "local ad-hoc, strict deep verification passed",
+    "exitMethod": "Playwright ElectronApplication.close: normal app.quit plus testing inspector disconnect; then independent owned-process-tree verification",
+    "sourceFiles": 962,
+    "distFiles": 163,
+    "profile": "Fresh isolated profile; virtual practice funds; actual public Binance HTTP/WebSocket; no substituted responses",
+    "exitCycles": 2,
+    "scriptRendererErrors": 0,
+    "manualAudit": {
+      "status": "partial",
+      "scope": "inspected_ranges",
+      "scanned_ranges": 4,
+      "verified_ranges": 1,
+      "failed_ranges": 0,
+      "has_more": false,
+      "meaning": "The flow passed; pending/suppressed provider repairs and remaining gaps remain explicit. This is not complete historical coverage."
+    },
+    "exitElapsedMs": [
+      15274,
+      15266
+    ]
+  },
+  "runtimeInputProvenance": "Standalone runtime cloned from the PR189 native candidate after runtime preparation scripts, Python requirements, CCXT lock, SDK and control preparation inputs matched. Electron/Vite build from joint source; effective-limit manager follow-up copied and checked-hash bytecompiled before final root ad-hoc sign. Source manifest verifies all packaged backend/app and frontend/desktop source plus dist.",
+  "scopeLimits": [
+    "Windows/x64 installed acceptance",
+    "full 157-item acceptance",
+    "all resource owners from #156",
+    "HEDGE/exchange account execution from #177",
+    "Not notarized release qualification",
+    "129-A only: dictionary publication copying and H127/realtime integration remain separate",
+    "Does not close the broader #156/#177/#129/#120 issues"
+  ],
+  "earlierHarnessRuns": {
+    "retainedLocally": "output/batch1-native-20261101/attempt-1 through attempt-6",
+    "corrections": [
+      "Retry strict value comparison across transient revision-fenced pending history responses",
+      "Validate every displayed point within each chart actual retained window; do not require both charts to retain 1500 bars",
+      "Re-authorize optional desktop control after complete process exit",
+      "Position tab accessible name includes its nonzero count",
+      "Match gap-scan URL pathname with query parameters",
+      "Use public ElectronApplication.close to detach the testing inspector after normal app.quit, then verify all captured owned processes exited"
+    ],
+    "productCodeChangedForTheseCorrections": false,
+    "finalEvidence": "Separate fresh profile, uninterrupted complete workflow in acceptance.json"
+  },
+  "logs": {
+    "backend-joint.log": {
+      "bytes": 2691,
+      "sha256": "f6578aae9ec65dd0cf0080d599e8d24fafd0dd652cbe71a4dd5d5f04ef036b20"
+    },
+    "backend-joint.xml": {
+      "bytes": 309852,
+      "sha256": "09f985fb04745e50a5b5e6429c01c81b32267df4517fd034cfbdad2b17b7df7a"
+    },
+    "final-admission-tests.log": {
+      "bytes": 100,
+      "sha256": "499e9fb70fe1def10a35f13a1462cbc6a1012423ef04615092768acc5dc2ccd1"
+    },
+    "frontend-focused.log": {
+      "bytes": 4125,
+      "sha256": "d66f1c99447d84046f63c0e9b80cfbaabd6b86c946b46906cc8bb234c7313570"
+    },
+    "architecture.log": {
+      "bytes": 142,
+      "sha256": "6583b698d3f98d0c903c8681a6e663ce4409834e50a09b2ef63edd4bb3f51e1e"
+    },
+    "i18n.log": {
+      "bytes": 127,
+      "sha256": "39555c654b437f14aab3b182391e2ef16ca6341c536705ad6f3c26a1d95ab780"
+    },
+    "typecheck.log": {
+      "bytes": 99,
+      "sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135"
+    },
+    "build.log": {
+      "bytes": 13943,
+      "sha256": "6edf3efe630065a8c9679422db1b6570c112dd790ff4ed2f0d1007cbdd39ee8c"
+    },
+    "package.log": {
+      "bytes": 1275,
+      "sha256": "795c31fa7ca9bcecb864d2368075d1c22debbc4882dfe1261630eb14cc596691"
+    },
+    "package-verification.log": {
+      "bytes": 4462,
+      "sha256": "77f688721989781640a87ec5650661400364955380e2f8acab591f9818b606c1"
+    },
+    "native.log": {
+      "bytes": 16,
+      "sha256": "1ea63e7fda68e7ce49b013af8410102e9228f7591e79ef602dd23d95556d03bc"
+    }
+  },
+  "reproduce": {
+    "native": "CANDLESCOPE_PLAYWRIGHT_PACKAGE=/path/to/package.json node docs/qa/backend-batch1-20261101/acceptance.mjs (Playwright core installed there; installed app under output/batch1-native-20261101/Installed App; no other app owns the isolated profile)",
+    "backend": "Use joint-files.json with python -m pytest from backend, PYTHONPATH=backend and isolated CANDLE_DATA_DIR; do not run pytest.main from stdin because catalog workers use spawn",
+    "packaging": "VITE_DESKTOP_BUILD=1 npm run build; node node_modules/electron-builder/cli.js --mac dir --arm64 --publish never; see package manifest for this locally assembled candidate"
+  }
+}

@@ -40,16 +40,25 @@ import logging
 import threading
 import time
 from collections import OrderedDict
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
+from app.core.async_cleanup import apply_thread_guard
 from app.data_engine.kline_quality import incoming_source_can_replace
 
 from .config import CacheConfig
 from .models import BarData, SeriesKey
 
 logger = logging.getLogger("data_manager.cache")
+
+
+class CacheCapacityError(RuntimeError):
+    """A new resident series cannot displace any protected series."""
+
+    def __init__(self, key: SeriesKey, maximum: int) -> None:
+        self.key, self.maximum = key, maximum
+        super().__init__(f"Cache capacity exhausted for {key}: {maximum} series, no evictable slot")
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,10 +427,20 @@ class BarCache:
         cache.on_eviction(my_callback)  # hook for custom eviction logic
     """
 
-    def __init__(self, config: CacheConfig | None = None) -> None:
+    def __init__(
+        self, config: CacheConfig | None = None, *,
+        protection_lock: Any = None,
+        is_protected: Callable[[SeriesKey], bool] | None = None,
+    ) -> None:
         self.revision_consumer = None
         self._cfg = config or CacheConfig()
         self._lock = threading.Lock()
+        # Lock order: owner protection claim -> cache -> subscription lookup.
+        # Lease/subscription acquisition uses the same owner guard. Never take
+        # it from a cache read or while already holding the cache lock.
+        self._protection_lock = protection_lock if protection_lock is not None else nullcontext()
+        self._is_protected = is_protected or (lambda key: False)
+        self._admission_rejected = 0
         # OrderedDict for LRU tracking — most recently used at the end
         self._series: OrderedDict[SeriesKey, BarSeries] = OrderedDict()
         # Expanded history capacities are independently LRU-bounded.  Keeping
@@ -447,6 +466,16 @@ class BarCache:
         self._history_reservation_capped = 0
         self._history_reservation_demotions = 0
 
+    async def apply_protected(self, operation, *args, **kwargs):
+        """Admit an owner-loop write without blocking on a GC worker's guard.
+
+        Cancellation while waiting applies no mutation. The synchronous write
+        still claims protection itself, so threaded callers use the same gate.
+        """
+        if not hasattr(self._protection_lock, "acquire"):
+            return operation(*args, **kwargs)
+        return await apply_thread_guard(self._protection_lock, operation, *args, **kwargs)
+
     # ── Public: Write Operations ─────────────────────────────
 
     def append(self, key: SeriesKey, bar: BarData) -> None:
@@ -455,7 +484,7 @@ class BarCache:
         Creates the series if it doesn't exist.  Evicts the LRU series
         if the series count exceeds ``max_series``.
         """
-        with self._lock:
+        with self._protection_lock, self._lock:
             series = self._get_or_create(key)
             evicted = series.append(bar)
         # Fire eviction callbacks outside the lock to avoid deadlocks
@@ -464,7 +493,7 @@ class BarCache:
 
     def upsert(self, key: SeriesKey, bar: BarData) -> None:
         """Insert or update a bar at the correct sorted position."""
-        with self._lock:
+        with self._protection_lock, self._lock:
             series = self._get_or_create(key)
             evicted = series.upsert(bar)
         if evicted:
@@ -482,7 +511,7 @@ class BarCache:
         consistent can use this result to suppress a rejected lower-quality
         update before it escapes the cache boundary.
         """
-        with self._lock:
+        with self._protection_lock, self._lock:
             series = self._get_or_create(key)
             existing = series.get_bar_at(bar.time)
             if (
@@ -518,18 +547,24 @@ class BarCache:
                 existing,
             )
 
-    def bulk_load(self, key: SeriesKey, bars: list[BarData]) -> None:
+    def bulk_load(self, key: SeriesKey, bars: list[BarData]) -> bool:
         """Load multiple bars into a series (prewarm / backfill path).
 
-        Bars should be sorted by time ascending.  Duplicates are replaced.
+        Bars should be sorted by time ascending. Duplicates are replaced.
+        Return False when bounded cache admission is unavailable; callers
+        retain their storage result without displacing an active resident.
         """
         if not bars:
-            return
-        with self._lock:
-            series = self._get_or_create(key)
+            return True
+        with self._protection_lock, self._lock:
+            try:
+                series = self._get_or_create(key)
+            except CacheCapacityError:
+                return False
             evicted = series.bulk_load(bars)
         if evicted:
             self._on_bars_evicted(key, evicted)
+        return True
 
     @contextmanager
     def read_token(self, key: SeriesKey) -> Iterator[CacheReadToken]:
@@ -570,12 +605,14 @@ class BarCache:
 
         A query may adopt several pages with the same token. Its own accepted
         fills advance that token, while competing queries still see revision
-        drift. Closed, foreign, invalidated or stale tokens fail closed.
+        drift. Closed, foreign, invalidated or stale tokens fail closed. A
+        valid storage result may remain uncached when all slots are protected;
+        True means the read fence passed, not a promise of cache residency.
         """
         evicted: list[BarData] = []
         if self.revision_consumer is not None:
             self.revision_consumer.sync(force=True)
-        with self._lock:
+        with self._protection_lock, self._lock:
             series = self._series.get(key)
             if (
                 read_token not in self._read_tokens.get(key, ())
@@ -586,7 +623,10 @@ class BarCache:
                 self._rejected_read_refills += 1
                 return False
             if bars:
-                series = self._get_or_create(key)
+                try:
+                    series = self._get_or_create(key)
+                except CacheCapacityError:
+                    return True
                 evicted = series.bulk_load(bars)
                 read_token.generation = series.generation
                 read_token.revision = series.revision
@@ -629,7 +669,9 @@ class BarCache:
         expected_last_access_ms: int,
     ) -> tuple[int, str]:
         """Atomically remove a series only when its plan snapshot is current."""
-        with self._lock:
+        with self._protection_lock, self._lock:
+            if self._is_protected(key):
+                return 0, "protected-at-execute"
             series = self._series.get(key)
             if series is None:
                 return 0, "missing"
@@ -837,9 +879,9 @@ class BarCache:
         cutoff_ms = int(time.time() * 1000) - ttl * 1000
         to_remove: list[SeriesKey] = []
 
-        with self._lock:
+        with self._protection_lock, self._lock:
             for key, series in self._series.items():
-                if series.last_access_ms < cutoff_ms:
+                if series.last_access_ms < cutoff_ms and not self._is_protected(key):
                     to_remove.append(key)
             for key in to_remove:
                 self._invalidate_read_tokens(key)
@@ -887,7 +929,9 @@ class BarCache:
         expected_last_access_ms: int,
     ) -> tuple[int, str]:
         """Atomically trim a series only when its plan snapshot is current."""
-        with self._lock:
+        with self._protection_lock, self._lock:
+            if self._is_protected(key):
+                return 0, "protected-at-execute"
             series = self._series.get(key)
             if series is None:
                 return 0, "missing"
@@ -942,6 +986,7 @@ class BarCache:
                 "hits": self._hits,
                 "misses": self._misses,
                 "evictions": self._evictions,
+                "admission_rejected": self._admission_rejected,
                 "active_read_tokens": sum(len(tokens) for tokens in self._read_tokens.values()),
                 "rejected_read_refills": self._rejected_read_refills,
                 "history": {
@@ -1010,9 +1055,14 @@ class BarCache:
             self._series.move_to_end(key)
             return self._series[key]
 
-        # Evict LRU series if at capacity
+        # LRU orders eligible victims; it is not permission to evict a lease.
         while len(self._series) >= self._cfg.max_series:
-            evicted_key, evicted_series = self._series.popitem(last=False)
+            evicted_key = next((candidate for candidate in self._series
+                                if not self._is_protected(candidate)), None)
+            if evicted_key is None:
+                self._admission_rejected += 1
+                raise CacheCapacityError(key, self._cfg.max_series)
+            evicted_series = self._series.pop(evicted_key)
             self._invalidate_read_tokens(evicted_key)
             self._history_capacities.pop(evicted_key, None)
             self._evictions += 1
