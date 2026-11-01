@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from pathlib import Path
+import signal
 import sys
+import threading
+import time
 import traceback
 
 # -I deliberately excludes ambient PYTHONPATH and the current directory.
@@ -26,6 +30,17 @@ def main():
         import resource
         resource.setrlimit(resource.RLIMIT_FSIZE, (8 * 1024 * 1024, 8 * 1024 * 1024))
         resource.setrlimit(resource.RLIMIT_CPU, (8, 8))
+        # The host may terminate the plugin while this fresh worker sleeps.
+        # Its independent process group must not outlive that parent runtime.
+        parent, worker = os.getppid(), os.getpid()
+        get_parent, kill_group, sleep = os.getppid, os.killpg, time.sleep
+        def watch_parent():
+            while True:
+                if get_parent() != parent:
+                    kill_group(worker, signal.SIGKILL)
+                    return
+                sleep(.1)
+        threading.Thread(target=watch_parent, daemon=True).start()
     request = json.loads(request_path.read_text(encoding="utf-8"))
     try:
         declaration = analyze(request["source"])

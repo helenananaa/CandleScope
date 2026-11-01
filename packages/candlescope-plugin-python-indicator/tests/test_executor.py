@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import os
 import time
+import subprocess
 
 import pytest
 
@@ -58,3 +59,27 @@ def test_successful_batch_does_not_leave_a_running_descendant(tmp_path):
     assert execute(source,[BAR],{})[1] == {'main':[1]}
     time.sleep(1.2)
     assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='POSIX parent death; Windows native process lifecycle qualification remains separate')
+def test_worker_stops_when_its_runtime_parent_is_terminated(tmp_path):
+    marker=tmp_path/'worker-pid'
+    source=f"import os,time\ndef compute(bars, params):\n open({str(marker)!r},'w').write(str(os.getpid()))\n time.sleep(20)"
+    controller="from candlescope_plugin_python_indicator.executor import execute\nexecute("+repr(source)+","+repr([BAR])+",{},timeout=30)"
+    root=Path(__file__).resolve().parents[1]/'src'
+    process=subprocess.Popen([sys.executable,'-c',controller],env={**os.environ,'PYTHONPATH':str(root)},
+                             stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    try:
+        deadline=time.monotonic()+5
+        while not marker.exists() and time.monotonic()<deadline:time.sleep(.02)
+        assert marker.exists()
+        worker=int(marker.read_text())
+        process.terminate();process.wait(timeout=3)
+        deadline=time.monotonic()+3
+        while time.monotonic()<deadline:
+            status=subprocess.run(['ps','-o','stat=','-p',str(worker)],capture_output=True,text=True).stdout.strip()
+            if not status or status.startswith('Z'):break
+            time.sleep(.05)
+        else:pytest.fail('Fresh worker survived termination of its runtime parent')
+    finally:
+        if process.poll() is None:process.kill();process.wait()
