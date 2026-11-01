@@ -23,7 +23,7 @@ export class ReadOnlyAccountDataManager {
     const observer = { update, error };
     this.observers.add(observer);
     if (this.latest) this.deliver(observer, this.latest);
-    if (!this.controller && this.timer === undefined) this.connect();
+    if (!this.controller && this.timer === undefined) this.openStream();
     return () => {
       this.observers.delete(observer);
       if (!this.observers.size) this.stop();
@@ -32,7 +32,7 @@ export class ReadOnlyAccountDataManager {
   private deliver(observer: Observer, value: AccountStatus): void {
     try { observer.update(value); } catch { console.error("Account snapshot observer failed"); }
   }
-  private connect(): void {
+  private openStream(): void {
     if (this.closed || !this.observers.size) return;
     const controller = new AbortController(); this.controller = controller;
     void this.transport(controller.signal, (value) => {
@@ -48,7 +48,7 @@ export class ReadOnlyAccountDataManager {
       this.controller = null;
       if (!controller.signal.aborted && !this.closed && this.observers.size) {
         this.retries++;
-        this.timer = setTimeout(() => { this.timer = undefined; this.connect(); }, this.retryMs);
+        this.timer = setTimeout(() => { this.timer = undefined; this.openStream(); }, this.retryMs);
       }
     });
   }
