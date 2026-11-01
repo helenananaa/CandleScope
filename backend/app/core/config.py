@@ -906,6 +906,8 @@ INDICATOR_REALTIME_PENDING = max(0, int(os.getenv("INDICATOR_REALTIME_PENDING", 
 INDICATOR_REALTIME_INPUT_BARS = max(1, int(os.getenv("INDICATOR_REALTIME_INPUT_BARS", "500000")))
 SCRIPT_HTTP_THREAD_PENDING = int(os.getenv("SCRIPT_HTTP_THREAD_PENDING", "64"))
 STORAGE_THREAD_PENDING = int(os.getenv("STORAGE_THREAD_PENDING", "128"))
+# Publication acknowledgements only; 1 restores per-event transactions.
+BAR_DELIVERY_ACK_BATCH_SIZE = max(1, min(64, int(os.getenv("BAR_DELIVERY_ACK_BATCH_SIZE", "16"))))
 PREPARATION_THREAD_WORKERS = int(os.getenv("PREPARATION_THREAD_WORKERS", "2"))
 PREPARATION_THREAD_PENDING = int(os.getenv("PREPARATION_THREAD_PENDING", "64"))
 # Backfill chunks perform SQLite projection and reconciliation in the same
