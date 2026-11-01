@@ -316,12 +316,13 @@ export class SeriesWindowStore {
   replace(
     rows: readonly KlineBarInput[] | null | undefined,
     meta: WindowDeltaDetail = {},
+    { rightEdgeCurrent = true }: { rightEdgeCurrent?: boolean } = {},
   ): WindowDelta {
     const normalized = normalizeRows(rows);
     const originalBars = normalized.length;
     this._replaceRows(normalized);
     const trim = this.trimToBudget();
-    this._rightTruncated = false;
+    this._rightTruncated = !rightEdgeCurrent;
     this._version += 1;
     this._axisRevision += 1;
     const delta = createWindowDelta(WINDOW_DELTA_TYPES.REPLACE, {

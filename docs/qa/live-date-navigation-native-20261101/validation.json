@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "7b173ff8edc1a8b5b5a346ccb0a926108b395540",
+  "checks": {
+    "frontend": 4721,
+    "isolatedDrawingPerformance": 1,
+    "desktop": 127,
+    "backendGapCalendarCoordinatorAudit": 129,
+    "architecture": "passed",
+    "plugins": "passed",
+    "i18n": "30 locales / 5273 keys / 977 sources",
+    "typescript": "both projects passed",
+    "lint": "passed",
+    "productionBuild": "passed",
+    "signatureBefore": "passed",
+    "signatureAfter": "passed",
+    "signatureAfterRestart": "passed"
+  },
+  "fullCheckLog": {
+    "path": "/tmp/candlescope186-bounded-history-integrated-check.log",
+    "sha256": "09641b45aa4dac34dced91fd4a3c1d41e917b16efc9d7d92e1d9b878d8c92f76"
+  },
+  "nativeOutput": "/Users/ryanliang/.codex/worktrees/live-chart-date-jump-20261101/CandleScope/output/issue186-bounded-history-native-20261101"
+}

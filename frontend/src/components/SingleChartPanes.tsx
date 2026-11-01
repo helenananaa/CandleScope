@@ -2518,21 +2518,32 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
   }, [paneCrosshairStore, publishMainLegendCrosshair]);
 
-  const setLinkedVisibleTimeAnchor = useCallback((time: number): boolean => {
+  const positionVisibleTime = useCallback((time: number, center: boolean, savedViewport?: ChartSurfaceVisibleRange): boolean => {
     if (!Number.isFinite(time)) return false;
-    const currentRange = captureVisibleRange();
+    const painted = paintedSourceRef.current;
+    if (center && (!seriesStore || painted?.store !== seriesStore
+      || painted.version !== seriesStore.version || painted.datasetKey !== datasetKeyRef.current
+      || !seriesStore.hasTime(time))) return false;
+    const currentRange = savedViewport ?? captureVisibleRange();
     const logical = currentRange?.logical;
     if (!logical) return false;
     const span = logical.to - logical.from;
     const targetIndex = findDisplayIndexForAxisAnchor(displayRowsRef.current, time);
     if (!Number.isFinite(span) || span <= 0 || targetIndex < 0) return false;
+    const targetLogical = {
+      from: targetIndex - (center ? span / 2 : span),
+      to: targetIndex + (center ? span / 2 : 0),
+    };
+    // LWC applies a logical-range write on its next draw. Reading it back
+    // synchronously would retain the previous viewport on the new rows, then
+    // restore that stale position after a history page or live amendment.
+    const targetSourceRange = sourceRangeFromLogicalRows(displayRowsRef.current, targetLogical,
+      intervalRef.current, futureTimeAxisDataRef.current);
+    if (!targetSourceRange) return false;
     const previousSyncing = isSyncingRef.current;
     isSyncingRef.current = true;
     try {
-      if (!viewportControllerRef.current?.restoreProjectionRange({
-        from: targetIndex - span,
-        to: targetIndex,
-      }, {
+      if (!viewportControllerRef.current?.restoreProjectionRange(targetLogical, {
         ...(currentRange?.barSpacing === undefined
           ? {}
           : { barSpacing: currentRange.barSpacing }),
@@ -2545,13 +2556,22 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
     markLinkedViewportApplied();
     hasRestoredRangeRef.current = true;
-    lastViewportRestoreSourceRef.current = "linked-time-anchor";
-    const visibleRange = captureVisibleRange();
+    lastViewportRestoreSourceRef.current = center ? "date-seek" : "linked-time-anchor";
+    const visibleRange = buildVisibleRangeSnapshot({
+      ...(currentRange?.barSpacing === undefined ? {} : { barSpacing: currentRange.barSpacing }),
+      logicalRange: targetLogical,
+      timeRange: targetSourceRange,
+    });
     if (visibleRange?.time) ensureLinkedHistoryFill(visibleRange.time);
     publishViewportRangeChange(visibleRange);
     scheduleVisibleRangeSave(visibleRange);
     return true;
-  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave, seriesStore]);
+
+  const setLinkedVisibleTimeAnchor = useCallback((time: number) => positionVisibleTime(time, false), [positionVisibleTime]);
+  const centerVisibleTime = useCallback((time: number, viewport?: ChartSurfaceVisibleRange) => (
+    positionVisibleTime(time, true, viewport)
+  ), [positionVisibleTime]);
 
   const setLinkedVisibleTimeRange = useCallback((
     range: ChartSurfaceLinkedTimeRange,
@@ -5314,6 +5334,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     getVisibleRange: captureVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,
@@ -5386,6 +5407,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     seriesReady,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,

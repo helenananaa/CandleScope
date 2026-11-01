@@ -18,7 +18,8 @@ const accountOverlays = process.argv.includes("--account-overlays");
 const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
 const quickReplayStep = process.argv.includes("--quick-replay-step");
-const fixture = replayResize ? "replay-resize-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const chartTimeNavigation = process.argv.includes("--chart-time-navigation");
+const fixture = replayResize ? "replay-resize-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -141,7 +142,7 @@ app.on("window-all-closed",()=>app.quit());
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
+  if (!chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));
