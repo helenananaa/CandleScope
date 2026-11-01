@@ -2997,7 +2997,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         console.warn("[drawing-engine] surface disposal continued after drawing teardown failed closed");
       }
     };
-  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, inheritApplicationTheme, timezone, upColor]);
+  // Appearance has its own in-place update effects below. Replacing the surface
+  // for a color edit also resets viewport/series ownership and can supersede an
+  // appearance update made immediately before that edit.
+  }, [captureVisibleRange, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
