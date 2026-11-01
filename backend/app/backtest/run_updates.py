@@ -46,8 +46,14 @@ class RunUpdateSubscription:
             self._dirty = False
             self._event.clear()
 
-    async def wait(self) -> None:
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
+
+    async def wait(self) -> bool:
         await self._event.wait()
+        return not self.closed
 
     def close(self) -> None:
         with self._lock:
@@ -55,6 +61,10 @@ class RunUpdateSubscription:
                 return
             self._closed = True
         self._owner.remove(self)
+        try:
+            self._loop.call_soon_threadsafe(self._event.set)
+        except RuntimeError:
+            pass
 
 
 class RunUpdates:
