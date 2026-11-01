@@ -21,7 +21,7 @@ import logging
 from typing import Any, Callable
 
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
-from app.core.process_lane import SerialProcessLane
+from app.core.process_lane import ProcessMessageTooLarge, SerialProcessLane
 from app.data_engine.data_manager.models import BarData
 from app.indicator.engine import IndicatorCapacityError, IndicatorParametersError, indicator_code_hash
 from app.indicator.events import IndicatorEvent, IndicatorEventType
@@ -336,6 +336,8 @@ class SerialIndicatorOwner:
         self._execution_mode = execution_mode
         self._state = _IndicatorState(factory)
         self._process_lane = None
+        self._transport_snapshot = {}
+        self._process_starts = 0
         self._executor = BoundedExecutor("indicator_realtime", max_workers=1, max_pending=0)
         self._lock = asyncio.Lock()
         self._max_inflight = max_pending + 1
@@ -405,6 +407,8 @@ class SerialIndicatorOwner:
                     "failure": self._failure,
                     "generation": self._generation, "recovering": self._recovering,
                     "release_targets": len(self._pending_releases),
+                    "process_starts": self._process_starts,
+                    "transport": dict(self._transport_snapshot),
                     "executor": self._executor.snapshot()}}
 
     def _adopt_snapshot(self, snapshot, keys):
@@ -430,9 +434,11 @@ class SerialIndicatorOwner:
             self._process_lane = None
         if self._process_lane is None:
             self._process_lane = SerialProcessLane(_process_command, name="indicator-realtime")
+            self._process_starts += 1
         try:
             return self._process_lane.call(method, args, kwargs)
         finally:
+            self._transport_snapshot = self._process_lane.snapshot()
             if method == "stop":
                 self._process_lane.close()
                 self._process_lane = None
@@ -503,7 +509,7 @@ class SerialIndicatorOwner:
                 started = True
                 try:
                     (result, events, snapshot, keys), cancelled = await self._physical(method, args, kwargs)
-                except (IndicatorInputChanged, IndicatorCapacityError, IndicatorParametersError):
+                except (IndicatorInputChanged, IndicatorCapacityError, IndicatorParametersError, ProcessMessageTooLarge):
                     # Rejected before any mutation; the caller can fetch a
                     # fresh canonical snapshot without poisoning valid state.
                     raise

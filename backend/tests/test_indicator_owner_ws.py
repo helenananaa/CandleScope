@@ -145,6 +145,41 @@ async def test_source_revision_change_while_worker_seeds_prevents_success_ack():
 
 
 @pytest.mark.asyncio
+async def test_reconnect_during_recovery_remains_retryable_and_releases_market_lease():
+    entered, release = threading.Event(), threading.Event()
+    calls = 0
+    def factory():
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            entered.set()
+            assert release.wait(3)
+        return create_engine()
+    owner = SerialIndicatorOwner(factory=factory)
+    dm = DataManager()
+    subscription = Subscription(owner, dm)
+    recovery = None
+    try:
+        await owner.call('list_instances')
+        recovery = asyncio.create_task(owner.recover({'reason':'owned_process_failure'}))
+        await until(entered.is_set)
+        await subscription.run()
+        assert not subscription.sent, 'recovery must not become permanent HTTP-only fallback'
+        assert (await subscription.queue.get())['type'] == 'resync_required'
+        assert not dm.leases and not subscription.subscribed
+        release.set()
+        await recovery
+        await subscription.run()
+        assert subscription.sent[0]['type'] == 'indicator.subscribed'
+        assert dm.leases and subscription.subscribed
+    finally:
+        release.set()
+        if recovery is not None:
+            await asyncio.gather(recovery, return_exceptions=True)
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('updates', [1, 17])
 async def test_live_events_wait_for_ack_and_pending_overflow_requires_resync(updates):
     owner = SerialIndicatorOwner()

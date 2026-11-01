@@ -743,6 +743,12 @@ async def _handle_indicator_subscribe(
                 _builtin_seed_attempt=_builtin_seed_attempt + 1,
             )
             return
+        if isinstance(exc, IndicatorInputChanged):
+            # A reconnect can reach us while the owned process is still
+            # rebuilding. Keep the client in its bounded reconnect protocol;
+            # STREAM_UNAVAILABLE would permanently switch it to HTTP fallback.
+            _queue_indicator_message(queue, {"type": "resync_required"})
+            return
         await send_json(_indicator_stream_failure(
             client_id=client_id,
             requested_interval=requested_interval,

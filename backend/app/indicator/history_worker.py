@@ -6,6 +6,11 @@ from copy import deepcopy
 import os
 import threading
 import time
+import sys
+try:
+    import resource
+except ImportError:
+    resource = None
 
 from app.core import config
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
@@ -29,7 +34,9 @@ def _dispatch(request):
         value = _compute_builtin_range_patch_from_bars(*args)
     else:
         raise ValueError('Unknown builtin history operation')
-    return value, {'pid': os.getpid(), 'cpu_seconds': time.process_time()}
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None
+    return value, {'pid': os.getpid(), 'cpu_seconds': time.process_time(),
+                   'peak_rss_bytes': (rss * (1 if sys.platform == 'darwin' else 1024)) if rss is not None else None}
 
 
 class BuiltinHistoryExecutor:
@@ -42,13 +49,20 @@ class BuiltinHistoryExecutor:
         self._closing = False
         self._lane = None
         self._worker = {}
+        self._transport = {}
+        self._process_starts = 0
 
     def _execute(self, request):
         if self._lane is None or not self._lane.alive:
             if self._lane is not None:
                 self._lane.close()
             self._lane = SerialProcessLane(_dispatch, name='indicator-history', timeout=self._timeout)
-        value, worker = self._lane.call(request)
+            self._process_starts += 1
+        try:
+            value, worker = self._lane.call(request)
+        finally:
+            with self._lock:
+                self._transport = self._lane.snapshot()
         with self._lock:
             self._worker = worker
         return value
@@ -85,6 +99,7 @@ class BuiltinHistoryExecutor:
         with self._lock:
             return {**self._executor.snapshot(), 'input_bars': self._rows,
                     'max_input_bars': self._limit, 'closing': self._closing,
+                    'process_starts': self._process_starts, 'transport': dict(self._transport),
                     'worker': dict(self._worker)}
 
     def close(self):
