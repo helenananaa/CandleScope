@@ -57,10 +57,14 @@ _MAINTENANCE_BACKFILL_REASONS = (
     # Durable delivery recovery may retry old series for much longer than an
     # interactive gap fetch. Keep its normal priority, but let a visible chart
     # use the bounded reserve while that recovery occupies the single lane.
-    _BACKGROUND_BACKFILL_REASONS | frozenset({"price_daily_open", "bar_delivery_recovery"})
+    _BACKGROUND_BACKFILL_REASONS | frozenset({"price_daily_open", "bar_delivery_recovery", "latest_refresh"})
 )
 
 _SCHEDULER_OUTCOME_HISTORY_LIMIT = 256
+_INTEREST_METADATA_KEYS = (
+    "app_id", "workspace_id", "window_id", "cell_id", "demand_owner_id",
+    "demand_scope", "demand_generation", "focus_scope", "subscription_tier",
+)
 
 
 @dataclass(slots=True)
@@ -86,10 +90,25 @@ class _FetchChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class _SchedulingInterest:
+    priority: int
+    reason: str
+    requester: str
+    metadata: dict[str, Any]
+
+    @classmethod
+    def from_request(cls, request: RepairRequest) -> _SchedulingInterest:
+        return cls(int(request.priority or 100), request.reason, request.requester,
+                   {key: request.metadata[key] for key in _INTEREST_METADATA_KEYS
+                    if key in request.metadata})
+
+
+@dataclass(frozen=True, slots=True)
 class _DemandLease:
     owner_id: str
     scope: str | None = None
     generation: int | None = None
+    scheduling: _SchedulingInterest | None = None
 
 
 @dataclass(slots=True)
@@ -105,6 +124,7 @@ class _RequestState:
     stale: bool = False
     demand_leases: dict[str, _DemandLease] = field(default_factory=dict)
     persistent_interest: bool = False
+    persistent_scheduling: _SchedulingInterest | None = None
     cancel_requested: bool = False
     cancel_reason: str | None = None
     progress_revision: int = 0
@@ -292,7 +312,7 @@ class BackfillScheduler:
                 incoming_leases = self._demand_leases_from_request(request)
                 state.demand_leases.update(incoming_leases)
                 if not incoming_leases:
-                    state.persistent_interest = True
+                    self._remember_persistent_interest(state, request)
                 self._replace_pending_chunks(state)
                 self._on_queued(state.request)
                 self._publish_progress(state, status="merged")
@@ -311,6 +331,7 @@ class BackfillScheduler:
             chunk_ids=[],
             demand_leases=demand_leases,
             persistent_interest=not bool(demand_leases),
+            persistent_scheduling=(None if demand_leases else _SchedulingInterest.from_request(request)),
         )
         self._requests[request.request_id] = state
         series.pending.append(request.request_id)
@@ -329,7 +350,7 @@ class BackfillScheduler:
         incoming_leases = self._demand_leases_from_request(request)
         state.demand_leases.update(incoming_leases)
         if not incoming_leases:
-            state.persistent_interest = True
+            self._remember_persistent_interest(state, request)
         current_requires_trusted_finality = repair_requires_trusted_finality(
             state.request.metadata,
             reason=state.request.reason,
@@ -401,6 +422,66 @@ class BackfillScheduler:
         return upgraded_finality
 
     @staticmethod
+    def _remember_persistent_interest(state: _RequestState, request: RepairRequest) -> None:
+        incoming = _SchedulingInterest.from_request(request)
+        previous = state.persistent_scheduling
+        state.persistent_interest = True
+        if previous is None:
+            state.persistent_scheduling = incoming
+            return
+        winner = min((previous, incoming), key=lambda item: item.priority)
+        reasons = dict.fromkeys(part for item in (previous, incoming)
+                                for part in item.reason.split("+") if part)
+        state.persistent_scheduling = _SchedulingInterest(
+            winner.priority, "+".join(reasons),
+            previous.requester if previous.requester == incoming.requester else "mixed",
+            winner.metadata,
+        )
+
+    def _restore_remaining_interest(self, state: _RequestState) -> None:
+        interests = [lease.scheduling for lease in state.demand_leases.values()
+                     if lease.scheduling is not None]
+        if state.persistent_scheduling is not None:
+            interests.append(state.persistent_scheduling)
+        if not interests:
+            return
+        winner = min(interests, key=lambda item: item.priority)
+        reasons = "+".join(dict.fromkeys(part for item in interests
+                                       for part in item.reason.split("+") if part))
+        requesters = {item.requester for item in interests}
+        state.request.priority = winner.priority
+        state.request.reason = reasons
+        state.request.requester = next(iter(requesters)) if len(requesters) == 1 else "mixed"
+        for key in _INTEREST_METADATA_KEYS:
+            state.request.metadata.pop(key, None)
+        state.request.metadata.update(winner.metadata)
+        pending = {key for key in state.chunk_ids if key in self._chunks and key not in self._tasks}
+        self._ready = [entry for entry in self._ready if entry[3] not in pending]
+        heapq.heapify(self._ready)
+        for chunk_id in state.chunk_ids:
+            chunk = self._chunks.get(chunk_id)
+            if chunk is None:
+                continue
+            chunk.request.priority = state.request.priority
+            chunk.request.reason = reasons
+            chunk.request.requester = state.request.requester
+            for key in _INTEREST_METADATA_KEYS:
+                chunk.request.metadata.pop(key, None)
+            chunk.request.metadata.update(winner.metadata)
+            if chunk_id in self._tasks:
+                self._active_foreground_chunks.discard(chunk_id)
+                self._active_background_chunks.discard(chunk_id)
+                (self._active_background_chunks if self._is_background(chunk.request)
+                 else self._active_foreground_chunks).add(chunk_id)
+            else:
+                if chunk.public_demand is not None:
+                    get_public_admission().forget(chunk.public_demand)
+                    chunk.public_demand = None
+                self._push_ready(chunk, preserve_sequence=True)
+        self._publish_progress(state, status="interest_changed")
+        self._drain()
+
+    @staticmethod
     def _demand_leases_from_request(
         request: RepairRequest,
     ) -> dict[str, _DemandLease]:
@@ -419,6 +500,7 @@ class BackfillScheduler:
             owner_id=owner_id,
             scope=scope or None,
             generation=generation,
+            scheduling=_SchedulingInterest.from_request(request),
         )
         return {owner_id: lease}
 
@@ -473,10 +555,12 @@ class BackfillScheduler:
         normalized_owner = str(owner_id or "").strip()
         if state is None or state.stale or not normalized_owner:
             return False
+        previous = state.demand_leases.get(normalized_owner)
         state.demand_leases[normalized_owner] = _DemandLease(
             owner_id=normalized_owner,
             scope=str(scope).strip() if scope is not None and str(scope).strip() else None,
             generation=int(generation) if generation is not None else None,
+            scheduling=(previous.scheduling if previous else _SchedulingInterest.from_request(state.request)),
         )
         self._publish_progress(state, status="demand_acquired")
         return True
@@ -493,6 +577,7 @@ class BackfillScheduler:
         if state is None:
             return False
         state.demand_leases.pop(str(owner_id or "").strip(), None)
+        self._restore_remaining_interest(state)
         if (
             state.demand_leases
             or state.persistent_interest
@@ -522,6 +607,7 @@ class BackfillScheduler:
                 continue
             for owner_id in old_owners:
                 state.demand_leases.pop(owner_id, None)
+            self._restore_remaining_interest(state)
             if not state.demand_leases and not state.persistent_interest:
                 started, final, series = self._begin_request_cancel(
                     state,
@@ -550,6 +636,7 @@ class BackfillScheduler:
             if normalized_owner not in state.demand_leases:
                 continue
             state.demand_leases.pop(normalized_owner, None)
+            self._restore_remaining_interest(state)
             revoked += 1
             if not state.demand_leases and not state.persistent_interest:
                 _started, final, series = self._begin_request_cancel(
@@ -1125,7 +1212,7 @@ class BackfillScheduler:
         reasons = cls._reasons(request)
         return (
             bool(reasons)
-            and not bool(reasons & _INTERACTIVE_BACKFILL_REASONS)
+            and not cls._is_interactive(request)
             and reasons.issubset(_MAINTENANCE_BACKFILL_REASONS)
         )
 
