@@ -32,7 +32,7 @@ test("live notes and fills use the loaded calendar bucket, including monthly, we
     const notes = liveJournalEntries([excluded, note], BTC, bucketTime);
     assert.deepEqual(notes, [note]);
     assert.deepEqual(liveJournalEntries([note], BTC, () => null), []);
-    const fills = liveFillLegs([trade("t", [leg("f", "buy", "entry", "1", "100", eventMs / 1000)])], BTC,
+    const fills = liveFillLegs([trade("t", [leg("f", "buy", "open", "1", "100", eventMs / 1000)])], BTC,
       { firstSec: open, lastSec: open }, 60, 200, bucketTime);
     assert.equal(fills.length, 1);
     const source = createReplayMarkerSource({ up: "green", down: "red", note: "blue" }, "calendar-live");

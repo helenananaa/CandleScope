@@ -121,3 +121,18 @@ test("pending refresh after a write cannot revive a released account", async () 
   assert.equal(calls, 1);
   assert.equal(data.getSnapshot().summary, null);
 });
+
+test("journal failure is visible without withholding valid account positions", async () => {
+  const expected = summary("a");
+  const pool = new TradingAccountDataPool({
+    summary: async () => expected, trades: async () => ({ trades: [] }),
+    journal: async () => { throw new Error("journal unavailable"); },
+  });
+  const data = pool.account("a"), release = data.retain();
+  try {
+    await data.refresh();
+    assert.equal(data.getSnapshot().summary, expected);
+    assert.equal(data.getSnapshot().error, "journal unavailable");
+    assert.equal(data.getSnapshot().loading, false);
+  } finally { release(); }
+});

@@ -83,21 +83,36 @@ export class TradingAccountData {
     const pending = Promise.resolve().then(async () => {
       if (controller.signal.aborted) return;
       try {
-        const [summary, trades, journal] = await Promise.all([
-          this.api.summary(this.accountId, controller.signal),
-          this.api.trades(this.accountId, controller.signal),
-          this.api.journal(this.accountId, controller.signal),
-        ]);
+        const current = () => generation === this.generation && !controller.signal.aborted;
+        // A journal outage must not block current positions/fills in the panel.
+        // Both read groups still share this owner's cancellation and poll cycle.
+        const readTrading = async () => {
+          const [summary, trades] = await Promise.all([
+            this.api.summary(this.accountId, controller.signal),
+            this.api.trades(this.accountId, controller.signal),
+          ]);
+          if (!current()) return;
+          if (summary.account.id !== this.accountId
+            || summary.positions.some(position => position.accountId !== this.accountId)
+            || summary.workingOrders.some(order => order.accountId !== this.accountId)
+            || trades.trades.some(trade => trade.accountId !== this.accountId)) {
+            throw new Error("Trading account response does not match its read owner");
+          }
+          this.publish({ ...this.state, summary, trades: trades.trades });
+        };
+        const readJournal = async () => {
+          const journal = await this.api.journal(this.accountId, controller.signal);
+          if (!current()) return;
+          if (journal.entries.some(entry => entry.accountId !== this.accountId)) {
+            throw new Error("Trading journal response does not match its read owner");
+          }
+          this.publish({ ...this.state, entries: journal.entries });
+        };
+        const results = await Promise.allSettled([readTrading(), readJournal()]);
         if (generation !== this.generation || controller.signal.aborted) return;
-        if (summary.account.id !== this.accountId
-          || summary.positions.some(position => position.accountId !== this.accountId)
-          || summary.workingOrders.some(order => order.accountId !== this.accountId)
-          || trades.trades.some(trade => trade.accountId !== this.accountId)
-          || journal.entries.some(entry => entry.accountId !== this.accountId)) {
-          throw new Error("Trading account response does not match its read owner");
-        }
-        this.publish({ accountId: this.accountId, summary, trades: trades.trades,
-          entries: journal.entries, loading: false, error: null });
+        const failures = results.filter(result => result.status === "rejected")
+          .map(result => tradingErrorMessage(result.reason));
+        this.publish({ ...this.state, loading: false, error: [...new Set(failures)].join("; ") || null });
       } catch (error) {
         if (generation !== this.generation || controller.signal.aborted) return;
         this.publish({ ...this.state, loading: false,
