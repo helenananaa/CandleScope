@@ -11,6 +11,7 @@ from typing import Any, Callable
 from app.core.config import KLINES_DB_PATH
 from app.core.executors import run_storage
 from app.data_engine.kline_quality import source_rank_sql
+from app.exchanges.trade_candles import uses_trade_candles, supports_trade_candles
 from app.data_engine.history.calendar import (
     AlwaysOpenCalendar,
     CalendarRegistry,
@@ -355,6 +356,10 @@ def init_klines_storage() -> None:
         from .bar_delivery import init_bar_delivery_storage
         init_bar_delivery_storage(conn)
         init_revision_storage(conn)
+        from .native_empty_seconds import init_schema as init_native_empty_schema
+        init_native_empty_schema(conn)
+        from .trade_empty_buckets import init_schema as init_trade_empty_schema
+        init_trade_empty_schema(conn)
 
 
 def dataframe_to_rows(df: Any) -> list[dict]:
@@ -516,6 +521,12 @@ def upsert_klines(
                     acknowledge_history_projection(conn, rows)
 
 
+    if exchange == "upbit" and market_type == "spot" and interval == "1s":
+        from .native_empty_seconds import invalidate_calendar_snapshots
+        invalidate_calendar_snapshots()
+    if supports_trade_candles(exchange, market_type):
+        from .trade_empty_buckets import invalidate
+        invalidate()
     return int(affected)
 
 
@@ -1183,7 +1194,15 @@ def _resolve_trading_calendar(
     calendar: TradingCalendar | None,
     calendar_resolver: CalendarResolver | None,
     calendar_registry: CalendarRegistry | None,
+    series_identity: KlineSeriesIdentity | None = None,
+    interval: str = "",
 ) -> TradingCalendar | None:
+    if _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange) and uses_trade_candles(exchange, market_type, interval):
+        from .trade_empty_buckets import make_calendar
+        return make_calendar(exchange, market_type, symbol, interval)
+    if exchange == "upbit" and market_type == "spot" and interval == "1s" and _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange):
+        from .native_empty_seconds import make_calendar
+        return make_calendar(symbol)
     if calendar is not None:
         return calendar
     if calendar_resolver is None:
@@ -1290,6 +1309,8 @@ def scan_klines_gaps(
         calendar=calendar,
         calendar_resolver=calendar_resolver,
         calendar_registry=calendar_registry,
+        series_identity=series_identity,
+        interval=interval,
     )
     if selected_calendar is None:
         return {
@@ -1702,6 +1723,8 @@ class KlinesRepoAdapter:
             calendar=None,
             calendar_resolver=self._calendar_resolver,
             calendar_registry=self._calendar_registry,
+            series_identity=series_identity or self._series_identity,
+            interval=interval,
         )
         if selected_calendar is None:
             return {
@@ -2073,6 +2096,14 @@ class AsyncKlinesRepoAdapter:
     ) -> int:
         return await run_storage(record_history_archive_imports, receipts)
 
+    async def record_native_empty_seconds(self, symbol: str, ranges: list) -> None:
+        from .native_empty_seconds import record
+        await run_storage(record, symbol, ranges)
+
+    async def record_trade_empty_buckets(self, exchange, market_type, symbol, interval, ranges) -> None:
+        from .trade_empty_buckets import record
+        await run_storage(record, exchange, market_type, symbol, interval, ranges)
+
     async def import_history_archive(
         self,
         symbol: str,
@@ -2216,6 +2247,12 @@ def delete_klines(
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute(sql, params)
         mark_deleted(conn, series_values(symbol, interval, exchange, market_type, series_identity), start_ms, end_ms)
+        if exchange == "upbit" and market_type == "spot" and interval == "1s" and _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange):
+            from .native_empty_seconds import clear
+            clear(conn, symbol, start_ms, end_ms)
+        if _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange) and uses_trade_candles(exchange, market_type, interval):
+            from .trade_empty_buckets import clear
+            clear(conn, exchange, market_type, symbol, interval, start_ms, end_ms)
         conn.commit()
         return cur.rowcount
 
@@ -2280,6 +2317,12 @@ def delete_oldest_klines(
             (*params, cutoff_ms),
         )
         conn.execute("UPDATE kline_mutation_context SET mode='' WHERE singleton=1")
+        if exchange == "upbit" and market_type == "spot" and interval == "1s" and _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange):
+            from .native_empty_seconds import clear
+            clear(conn, symbol, end_ms=cutoff_ms)
+        if _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange) and uses_trade_candles(exchange, market_type, interval):
+            from .trade_empty_buckets import clear
+            clear(conn, exchange, market_type, symbol, interval, end_ms=cutoff_ms)
         conn.commit()
         return cur.rowcount
 
@@ -2367,6 +2410,18 @@ def delete_oldest_klines_batch(
             return 0
 
         conn.execute("UPDATE kline_mutation_context SET mode='retention' WHERE singleton=1")
+        empty_evidence_cutoff = None
+        trade_empty_evidence = uses_trade_candles(exchange, market_type, interval) and _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange)
+        if trade_empty_evidence or (exchange == "upbit" and market_type == "spot" and interval == "1s" and _resolved_identity(exchange, series_identity).is_legacy_default_for(exchange)):
+            ceiling_clause = " AND open_time < ?" if ceiling_ms is not None else ""
+            selected_params = (*params, ceiling_ms) if ceiling_ms is not None else tuple(params)
+            # Clear evidence only through the last deleted bar. The first
+            # retained candle may follow protected no-trade seconds.
+            empty_evidence_cutoff = conn.execute(
+                f"SELECT MAX(open_time) FROM (SELECT open_time FROM klines WHERE {predicate}{ceiling_clause} ORDER BY open_time LIMIT ?)",
+                (*selected_params, to_delete),
+            ).fetchone()[0]
+
         if ceiling_ms is None:
             cur = conn.execute(
                 f"""
@@ -2398,6 +2453,13 @@ def delete_oldest_klines_batch(
                 ),
             )
         conn.execute("UPDATE kline_mutation_context SET mode='' WHERE singleton=1")
+        if empty_evidence_cutoff is not None:
+            if trade_empty_evidence:
+                from .trade_empty_buckets import clear
+                clear(conn, exchange, market_type, symbol, interval, end_ms=int(empty_evidence_cutoff))
+            else:
+                from .native_empty_seconds import clear
+                clear(conn, symbol, end_ms=int(empty_evidence_cutoff))
         conn.commit()
         return cur.rowcount
 

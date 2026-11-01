@@ -1,0 +1,34 @@
+{
+  "status": "integration in progress; not native acceptance",
+  "upstream": "PR147 3cd54ef1a58f99ebf4c91153257ede4632e58bcc",
+  "decisions": [
+    "Keep the current shared CcxtProvider; port protocol functions without restoring per-venue provider ownership.",
+    "Do not alias USD-M continuous-contract 1s candles into the ordinary contract identity. This stage leaves that route unavailable.",
+    "Declare only Gate/Upbit spot1s native boundaries from their explicit protocols. Other unknown native candle calendars remain unknown.",
+    "Admitted trade reduction may supply custom fixed periods without assuming native candle boundaries. An advertised native period with unknown boundaries is rejected, not silently replaced under its existing identity.",
+    "Empty-window evidence is not a fabricated zero-volume candle. It uses existing D126 acquisition fences, semantic identity, revision publication and transaction rollback.",
+    "A new range operation refreshes its durable empty-coverage version once; calendar iteration does not query the revision ledger per second.",
+    "Preserve current request ownership, restore identity, staged viewport admission and native memory limits.",
+    "1s persistence does not enable 1s replay archives in this stage. Existing replay financial behavior and source eligibility remain.",
+    "Historical PR147 QA is retained as dated evidence; it is not proof for this integrated source."
+  ],
+  "protocol_sources": [
+    "https://www.gate.com/docs/developers/apiv4/en/spot/",
+    "https://global-docs.upbit.com/reference/list-candles-seconds",
+    "https://global-docs.upbit.com/v1.2.2/reference/websocket-candle",
+    "https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data"
+  ],
+  "local_checks_so_far": {
+    "frontend": "62 selected tests passed; TypeScript passed",
+    "backend": "225 selection:223 passed,2 failed. One obsolete continuous1s expectation corrected (22 route/audit cases now pass). One H127 owner architecture violation fixed upstream in7711deb1; integration pending.",
+    "empty_coverage": "8 cases passed, including actual separate-process deletion, stale acquisition rejection, foreign vendor isolation and atomic rollback.",
+    "counting": "Overlapping selections, not additive; logs retain failures."
+  },
+  "remaining": [
+    "Merge the latest H127 frontend generation and owner-boundary fixes.",
+    "Run integrated backend/source-revision/retention and frontend checks on final source.",
+    "Exercise real public seconds/custom-seconds, quality and coverage, save and full owned native exit/restart.",
+    "Final source and native evidence, CI, draft review and merge qualification.",
+    "Alert builtin reuse remains the other part of batch3."
+  ]
+}

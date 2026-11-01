@@ -218,6 +218,20 @@ class Reconciler:
             grouped = self._group_bars(fetch_results)
             total_received = sum(len(bars) for bars in grouped.values())
             result.bars_received = total_received
+            record_empty = getattr(self._storage, "record_native_empty_seconds", None)
+            record_trade_empty = getattr(self._storage, "record_trade_empty_buckets", None)
+            if callable(record_trade_empty):
+                for fetched in fetch_results:
+                    ranges = fetched.metadata.get("trade_empty_ranges", [])
+                    task = fetched.task
+                    if ranges:
+                        await record_trade_empty(task.exchange, task.market_type, task.symbol, task.interval, ranges)
+            if callable(record_empty):
+                for fetched in fetch_results:
+                    task = fetched.task
+                    ranges = fetched.metadata.get("native_empty_ranges", [])
+                    if task.exchange == "upbit" and task.market_type == "spot" and task.interval == "1s" and ranges:
+                        await record_empty(task.symbol, ranges)
 
             # 2 & 3. Dedup + write standard bars
             for (exchange, market_type, symbol, interval), bars in grouped.items():

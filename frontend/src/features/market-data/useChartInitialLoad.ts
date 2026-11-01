@@ -173,6 +173,7 @@ export interface UseChartInitialLoadOptions {
   marketType: MarketType;
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   initialViewportCountBackCap?: number;
   sharedCacheOwnsHealth?: boolean;
   getFromCache(symbol: SymbolCode, interval: IntervalString): KlineBar[];
@@ -256,11 +257,13 @@ export function canCommitInitialFeedResult({
 export function planInitialHistoryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): number {
   return planTargetBarRequest({
     desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
   })?.targetBars ?? INITIAL_HISTORY_COUNT_BACK;
 }
@@ -268,8 +271,9 @@ export function planInitialHistoryCountBack(
 export function planInitialViewportCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): number {
-  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues);
+  const admission = planInitialHistoryAdmission(interval, nativeIntervalValues, tradeCandlesAvailable);
   // Materialized probes cannot start the source-backed hydration lane.
   return admission.materializedOnly ? 0 : admission.viewportCountBack;
 }
@@ -277,11 +281,13 @@ export function planInitialViewportCountBack(
 export function planInitialHistoryAdmission(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): { historyCountBack: number; viewportCountBack: number; materializedOnly: boolean } {
   const plan = planTargetBarRequest({
     desiredTargetBars: INITIAL_HISTORY_COUNT_BACK,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: INITIAL_HISTORY_SOURCE_ROW_BUDGET,
   });
   // Only a resolved route that exceeds the source budget may use this escape
@@ -375,6 +381,7 @@ export function useChartInitialLoad({
   marketType,
   seriesIdentity,
   nativeIntervalValues,
+  tradeCandlesAvailable = false,
   initialViewportCountBackCap,
   getFromCache,
   resolveInitialRows,
@@ -487,7 +494,7 @@ export function useChartInitialLoad({
       interval: intv,
       ...(ex === exchange && mt === marketType ? seriesIdentity : {}),
     };
-    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues);
+    const initialAdmission = planInitialHistoryAdmission(intv, nativeIntervalValues, tradeCandlesAvailable);
     const initialHistoryCountBack = initialAdmission.historyCountBack;
     const plannedViewportCountBack = initialAdmission.viewportCountBack;
     const initialViewportCountBack = initialViewportCountBackCap == null
@@ -1007,6 +1014,7 @@ export function useChartInitialLoad({
     markChartDataTransition,
     marketType,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     initialViewportCountBackCap,
     pendingInitialHistoryRef,
     replaceChartData,

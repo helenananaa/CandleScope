@@ -264,6 +264,7 @@ export function useMarketDataRuntime({
   const { intervalRef } = session.refs;
   const {
     exchangeCatalogStatus,
+    tradeCandlesAvailable = false,
     historyIntervalAvailable,
     marketDataReady: sessionMarketDataReady,
     webSocketReady: sessionWebSocketReady,
@@ -425,6 +426,7 @@ export function useMarketDataRuntime({
     marketDataReady,
     webSocketReady,
     nativeIntervalValues,
+    tradeCandlesAvailable,
   });
 
   useLayoutEffect(() => {
@@ -435,8 +437,9 @@ export function useMarketDataRuntime({
       marketDataReady,
       webSocketReady,
       nativeIntervalValues,
+      tradeCandlesAvailable,
     };
-  }, [exchange, marketDataReady, marketType, nativeIntervalValues, symbol, webSocketReady]);
+  }, [exchange, marketDataReady, marketType, nativeIntervalValues, symbol, webSocketReady, tradeCandlesAvailable]);
 
   const activeChartReady = marketDataReady
     && chartData.length > 0
@@ -483,6 +486,7 @@ export function useMarketDataRuntime({
     return canResolveIntervalFromNativeValues(
       candidate.interval,
       gate.nativeIntervalValues,
+      gate.tradeCandlesAvailable,
     );
   }, []);
   // The stream and initial-history runtimes mount in layout effects. Configure
@@ -567,6 +571,7 @@ export function useMarketDataRuntime({
     interval,
     seriesIdentity,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     chartData,
     loading,
     dataSource,
@@ -587,6 +592,7 @@ export function useMarketDataRuntime({
     marketType,
     seriesIdentity,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     ...(initialViewportCountBackCap === undefined ? {} : { initialViewportCountBackCap }),
     getFromCache,
     resolveInitialRows,
@@ -612,11 +618,13 @@ export function useMarketDataRuntime({
   const activeHistoryTargetCountBack = planInitialHistoryCountBack(
     interval,
     nativeIntervalValues,
+    tradeCandlesAvailable,
   );
   const [indicatorPreparationHeld, holdHistoryHydrationForIndicators] = useHistoryHydrationHolds();
   const plannedActiveHistoryViewportCountBack = planInitialViewportCountBack(
     interval,
     nativeIntervalValues,
+    tradeCandlesAvailable,
   );
   const activeHistoryViewportCountBack = initialViewportCountBackCap == null
     ? plannedActiveHistoryViewportCountBack
@@ -804,7 +812,7 @@ export function useMarketDataRuntime({
       paginationPhase: paginationState.phase,
     })) return Promise.resolve(false);
 
-    const countBack = planInitialHistoryCountBack(interval, nativeIntervalValues);
+    const countBack = planInitialHistoryCountBack(interval, nativeIntervalValues, tradeCandlesAvailable);
     const demand = requestDemandRef.current;
     if (
       countBack <= 0
@@ -900,6 +908,7 @@ export function useMarketDataRuntime({
     loadingMoreLeft,
     marketDataReady,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     paginationState.phase,
     replaceChartData,
     resetPagination,
@@ -964,6 +973,7 @@ export function useMarketDataRuntime({
     exchange,
     marketType,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     trackedIntervals,
     intervalRef,
     seriesDataFeed,
@@ -1057,6 +1067,7 @@ export function useMarketDataRuntime({
     activeInterval: interval,
     trackedIntervals: prefetchIntervals,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     hasCache,
     seriesDataFeed,
     priorityGate: backgroundPrefetchPriority,
@@ -1156,6 +1167,7 @@ export function useMarketDataRuntime({
     detachActiveChartData,
     exchange,
     exchangeCatalogStatus,
+    tradeCandlesAvailable,
     historyIntervalAvailable,
     interval,
     lastSessionTransition,

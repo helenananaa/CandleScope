@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, Protocol
 
 from app.data_engine.interval_policy import (
+    IntervalAlignment,
     IntervalSpec,
     interval_tiles,
     intervals_equivalent,
@@ -29,6 +30,7 @@ class IntervalPurpose(str, Enum):
 class IntervalRouteKind(str, Enum):
     NATIVE = "native"
     DERIVED = "derived"
+    TRADE = "trade"
 
 
 class IntervalResolutionErrorCode(str, Enum):
@@ -87,6 +89,8 @@ class IntervalRoute:
 
     @property
     def source_interval(self) -> str:
+        if self.kind is IntervalRouteKind.TRADE:
+            return self.canonical_interval
         source = (
             self.native_interval
             if self.kind is IntervalRouteKind.NATIVE
@@ -162,12 +166,6 @@ class IntervalResolver:
                 declared[value] = contract.basis_interval
                 if contract.calendar_id:
                     session_intervals.add(value)
-        if not declared:
-            raise self._error(IntervalResolutionErrorCode.NATIVE_BASIS_UNKNOWN,
-                f"Native candle boundaries have not been declared for {normalized_exchange}/{normalized_market}",
-                exchange=normalized_exchange, market_type=normalized_market,
-                interval=requested_interval, purpose=normalized_purpose)
-
         for native_interval, basis_interval in declared.items():
             if intervals_equivalent(requested_interval, basis_interval):
                 return IntervalRoute(
@@ -180,6 +178,16 @@ class IntervalResolver:
                     spec=spec,
                     native_interval=native_interval,
                 )
+
+        if any(intervals_equivalent(requested_interval, value) and value not in declared
+               for value in native_intervals):
+            # A raw provider label with unknown boundaries may already have
+            # stored rows. Do not silently replace it with an event-time
+            # reduction under the same canonical series identity.
+            raise self._error(IntervalResolutionErrorCode.NATIVE_BASIS_UNKNOWN,
+                f"Native candle boundaries have not been declared for {normalized_exchange}/{normalized_market}/{requested_interval}",
+                exchange=normalized_exchange, market_type=normalized_market,
+                interval=requested_interval, purpose=normalized_purpose)
 
         best_base: tuple[str, IntervalSpec] | None = None
         for native_interval, basis_interval in declared.items():
@@ -199,6 +207,20 @@ class IntervalResolver:
                 best_base = (native_interval, native_spec)
 
         if best_base is None:
+            from app.exchanges.trade_candles import supports_trade_candles
+            if spec.alignment is IntervalAlignment.FIXED_EPOCH and supports_trade_candles(normalized_exchange, normalized_market):
+                # The admitted trade route uses exchange event timestamps;
+                # it does not inherit an unqualified native-candle calendar.
+                return IntervalRoute(
+                    exchange=normalized_exchange, market_type=normalized_market,
+                    requested_interval=requested_interval, canonical_interval=spec.canonical,
+                    purpose=normalized_purpose, kind=IntervalRouteKind.TRADE, spec=spec,
+                )
+            if not declared:
+                raise self._error(IntervalResolutionErrorCode.NATIVE_BASIS_UNKNOWN,
+                    f"Native candle boundaries have not been declared for {normalized_exchange}/{normalized_market}",
+                    exchange=normalized_exchange, market_type=normalized_market,
+                    interval=requested_interval, purpose=normalized_purpose)
             raise self._error(
                 IntervalResolutionErrorCode.NO_EXACT_BASE,
                 (
