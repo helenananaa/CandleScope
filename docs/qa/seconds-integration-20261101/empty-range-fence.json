@@ -1,8 +1,8 @@
 {
   "problem": "Existing Upbit REST native empty-proof record still used whole-family fence. A disjoint live append after prefetch rejects valid absence and leaves sparse history incomplete. Real SQLite interleaving fails on prior source and passes after fix.",
   "change": "Use previously captured exact Upbit default spot1s native-window canonical fingerprint and durable deletion floor for negative evidence within that window. Only own committed proof merges/automatic invalidation advance accepted deletion watermark; external subsequent deletion still rejects. Unknown/foreign/outside/no-view absence remains strict.",
-  "tests": "83 range,revision,sparse continuity and negative-proof regressions passed. Broader delivery pending.",
-  "native": "Pending fresh14; no complete indicators/native acceptance claimed. Original13 strict four-source quality pass but Upbit indicator blocked preserved.",
+  "tests": "83 range/revision/negative-proof/sparse checks plus21 further delivery/source/reconciler regressions passed (some overlap); before-fix interleaving failed as expected.",
+  "native": "Fresh14 running on eef5e1ee,978source162dist matched, deep strict signing verified before launch; no success claimed.",
   "artifacts": [
     {
       "path": "repro.log.gz",
@@ -15,6 +15,10 @@
     {
       "path": "empty-range-fence-tests.log.gz",
       "sha256": "259017b8b49d8bcea61b7526b1da67c5d563762da1c7fb29062d8d92a9aad620"
+    },
+    {
+      "path": "empty-range-broader.log.gz",
+      "sha256": "5055a1907235feb8441c99512467c6d6bafa8ea768eb7b487f7cd664021dd365"
     }
   ]
 }
