@@ -84,6 +84,11 @@ export async function checkChartTimeNavigation() {
     assert(Math.abs((after.logical.to - after.logical.from) - (before[0].logical.to - before[0].logical.from)) < 0.1, "zoom changed");
     assert(JSON.stringify(surfaces.get("cell-2")!.getVisibleRange()) === JSON.stringify(before[1]), "independent sibling moved");
     assert(requests.length === 1, "independent sibling fetched");
+    stores[0]!.applyTick({ ...stores[0]!.snapshot()[250]!, close: 102.5 });
+    await settle(); await flushDisplay(); await settle();
+    const amended = surfaces.get("cell-1")!.getVisibleRange()?.logical;
+    assert(amended && Math.abs((amended.from + amended.to) / 2 - 250) < 0.1,
+      `late amendment displaced date target: ${JSON.stringify(amended)}`);
     for (const group of Object.values(documentState.linkGroups)) group.peerPolicy.timeAnchor = true;
     links.updateDocument(documentState);
     const linkedPending = links.seekToTime("cell-1", target - 60_000);
@@ -94,6 +99,15 @@ export async function checkChartTimeNavigation() {
       const logical = surface.getVisibleRange()?.logical;
       assert(logical && Math.abs((logical.from + logical.to) / 2 - 250) < 0.1, "linked target not centered");
     }
-    return { passed: true, scope: "Actual React navigation hook, chart canvas and window stores with synthetic seek transport; not full live runtime or native qualification", before, after, independent, linked, requests };
+    // History can land after the navigation has settled. Its prepend changes
+    // every logical index, but must preserve the selected source-time center.
+    for (const store of stores) store.applyRange(rows(store.first()!.time - 100 * 60).slice(0, 100));
+    await settle(); await flushDisplay(); await settle();
+    const prepended = ids.map((id) => surfaces.get(id)!.getVisibleRange());
+    for (const range of prepended) {
+      assert(range?.logical && Math.abs((range.logical.from + range.logical.to) / 2 - 350) < 0.1,
+        `late history displaced linked target: ${JSON.stringify(range)}`);
+    }
+    return { passed: true, scope: "Actual React navigation hook, chart canvas and window stores with synthetic seek transport; not full live runtime or native qualification", before, after, amended, independent, linked, prepended, requests };
   } finally { flushSync(() => root.unmount()); scheduler.dispose(); host.remove(); style.remove(); }
 }

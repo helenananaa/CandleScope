@@ -84,7 +84,9 @@ app.on("window-all-closed",()=>app.quit());
   child = spawn(chrome, args, { stdio: ["ignore", log, log] });
   fs.closeSync(log);
   let lines;
-  for (let i = 0; i < 100; i++) {
+  const browserStartDeadline = Date.now() + Math.min(120_000,
+    Math.max(10_000, Number(process.env.CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS) || 10_000));
+  while (Date.now() < browserStartDeadline) {
     try { lines = fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").trim().split("\n"); break; } catch { /* browser not ready */ }
     if (native) {
       const match = fs.readFileSync(path.join(output, "chrome.log"), "utf8").match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)(\/devtools\/browser\/[^\s]+)/);
