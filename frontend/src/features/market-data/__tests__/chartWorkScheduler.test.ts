@@ -20,7 +20,7 @@ async function turn(): Promise<void> {
 test("the default display budget serves both visible charts in the first frame", () => {
   const frames: Array<() => void> = [];
   const painted: string[] = [];
-  const scheduler = new ChartWorkScheduler({ requestFrame: cb => frames.push(cb), cancelFrame: () => {} });
+  const scheduler = new ChartWorkScheduler({ now: () => 0, requestFrame: cb => frames.push(cb), cancelFrame: () => {} });
   scheduler.registerCell("a", "focused");
   scheduler.registerCell("b", "visible-secondary");
   for (const id of ["a", "b"]) scheduler.enqueueFrame(id, "candle-display", "bars", () => painted.push(id));
@@ -63,6 +63,9 @@ test("replaceable Canvas fan-out is staggered across bounded animation frames", 
   const frames: Array<() => void> = [];
   const commits: string[] = [];
   const scheduler = new ChartWorkScheduler({
+    // This fixture checks the task-count bound. The separate expensive-frame
+    // test advances its clock to verify the elapsed-time budget.
+    now: () => 0,
     maxFrameTasksPerFrame: 2,
     yieldFrameBetweenTasks: false,
     requestFrame: (callback) => {

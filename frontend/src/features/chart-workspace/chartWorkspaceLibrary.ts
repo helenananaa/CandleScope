@@ -1,3 +1,4 @@
+import { normalizeChartAccountOverlay } from "./chartAccountOverlaySettings.js";
 import { getLocale, t, type LocaleId, type MessageKey } from "../../i18n/index.js";
 import { workspaceNameAliases } from "../../i18n/workspaceNameAliases.js";
 import {
@@ -330,6 +331,7 @@ export function createTemplateChartWorkspaceDocument(
         : index === 0 ? anchor.session.interval : cell.session.interval,
     },
     chartSettings: cloneSerializable(anchor.chartSettings),
+    accountOverlay: normalizeChartAccountOverlay(anchor.accountOverlay),
     priceScale: cloneSerializable(anchor.priceScale),
     indicators: cloneSerializable(anchor.indicators),
   });

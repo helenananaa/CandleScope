@@ -1,3 +1,4 @@
+import PageSettingsDialog from "../../app/PageSettingsDialog.js";
 import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
 import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
@@ -183,6 +184,7 @@ export default function ReplayTrainingPageShell({
     };
   });
   const { settings, setSettings, resolvedTheme } = chartSettingsRuntime;
+  const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const drawings = useDrawingRuntime({ chartSurfaceActions, session: null });
   const activeIntervalViewportTransfer = intervalViewportTransfer !== null
     && intervalsSemanticallyEquivalent(
@@ -959,6 +961,7 @@ export default function ReplayTrainingPageShell({
       kagiReversalAmount={settings.kagiReversalAmount}
       lineBreakNumberOfLines={settings.lineBreakNumberOfLines}
       theme={resolvedTheme}
+      inheritApplicationTheme={chartSettingsRuntime.inheritApplicationTheme ?? true}
       customBg={settings.customBg}
       timezone={settings.timezone ?? "UTC"}
       timeFormatter={formatChartTime}
@@ -1141,6 +1144,9 @@ export default function ReplayTrainingPageShell({
           intervals={replayIntervalSelector}
           controls={<>
             {cell?.controls}
+            <button type="button" className="settings-btn indicator-toggle-btn"
+              aria-label={t("shell.settings")} title={t("shell.settings")}
+              onClick={() => setChartSettingsOpen(true)}><Icon name="palette" size={18} /></button>
             <button
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
               type="button"
@@ -1221,6 +1227,7 @@ export default function ReplayTrainingPageShell({
         />
       )}
       featureSurfaces={active ? <>
+        {chartSettingsOpen && <PageSettingsDialog runtime={chartSettingsRuntime} onClose={() => setChartSettingsOpen(false)} />}
         {review === null && exportFlow.view.isOpen && <Suspense fallback={null}><ExportPanel
           {...exportFlow.view}
           onOptionsChange={exportFlow.actions.updateOptions}
