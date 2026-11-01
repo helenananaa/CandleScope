@@ -67,7 +67,7 @@ class SourceGapRegistry:
         self._changed = asyncio.Event()
         self._closed = False
 
-    async def wait_cleared(self) -> None:
+    async def wait_cleared(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait for repair or stream retirement before taking a fresh snapshot.
 
         A failed gap remains unsafe until its stream restarts. There is no
@@ -79,10 +79,22 @@ class SourceGapRegistry:
                 raise ConsumerRecoveryRequired('source_stream_closed')
             if self.overflowed:
                 raise ConsumerRecoveryRequired('source_gap_tracking_exhausted')
-            if not self.pending():
+            keys = key if isinstance(key, frozenset) else frozenset({key}) if key is not None else None
+            pending = [gap for gap in self.pending() if keys is None or gap.key in keys]
+            if not pending:
                 return
+            if fail_on_error and any(gap.error for gap in pending):
+                raise ConsumerRecoveryRequired(next(gap.error for gap in pending if gap.error))
             self._changed.clear()
-            await self._changed.wait()
+            changed = asyncio.create_task(self._changed.wait())
+            try:
+                # fail() completes a gap's future even when no registry change
+                # notification follows. Never cancel these owner-held futures.
+                await asyncio.wait({changed, *(gap.future for gap in pending if not gap.future.done())},
+                                   return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                changed.cancel()
+                await asyncio.gather(changed, return_exceptions=True)
 
     def pending(self, key: SeriesKey | None = None) -> list[SourceGap]:
         return [gap for gap in self.gaps.values()

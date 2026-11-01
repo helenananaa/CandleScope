@@ -1963,13 +1963,13 @@ class DataManager:
         """Remove a subscription."""
         self.event_bus.unsubscribe(handle)
 
-    async def wait_for_source_continuity(self) -> None:
+    async def wait_for_source_continuity(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait before replacing a failed wildcard strict consumer.
 
         Returns only when retained source gaps have been repaired or retired;
         the caller must then acquire fresh state and subscribe on this loop.
         """
-        await self.source_gaps.wait_cleared()
+        await self.source_gaps.wait_cleared(key, fail_on_error=fail_on_error)
 
     async def subscribe_iter(
         self,
