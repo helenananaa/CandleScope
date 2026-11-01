@@ -13,8 +13,55 @@ from typing import Any, Callable
 
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
 from app.data_engine.data_manager.models import BarData
+from app.indicator.engine import indicator_code_hash
+from app.indicator.types import IndicatorKey
 
 logger = logging.getLogger("candlescope.indicator.owner")
+
+
+class IndicatorInputChanged(RuntimeError):
+    """A queued history snapshot no longer covers the owner's state."""
+
+    code = "INDICATOR_INPUT_CHANGED"
+
+
+def _argument(args: tuple, kwargs: dict, index: int, name: str, default=None):
+    return args[index] if len(args) > index else kwargs.get(name, default)
+
+
+def _validate_history_state(engine, method: str, args: tuple, kwargs: dict) -> None:
+    """Recheck at the physical owner boundary, without changing any state.
+
+    The bridge's query fence is necessary but insufficient once another close
+    can run between its last check and admission to this worker.
+    """
+    if method not in {"subscribe", "on_bars_backfilled"}:
+        return
+    subscribing = method == "subscribe"
+    source = _argument(args, kwargs, 5 if subscribing else 2, "bars") or ()
+    confirmed = [bar for bar in source if bar.is_closed]
+    if not confirmed:
+        return
+    symbol = _argument(args, kwargs, 0, "symbol")
+    interval = _argument(args, kwargs, 1, "interval")
+    market_type = _argument(args, kwargs, 2 if subscribing else 3, "market_type", "spot")
+    exchange = _argument(args, kwargs, 6 if subscribing else 4, "exchange", "binance")
+    identity = _argument(args, kwargs, 9 if subscribing else 7, "series_identity")
+    name = _argument(args, kwargs, 3, "indicator_name") if subscribing else "__topic__"
+    params = _argument(args, kwargs, 4, "params", {}) if subscribing else {}
+    key = IndicatorKey(symbol, interval, name, params, market_type=market_type,
+                       exchange=exchange, series_identity=identity,
+                       code_hash=indicator_code_hash(name) if subscribing else "")
+    keys = [key] if subscribing else list(engine._stream_keys.get(key.series_topic, ()))
+    last = max((engine._last_committed.get(key, 0) for key in keys), default=0)
+    start, end = min(bar.time for bar in confirmed), max(bar.time for bar in confirmed)
+    if end < last:
+        raise IndicatorInputChanged("Indicator input state changed; history ends before the committed tail")
+    if not subscribing:
+        minimum = max((engine._instances[key].bar_count for key in keys if key in engine._instances), default=0)
+        first = min((engine._first_committed[key] for key in keys if key in engine._first_committed), default=start)
+        if len(confirmed) < minimum or start > first:
+            raise IndicatorInputChanged("Indicator input state changed; correction omits part of the committed seed")
 
 
 def _input_snapshot(value: Any) -> Any:
@@ -112,6 +159,7 @@ No engine or mutable indicator instance is exposed through this facade.
             else:
                 self._engine = self._factory()
         engine = self._engine
+        _validate_history_state(engine, method, args, kwargs)
         events: list = []
         # Capture detached values while the worker owns the engine. Consumers
         # never run on this thread or inspect engine-owned mutable structures.
@@ -178,6 +226,10 @@ No engine or mutable indicator instance is exposed through this facade.
                 started = True
                 try:
                     (result, events, snapshot), cancelled = await self._physical(method, args, kwargs)
+                except IndicatorInputChanged:
+                    # Rejected before any mutation; the caller can fetch a
+                    # fresh canonical snapshot without poisoning valid state.
+                    raise
                 except BaseException as error:
                     # An unexpected worker failure may have partially changed
                     # state. Never continue issuing apparently valid results.

@@ -229,3 +229,71 @@ async def test_running_subscription_cancel_adopts_for_deterministic_owner_cleanu
         release.set()
         await asyncio.gather(task, return_exceptions=True)
         await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_queued_old_correction_cannot_erase_a_newly_committed_close():
+    entered, release = threading.Event(), threading.Event()
+    def factory():
+        engine = create_engine()
+        original = engine.on_bar_closed
+        def blocked(*args, **kwargs):
+            entered.set()
+            assert release.wait(3)
+            return original(*args, **kwargs)
+        engine.on_bar_closed = blocked
+        return engine
+    owner = SerialIndicatorOwner(factory=factory)
+    source = bars()
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        close = asyncio.create_task(owner.call('on_bar_closed', 'BTCUSDT', '1m', replace(source[-1], time=1860, close=150)))
+        await eventually(entered.is_set)
+        correction = asyncio.create_task(owner.call('on_bars_backfilled', 'BTCUSDT', '1m', source,
+            dirty_range={'start': 60, 'end': 60}))
+        await eventually(lambda: owner.snapshot()['serial_owner']['inflight'] == 2)
+        release.set()
+        await close
+        with pytest.raises(RuntimeError, match='input.*changed'):
+            await correction
+        assert owner.snapshot()['instances'][0]['last_committed'] == 1860
+        assert (await owner.call('get_result', key)).get_latest()
+    finally:
+        release.set()
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_correction_must_keep_full_seed_even_when_row_count_has_not_shrunk():
+    owner = SerialIndicatorOwner()
+    source = bars()
+    reference = create_engine()
+    newer = replace(source[-1], time=1860, close=150)
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        with pytest.raises(RuntimeError, match='input.*changed'):
+            await owner.call('on_bars_backfilled', 'BTCUSDT', '1m', source[1:] + [newer])
+        assert owner.snapshot()['serial_owner']['failure'] is None
+        await owner.call('on_bars_backfilled', 'BTCUSDT', '1m', source + [newer])
+        result = await owner.call('get_result', key)
+        expected = reference.compute('BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, source + [newer])
+        assert result.to_dict()['outputs'] == expected.to_dict()['outputs']
+    finally:
+        reference.stop()
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_old_left_extension_subscription_cannot_roll_existing_instance_back():
+    owner = SerialIndicatorOwner()
+    source = bars()
+    try:
+        key, before = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        old_seed = [replace(source[0], time=0)] + source[:-1]
+        with pytest.raises(RuntimeError, match='input.*changed'):
+            await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=old_seed)
+        after = await owner.call('get_result', key)
+        assert after.to_dict()['outputs'] == before.to_dict()['outputs']
+        assert owner.snapshot()['instances'][0]['refcount'] == 1
+    finally:
+        await owner.aclose()
