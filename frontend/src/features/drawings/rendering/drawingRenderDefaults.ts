@@ -74,6 +74,12 @@ export type AxisLineDrawingRenderEntity = DrawingRenderEntityBase<"axis-line", {
   lineWidth: number;
 }>;
 
+export type RangeMeasureDrawingRenderEntity = DrawingRenderEntityBase<"range-measure", {
+  kind: "range-measure";
+  measureType: import("../drawingTypes.js").RangeMeasureType;
+  dataPoints: readonly DrawingDataPoint[];
+}, { kind: "range-measure"; color: string; lineWidth: number }>;
+
 export type AngleDrawingRenderEntity = DrawingRenderEntityBase<"angle-measure", {
   kind: "angle-measure";
   dataPoints: readonly DrawingDataPoint[];
@@ -156,6 +162,7 @@ export type FreehandDrawingRenderEntity = DrawingRenderEntityBase<"freehand" | "
 export type DrawingRenderEntity =
   | LineDrawingRenderEntity
   | AxisLineDrawingRenderEntity
+  | RangeMeasureDrawingRenderEntity
   | AngleDrawingRenderEntity
   | TextDrawingRenderEntity
   | FibonacciDrawingRenderEntity
@@ -316,6 +323,13 @@ export function normalizeDrawingEntityForRender(
           color: renderColor(style.color),
           lineWidth: renderLineWidth(style.lineWidth),
         }),
+      });
+    case "range-measure":
+      if (entity.kind !== "range-measure" || style.kind !== "range-measure") return null;
+      return Object.freeze({
+        ...renderBase(entity, "range-measure"),
+        geometry: Object.freeze({ kind: "range-measure" as const, measureType: geometry.measureType, dataPoints: cloneFrozen(geometry.dataPoints) }),
+        style: Object.freeze({ kind: "range-measure" as const, color: renderColor(style.color), lineWidth: renderLineWidth(style.lineWidth) }),
       });
     case "angle-measure":
       if (entity.kind !== "angle-measure" || style.kind !== "angle-measure") return null;

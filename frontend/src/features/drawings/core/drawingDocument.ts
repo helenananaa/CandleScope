@@ -10,6 +10,7 @@ import type {
   PositionDirection,
   PositionInfoPanelOffset,
   PositionTimeRange,
+  RangeMeasureType,
   ShapeLineStyle,
   ShapeType,
   TextAlign,
@@ -30,6 +31,11 @@ export type CanonicalBounds =
     }>;
 
 export type CanonicalDrawingGeometry =
+  | Readonly<{
+      kind: "range-measure";
+      measureType: RangeMeasureType;
+      dataPoints: readonly DrawingDataPoint[];
+    }>
   | Readonly<{
       kind: "line";
       lineType?: BasicLineToolId;
@@ -74,7 +80,7 @@ export type CanonicalDrawingGeometry =
 
 export type DrawingStyle = Readonly<{ hidden?: boolean; locked?: boolean; visibleIntervals?: readonly string[] | null }> & (
   | Readonly<{
-      kind: "line" | "axis-line" | "angle-measure";
+      kind: "line" | "axis-line" | "angle-measure" | "range-measure";
       color?: string;
       lineWidth?: number;
     }>
@@ -233,6 +239,7 @@ function matchingKind(
 ): boolean {
   if (geometry.kind !== kind || style.kind !== kind) return false;
   const geometryKeys: Record<DrawingKind, readonly string[]> = {
+    "range-measure": ["dataPoints", "measureType", "kind"],
     "angle-measure": ["dataPoints", "kind"],
     "axis-line": ["axisLineType", "dataPoint", "kind"],
     fibonacci: ["dataPoints", "inverted", "kind"],
@@ -244,6 +251,7 @@ function matchingKind(
     text: ["dataPoint", "kind"],
   };
   const styleKeys: Record<DrawingKind, readonly string[]> = {
+    "range-measure": ["color", "kind", "lineWidth"],
     "angle-measure": ["color", "kind", "lineWidth"],
     "axis-line": ["color", "kind", "lineWidth"],
     fibonacci: ["color", "kind", "levels", "lineWidth"],

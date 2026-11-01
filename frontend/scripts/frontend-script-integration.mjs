@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { build, preview } from "vite";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const rangeMeasure = process.argv.includes("--range-measure");
 const marketHealth = process.argv.includes("--market-health");
 const indicatorFlow = process.argv.includes("--indicator-flow");
 const native = process.argv.includes("--native");
@@ -15,7 +16,7 @@ const intervalAdmission = process.argv.includes("--interval-admission");
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
-const fixture = indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = rangeMeasure ? "range-measure-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -63,10 +64,10 @@ class CDP {
 }
 
 let server, child, browser, page;
-const receipt = { scope: native ? "Isolated Electron host, production-minified renderer and controlled market transport; not installed-release qualification" : replay ? "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification" : "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", output };
+const receipt = { scope: native ? "Isolated Electron host, production-minified renderer and controlled market transport; not installed-release qualification" : (replay || rangeMeasure) ? "Real Chromium, minified application fixture with development React act lifecycle; not native application qualification" : "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification", output };
 try {
   const destination = path.join(output, "dist");
-  await build({ root, ...(replay ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
+  await build({ root, ...((replay || rangeMeasure) ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
   server = await preview({ root, build: { outDir: destination }, preview: { host: "127.0.0.1", port: 0, strictPort: false } });
   const url = server.resolvedUrls.local[0] + "scripts/" + fixture;
   const log = fs.openSync(path.join(output, "chrome.log"), "a");
@@ -83,7 +84,7 @@ app.on("window-all-closed",()=>app.quit());
   child = spawn(chrome, args, { stdio: ["ignore", log, log] });
   fs.closeSync(log);
   let lines;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < Math.min(1200, Math.max(100, Number(process.env.BROWSER_START_TIMEOUT_MS || 10000) / 100)); i++) {
     try { lines = fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").trim().split("\n"); break; } catch { /* browser not ready */ }
     if (native) {
       const match = fs.readFileSync(path.join(output, "chrome.log"), "utf8").match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)(\/devtools\/browser\/[^\s]+)/);

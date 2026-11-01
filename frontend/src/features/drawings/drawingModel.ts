@@ -1,5 +1,6 @@
 import type {
   AngleToolId,
+  RangeMeasureToolId,
   AxisLineToolId,
   AxisLineType,
   BasicLineToolId,
@@ -15,7 +16,8 @@ export const DEFAULT_CURSOR_TOOL: PassiveCursorToolId = "cursor-default";
 export const BASIC_LINE_TOOL_IDS = new Set<BasicLineToolId>(["line-segment", "line-ray", "line-infinite"]);
 export const AXIS_LINE_TOOL_IDS = new Set<AxisLineToolId>(["line-horizontal", "line-vertical", "line-cross"]);
 export const ANGLE_TOOL_IDS = new Set<AngleToolId>(["angle-measure"]);
-export const LINE_TOOL_IDS = new Set([...BASIC_LINE_TOOL_IDS, ...AXIS_LINE_TOOL_IDS, ...ANGLE_TOOL_IDS]);
+export const RANGE_MEASURE_TOOL_IDS = new Set<RangeMeasureToolId>(["measure-price", "measure-time", "measure-price-time"]);
+export const LINE_TOOL_IDS = new Set([...BASIC_LINE_TOOL_IDS, ...AXIS_LINE_TOOL_IDS, ...ANGLE_TOOL_IDS, ...RANGE_MEASURE_TOOL_IDS]);
 export const FIB_TOOL_IDS = new Set<DrawingToolId>(["fibonacci"]);
 export const POSITION_TOOL_IDS = new Set<DrawingToolId>(["position-long", "position-short"]);
 export const SHAPE_TOOL_IDS = new Set<DrawingToolId>(["shape-rectangle", "shape-ellipse"]);
@@ -42,6 +44,7 @@ export const DRAWING_ENGINE_TOOL_IDS = new Set<DrawingToolId>([
   ...BASIC_LINE_TOOL_IDS,
   ...AXIS_LINE_TOOL_IDS,
   ...ANGLE_TOOL_IDS,
+  ...RANGE_MEASURE_TOOL_IDS,
   ...SHAPE_TOOL_IDS,
   "text",
   ...FIB_TOOL_IDS,

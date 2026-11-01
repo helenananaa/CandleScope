@@ -169,6 +169,12 @@ const PHASE8_TOOL_MATRIX: readonly Phase8MatrixRow[] = Object.freeze([
     }),
   },
   {
+    kind: "range-measure",
+    renderOp: "range-measure",
+    draggable: true,
+    create: () => createTwoPointSavedDrawing({ tool: "measure-price-time", dataPoints: [SOURCE_POINT, FUTURE_POINT], color: "#34d399", lineWidth: 2 }),
+  },
+  {
     kind: "fibonacci",
     renderOp: "fibonacci",
     draggable: true,
@@ -470,11 +476,12 @@ function dragDescriptor(
   box: ScreenBox | null,
 ): DrawingDragDescriptor | null {
   switch (drawing.type) {
+    case "range-measure":
     case "line":
       return drawing.dataPoints?.length
         ? {
             id: drawing.id,
-            type: "line",
+            type: drawing.type,
             pointIndex: hit.pointIndex ?? -1,
             startMouse,
             origPoints: drawing.dataPoints.map((point) => ({ ...point })),
@@ -599,13 +606,14 @@ function displayListEntityCount(list: DrawingScreenDisplayList | null): number |
   return list === null ? null : list.entities.length;
 }
 
-test("Phase 8 global matrix: nine SavedDrawing kinds cross document, scene, hit, and entity interaction", async (context) => {
+test("Phase 8 global matrix: all SavedDrawing kinds cross document, scene, hit, and entity interaction", async (context) => {
   assert.deepEqual(
     PHASE8_TOOL_MATRIX.map((row) => row.kind),
     [
       "line",
       "axis-line",
       "angle-measure",
+      "range-measure",
       "fibonacci",
       "text",
       "position",
@@ -712,7 +720,7 @@ test("Phase 8 global matrix: reload and hidden/clear/recreate keep document-only
   assert.equal(renderer.reconcile(store.getSnapshot()), true);
   assert.deepEqual(renderer.evidence(), {
     registryKind: "scene-document-only",
-    documentEntityCount: 9,
+    documentEntityCount: PHASE8_TOOL_MATRIX.length,
     legacyPrimitiveAttachedCount: 0,
     legacyPrimitiveInstanceCount: 0,
     disposed: false,
@@ -756,8 +764,8 @@ test("Phase 8 global matrix: reload and hidden/clear/recreate keep document-only
 
   assert.equal(runtime.activate(binding), true);
   assert.equal(runtime.flushNow(), true);
-  assert.equal(displayListEntityCount(published), 9);
-  assert.equal(runtime.snapshot().hitIndex?.list.entities.length, 9);
+  assert.equal(displayListEntityCount(published), PHASE8_TOOL_MATRIX.length);
+  assert.equal(runtime.snapshot().hitIndex?.list.entities.length, PHASE8_TOOL_MATRIX.length);
 
   // Hidden uses the same synchronous suspend seam as the lifecycle hook: the
   // public plan/hit index disappear, while the canonical document survives.
@@ -774,10 +782,10 @@ test("Phase 8 global matrix: reload and hidden/clear/recreate keep document-only
   assert.equal(renderer.rebindSurface(), true);
   assert.equal(runtime.activate(binding), true);
   assert.equal(runtime.flushNow(), true);
-  assert.equal(displayListEntityCount(published), 9);
+  assert.equal(displayListEntityCount(published), PHASE8_TOOL_MATRIX.length);
   assert.deepEqual(renderer.evidence(), {
     registryKind: "scene-document-only",
-    documentEntityCount: 9,
+    documentEntityCount: PHASE8_TOOL_MATRIX.length,
     legacyPrimitiveAttachedCount: 0,
     legacyPrimitiveInstanceCount: 0,
     disposed: false,

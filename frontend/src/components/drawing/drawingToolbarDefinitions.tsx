@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type {
   BasicLineToolId,
+  RangeMeasureToolId,
   FreehandToolId,
   PassiveCursorToolId,
   PositionToolId,
@@ -16,6 +17,7 @@ export interface ToolbarVariant<TId extends string = string> {
 }
 
 export type LineToolbarToolId = BasicLineToolId
+  | RangeMeasureToolId
   | "line-horizontal"
   | "line-vertical"
   | "line-cross"
@@ -384,6 +386,9 @@ const LINE_VARIANTS: ToolbarVariant<LineToolbarToolId>[] = [
     description: "Visual angle on the current scale",
     icon: AngleMeasureIcon,
   },
+  { id: "measure-price", label: "Price range", icon: VerticalLineIcon },
+  { id: "measure-time", label: "Time range", icon: HorizontalLineIcon },
+  { id: "measure-price-time", label: "Price and time range", icon: RectangleIcon },
 ];
 
 const LINE_TOOL_IDS = new Set(LINE_VARIANTS.map((v) => v.id));

@@ -1,3 +1,4 @@
+import { measureDrawingRange, rangeMeasurementLabel } from "../rangeMeasurement.js";
 import type { DrawingFrameSnapshot } from "../../../chart-adapter/drawingFrameSnapshot.js";
 import type {
   CoordinateDataPoint,
@@ -55,6 +56,7 @@ import {
 } from "../rendering/drawingRenderDefaults.js";
 import type {
   AngleDrawingRenderEntity,
+  RangeMeasureDrawingRenderEntity,
   AxisLineDrawingRenderEntity,
   DrawingRenderEntity,
   FibonacciDrawingRenderEntity,
@@ -714,7 +716,7 @@ function createProjectedEntity(
 }
 
 function projectTwoDataPoints(
-  entity: LineDrawingRenderEntity | AngleDrawingRenderEntity
+  entity: LineDrawingRenderEntity | AngleDrawingRenderEntity | RangeMeasureDrawingRenderEntity
     | FibonacciDrawingRenderEntity | ShapeDrawingRenderEntity,
   frame: DrawingFrameSnapshot,
   adapter: DrawingSceneProjectionAdapter,
@@ -1048,6 +1050,42 @@ function measuredTextWidth(
   return [...request.text].reduce((width, character) => (
     width + (character.charCodeAt(0) > 0xff ? request.fontSize : request.fontSize * 0.62)
   ), 0);
+}
+
+function projectRangeMeasure(
+  entity: RangeMeasureDrawingRenderEntity,
+  frame: DrawingFrameSnapshot,
+  adapter: DrawingSceneProjectionAdapter,
+  selected: boolean,
+): EntityProjection {
+  const measurement = measureDrawingRange(entity.geometry.dataPoints);
+  if (!measurement) return null;
+  const anchors = projectTwoDataPoints(entity, frame, adapter);
+  if (anchors === PROJECTION_FAILED || anchors === null) return anchors;
+  const [a, b] = anchors;
+  const label = rangeMeasurementLabel(measurement, entity.geometry.measureType);
+  const width = measuredTextWidth(adapter, {
+    text: label, fontFamily: "sans-serif", fontSize: 11, bold: false, italic: false,
+  }) + 12;
+  const x = (a.x + b.x) / 2;
+  const y = Math.min(a.y, b.y) - 12;
+  const values = new Float64Array([a.x, a.y, b.x, b.y, x - width / 2, y - 9, x + width / 2, y + 9]);
+  const hitZones: DrawingDisplayHitZone[] = [
+    { kind: "point", name: "start", pointOffset: 0, pointCount: 1, tolerance: 7 + entity.style.lineWidth, result: { pointIndex: 0 } },
+    { kind: "point", name: "end", pointOffset: 1, pointCount: 1, tolerance: 7 + entity.style.lineWidth, result: { pointIndex: 1 } },
+    { kind: "box", name: "label", pointOffset: 2, pointCount: 2, tolerance: 0, result: { pointIndex: -1, zone: "label" } },
+    { kind: "box", name: "body", pointOffset: 0, pointCount: 2, tolerance: 6, result: { pointIndex: -1, zone: "body" } },
+  ];
+  return createProjectedEntity(entity, values, {
+    bbox: bboxFromValues([...values]),
+    renderSpec: Object.freeze({ op: "range-measure", measureType: entity.geometry.measureType,
+      strokeColor: entity.style.color, lineWidthCssPx: entity.style.lineWidth, selected,
+      labelText: label, labelBoxPointOffset: 2 }),
+    handles: new Float64Array([a.x, a.y, b.x, b.y]),
+    handleNames: Object.freeze(["start", "end"]),
+    handleResults: Object.freeze([null, null]),
+    hitZones: Object.freeze(hitZones),
+  });
 }
 
 function projectAngle(
@@ -3497,6 +3535,7 @@ function projectEntity(
       selected,
     );
     case "axis-line": return projectAxisLine(entity, frame, adapter, selected);
+    case "range-measure": return projectRangeMeasure(entity, frame, adapter, selected);
     case "angle-measure": return projectAngle(entity, frame, adapter, selected);
     case "text": return projectText(entity, frame, adapter, selected);
     case "fibonacci": return projectFibonacci(entity, frame, adapter, selected);

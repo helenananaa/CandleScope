@@ -394,6 +394,7 @@ export function createDrawingEntityGeometryBounds(
         : explicitUnbounded(axisLineType, point);
       break;
     }
+    case "range-measure":
     case "angle-measure":
     case "fibonacci":
     case "shape":
