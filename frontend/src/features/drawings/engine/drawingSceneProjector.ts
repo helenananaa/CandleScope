@@ -1063,12 +1063,18 @@ function projectRangeMeasure(
   const anchors = projectTwoDataPoints(entity, frame, adapter);
   if (anchors === PROJECTION_FAILED || anchors === null) return anchors;
   const [a, b] = anchors;
+  // A label may move inside the pane, but an entirely off-screen ruler must
+  // not leave a detached badge at its edge.
+  if (Math.max(a.x, b.x) < 0 || Math.min(a.x, b.x) > frame.widthCssPx
+    || Math.max(a.y, b.y) < 0 || Math.min(a.y, b.y) > frame.heightCssPx) return null;
   const label = rangeMeasurementLabel(measurement, entity.geometry.measureType);
   const width = measuredTextWidth(adapter, {
     text: label, fontFamily: "sans-serif", fontSize: 11, bold: false, italic: false,
   }) + 12;
-  const x = (a.x + b.x) / 2;
-  const y = Math.min(a.y, b.y) - 12;
+  const x = width + 8 <= frame.widthCssPx
+    ? Math.max(width / 2 + 4, Math.min(frame.widthCssPx - width / 2 - 4, (a.x + b.x) / 2))
+    : frame.widthCssPx / 2;
+  const y = Math.max(13, Math.min(frame.heightCssPx - 13, Math.min(a.y, b.y) - 12));
   const values = new Float64Array([a.x, a.y, b.x, b.y, x - width / 2, y - 9, x + width / 2, y + 9]);
   const hitZones: DrawingDisplayHitZone[] = [
     { kind: "point", name: "start", pointOffset: 0, pointCount: 1, tolerance: 7 + entity.style.lineWidth, result: { pointIndex: 0 } },

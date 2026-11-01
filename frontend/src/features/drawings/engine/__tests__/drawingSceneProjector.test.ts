@@ -3169,3 +3169,23 @@ test("source range measurement keeps its values across projection scales and exp
   const gap = project(document, createFrame(), createAdapter({ gapTime: 100 }));
   assert.equal(gap?.entities.length, 0, "unresolved anchors must not produce fabricated measurements");
 });
+
+test("ruler labels stay inside the visible pane after an interval change without moving source anchors", () => {
+  const entity = createDrawingEntity({
+    id: "edge-ruler", kind: "range-measure",
+    geometry: { kind: "range-measure", measureType: "price-time", dataPoints: [{ time: 180, price: 2 }, { time: 195, price: 15 }] },
+    style: { kind: "range-measure", color: "#f00", lineWidth: 2 },
+  });
+  const document = createDrawingDocument({ scopeKey: "rulers", entities: [entity] });
+  const display = project(document, createFrame({ width: 320 }), createAdapter({ projectX: time => time + 120 }));
+  assert.ok(display);
+  const points = entityPoints(display, "edge-ruler");
+  assert.deepEqual(Array.from(points.slice(0, 4)), [300, 2, 315, 15]);
+  assert.ok(points[4]! >= 4 && points[6]! <= 316, "both horizontal label edges are visible");
+  assert.ok(points[5]! >= 4 && points[7]! <= 196, "the label stays below the pane top");
+  const spec = display.entities[0]?.renderSpec;
+  assert.ok(spec?.op === "range-measure");
+  assert.equal(spec.labelText, "Δ +13 (+650%) · Δt +15s");
+  const outside = project(document, createFrame({ width: 320 }), createAdapter({ projectX: time => time + 400 }));
+  assert.equal(outside?.entities.length, 0, "off-screen rulers do not produce floating edge labels");
+});
