@@ -299,6 +299,7 @@ class DataManager:
 
     def __init__(self, config: DataManagerConfig | None = None) -> None:
         self._cfg = config or DataManagerConfig()
+        self._numeric_indicator_service = None
         self._storage_gc_guard = threading.RLock()
         self._storage_gc_protection_epoch = 0
         self.interval_resolver = IntervalResolver()
@@ -928,6 +929,8 @@ class DataManager:
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
+        if self._numeric_indicator_service is not None:
+            await self._numeric_indicator_service.close()
         if self.history_prefix_runtime is not None:
             await self.history_prefix_runtime.close()
         self.shared_blocks.close()
@@ -1836,6 +1839,22 @@ class DataManager:
     ) -> SubscriptionHandle:
         """Register an event-loop consumer after any contending GC transaction."""
         return await self._apply_gc_protected(self.subscribe, callback, **kwargs)
+
+    def bind_indicator_queries(self, service) -> None:
+        """Bind numeric calculations owned by the indicator domain."""
+        if self._numeric_indicator_service is not None and self._numeric_indicator_service is not service:
+            raise RuntimeError('Numeric indicator service is already bound')
+        self._numeric_indicator_service = service
+
+    async def query_indicator(self, request):
+        if self._numeric_indicator_service is None:
+            raise RuntimeError('Numeric indicator service is unavailable')
+        return await self._numeric_indicator_service.query(request)
+
+    async def subscribe_indicator(self, request, callback, **kwargs):
+        if self._numeric_indicator_service is None:
+            raise RuntimeError('Numeric indicator service is unavailable')
+        return await self._numeric_indicator_service.subscribe(request, callback, **kwargs)
 
     async def unsubscribe_async(self, handle: SubscriptionHandle) -> None:
         """Remove a consumer without synchronously waiting on a storage writer."""

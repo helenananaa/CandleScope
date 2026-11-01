@@ -230,6 +230,11 @@ async def _init_data_manager() -> None:
             if isinstance(indicator_engine, SerialIndicatorOwner):
                 await indicator_engine.call("list_instances")
             app.state.indicator_engine = indicator_engine
+            from app.data_engine.data_manager.indicator_inputs import IndicatorInputPort
+            from app.indicator.numeric_queries import NumericIndicatorService
+            numeric_indicators = NumericIndicatorService(IndicatorInputPort(runtime.data_manager), indicator_range_service)
+            runtime.data_manager.bind_indicator_queries(numeric_indicators)
+            app.state.numeric_indicator_service = numeric_indicators
             print("[startup] IndicatorEngine bridged to DataManager [ok]")
         except Exception as exc:
             if indicator_engine is not None:
@@ -930,6 +935,16 @@ async def shutdown_event() -> None:
         except Exception as exc:
             logger.warning("Plugin Platform v2 shutdown error: %s", exc, exc_info=True)
 
+    for label, owner, method in (
+        ("AlertRuntime", getattr(app.state, "alert_runtime", None), "stop"),
+        ("Numeric indicators", getattr(app.state, "numeric_indicator_service", None), "close"),
+    ):
+        if owner is not None:
+            try:
+                await getattr(owner, method)()
+            except Exception as exc:
+                logger.warning("%s shutdown error: %s", label, exc, exc_info=True)
+
     indicator_engine = getattr(app.state, "indicator_engine", None)
     if indicator_engine is not None:
         try:
@@ -956,14 +971,6 @@ async def shutdown_event() -> None:
     trading_accounts = getattr(app.state, "trading_accounts", None)
     if trading_accounts is not None:
         trading_accounts.store.close()
-
-    alert_runtime = getattr(app.state, "alert_runtime", None)
-    if alert_runtime is not None:
-        try:
-            await alert_runtime.stop()
-            print("[shutdown] AlertRuntime shut down [ok]")
-        except Exception as exc:
-            print(f"[shutdown] AlertRuntime shutdown error: {exc}")
 
     alert_facade = getattr(app.state, "alert_facade", None)
     if alert_facade is not None:

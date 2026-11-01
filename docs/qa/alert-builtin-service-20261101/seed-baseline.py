@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 import subprocess
 
-from app.alerts.indicator_context import compute_alert_indicator_values
+from legacy_indicator_oracle import compute_alert_indicator_values
 from app.data_engine.data_manager.models import BarData
 from app.indicator import create_engine
 
