@@ -62,6 +62,10 @@ class AlertRuntimeEngine:
         self._reconcile_task: asyncio.Task[None] | None = None
         self._reconcile_wakeup = asyncio.Event()
         self._warmup_tasks: dict[str, asyncio.Task[None]] = {}
+        # API mutations and the periodic reconciliation loop can overlap while
+        # acquiring a stream or starting the numeric worker. One lifecycle
+        # owner prevents replacement of an unrecorded, still-starting handle.
+        self._lifecycle = asyncio.Lock()
 
     async def start(self) -> None:
         """Subscribe all currently enabled rules."""
@@ -95,8 +99,9 @@ class AlertRuntimeEngine:
             task.cancel()
         if warmup_tasks:
             await asyncio.gather(*warmup_tasks, return_exceptions=True)
-        for rule_id in list(self._subscriptions):
-            await self.remove_rule(rule_id)
+        async with self._lifecycle:
+            for rule_id in list(self._subscriptions):
+                await self._remove_rule(rule_id)
 
     async def sync_rules(self) -> None:
         """Reconcile runtime subscriptions with persisted rules."""
@@ -109,10 +114,25 @@ class AlertRuntimeEngine:
             await self.sync_rule(rule)
         for stale_rule_id in list(self._subscriptions):
             if stale_rule_id not in seen:
-                await self.remove_rule(stale_rule_id)
+                # A rule may have been created after the list was read.
+                async with self._lifecycle:
+                    if self.facade.get_rule(stale_rule_id) is None:
+                        await self._remove_rule(stale_rule_id)
 
     async def sync_rule(self, rule: dict[str, Any] | None) -> None:
         """Start, update, or stop one rule subscription."""
+        if not isinstance(rule, dict) or not rule.get("id"):
+            return
+        async with self._lifecycle:
+            # A caller can wait behind an edit/disable. Never reinstall the
+            # older payload once its turn reaches the lifecycle owner.
+            current = self.facade.get_rule(str(rule["id"]))
+            if current is None:
+                await self._remove_rule(str(rule["id"]))
+                return
+            await self._sync_rule(current)
+
+    async def _sync_rule(self, rule: dict[str, Any]) -> None:
         if not self._started or self.data_manager is None or not isinstance(rule, dict):
             return
 
@@ -120,12 +140,12 @@ class AlertRuntimeEngine:
         if not rule_id:
             return
         if "pineAlert" in referenced_alert_fields(rule.get("expression")):
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
         if not self._is_rule_active(rule):
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
                 await run_storage(self.facade.set_enabled, rule_id, False)
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
 
         if rule_id in self._recovery_required:
@@ -133,7 +153,7 @@ class AlertRuntimeEngine:
 
         target = self._target(rule)
         if not target["symbol"] or not target["interval"]:
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
 
         target_key = (target["exchange"], target["marketType"], target["symbol"], target["interval"])
@@ -150,7 +170,7 @@ class AlertRuntimeEngine:
                 self._schedule_backfill_wait(rule_id, target, request_ids)
             return
         if existing:
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
 
         async def _on_event(event: DataEvent, *, current_rule_id: str = rule_id) -> None:
             try:
@@ -183,7 +203,7 @@ class AlertRuntimeEngine:
                     on_recovery=_on_recovery, consumer_id=consumer_id,
                     subscription_tier="alerts", event_types=event_types)
                 current = self.facade.get_rule(rule_id)
-                if not current or current.get("definitionRevision") != rule["definitionRevision"]:
+                if not self._started or not current or current.get("definitionRevision") != rule["definitionRevision"]:
                     await handle.close()
                     self._reconcile_wakeup.set()
                     return
@@ -214,8 +234,9 @@ class AlertRuntimeEngine:
                     market_type=target["marketType"],
                     event_types=event_types,
                 )
-        except Exception as exc:
-            self._record_error(exc, rule_id=rule_id)
+        except (Exception, asyncio.CancelledError) as exc:
+            if not isinstance(exc, asyncio.CancelledError):
+                self._record_error(exc, rule_id=rule_id)
             try:
                 await self.data_manager.release_stream(
                     target["symbol"],
@@ -228,6 +249,8 @@ class AlertRuntimeEngine:
                 )
             except Exception:
                 logger.debug("Failed to roll back alert stream %s", rule_id, exc_info=True)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             return
         self._subscriptions[rule_id] = _RuleSubscription(
             rule_id=rule_id,
@@ -238,6 +261,11 @@ class AlertRuntimeEngine:
             definition_revision=rule["definitionRevision"],
             numeric=numeric,
         )
+        current = self.facade.get_rule(rule_id)
+        if not self._started or not current or current.get("definitionRevision") != rule["definitionRevision"]:
+            await self._remove_rule(rule_id)
+            self._reconcile_wakeup.set()
+            return
         self._require_recovery_seed.discard(rule_id)
         self._schedule_backfill_wait(rule_id, target, request_ids)
         self._clear_rule_error(rule_id)
@@ -245,6 +273,10 @@ class AlertRuntimeEngine:
 
     async def remove_rule(self, rule_id: str) -> None:
         """Unsubscribe and release one rule's stream lease."""
+        async with self._lifecycle:
+            await self._remove_rule(rule_id)
+
+    async def _remove_rule(self, rule_id: str) -> None:
         self._recovery_required.pop(rule_id, None)
         self._seed_frontiers.pop(rule_id, None)
         sub = self._subscriptions.pop(rule_id, None)
