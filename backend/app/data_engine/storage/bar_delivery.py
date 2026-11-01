@@ -175,6 +175,26 @@ class BarDeliveryJournal:
             # Pending receipts and unpublished commits are never pruned.
             self._prune(conn)
 
+    def acknowledge_many(self, event_ids):
+        """Confirm a bounded published prefix atomically; pending is untouched.
+
+        This only amortizes publication receipts. Canonical arbitration still
+        happens per event before publication, preserving close/amend ordering.
+        """
+        if (not isinstance(event_ids, (tuple, list)) or not 1 <= len(event_ids) <= 64
+                or any(not isinstance(value, str) or not value for value in event_ids)
+                or sum(len(value.encode('utf-8')) for value in event_ids) > 64 * 1024):
+            raise ValueError('bounded delivery identity batch required')
+        ids = tuple(dict.fromkeys(event_ids))
+        placeholders = ','.join('?' for _ in ids)
+        with closing(self._connect()) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            conn.execute("UPDATE bar_delivery SET phase='published' WHERE phase='committed' "
+                         f'AND event_id IN ({placeholders})', ids)
+            conn.execute("UPDATE bar_delivery SET recovery_required=0 WHERE phase='rejected' "
+                         f'AND event_id IN ({placeholders})', ids)
+            self._prune(conn)
+
     def watch(self, owner, series, from_ms):
         encoded = _json(series)
         with closing(self._connect()) as conn, conn:
