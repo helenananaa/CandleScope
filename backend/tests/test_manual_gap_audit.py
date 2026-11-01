@@ -6,11 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator
+from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator, RepairRequest
 from app.data_engine.data_manager.maintenance import MaintenanceService
 from app.data_engine.history.calendar import SessionCalendar
 from app.data_engine.history.models import HistoryAvailability
 from app.data_engine.storage import klines_repo
+from app.data_engine.storage.gap_ledger import GapLedger
 
 
 MINUTE = 60_000
@@ -211,6 +212,26 @@ def test_failed_repair_keeps_missing_count_and_reason(storage):
         assert page["remaining_gaps"] == 1
         assert page["remaining_missing_bars"] == 1
         assert any("source unavailable" in error for error in page["repair_errors"])
+        await coordinator.shutdown()
+    asyncio.run(scenario())
+
+
+def test_suppressed_repair_reports_ledger_reason_without_claiming_success(storage, tmp_path):
+    _write([0, 2 * MINUTE])
+    ledger = GapLedger(tmp_path / "ledger.sqlite")
+    request = RepairRequest(symbol="BTCUSDT", interval="1m", start_ms=MINUTE, end_ms=MINUTE)
+    ledger.upsert_detected(request)
+    ledger.mark_deferred(request, status="unavailable", reason="provider retention boundary", next_retry_at=9_999_999_999_999)
+    async def scenario():
+        coordinator = BackfillCoordinator(
+            storage=storage, bars_backfilled=_ignore, emit_event=_ignore, gap_ledger=ledger,
+        )
+        result = await _scan(storage, coordinator)
+        assert result["status"] == "partial"
+        page = result["results"][0]
+        assert page["suppressed_gaps"] == 1
+        assert page["remaining_gaps"] == 1
+        assert any("provider retention boundary" in error for error in page["repair_errors"])
         await coordinator.shutdown()
     asyncio.run(scenario())
 

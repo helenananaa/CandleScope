@@ -863,9 +863,19 @@ class BackfillCoordinator:
                         "gap_type": gap.get("reason", "unknown"),
                     },
                 )
-                if await self._should_skip_audited_gap(request):
+                decision: dict[str, Any] = {}
+                skip = (
+                    await self._should_skip_audited_gap(request, decision=decision)
+                    if detailed else await self._should_skip_audited_gap(request)
+                )
+                if skip:
                     if page is not None:
                         page["suppressed_gaps"] += 1
+                        page["repair_errors"].append(
+                            "共享回补暂缓此缺口: " + str(decision.get("status", "unknown"))
+                            + (f"; {decision['error']}" if decision.get("error") else "")
+                            + (f"; next_retry_at={decision['next_retry_at']}" if decision.get("next_retry_at") else "")
+                        )
                     continue
                 if repair:
                     canonical_id = self.request(request)
@@ -1255,6 +1265,7 @@ class BackfillCoordinator:
             "remaining_missing_bars": int(scan.get("missing_bars", 0)),
             "truncated": bool(scan.get("truncated")), "next_cursor_ms": None,
             "suppressed_gaps": 0, "request_ids": [], "bars_filled": 0,
+            "repair_errors": [],
             "verified_after_repair": False,
         }
 
@@ -1270,7 +1281,7 @@ class BackfillCoordinator:
             if page.get("status") != "gap_found":
                 continue
             pending = False
-            repair_errors: list[str] = []
+            repair_errors: list[str] = list(page.get("repair_errors", []))
             for request_id in dict.fromkeys(page["request_ids"]):
                 if request_id not in outcomes:
                     remaining = deadline - asyncio.get_running_loop().time()
@@ -3263,7 +3274,9 @@ class BackfillCoordinator:
         _, _, end_exclusive_ms = target_range
         return end_exclusive_ms <= int(now_ms)
 
-    async def _should_skip_audited_gap(self, request: RepairRequest) -> bool:
+    async def _should_skip_audited_gap(
+        self, request: RepairRequest, *, decision: dict[str, Any] | None = None,
+    ) -> bool:
         if self._gap_ledger is None:
             return False
         now_ms = int(time.time() * 1000)
@@ -3290,6 +3303,9 @@ class BackfillCoordinator:
             return False
         if not status:
             return False
+        if decision is not None:
+            decision.update({key: status.get(key) for key in ("status", "next_retry_at")})
+            decision["error"] = status.get("last_error") or status.get("error")
         status_value = str(status.get("status") or "")
 
         next_retry_at = status.get("next_retry_at")
