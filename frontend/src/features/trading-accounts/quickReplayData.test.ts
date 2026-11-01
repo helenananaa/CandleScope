@@ -94,8 +94,10 @@ test("a capped response without a continuation remains visibly truncated", async
 });
 
 test("forming or unproven candles cannot become the frozen replay history", async () => {
+  const unproven = ready(0);
+  delete unproven.all_rows_final;
   for (const response of [
-    { ...ready(0), all_rows_final: undefined },
+    unproven,
     { ...ready(0), data: [{ ...bar(0), is_closed: false }] },
   ]) {
     await assert.rejects(loadReplayBars(input, 0, 10800, undefined, {
