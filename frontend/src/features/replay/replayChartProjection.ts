@@ -29,6 +29,7 @@ export class ReplayChartProjection {
   private unsubscribe: (() => void) | null = null;
   private request: AbortController | null = null;
   private authorityKey: string | null = null;
+  private generation: number | null = null;
   private completedKey: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private leases = 0;
@@ -101,19 +102,29 @@ export class ReplayChartProjection {
     const boundary = store.virtualTimeMs;
     const epoch = store.dataEpoch;
     const sessionId = store.sessionId;
+    const authorityKey = JSON.stringify([sessionId, epoch, this.lifecycle.store.seriesStore.seriesKey]);
+    const generationChanged = this.generation !== store.generation;
+    const rewound = boundary !== null && this.state.boundaryMs !== null && boundary < this.state.boundaryMs;
+    // A transport generation fences requests, not the already admitted BAR
+    // history. Dropping that history races the hook's paging cursor reset and
+    // can leave a resumed coarse chart permanently at its tiny execution tail.
+    const preserveWindow = config?.source_kind === "bar" && store.hasAuthoritativeSnapshot === true
+      && this.authorityKey === authorityKey && !rewound;
     if (sessionId !== null && epoch !== null) this.data.bind({ runId: this.runId,
-      trackId: this.trackId, sessionId, dataEpoch: epoch, generation: store.generation, interval: this.interval });
-    const authorityKey = JSON.stringify([sessionId, epoch, store.generation]);
-    if (this.authorityKey !== authorityKey || (boundary !== null && this.state.boundaryMs !== null && boundary < this.state.boundaryMs)) {
+      trackId: this.trackId, sessionId, dataEpoch: epoch, generation: store.generation, interval: this.interval }, { preserveWindow });
+    if (this.authorityKey !== authorityKey || generationChanged || rewound) {
       this.authorityKey = authorityKey;
+      this.generation = store.generation;
       this.request?.abort();
       this.request = null;
       this.tape?.dispose();
       this.tape = null;
       this.completedKey = null;
-      this.seriesStore.clear({ source: "replay-cell-authority-change" });
-      this.publish({ loading: true, error: null, boundaryMs: null,
-        ...(config?.source_kind === "agg_trade" ? { tapeObservation: null } : {}) });
+      if (!preserveWindow) {
+        this.seriesStore.clear({ source: "replay-cell-authority-change" });
+        this.publish({ loading: true, error: null, boundaryMs: null,
+          ...(config?.source_kind === "agg_trade" ? { tapeObservation: null } : {}) });
+      }
     }
     // Multi-chart cells own the production display path. The run-level viewer
     // only controls the account and must not supply a cell's sampled boundary.
