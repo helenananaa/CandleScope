@@ -62,7 +62,8 @@
   "limitations": [
     "macOS arm64 only; full issue165 and 157-item acceptance not claimed",
     "Native error fixture set via published editor commands; clipboard/edit-context paste behavior is not qualified",
-    "Failed QA selector, response-observer, autoindent, clipboard and load/quit attempts retained under output directory; they are not counted as passes"
+    "Failed QA selector, response-observer, autoindent, clipboard and load/quit attempts retained under output directory; they are not counted as passes",
+    "Screenshot follow-up found that a failed host run retained the completed footer from an earlier result; corrected in a later source commit, requiring new package verification. This evidence does not qualify that later footer correction."
   ],
   "artifacts": "output/issue165-strategy-native-20261101"
 }

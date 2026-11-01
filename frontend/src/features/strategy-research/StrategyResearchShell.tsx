@@ -8,10 +8,12 @@ import { ResearchDataSourceBar } from "../research-data/ResearchDataSourceBar.js
 import type { ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import type { StrategyResearchVisualState } from "./strategyResearchLaunch.js";
 import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
+import type { ChartStrategyTesterStatus } from "../backtest/chart-tester/chartStrategyTesterState.js";
 
 export function StrategyResearchShell({
   visualState,
   nativeStatus,
+  hostStatus,
   source,
   sourceLabel,
   libraryEnabled,
@@ -34,6 +36,7 @@ export function StrategyResearchShell({
 }: {
   visualState: StrategyResearchVisualState;
   nativeStatus?: NativeFeedbackStatus | undefined;
+  hostStatus?: ChartStrategyTesterStatus | undefined;
   source: ResearchSourceRefV1 | null;
   sourceLabel?: string;
   libraryEnabled: boolean;
@@ -55,6 +58,16 @@ export function StrategyResearchShell({
   extraSurfaces: ReactNode;
 }) {
   const hasData = source !== null;
+  const hostStatusKey = hostStatus ? ({
+    DETACHED: null, READY: null, COMPLETED: null,
+    RESOLVING: "chartTester.status.resolving",
+    NEEDS_DATA: "chartTester.status.needs_data",
+    QUEUED: "chartTester.status.queued",
+    RUNNING: "chartTester.status.running",
+    FAILED: "chartTester.status.failed",
+    UNSUPPORTED: "chartTester.status.unsupported",
+    STALE: "chartTester.status.stale",
+  } as const)[hostStatus] : null;
   const statusKeys = {
     first: "research.source.none",
     import: "research.source.openLibrary",
@@ -126,7 +139,7 @@ export function StrategyResearchShell({
         statusBar={(
           <footer className="status-bar" data-testid="strategy-research-status">
             {t("strategy.status", { state: t(!hasData ? "research.source.none"
-              : nativeStatus ? `strategyReview.status.${nativeStatus}` : statusKeys[visualState]) })}
+              : nativeStatus ? `strategyReview.status.${nativeStatus}` : hostStatusKey ?? statusKeys[visualState]) })}
           </footer>
         )}
       />
