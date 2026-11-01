@@ -236,6 +236,10 @@ async def test_real_indicator_bridge_overrun_invalidates_epoch_and_reseeds_witho
         subscribe = bus.subscribe
         unsubscribe = bus.unsubscribe
 
+        async def wait_for_source_continuity(self):
+            # This fixture owns only the bus; no provider source gap exists.
+            return
+
     cache = IndicatorRangeResultService()
     engine = bridge_indicator_engine(Manager(), result_service=cache)
     bars = [BarData(time=n * 60, open=n, high=n, low=n, close=n, volume=1) for n in range(1, 5)]

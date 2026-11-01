@@ -112,6 +112,18 @@ class BarDeliveryJournal:
                 name: payload[name] for name in KlineSeriesIdentity.for_exchange(payload["exchange"]).to_dict()
                 if name in payload})
             values = series_values(payload["symbol"], payload["interval"], payload["exchange"], payload["market_type"], identity)
+            prefix_revisions = payload.get('history_prefix_revisions', ())
+            if len(prefix_revisions) > 32:
+                raise ValueError('history prefix requires bounded source revisions')
+            for source_interval, acquired_revision in prefix_revisions:
+                source_values = series_values(payload['symbol'], source_interval,
+                    payload['exchange'], payload['market_type'], identity)
+                source_change = series_change(conn, source_values)
+                current_source_revision = int(source_change['revision']) if source_change else 0
+                if type(acquired_revision) is not int or current_source_revision != acquired_revision:
+                    conn.execute("UPDATE bar_delivery SET phase='rejected',recovery_required=1 WHERE event_id=?", (event_id,))
+                    record['phase'], record['recovery_required'] = 'rejected', 1
+                    return self._canonical(conn, record)
             if payload.get("derived"):
                 # A target may not exist yet when its input is repaired/deleted.
                 # Check its semantic family, including those source revisions.

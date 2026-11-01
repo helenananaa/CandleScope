@@ -897,6 +897,7 @@ INDICATOR_THREAD_PENDING = int(os.getenv("INDICATOR_THREAD_PENDING", "64"))
 # The shared realtime engine has its own serial owner; historical requests
 # retain their independent executor. The fallback supports controlled rollout.
 INDICATOR_HISTORY_PROCESS_ENABLED = os.getenv("INDICATOR_HISTORY_PROCESS_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+HISTORY_PREFIX_ENABLED = os.getenv("HISTORY_PREFIX_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 INDICATOR_HISTORY_PENDING = max(0, int(os.getenv("INDICATOR_HISTORY_PENDING", "32")))
 INDICATOR_HISTORY_INPUT_BARS = max(1, int(os.getenv("INDICATOR_HISTORY_INPUT_BARS", "500000")))
 INDICATOR_HISTORY_PROCESS_TIMEOUT_SECONDS = max(.1, float(os.getenv("INDICATOR_HISTORY_PROCESS_TIMEOUT_SECONDS", "30")))

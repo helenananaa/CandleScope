@@ -62,6 +62,36 @@ def test_quality_rejection_is_not_a_storage_failure(journal):
     assert klines_repo.query_klines("BTCUSDT", "1m")[0]["close"] == 4
 
 
+def test_known_predecessor_cannot_authorize_a_stale_compact_history_prefix(journal):
+    journal.enqueue('source-close', payload())
+    first = journal.commit('source-close')
+    journal.acknowledge('source-close')
+    journal.enqueue('source-amend', payload(3, 'bar.amended'))
+    derived = payload()
+    derived.update(interval='2m', derived=True,
+                   acquisition_revision=first['committed_revision'],
+                   history_prefix_revisions=[['1m', first['canonical_revision']]])
+    journal.enqueue('stale-prefix-close', derived)
+    # This native predecessor is durable and earlier in journal order, but the
+    # old prefix did not include its amended value. The normal predecessor
+    # exception must not grant this old summary a new source revision.
+    journal.commit('source-amend')
+    result = klines_repo.KlinesRepoAdapter().bar_delivery.commit('stale-prefix-close')
+    assert result['phase'] == 'rejected' and result['recovery_required'] == 1
+    assert klines_repo.query_klines('BTCUSDT', '2m') == []
+
+
+def test_current_compact_history_prefix_commits_under_same_source_transaction(journal):
+    journal.enqueue('source-close', payload())
+    first = journal.commit('source-close')
+    derived = payload()
+    derived.update(interval='2m', derived=True,
+                   acquisition_revision=first['committed_revision'],
+                   history_prefix_revisions=[['1m', first['canonical_revision']]])
+    journal.enqueue('current-prefix-close', derived)
+    assert journal.commit('current-prefix-close')['phase'] == 'committed'
+
+
 @pytest.mark.parametrize("mutation", ["repair", "delete"])
 @pytest.mark.parametrize("other_open", [0, 120_000])
 def test_disjoint_history_change_does_not_reject_a_fresh_native_close(journal, mutation, other_open):
