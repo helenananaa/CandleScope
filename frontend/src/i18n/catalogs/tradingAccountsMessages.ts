@@ -1399,7 +1399,7 @@ export const tradingAccountsPtBR = {
   "trading.overlay.linkSource": "Conta de origem",
   "trading.overlay.linkSourceDesc": "Sincronizar a conta selecionada para cada gráfico.",
   "trading.overlay.linkTrades": "Execuções e posições",
-  "trading.overlay.linkTradesDesc": "Sincronizar a exibição de execuções, posições e linhas de stop-loss e take-profit.",
+  "trading.overlay.linkTradesDesc": "Sincronizar a exibição das execuções, posições e linhas de proteção.",
   "trading.overlay.linkNotes": "Exibição de notas",
   "trading.overlay.linkNotesDesc": "Sincronizar a exibição dos marcadores de notas.",
   "rail.accounts": "Contas de negociação",
