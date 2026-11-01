@@ -168,6 +168,25 @@ class RevisionStore:
             self.observed_revision = current_revision(conn)
             return self.observed_revision
 
+    def read_versions(self, series):
+        """Bounded per-series view tokens from one SQLite read transaction.
+
+        Tokens identify the latest committed content change, including empty
+        deletions. Unrelated series writes do not change a source's token.
+        Consumers still fence their entire acquisition before publication.
+        """
+        values = tuple(series)
+        if len(values) > 32:
+            raise ValueError("at most 32 source dependencies per revision view")
+        with closing(self.connect()) as conn, conn:
+            conn.execute("BEGIN")
+            head = current_revision(conn)
+            versions = []
+            for key in values:
+                row = series_change(conn, key)
+                versions.append(int(row["revision"]) if row is not None else 0)
+            return head, tuple(versions)
+
     def acquisition(self, *, owner=None, revision=None):
         with closing(self.connect()) as conn, conn:
             conn.execute("BEGIN IMMEDIATE" if owner else "BEGIN")
@@ -213,6 +232,12 @@ class Acquisition:
 
 
 _acquisition: ContextVar[Acquisition | None] = ContextVar("kline_acquisition", default=None)
+
+
+def acquisition_revision():
+    """Readonly permission floor for consumers of an already acquired view."""
+    scope = _acquisition.get()
+    return scope.revision if scope is not None else None
 
 
 @contextmanager
