@@ -839,6 +839,10 @@ class DataManager:
                 }})
         return event
 
+    async def source_storage_available(self, key: SeriesKey) -> None:
+        """Recheck exact canonical gaps after storage work, not job completion."""
+        await self._refresh_source_gap_proof(key)
+
     async def _refresh_source_gap_proof(self, key: SeriesKey, *, opened: int | None = None) -> None:
         """Re-read canonical proof after repair or a delayed live final candle.
 
