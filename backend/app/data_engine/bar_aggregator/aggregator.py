@@ -380,7 +380,7 @@ class BarAggregator:
         epoch = self._target_epochs.get(key)
         return (key, epoch) if epoch is not None else None
 
-    def adopt_history_prefix(self, prefix, token, *, acquisition_revision):
+    def adopt_history_prefix(self, prefix, token, *, acquisition_revision=None, refresh=False):
         """Loop-owned, synchronous last step after the durable read fence.
 
         No await separates the target-generation check and builder adoption.
@@ -398,8 +398,9 @@ class BarAggregator:
                 exchange, market_type, symbol, identity):
             raise ValueError('history initialization source differs from target')
         pipeline = self._pipelines[self._pipeline_key(interval, exchange, identity)]
-        state = pipeline.bar_state.adopt_history_prefix(prefix)
-        state.acquisition_revision = acquisition_revision
+        state = pipeline.bar_state.adopt_history_prefix(prefix, refresh=refresh)
+        state.acquisition_revision = (prefix.acquisition_revision if acquisition_revision is None
+                                      else min(acquisition_revision, prefix.acquisition_revision))
         return deepcopy(state)
 
     def get_series_targets(self):

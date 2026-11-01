@@ -564,19 +564,34 @@ class BarStateEngine:
 
     # ── Public: Core Operation ───────────────────────────────
 
-    def adopt_history_prefix(self, prefix) -> BarState:
+    def adopt_history_prefix(self, prefix, *, refresh=False) -> BarState:
         """Install a qualified prefix while retaining the current live overlay."""
         source = prefix.summary.target
         key = (source.exchange, source.market_type, source.symbol, prefix.start_ms)
-        if key in self._closed or self._merge_strategy_overridden:
+        was_closed = key in self._closed
+        if ((was_closed and not refresh) or self._merge_strategy_overridden):
             raise ValueError('history initialization requires an ordinary forming target')
-        state = self._active.get(key)
+        state = self._active.get(key) or self._closed.get(key)
+        if refresh and (state is None or state._history_prefix is None):
+            raise ValueError('history refresh requires an existing compact prefix')
         if state is None:
             start, end = self._time_bucket.compute_bucket_range(prefix.start_ms)
             state = BarState(source.symbol, self._interval, start, end, 0, 0, 0, 0, 0,
                              exchange=source.exchange, market_type=source.market_type,
                              series_identity=source.identity)
         self._component_merge_strategy.adopt_history_prefix(state, prefix)
+        if was_closed and has_complete_closed_component_coverage(state):
+            state.finality = BarFinality.AUTHORITATIVE
+            state.close_reason = 'history_prefix_refresh'
+            self._closed.move_to_end(key)
+            return state
+        if was_closed:
+            # Deleting one historical component revokes the old close. A gap
+            # cannot retain authoritative finality just because it was closed.
+            self._closed.pop(key)
+            state.status = BarStatus.FORMING
+            state.finality = BarFinality.PROVISIONAL
+            state.close_reason = 'history_prefix_gap'
         self._active[key] = state
         self._active.move_to_end(key)
         self._enforce_active_limit(source.exchange, source.market_type, source.symbol)

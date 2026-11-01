@@ -30,6 +30,8 @@ class HistoryPrefix:
     pages: int
     storage_rows: int
     cache_hits: int
+    acquisition_revision: int = 0
+    binding: tuple[int, int, int] = ()
 
     @property
     def complete(self):
@@ -64,7 +66,8 @@ class HistoryPrefixReader:
         """Worker-side durable fence, also reusable immediately before adoption."""
         engine = self.engine
         if (engine.storage is not storage or engine.shared_blocks is not manager
-                or engine.history_policy is not policy):
+                or engine.history_policy is not policy
+                or prefix.binding != (id(storage), id(manager), id(policy))):
             raise BlockRevisionChanged("history prefix source binding changed")
         with manager.view((prefix.summary.target,)) as view:
             if view.revisions != prefix.summary.revisions:
@@ -84,6 +87,12 @@ class HistoryPrefixReader:
             raise ValueError("bounded nonempty history prefix required")
         engine = self.engine
         storage, manager, policy = engine.storage, engine.shared_blocks, engine.history_policy
+        store = getattr(storage, 'revision_store', None)
+        if store is None:
+            raise BlockUnavailable('history prefix requires durable acquisition fencing')
+        # Capture before the first page, never relabel old inputs with a head
+        # obtained after staging. This is D126's existing global delete floor.
+        acquisition_revision = await run_storage(store.head)
         cancel = threading.Event()
         # Covers retained summary and intermediate folding metadata; H127
         # independently reserves its page/decode work and B130 its shared cache.
@@ -103,7 +112,8 @@ class HistoryPrefixReader:
                 if summary is None or (require_complete and not summary.is_authoritative(start_ms, through_ms)):
                     raise BlockUnavailable("history prefix cannot prove closed coverage")
                 prefix = HistoryPrefix(summary, start_ms, through_ms, spec.nominal_ms,
-                                       pages, storage_rows, cache_hits)
+                                       pages, storage_rows, cache_hits, acquisition_revision,
+                                       (id(storage), id(manager), id(policy)))
                 await run_storage(self.validate, prefix, storage=storage,
                                   manager=manager, policy=policy)
                 yield prefix

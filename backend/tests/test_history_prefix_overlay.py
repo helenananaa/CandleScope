@@ -154,3 +154,33 @@ def test_explicit_partial_refresh_preserves_gap_and_unknown_enhanced_totals(dm, 
             assert not compact.enhanced_fields
             assert len(compact.source_snapshots) == 1
     asyncio.run(check())
+
+
+def test_closed_prefix_refresh_amends_values_and_delete_revokes_authoritative_close(dm):
+    from app.data_engine.bar_aggregator.models import BarFinality, BarStatus
+    async def check():
+        agg = BarAggregator()
+        agg.add_target('BTCUSDT', '120d', market_type='futures')
+        token = agg.history_target_token(KEY, '120d')
+        reader = HistoryPrefixReader(dm.query_engine)
+        async with reader.stage(KEY, 0, 120 * DAY) as prefix:
+            agg.adopt_history_prefix(prefix, token)
+        pipeline = agg._pipelines['120d']
+        closed = pipeline.bar_state.close_bar('binance', 'futures', 'BTCUSDT', 0)
+        assert closed.status == BarStatus.CLOSED
+        write([replace(read_rows(dm)[30], volume=1)])
+        async with reader.stage(KEY, 0, 120 * DAY) as prefix:
+            result = agg.adopt_history_prefix(prefix, token, refresh=True)
+        assert result.status == BarStatus.CLOSED
+        assert result.finality == BarFinality.AUTHORITATIVE
+        assert result.volume == pytest.approx(sum(row.volume for row in read_rows(dm)))
+        dm.query_engine.storage.delete_bars('BTCUSDT', '1d', start_ms=30 * DAY,
+                                           end_ms=30 * DAY, market_type='futures')
+        async with reader.stage(KEY, 0, 120 * DAY, require_complete=False) as prefix:
+            result = agg.adopt_history_prefix(prefix, token, refresh=True)
+        assert result.status == BarStatus.FORMING
+        assert result.finality == BarFinality.PROVISIONAL
+        assert not has_complete_closed_component_coverage(result)
+        assert not result.enhanced_fields
+        assert pipeline.bar_state.get_closed('binance', 'futures', 'BTCUSDT', 0) is None
+    asyncio.run(check())

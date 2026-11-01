@@ -126,6 +126,13 @@ class AggregatorBridge:
                 payload["previous_bar"] = {name: getattr(dm_event.previous_bar, name) for name in fields}
             payload["storage_row"] = bar_state.to_storage_dict()
             payload["derived"] = bool(bar_state.source_snapshots or bar_state._history_prefix)
+            if bar_state._history_prefix is not None:
+                # Recheck the acquired source version in the eventual SQLite
+                # commit transaction. An external write can happen after the
+                # last read fence and before the loop adopts/publishes a bar.
+                payload['history_prefix_revisions'] = [
+                    [revision.series.interval, revision.version]
+                    for revision in bar_state._history_prefix.summary.revisions]
             if bar_state.acquisition_revision is not None:
                 payload["acquisition_revision"] = bar_state.acquisition_revision
             return await self.delivery.submit(event.delivery_id, payload, key)

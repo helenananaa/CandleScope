@@ -44,6 +44,25 @@ def test_gap_discards_partial_prefix_without_inventing_completion(dm):
     assert dm.memory_budget.snapshot()['reserved_bytes'] == 0
 
 
+def test_acquisition_floor_precedes_all_pages_and_is_not_upgraded_after_read(dm, monkeypatch):
+    reader = HistoryPrefixReader(dm.query_engine)
+    floor = dm.query_engine.storage.revision_store.head()
+    original = reader._read_page
+    called = False
+    def writing_before_first_page(*args, **kwargs):
+        nonlocal called
+        if not called:
+            called = True
+            write([replace(read_rows(dm)[0], volume=3)])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(reader, '_read_page', writing_before_first_page)
+    async def check():
+        async with reader.stage(KEY, 0, 120 * DAY) as prefix:
+            assert prefix.acquisition_revision == floor
+            assert dm.query_engine.storage.revision_store.head() > floor
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('when', ['between_pages', 'after_last_page'])
 def test_revision_change_never_returns_a_mixed_prefix(dm, monkeypatch, when):
     reader = HistoryPrefixReader(dm.query_engine)
