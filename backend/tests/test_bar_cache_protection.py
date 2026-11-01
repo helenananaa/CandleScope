@@ -76,6 +76,7 @@ def test_stream_plan_cannot_claim_more_resident_series_than_cache_can_hold():
     with pytest.raises(StreamCapacityError):
         dm._register_stream_leases(keys, consumer_id="chart:one")
     assert dm._stream_leases == {}
+    assert dm.stream_lease_snapshot()["max_active_series"] == 1
 
 
 def test_ttl_uses_same_protection_and_wildcards_do_not_pin_every_series(monkeypatch):
