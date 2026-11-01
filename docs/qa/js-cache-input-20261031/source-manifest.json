@@ -1,0 +1,17 @@
+{
+  "baseCommit": "e8ae4ad621afcd9d7f36fa6efd97bf1d2282a736",
+  "files": {
+    "docs/architecture/INDICATOR_DATA_FLOW.md": "9a095496ede6e36456634253ad8ac76d816c1fb5858f4e3f8f4f754e9ed15250",
+    "frontend/scripts/frontend-script-integration.mjs": "7823048865e8ec191b2ee4273ad157a75c7cc3584f5fee22bc9092ce6c15455f",
+    "frontend/scripts/indicator-flow-browser.html": "924142335c20e5f6cee6b4939060b9275b28ad01e7c71b5e5143d195bb15bb3a",
+    "frontend/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx": "485cf7c4690f7cc1f9f8b1ba441a4935d1527eff97e0220c904b8b5497d8a269",
+    "frontend/src/chart-adapter/__tests__/indicatorHydration.browser.tsx": "eb7514452660aaf652a5800ca1f97c0140658e8e52ddbf6286c86011ec32ff60",
+    "frontend/src/components/SingleChartPanes.tsx": "090ee3cb212a90e30e49752914355835cd28e0e9aa12d00fa4b05e5e891db6bf",
+    "frontend/src/features/indicators/__tests__/indicatorInputRanges.test.ts": "3fb199fc0439d19ef244de864b2d3f4fcc6d0a5c47564e86210ede3328ba58ea",
+    "frontend/src/features/indicators/indicatorDataManager.ts": "0a8377d4b535e48fe6cd8715178f1661307734f4a34b6688c74e2208ac74f073",
+    "frontend/src/features/indicators/indicatorInputRanges.ts": "af47eda7fa8af7f68eec5bdbff6bc44048695e481f1803af771a2bf7e685d8e4",
+    "frontend/src/features/indicators/useFrontendScriptWindow.ts": "cba1d53d54a9102386d4645234aba7c81699e92b71fc50baf943d21a49b7a652",
+    "frontend/src/features/indicators/useIndicatorRuntime.ts": "6344090090a571d8429b5a9632e7755aa3c6e107e2a692fa0127da69906d857f"
+  },
+  "nativeApplicationCommit": "8c5eb02bc027d42d8afdb60171193972520068b3"
+}

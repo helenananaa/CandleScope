@@ -1,0 +1,4677 @@
+{
+  "schema": "candlescope.js-cache-input-native-acceptance/1",
+  "sourceCommit": "8c5eb02bc027d42d8afdb60171193972520068b3",
+  "transport": "packaged bundled backend, real public Binance HTTP and WebSocket, no response substitution",
+  "steps": [
+    {
+      "name": "zip-launch",
+      "at": "2026-11-01T03:04:56.116Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 20822,
+          "userData": "${ARTIFACT_ROOT}/profile",
+          "resources": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 20827,
+          "running": true,
+          "startedAt": "2026-11-01T03:04:44.618Z",
+          "readyMs": 6728,
+          "command": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:49792/health",
+          "logPath": "${ARTIFACT_ROOT}/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "dual-js-baseline",
+      "at": "2026-11-01T03:05:10.545Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793472300,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793472300,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793412300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793472300,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793472300,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 30,
+          "seriesStores": 3,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 26,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 12,
+              "klines": 3,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 2,
+              "bars": 2001,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 1
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 6,
+                "completed": 6,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 50,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 50,
+            "totalPhysical": 50
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 12,
+              "klines": 3,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "independent-params",
+      "at": "2026-11-01T03:05:12.046Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "independent-script",
+      "at": "2026-11-01T03:05:13.574Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "historical-cold-switch-ETHUSDT-5m",
+      "at": "2026-11-01T03:05:25.843Z",
+      "evidence": {
+        "requested": {
+          "from": 1793418300,
+          "to": 1793424300
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "ETHUSDT",
+            "interval": "5m",
+            "bars": 1501,
+            "firstClosed": 1793052300,
+            "lastClosed": 1793502000,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "5m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:ETHUSDT:5m",
+              "symbol": "ETHUSDT"
+            },
+            "view": {
+              "from": 1793352300,
+              "to": 1793503800
+            },
+            "checked": {
+              "start": 1793352300,
+              "end": 1793502000
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793052300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 46,
+          "seriesStores": 4,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 32,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-3"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 24,
+              "klines": 11,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 4,
+              "bars": 3503,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 1
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 61,
+                "completed": 61,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 61,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 61,
+            "totalPhysical": 61
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 24,
+              "klines": 11,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T03:05:33.330Z",
+      "evidence": {
+        "requested": {
+          "from": 1793082300,
+          "to": 1793112300
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793496300,
+              "to": 1793502300
+            },
+            "checked": {
+              "start": 1793496300,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793412300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 53,
+          "seriesStores": 4,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 34,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 35,
+              "klines": 19,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 2,
+            "cache": {
+              "series": 5,
+              "bars": 3503,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 1
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 1,
+                "physicalActive": 1,
+                "joined": 1,
+                "totalPhysical": 90,
+                "completed": 89,
+                "consumers": 1
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 61,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 61,
+            "totalPhysical": 61
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 35,
+              "klines": 19,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-SOLUSDT-15m",
+      "at": "2026-11-01T03:05:39.288Z",
+      "evidence": {
+        "requested": {
+          "from": 1793418300,
+          "to": 1793424300
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "SOLUSDT",
+            "interval": "15m",
+            "bars": 1501,
+            "firstClosed": 1792152000,
+            "lastClosed": 1793501100,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "15m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:SOLUSDT:15m",
+              "symbol": "SOLUSDT"
+            },
+            "view": {
+              "from": 1793052000,
+              "to": 1793506500
+            },
+            "checked": {
+              "start": 1793052000,
+              "end": 1793501100
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1792152000,
+                    "last": 1793502000,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 60,
+          "seriesStores": 5,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 38,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-4"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 44,
+              "klines": 24,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 2,
+            "cache": {
+              "series": 7,
+              "bars": 5005,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 1
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 112,
+                "completed": 112,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 70,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 70,
+            "totalPhysical": 70
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 44,
+              "klines": 24,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T03:05:44.675Z",
+      "evidence": {
+        "requested": {
+          "from": 1792242000,
+          "to": 1792332000
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793496300,
+              "to": 1793502300
+            },
+            "checked": {
+              "start": 1793496300,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793412300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 68,
+          "seriesStores": 5,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 40,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 54,
+              "klines": 31,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 4,
+            "cache": {
+              "series": 8,
+              "bars": 5005,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 135,
+                "completed": 135,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 71,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 71,
+            "totalPhysical": 71
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 54,
+              "klines": 31,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-XRPUSDT-3m",
+      "at": "2026-11-01T03:05:54.421Z",
+      "evidence": {
+        "requested": {
+          "from": 1793418300,
+          "to": 1793424300
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "XRPUSDT",
+            "interval": "3m",
+            "bars": 1501,
+            "firstClosed": 1793232180,
+            "lastClosed": 1793502000,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "3m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:XRPUSDT:3m",
+              "symbol": "XRPUSDT"
+            },
+            "view": {
+              "from": 1793412180,
+              "to": 1793502720
+            },
+            "checked": {
+              "start": 1793412180,
+              "end": 1793502000
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793232180,
+                    "last": 1793502180,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 84,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 51,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "clientIds": [
+              "chart-cell-2",
+              "chart-cell-5"
+            ],
+            "serverStates": {
+              "subscribed": 2
+            },
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 65,
+              "klines": 38,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 2,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 4,
+            "cache": {
+              "series": 10,
+              "bars": 6507,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 1,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 166,
+                "completed": 166,
+                "consumers": 1
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 88,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 88,
+            "totalPhysical": 88
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 3,
+            "activeLogicalSubscriptions": 3,
+            "counts": {
+              "messages": 65,
+              "klines": 38,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "historical-cold-switch-BTCUSDT-1m",
+      "at": "2026-11-01T03:05:56.191Z",
+      "evidence": {
+        "requested": {
+          "from": 1793250180,
+          "to": 1793268180
+        },
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793496300,
+              "to": 1793502300
+            },
+            "checked": {
+              "start": 1793496300,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793412300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502240
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472300,
+                    "last": 1793502300,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 88,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 53,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 69,
+              "klines": 39,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6507,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 173,
+                "completed": 173,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 88,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 88,
+            "totalPhysical": 88
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 69,
+              "klines": 39,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "single-input-release",
+      "at": "2026-11-01T03:05:56.405Z",
+      "evidence": {
+        "surviving": [
+          {
+            "id": "qa-js-right",
+            "name": "JS Close qa-js-right",
+            "params": {
+              "scale": 2
+            },
+            "kind": "script",
+            "executionTarget": "local",
+            "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+            "language": "frontend-js",
+            "securityMode": "safe",
+            "visible": true,
+            "bindingId": "indicator:qa-js-right",
+            "error": null,
+            "outputPointCount": 501
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 88,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 53,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 69,
+              "klines": 39,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6507,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 3
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 1,
+                "physicalActive": 1,
+                "joined": 1,
+                "totalPhysical": 174,
+                "completed": 173,
+                "consumers": 1
+              },
+              "inputs": {
+                "subscriptions": 1
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 88,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 88,
+            "totalPhysical": 88
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 69,
+              "klines": 39,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "input-reacquire",
+      "at": "2026-11-01T03:05:58.047Z",
+      "evidence": {
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502240,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502240,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "offline-start",
+      "at": "2026-11-01T03:06:18.306Z",
+      "evidence": {
+        "at": 1793502378304,
+        "charts": [
+          {
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 1502,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "8h",
+                "label": "8H",
+                "seconds": 28800
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 3.386138613861386,
+              "rightOffset": -1301,
+              "time": {
+                "from": 1793418300,
+                "to": 1793424300
+              },
+              "rightmostTime": 1793424300,
+              "logical": {
+                "from": 100,
+                "to": 200
+              }
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "name": "JS Close qa-js-left",
+                "params": {
+                  "scale": 1
+                },
+                "kind": "script",
+                "executionTarget": "local",
+                "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)),{pane:\"main\",color:\"#f59e0b\"});",
+                "language": "frontend-js",
+                "securityMode": "safe",
+                "visible": true,
+                "bindingId": "indicator:qa-js-left",
+                "error": null,
+                "outputPointCount": 1502
+              }
+            ],
+            "computing": false
+          },
+          {
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 502,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "8h",
+                "label": "8H",
+                "seconds": 28800
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 0.6758893280632411,
+              "rightOffset": 4,
+              "time": {
+                "from": 1793473010.1754386,
+                "to": 1793502540
+              },
+              "rightmostTime": 1793502540,
+              "logical": {
+                "from": 11.836257309941516,
+                "to": 505
+              }
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "name": "JS Close qa-js-right",
+                "params": {
+                  "scale": 2
+                },
+                "kind": "script",
+                "executionTarget": "local",
+                "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+                "language": "frontend-js",
+                "securityMode": "safe",
+                "visible": true,
+                "bindingId": "indicator:qa-js-right",
+                "error": null,
+                "outputPointCount": 502
+              }
+            ],
+            "computing": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "offline-observed",
+      "at": "2026-11-01T03:06:27.709Z",
+      "evidence": {
+        "offlineMs": 9405,
+        "fetch": "TypeError: Failed to fetch",
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 2,
+          "displayCommits": 110,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 53,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 2
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 81,
+              "klines": 51,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6508,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 207,
+                "completed": 207,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 88,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 88,
+            "totalPhysical": 88
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 81,
+              "klines": 51,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 2,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": false
+          }
+        },
+        "sockets": [
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/prices",
+            "received": 498
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/klines_batch",
+            "received": 4,
+            "closedAt": 1793502302889
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 240,
+            "closedAt": 1793502319650
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/klines_batch",
+            "received": 79
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 101,
+            "closedAt": 1793502332266
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 3,
+            "closedAt": 1793502333819
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 3,
+            "closedAt": 1793502343513
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 3,
+            "closedAt": 1793502345158
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 29,
+            "closedAt": 1793502355004
+          },
+          {
+            "url": "ws://127.0.0.1:49792/api/v1/stream/order-book",
+            "received": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "explicit-real-socket-disconnect",
+      "at": "2026-11-01T03:06:53.594Z",
+      "evidence": {
+        "urls": [
+          "ws://127.0.0.1:49792/api/v1/stream/prices",
+          "ws://127.0.0.1:49792/api/v1/stream/klines_batch",
+          "ws://127.0.0.1:49792/api/v1/stream/order-book"
+        ],
+        "method": "Native WebSocket.close(4001) on this packaged app backend connections; no response substitution",
+        "offlineSince": 1793502378304
+      }
+    },
+    {
+      "name": "offline-disconnected-observed",
+      "at": "2026-11-01T03:07:10.467Z",
+      "evidence": {
+        "elapsedMs": 52163,
+        "stream": {
+          "mode": "batch",
+          "physicalStreams": 1,
+          "open": false,
+          "logicalSubscribers": 3,
+          "logicalSubscriptions": 2,
+          "clientIds": [
+            "chart-cell-2"
+          ],
+          "serverStates": {
+            "subscribed": 1
+          },
+          "activeLogicalSubscriptions": 1,
+          "counts": {
+            "messages": 81,
+            "klines": 51,
+            "closed": 1,
+            "amended": 0,
+            "parseErrors": 0,
+            "socketOpens": 2,
+            "socketCloses": 0,
+            "retriesScheduled": 0,
+            "retriesSent": 0
+          },
+          "sharedInstruments": 1,
+          "rejectedRealtime": 0,
+          "rangeHits": 0,
+          "beforeHits": 0,
+          "historyHits": 6,
+          "cache": {
+            "series": 11,
+            "bars": 6508,
+            "maxSeries": 128,
+            "maxBars": 200000,
+            "listenerErrors": 0,
+            "capacityRejects": 0,
+            "requests": 0,
+            "retainedRanges": 4
+          },
+          "warmStreams": {
+            "series": 1,
+            "maxSeries": 4,
+            "ttlMs": 30000,
+            "evicted": 0
+          },
+          "healthRecovery": {
+            "active": 0,
+            "pending": 0,
+            "attemptsInMinute": 3
+          },
+          "warming": {
+            "queued": 0,
+            "active": 0,
+            "inflightBytes": 0,
+            "completed": 0,
+            "promoted": 0,
+            "rejected": 0
+          }
+        },
+        "scheduler": {
+          "activeAsync": 0,
+          "activeHydration": 0,
+          "disposed": false,
+          "pendingAsync": 0,
+          "pendingFrames": 0,
+          "runnableFrames": 0,
+          "windowVisible": false
+        }
+      }
+    },
+    {
+      "name": "offline-reconnected",
+      "at": "2026-11-01T03:08:25.128Z",
+      "evidence": {
+        "offlineDuration": 125002,
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502300,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502300,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793418300,
+              "to": 1793424300
+            },
+            "checked": {
+              "start": 1793418300,
+              "end": 1793424300
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1502,
+                    "first": 1793412300,
+                    "last": 1793502360,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502540
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502300
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 502,
+                    "first": 1793472300,
+                    "last": 1793502360,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 2,
+          "displayCommits": 115,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 57,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 2
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 84,
+              "klines": 51,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 1,
+              "retriesScheduled": 1,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6508,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 2,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 3
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 209,
+                "completed": 209,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 263,
+            "joinedLogical": 2,
+            "logicalInflight": 2,
+            "physicalInflight": 1,
+            "totalLogical": 267,
+            "totalPhysical": 264
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 84,
+              "klines": 51,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 1,
+              "retriesScheduled": 1,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 1,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        },
+        "beforeLeftRange": {
+          "barSpacing": 3.386138613861386,
+          "rightOffset": -1301,
+          "time": {
+            "from": 1793418300,
+            "to": 1793424300
+          },
+          "rightmostTime": 1793424300,
+          "logical": {
+            "from": 100,
+            "to": 200
+          }
+        },
+        "afterLeftRange": {
+          "barSpacing": 3.386138613861386,
+          "rightOffset": -1301,
+          "time": {
+            "from": 1793418300,
+            "to": 1793424300
+          },
+          "rightmostTime": 1793424300,
+          "logical": {
+            "from": 100,
+            "to": 200
+          }
+        }
+      }
+    },
+    {
+      "name": "recovery-tail-caught-up",
+      "at": "2026-11-01T03:08:40.625Z",
+      "evidence": {
+        "beforeClosed": 1793502300,
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1504,
+            "firstClosed": 1793412300,
+            "lastClosed": 1793502420,
+            "backendRows": 1503,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1503,
+                "points": 1504,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 504,
+            "firstClosed": 1793472300,
+            "lastClosed": 1793502420,
+            "backendRows": 503,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 503,
+                "points": 504,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 2,
+          "displayCommits": 137,
+          "seriesStores": 6,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 1,
+            "publishes": 63,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 2
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-2"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 99,
+              "klines": 59,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 1,
+              "retriesScheduled": 1,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 6,
+            "cache": {
+              "series": 11,
+              "bars": 6510,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 1
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 1,
+                "totalPhysical": 229,
+                "completed": 227,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 275,
+            "joinedLogical": 2,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 278,
+            "totalPhysical": 275
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 99,
+              "klines": 59,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 3,
+              "socketCloses": 1,
+              "retriesScheduled": 1,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "saved-before-full-exit",
+      "at": "2026-11-01T03:08:40.631Z",
+      "evidence": {
+        "charts": [
+          {
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 1504,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "8h",
+                "label": "8H",
+                "seconds": 28800
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 3.386138613861386,
+              "rightOffset": -1303,
+              "time": {
+                "from": 1793418300,
+                "to": 1793424300
+              },
+              "rightmostTime": 1793424300,
+              "logical": {
+                "from": 100,
+                "to": 200
+              }
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "name": "JS Close qa-js-left",
+                "params": {
+                  "scale": 1
+                },
+                "kind": "script",
+                "executionTarget": "local",
+                "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)),{pane:\"main\",color:\"#f59e0b\"});",
+                "language": "frontend-js",
+                "securityMode": "safe",
+                "visible": true,
+                "bindingId": "indicator:qa-js-left",
+                "error": null,
+                "outputPointCount": 1504
+              }
+            ],
+            "computing": false
+          },
+          {
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "settings": {
+              "theme": "dark",
+              "customBg": "#0f172a",
+              "upColor": "#22c55e",
+              "downColor": "#ef4444",
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "cachePreset": "standard",
+              "cacheLimits": {
+                "minutes": 200000,
+                "hours": 50000,
+                "daily": 0
+              },
+              "ephemeralCacheBars": 86400,
+              "frontendCacheBudgetBytes": 67108864,
+              "sqliteStorageBudgetBytes": null,
+              "storageRowLimitsEnabled": false,
+              "locale": "zh-CN"
+            },
+            "barCount": 504,
+            "loading": false,
+            "sessionCapabilities": {
+              "exchangeCatalogStatus": "ready",
+              "exchangeLimitations": [
+                "All physical public market-data I/O is owned by pinned CCXT",
+                "Strict aggregate-trade and full-depth semantics use CCXT raw event hooks"
+              ],
+              "exchangeCapabilityAvailable": true,
+              "historyIntervalAvailable": true,
+              "realtimeIntervalAvailable": true,
+              "marketDataReady": true,
+              "webSocketReady": true
+            },
+            "nativeIntervals": [
+              {
+                "value": "1s",
+                "label": "1s",
+                "seconds": 1
+              },
+              {
+                "value": "1m",
+                "label": "1m",
+                "seconds": 60
+              },
+              {
+                "value": "3m",
+                "label": "3m",
+                "seconds": 180
+              },
+              {
+                "value": "5m",
+                "label": "5m",
+                "seconds": 300
+              },
+              {
+                "value": "15m",
+                "label": "15m",
+                "seconds": 900
+              },
+              {
+                "value": "30m",
+                "label": "30m",
+                "seconds": 1800
+              },
+              {
+                "value": "1h",
+                "label": "1H",
+                "seconds": 3600
+              },
+              {
+                "value": "2h",
+                "label": "2H",
+                "seconds": 7200
+              },
+              {
+                "value": "4h",
+                "label": "4H",
+                "seconds": 14400
+              },
+              {
+                "value": "6h",
+                "label": "6H",
+                "seconds": 21600
+              },
+              {
+                "value": "8h",
+                "label": "8H",
+                "seconds": 28800
+              },
+              {
+                "value": "12h",
+                "label": "12H",
+                "seconds": 43200
+              },
+              {
+                "value": "1d",
+                "label": "1D",
+                "seconds": 86400
+              },
+              {
+                "value": "3d",
+                "label": "3D",
+                "seconds": 259200
+              },
+              {
+                "value": "1w",
+                "label": "1W",
+                "seconds": 604800
+              },
+              {
+                "value": "1M",
+                "label": "1M",
+                "seconds": 2592000
+              }
+            ],
+            "customIntervals": [],
+            "exchangeMarketTypes": [
+              "spot",
+              "futures"
+            ],
+            "error": null,
+            "status": {
+              "initialHistoryPending": false,
+              "activeChartReady": true,
+              "hasMoreLeft": true,
+              "loadingMoreLeft": false,
+              "loadingMoreRight": false,
+              "canLoadMoreLeft": true,
+              "canLoadMoreRight": false,
+              "canRestoreLatestWindow": true
+            },
+            "visibleRange": {
+              "barSpacing": 0.6758893280632411,
+              "rightOffset": 2,
+              "time": {
+                "from": 1793473010.1754386,
+                "to": 1793502600
+              },
+              "rightmostTime": 1793502600,
+              "logical": {
+                "from": 11.836257309941516,
+                "to": 505
+              }
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "name": "JS Close qa-js-right",
+                "params": {
+                  "scale": 2
+                },
+                "kind": "script",
+                "executionTarget": "local",
+                "script": "plot(\"close\",bars.map(bar=>bar.close*Number(params.scale??1)+5),{pane:\"main\",color:\"#38bdf8\"});",
+                "language": "frontend-js",
+                "securityMode": "safe",
+                "visible": true,
+                "bindingId": "indicator:qa-js-right",
+                "error": null,
+                "outputPointCount": 504
+              }
+            ],
+            "computing": false
+          }
+        ],
+        "workspace": {
+          "workspaceId": "workspace-default",
+          "windowId": "main-window",
+          "name": "\u9ed8\u8ba4\u5de5\u4f5c\u533a",
+          "revision": 13,
+          "ready": true,
+          "layout": "split-vertical",
+          "layoutLocked": false,
+          "maxCellsPerWindow": 4,
+          "activeCellId": "cell-1",
+          "persistence": {
+            "state": "saved",
+            "mode": "indexeddb",
+            "error": null
+          },
+          "cells": [
+            {
+              "cellId": "cell-1",
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m",
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "qa-js-left",
+                  "params": {
+                    "scale": 1
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "indicatorSignature": "[[\"qa-js-left\",null,{\"scale\":1},\"script\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 1504,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  1504
+                ],
+                "error": null
+              }
+            },
+            {
+              "cellId": "cell-2",
+              "session": {
+                "exchange": "binance",
+                "marketType": "spot",
+                "symbol": "BTCUSDT",
+                "interval": "1m"
+              },
+              "linkGroupId": null,
+              "indicators": [
+                {
+                  "id": "qa-js-right",
+                  "params": {
+                    "scale": 2
+                  },
+                  "executionTarget": "local"
+                }
+              ],
+              "runtime": {
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "indicatorSignature": "[[\"qa-js-right\",null,{\"scale\":2},\"script\",\"local\",true]]",
+                "marketReady": true,
+                "indicatorsReady": true,
+                "barCount": 504,
+                "loading": false,
+                "initialHistoryPending": false,
+                "loadingMoreLeft": false,
+                "paused": false,
+                "computing": false,
+                "indicatorErrors": [],
+                "indicatorOutputPoints": [
+                  504
+                ],
+                "error": null
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "full-exit",
+      "at": "2026-11-01T03:08:56.045Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 20822,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 20825,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=${ARTIFACT_ROOT}/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,16650199301884889634,14361451073313123008,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5883912837699540786,16140843239377891125,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 20826,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=${ARTIFACT_ROOT}/profile --shared-files --field-trial-handle=1718379636,r,16650199301884889634,14361451073313123008,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5883912837699540786,16140843239377891125,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 20827,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 20843,
+            "args": "${ARTIFACT_ROOT}/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 20844,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=${ARTIFACT_ROOT}/profile --app-path=${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688202558 --launch-time-ticks=3603247397 --shared-files --field-trial-handle=1718379636,r,16650199301884889634,14361451073313123008,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5883912837699540786,16140843239377891125,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=49792 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 20848,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 20849,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=65, pipe_handle=77) --multiprocessing-fork"
+          },
+          {
+            "pid": 21531,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=${ARTIFACT_ROOT}/profile --app-path=${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=191 --time-ticks-at-unix-epoch=-1793498688202558 --launch-time-ticks=3818101612 --shared-files --field-trial-handle=1718379636,r,16650199301884889634,14361451073313123008,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,5883912837699540786,16140843239377891125,4 --trace-process-track-uuid=3190709165286864653"
+          }
+        ],
+        "allExited": true
+      }
+    },
+    {
+      "name": "restart-viewport-gap",
+      "at": "2026-11-01T03:09:36.386Z",
+      "evidence": {
+        "expected": {
+          "barSpacing": 3.386138613861386,
+          "rightOffset": -1303,
+          "time": {
+            "from": 1793418300,
+            "to": 1793424300
+          },
+          "rightmostTime": 1793424300,
+          "logical": {
+            "from": 100,
+            "to": 200
+          }
+        },
+        "actual": {
+          "barSpacing": 3.386138613861386,
+          "rightOffset": -1,
+          "time": {
+            "from": 1793496480,
+            "to": 1793502480
+          },
+          "rightmostTime": 1793502480,
+          "logical": {
+            "from": 1399,
+            "to": 1499
+          }
+        },
+        "definitionsRestored": true,
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412540,
+            "lastClosed": 1793502480,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472540,
+            "lastClosed": 1793502480,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "rendererErrors": []
+      }
+    },
+    {
+      "name": "restart-policy-verified",
+      "at": "2026-11-01T03:09:53.650Z",
+      "evidence": {
+        "policy": "Existing planVisibleRangeRestore intentionally reopens at latest bar, preserving zoom/right-edge whitespace; historical anchor restore across full restart is not its contract.",
+        "source": "frontend/src/features/chart-session/visibleRangeStorage.ts:planVisibleRangeRestore",
+        "before": [
+          {
+            "barSpacing": 3.386138613861386,
+            "rightOffset": -1303,
+            "time": {
+              "from": 1793418300,
+              "to": 1793424300
+            },
+            "rightmostTime": 1793424300,
+            "logical": {
+              "from": 100,
+              "to": 200
+            }
+          },
+          {
+            "barSpacing": 0.6758893280632411,
+            "rightOffset": 2,
+            "time": {
+              "from": 1793473010.1754386,
+              "to": 1793502600
+            },
+            "rightmostTime": 1793502600,
+            "logical": {
+              "from": 11.836257309941516,
+              "to": 505
+            }
+          }
+        ],
+        "after": [
+          {
+            "barSpacing": 3.386138613861386,
+            "rightOffset": -1,
+            "time": {
+              "from": 1793496480,
+              "to": 1793502480
+            },
+            "rightmostTime": 1793502480,
+            "logical": {
+              "from": 1399,
+              "to": 1499
+            }
+          },
+          {
+            "barSpacing": 0.6758893280632411,
+            "rightOffset": 1,
+            "time": {
+              "from": 1793473010.1754386,
+              "to": 1793502540
+            },
+            "rightmostTime": 1793502540,
+            "logical": {
+              "from": 7.836257309941516,
+              "to": 501
+            }
+          }
+        ],
+        "definitionsRestored": true,
+        "zoomRestored": true,
+        "values": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1501,
+            "firstClosed": 1793412540,
+            "lastClosed": 1793502480,
+            "backendRows": 1500,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1500,
+                "points": 1501,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 501,
+            "firstClosed": 1793472540,
+            "lastClosed": 1793502480,
+            "backendRows": 500,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 500,
+                "points": 501,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "coverage": [
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793496480,
+              "to": 1793502480
+            },
+            "checked": {
+              "start": 1793496480,
+              "end": 1793502480
+            },
+            "indicators": [
+              {
+                "id": "qa-js-left",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 1501,
+                    "first": 1793412540,
+                    "last": 1793502540,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "context": {
+              "exchange": "binance",
+              "seriesIdentity": {
+                "providerId": "binance",
+                "venue": "binance",
+                "assetClass": "crypto",
+                "seriesVariant": "native",
+                "priceAdjustment": "raw",
+                "sessionVariant": "continuous",
+                "volumeSemantics": "base_asset"
+              },
+              "interval": "1m",
+              "marketType": "spot",
+              "sessionKey": "binance:spot:BTCUSDT:1m",
+              "symbol": "BTCUSDT"
+            },
+            "view": {
+              "from": 1793473010.1754386,
+              "to": 1793502540
+            },
+            "checked": {
+              "start": 1793473010.1754386,
+              "end": 1793502480
+            },
+            "indicators": [
+              {
+                "id": "qa-js-right",
+                "lines": [
+                  {
+                    "id": "close",
+                    "points": 501,
+                    "first": 1793472540,
+                    "last": 1793502540,
+                    "visibleGaps": []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 0,
+          "displayCommits": 59,
+          "seriesStores": 2,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 256,
+            "publishes": 31,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 0
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-1"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 20,
+              "klines": 15,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 1,
+              "bars": 1501,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 4
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 34,
+                "completed": 34,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 2
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 34,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 35,
+            "totalPhysical": 34
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 20,
+              "klines": 15,
+              "closed": 0,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        },
+        "errors": []
+      }
+    },
+    {
+      "name": "final-input-release",
+      "at": "2026-11-01T03:10:28.181Z",
+      "evidence": {
+        "broker": {
+          "enabled": true,
+          "klineBatchEnabled": true,
+          "authoritativeCommits": 2,
+          "displayCommits": 79,
+          "seriesStores": 2,
+          "sharedSeries": {
+            "hydrations": 1,
+            "hydratedBars": 256,
+            "publishes": 31,
+            "publishErrors": 0,
+            "authoritativeAdmissions": 2
+          },
+          "marketDataManager": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "clientIds": [
+              "chart-cell-1"
+            ],
+            "serverStates": {
+              "subscribed": 1
+            },
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 30,
+              "klines": 25,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            },
+            "sharedInstruments": 1,
+            "rejectedRealtime": 0,
+            "rangeHits": 0,
+            "beforeHits": 0,
+            "historyHits": 0,
+            "cache": {
+              "series": 1,
+              "bars": 1502,
+              "maxSeries": 128,
+              "maxBars": 200000,
+              "listenerErrors": 0,
+              "capacityRejects": 0,
+              "requests": 0,
+              "retainedRanges": 2
+            },
+            "warmStreams": {
+              "series": 0,
+              "maxSeries": 4,
+              "ttlMs": 30000,
+              "evicted": 0
+            },
+            "healthRecovery": {
+              "active": 0,
+              "pending": 0,
+              "attemptsInMinute": 2
+            },
+            "warming": {
+              "queued": 0,
+              "active": 0,
+              "inflightBytes": 0,
+              "completed": 0,
+              "promoted": 0,
+              "rejected": 0
+            }
+          },
+          "dataFlow": {
+            "plans": 2,
+            "warming": 0,
+            "warmed": 0,
+            "rejected": 0,
+            "indicators": {
+              "range": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 0,
+                "completed": 0,
+                "consumers": 0
+              },
+              "compute": {
+                "pending": 0,
+                "physicalActive": 0,
+                "joined": 0,
+                "totalPhysical": 52,
+                "completed": 52,
+                "consumers": 0
+              },
+              "inputs": {
+                "subscriptions": 0
+              }
+            }
+          },
+          "indicator": {
+            "logicalClients": 0,
+            "logicalSubscriptions": 0,
+            "sharedSubscriptions": 0,
+            "deduplicatedSubscriptions": 0,
+            "privateScriptSubscriptions": 0,
+            "maxSubscriptions": 50,
+            "physicalShards": 0,
+            "subscriptions": 0
+          },
+          "klineHttp": {
+            "completedPhysical": 34,
+            "joinedLogical": 0,
+            "logicalInflight": 0,
+            "physicalInflight": 0,
+            "totalLogical": 35,
+            "totalPhysical": 34
+          },
+          "klineStream": {
+            "mode": "batch",
+            "physicalStreams": 1,
+            "open": true,
+            "logicalSubscribers": 2,
+            "logicalSubscriptions": 1,
+            "activeLogicalSubscriptions": 1,
+            "counts": {
+              "messages": 30,
+              "klines": 25,
+              "closed": 1,
+              "amended": 0,
+              "parseErrors": 0,
+              "socketOpens": 1,
+              "socketCloses": 0,
+              "retriesScheduled": 0,
+              "retriesSent": 0
+            }
+          },
+          "scheduler": {
+            "activeAsync": 0,
+            "activeHydration": 0,
+            "disposed": false,
+            "pendingAsync": 0,
+            "pendingFrames": 0,
+            "runnableFrames": 0,
+            "windowVisible": true
+          }
+        },
+        "remainingJsWorkers": [],
+        "expectedDrawingWorkers": [
+          {
+            "type": "worker",
+            "url": "http://127.0.0.1:49791/assets/drawing.worker-DfyP7YVq.js",
+            "title": "candlescope-drawing-worker"
+          },
+          {
+            "type": "worker",
+            "url": "http://127.0.0.1:49791/assets/drawing.worker-DfyP7YVq.js",
+            "title": "candlescope-drawing-worker"
+          }
+        ]
+      }
+    },
+    {
+      "name": "final-exit",
+      "at": "2026-11-01T03:10:45.516Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 22846,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 22847,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=${ARTIFACT_ROOT}/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,7198076518992555403,7225259063363852411,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7282844590931101783,12603820097768736003,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 22848,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=${ARTIFACT_ROOT}/profile --shared-files --field-trial-handle=1718379636,r,7198076518992555403,7225259063363852411,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7282844590931101783,12603820097768736003,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 22849,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 22857,
+            "args": "${ARTIFACT_ROOT}/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 22859,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=${ARTIFACT_ROOT}/profile --app-path=${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498688201195 --launch-time-ticks=3861382756 --shared-files --field-trial-handle=1718379636,r,7198076518992555403,7225259063363852411,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7282844590931101783,12603820097768736003,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=55286 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 22862,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(102)"
+          },
+          {
+            "pid": 22863,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=103, pipe_handle=105) --multiprocessing-fork"
+          },
+          {
+            "pid": 23054,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=${ARTIFACT_ROOT}/profile --app-path=${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=33 --time-ticks-at-unix-epoch=-1793498688201195 --launch-time-ticks=3940097305 --shared-files --field-trial-handle=1718379636,r,7198076518992555403,7225259063363852411,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7282844590931101783,12603820097768736003,4 --trace-process-track-uuid=3190709017234252511"
+          },
+          {
+            "pid": 23055,
+            "args": "${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=${ARTIFACT_ROOT}/profile --app-path=${ARTIFACT_ROOT}/Installed App/CandleScope.app/Contents/Resources/app.asar --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=34 --time-ticks-at-unix-epoch=-1793498688201195 --launch-time-ticks=3940306792 --shared-files --field-trial-handle=1718379636,r,7198076518992555403,7225259063363852411,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,7282844590931101783,12603820097768736003,4 --trace-process-track-uuid=3190709018171294360"
+          }
+        ],
+        "allExited": true,
+        "finalValues": [
+          {
+            "cellId": "cell-1",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 1502,
+            "firstClosed": 1793412540,
+            "lastClosed": 1793502540,
+            "backendRows": 1501,
+            "lines": [
+              {
+                "id": "qa-js-left",
+                "checked": 1501,
+                "points": 1502,
+                "transform": {
+                  "scale": 1,
+                  "offset": 0
+                }
+              }
+            ]
+          },
+          {
+            "cellId": "cell-2",
+            "symbol": "BTCUSDT",
+            "interval": "1m",
+            "bars": 502,
+            "firstClosed": 1793472540,
+            "lastClosed": 1793502540,
+            "backendRows": 501,
+            "lines": [
+              {
+                "id": "qa-js-right",
+                "checked": 501,
+                "points": 502,
+                "transform": {
+                  "scale": 2,
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ],
+        "rendererErrors": []
+      }
+    },
+    {
+      "name": "backend-port-closed",
+      "at": "2026-11-01T03:11:09.324Z",
+      "evidence": {
+        "origin": "http://127.0.0.1:55286",
+        "closed": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true,
+  "scope": "macOS arm64 ZIP, installed app with bundled backend and public Binance data",
+  "limits": [
+    "No x64 or Windows installed acceptance in this run",
+    "Real-provider historical amendments were not observed; correction notifications remain controlled-browser coverage",
+    "Full restart follows existing latest-bar restore policy; historical viewport is retained during in-session switching/reconnect",
+    "Ad-hoc local package; no notarization/Gatekeeper distribution claim"
+  ]
+}

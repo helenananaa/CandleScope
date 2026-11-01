@@ -622,9 +622,9 @@ class StreamCoordinator:
         # Update cache
         if self._cache is not None:
             if event_type == DataEventType.BAR_CLOSED:
-                self._cache.append(key, bar)
+                await self._cache.apply_protected(self._cache.append, key, bar)
             else:
-                self._cache.upsert(key, bar)
+                await self._cache.apply_protected(self._cache.upsert, key, bar)
 
         # Update stream info
         entry = self._streams.get(key)

@@ -408,6 +408,7 @@ interface IndicatorSeriesEntry {
   paneIndex: number;
   series: IndicatorSeriesHandle;
   lineConfig: AdapterIndicatorLine;
+  optionsKey: string;
   data: NormalizedIndicatorSeriesEntry[];
 }
 
@@ -4422,6 +4423,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         // every line here doubled the O(lines * bars) work on each realtime
         // indicator/market-data publication.
         const validData = line.data as NormalizedIndicatorSeriesEntry[];
+        const seriesOptions = buildIndicatorSeriesOptions(line, {
+          crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
+        });
+        const optionsKey = JSON.stringify(seriesOptions);
         const detail = {
           datasetKey,
           indicatorId: line.indicatorId,
@@ -4441,9 +4446,6 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             existing.series.detachPrimitive(existing.nativePrimitive);
             delete existing.nativePrimitive;
           }
-          existing.series.applyOptions?.(buildIndicatorSeriesOptions(line, {
-            crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
-          }));
           const declaredTailUpdate = !usesDerivedAxis && line.renderUpdate === "tail";
           if (needsIndicatorSeriesDataUpdate(existing.data, validData, declaredTailUpdate)) {
             const trustedTrailingUpdate = !usesDerivedAxis && (
@@ -4464,6 +4466,13 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
               trustedTrailingUpdate,
             });
           }
+          // Data replacement can reindex the chart while LWC synchronously
+          // refreshes the crosshair. Do not invalidate cached line styles before
+          // that replacement, or on every unchanged indicator publication.
+          if (existing.optionsKey !== optionsKey || existing.lineConfig.nativeScene !== line.nativeScene) {
+            existing.series.applyOptions?.(seriesOptions);
+          }
+          existing.optionsKey = optionsKey;
           existing.key = key;
           existing.paneId = pane.id;
           existing.paneIndex = pane.paneIndex;
@@ -4503,6 +4512,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             paneIndex: pane.paneIndex,
             series,
             lineConfig: line,
+            optionsKey,
             data: validData,
           });
           createdSeriesCount += 1;

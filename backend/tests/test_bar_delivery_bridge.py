@@ -21,6 +21,7 @@ from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.data_manager.aggregator_bridge import AggregatorBridge
 from app.data_engine.data_manager.bar_delivery import source_recovery_handler
 from app.data_engine.data_manager.cache import BarCache
+from app.data_engine.data_manager.config import CacheConfig
 from app.data_engine.data_manager.event_bus import DataEventBus
 from app.data_engine.data_manager.models import DataEventType, SeriesKey
 from app.data_engine.storage import klines_repo
@@ -55,6 +56,37 @@ def closed(close=2):
     return BarEvent(BarEventType.CLOSED, BarState(symbol="BTCUSDT", interval="1m",
         bucket_start_ms=start, bucket_end_ms=start + 60_000, open=1, high=4, low=1,
         close=close, volume=10, finality=BarFinality.AUTHORITATIVE, close_reason="source_close"))
+
+
+@async_test
+async def test_cache_capacity_keeps_committed_delivery_pending_until_slot_is_available(storage):
+    instance, bus = bridge(storage)
+    reserved = SeriesKey("ETHUSDT", "1m")
+    protected = {reserved}
+    cache = BarCache(CacheConfig(max_series=1), is_protected=protected.__contains__)
+    instance._cache = cache
+    from app.data_engine.data_manager.models import BarData
+    cache.upsert(reserved, BarData(time=60, open=1, high=1, low=1, close=1, volume=1))
+    delivered = []
+
+    async def receive(event):
+        delivered.append(event)
+
+    bus.subscribe(receive)
+    try:
+        await instance.on_bar_event(closed())
+        assert storage.bar_delivery.pending()[0]["phase"] == "committed"
+        assert not delivered
+        assert "CacheCapacityError" in instance.delivery.snapshot()["last_error"]
+        assert cache.get_all_keys() == [reserved]
+        protected.clear()
+        await instance.delivery.flush()
+        await wait_for(lambda: len(delivered) == 1)
+        assert not storage.bar_delivery.pending()
+        assert delivered[0].bar.close == 2
+        assert cache.get_all_keys() == [SeriesKey("BTCUSDT", "1m")]
+    finally:
+        await bus.close()
 
 
 async def wait_for(predicate):

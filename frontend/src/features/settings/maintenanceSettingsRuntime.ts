@@ -17,6 +17,16 @@ export interface MaintenanceSeriesResult extends Record<string, unknown> {
   total_bars?: number;
   latest_data?: string;
   bars_filled?: number;
+  exchange?: string;
+  market_type?: string;
+  lane?: string;
+  scanned_from_ms?: number | null;
+  scanned_to_ms?: number | null;
+  scanned_bars?: number;
+  remaining_gaps?: number | null;
+  truncated?: boolean;
+  next_cursor_ms?: number | null;
+  repair_errors?: string[];
 }
 
 export interface MaintenanceResult extends Record<string, unknown> {
@@ -34,6 +44,11 @@ export interface MaintenanceResult extends Record<string, unknown> {
   gaps_found?: number;
   gaps_filled?: number;
   total_bars_filled?: number;
+  scanned_ranges?: number;
+  verified_ranges?: number;
+  failed_ranges?: number;
+  has_more?: boolean;
+  errors?: string[];
   elapsed_ms?: number;
   results?: MaintenanceSeriesResult[];
 }

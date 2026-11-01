@@ -250,6 +250,9 @@ class BarState:
     series_identity: KlineSeriesIdentity | None = None
 
     acquisition_revision: int | None = None
+    # Mutable execution metadata belongs only to this builder. Publication
+    # copies carry immutable inputs and scalars, never the live accumulator.
+    _component_accumulator: Any = field(default=None, repr=False, compare=False)
 
     def __deepcopy__(self, memo):
         # Builder scalars are immutable. Share immutable component values and
@@ -257,7 +260,7 @@ class BarState:
         result = replace(self, source_snapshots={
             key: value if isinstance(value, ReadonlyFields) else deepcopy(value, memo)
             for key, value in self.source_snapshots.items()
-        }, source_refs=deepcopy(self.source_refs, memo))
+        }, source_refs=deepcopy(self.source_refs, memo), _component_accumulator=None)
         memo[id(self)] = result
         return result
 

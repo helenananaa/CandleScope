@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Indicator data flow integration</title></head><body>
 <div id="checks"></div><script type="module">
 import { checkIndicatorDataFlow } from "/src/chart-adapter/__tests__/indicatorDataFlow.browser.tsx";
-window.__indicatorFlowCheck = checkIndicatorDataFlow;
+import { checkIndicatorHydration } from "/src/chart-adapter/__tests__/indicatorHydration.browser.tsx";
+window.__indicatorFlowCheck = async () => { const result = await checkIndicatorDataFlow(); result.checks.push(await checkIndicatorHydration()); return result; };
 </script></body></html>

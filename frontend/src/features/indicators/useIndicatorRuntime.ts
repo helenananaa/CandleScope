@@ -1,5 +1,5 @@
 import { indicatorWarmPlanKey, type IndicatorWarmPlan } from "../market-data/manager/chartDataFlowManager.js";
-import { bindSharedIndicatorPrefix, createIndicatorCacheInputSource } from "./indicatorInputBinding.js";
+import { bindSharedIndicatorPrefix } from "./indicatorInputBinding.js";
 import { buildIndicatorOhlcvSignature } from "./indicatorComputeRuntime.js";
 import { captureStableSeries } from "../market-data/window/stableSeriesSnapshot.js";
 import { isLegacyKlineSeriesIdentity, klineSeriesIdentityKey, resolveKlineSeriesIdentity, type KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
@@ -639,15 +639,19 @@ export function useIndicatorRuntime(
     return marketWorkspaceResources.dataFlow.registerPlan(`chart:${warmOwner}`, JSON.parse(warmPlanKey) as IndicatorWarmPlan);
   }, [marketWorkspaceResources, warmOwner, warmPlanKey, options.realtimeEnabled]);
 
+  const inputBinding = useMemo(() => marketWorkspaceResources ? {
+    inputs: marketWorkspaceResources.indicatorDataManager.inputs,
+    series: { ...seriesIdentity, exchange, marketType, symbol, interval },
+  } : undefined, [marketWorkspaceResources, seriesIdentity, exchange, marketType, symbol, interval]);
   const frontendWindow = useFrontendScriptWindow(
     options.marketData?.view.seriesStore ?? null,
     options.realtimeEnabled !== false && activeIndicators.some(indicator => (isFrontendScript(indicator) || indicator.executionTarget === "local") && indicator.visible !== false),
     sessionKey,
+    inputBinding,
   );
   const computeChartData = frontendWindow.rows ?? chartData;
   const computeChartDataRef = useLatestRef(computeChartData);
-  const inputSource = useMemo(() => marketWorkspaceResources
-    ? createIndicatorCacheInputSource(marketWorkspaceResources.dataManager.cache) : undefined, [marketWorkspaceResources]);
+  const inputSource = marketWorkspaceResources?.indicatorDataManager.inputSource;
   const localInputKey = useMemo(() => activeIndicators.some(indicator => isFrontendScript(indicator) || indicator.executionTarget === "local")
     ? buildIndicatorOhlcvSignature(computeChartData) : undefined, [activeIndicators, computeChartData]);
   const localInputKeyRef = useLatestRef(localInputKey);
