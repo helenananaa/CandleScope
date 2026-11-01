@@ -1,4 +1,5 @@
 import { useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { DrawingEngineApi } from "./DrawingEngineHost.js";
@@ -71,7 +72,8 @@ function ObjectGroup({ api, label, interval, query, filter, close, readOnly }: {
   </section>;
 }
 
-export default function DrawingObjectList({ apis, currentInterval, panes, onSelectPane, readOnly = false }: {
+export default function DrawingObjectList({ apis, currentInterval, panes, onSelectPane, readOnly = false, host = null }: {
+  host?: HTMLElement | null;
   readOnly?: boolean;
   apis: ReadonlyMap<string, DrawingEngineApi>; currentInterval: string;
   panes: readonly { id: string; label: string }[];
@@ -88,7 +90,7 @@ export default function DrawingObjectList({ apis, currentInterval, panes, onSele
     .flatMap(pane => { const api = apis.get(pane.id)?.objects; return api ? [{ ...pane, api }] : []; });
   const close = () => { dialog.current?.close(); setOpen(false); setQuery(""); setFilter("all"); trigger.current?.focus(); };
   if (!sources.length) return null;
-  return <div className="drawing-object-list" onPointerDown={event => event.stopPropagation()}
+  const content = <div className="drawing-object-list" data-placement={host ? "header" : "overlay"} onPointerDown={event => event.stopPropagation()}
     onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
     onKeyDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
     <button className="drawing-object-trigger" ref={trigger} type="button" aria-label={t("drawing.objects.title")}
@@ -113,4 +115,5 @@ export default function DrawingObjectList({ apis, currentInterval, panes, onSele
       <footer className="drawing-properties-footer"><span className="drawing-control-caption">{t(readOnly ? "replay.kicker.reviewReadOnly" : "drawing.objects.undoHint")}</span></footer>
     </dialog>}
   </div>;
+  return host ? createPortal(content, host) : content;
 }

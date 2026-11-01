@@ -50,6 +50,7 @@ export function drawingEntityGeometryCommandForDrag(
     case "shape":
       return descriptor.zone === "body" || descriptor.zone === "center" ? "move" : "resize";
     case "line":
+    case "range-measure":
     case "angle":
     case "fibonacci":
       return descriptor.pointIndex < 0 ? "move" : "resize";
@@ -595,11 +596,12 @@ function applyLineLikeDrag(options: DrawingEntityDragOptions): SavedDrawing | nu
     dataToScreen,
     snap,
   } = options;
-  if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci") {
+  if (descriptor.type !== "line" && descriptor.type !== "angle" && descriptor.type !== "fibonacci" && descriptor.type !== "range-measure") {
     return null;
   }
   if ((descriptor.type === "line" && drawing.type !== "line")
     || (descriptor.type === "angle" && drawing.type !== "angle-measure")
+    || (descriptor.type === "range-measure" && drawing.type !== "range-measure")
     || (descriptor.type === "fibonacci" && drawing.type !== "fibonacci")) return null;
   const currentPoints = "dataPoints" in drawing && Array.isArray(drawing.dataPoints)
     ? immutableDataPoints(drawing.dataPoints)
@@ -667,7 +669,8 @@ export function applyDrawingEntityDrag(options: DrawingEntityDragOptions): Saved
       case "shape":
         return applyShapeDrag(options);
       case "line":
-      case "angle":
+      case "range-measure":
+    case "angle":
       case "fibonacci":
         return applyLineLikeDrag(options);
     }

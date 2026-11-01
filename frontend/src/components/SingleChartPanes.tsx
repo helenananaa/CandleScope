@@ -285,6 +285,8 @@ import type { MainChartType } from "../shared/mainChartTypes.js";
 import type { IntervalString } from "../utils/intervals.js";
 
 export interface SingleChartPanesProps {
+  /** A cell header can own drawing controls outside the plot. Standalone charts retain the overlay. */
+  drawingControlsHost?: HTMLElement | null;
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
@@ -815,6 +817,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   symbol,
   drawingKeyBase = "",
   drawingReadOnly = false,
+  drawingControlsHost = null,
   drawingDocumentGeneration = 0,
   paneLayoutScope = null,
   interval,
@@ -5541,7 +5544,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         onAddAlertAtPrice={onAddAlertAtPrice}
       />
 
-      {shouldMountDrawingEngine && <DrawingObjectList readOnly={drawingReadOnly} apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
+      {shouldMountDrawingEngine && <DrawingObjectList host={drawingControlsHost} readOnly={drawingReadOnly} apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
 
       {DrawingEngineHost && shouldMountDrawingEngine && drawingPaneSurfaces
         .filter((surface) => drawingPaneMountKeys.has(surface.drawingKey))

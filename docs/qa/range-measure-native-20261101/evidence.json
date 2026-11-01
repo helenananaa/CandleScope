@@ -1,0 +1,50 @@
+{
+  "schema": "candlescope.range-measure-native-evidence/1",
+  "sourceCommit": "294339e6c08edac8c44dc574e0fb48e83a865524",
+  "zipSha256": "b002aa6cb34ac31550940f72a776e2afc86ec34093ceb73d3aa2310bd0f1ec72",
+  "asarSha256": "cf98ca2246ee86ba2964eb92600628f51e91ab536cff5cb46b2d37b65c035d1b",
+  "sourceFiles": 3093,
+  "distFiles": 163,
+  "sourceMismatches": [],
+  "nativePassed": true,
+  "rendererErrors": [],
+  "checks": [
+    "created-measure-price",
+    "created-measure-time",
+    "created-measure-price-time",
+    "objects-control-outside-plot",
+    "history-style-lock",
+    "interval-preserved",
+    "quit-requested",
+    "quit-completed",
+    "full-exit",
+    "restart-persistence",
+    "delete-undo",
+    "quit-requested",
+    "quit-completed",
+    "final-exit"
+  ],
+  "signatureBefore": true,
+  "signatureAfter": true,
+  "fullOwnedProcessExitBeforeRestart": true,
+  "finalOwnedProcessExit": true,
+  "artifactDirectory": "output/issue184-header-native-20261101",
+  "screenshots": [
+    "three-measurements.png",
+    "five-minute-measurements.png",
+    "restored-measurements.png"
+  ],
+  "scope": [
+    "Three source-time price/time/combined measurement tools",
+    "Undo, redo, style, locked geometry, interval switch, save/full exit/restart, delete/undo",
+    "Object-list control outside the plot in the existing per-chart header",
+    "Price and time deltas remain anchored to original source points; sibling chart unchanged"
+  ],
+  "limitations": [
+    "macOS arm64 only; full 157 acceptance and Windows not claimed",
+    "Earlier edge-label candidate startup timeout retained in adjacent evidence directory",
+    "Current package compression initially failed ENOSPC; resumed exact archive command from the verified signed stage",
+    "Standalone charts retain existing overlay control fallback; live orderbook reconnect not qualified"
+  ],
+  "signedArchiveRecovery": "staging-cleanup.json"
+}

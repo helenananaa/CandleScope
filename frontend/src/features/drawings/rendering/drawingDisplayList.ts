@@ -15,6 +15,7 @@ export const DRAWING_DISPLAY_KIND_CODES: Readonly<Record<DrawingKind, number>> =
   line: 1,
   "axis-line": 2,
   "angle-measure": 3,
+  "range-measure": 10,
   text: 4,
   fibonacci: 5,
   position: 6,
@@ -32,6 +33,15 @@ export type DrawingDisplayUnboundedAxis = "horizontal" | "vertical" | "both" | n
  * geometry or infer an opcode from point counts.
  */
 export type DrawingDisplayRenderSpec =
+  | Readonly<{
+      op: "range-measure";
+      measureType: import("../drawingTypes.js").RangeMeasureType;
+      strokeColor: string;
+      lineWidthCssPx: number;
+      selected: boolean;
+      labelText: string;
+      labelBoxPointOffset: 2;
+    }>
   | Readonly<{
       op: "line";
       lineType: BasicLineToolId;
@@ -568,6 +578,11 @@ function validRenderSpec(
       && typeof spec.selectionHighlightColor === "string"
       && spec.drawEndpointDots === (spec.lineType === "line-segment")
       && entity.points.length >= 8;
+  }
+  if (spec.op === "range-measure") {
+    return entity.kind === "range-measure" && entity.points.length === 8
+      && (spec.measureType === "price" || spec.measureType === "time" || spec.measureType === "price-time")
+      && spec.labelBoxPointOffset === 2 && typeof spec.labelText === "string";
   }
   if (spec.op === "axis-line") {
     return entity.kind === "axis-line"

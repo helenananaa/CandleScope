@@ -871,6 +871,7 @@ function LiveChartCell({
     settingsModal: { ...model.lazySurfaces.settingsModal, plugins },
   }), [model.lazySurfaces, plugins]);
   const [drawingInteractionReady, setDrawingInteractionReady] = useState(false);
+  const [drawingControlsHost, setDrawingControlsHost] = useState<HTMLSpanElement | null>(null);
   const drawingToolbarProps = useMemo(() => ({
     ...model.chartWorkspace.drawingToolbar,
     activeTool: drawingToolWhenInteractionReady(
@@ -990,6 +991,7 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
+          <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={quickReplay !== null} />
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
             layoutCellIds={layoutCellIds}
@@ -1030,6 +1032,7 @@ function LiveChartCell({
             accountPriceLineSource={tradingOverlay.priceLineSource}
             pluginChartLayerSource={plugins.view.chartLayerSource}
             drawingInteractionReady={drawingInteractionReady}
+            drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
             paused={obscured || quickReplay !== null}
           />}

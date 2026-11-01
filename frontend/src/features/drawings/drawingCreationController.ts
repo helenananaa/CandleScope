@@ -43,6 +43,7 @@ import { drawingCommandsForLegacyPrimitive } from "./core/drawingDocumentRuntime
 import type { DrawingCommand } from "./core/drawingCommands.js";
 import type {
   AngleToolId,
+  RangeMeasureToolId,
   AxisLineToolId,
   DrawingAnchor,
   DrawingChartAdapter,
@@ -64,7 +65,7 @@ import type {
   BasicLineToolId,
 } from "./drawingTypes.js";
 
-type TwoPointCreationTool = BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
+type TwoPointCreationTool = RangeMeasureToolId | BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
 type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
   | FibonacciDrawingPrimitive
@@ -512,6 +513,7 @@ export function commitTwoPointDrawing({
   fibLevelsRef,
   fibInvertedRef,
 }: CommitTwoPointDrawingOptions): boolean {
+  if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") return false;
   const isShapeDrawingTool = SHAPE_TOOL_IDS.has(tool);
   const shapeType = shapeTypeFromTool(tool);
 
@@ -649,6 +651,7 @@ export function beginTwoPointDrawing({
   fibLevelsRef,
   fibInvertedRef,
 }: BeginTwoPointDrawingOptions): boolean {
+  if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") return false;
   consumePointerEvent(e);
   const isShapeDrawingTool = SHAPE_TOOL_IDS.has(tool);
   const shapeType = shapeTypeFromTool(tool);
