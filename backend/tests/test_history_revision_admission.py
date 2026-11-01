@@ -130,6 +130,43 @@ def test_stream_lease_remains_until_materialization_then_releases(engine, monkey
     assert not hasattr(engine.custom_intervals, "_aggregate_blocks")
 
 
+@pytest.mark.parametrize("direction", ["range", "before"])
+def test_large_fixed_viewport_fits_default_budget_with_bounded_source_pages(tmp_path, monkeypatch, direction):
+    monkeypatch.setattr(klines_repo, "KLINES_DB_PATH", tmp_path / "large-viewport.sqlite")
+    klines_repo.init_klines_storage()
+    width = 2321
+    count = 8 * width
+    klines_repo.upsert_klines("BTCUSDT", "1m", [dict(
+        open_time=i * 60000, close_time=(i + 1) * 60000 - 1,
+        open=float(i), high=float(i + 2), low=float(i - 1), close=i + .5,
+        volume=1., quote_volume=2., trades=1, taker_buy_base=.5, taker_buy_quote=1.,
+    ) for i in range(count)], source="backfill")
+    engine = QueryEngine(BarCache(), klines_repo.KlinesRepoAdapter(), QueryConfig(auto_backfill=False))
+    budget = MemoryBudget()
+    budget.register("history-query", limit_bytes=64 * 1024 * 1024,
+                    usage=lambda: {"estimated_bytes": 0})
+    engine.memory_budget = budget
+    pages = []
+    original = FixedHistoryStream.push
+    def observe(stream, bars):
+        pages.append(len(bars))
+        return original(stream, bars)
+    monkeypatch.setattr(FixedHistoryStream, "push", observe)
+    if direction == "before":
+        result = engine.query_before("BTCUSDT", f"{width}m", count * 60000, limit=5)
+    else:
+        result = engine.query("BTCUSDT", f"{width}m", start_ms=3 * width * 60000,
+                              end_ms=7 * width * 60000, limit=5)
+    assert result.complete and not result.retryable, result.metadata
+    assert len(result.bars) == 5
+    assert pages and max(pages) <= 4096
+    for bucket, bar in enumerate(result.bars, 3):
+        assert (bar.open, bar.high, bar.low, bar.close, bar.volume) == (
+            float(bucket * width), float((bucket + 1) * width + 1),
+            float(bucket * width - 1), (bucket + 1) * width - .5, float(width))
+    assert budget.snapshot()["reserved_bytes"] == 0
+
+
 @pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
 def test_stream_failure_releases_outer_query_lease(engine, monkeypatch, failure):
     def fail(*args, **kwargs):

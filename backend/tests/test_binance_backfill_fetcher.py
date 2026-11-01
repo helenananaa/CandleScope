@@ -228,3 +228,49 @@ def test_91m_engine_fetches_page_bounded_components_and_persists_target() -> Non
         } == {"1m", "91m"}
 
     asyncio.run(_run())
+
+
+def test_server_clock_and_kline_pages_share_weight_without_legacy_deferral() -> None:
+    """Three source pages need a server clock observation before each fetch.
+
+    A clock falling back to the one-token legacy bucket discards all progress
+    at page two, even though the documented IP weight budget is available.
+    """
+    from app.exchanges.ccxt_ext.admission import PublicCcxtAdmissionMixin
+    from app.exchanges.public_admission import PublicDemand, public_demand
+    from app.exchanges.rate_limits import RateLimitManager
+
+    class PhysicalResponse:
+        async def fetch(self, url, method="GET", headers=None, body=None):
+            return []
+
+    class Client(PublicCcxtAdmissionMixin, PhysicalResponse):
+        id = "binance"
+        _candlescope_public_market_type = "spot"
+
+    class AdmittedTransport(_FakeBinanceTransport):
+        def manages_physical_admission(self, req):
+            return True
+
+        async def http_fetch(self, req):
+            await client.fetch("https://api.binance.com/api/v3/time")
+            await client.fetch("https://api.binance.com/api/v3/klines?limit=1000")
+            return await super().http_fetch(req)
+
+    async def run():
+        nonlocal client
+        client = Client()
+        client._candlescope_rate_limit_manager = RateLimitManager()
+        transport = AdmittedTransport(_make_binance_rows(2321, 60000))
+        fetcher = HistoricalFetcher(BackfillConfig(fetch_concurrency=1), transport, IngestionConfig())
+        fetcher._rate_limit_manager = client._candlescope_rate_limit_manager
+        with public_demand(PublicDemand(defer=True)):
+            results = await fetcher.fetch([BackfillTask(
+                "BTCUSDT", "1m", 0, 2320 * 60000, estimated_bars=2321,
+            )])
+        assert results[0].bars_count == 2321
+        assert len(transport.requests) == 3
+        assert set(client._candlescope_rate_limit_manager.snapshot()) == {"binance:spot:request_weight:ip"}
+
+    client = None
+    asyncio.run(run())

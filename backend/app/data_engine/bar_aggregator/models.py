@@ -253,6 +253,9 @@ class BarState:
     # Mutable execution metadata belongs only to this builder. Publication
     # copies carry immutable inputs and scalars, never the live accumulator.
     _component_accumulator: Any = field(default=None, repr=False, compare=False)
+    # Immutable canonical H127 prefix. Publication retains its coverage proof;
+    # the mutable accumulator above remains private to the live builder.
+    _history_prefix: Any = field(default=None, repr=False, compare=False)
 
     def __deepcopy__(self, memo):
         # Builder scalars are immutable. Share immutable component values and

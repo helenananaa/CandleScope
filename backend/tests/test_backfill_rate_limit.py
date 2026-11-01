@@ -1011,3 +1011,25 @@ def test_okx_50011_body_code_uses_matching_bucket_cooldown() -> None:
     assert result["binance_elapsed"] < 0.04
     assert "okx:history-candles:ip" in result["snapshot"]
     assert result["snapshot"]["okx:history-candles:ip"]["last_body_code"] == "50011"
+
+
+@pytest.mark.parametrize("market,path", [("spot", "/api/v3"), ("futures", "/fapi/v1")])
+def test_binance_clock_dependency_obeys_kline_cooldown(market, path):
+    from app.exchanges.plugins.binance.plugin import BinancePlugin
+    from app.exchanges.public_admission import PublicAdmission, PublicDemand
+
+    async def run():
+        policy = BinancePlugin._rate_limit_policy()
+        clock = HistoricalRequest("binance", market, path + "/time", "")
+        candle = HistoricalRequest("binance", market, path + "/klines", "BTCUSDT")
+        clock_rule, candle_rule = policy.rule_for(clock), policy.rule_for(candle)
+        assert clock_rule.bucket_key == candle_rule.bucket_key
+        assert clock_rule.request_cost(clock) == 1
+        scheduler = PublicAdmission(RateLimitManager())
+        permit = await scheduler.acquire([candle_rule], candle)
+        permit.finish(status_code=429, retry_after=10)
+        with pytest.raises(RateLimitDeferred, match="cooldown"):
+            await scheduler.acquire([clock_rule], clock, demand=PublicDemand(defer=True))
+        assert scheduler.snapshot()["in_flight"] == 0
+
+    asyncio.run(run())

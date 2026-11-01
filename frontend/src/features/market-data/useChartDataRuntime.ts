@@ -138,6 +138,7 @@ interface MergeChartDataOptions {
   historyRepairPending?: boolean;
   historyValidatedCountBack?: number | null;
   indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
   onMerged?: (rows: KlineBar[]) => void;
   source?: string;
 }
@@ -1230,6 +1231,7 @@ export function useChartDataRuntime({
       historyRepairPending,
       historyValidatedCountBack,
       indicatorWindowOwner,
+      indicatorWindowEpoch,
       onMerged,
       source = "merge",
     }: MergeChartDataOptions = {},
@@ -1256,6 +1258,7 @@ export function useChartDataRuntime({
       if (quality) touchCacheMeta(key, { responseQuality: quality });
       const indicatorWindowCommit = indicatorWindowCommitBufferRef.current.record(key, [], {
         ownerToken: indicatorWindowOwner,
+        epoch: indicatorWindowEpoch,
         pending: deferIndicatorWindow,
       });
       touchHistoryProof();
@@ -1305,6 +1308,7 @@ export function useChartDataRuntime({
     if (delta.type === WINDOW_DELTA_TYPES.NOOP) {
       const indicatorWindowCommit = indicatorWindowCommitBufferRef.current.record(key, [], {
         ownerToken: indicatorWindowOwner,
+        epoch: indicatorWindowEpoch,
         pending: deferIndicatorWindow,
       });
       touchHistoryProof();
@@ -1343,6 +1347,7 @@ export function useChartDataRuntime({
       delta.changedRanges,
       {
         ownerToken: indicatorWindowOwner,
+        epoch: indicatorWindowEpoch,
         pending: deferIndicatorWindow,
       },
     );

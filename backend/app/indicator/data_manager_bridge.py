@@ -587,13 +587,26 @@ def bridge_indicator_engine(
             )
 
     handles = []
-    resetting = False
+    stopping = asyncio.Event()
+
+    async def _wait_for_source() -> None:
+        # A timed-out gap also invalidates a fresh strict subscription. Keep
+        # readiness fenced until its source is usable, with bounded shutdown.
+        source = asyncio.create_task(data_manager.wait_for_source_continuity())
+        stopped = asyncio.create_task(stopping.wait())
+        try:
+            await asyncio.wait({source, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            if stopping.is_set():
+                raise asyncio.CancelledError
+            await source
+        finally:
+            for task in (source, stopped):
+                task.cancel()
+            await asyncio.gather(source, stopped, return_exceptions=True)
 
     async def _on_recovery(error: ConsumerRecoveryRequired) -> None:
-        nonlocal resetting
-        if resetting or (error.subscription_id and not any(h.id == error.subscription_id for h in handles)):
+        if stopping.is_set() or (error.subscription_id and not any(h.id == error.subscription_id for h in handles)):
             return
-        resetting = True
         isolated = isinstance(indicator_engine, SerialIndicatorOwner)
         try:
             if not isolated:
@@ -610,6 +623,7 @@ def bridge_indicator_engine(
                 pending_backfills.clear()
                 pending_series_refreshes.clear()
                 completed_backfills.clear()
+                await _wait_for_source()
                 # No ready subscription can exist before these source
                 # callbacks are reattached to deliver subsequent closes.
                 _subscribe_bridge()
@@ -634,8 +648,6 @@ def bridge_indicator_engine(
                     "state": "recovery_failed", "gap": error.to_dict(), "error": str(exc),
                 })
             raise
-        finally:
-            resetting = False
 
     def _subscribe_bridge() -> None:
         for callback, event_types in (
@@ -650,6 +662,7 @@ def bridge_indicator_engine(
     _subscribe_bridge()
 
     async def _shutdown_bridge() -> None:
+        stopping.set()
         for handle in handles:
             data_manager.unsubscribe(handle)
         handles.clear()
