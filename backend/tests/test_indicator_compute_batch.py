@@ -60,11 +60,18 @@ def _body(requests: list[dict], *, schema_version: int = 1) -> dict:
     }
 
 
-def test_compute_batch_reports_capacity_as_retryable_without_computing(monkeypatch):
-    pool = BoundedExecutor("indicator", max_workers=1, max_pending=0)
+@pytest.mark.parametrize('process_history', [False, True])
+def test_compute_batch_reports_capacity_as_retryable_without_computing(monkeypatch, process_history):
+    from app.indicator import history_worker
+    monkeypatch.setattr(indicators_api.config, 'INDICATOR_HISTORY_PROCESS_ENABLED', process_history)
+    history_pool = history_worker.BuiltinHistoryExecutor(max_pending=0) if process_history else None
+    pool = history_pool._executor if history_pool else BoundedExecutor("indicator", max_workers=1, max_pending=0)
     release = threading.Event()
     occupied = pool.submit(lambda: release.wait(5))
-    monkeypatch.setattr("app.core.executors._indicator_executor", pool)
+    if history_pool:
+        monkeypatch.setattr(history_worker, '_pool', history_pool)
+    else:
+        monkeypatch.setattr("app.core.executors._indicator_executor", pool)
     try:
         response = _client().post("/api/v1/indicators/compute/batch", json=_body([_item(1), _item(2)]))
         assert response.status_code == 200
@@ -75,7 +82,10 @@ def test_compute_batch_reports_capacity_as_retryable_without_computing(monkeypat
     finally:
         release.set()
         occupied.result(2)
-        pool.shutdown()
+        if history_pool:
+            history_pool.close()
+        else:
+            pool.shutdown()
 
 
 @pytest.mark.parametrize(

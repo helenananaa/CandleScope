@@ -7,6 +7,7 @@ import time
 import uuid
 
 from app.core.executors import run_storage
+from app.core import config
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
 from app.data_engine.interval_policy import is_ephemeral_interval, parse_interval_spec
 from .models import BarData, DataEvent, DataEventType, SeriesKey
@@ -16,7 +17,8 @@ logger = logging.getLogger("data_manager.bar_delivery")
 
 class DurableBarDelivery:
     def __init__(self, storage_provider, publish, *, retry_delay=0.1, max_submissions=64,
-                 recovery_lookback_bars=500, require_recovery=None):
+                 recovery_lookback_bars=500, require_recovery=None,
+                 acknowledgement_batch_size=None, acknowledgement_delay=0.05):
         self._storage_provider, self._publish = storage_provider, publish
         self._require_recovery = require_recovery
         self.retry_delay = retry_delay
@@ -42,6 +44,11 @@ class DurableBarDelivery:
         self._last_error = None
         self._recovery_error = None
         self._published = self._rejected = 0
+        selected_batch_size = (config.BAR_DELIVERY_ACK_BATCH_SIZE if acknowledgement_batch_size is None
+                               else acknowledgement_batch_size)
+        self.acknowledgement_batch_size = min(64, max(1, int(selected_batch_size)))
+        self.acknowledgement_delay = max(0.0, float(acknowledgement_delay))
+        self._acknowledgement_batches = self._acknowledgement_records = 0
 
     @property
     def journal(self):
@@ -63,7 +70,11 @@ class DurableBarDelivery:
                     failures=self._failures, last_error=self._last_error,
                     recovery_error=self._recovery_error, unconfirmed_receipt=self._receipt_failed,
                     active_submissions=len(self._submissions), admission_rejected=self._admission_rejected,
-                    published=self._published, rejected=self._rejected)
+                    published=self._published, rejected=self._rejected,
+                    acknowledgement_batch_size=self.acknowledgement_batch_size,
+                    acknowledgement_delay_ms=self.acknowledgement_delay * 1000,
+                    acknowledgement_batches=self._acknowledgement_batches,
+                    acknowledgement_records=self._acknowledgement_records)
 
     async def start(self):
         self._closing = False
@@ -179,13 +190,37 @@ class DurableBarDelivery:
                 records = await self._retry(journal.pending)
                 self._dispatch_records = records
                 self._pending = await self._retry(journal.pending_count)
+                acknowledgements = []
+                acknowledgement_started = None
+
+                async def acknowledge_completed():
+                    nonlocal acknowledgement_started
+                    if not acknowledgements:
+                        return
+                    ids = [event_id for event_id, _published in acknowledgements]
+                    batch = getattr(journal, 'acknowledge_many', None)
+                    if len(ids) > 1 and callable(batch):
+                        await self._retry(batch, ids)
+                    else:
+                        for event_id in ids:
+                            await self._retry(journal.acknowledge, event_id)
+                    self._published += sum(published for _event_id, published in acknowledgements)
+                    self._rejected += sum(not published for _event_id, published in acknowledgements)
+                    self._pending -= len(acknowledgements)
+                    self._acknowledgement_batches += 1
+                    self._acknowledgement_records += len(acknowledgements)
+                    acknowledgements.clear()
+                    acknowledgement_started = None
+
                 for pending in records:
                     record = await self._retry(journal.commit, pending["event_id"])
                     if record["phase"] == "rejected":
                         if record.get("recovery_required"):
                             self._invalidate(record)
-                            await self._retry(journal.acknowledge, record["event_id"])
-                        self._rejected += 1
+                            acknowledgements.append((record['event_id'], False))
+                        else:
+                            self._rejected += 1
+                            self._pending -= 1
                     elif record["phase"] == "committed":
                         # A later authoritative repair may already have replaced
                         # this row while publication was interrupted. Publish a
@@ -194,9 +229,15 @@ class DurableBarDelivery:
                             await self._publish(self._event(record))
                         else:
                             self._invalidate(record)
-                        await self._retry(journal.acknowledge, record["event_id"])
-                        self._published += 1
-                    self._pending -= 1
+                        acknowledgements.append((record['event_id'], True))
+                    else:
+                        self._pending -= 1
+                    if acknowledgements:
+                        acknowledgement_started = acknowledgement_started or time.monotonic()
+                        if (len(acknowledgements) >= self.acknowledgement_batch_size
+                                or time.monotonic() - acknowledgement_started >= self.acknowledgement_delay):
+                            await acknowledge_completed()
+                await acknowledge_completed()
                 self._last_error = None
                 if len(records) == 64:
                     self._wake.set()
