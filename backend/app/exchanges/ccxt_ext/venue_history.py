@@ -8,6 +8,41 @@ from app.data_engine.ingestion.models import DataSource, RawMessage, StreamDescr
 from app.exchanges.okx_intervals import okx_utc_interval as _okx_interval
 from .unified import make_unified_payload
 
+
+async def _binance_snapshot_time(exchange, req: TransportRequest, *, futures: bool) -> int:
+    """Reuse a server observation only if it proves the whole request is closed.
+
+    A deferred page keeps its admission turn, but each successful physical
+    request consumes that turn. Repeating a time preflight on every retry can
+    therefore starve the K-line request when other chunks protect their turns.
+    An older server observation is sufficient for bounded, already closed
+    history; it must never be extrapolated to confirm a newer/forming bucket.
+    The cache has at most two entries and dies with the pooled exchange client.
+    """
+    from app.data_engine.interval_policy import parse_interval_spec
+
+    market = "futures" if futures else "spot"
+    observations = getattr(exchange, "_candlescope_snapshot_times", None)
+    if observations is None:
+        observations = {}
+        exchange._candlescope_snapshot_times = observations
+    observed = observations.get(market)
+    spec = parse_interval_spec(req.descriptor.interval or "")
+    if type(req.end_ms) is int and req.end_ms >= 0 and spec is not None:
+        last_close = spec.next_ms(spec.floor_ms(req.end_ms)) - 1
+        if type(observed) is int and observed > last_close:
+            return observed
+    observed = await exchange.fetch_time(
+        {"type": "swap", "subType": "linear"} if futures else {"type": "spot"}
+    )
+    if type(observed) is not int or observed <= 0:
+        raise RuntimeError("missing exchange time for fork REST snapshot")
+    # Save before the candle request: even a deferred page has obtained this
+    # valid observation and can reuse it on its next admission turn.
+    observations[market] = observed
+    return observed
+
+
 async def _fetch_binance_raw(
     req: TransportRequest,
     config: IngestionConfig,
@@ -49,15 +84,7 @@ async def _fetch_binance_raw(
                 watermark = await run_storage(kline_sources.rest_watermark)
                 # Observe exchange time BEFORE requesting the candle, so
                 # local clock skew cannot invent or delay its finality.
-                server_time = await exchange.fetch_time(
-                    {"type": "swap", "subType": "linear"}
-                    if futures
-                    else {"type": "spot"}
-                )
-                if type(server_time) is not int or server_time <= 0:
-                    raise RuntimeError(
-                        "missing exchange time for fork REST snapshot"
-                    )
+                server_time = await _binance_snapshot_time(exchange, req, futures=futures)
                 values = await exchange.fetch_candlescope_klines(
                     symbol,
                     descriptor.interval,
