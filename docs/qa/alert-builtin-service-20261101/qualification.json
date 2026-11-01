@@ -212,5 +212,7 @@
       "sha256": "055c1410c31d123c52d2e166341e91666904af15a8c91d84d4afd7a92c171694",
       "uncompressed_bytes": 66
     }
-  ]
+  ],
+  "performance": "See performance.json; value-equivalent bounded public path still costs more than legacy, no claimed performance win.",
+  "local_followup": "51 targeted regressions and architecture passed; same-input capture sharing, bounded numeric batchIPC and raw-input fingerprint coverage."
 }

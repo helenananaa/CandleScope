@@ -19,14 +19,26 @@ from app.core.process_lane import SerialProcessLane
 
 def _dispatch(request):
     kind, *args = request
-    if kind == 'compute':
+    if kind in {'compute', 'numeric'}:
         from app.indicator import create_engine
         from app.indicator.series_reference import identity_kwargs
         name, meta, bars = args
         engine = create_engine()
         try:
-            value = engine.compute(meta['symbol'], meta['interval'], meta['market_type'], name,
-                                   meta['params'], bars, exchange=meta['exchange'], **identity_kwargs(meta))
+            if kind == 'numeric':
+                # One bounded input transfer, no RenderIR or complete output
+                # series roundtrip for a numeric-only caller.
+                value = {}
+                for output in name:
+                    result = engine.compute(meta['symbol'], meta['interval'], meta['market_type'],
+                        output.name, dict(output.params), bars, exchange=meta['exchange'], **identity_kwargs(meta))
+                    latest = result.get_latest()
+                    if output.output_id not in latest:
+                        raise ValueError('Unknown numeric output ID')
+                    value[output] = latest[output.output_id]
+            else:
+                value = engine.compute(meta['symbol'], meta['interval'], meta['market_type'], name,
+                                       meta['params'], bars, exchange=meta['exchange'], **identity_kwargs(meta))
         finally:
             engine.stop()
     elif kind == 'range':
@@ -134,6 +146,12 @@ def _get_pool():
 
 async def run_builtin_history(name, meta, bars):
     return await _get_pool().run(('compute', name, deepcopy(meta), tuple(bars)), len(bars))
+
+
+async def run_builtin_history_numeric(outputs, meta, bars):
+    if not 1 <= len(outputs) <= 3 or not 1 <= len(bars) <= 250:
+        raise ValueError('Numeric builtin request exceeds bounded input contract')
+    return await _get_pool().run(('numeric', tuple(outputs), deepcopy(meta), tuple(bars)), len(bars))
 
 
 async def run_builtin_history_range(client_id, meta, start, end, bars, reason, target_bars):

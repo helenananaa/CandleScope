@@ -194,6 +194,12 @@ def test_public_numeric_query_uses_existing_isolated_history_process(dm, query):
             assert state['worker']['pid'] != os.getpid()
             assert state['input_bars'] == 0
             assert len(result.values) == 3
+            assert state['submitted'] == 1
+            rows = read_rows(dm)[-100:]
+            for output, value in result.values:
+                oracle = compute(output.name, {'symbol': KEY.symbol, 'interval': KEY.interval,
+                    'market_type': KEY.market_type, 'exchange': KEY.exchange, 'params': dict(output.params)}, rows)
+                assert value == oracle.get_latest()[output.output_id]
         finally:
             await service.close()
             await shutdown_builtin_history()
@@ -231,4 +237,85 @@ def test_numeric_subscription_recovery_is_terminal_until_replaced(dm, query, mon
         assert observations == []
         await service.close()
         assert not service.subscriptions and not service.queries
+    asyncio.run(run())
+
+
+def test_numeric_same_request_shares_canonical_capture_and_waiter_cancellation(dm, query):
+    async def run():
+        entered, release = asyncio.Event(), asyncio.Event()
+        port = IndicatorInputPort(dm)
+        original, captures = port.capture, []
+        def capture(request):
+            captures.append(request)
+            return original(request)
+        port.capture = capture
+        async def held(name, meta, bars):
+            entered.set()
+            await release.wait()
+            return compute(name, meta, bars)
+        service = NumericIndicatorService(port, IndicatorRangeResultService(), compute=held)
+        first = asyncio.create_task(service.query(query))
+        second = asyncio.create_task(service.query(query))
+        await asyncio.wait_for(entered.wait(), 20)
+        await asyncio.sleep(.02)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert not second.done()
+        release.set()
+        result = await second
+        assert result.status == 'ready'
+        assert len(captures) == 1
+        assert not service.queries
+        await service.close()
+    asyncio.run(run())
+
+
+def test_numeric_new_live_frontier_cannot_join_older_input(dm, query):
+    from app.data_engine.data_manager.models import DataEvent, DataEventType
+    async def run():
+        entered, release = asyncio.Event(), asyncio.Event()
+        port = IndicatorInputPort(dm)
+        original, captures = port.capture, []
+        def capture(request):
+            captures.append(request)
+            return original(request)
+        port.capture = capture
+        async def held(name, meta, bars):
+            entered.set()
+            await release.wait()
+            return compute(name, meta, bars)
+        service = NumericIndicatorService(port, IndicatorRangeResultService(), compute=held)
+        first = asyncio.create_task(service.query(query))
+        await asyncio.wait_for(entered.wait(), 20)
+        await dm.event_bus.emit(DataEvent(DataEventType.BAR_UPDATED, KEY, bar=read_rows(dm)[-1]))
+        second = asyncio.create_task(service.query(query))
+        release.set()
+        a, b = await asyncio.gather(first, second)
+        assert a.status == b.status == 'ready'
+        assert len(captures) == 2
+        assert dict(b.stream_version)['sequence'] > dict(a.stream_version)['sequence']
+        assert a.latest_closed == b.latest_closed
+        await service.close()
+        assert not service.flights
+    asyncio.run(run())
+
+
+def test_numeric_input_fingerprint_preserves_sub_wire_precision(dm, query):
+    port = IndicatorInputPort(dm)
+    before = port.capture(query)
+    rows = read_rows(dm)
+    dm.cache.upsert(KEY, replace(rows[-1], close=rows[-1].close + 1e-10))
+    after = port.capture(query)
+    assert before.bars[-1].to_dict() == after.bars[-1].to_dict()
+    assert before.fingerprint != after.fingerprint
+
+
+def test_numeric_process_rejects_unbounded_input_before_submission():
+    from app.indicator.history_worker import run_builtin_history_numeric
+    async def run():
+        with pytest.raises(ValueError, match='bounded input'):
+            await run_builtin_history_numeric(OUTPUTS, {}, [None] * 251)
+        with pytest.raises(ValueError, match='bounded input'):
+            await run_builtin_history_numeric(OUTPUTS * 2, {}, [None])
     asyncio.run(run())

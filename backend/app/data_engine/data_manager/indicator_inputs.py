@@ -26,6 +26,16 @@ class IndicatorInputPort:
     def __init__(self, manager):
         self.manager = manager
 
+    def admission_token(self, request):
+        # Cheap owner/live identity only. Durable validity is still checked by
+        # capture and final validation on the storage executor. A new live
+        # sequence must not join an older moving-frontier input operation.
+        dm = self.manager
+        version = dm.event_bus.stream_versions.snapshot(request.source)
+        return (id(dm.query_engine.storage), id(dm.cache.revision_consumer),
+                id(dm.query_engine.history_policy),
+                tuple(version[name] for name in ('epoch', 'generation', 'sequence', 'barrier', 'stable')))
+
     def _query(self, request, *, auto_backfill):
         key = request.source
         # Count-based pagination must fill the recursive seed from storage.
@@ -70,7 +80,9 @@ class IndicatorInputPort:
         if not closed or any(not bar.trusted_final for bar in closed):
             raise IndicatorInputUnavailable('confirmed_history_unverified')
         value = {'seed_policy': request.seed_policy, 'source_slots': request.source_slots,
-                 'slots': len(rows), 'bars': [bar.to_dict() for bar in closed]}
+                 'slots': len(rows), 'bars': [tuple(getattr(bar, name) for name in
+                    ('time', 'open', 'high', 'low', 'close', 'volume', 'quote_volume',
+                     'trades', 'taker_buy_base', 'taker_buy_quote', 'source')) for bar in closed]}
         fingerprint = hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
                                                 allow_nan=False).encode()).hexdigest()
         captured = CanonicalIndicatorInput(request, closed, len(rows), revision,
