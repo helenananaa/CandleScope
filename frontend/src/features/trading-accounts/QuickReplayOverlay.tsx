@@ -9,8 +9,9 @@ import { parseIntervalSeconds } from "../../utils/intervals.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
+import { useMarketDataWorkspaceResources } from "../market-data/marketDataWorkspaceContext.js";
 import { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
-import { loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
+import { createManagedReplayHistoryReader, loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
 import {
   STANDARD_STEPS,
   initialCursor,
@@ -58,12 +59,13 @@ export default function QuickReplayOverlay({
   onExit(): void;
 }) {
   useLocale();
+  const dataManager = useMarketDataWorkspaceResources()?.dataManager ?? null;
+  const historyReader = useMemo(() => createManagedReplayHistoryReader(dataManager), [dataManager]);
   const { trade } = request;
   const api = request.api ?? tradingApi;
   const intervalSec = parseIntervalSeconds(request.interval) ?? 900;
   const window_ = useMemo(() => replayWindow(trade, intervalSec, Date.now()), [intervalSec, trade]);
   const [chartBars, setChartBars] = useState<ReplayBar[]>([]);
-  const [fineBars, setFineBars] = useState<ReplayBar[] | null>(null);
   const [detail, setDetail] = useState<TradeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +84,19 @@ export default function QuickReplayOverlay({
     symbol: trade.symbol,
   }), [trade.exchange, trade.marketType, trade.symbol]);
 
+  const fineRequest = useMemo(() => ({
+    reader: historyReader,
+    input: { ...instrument, interval: step },
+    startSec: Math.floor(trade.openedAtMs / 1000) - intervalSec * 4,
+    endSec: window_.endSec,
+    reload,
+  }), [historyReader, instrument, intervalSec, reload, step, trade.openedAtMs, window_.endSec]);
+  const [fineLoaded, setFineLoaded] = useState<{ request: typeof fineRequest; bars: ReplayBar[] } | null>(null);
+  // Hide an old period in the same render that changes the request. Clearing
+  // it only in an effect would still expose its final OHLC at the new step's
+  // earlier close time, before the replacement history has arrived.
+  const fineBars = stepSec < intervalSec && fineLoaded?.request === fineRequest ? fineLoaded.bars : null;
+
   // ── data ──────────────────────────────────────────────────────
   useEffect(() => {
     const controller = new AbortController();
@@ -90,7 +105,7 @@ export default function QuickReplayOverlay({
     setChartBars([]);
     setLoadFailed(false);
     setError(null);
-    loadReplayBars({ ...instrument, interval: request.interval }, window_.startSec, window_.endSec, controller.signal)
+    loadReplayBars({ ...instrument, interval: request.interval }, window_.startSec, window_.endSec, controller.signal, historyReader)
       .then((result) => {
         if (controller.signal.aborted) return;
         setChartBars(result.bars);
@@ -105,21 +120,19 @@ export default function QuickReplayOverlay({
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
     return () => controller.abort();
-  }, [api, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
+  }, [api, historyReader, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
   useEffect(() => {
     if (stepSec >= intervalSec) {
-      setFineBars(null);
       return undefined;
     }
     const controller = new AbortController();
     // Finer candles only for the holding period, where partial candles matter.
-    const start = Math.floor(trade.openedAtMs / 1000) - intervalSec * 4;
-    loadReplayBars({ ...instrument, interval: step }, start, window_.endSec, controller.signal)
-      .then((result) => { if (!controller.signal.aborted) setFineBars(result.bars); })
-      .catch(() => { if (!controller.signal.aborted) setFineBars(null); });
+    loadReplayBars(fineRequest.input, fineRequest.startSec, fineRequest.endSec, controller.signal, fineRequest.reader)
+      .then((result) => { if (!controller.signal.aborted) setFineLoaded({ request: fineRequest, bars: result.bars }); })
+      .catch(() => { if (!controller.signal.aborted) setFineLoaded(null); });
     return () => controller.abort();
-  }, [instrument, intervalSec, step, stepSec, trade.openedAtMs, window_.endSec]);
+  }, [fineRequest, intervalSec, stepSec]);
 
   const minCursor = (chartBars[0]?.time ?? window_.startSec) + intervalSec * 30;
   // The range API returns closed candles only, so a trade inside the forming

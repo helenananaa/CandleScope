@@ -1,0 +1,48 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {}
+    },
+    "exceptionDetails": {
+      "exceptionId": 1,
+      "text": "Uncaught (in promise) Error: old 5m bar leaked at the 1m cursor: {\"time\":1699999200,\"open\":100,\"high\":999,\"low\":99,\"close\":998,\"volume\":1,\"is_closed\":true}",
+      "lineNumber": 31,
+      "columnNumber": 82597,
+      "scriptId": "3",
+      "stackTrace": {
+        "callFrames": [
+          {
+            "functionName": "la",
+            "scriptId": "3",
+            "url": "http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js",
+            "lineNumber": 30,
+            "columnNumber": 82596
+          },
+          {
+            "functionName": "eD",
+            "scriptId": "3",
+            "url": "http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js",
+            "lineNumber": 30,
+            "columnNumber": 84760
+          }
+        ]
+      },
+      "exception": {
+        "type": "object",
+        "subtype": "error",
+        "className": "Error",
+        "description": "Error: old 5m bar leaked at the 1m cursor: {\"time\":1699999200,\"open\":100,\"high\":999,\"low\":99,\"close\":998,\"volume\":1,\"is_closed\":true}\n    at la (http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js:31:82597)\n    at eD (http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js:31:84761)",
+        "objectId": "8958313628296658033.1.1"
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": false,
+  "error": "Error: {\"exceptionId\":1,\"text\":\"Uncaught (in promise) Error: old 5m bar leaked at the 1m cursor: {\\\"time\\\":1699999200,\\\"open\\\":100,\\\"high\\\":999,\\\"low\\\":99,\\\"close\\\":998,\\\"volume\\\":1,\\\"is_closed\\\":true}\",\"lineNumber\":31,\"columnNumber\":82597,\"scriptId\":\"3\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"la\",\"scriptId\":\"3\",\"url\":\"http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js\",\"lineNumber\":30,\"columnNumber\":82596},{\"functionName\":\"eD\",\"scriptId\":\"3\",\"url\":\"http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js\",\"lineNumber\":30,\"columnNumber\":84760}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: old 5m bar leaked at the 1m cursor: {\\\"time\\\":1699999200,\\\"open\\\":100,\\\"high\\\":999,\\\"low\\\":99,\\\"close\\\":998,\\\"volume\\\":1,\\\"is_closed\\\":true}\\n    at la (http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js:31:82597)\\n    at eD (http://127.0.0.1:58020/assets/quick-replay-step-browser-BM7560UB.js:31:84761)\",\"objectId\":\"8958313628296658033.1.1\"}}",
+  "browserExitCode": null
+}
