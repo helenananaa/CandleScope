@@ -18,6 +18,7 @@ MAX_SOURCE_BYTES = 128 * 1024
 MAX_BARS = 10000
 MAX_OUTPUTS = 16
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+OUTPUT_ID = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$")
 
 
 class AuthorError(ValueError):
@@ -111,8 +112,8 @@ def analyze(source: str) -> Declaration:
     for output in outputs:
         only_keys(output, {"id", "title", "type", "color"}, "output")
         key = output.get("id")
-        if not isinstance(key, str) or not IDENTIFIER.fullmatch(key) or key in seen:
-            raise AuthorError("Output IDs must be unique identifiers")
+        if not isinstance(key, str) or not OUTPUT_ID.fullmatch(key) or key in seen:
+            raise AuthorError("Output IDs must be unique lowercase public render identifiers")
         seen.add(key)
         if output.get("type", "line") not in {"line", "histogram"}:
             raise AuthorError("Output type must be line or histogram")
