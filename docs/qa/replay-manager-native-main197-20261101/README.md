@@ -1,0 +1,11 @@
+# PR 180: native replay qualification after main #194 / #197
+
+The official macOS arm64 package from application commit `2d16a083119cc1fbd268c975e81a1522cc391490` passed the full native chain after integrating main commit `15113a30`. Its fresh ZIP extraction matches 3,103 source files and 162 renderer files; strict signatures passed before and after execution. The manifest records the ZIP and ASAR hashes. Head `12a7d71a` adds only test/CI corrections; its application paths are byte-identical to the packaged source.
+
+Creation, paper buy/sell, independent Decimal financial reconciliation, save, full process exit, restart and continued playback passed. A split restored chart retained 51 visible one-minute bars without manual viewport correction. Disconnect/reconnect preserved the prior closed OHLCV rows in both one-minute and five-minute charts; recovery took 6.704 seconds. Closing a chart and leaving the run released the private sequences.
+
+MA20 passed initial, dual-period, advanced and full-exit/restart numerical checks: 353 one-minute and 55 five-minute closed points, including 241 and 48 visible points and two complete five-minute aggregate comparisons. A native DownloadItem completed the 509-byte NDJSON export with a valid terminal record and hash. All four stage receipts passed with zero renderer exceptions; owned application/backend processes exited normally.
+
+The selected backend regression suite passed 146 tests with zero skips. Four inherited async test modules previously used an unavailable pytest-asyncio marker; they now use the already locked AnyIO runner, and CI rejects unhandled coroutine warnings. The process-lane blocked-send test allows cold startup separately while retaining its one-second send deadline. Application code did not change for these test corrections. The unchanged frontend already passed 4,704 functional tests, one isolated performance test, 127 desktop tests, static gates and production build. Exact-head cloud CI is a separate merge gate.
+
+This validates the finite synthetic archive with six-hour history. ALL_AVAILABLE cold performance, extended controller disconnection, Windows and full 157-item acceptance remain open. The single-market export has no equity samples; its native stream is verified, while a nonempty equity curve and operating-system save dialog are outside this run.

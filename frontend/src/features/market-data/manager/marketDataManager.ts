@@ -13,6 +13,7 @@ import { planTargetBarRequest } from "../intervalRequestBudget.js";
 import { MarketHealthRecovery } from "./marketHealthRecovery.js";
 import { MarketWarmStreams } from "./marketWarmStreams.js";
 import { MarketWarmQueue, type MarketWarmLease } from "./marketWarmQueue.js";
+import { MarketDataManagerCore } from "./marketDataManagerCore.js";
 
 interface StreamTransport {
   readonly reconnects?: boolean;
@@ -38,7 +39,7 @@ function aborted(): DOMException { return new DOMException("The operation was ab
 /** Frontend workspace data boundary. Physical responses are admitted once before
  * fan-out. Chart/watchlist consumers own independent request/stream leases;
  * cache facts contain no viewport or chart-selection state. */
-export class MarketDataManager implements MarketDataService {
+export class MarketDataManager extends MarketDataManagerCore implements MarketDataService {
   readonly ownsRequestLeases = true;
   readonly cache: SharedMarketCache;
   readonly requestCoordinator: SharedKlineRequestCoordinator;
@@ -57,6 +58,7 @@ export class MarketDataManager implements MarketDataService {
   private historyHits = 0;
 
   constructor(options: MarketDataManagerOptions) {
+    super();
     this.api = options.api;
     this.transport = options.streams;
     this.cache = new SharedMarketCache(options.cache);
@@ -290,12 +292,13 @@ export class MarketDataManager implements MarketDataService {
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
       sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits, historyHits: this.historyHits,
-      cache: this.cache.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
+      cache: this.cache.diagnostics(), replay: this.replay.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 
   closeAll(): void {
     if (this.closed) return;
     this.closed = true;
+    super.closeAll();
     this.warmQueue.dispose();
     this.warmStreams.dispose();
     this.healthRecovery.dispose();

@@ -86,6 +86,7 @@ export interface KlineFetchResult extends Record<string, unknown> {
   quality?: KlineQualityEvidence;
   data?: KlineBar[];
   indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
   all_rows_final?: boolean;
   has_more?: boolean;
   has_tail_gap?: boolean;
@@ -238,6 +239,7 @@ export interface FeedCommitMeta {
   seedIfEmpty?: boolean;
   deferIndicatorWindow?: boolean;
   indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
   historyComplete?: boolean;
   historyRepairPending?: boolean;
   historyValidatedCountBack?: number | null;
@@ -325,6 +327,7 @@ export interface PendingBeforePage {
   pollAttempts?: number;
   nextPollAt?: number;
   indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
 }
 
 export interface BackfillCompletedDetail extends Record<string, unknown> {
@@ -359,6 +362,7 @@ export interface PendingInitialSeries extends MarketSeries {
   countBack?: number | null;
   range?: TimeRangeMs | null;
   indicatorWindowOwner?: string;
+  indicatorWindowEpoch?: number;
 }
 
 export type BackfillRecoveryProgress =

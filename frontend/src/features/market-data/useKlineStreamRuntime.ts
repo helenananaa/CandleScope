@@ -445,7 +445,7 @@ export function useKlineStreamRuntime({
                 console.log(`[WS-Recovery] Reconnected, reloading recent bars for ${symbol}@${currentIntv}`);
                 if (recoveryCountBack <= 0) {
                   console.warn(`[WS-Recovery] Skipped ${currentIntv}; source-history budget exceeded`);
-                } else seriesDataFeed.getBars(
+                } else seriesDataFeed.getRecoveryHistory(
                   { exchange, marketType, symbol, interval: currentIntv },
                   { countBack: recoveryCountBack, source: "ws-reconnect-history" },
                 )
@@ -454,7 +454,6 @@ export function useKlineStreamRuntime({
                       !active
                       || result.stale
                       || result.active === false
-                      || !result?.data?.length
                     ) return;
                     const latest = result.data[result.data.length - 1];
                     if (latest) updateLastPrice(latest, currentIntv);

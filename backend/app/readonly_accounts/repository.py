@@ -271,6 +271,29 @@ class AccountRepository:
             return {row["kind"]:{"receivedMs":row["received_ms"],"data":json.loads(row["payload"])}
                     for row in db.execute("SELECT * FROM snapshot" + (" WHERE kind NOT IN ('contracts','position_history')" if overview else ""))}
 
+    def overview(self) -> dict:
+        """One committed account/fact/coverage view; never expose credentials.
+
+        A sync page commits facts, its cursor and coverage together. Reading
+        each field on a separate connection can undo that guarantee at the API
+        boundary, even when every individual repository call is correct.
+        """
+        with self.connection() as db:
+            db.execute("BEGIN")
+            row = db.execute("SELECT * FROM account WHERE id='okx'").fetchone()
+            account = dict(row) if row is not None else None
+            if account is not None:
+                account.pop("credential_id")
+            return {
+                "account": account,
+                "scans": [dict(row) for row in db.execute("SELECT * FROM sync_scan ORDER BY kind")],
+                "coverage": [dict(row) for row in db.execute("SELECT * FROM coverage ORDER BY kind,start_ms,end_ms")],
+                "gaps": [dict(row) for row in db.execute("SELECT * FROM gap ORDER BY kind,start_ms")],
+                "snapshots": {row["kind"]: {"receivedMs": row["received_ms"], "data": json.loads(row["payload"])}
+                              for row in db.execute("SELECT * FROM snapshot WHERE kind NOT IN ('contracts','position_history')")},
+                "counts": {row[0]: row[1] for row in db.execute("SELECT kind,COUNT(*) FROM fact GROUP BY kind")},
+            }
+
     def reconciliation_inputs(self, maximum: int = 20_000) -> dict:
         # One bounded, consistent view. This is requested on demand, not by the
         # five-second status poll, and never returns credential references.

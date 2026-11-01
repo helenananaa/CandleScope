@@ -64,6 +64,25 @@ class SourceGapRegistry:
         self.max_gaps, self.max_bars = max_gaps, max_bars
         self.gaps: OrderedDict[str, SourceGap] = OrderedDict()
         self.overflowed = False
+        self._changed = asyncio.Event()
+        self._closed = False
+
+    async def wait_cleared(self) -> None:
+        """Wait for repair or stream retirement before taking a fresh snapshot.
+
+        A failed gap remains unsafe until its stream restarts. There is no
+        polling, new repair request, or extension of a consumer's deadline.
+        The owner must cancel this wait when it shuts down.
+        """
+        while True:
+            if self._closed:
+                raise ConsumerRecoveryRequired('source_stream_closed')
+            if self.overflowed:
+                raise ConsumerRecoveryRequired('source_gap_tracking_exhausted')
+            if not self.pending():
+                return
+            self._changed.clear()
+            await self._changed.wait()
 
     def pending(self, key: SeriesKey | None = None) -> list[SourceGap]:
         return [gap for gap in self.gaps.values()
@@ -105,6 +124,7 @@ class SourceGapRegistry:
         if self.overflowed:
             for pending in self.pending():
                 pending.fail("source_gap_tracking_exhausted")
+        self._changed.set()
         return gap, True
 
     def retire(self, key: SeriesKey) -> None:
@@ -112,6 +132,7 @@ class SourceGapRegistry:
             if gap.key == key:
                 gap.fail("source_stream_restarted")
                 del self.gaps[gap_id]
+        self._changed.set()
 
     def snapshot(self) -> dict:
         return {"tracking_exhausted": self.overflowed, "retained_gaps": len(self.gaps),
@@ -153,12 +174,16 @@ class SourceGapRegistry:
                 gap.completed_at = time.monotonic()
                 gap.future.set_result(None)
                 resolved.append(gap)
+        if resolved:
+            self._changed.set()
         return resolved, corrections
 
     def close(self) -> None:
+        self._closed = True
         for gap in self.pending():
             gap.fail("source_stream_closed")
         self.gaps.clear()
+        self._changed.set()
 
 
 class ContinuityConsumer:

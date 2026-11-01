@@ -1,0 +1,24 @@
+{
+  "source_commit": "09e5259f35bfd44b8eef1f330a52473666d13b3a",
+  "full_check": {
+    "command": "npm run check",
+    "cwd": "frontend",
+    "exit_code": 0,
+    "frontend_tests": 4699,
+    "isolated_performance_tests": 1,
+    "desktop_tests": 127,
+    "includes": [
+      "architecture",
+      "plugins",
+      "30-locale i18n",
+      "TypeScript application and tooling",
+      "ESLint",
+      "Vite build"
+    ],
+    "log": "/tmp/candlescope180-native-download-check.log"
+  },
+  "native_platform": "macOS arm64, local ad-hoc signature, bundled Python 3.12.15",
+  "native_fixture": "finite synthetic 1m OHLCV, matching synthetic instrument metadata; real packaged HTTP/WebSocket; no response substitution; DURATION=21600000",
+  "download_scope": "empty single-market NDJSON via trusted native IPC and Electron DownloadItem; destination selected by harness, no OS save-dialog or nonempty curve UI qualification",
+  "cloud_ci": "pending at final evidence commit; required before main merge"
+}

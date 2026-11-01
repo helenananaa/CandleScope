@@ -364,6 +364,11 @@ class PublicAdmission:
 
     def snapshot(self) -> dict[str, Any]:
         self._prune()
+        waiting = sorted(
+            [*((intent, False) for intent in self._intents.values()),
+             *((intent, True) for intent in self._protected.values())],
+            key=lambda item: self._rank(item[0]),
+        )
         return {
             "owner_scope": "backend_event_loop_and_catalog_worker",
             "coverage": "host_estimate_external_consumers_unknown",
@@ -373,6 +378,13 @@ class PublicAdmission:
             "oldest_wait_seconds": max(
                 (time.monotonic() - i.since for i in self._intents.values()), default=0.0),
             "counts": dict(self._counts), "recent": list(self._recent),
+            "waiting": [{"owner": intent.demand.owner, "purpose": intent.demand.purpose,
+                         "traffic_class": intent.demand.priority().name.lower(),
+                         "ticket": intent.demand.wait_ticket, "bypasses": intent.demand.bypasses,
+                         "protected": protected, "buckets": sorted(intent.keys),
+                         "age_seconds": max(0, time.monotonic() - intent.since)}
+                        for intent, protected in waiting[:32]],
+            "waiting_truncated": len(waiting) > 32,
         }
 
 

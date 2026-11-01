@@ -38,10 +38,12 @@ def test_byte_admission_and_output_limit_preserve_framing():
 
 
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
-def test_large_send_has_physical_deadline_and_reaps_owned_child():
-    lane = SerialProcessLane(echo, name='test-send-deadline', timeout=1)
+def test_large_send_has_physical_deadline_and_reaps_owned_child(monkeypatch):
+    lane = SerialProcessLane(echo, name='test-send-deadline', timeout=10)
     try:
         assert lane.call('ready') == 'ready'
+        # Cold process import is setup; the measured blocked send still has one second.
+        monkeypatch.setattr(lane, '_timeout', 1.0)
         pid = lane.pid
         assert pid != os.getpid()
         os.kill(pid, signal.SIGSTOP)
