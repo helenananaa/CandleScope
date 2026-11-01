@@ -19,6 +19,35 @@ class MemoryBudgetExceeded(RuntimeError):
     pass
 
 
+class MemoryReservation:
+    """Transfer admitted work to retained owner state under one budget lock.
+
+    The synchronous commit callback must update the owner's cheap usage counter
+    before returning. It must not acquire another owner's lock or perform I/O.
+    Failed admission leaves the reservation intact for normal context cleanup.
+    """
+    def __init__(self, budget, owner, size):
+        self.budget, self.owner, self.size = budget, owner, size
+        self.active = True
+
+    def retain(self, bytes_needed, commit):
+        if bytes_needed < 0:
+            raise ValueError("retained size must be non-negative")
+        with self.budget._lock:
+            if not self.active:
+                raise RuntimeError("memory reservation has already been consumed")
+            snapshot = self.budget.snapshot()
+            item = snapshot["owners"][self.owner]
+            if (snapshot["estimated_bytes"] + snapshot["reserved_bytes"] - self.size + bytes_needed > self.budget.total_bytes
+                    or item.get("estimated_bytes", 0) + item["reserved_bytes"] - self.size + bytes_needed > item["limit_bytes"]):
+                self.budget.rejections += 1
+                raise MemoryBudgetExceeded(f"retained memory admission deferred for {self.owner}")
+            commit()
+            self.budget._reserved[self.owner] -= self.size
+            self.size = 0
+            self.active = False
+
+
 _work_leases = ContextVar("market_data_memory_leases", default=None)
 
 
@@ -150,8 +179,11 @@ class MemoryBudget:
                 self.rejections += 1
                 raise MemoryBudgetExceeded(f"memory admission deferred for {owner}")
             self._reserved[owner] += bytes_needed
+        lease = MemoryReservation(self, owner, bytes_needed)
         try:
-            yield
+            yield lease
         finally:
             with self._lock:
-                self._reserved[owner] -= bytes_needed
+                self._reserved[owner] -= lease.size
+                lease.size = 0
+                lease.active = False
