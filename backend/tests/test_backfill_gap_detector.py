@@ -197,6 +197,31 @@ def test_gap_detector_clamps_stale_tail_to_exact_requested_bar() -> None:
     asyncio.run(_run())
 
 
+def test_historical_head_and_empty_ranges_do_not_expand_to_storage_or_live_edge() -> None:
+    async def _run() -> None:
+        start, end = 1_700_014_800_000, 1_700_164_800_000
+        newer = _ms(2026, 8, 12)
+        for existing in ({newer}, set()):
+            for live_reference in (False, True):
+                detector = GapDetector(BackfillConfig(gap_tolerance_bars=0), _Storage(existing))
+                if live_reference:
+                    detector.update_ingestion_reference("BTCUSDT", "5m", newer)
+                gaps = await detector.detect("BTCUSDT", intervals=["5m"],
+                    range_start_ms=start, range_end_ms=end)
+                assert [(gap.start_ms, gap.end_ms, gap.missing_bars) for gap in gaps] == [(start, end, 501)]
+    asyncio.run(_run())
+
+
+def test_historical_monthly_head_clamps_to_requested_calendar_end() -> None:
+    async def _run() -> None:
+        detector = GapDetector(BackfillConfig(gap_tolerance_bars=0), _Storage({_ms(2024, 6, 1)}))
+        gaps = await detector.detect("BTCUSDT", intervals=["1M"],
+            range_start_ms=_ms(2024, 1, 15), range_end_ms=_ms(2024, 3, 15))
+        assert [(gap.start_ms, gap.end_ms, gap.missing_bars) for gap in gaps] == [
+            (_ms(2024, 2, 1), _ms(2024, 3, 1), 2)]
+    asyncio.run(_run())
+
+
 def test_gap_detector_tail_range_clamp_preserves_head_and_interior_holes() -> None:
     async def _run() -> None:
         detector = GapDetector(
