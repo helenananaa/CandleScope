@@ -36,6 +36,7 @@ def main() -> int:
         "test_custom_history_streaming.py", "test_materialized_history_probe.py",
         "test_history_revision_admission.py", "test_aggregation_core.py",
         "test_shared_aggregation_blocks.py", "test_shared_blocks_integration.py",
+        "test_history_block_reader.py",
         "test_interval_policy_consistency.py", "test_bar_aggregator_contracts.py",
         "test_kline_order_flow_metrics.py", "test_history_calendar.py",
     )

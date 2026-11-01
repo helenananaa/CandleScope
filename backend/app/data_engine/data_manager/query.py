@@ -196,6 +196,9 @@ class QueryEngine:
             block_manager_provider=lambda: getattr(self, "shared_blocks", None),
         )
 
+        from .history_blocks import HistoryBlockReader
+        self.history_blocks = HistoryBlockReader(self)
+
     # ── Public: Dependency Access ────────────────────────────
 
     @property
@@ -263,6 +266,22 @@ class QueryEngine:
         if not callable(writer):
             return 0
         return int(writer(*args, **kwargs) or 0)
+
+    def read_history_blocks(self, source: SeriesKey, start_ms: int, end_ms: int, **options):
+        """Lease-scoped H127 canonical history page; publish only after context exit."""
+        return self.history_blocks.read(source, start_ms, end_ms, **options)
+
+    def _read_canonical_history_rows(self, storage, source, start_ms, end_ms, limit):
+        # Full canonical rows retain actual close_time; the compact chart
+        # projection intentionally omits it and cannot prove H127 bounds.
+        from app.data_engine.aggregation.blocks import BlockUnavailable
+        try:
+            return self._measure_storage_read(_QueryIOMetrics(), lambda: storage.query_bars(
+                symbol=source.symbol, interval=source.interval, start_ms=start_ms,
+                end_ms=end_ms - 1, limit=limit, order="ASC", exchange=source.exchange,
+                market_type=source.market_type, series_identity=source.identity))
+        except Exception as exc:
+            raise BlockUnavailable("canonical history page read failed") from exc
 
     # ── Public: Main Query ───────────────────────────────────
 
@@ -1148,6 +1167,7 @@ class QueryEngine:
         return {
             **metrics,
             "custom_intervals": self.custom_intervals.snapshot(),
+            "history_blocks": self.history_blocks.snapshot(),
             "shared_aggregation_blocks": (self.shared_blocks.snapshot()
                                           if getattr(self, "shared_blocks", None) is not None else None),
             "config": {
