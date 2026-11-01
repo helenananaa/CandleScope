@@ -23,6 +23,7 @@ from app.data_engine.interval_policy import (
 )
 from app.data_engine.interval_resolution import IntervalPurpose, IntervalRouteKind
 from app.indicator import create_engine
+from app.core import config
 
 logger = logging.getLogger("candlescope.indicator.bridge")
 
@@ -157,10 +158,14 @@ def bridge_indicator_engine(
     backfill_coordinator: Any | None = None,
     result_service: Any | None = None,
     isolate_realtime: bool = False,
+    execution_mode: str = "thread",
 ) -> Any:
     """Create an IndicatorEngine and subscribe it to DataManager events."""
     indicator_engine = (
-        SerialIndicatorOwner(factory=create_engine)
+        SerialIndicatorOwner(factory=create_engine if execution_mode == "thread" else None,
+                             execution_mode=execution_mode,
+                             max_pending=config.INDICATOR_REALTIME_PENDING,
+                             max_input_bars=config.INDICATOR_REALTIME_INPUT_BARS)
         if isolate_realtime else create_engine()
     )
     # The WebSocket Script path observes the same completion events as this
@@ -187,6 +192,7 @@ def bridge_indicator_engine(
         interval = event.key.interval
         market_type = event.key.market_type
         exchange = event.key.exchange
+        input_revision = None
 
         if event.event_type == DataEventType.BAR_CLOSED:
             if result_service is not None:
@@ -194,6 +200,7 @@ def bridge_indicator_engine(
                     series_key=series_reference(meta_from_key(event.key)),
                     closed_through=int(bar.time),
                 )
+                input_revision = result_service.data_revision_for_meta(meta_from_key(event.key))
             await call_engine(
                 indicator_engine, "on_bar_closed",
                 symbol,
@@ -201,9 +208,12 @@ def bridge_indicator_engine(
                 bar,
                 market_type=market_type,
                 exchange=exchange,
+                input_revision=input_revision,
                 **identity_kwargs(meta_from_key(event.key)),
             )
         elif event.event_type == DataEventType.BAR_UPDATED:
+            if result_service is not None:
+                input_revision = result_service.data_revision_for_meta(meta_from_key(event.key))
             await call_engine(
                 indicator_engine, "on_bar_updated",
                 symbol,
@@ -211,6 +221,7 @@ def bridge_indicator_engine(
                 bar,
                 market_type=market_type,
                 exchange=exchange,
+                input_revision=input_revision,
                 **identity_kwargs(meta_from_key(event.key)),
             )
 
@@ -653,6 +664,19 @@ def bridge_indicator_engine(
     indicator_engine.shutdown_bridge = _shutdown_bridge
 
     return indicator_engine
+
+
+async def shutdown_indicator_engine(engine: Any) -> None:
+    """Stop source delivery and always dispose the physical compute owner."""
+    try:
+        shutdown_bridge = getattr(engine, "shutdown_bridge", None)
+        if shutdown_bridge is not None:
+            await shutdown_bridge()
+    finally:
+        if isinstance(engine, SerialIndicatorOwner):
+            await engine.aclose()
+        else:
+            engine.stop()
 
 
 def indicator_dirty_range_from_event(event: Any) -> dict[str, int]:

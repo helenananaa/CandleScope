@@ -23,6 +23,62 @@ async def eventually(predicate):
             await asyncio.sleep(.001)
 
 
+def revision(number):
+    return {'serverEpoch': 'test', 'correctionRevision': number,
+            'revisionToken': f'test:{number}', 'closedThrough': 1800}
+
+
+@pytest.mark.asyncio
+async def test_corrected_seed_cannot_relabel_an_active_uncorrected_instance():
+    from app.indicator.serial_owner import IndicatorInputChanged
+    owner = SerialIndicatorOwner()
+    old, corrected = bars(), bars()
+    corrected[10] = replace(corrected[10], close=900)
+    try:
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5},
+                                  bars=old, data_revision=revision(0))
+        with pytest.raises(IndicatorInputChanged):
+            await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5},
+                             bars=corrected, data_revision=revision(1))
+        assert owner.snapshot()['instances'][0]['refcount'] == 1
+        await owner.call('on_bars_backfilled', 'BTCUSDT', '1m', corrected, data_revision=revision(1))
+        _, actual = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5},
+                                     bars=corrected, data_revision=revision(1))
+        reference = create_engine()
+        expected = reference.compute('BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, corrected)
+        assert actual.to_dict()['outputs'] == expected.to_dict()['outputs']
+        reference.stop()
+        with pytest.raises(IndicatorInputChanged):
+            await owner.call('on_bars_backfilled', 'BTCUSDT', '1m', old, data_revision=revision(0))
+        assert (await owner.call('get_result', key)).to_dict()['outputs'] == expected.to_dict()['outputs']
+    finally:
+        await owner.aclose()
+
+
+@pytest.mark.asyncio
+async def test_realtime_revision_describes_applied_state_and_out_of_span_cannot_skip_a_revision():
+    owner = SerialIndicatorOwner()
+    events = []
+    owner.add_listener(events.append)
+    try:
+        await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5},
+                         bars=bars(), data_revision=revision(0))
+        await owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(31)[-1], input_revision=revision(1))
+        event = [event for event in events if event.event_type == IndicatorEventType.INDICATOR_UPDATED][-1]
+        assert event.detail['dataRevision']['revisionToken'] == 'test:0'
+        assert event.detail['resyncRequired'] is True
+        await owner.call('on_series_correction_invalidated', 'BTCUSDT', '1m',
+                         dirty_range={'start': 1, 'end': 2}, data_revision=revision(2))
+        assert events[-1].detail['dataRevision']['revisionToken'] == 'test:0'
+        assert events[-1].detail['resyncRequired'] is True
+        await owner.call('on_bars_backfilled', 'BTCUSDT', '1m', bars(31), data_revision=revision(2))
+        await owner.call('on_bar_closed', 'BTCUSDT', '1m', bars(32)[-1], input_revision=revision(2))
+        assert events[-1].detail['dataRevision']['revisionToken'] == 'test:2'
+        assert not events[-1].detail.get('resyncRequired')
+    finally:
+        await owner.aclose()
+
+
 @pytest.mark.asyncio
 async def test_state_and_listeners_have_distinct_single_owners_and_match_batch():
     loop_thread = threading.get_ident()

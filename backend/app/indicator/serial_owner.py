@@ -1,19 +1,29 @@
-"""Bounded, serial ownership for the app's mutable builtin indicator engine.
+"""Bounded ownership for mutable builtin indicators, separate from history.
 
-This owner is separate from the historical indicator executor. A command keeps
-ownership until physical completion and loop-side delivery; cancelling its
-waiter does not let another command mutate the engine concurrently.
+Production uses one owned process; thread mode supports controlled comparison.
+A command retains ownership until physical completion and loop-side delivery;
+cancelling its waiter never permits overlapping state mutation.
 """
 from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from dataclasses import replace
+import os
+import threading
+import time
+import sys
+try:
+    import resource
+except ImportError:  # Windows packaging uses the same worker protocol.
+    resource = None
 import logging
 from typing import Any, Callable
 
 from app.core.bounded_executor import BoundedExecutor, ExecutorBusyError
+from app.core.process_lane import SerialProcessLane
 from app.data_engine.data_manager.models import BarData
-from app.indicator.engine import indicator_code_hash
+from app.indicator.engine import IndicatorCapacityError, IndicatorParametersError, indicator_code_hash
 from app.indicator.events import IndicatorEvent, IndicatorEventType
 from app.indicator.types import IndicatorKey
 
@@ -34,6 +44,24 @@ def _argument(args: tuple, kwargs: dict, index: int, name: str, default=None):
     return args[index] if len(args) > index else kwargs.get(name, default)
 
 
+def _revision_token(revision) -> str:
+    return str(revision.get('revisionToken') or
+               f"{revision.get('serverEpoch', '')}:{revision.get('correctionRevision', 0)}") if isinstance(revision, dict) else ''
+
+
+def _command_key(method: str, args: tuple, kwargs: dict) -> IndicatorKey:
+    subscribing = method == 'subscribe'
+    name = _argument(args, kwargs, 3, 'indicator_name') if subscribing else '__topic__'
+    return IndicatorKey(
+        _argument(args, kwargs, 0, 'symbol'), _argument(args, kwargs, 1, 'interval'),
+        name, _argument(args, kwargs, 4, 'params', {}) if subscribing else {},
+        market_type=_argument(args, kwargs, 2 if subscribing else 3, 'market_type', 'spot'),
+        exchange=_argument(args, kwargs, 6 if subscribing else 4, 'exchange', 'binance'),
+        series_identity=_argument(args, kwargs, 9 if subscribing else 7, 'series_identity'),
+        code_hash=indicator_code_hash(name) if subscribing else '',
+    )
+
+
 def _validate_history_state(engine, method: str, args: tuple, kwargs: dict) -> None:
     """Recheck at the physical owner boundary, without changing any state.
 
@@ -47,16 +75,7 @@ def _validate_history_state(engine, method: str, args: tuple, kwargs: dict) -> N
     confirmed = [bar for bar in source if bar.is_closed]
     if not confirmed:
         return
-    symbol = _argument(args, kwargs, 0, "symbol")
-    interval = _argument(args, kwargs, 1, "interval")
-    market_type = _argument(args, kwargs, 2 if subscribing else 3, "market_type", "spot")
-    exchange = _argument(args, kwargs, 6 if subscribing else 4, "exchange", "binance")
-    identity = _argument(args, kwargs, 9 if subscribing else 7, "series_identity")
-    name = _argument(args, kwargs, 3, "indicator_name") if subscribing else "__topic__"
-    params = _argument(args, kwargs, 4, "params", {}) if subscribing else {}
-    key = IndicatorKey(symbol, interval, name, params, market_type=market_type,
-                       exchange=exchange, series_identity=identity,
-                       code_hash=indicator_code_hash(name) if subscribing else "")
+    key = _command_key(method, args, kwargs)
     keys = [key] if subscribing else list(engine._stream_keys.get(key.series_topic, ()))
     last = max((engine._last_committed.get(key, 0) for key in keys), default=0)
     start, end = min(bar.time for bar in confirmed), max(bar.time for bar in confirmed)
@@ -96,7 +115,8 @@ def _bar_count(value: Any) -> int:
     return 0
 
 
-async def _drain_control(task: asyncio.Task) -> None:
+async def drain_control_task(task: asyncio.Task) -> None:
+    """Finish one bounded control operation before propagating cancellation."""
     cancelled = False
     while True:
         try:
@@ -112,13 +132,187 @@ async def _drain_control(task: asyncio.Task) -> None:
         raise asyncio.CancelledError
 
 
-class SerialIndicatorOwner:
-    """One physical worker; finite commands and retained input rows.
+class _IndicatorState:
+    """Mutable state used exclusively by one physical worker."""
 
-Listeners and adoption callbacks run on the creating asyncio loop. The engine
-itself is created, read, mutated and destroyed only by the dedicated worker.
-No engine or mutable indicator instance is exposed through this facade.
-"""
+    def __init__(self, factory=None):
+        self._factory = factory
+        self._engine = None
+        self._applied_revisions: dict[IndicatorKey, dict] = {}
+        self._worker_snapshot: dict = {}
+        self._worker_rows: dict[int, int] = {}
+        self._worker_key_ids: tuple[int, ...] = ()
+        self._worker_keys: tuple[IndicatorKey, ...] = ()
+
+    def _validate_revision(self, engine, method, args, kwargs, input_revision):
+        if method == 'subscribe':
+            key = _command_key(method, args, kwargs)
+            old = self._applied_revisions.get(key)
+            if (key in engine._instances and engine._instances[key].is_initialized
+                    and _revision_token(old) != _revision_token(input_revision)):
+                if engine._refcounts.get(key, 0) > 0:
+                    raise IndicatorInputChanged('Indicator correction is not applied to the shared instance yet')
+                engine._destroy_instance(key)
+                self._applied_revisions.pop(key, None)
+        elif method == 'on_bars_backfilled' and isinstance(input_revision, dict):
+            topic = _command_key(method, args, kwargs).series_topic
+            for key, old in self._applied_revisions.items():
+                if key.series_topic != topic or key not in engine._instances:
+                    continue
+                if (old.get('serverEpoch') != input_revision.get('serverEpoch') or
+                        int(old.get('correctionRevision', 0)) > int(input_revision.get('correctionRevision', 0))):
+                    raise IndicatorInputChanged('Correction snapshot predates applied indicator revision')
+        elif method in {'preview_for_key', 'get_result'} and isinstance(input_revision, dict):
+            if _revision_token(self._applied_revisions.get(args[0])) != _revision_token(input_revision):
+                raise IndicatorInputChanged('Indicator state belongs to another source revision')
+
+    def _stamp_revision(self, event, input_revision):
+        revision = event.detail.get('dataRevision', input_revision)
+        if revision is None:
+            return
+        old = self._applied_revisions.get(event.key)
+        if event.event_type in {IndicatorEventType.INSTANCE_INITIALIZED, IndicatorEventType.INDICATOR_RECOMPUTED}:
+            if isinstance(revision, dict):
+                # A no-recompute invalidation is safe only if no earlier
+                # correction remains unapplied to this instance.
+                contiguous = old is not None and old.get('serverEpoch') == revision.get('serverEpoch') and (
+                    int(revision.get('correctionRevision', 0)) - int(old.get('correctionRevision', 0)) in (0, 1))
+                if event.full_result is not None or contiguous:
+                    self._applied_revisions[event.key] = deepcopy(revision)
+                else:
+                    event.detail['resyncRequired'] = True
+                    event.detail['dataRevision'] = deepcopy(old)
+        elif event.event_type in {IndicatorEventType.INDICATOR_UPDATED, IndicatorEventType.INDICATOR_PREVIEW}:
+            if isinstance(revision, dict):
+                if _revision_token(old) != _revision_token(revision):
+                    event.detail['resyncRequired'] = True
+                elif old is not None:
+                    old = {**old, 'closedThrough': max(int(old.get('closedThrough', 0)),
+                           event.bar_timestamp if event.event_type == IndicatorEventType.INDICATOR_UPDATED else 0)}
+                    self._applied_revisions[event.key] = old
+                event.detail['dataRevision'] = deepcopy(old)
+
+    def execute(self, method: str, args: tuple, kwargs: dict) -> tuple:
+        kwargs = dict(kwargs)
+        input_revision = kwargs.pop('__input_revision', None) or kwargs.get('data_revision')
+        if method == "__reset_source":
+            if self._engine is not None:
+                try:
+                    self._engine.stop()
+                except Exception:
+                    logger.exception("Discarding failed indicator engine")
+            self._engine = None
+            self._applied_revisions.clear()
+            self._worker_snapshot = {}
+            self._worker_rows.clear()
+            self._worker_key_ids = ()
+            self._worker_keys = ()
+        if self._engine is None:
+            if self._factory is None:
+                from app.indicator import create_engine
+                self._engine = create_engine()
+            else:
+                self._engine = self._factory()
+        engine = self._engine
+        self._validate_revision(engine, method, args, kwargs, input_revision)
+        _validate_history_state(engine, method, args, kwargs)
+        events: list = []
+        committed: list[tuple[int, int]] = []
+        changed_keys = None
+        # Capture detached values while the worker owns the engine. Consumers
+        # never run on this thread or inspect engine-owned mutable structures.
+        def capture(event):
+            self._stamp_revision(event, input_revision)
+            if event.event_type == IndicatorEventType.INDICATOR_UPDATED:
+                committed.append((id(event.key), event.bar_timestamp))
+            # Realtime frames contain scalar values and a small bar detail.
+            # Clone these explicitly; generic dataclass reconstruction for
+            # every tick needlessly duplicates reflection and key identity.
+            events.append(IndicatorEvent(
+                event.event_type, replace(event.key, params=deepcopy(event.key.params)),
+                values=dict(event.values), full_result=deepcopy(event.full_result),
+                detail=deepcopy(event.detail), timestamp_ms=event.timestamp_ms,
+                bar_timestamp=event.bar_timestamp,
+            ))
+        engine.add_listener(capture)
+        try:
+            if method == "__reset_source":
+                result = None
+            elif method == "__release_many":
+                for key, count in args[0].items():
+                    engine.unsubscribe(key, count=count)
+                result = None
+            elif method == "set_source_delivery_state":
+                engine.source_delivery_state = dict(args[0])
+                result = None
+            else:
+                result = getattr(engine, method)(*args, **kwargs)
+            if any(event.event_type == IndicatorEventType.INDICATOR_ERROR for event in events):
+                raise RuntimeError('Indicator calculation reported a state transition failure')
+            steady_update = (method in {'on_bar_updated', 'on_bar_closed'} and self._worker_snapshot
+                             and all(event.event_type in {IndicatorEventType.INDICATOR_UPDATED, IndicatorEventType.INDICATOR_PREVIEW}
+                                     for event in events))
+            if steady_update:
+                # Copy-on-write diagnostic rows: preview changes no committed
+                # field; each successful close advances only its own row.
+                # Never mutate a snapshot already handed to the loop.
+                snapshot = self._worker_snapshot
+                if committed:
+                    rows = list(snapshot['instances'])
+                    for key_id, timestamp in committed:
+                        index = self._worker_rows[key_id]
+                        row = rows[index]
+                        rows[index] = {**row, 'bar_count': row['bar_count'] + 1,
+                                       'last_committed': timestamp}
+                    snapshot = {**snapshot, 'instances': rows}
+            else:
+                snapshot = engine.snapshot()
+                self._worker_rows = {id(key): index for index, key in enumerate(engine._instances)}
+                self._applied_revisions = {key: revision for key, revision in self._applied_revisions.items()
+                                           if key in engine._instances}
+                key_ids = tuple(self._worker_rows)
+                if key_ids != self._worker_key_ids:
+                    self._worker_key_ids = key_ids
+                    self._worker_keys = deepcopy(tuple(engine._instances))
+                    changed_keys = self._worker_keys
+            peak_rss = (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024)
+                        if resource is not None else None)
+            snapshot = {**snapshot, "worker": {"pid": os.getpid(), "thread": threading.get_ident(),
+                                              "cpu_seconds": time.process_time(), "peak_rss_bytes": peak_rss}}
+            self._worker_snapshot = snapshot
+            if method in {'stop', '__reset_source'}:
+                changed_keys = self._worker_keys
+            if steady_update:
+                # The loop already owns the unchanged diagnostic metadata.
+                # Only committed frontiers and worker telemetry cross IPC on
+                # ordinary ticks; membership changes always send a full view.
+                snapshot = {'_delta': True, 'worker': snapshot['worker'], 'committed': [
+                    (self._worker_rows[key_id], self._worker_snapshot['instances'][self._worker_rows[key_id]]['bar_count'], timestamp)
+                    for key_id, timestamp in committed
+                ]}
+            return deepcopy(result), events, snapshot, changed_keys
+        finally:
+            engine.remove_listener(capture)
+
+
+
+_process_state = None
+
+
+def _process_command(method, args, kwargs):
+    global _process_state
+    if _process_state is None:
+        _process_state = _IndicatorState()
+    return _process_state.execute(method, args, kwargs)
+
+
+class SerialIndicatorOwner:
+    """One physical worker, with finite commands and retained input rows.
+
+    Listeners and adoption callbacks run on the creating loop. The engine is
+    created, read, mutated and destroyed only by its worker. The facade never
+    exposes a raw engine or a mutable indicator instance.
+    """
 
     METHODS = frozenset({
         "subscribe", "unsubscribe", "on_bar_closed", "on_bar_updated",
@@ -129,12 +323,19 @@ No engine or mutable indicator instance is exposed through this facade.
     })
 
     def __init__(self, *, factory: Callable | None = None,
-                 max_pending: int = 64, max_input_bars: int = 500_000) -> None:
+                 max_pending: int = 64, max_input_bars: int = 500_000,
+                 execution_mode: str = "thread") -> None:
         if max_pending < 0 or max_input_bars < 1:
             raise ValueError("Invalid indicator owner capacity")
         self._loop = asyncio.get_running_loop()
         self._factory = factory
-        self._engine = None
+        if execution_mode not in {"thread", "process"}:
+            raise ValueError("Invalid indicator execution mode")
+        if execution_mode == "process" and factory is not None:
+            raise ValueError("Process ownership uses the installed builtin registry")
+        self._execution_mode = execution_mode
+        self._state = _IndicatorState(factory)
+        self._process_lane = None
         self._executor = BoundedExecutor("indicator_realtime", max_workers=1, max_pending=0)
         self._lock = asyncio.Lock()
         self._max_inflight = max_pending + 1
@@ -181,7 +382,7 @@ No engine or mutable indicator instance is exposed through this facade.
                     logger.exception("Indicator listener failed")
 
     def _notify_resync(self, detail: dict) -> None:
-        self._publish(IndicatorEvent(IndicatorEventType.INDICATOR_ERROR, key,
+        self._publish(IndicatorEvent(IndicatorEventType.INDICATOR_ERROR, deepcopy(key),
             detail={**detail, "resyncRequired": True, "ownerGeneration": self._generation})
             for key in self._known_keys)
 
@@ -195,7 +396,7 @@ No engine or mutable indicator instance is exposed through this facade.
         state = ("recovering" if self._recovering else "recovery_failed" if self._failure else None)
         return {**deepcopy(self._snapshot), "listener_count": len(self._listeners),
                 **({"source_delivery": {"state": state, "error": self._failure}} if state else {}),
-                "serial_owner": {"sequence": self._sequence, "inflight": self._inflight,
+                "serial_owner": {"execution_mode": self._execution_mode, "sequence": self._sequence, "inflight": self._inflight,
                     "max_inflight": self._max_inflight, "input_bars": self._input_bars,
                     "max_input_bars": self._max_input_bars, "rejected": self._rejected,
                     "cancelled_queued": self._cancelled_queued,
@@ -206,44 +407,35 @@ No engine or mutable indicator instance is exposed through this facade.
                     "release_targets": len(self._pending_releases),
                     "executor": self._executor.snapshot()}}
 
+    def _adopt_snapshot(self, snapshot, keys):
+        if snapshot.get('_delta'):
+            rows = self._snapshot['instances']
+            if snapshot['committed']:
+                rows = list(rows)
+                for index, count, timestamp in snapshot['committed']:
+                    rows[index] = {**rows[index], 'bar_count': count, 'last_committed': timestamp}
+            self._snapshot = {**self._snapshot, 'instances': rows, 'worker': snapshot['worker']}
+        else:
+            self._snapshot = snapshot
+        if keys is not None:
+            self._known_keys = keys
+
     def _execute(self, method: str, args: tuple, kwargs: dict) -> tuple:
-        if method == "__reset_source":
-            if self._engine is not None:
-                try:
-                    self._engine.stop()
-                except Exception:
-                    logger.exception("Discarding failed indicator engine")
-            self._engine = None
-        if self._engine is None:
-            if self._factory is None:
-                from app.indicator import create_engine
-                self._engine = create_engine()
-            else:
-                self._engine = self._factory()
-        engine = self._engine
-        _validate_history_state(engine, method, args, kwargs)
-        events: list = []
-        # Capture detached values while the worker owns the engine. Consumers
-        # never run on this thread or inspect engine-owned mutable structures.
-        def capture(event):
-            events.append(deepcopy(event))
-        engine.add_listener(capture)
+        if self._execution_mode == "thread":
+            return self._state.execute(method, args, kwargs)
+        # This synchronous transport runs on the dedicated I/O thread, never
+        # on the event loop. One worker process owns all mutable instances.
+        if method == "__reset_source" and self._process_lane is not None:
+            self._process_lane.close()
+            self._process_lane = None
+        if self._process_lane is None:
+            self._process_lane = SerialProcessLane(_process_command, name="indicator-realtime")
         try:
-            if method == "__reset_source":
-                result = None
-            elif method == "__release_many":
-                for key, count in args[0].items():
-                    engine.unsubscribe(key, count=count)
-                result = None
-            elif method == "set_source_delivery_state":
-                engine.source_delivery_state = dict(args[0])
-                result = None
-            else:
-                result = getattr(engine, method)(*args, **kwargs)
-            snapshot = engine.snapshot()
-            return deepcopy(result), events, snapshot, tuple(engine._instances)
+            return self._process_lane.call(method, args, kwargs)
         finally:
-            engine.remove_listener(capture)
+            if method == "stop":
+                self._process_lane.close()
+                self._process_lane = None
 
     async def _physical(self, method: str, args: tuple, kwargs: dict) -> tuple:
         physical = self._executor.submit(lambda: self._execute(method, args, kwargs), operation=method)
@@ -270,7 +462,8 @@ No engine or mutable indicator instance is exposed through this facade.
 
     async def call(self, method: str, *args: Any,
                    adopt: Callable[[Any], None] | None = None,
-                   expected_generation: int | None = None, **kwargs: Any) -> Any:
+                   expected_generation: int | None = None,
+                   input_revision: dict | None = None, **kwargs: Any) -> Any:
         self._assert_loop()
         if method not in self.METHODS:
             raise ValueError(f"Unsupported indicator owner operation: {method}")
@@ -296,6 +489,8 @@ No engine or mutable indicator instance is exposed through this facade.
         started = False
         try:
             args, kwargs = _input_snapshot(args), _input_snapshot(kwargs)
+            if input_revision is not None:
+                kwargs['__input_revision'] = deepcopy(input_revision)
             async with self._lock:
                 if self._closing:
                     raise RuntimeError("Indicator owner is closing")
@@ -308,7 +503,7 @@ No engine or mutable indicator instance is exposed through this facade.
                 started = True
                 try:
                     (result, events, snapshot, keys), cancelled = await self._physical(method, args, kwargs)
-                except IndicatorInputChanged:
+                except (IndicatorInputChanged, IndicatorCapacityError, IndicatorParametersError):
                     # Rejected before any mutation; the caller can fetch a
                     # fresh canonical snapshot without poisoning valid state.
                     raise
@@ -323,8 +518,7 @@ No engine or mutable indicator instance is exposed through this facade.
                     # subscription which completed after its caller became old.
                     raise IndicatorGenerationChanged("Indicator input generation changed while running")
                 self._sequence += 1
-                self._snapshot = snapshot
-                self._known_keys = keys
+                self._adopt_snapshot(snapshot, keys)
                 # Adoption is synchronous on the loop, before a subsequent
                 # command or listener can observe the new subscription.
                 if adopt is not None:
@@ -371,13 +565,13 @@ No engine or mutable indicator instance is exposed through this facade.
                         self._notify_resync({"error": "Indicator release failed; reload canonical history"})
                         raise
                     if generation == self._generation and not self._recovering:
-                        self._snapshot, self._known_keys = snapshot, keys
+                        self._adopt_snapshot(snapshot, keys)
                         self._sequence += 1
                         self._publish(events)
 
         if self._release_task is None or self._release_task.done():
             self._release_task = asyncio.create_task(drain(), name="indicator-owner-release")
-        await _drain_control(self._release_task)
+        await drain_control_task(self._release_task)
 
     async def recover(self, detail: dict) -> None:
         """Invalidate old admissions immediately; replace state on its worker.
@@ -399,7 +593,7 @@ No engine or mutable indicator instance is exposed through this facade.
             try:
                 async with self._lock:
                     (_, _, snapshot, keys), _ = await self._physical("__reset_source", (), {})
-                    self._snapshot, self._known_keys = snapshot, keys
+                    self._adopt_snapshot(snapshot, keys)
                     self._failure = None
                     self._sequence += 1
             except BaseException as error:
@@ -409,7 +603,7 @@ No engine or mutable indicator instance is exposed through this facade.
                 self._recovering = False
 
         task = self._recovery_task = asyncio.create_task(reset(), name="indicator-owner-recovery")
-        await _drain_control(task)
+        await drain_control_task(task)
 
     async def aclose(self) -> None:
         self._assert_loop()
@@ -434,15 +628,17 @@ No engine or mutable indicator instance is exposed through this facade.
 
         if self._close_task is None:
             self._close_task = asyncio.create_task(stop(), name="indicator-owner-close")
-        await _drain_control(self._close_task)
+        await drain_control_task(self._close_task)
 
 
 async def call_engine(engine: Any, method: str, *args: Any,
                       adopt: Callable[[Any], None] | None = None,
-                      expected_generation: int | None = None, **kwargs: Any) -> Any:
+                      expected_generation: int | None = None,
+                      input_revision: dict | None = None, **kwargs: Any) -> Any:
     """Support explicit standalone synchronous engines in isolated computations."""
     if isinstance(engine, SerialIndicatorOwner):
-        return await engine.call(method, *args, adopt=adopt, expected_generation=expected_generation, **kwargs)
+        return await engine.call(method, *args, adopt=adopt, expected_generation=expected_generation,
+                                 input_revision=input_revision, **kwargs)
     if method == "set_source_delivery_state":
         engine.source_delivery_state = dict(args[0])
         return None

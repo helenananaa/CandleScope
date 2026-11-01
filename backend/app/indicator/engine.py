@@ -50,12 +50,19 @@ EventListener = Callable[[IndicatorEvent], None]
 class IndicatorCapacityError(RuntimeError):
     """Raised when a new target would exceed the process-wide hard limit."""
 
-    def __init__(self, *, active: int, maximum: int) -> None:
+    def __init__(self, active: int, maximum: int) -> None:
         self.active = active
         self.maximum = maximum
         super().__init__(
             f"indicator target capacity reached: active={active}, maximum={maximum}"
         )
+
+    def __reduce__(self):
+        return type(self), (self.active, self.maximum)
+
+
+class IndicatorParametersError(ValueError):
+    """A new instance was rejected before any shared instance was modified."""
 
 
 def indicator_code_hash(indicator_name: str) -> str:
@@ -285,6 +292,7 @@ class IndicatorEngine:
                 )
             except Exception as exc:
                 logger.error("Init failed for %s: %s", key.uid, exc, exc_info=True)
+                self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={"error": str(exc)})
 
         elif bars and instance.is_initialized:
             try:
@@ -349,6 +357,7 @@ class IndicatorEngine:
                 )
             except Exception as exc:
                 logger.error("Warm resume failed for %s: %s", key.uid, exc, exc_info=True)
+                self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={"error": str(exc)})
 
         return key, result
 
@@ -391,7 +400,10 @@ class IndicatorEngine:
                 maximum=self._max_active_targets,
             )
 
-        instance = cls(params=dict(key.params))
+        try:
+            instance = cls(params=dict(key.params))
+        except (ValueError, TypeError, ZeroDivisionError, OverflowError) as exc:
+            raise IndicatorParametersError(str(exc)) from exc
         self._instances[key] = instance
         self._refcounts.setdefault(key, 0)
 
@@ -535,6 +547,7 @@ class IndicatorEngine:
                 )
             except Exception as exc:
                 logger.error("update_partial failed for %s: %s", key.uid, exc, exc_info=True)
+                self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={"error": str(exc)})
 
     def preview_for_key(
         self,
@@ -559,6 +572,7 @@ class IndicatorEngine:
             return instance.get_preview()
         except Exception as exc:
             logger.error("initial preview failed for %s: %s", key.uid, exc, exc_info=True)
+            self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={"error": str(exc)})
             return None
 
     def plan_series_correction(
@@ -824,6 +838,7 @@ class IndicatorEngine:
                 )
             except Exception as exc:
                 logger.error("Recompute failed for %s: %s", key.uid, exc, exc_info=True)
+                self._emit(IndicatorEventType.INDICATOR_ERROR, key, detail={"error": str(exc)})
 
     # =============================================================
     #  Event Dispatching

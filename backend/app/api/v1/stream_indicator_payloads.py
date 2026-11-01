@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import Any
 
+from app.indicator.history_worker import run_builtin_history_range
 from app.core import config
 from app.core.executors import run_indicator, run_script_wait, run_storage
 from app.data_engine.interval_policy import (
@@ -465,7 +466,9 @@ async def compute_indicator_range_payload_async(
         backfill_coordinator=backfill_coordinator,
         wait_seconds=backfill_wait_seconds,
     )
-    return await run_indicator(
+    return await (run_builtin_history_range(
+        client_id, meta, start_s, end_s, bars, reason, target_bars,
+    ) if config.INDICATOR_HISTORY_PROCESS_ENABLED else run_indicator(
         _compute_builtin_range_patch_from_bars,
         client_id,
         meta,
@@ -474,7 +477,7 @@ async def compute_indicator_range_payload_async(
         bars,
         reason,
         target_bars,
-    )
+    ))
 
 
 def _query_indicator_compute_bars(
@@ -750,16 +753,19 @@ def _compute_builtin_range_patch_from_bars(
     params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
     warmup = _indicator_warmup_bars(name, params)
     engine = create_engine()
-    result = engine.compute(
-        symbol=meta["symbol"],
-        interval=meta["interval"],
-        market_type=meta["market_type"],
-        indicator_name=name,
-        params=params,
-        bars=bars,
-        exchange=meta["exchange"],
-        **identity_kwargs(meta),
-    )
+    try:
+        result = engine.compute(
+            symbol=meta["symbol"],
+            interval=meta["interval"],
+            market_type=meta["market_type"],
+            indicator_name=name,
+            params=params,
+            bars=bars,
+            exchange=meta["exchange"],
+            **identity_kwargs(meta),
+        )
+    finally:
+        engine.stop()
     payload = build_indicator_snapshot_payload(
         client_id=client_id,
         indicator_id=meta.get("indicatorId")
