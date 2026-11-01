@@ -105,6 +105,43 @@ def test_failed_source_validation_signals_recovery_without_mutating_tail(dm, run
     asyncio.run(check())
 
 
+def test_initial_revision_race_keeps_bounded_owner_for_next_canonical_close(dm, runtime, monkeypatch):
+    from app.data_engine.aggregation.blocks import BlockRevisionChanged
+    agg, service, _ = runtime
+    original = service.reader.validate_bound
+    failed = False
+
+    def fail_once(prefix):
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise BlockRevisionChanged('canonical backfill advanced during first staging')
+        return original(prefix)
+
+    monkeypatch.setattr(service.reader, 'validate_bound', fail_once)
+
+    async def check():
+        rows = read_rows(dm)
+        assert await service.seed(KEY, '121d', 0, 120 * DAY)
+        assert service.owns_target(KEY, '121d')
+        # Current previews remain a bounded fine overlay. A later confirmed
+        # source input retries canonical staging instead of permanently
+        # falling back to a full fine-grained history after one transient race.
+        tail = replace(rows[-1], time=120 * DAY // 1000, volume=4)
+        await feed(agg, tail)
+        assert actual(agg)._history_prefix is None
+        await feed(agg, rows[-1], closed=True)
+        assert actual(agg)._history_prefix.complete
+        equal(actual(agg), reference(dm, tail))
+        adopted = service.metrics['adoptions']
+        await feed(agg, rows[-2], closed=True)
+        assert service.metrics['adoptions'] == adopted
+        equal(actual(agg), reference(dm, tail))
+        await service.close()
+
+    asyncio.run(check())
+
+
 def test_empty_delete_repeated_stale_input_and_partial_repair_never_resurrect(dm, runtime):
     agg, service, recovery = runtime
     async def check():
