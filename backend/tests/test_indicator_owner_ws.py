@@ -86,7 +86,7 @@ def blocking_factory(entered, release):
     return factory
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_repeated_cancel_drains_adopted_subscription_and_market_lease():
     entered, release = threading.Event(), threading.Event()
     owner = SerialIndicatorOwner(factory=blocking_factory(entered, release), max_pending=0)
@@ -118,7 +118,7 @@ async def test_repeated_cancel_drains_adopted_subscription_and_market_lease():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_source_revision_change_while_worker_seeds_prevents_success_ack():
     entered, release = threading.Event(), threading.Event()
     owner = SerialIndicatorOwner(factory=blocking_factory(entered, release))
@@ -144,7 +144,7 @@ async def test_source_revision_change_while_worker_seeds_prevents_success_ack():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_reconnect_during_recovery_remains_retryable_and_releases_market_lease():
     entered, release = threading.Event(), threading.Event()
     calls = 0
@@ -179,7 +179,7 @@ async def test_reconnect_during_recovery_remains_retryable_and_releases_market_l
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.parametrize('updates', [1, 17])
 async def test_live_events_wait_for_ack_and_pending_overflow_requires_resync(updates):
     owner = SerialIndicatorOwner()
