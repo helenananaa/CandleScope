@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
 
 from .schema import apply_schema
+from .run_updates import run_updates_for
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -37,6 +38,7 @@ class BacktestRepository:
         self.path = Path(path)
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
+        self.run_updates = run_updates_for(self.path)
 
     @_locked
     def open(self, *, now_ms: int) -> None:
@@ -419,6 +421,7 @@ class BacktestRepository:
             values,
         )
         self.connection.commit()
+        self.run_updates.notify(run_id)
 
     @_locked
     def compare_and_set_run_state(
@@ -447,6 +450,8 @@ class BacktestRepository:
             values,
         )
         self.connection.commit()
+        if cursor.rowcount == 1:
+            self.run_updates.notify(run_id)
         return cursor.rowcount == 1
 
     @_locked
@@ -610,6 +615,7 @@ class BacktestRepository:
                 (payload["run_id"], payload["sequence"]),
             )
             connection.commit()
+            self.run_updates.notify(str(payload["run_id"]))
             return True
         except Exception:
             connection.rollback()
@@ -1316,6 +1322,7 @@ class BacktestRepository:
             )
             connection.execute("DELETE FROM backtest_checkpoint_chunks WHERE run_id = ?", (run_id,))
             connection.commit()
+            self.run_updates.notify(run_id)
         except Exception:
             connection.rollback()
             raise
