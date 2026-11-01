@@ -542,6 +542,78 @@ async def test_actual_bridge_recovers_failed_worker_and_accepts_fresh_generation
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('resolution', ['repair', 'stream_restart'])
+@pytest.mark.parametrize('execution_mode', ['thread', 'process'])
+async def test_bridge_expired_source_gap_keeps_recovery_fenced_until_source_is_usable(resolution, execution_mode):
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
+    from app.indicator import data_manager_bridge as bridge
+    from app.indicator.range_result_service import IndicatorRangeResultService
+    from app.indicator.serial_owner import IndicatorGenerationChanged
+
+    dm = DataManager()
+    service = IndicatorRangeResultService.from_config()
+    owner = bridge.bridge_indicator_engine(dm, result_service=service, isolate_realtime=True,
+                                          execution_mode=execution_mode)
+    source = bars()
+    source_key = SeriesKey('BTCUSDT', '1m')
+    missing = replace(bars(31)[-1], source='backfill')
+    try:
+        await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        gap, _ = dm.source_gaps.open(source_key, missing.time_ms, missing.time_ms)
+        gap.detected_at -= 11
+        await dm.event_bus.emit(gap.event())
+        await eventually(lambda: owner.generation == 1)
+        await asyncio.sleep(.05)
+        # A reconnect while this old gap remains would immediately retire all
+        # three fresh subscriptions. It must never advertise live readiness.
+        assert owner.snapshot()['source_delivery']['state'] == 'recovering'
+        assert dm.event_bus.snapshot()['callback_subscriptions'] == 0
+        with pytest.raises(IndicatorGenerationChanged, match='recovering'):
+            await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source)
+        if resolution == 'repair':
+            resolved, _ = dm.source_gaps.accept(source_key, [missing])
+            assert resolved == [gap]
+        else:
+            dm.source_gaps.retire(source_key)
+        await eventually(lambda: not owner.snapshot()['serial_owner']['recovering'])
+        assert owner.generation == 1
+        assert dm.event_bus.snapshot()['callback_subscriptions'] == 3
+        assert all(state['state'] == 'live' for state in dm.event_bus.snapshot()['consumer_states'].values())
+        key, _ = await owner.call('subscribe', 'BTCUSDT', '1m', 'spot', 'EMA', {'period': 5}, bars=source + [missing])
+        next_close = replace(bars(32)[-1], source='backfill')
+        await dm.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED, source_key, next_close))
+        await eventually(lambda: owner.snapshot()['instances'][0]['last_committed'] == next_close.time)
+        assert (await owner.call('get_result', key)).get_latest()
+    finally:
+        await bridge.shutdown_indicator_engine(owner)
+        await dm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_bridge_shutdown_drains_recovery_waiting_on_unrepaired_source():
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.models import SeriesKey
+    from app.indicator import data_manager_bridge as bridge
+
+    dm = DataManager()
+    owner = bridge.bridge_indicator_engine(dm, isolate_realtime=True)
+    try:
+        gap, _ = dm.source_gaps.open(SeriesKey('BTCUSDT', '1m'), 1860000, 1860000)
+        gap.detected_at -= 11
+        await dm.event_bus.emit(gap.event())
+        await eventually(lambda: owner.generation == 1)
+        await asyncio.sleep(.05)
+        assert owner.snapshot()['source_delivery']['state'] == 'recovering'
+        await asyncio.wait_for(bridge.shutdown_indicator_engine(owner), 2)
+        assert owner.snapshot()['serial_owner']['closed']
+        assert dm.event_bus.snapshot()['callback_subscriptions'] == 0
+    finally:
+        await bridge.shutdown_indicator_engine(owner)
+        await dm.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_cancelled_shutdown_waits_for_recovery_and_physical_worker_exit():
     from app.indicator.serial_owner import IndicatorGenerationChanged
     entered, release = threading.Event(), threading.Event()
