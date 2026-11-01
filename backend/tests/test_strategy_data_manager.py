@@ -32,6 +32,60 @@ def events():
         payload={"open": "100", "high": "101", "low": "99", "close": "100", "volume": "1"}) for i in (1, 2))
 
 
+def test_real_runtime_worker_publishes_committed_terminal_to_manager(tmp_path, monkeypatch):
+    """The worker opens its own repository; its commits must wake the API owner."""
+    from app.backtest.runtime import BacktestRuntime
+    from app.data_engine.data_manager.core import DataManagerCore
+    from app.local_data.service import LocalDatasetService, LocalImportOptions
+    monkeypatch.setenv("BACKTEST_COLOCATED_BAR_ENABLED", "1")
+    trace = []
+
+    source = tmp_path / "bars.csv"
+    source.write_text("time,open,high,low,close,volume\n" + "\n".join(
+        f"{i * 60000},{100 + i % 7},{101 + i % 7},{99 + i % 7},{100 + i % 7},1" for i in range(40)))
+    local = tmp_path / "local-data"
+    manifest = LocalDatasetService(local).import_csv(source,
+        LocalImportOptions(name="committed stream", symbol="FIXTURE", interval="1m", timestamp_unit="ms"))
+    settings = load_backtest_settings({"BACKTEST_ENABLED": "1", "BACKTEST_BAR_ENABLED": "1"},
+        data_dir=tmp_path, klines_db_path=tmp_path / "market.db", replay_db_path=tmp_path / "replay.db")
+    runtime = BacktestRuntime.start(settings, local_data_dir=local)
+    core = DataManagerCore()
+    manager = core.bind_strategy(runtime.service, runtime)
+    try:
+        preview = runtime.preview_snapshot(dataset_id=manifest["dataset_id"], data_epoch=manifest["data_epoch"],
+            start_time_ms=0, end_time_ms=2400000, interval="1m")
+        run = manager.control_plane().create_run({"strategy_revision_id": "builtin-sma-cross-v1",
+            "dataset_id": manifest["dataset_id"], "data_epoch": manifest["data_epoch"],
+            "snapshot_hash": preview["snapshot_hash"], "fidelity_mode": "BAR_APPROX", "interval": "1m",
+            "start_time_ms": 0, "end_time_ms": 2400000, "parameters": {"fast": 3, "slow": 5}},
+            idempotency_key="runtime-stream")
+
+        async def consume():
+            subscription = await manager.subscribe_run(run["run_id"])
+            received = []
+            async for event in subscription.events():
+                received.append(event)
+                trace.append(("event", event["type"], event.get("run", {}).get("state")))
+            return received
+
+        async def bounded():
+            return await asyncio.wait_for(consume(), 20)
+
+        try:
+            received = asyncio.run(bounded())
+        except TimeoutError:
+            pytest.fail(str({"owner": id(runtime.service.repository.run_updates), "state": runtime.service.get_run(run["run_id"])["state"], "trace": trace}))
+        assert received[-1]["type"] == "completed"
+        assert received[-1]["terminal"] is True
+        assert received[-1]["run"]["snapshot_hash"] == preview["snapshot_hash"]
+        assert received[-1]["result"]["report_hash"] == runtime.service.get_report(run["run_id"])["hashes"]["report"]
+        assert manager.diagnostics()["subscriptions"] == 0
+        assert runtime.service.repository.run_updates.diagnostics()["subscriptions"] == 0
+    finally:
+        core.close_strategy()
+        runtime.shutdown()
+
+
 @pytest.mark.parametrize("crash", [False, True])
 def test_actual_engine_completion_and_failure_arrive_without_polling(service, crash):
     async def check():

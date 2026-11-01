@@ -6,6 +6,8 @@ coalesce several commits; subscribers read the latest committed run identity.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+import logging
 import threading
 import weakref
 from pathlib import Path
@@ -71,6 +73,21 @@ class RunUpdates:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._subscribers: dict[str, set[RunUpdateSubscription]] = {}
+        self._commit_listeners: dict[str, set[Callable[[], None]]] = {}
+
+    def listen_commits(self, run_id: str, listener: Callable[[], None]) -> Callable[[], None]:
+        """Install an owned process bridge; callbacks carry no result payload."""
+        with self._lock:
+            self._commit_listeners.setdefault(run_id, set()).add(listener)
+
+        def release() -> None:
+            with self._lock:
+                listeners = self._commit_listeners.get(run_id)
+                if listeners is not None:
+                    listeners.discard(listener)
+                    if not listeners:
+                        self._commit_listeners.pop(run_id, None)
+        return release
 
     def subscribe(self, run_id: str) -> RunUpdateSubscription:
         subscription = RunUpdateSubscription(self, run_id)
@@ -90,8 +107,16 @@ class RunUpdates:
     def notify(self, run_id: str) -> None:
         with self._lock:
             subscribers = tuple(self._subscribers.get(run_id, ()))
+            listeners = tuple(self._commit_listeners.get(run_id, ()))
         for subscription in subscribers:
             subscription.notify()
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:
+                # Notification failure cannot turn an already committed write
+                # into a reported transaction failure.
+                logging.getLogger(__name__).exception("Run commit bridge failed for %s", run_id)
 
     def diagnostics(self) -> dict[str, int]:
         with self._lock:

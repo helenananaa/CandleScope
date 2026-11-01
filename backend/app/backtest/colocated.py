@@ -81,13 +81,14 @@ class _GuardedProvider:
         return invoke
 
 
-def _worker(connection, settings, run_id, spec, events, options, call_deadline, log_fd=None):
+def _worker(connection, settings, run_id, spec, events, options, call_deadline, commit_revision, log_fd=None):
     from .service import BacktestService
     from .strategy.pine_adapter import PineStrategyProvider
     from .strategy.registry import build_default_strategy_registry
     from .strategy.local_python import LocalPythonRunner
 
     service = None
+    release_commits = None
     working_directory = Path.cwd()
     stdout, stderr = sys.stdout, sys.stderr
     try:
@@ -98,6 +99,10 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
             sys.stdout = os.fdopen(os.dup(1), "w", buffering=1, encoding="utf-8")
             sys.stderr = os.fdopen(os.dup(2), "w", buffering=1, encoding="utf-8")
         service = BacktestService.start(settings)
+        def committed():
+            with commit_revision.get_lock():
+                commit_revision.value += 1
+        release_commits = service.repository.run_updates.listen_commits(run_id, committed)
         service._colocated_worker = True
         if spec["kind"] == "python":
             from .strategy.python_runner import SDK_SRC
@@ -137,6 +142,8 @@ def _worker(connection, settings, run_id, spec, events, options, call_deadline, 
             sys.stdout.close()
             sys.stderr.close()
         sys.stdout, sys.stderr = stdout, stderr
+        if release_commits is not None:
+            release_commits()
         if service is not None:
             service.shutdown()
         os.chdir(working_directory)
@@ -156,11 +163,16 @@ def execute(service, run_id, spec, events, options):
     })
     parent, child = context.Pipe(duplex=False)
     deadline = context.RawValue("d", time.monotonic() + 15.0)
+    # One shared counter coalesces committed child updates. The supervisor
+    # already wakes for deadlines/control; no per-event pipe payload or extra
+    # database polling is introduced for result subscriptions.
+    commit_revision = context.Value("Q", 0)
+    observed_revision = 0
     read_fd, write_fd = os.pipe()
     overflow = threading.Event()
     reader = None
     process = context.Process(target=_worker, args=(
-        child, settings, run_id, spec, pack_events(events), options, deadline, SpawnWriter(write_fd),
+        child, settings, run_id, spec, pack_events(events), options, deadline, commit_revision, SpawnWriter(write_fd),
     ), name=f"backtest-run-{run_id}", daemon=True)
     generation = int(service.get_run(run_id)["generation"])
     overall_deadline = time.monotonic() + service.settings.max_run_seconds
@@ -186,11 +198,26 @@ def execute(service, run_id, spec, events, options):
                 raise BacktestError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
             if parent.poll(.05):
                 status, result = parent.recv()
+                # Publish the final committed state before returning or raising,
+                # even if the whole run completed within one supervisor tick.
+                service.repository.run_updates.notify(run_id)
                 if status == "ok":
                     if overflow.is_set():
                         raise BacktestError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
                     return result
                 raise BacktestError(*result)
+            revision = observed_revision
+            commit_lock = commit_revision.get_lock()
+            # A killed child can leave its mutex held. Notifications are
+            # advisory: never block cancellation/deadline supervision on it.
+            if commit_lock.acquire(False):
+                try:
+                    revision = commit_revision.get_obj().value
+                finally:
+                    commit_lock.release()
+            if revision != observed_revision:
+                observed_revision = revision
+                service.repository.run_updates.notify(run_id)
             current = service.repository.get_run_by_id(run_id)
             if current is None or int(current["generation"]) != generation or current["state"] in {"CANCELLED", "CANCELLING"}:
                 raise BacktestError("IDENTITY_MUTATION", "backtest run was cancelled or superseded")
