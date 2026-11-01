@@ -19,16 +19,15 @@
     "https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data"
   ],
   "local_checks_so_far": {
-    "frontend": "62 selected tests passed; TypeScript passed",
-    "backend": "225 selection:223 passed,2 failed. One obsolete continuous1s expectation corrected (22 route/audit cases now pass). One H127 owner architecture violation fixed upstream in7711deb1; integration pending.",
-    "empty_coverage": "8 cases passed, including actual separate-process deletion, stale acquisition rejection, foreign vendor isolation and atomic rollback.",
-    "counting": "Overlapping selections, not additive; logs retain failures."
+    "backend": "287 integrated source/routes/revision/retention tests passed afterc090db5e.22route/sharedaudit and8emptycoverage cases also passed earlier.",
+    "frontend": "62 selected tests passed earlier;41 finalfeed/epoch cases passed afterc090db5e. TypeScript finalrun pending.",
+    "h127_recovery": "Integrateddc9e0bcd: shared wildcard indicator recovery waits for source repair or stream retirement; source fix has112 passing upstream owner/process/bridge/consumer/continuity cases.",
+    "counting": "Overlapping selections, not additive; failed runs retained."
   },
   "remaining": [
-    "Merge the latest H127 frontend generation and owner-boundary fixes.",
-    "Run integrated backend/source-revision/retention and frontend checks on final source.",
-    "Exercise real public seconds/custom-seconds, quality and coverage, save and full owned native exit/restart.",
-    "Final source and native evidence, CI, draft review and merge qualification.",
-    "Alert builtin reuse remains the other part of batch3."
+    "Final TypeScript and focused recovery/emptycoverage checks on integratedhead.",
+    "Real publicseconds/customseconds, quality/coverage, save/fullownednativeexit/restart.",
+    "Source/native evidence andCI qualification beforemerge.",
+    "Alert builtin reuse remains the other partofbatch3."
   ]
 }
