@@ -1815,6 +1815,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     let settleFrame: number | null = null;
     let followLatestResizeFrame: number | null = null;
     let observedWidth = wrapper.getBoundingClientRect().width;
+    let stableResizeView = {
+      logical: chart.timeScale().getVisibleLogicalRange(),
+      store: seriesStoreRef.current,
+      version: seriesStoreRef.current?.version,
+      datasetKey: datasetKeyRef.current,
+    };
+    const rememberResizeView = (logical: VisibleLogicalRange) => {
+      // LWC emits the resized range before our observer runs. Keep the last
+      // view at the old width so a split cannot retain only future padding.
+      if (Math.abs(wrapper.getBoundingClientRect().width - observedWidth) >= 0.5) return;
+      stableResizeView = { logical, store: seriesStoreRef.current,
+        version: seriesStoreRef.current?.version, datasetKey: datasetKeyRef.current };
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(rememberResizeView);
     const syncSize = () => {
       if (frameLifecycle.isDisposed()) return;
       syncOverlays();
@@ -1822,6 +1836,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (!Number.isFinite(nextWidth)
         || nextWidth <= 0
         || Math.abs(nextWidth - observedWidth) < 0.5) return;
+      const previousView = stableResizeView;
       observedWidth = nextWidth;
       if (pendingSurfaceViewportRef.current === null) {
         // A layout resize exposes a new elapsed range at the existing zoom.
@@ -1835,9 +1850,22 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         followLatestResizeFrame = null;
         const displayRows = displayRowsRef.current;
         if (!followLatestRef.current
-          || followLatestDisabledRef.current
           || pendingSurfaceViewportRef.current !== null
           || displayRows.length === 0) return;
+        if (followLatestDisabledRef.current) {
+          // A restored or panned replay remains fixed in time. Resize around
+          // its previous center at the same zoom, without resuming following.
+          if (!previousView.logical || previousView.store !== seriesStoreRef.current
+            || previousView.version !== seriesStoreRef.current?.version
+            || previousView.datasetKey !== datasetKeyRef.current) return;
+          const range = logicalRangeForLatestBarPosition({
+            barSpacing: chart.timeScale().options().barSpacing,
+            contentLastLogical: (previousView.logical.from + previousView.logical.to) / 2,
+            width: chart.timeScale().width(), position: 0.5,
+          });
+          if (range) viewportControllerRef.current?.restoreProjectionRange(range);
+          return;
+        }
         const rawPosition = Number(latestBarPositionRef.current);
         const position = Number.isFinite(rawPosition)
           ? Math.min(1, Math.max(0, rawPosition))
@@ -1899,6 +1927,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       trackingFrame = null;
       settleFrame = null;
       followLatestResizeFrame = null;
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(rememberResizeView);
       resizeObserver?.disconnect();
       scrollViewport?.removeEventListener("scroll", syncOverlays);
       wrapper.removeEventListener("pointerdown", startPaneResizeTracking, true);

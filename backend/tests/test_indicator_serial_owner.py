@@ -28,7 +28,7 @@ def revision(number):
             'revisionToken': f'test:{number}', 'closedThrough': 1800}
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_corrected_seed_cannot_relabel_an_active_uncorrected_instance():
     from app.indicator.serial_owner import IndicatorInputChanged
     owner = SerialIndicatorOwner()
@@ -55,7 +55,7 @@ async def test_corrected_seed_cannot_relabel_an_active_uncorrected_instance():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_realtime_revision_describes_applied_state_and_out_of_span_cannot_skip_a_revision():
     owner = SerialIndicatorOwner()
     events = []
@@ -79,7 +79,7 @@ async def test_realtime_revision_describes_applied_state_and_out_of_span_cannot_
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_state_and_listeners_have_distinct_single_owners_and_match_batch():
     loop_thread = threading.get_ident()
     worker_threads, listener_threads, notices = set(), set(), []
@@ -123,7 +123,7 @@ async def test_state_and_listeners_have_distinct_single_owners_and_match_batch()
     assert owner.snapshot()['serial_owner']['executor']['active'] == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_adoption_precedes_listener_delivery_and_next_command():
     owner = SerialIndicatorOwner()
     adopted, observed = set(), []
@@ -139,7 +139,7 @@ async def test_adoption_precedes_listener_delivery_and_next_command():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_cancelled_running_command_keeps_capacity_and_drains_before_next():
     entered, release = threading.Event(), threading.Event()
     calls = []
@@ -176,7 +176,7 @@ async def test_cancelled_running_command_keeps_capacity_and_drains_before_next()
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_queued_cancel_retracts_input_and_finite_admission_without_mutation():
     entered, release = threading.Event(), threading.Event()
     def factory():
@@ -209,7 +209,7 @@ async def test_queued_cancel_retracts_input_and_finite_admission_without_mutatio
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_unexpected_failure_prevents_reuse_of_uncertain_state():
     def factory():
         engine = create_engine()
@@ -227,7 +227,7 @@ async def test_unexpected_failure_prevents_reuse_of_uncertain_state():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_failure_also_rejects_commands_already_waiting_for_owner():
     entered, release = threading.Event(), threading.Event()
     def factory():
@@ -256,7 +256,7 @@ async def test_failure_also_rejects_commands_already_waiting_for_owner():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_running_subscription_cancel_adopts_for_deterministic_owner_cleanup():
     entered, release = threading.Event(), threading.Event()
     adopted = []
@@ -287,7 +287,7 @@ async def test_running_subscription_cancel_adopts_for_deterministic_owner_cleanu
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_queued_old_correction_cannot_erase_a_newly_committed_close():
     entered, release = threading.Event(), threading.Event()
     def factory():
@@ -319,7 +319,7 @@ async def test_queued_old_correction_cannot_erase_a_newly_committed_close():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_correction_must_keep_full_seed_even_when_row_count_has_not_shrunk():
     owner = SerialIndicatorOwner()
     source = bars()
@@ -339,7 +339,7 @@ async def test_correction_must_keep_full_seed_even_when_row_count_has_not_shrunk
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_old_left_extension_subscription_cannot_roll_existing_instance_back():
     owner = SerialIndicatorOwner()
     source = bars()
@@ -355,7 +355,7 @@ async def test_old_left_extension_subscription_cannot_roll_existing_instance_bac
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_actual_data_manager_bridge_runs_compute_on_owner_and_publishes_on_loop(monkeypatch):
     from app.data_engine.data_manager import DataManager
     from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
@@ -396,7 +396,7 @@ async def test_actual_data_manager_bridge_runs_compute_on_owner_and_publishes_on
         await dm.shutdown()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_recovery_at_full_admission_discards_old_work_and_late_unsubscribe():
     from app.indicator.serial_owner import IndicatorGenerationChanged
     entered, release = threading.Event(), threading.Event()
@@ -443,7 +443,7 @@ async def test_recovery_at_full_admission_discards_old_work_and_late_unsubscribe
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_failed_worker_state_is_replaced_before_fresh_history_subscription():
     creations = 0
     def factory():
@@ -473,7 +473,7 @@ async def test_failed_worker_state_is_replaced_before_fresh_history_subscription
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_disconnect_release_remains_available_when_regular_admission_is_full():
     entered, release = threading.Event(), threading.Event()
     def factory():
@@ -502,7 +502,7 @@ async def test_disconnect_release_remains_available_when_regular_admission_is_fu
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_actual_bridge_recovers_failed_worker_and_accepts_fresh_generation(monkeypatch):
     from app.data_engine.data_manager import DataManager
     from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
@@ -541,7 +541,7 @@ async def test_actual_bridge_recovers_failed_worker_and_accepts_fresh_generation
         await dm.shutdown()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.parametrize('resolution', ['repair', 'stream_restart'])
 @pytest.mark.parametrize('execution_mode', ['thread', 'process'])
 async def test_bridge_expired_source_gap_keeps_recovery_fenced_until_source_is_usable(resolution, execution_mode):
@@ -590,7 +590,7 @@ async def test_bridge_expired_source_gap_keeps_recovery_fenced_until_source_is_u
         await dm.shutdown()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_bridge_shutdown_drains_recovery_waiting_on_unrepaired_source():
     from app.data_engine.data_manager import DataManager
     from app.data_engine.data_manager.models import SeriesKey
@@ -613,7 +613,7 @@ async def test_bridge_shutdown_drains_recovery_waiting_on_unrepaired_source():
         await dm.shutdown()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_cancelled_shutdown_waits_for_recovery_and_physical_worker_exit():
     from app.indicator.serial_owner import IndicatorGenerationChanged
     entered, release = threading.Event(), threading.Event()
@@ -648,7 +648,7 @@ async def test_cancelled_shutdown_waits_for_recovery_and_physical_worker_exit():
     assert state['instances'] == []
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_recovery_stays_unavailable_until_source_callbacks_are_ready():
     from app.indicator.serial_owner import IndicatorGenerationChanged
     owner = SerialIndicatorOwner()

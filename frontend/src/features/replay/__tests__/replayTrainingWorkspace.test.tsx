@@ -90,7 +90,7 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
   const composition = source("src/features/replay/ReplayApp.tsx");
   const controls = source("src/features/replay/components/ReplayControlBar.tsx");
   const viewerRuntime = source("src/features/replay/useReplayViewerRuntime.ts");
-  assert.match(composition, /useReplayViewerRuntime\(replay, \{ onSelectedSessionChange, controllerOnly: true \}\)/);
+  assert.match(composition, /useReplayViewerRuntime\(replay, \{ onSelectedSessionChange, controllerOnly: true, runId \}\)/);
   assert.match(source("src/features/replay/ReplayChartWorkspace.tsx"), /useReplaySharedIndicatorRuntime\(/);
   assert.match(workspace, /<IndicatorPanel/);
   assert.doesNotMatch(workspace, /ReplayIndicatorPanel/);
@@ -146,7 +146,7 @@ test("Phase 13 workspace projects ViewerState and exposes capability-driven adva
     /createReplayViewerProjectionRequestScheduler\(refresh\)/,
     "coarse projection I/O must not wait for a paint frame",
   );
-  assert.match(viewerRuntime, /defaultReplayV2Api\.advanceProgress/);
+  assert.match(viewerRuntime, /api\.advanceProgress/);
   assert.match(viewerRuntime, /"cancel_advance"/);
   assert.match(workspace, /const effectiveState = replayEffectiveTrainingState\(/);
   assert.match(controls, /const effectiveState = replayEffectiveTrainingState\(/);
@@ -312,7 +312,7 @@ test("right-rail trading workstation keeps positions and account history out of 
   assert.match(rail, /replay\.wb\.openOrders/);
   assert.match(rail, /replay\.wb\.orderHistory/);
   assert.match(rail, /TERMINAL_ORDER_STATES\.has/);
-  assert.match(rail, /defaultReplayV2Api\.reportRun/);
+  assert.match(rail, /api\.reportRun/);
   assert.match(rail, /data-replay-action="close-partial"/);
   assert.match(rail, /aria-live="polite"/);
   assert.match(rail, /className="replay-position-card"/);

@@ -35,3 +35,11 @@ test("extension diagnostics uses the readonly native IPC channel", async () => {
   assert.deepEqual(await bridge.getExtensionDiagnostics(), { active: [] });
   assert.deepEqual(calls, ["candlescope:desktop:extension-diagnostics"]);
 });
+
+
+test("portfolio export exposes only a run-id native download command", async () => {
+  const calls = [];
+  const bridge = load([], { port: 29123 }, { invoke: async (...args) => { calls.push(args); return { started: true }; } });
+  assert.deepEqual(await bridge.downloadReplayPortfolio("run-a"), { started: true });
+  assert.deepEqual(calls, [["candlescope:desktop:replay-portfolio-download", "run-a"]]);
+});

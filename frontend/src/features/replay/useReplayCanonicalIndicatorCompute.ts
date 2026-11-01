@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SeriesWindowStore } from "../market-data/window/seriesWindowStore.js";
 import { ReplayCanonicalIndicators, type ReplayCanonicalBinding, type ReplayIndicatorPreparation } from "./replayCanonicalIndicators.js";
+import { useReplayOperations } from "./useReplayOperations.js";
 
 const idle: ReplayIndicatorPreparation = { active: 0, phase: null, prepared: null, target: null };
 
 export function useReplayCanonicalIndicatorCompute(scope: string, store: SeriesWindowStore, binding: ReplayCanonicalBinding | null) {
+  const { request } = useReplayOperations(undefined, "indicator", scope);
   const latest = useRef(binding);
   const activeScope = useRef<object | null>(null);
   useLayoutEffect(() => { latest.current = binding; }, [binding]);
@@ -12,12 +14,12 @@ export function useReplayCanonicalIndicatorCompute(scope: string, store: SeriesW
   const context = useMemo(() => {
     const token = { scope };
     const source = new ReplayCanonicalIndicators(store, () => latest.current,
-      value => { if (activeScope.current === token) setStatus({ scope: token, value }); });
+      value => { if (activeScope.current === token) setStatus({ scope: token, value }); }, undefined, undefined, undefined, request);
     // Display windows share durable server anchors. A per-chart local seed
     // cannot see anchors established by another viewport or after a restart.
     const compute = source.compute;
     return { token, source, compute };
-  }, [scope, store]);
+  }, [scope, store, request]);
   useEffect(() => {
     activeScope.current = context.token;
     const unsubscribe = context.source.connect();
