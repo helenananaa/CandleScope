@@ -196,6 +196,29 @@ export function getPaneThemeColors({ theme, customBg, inheritApplicationTheme = 
   };
 }
 
+/** DOM legends and pane controls share the canvas palette, scoped to one chart. */
+export function chartPaneCssVariables(options: PaneAppearanceOptions & {
+  upColor: string; downColor: string;
+}): Record<`--${string}`, string> {
+  const colors = getPaneThemeColors(options);
+  return {
+    "--text-up": options.upColor,
+    "--text-down": options.downColor,
+    ...(options.inheritApplicationTheme === false ? {
+      "--text-primary": colors.textColor,
+      "--text-secondary": colors.textColor,
+      "--text-muted": colors.textColor,
+      "--bg-primary": colors.bgColor,
+      "--bg-secondary": colors.bgColor,
+      "--surface-0": colors.bgColor,
+      "--surface-1": colors.bgColor,
+      "--surface-2": colors.bgColor,
+      "--surface-3": colors.bgColor,
+      "--border-color": colors.borderColor,
+    } : {}),
+  };
+}
+
 export function buildChartPaneOptions({
   container,
   theme,

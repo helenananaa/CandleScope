@@ -45,6 +45,7 @@ import {
   applyChartPaneAppearance,
   buildChartPaneOptions,
   getPaneThemeColors,
+  chartPaneCssVariables,
   buildCrosshairOptions,
 } from "../chart-adapter/chartPaneLifecycle";
 import {
@@ -5376,7 +5377,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         </details>
       )}
     <div
-      style={{ minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length }}
+      style={{
+        ...chartPaneCssVariables({ theme, customBg, inheritApplicationTheme, upColor, downColor }),
+        minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length,
+      }}
       className="chart-area multi-pane-chart"
       data-rendering-suspended={suspended ? "true" : "false"}
       ref={wrapperRef}

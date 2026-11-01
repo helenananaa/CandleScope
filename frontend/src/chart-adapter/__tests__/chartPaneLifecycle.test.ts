@@ -5,6 +5,7 @@ import {
   buildChartPaneOptions,
   applyChartPaneAppearance,
   getPaneThemeColors,
+  chartPaneCssVariables,
   buildLocalizationOptions,
 } from "../chartPaneLifecycle.js";
 import { getExtensionState, publishExtensions } from "../../features/extensions/state.js";
@@ -87,4 +88,17 @@ test("explicit chart themes override extension tokens while inherited charts fol
     assert.equal(structuralMock<{ layout: { background: { color: string } } }>(applied[0]!).layout.background.color, "#654321");
     assert.equal(getPaneThemeColors({ theme: "dark" }).bgColor, "#123456");
   } finally { publishExtensions({ theme: previous }); }
+});
+
+
+test("per-chart DOM legend colors match candles and explicit pane themes", () => {
+  const palette = chartPaneCssVariables({ theme: "light", inheritApplicationTheme: false,
+    upColor: "#ff0000", downColor: "#00ff00" });
+  assert.equal(palette["--text-up"], "#ff0000");
+  assert.equal(palette["--text-down"], "#00ff00");
+  assert.equal(palette["--text-muted"], "#1e293b");
+  assert.equal(palette["--surface-0"], "#ffffff");
+  assert.deepEqual(chartPaneCssVariables({ theme: "dark", upColor: "#123456", downColor: "#654321" }), {
+    "--text-up": "#123456", "--text-down": "#654321",
+  });
 });
