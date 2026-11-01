@@ -68,3 +68,23 @@ test("one shared connection owns all views; releasing one retains sync, releasin
   assert.equal(manager.diagnostics().connections, 0);
   assert.equal(manager.diagnostics().subscriptions, 0);
 });
+
+test("account controls delegate authenticated writes and a closed lifecycle rejects new controls", async () => {
+  await environment(async () => {
+    const calls: { url: string; action: string }[] = [];
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url: String(url), action: (init?.headers as Record<string,string>)["X-CandleScope-User-Action"]! });
+      assert.equal(init?.method, "POST");
+      assert.equal((init?.headers as Record<string,string>)["X-CandleScope-CSRF"], "c".repeat(40));
+      return Response.json({});
+    };
+    const manager = new ReadOnlyAccountDataManager();
+    await manager.connect({ apiKey: "fixture", secret: "fixture", password: "fixture" });
+    await manager.disconnect(false); await manager.resync();
+    assert.deepEqual(calls.map(x => x.action), ["account.connect", "account.disconnect", "account.resync"]);
+    assert.ok(calls.every(x => !x.url.endsWith("/status")));
+    manager.dispose();
+    await assert.rejects(manager.resync(), /ACCOUNT_MANAGER_CLOSED/);
+    assert.equal(calls.length, 3);
+  });
+});

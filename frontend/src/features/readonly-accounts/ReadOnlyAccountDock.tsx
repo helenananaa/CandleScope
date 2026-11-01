@@ -8,8 +8,8 @@ import ReadOnlyTradeReview, { type ReadOnlyReviewBinding } from "./ReadOnlyTrade
 import AccountJournal from "./AccountJournal.js";
 import { accountErrorHelp } from "./accountErrors.js";
 import type { LinkedNoteRequest } from "./journalDraft.js";
-import { AccountApiError, accountSession, connectAccount, disconnectAccount, getAccountFacts,
-  getAccountStatus, record, resyncAccount, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
+import { AccountApiError, accountSession, getAccountFacts,
+  record, type AccountStatus, type Fact, type FactKind, type FactPage } from "./accountApi.js";
 import "./readonlyAccount.css";
 
 type Tab = "overview" | FactKind | "journal" | "reconcile" | "trades";
@@ -36,7 +36,6 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const factRequest = useRef(0);
   const available = accountSession() !== null;
   const date = (ms: number | null | undefined) => typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toLocaleString(locale) : t("account.unknown", {}, locale);
-  const refresh = useCallback(async () => { setStatus(await getAccountStatus()); }, []);
 
   useEffect(() => {
     if (!available) return;
@@ -57,7 +56,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
   const action = async (operation: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError(null);
-    try { await operation(); await refresh(); }
+    try { await operation(); }
     catch (failure) { setError(failure instanceof AccountApiError ? failure.code : "ACCOUNT_UNAVAILABLE"); }
     finally { setBusy(false); }
   };
@@ -68,7 +67,7 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
     const credentials = { apiKey: String(data.get("apiKey") ?? ""), secret: String(data.get("secret") ?? ""), password: String(data.get("password") ?? "") };
     form.reset();
     void action(async () => {
-      try { await connectAccount(credentials); setCredentialsOpen(false); }
+      try { await accountManager.connect(credentials); setCredentialsOpen(false); }
       finally { credentials.apiKey = credentials.secret = credentials.password = ""; }
     });
   };
@@ -110,14 +109,14 @@ export default function ReadOnlyAccountDock({ height, onRequestClose, trading }:
         {failure && <div className="readonly-account-error" role="alert"><p>{t(accountErrorHelp(failure), {}, locale)}</p><code>{failure}</code></div>}
         <div className="readonly-account-actions">
           <button type="button" disabled={busy} onClick={() => setCredentialsOpen(!credentialsOpen)}>{t(status?.account ? "account.rotate" : "account.connect", {}, locale)}</button>
-          {status?.account && <><button type="button" disabled={busy} onClick={() => { void action(resyncAccount); }}>{t("account.sync", {}, locale)}</button>
-            <button type="button" disabled={busy || !status.account.enabled} onClick={() => { void action(() => disconnectAccount(false)); }}>{t("account.pause", {}, locale)}</button></>}
+          {status?.account && <><button type="button" disabled={busy} onClick={() => { void action(() => accountManager.resync()); }}>{t("account.sync", {}, locale)}</button>
+            <button type="button" disabled={busy || !status.account.enabled} onClick={() => { void action(() => accountManager.disconnect(false)); }}>{t("account.pause", {}, locale)}</button></>}
         </div>
         {credentialsOpen && <form onSubmit={connect} autoComplete="off">
           <p className="readonly-account-help">{t("account.credentialsHelp", {}, locale)}</p>
           {([ ["apiKey", "account.key"], ["secret", "account.secret"], ["password", "account.passphrase"] ] as const).map(([name, label]) => <label key={name}>{t(label, {}, locale)}<input name={name} type="password" autoComplete="off" spellCheck={false} required maxLength={256} disabled={busy} /></label>)}
           <button type="submit" disabled={busy}>{t(busy ? "account.working" : "account.connect", {}, locale)}</button>
-          {status?.account && <><p className="readonly-account-help">{t("account.forgetHelp", {}, locale)}</p><button type="button" disabled={busy} onClick={() => { void action(() => disconnectAccount(true)); }}>{t("account.forget", {}, locale)}</button></>}
+          {status?.account && <><p className="readonly-account-help">{t("account.forgetHelp", {}, locale)}</p><button type="button" disabled={busy} onClick={() => { void action(() => accountManager.disconnect(true)); }}>{t("account.forget", {}, locale)}</button></>}
         </form>}
         <nav aria-label={t("account.title", {}, locale)}>{TABS.map((id) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{t(`account.${id}`, {}, locale)}</button>)}</nav>
         {tab === "overview" && <>

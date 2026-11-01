@@ -25,6 +25,12 @@ async def service(request: Request) -> ReadOnlyAccountService:
     if not isinstance(guard,LocalManagementGuard) or not isinstance(owner,ReadOnlyAccountService):
         raise HTTPException(503,detail={"code":"ACCOUNT_UNAVAILABLE"})
     await guard(request)
+    manager = getattr(getattr(request.app.state, "data_manager_core", None), "readonly_account", None)
+    if manager is not None and manager.service is owner:
+        try:
+            return manager.control_plane()
+        except AccountDataError:
+            raise HTTPException(503, detail={"code": "ACCOUNT_UNAVAILABLE"}) from None
     return owner
 
 

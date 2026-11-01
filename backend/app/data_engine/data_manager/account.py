@@ -71,7 +71,13 @@ class ReadOnlyAccountDataManager:
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
         self._closed = False
+        self._control_requests = 0
         self._subscriptions: set[AccountStateSubscription] = set()
+
+    def control_plane(self):
+        self._check_open()
+        self._control_requests += 1
+        return self.service
 
     async def state(self) -> dict:
         self._check_open()
@@ -95,7 +101,7 @@ class ReadOnlyAccountDataManager:
             raise
 
     def diagnostics(self) -> dict:
-        return {"closed": self._closed, "subscriptions": len(self._subscriptions)}
+        return {"closed": self._closed, "subscriptions": len(self._subscriptions), "control_requests": self._control_requests}
 
     def close(self) -> None:
         self._closed = True

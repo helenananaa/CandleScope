@@ -1,4 +1,4 @@
-import { AccountApiError, type AccountStatus } from "./accountApi.js";
+import { AccountApiError, connectAccount, disconnectAccount, resyncAccount, type AccountStatus } from "./accountApi.js";
 import { streamAccountState } from "./accountStateStream.js";
 
 type Observer = { update: (state: AccountStatus) => void; error: (code: string) => void };
@@ -11,6 +11,11 @@ export class ReadOnlyAccountDataManager {
   private closed = false;
   private retries = 0;
   constructor(private readonly transport = streamAccountState, private readonly retryMs = 2000) {}
+
+  private checkOpen(): void { if (this.closed) throw new AccountApiError("ACCOUNT_MANAGER_CLOSED"); }
+  async connect(credentials: Parameters<typeof connectAccount>[0]): Promise<void> { this.checkOpen(); await connectAccount(credentials); }
+  async disconnect(forget: boolean): Promise<void> { this.checkOpen(); await disconnectAccount(forget); }
+  async resync(): Promise<void> { this.checkOpen(); await resyncAccount(); }
 
   subscribe(update: Observer["update"], error: Observer["error"]): () => void {
     if (this.closed) throw new AccountApiError("ACCOUNT_MANAGER_CLOSED");

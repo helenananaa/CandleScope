@@ -152,11 +152,14 @@ def test_stream_route_authenticates_before_subscription_and_releases_on_disconne
             async with httpx.AsyncClient(transport=transport, base_url='http://127.0.0.1:8000') as api:
                 assert (await api.get('/api/v1/readonly-accounts/events')).status_code == 403
             assert manager.diagnostics()['subscriptions'] == 0
+            assert manager.diagnostics()['control_requests'] == 0
             headers = guard.trusted_headers(user_action='account.read')
             request = Request({'type': 'http', 'method': 'GET', 'scheme': 'http', 'path': '/api/v1/readonly-accounts/events',
                 'query_string': b'', 'app': app, 'server': ('127.0.0.1', 8000), 'client': ('127.0.0.1', 61235),
                 'headers': [(key.lower().encode(), value.encode()) for key,value in headers.items()] + [(b'host',b'127.0.0.1:8000')]})
             response = await stream_state(request)
+            assert manager.diagnostics()['control_requests'] == 1
+            assert manager.control_plane() is owner
             assert response.headers['content-encoding'] == 'identity'
             assert response.headers['cache-control'] == 'no-store'
             assert json.loads(await anext(response.body_iterator))['type'] == 'snapshot'
