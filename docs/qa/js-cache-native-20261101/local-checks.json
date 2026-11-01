@@ -1,0 +1,55 @@
+{
+  "sourceCommit": "8c5eb02bc027d42d8afdb60171193972520068b3",
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "passed": true,
+  "checks": [
+    "two committed React runtimes share one real browser-worker computation",
+    "hover warms enabled JS; selection reuses exact cache without another worker and preserves the other chart viewport",
+    "hosted prewarm uses the bounded HTTP range route without starting an indicator WebSocket",
+    "cancelling one live consumer leaves the other's real worker computation running",
+    "shared cache range notification recomputes corrected JS values before private window publication; unrelated chart stays unchanged",
+    "failed backend work cannot poison a pending real JS worker; backend recovery preserves the other chart",
+    "superseded input cancellation is not a script failure and fresh demand still computes",
+    "two real hosted React runtimes share one wire; late join receives a fresh ACK and preserves prior history/viewport",
+    "overload disconnect restores one cold shared subscription and both real runtimes resume without losing private history",
+    "normal chart history growth preserves the live shared subscription without another subscribe",
+    "parameter divergence splits only the affected demand; rejoin shares again and final release closes the transport",
+    "real chart survives staged cold history and indicator publication across markets"
+  ],
+  "remainingWorkers": [],
+  "exceptions": [],
+  "nativeRegressionReproducedInFixture": false,
+  "fullCheck": {
+    "frontendTests": 4673,
+    "isolatedPerformanceTests": 1,
+    "desktopTests": 124,
+    "exitCode": 0
+  },
+  "javascript": {
+    "passed": true,
+    "checks": [
+      "real isolated worker computes starter SMA",
+      "opaque worker cannot use DOM, Node, storage, network or child workers; input copy preserved",
+      "runtime, syntax, nonfinite and forged output errors clear plots",
+      "infinite loop times out while parent event loop remains responsive",
+      "queued/running cancellation releases both slots and all frames; new work succeeds",
+      "real React replay rewind cancels stale worker and excludes unrevealed input/output",
+      "syntax error clears old curves; corrected source and remounted persistence restore without backend execution",
+      "real live runtime follows stable-identity store ticks and makes progress during a continuous stream",
+      "continuous ticks cannot starve timeout; failed program stays idle and corrected source recovers",
+      "source replacement fences busy old work immediately and keeps only the new window's timestamps",
+      "hidden script stays idle and resumes from the latest source window when shown",
+      "owner ABA rejects the delayed result and cache write without a React context change"
+    ],
+    "editor": {
+      "checks": [
+        "real panel/editor offers frontend JS when plugin catalog fails",
+        "new and updated previews stay pending until worker output; all-null warm-up completes",
+        "preview retains exact starter, failed HTTP save keeps draft open, successful retry preserves source/language"
+      ]
+    },
+    "exceptions": [],
+    "remainingWorkers": []
+  }
+}
