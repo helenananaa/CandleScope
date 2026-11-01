@@ -20,9 +20,10 @@
   ],
   "local_checks_so_far": {
     "backend": "287 integrated source/routes/revision/retention tests passed afterc090db5e.22route/sharedaudit and8emptycoverage cases also passed earlier.",
-    "frontend": "62 selected tests passed earlier;41 finalfeed/epoch cases passed afterc090db5e. TypeScript finalrun pending.",
+    "frontend": "62 selected tests passed earlier;41 finalfeed/epoch cases passed afterc090db5e. Final TypeScript passed.",
     "h127_recovery": "Integrateddc9e0bcd: shared wildcard indicator recovery waits for source repair or stream retirement; source fix has112 passing upstream owner/process/bridge/consumer/continuity cases.",
-    "counting": "Overlapping selections, not additive; failed runs retained."
+    "counting": "Overlapping selections, not additive; failed runs retained.",
+    "recovery_coverage": "32 focused shared owner/recovery and empty coverage fence cases passed afterf1a25bca."
   },
   "remaining": [
     "Final TypeScript and focused recovery/emptycoverage checks on integratedhead.",
