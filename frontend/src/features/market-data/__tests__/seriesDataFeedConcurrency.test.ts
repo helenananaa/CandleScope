@@ -323,3 +323,28 @@ test("workspace shutdown rejects queued consumers and retracts physical admissio
   assert.equal(h.signals.length, 0);
   blocker.resolve(); await blocking; scheduler.dispose();
 });
+
+test("new feed epoch retires obsolete indicator owners without settling current repairs", async () => {
+  const { IndicatorWindowCommitBuffer } = await import("../indicatorWindowCommitBuffer.js");
+  const buffer = new IndicatorWindowCommitBuffer();
+  const h = harness();
+  let complete = false;
+  h.feed.configure({
+    api: { ...h.api, fetchKlinesHistory: async () => ({ ...result,
+      complete, retryable: !complete, history_state: complete ? "ready" : "pending", verified_contiguous: complete,
+    }) },
+    commitMergedChartData: (_s, _i, _rows, meta) => {
+      buffer.record("active", [], { ownerToken: meta?.indicatorWindowOwner,
+        pending: meta?.deferIndicatorWindow === true, epoch: meta?.indicatorWindowEpoch });
+    },
+  });
+  h.feed.beginEpoch(series);
+  await h.feed.getHistory(series, { countBack: 500 });
+  assert.equal(buffer.hasPending("active"), true);
+  h.feed.beginEpoch(series);
+  await h.feed.getHistory(series, { countBack: 1500 });
+  assert.equal(buffer.hasPending("active"), true, "new incomplete window stays deferred");
+  complete = true;
+  await h.feed.getHistory(series, { countBack: 1500 });
+  assert.equal(buffer.hasPending("active"), false, "settled current owner must not wait on stale epochs");
+});

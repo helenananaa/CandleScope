@@ -2742,6 +2742,7 @@ export class SeriesDataFeed {
         } : {}),
         ...(finalResult?.plan === undefined ? {} : { plan: finalResult.plan }),
         indicatorWindowOwner,
+        indicatorWindowEpoch: epoch,
       };
       if (combinedHasTailGap === undefined) {
         // Do not inherit the final page's verdict when any earlier page was
@@ -2760,6 +2761,7 @@ export class SeriesDataFeed {
           source,
           deferIndicatorWindow: false,
           indicatorWindowOwner,
+          indicatorWindowEpoch: epoch,
         });
       }
       combinedResult.endpoint = "range";
@@ -2854,7 +2856,7 @@ export class SeriesDataFeed {
         committed: false,
         stale: true,
         active,
-        ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
+        ...(indicatorWindowOwner ? { indicatorWindowOwner, indicatorWindowEpoch: epoch } : {}),
       };
     }
     const rows = this.reconcileRealtimeRows(
@@ -2882,7 +2884,7 @@ export class SeriesDataFeed {
           source,
           quality,
           deferIndicatorWindow: isKlineResultRepairPending(result),
-          ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
+          ...(indicatorWindowOwner ? { indicatorWindowOwner, indicatorWindowEpoch: epoch } : {}),
         });
         return {
           ...result,
@@ -2891,7 +2893,7 @@ export class SeriesDataFeed {
           committed: true,
           stale: false,
           active,
-          ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
+          ...(indicatorWindowOwner ? { indicatorWindowOwner, indicatorWindowEpoch: epoch } : {}),
         };
       }
       if (commit === "patch-active" && active) {
@@ -2940,7 +2942,7 @@ export class SeriesDataFeed {
         source,
         quality,
         deferIndicatorWindow: false,
-        ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
+        ...(indicatorWindowOwner ? { indicatorWindowOwner, indicatorWindowEpoch: epoch } : {}),
       });
     }
 
@@ -2952,7 +2954,7 @@ export class SeriesDataFeed {
       stale: false,
       active,
       mode,
-      ...(indicatorWindowOwner ? { indicatorWindowOwner } : {}),
+      ...(indicatorWindowOwner ? { indicatorWindowOwner, indicatorWindowEpoch: epoch } : {}),
     };
   }
 }
