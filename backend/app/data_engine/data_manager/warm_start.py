@@ -623,6 +623,12 @@ class AggregatorWarmStartService:
         month_count = parse_monthly_count(interval)
         if month_count is not None:
             repair_window_ms = month_count * 2 * 31 * 86_400 * 1000
+        elif interval_seconds < 60:
+            # This automatic seed repairs the recent tail, not the viewport.
+            # The old six-hour floor silently queued21,600source seconds for
+            # a new7s chart and delayed other foreground repairs. Explicit
+            # history/range requests still own their complete requested span.
+            repair_window_ms = interval_seconds * 16 * 1000
         else:
             repair_window_ms = min(
                 max(interval_seconds * 16 * 1000, 6 * 60 * 60 * 1000),
