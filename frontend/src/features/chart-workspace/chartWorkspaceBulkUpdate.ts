@@ -1,3 +1,4 @@
+import { buildChartSessionKey } from "../chart-session/chartSessionTransition.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { chartWorkspaceCell } from "./chartWorkspaceDocument.js";
@@ -10,10 +11,7 @@ export interface ChartWorkspaceCellConfiguration {
 }
 
 function sameSession(left: ChartSession, right: ChartSession): boolean {
-  return left.exchange === right.exchange
-    && left.marketType === right.marketType
-    && left.symbol === right.symbol
-    && left.interval === right.interval;
+  return buildChartSessionKey(left) === buildChartSessionKey(right);
 }
 
 function sameIndicators(

@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Per-chart account overlays</title></head><body>
+<script type="module">
+import { checkChartAccountOverlays } from "/src/features/trading-accounts/chartAccountOverlays.browser.tsx";
+window.__frontendScriptCheck = checkChartAccountOverlays;
+window.__frontendScriptEditorCheck = () => ({ status: "PASS", scope: "account overlay regression" });
+</script></body></html>

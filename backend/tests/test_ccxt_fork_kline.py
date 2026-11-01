@@ -343,3 +343,98 @@ def test_guard_rejects_a_different_source_pin(tmp_path, monkeypatch):
     monkeypatch.setattr(fork_kline, "LOCK_PATH", path)
     with pytest.raises(CcxtCompatibilityError, match="source commit"):
         fork_kline.require_fork(exchange)
+
+
+def test_competing_deferred_pages_reuse_proven_clock_without_losing_their_turn(monkeypatch, tmp_path):
+    """Clock -> Kline pairs must progress when another chunk protects its turn."""
+    from app.data_engine.storage import klines_repo
+    from app.exchanges.public_admission import PublicAdmission, PublicDemand, TrafficClass, current_demand, public_demand
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitDeferred, RateLimitManager, RateLimitRule
+    monkeypatch.setattr(klines_repo, 'KLINES_DB_PATH', tmp_path / 'clock-pages.sqlite')
+    klines_repo.init_klines_storage()
+    exchange = fork_exchange()
+    admission = PublicAdmission(RateLimitManager())
+    quota = RateLimitRule('shared', 'shared', 100, 3600)
+    first, second = [PublicDemand(TrafficClass.INTERACTIVE, defer=True) for _ in range(2)]
+    clocks, pages = [], []
+    async def physical(endpoint):
+        permit = await admission.acquire([quota], HistoricalRequest('binance', 'futures', endpoint, 'BTCUSDT'),
+                                         demand=current_demand())
+        permit.finish(status_code=200)
+    async def server_time(params):
+        await physical('/fapi/v1/time')
+        clocks.append(params)
+        if len(clocks) == 1:
+            admission.protect(second, quota.bucket_key)
+        return ROW[6] + 1
+    async def fetch(params):
+        await physical('/fapi/v1/klines')
+        pages.append(params)
+        return [ROW]
+    exchange.fetch_time = server_time
+    exchange.fapiPublicGetKlines = fetch
+    class Pool:
+        @asynccontextmanager
+        async def request(self, selection):
+            yield exchange
+        async def resolve_symbol(self, *args, **kwargs):
+            return MARKET['symbol']
+    plugin = create_binance_ccxt_plugin()
+    monkeypatch.setattr(plugin.provider, '_rest_pool', lambda venue, config: Pool())
+    request = TransportRequest(DESCRIPTOR, limit=1, start_ms=ROW[0], end_ms=ROW[6], history_projection=True)
+    async def fetch_page(demand, req=request):
+        with public_demand(demand):
+            return await plugin.fetch_history_with_config(req, IngestionConfig(ccxt_fork_kline_enabled=True))
+    async def run():
+        try:
+            with pytest.raises(RateLimitDeferred, match='critical_demand'):
+                await fetch_page(first)
+            admission.protect(first, quota.bucket_key)
+            admission.forget(second)
+            result = await fetch_page(second)
+            assert len(result) == 1
+            admission.forget(first)
+            assert len(await fetch_page(first)) == 1
+            assert len(clocks) == 1 and len(pages) == 2
+            # A later requested boundary and unbounded latest read each need
+            # fresh server time; old observations cannot confirm a new bucket.
+            from dataclasses import replace
+            await fetch_page(first, replace(request, end_ms=ROW[6] + 1))
+            await fetch_page(first, replace(request, end_ms=None))
+            assert len(clocks) == 3
+        finally:
+            await exchange.close()
+    asyncio.run(run())
+
+
+def test_snapshot_clock_proof_respects_market_and_complete_calendar_bucket():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from app.exchanges.ccxt_ext.venue_history import _binance_snapshot_time
+
+    calls = []
+    async def clock(params):
+        calls.append(params)
+        return ROW[6] + 1
+    exchange = SimpleNamespace(fetch_time=clock)
+    req = TransportRequest(DESCRIPTOR, end_ms=ROW[6])
+    async def run():
+        assert await _binance_snapshot_time(exchange, req, futures=True) == ROW[6] + 1
+        # Both the month's last millisecond and an earlier timestamp in the
+        # same month are bounded by the same proven calendar close.
+        await _binance_snapshot_time(exchange, replace(req, end_ms=ROW[0]), futures=True)
+        assert len(calls) == 1
+        await _binance_snapshot_time(exchange, req, futures=False)
+        assert len(calls) == 2 and calls[-1] == {'type': 'spot'}
+        for end in (ROW[6] + 1, None, True, -1):
+            await _binance_snapshot_time(exchange, replace(req, end_ms=end), futures=True)
+        unknown = replace(req, descriptor=replace(DESCRIPTOR, interval='unknown'))
+        await _binance_snapshot_time(exchange, unknown, futures=True)
+        assert len(calls) == 7
+        # Equality with the close is insufficient: the exchange must have
+        # advanced beyond the whole bucket, with no local-clock inference.
+        exchange._candlescope_snapshot_times['futures'] = ROW[6]
+        await _binance_snapshot_time(exchange, req, futures=True)
+        assert len(calls) == 8
+        assert set(exchange._candlescope_snapshot_times) == {'spot', 'futures'}
+    asyncio.run(run())

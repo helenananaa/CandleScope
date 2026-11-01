@@ -127,8 +127,10 @@ class HistoricalFetcher:
         return self._metrics
 
     def snapshot(self) -> dict:
+        from app.exchanges.public_admission import get_public_admission
         return {
             "component": "HistoricalFetcher",
+            "public_admission": get_public_admission(self._rate_limit_manager).snapshot(),
             "concurrency": self._cfg.fetch_concurrency,
             "global_concurrency": self._global_fetch_concurrency(),
             "binance_spot_concurrency": getattr(
