@@ -153,6 +153,7 @@ class DataEngineRuntime:
         """Expose stable app.state handles used by API routes."""
         state.data_engine_runtime = self
         state.data_manager = self.data_manager
+        state.data_manager_core = self.data_manager
 
     def get_ingestion_config(self) -> IngestionConfig | None:
         """Return the primary ingestion config for settings display."""

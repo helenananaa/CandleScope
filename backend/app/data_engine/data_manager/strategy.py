@@ -13,6 +13,7 @@ from app.backtest.errors import BacktestError
 
 if TYPE_CHECKING:
     from app.backtest.service import BacktestService
+    from app.backtest.runtime import BacktestRuntime
 
 
 SCHEMA = "candlescope.strategy-run-events/1"
@@ -109,14 +110,22 @@ class StrategyRunSubscription:
 
 
 class StrategyDataManager:
-    def __init__(self, service: BacktestService, *, max_subscriptions: int = 32, heartbeat_seconds: float = 15) -> None:
+    def __init__(self, service: BacktestService, *, runtime: BacktestRuntime | None = None, max_subscriptions: int = 32, heartbeat_seconds: float = 15) -> None:
         if max_subscriptions < 1 or heartbeat_seconds <= 0:
             raise ValueError("strategy subscription limits must be positive")
         self.service = service
+        self.runtime = runtime
+        self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
         self._subscriptions: set[StrategyRunSubscription] = set()
         self._closed = False
+
+    def control_plane(self) -> BacktestService:
+        if self._closed:
+            raise BacktestError("STRATEGY_MANAGER_CLOSED", "strategy manager is closed")
+        self._control_requests += 1
+        return self.service
 
     async def subscribe_run(self, run_id: str) -> StrategyRunSubscription:
         if self._closed:
@@ -134,7 +143,7 @@ class StrategyDataManager:
             raise
 
     def diagnostics(self) -> dict[str, int | bool]:
-        return {"closed": self._closed, "subscriptions": len(self._subscriptions),
+        return {"closed": self._closed, "control_requests": self._control_requests, "subscriptions": len(self._subscriptions),
                 "runs": len({subscription.run_id for subscription in self._subscriptions})}
 
     def close(self) -> None:

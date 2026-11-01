@@ -279,7 +279,10 @@ class StreamCapacityError(RuntimeError):
         )
 
 
-class DataManager:
+from .core import DataManagerCore
+
+
+class DataManager(DataManagerCore):
     """Unified facade for market-data operations.
 
     This is the **only** class that external code needs to import.
@@ -298,6 +301,7 @@ class DataManager:
     """
 
     def __init__(self, config: DataManagerConfig | None = None) -> None:
+        super().__init__()
         self._cfg = config or DataManagerConfig()
         self._storage_gc_guard = threading.RLock()
         self._storage_gc_protection_epoch = 0
@@ -919,6 +923,7 @@ class DataManager:
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
+        self.close_strategy()
         self.shared_blocks.close()
         if not self._started:
             return

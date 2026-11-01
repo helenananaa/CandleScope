@@ -34,6 +34,7 @@ async def test_preparation_storage_failure_does_not_skip_remaining_shutdown(monk
         stopped.append("catalog")
 
     state = SimpleNamespace(
+        data_manager_core=SimpleNamespace(close_strategy=lambda: stopped.append("strategy")),
         data_preparation_service=SimpleNamespace(shutdown=preparation_stop),
         backtest_runtime=SimpleNamespace(shutdown=lambda: stopped.append("backtest")),
         event_loop_lag_monitor=SimpleNamespace(stop=lag_stop),
@@ -48,6 +49,6 @@ async def test_preparation_storage_failure_does_not_skip_remaining_shutdown(monk
 
     await main_module.shutdown_event()
 
-    assert stopped == (["preparation", "backtest", "offline", "lag"] if offline else
-                       ["preparation", "backtest", "catalog", "lag", "data", "replay"])
+    assert stopped == (["preparation", "strategy", "backtest", "offline", "lag"] if offline else
+                       ["preparation", "strategy", "backtest", "catalog", "lag", "data", "replay"])
     assert "unable to open database file" in caplog.text

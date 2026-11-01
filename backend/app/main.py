@@ -584,6 +584,8 @@ async def _startup_event_impl() -> None:
             app.state.local_data_service = local_runtime.service
             app.state.local_import_jobs = local_runtime.jobs
             app.state.data_manager = None
+            from app.data_engine.data_manager.core import DataManagerCore
+            app.state.data_manager_core = DataManagerCore()
             app.state.local_data_runtime = local_runtime.data
             await prepare_extensions(app)
             if BACKTEST_SETTINGS.enabled:
@@ -596,6 +598,7 @@ async def _startup_event_impl() -> None:
                 )
                 app.state.backtest_runtime = backtest_runtime
                 app.state.backtest_service = backtest_runtime.service
+                app.state.data_manager_core.bind_strategy(backtest_runtime.service, backtest_runtime)
                 logger.info(
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
@@ -690,6 +693,8 @@ async def _startup_event_impl() -> None:
         await _init_alert_delivery()
         await _init_replay_runtime()
         await _init_data_manager()
+        if getattr(app.state, "backtest_service", None) is not None:
+            app.state.data_manager_core.bind_strategy(app.state.backtest_service, app.state.backtest_runtime)
         from app.core.config import DATA_DIR, getenv
         from app.data_preparation.bar_adapter import BarPreparationAdapter
         from app.data_preparation.repository import PreparationRepository
@@ -870,6 +875,9 @@ async def shutdown_event() -> None:
                 exc,
                 exc_info=True,
             )
+    manager_core = getattr(app.state, "data_manager_core", None)
+    if manager_core is not None:
+        manager_core.close_strategy()
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         backtest_runtime = getattr(app.state, "backtest_runtime", None)
