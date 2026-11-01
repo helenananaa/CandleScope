@@ -1,7 +1,7 @@
 # Python 指标运行时
 
 开发中的 `python.indicator.batch/1` 指标作者入口，通过 CandleScope Script Runtime SDK
-接入；默认应用启用、编辑器与原生验证尚未完成。
+接入；桌面构建默认打包并启用，已有显式路由配置保持优先。编辑器和原生图表验证尚未完成。
 
 作者定义 `compute(bars, params)`，返回 `{"lines": {"main": values}}`。
 `bars` 是不可变列字典，包含 `time/open/high/low/close/volume/isClosed`；每个输出与

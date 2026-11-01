@@ -72,6 +72,29 @@ def test_explicit_routes_support_independent_language_rollouts(
     assert routes.for_language("pine").mode == "sidecar"
 
 
+def test_packaged_defaults_add_python_only_without_user_route_configuration(tmp_path):
+    env={"CANDLE_DATA_DIR": str(tmp_path)}
+    packaged=_write(tmp_path/'packaged-routes.json', {'schemaVersion':1,'routes':[
+        {'language':'python','mode':'sidecar','runtimeId':'candlescope.python-indicator'}]})
+    env['CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES']=str(packaged)
+    assert load_indicator_runtime_routes_from_environment(env).for_language('python').runtime_id=='candlescope.python-indicator'
+    profile=default_indicator_runtime_routes_path(env);profile.parent.mkdir(parents=True,exist_ok=True)
+    _write(profile,{'schemaVersion':1,'routes':[{'language':'pine','mode':'sidecar','runtimeId':'candlescope.pine-compat'}]})
+    assert load_indicator_runtime_routes_from_environment(env).for_language('pine').runtime_id=='candlescope.pine-compat'
+    with pytest.raises(IndicatorRuntimeRoutesError):load_indicator_runtime_routes_from_environment(env).for_language('python')
+    env[INDICATOR_RUNTIME_ROUTES_ENV]=str(packaged)
+    assert load_indicator_runtime_routes_from_environment(env).for_language('python').runtime_id=='candlescope.python-indicator'
+
+
+@pytest.mark.parametrize('contents',[None,'not json','{"schemaVersion":1,"routes":[]}'])
+def test_missing_or_damaged_packaged_routes_fail_closed(tmp_path,contents):
+    path=tmp_path/'packaged-routes.json'
+    if contents is not None:path.write_text(contents)
+    with pytest.raises(IndicatorRuntimeRoutesError):
+        load_indicator_runtime_routes_from_environment({'CANDLE_DATA_DIR':str(tmp_path),
+            'CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES':str(path)})
+
+
 @pytest.mark.parametrize(
     "value, message",
     [

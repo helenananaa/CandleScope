@@ -542,6 +542,11 @@ class IndicatorRuntimeService:
     def route_for(self, language: str) -> IndicatorRuntimeRoute:
         return self.routes.for_language(language)
 
+    def closed_bars_only(self, language: str) -> bool:
+        route = self.route_for(language)
+        descriptor = self._runtime_descriptors.get(route.runtime_id)
+        return descriptor is not None and descriptor.meta.get("closedBarsOnly") is True
+
     def uses_legacy(self, language: str) -> bool:
         return self.route_for(language).mode in {
             ROUTE_MODE_LEGACY,

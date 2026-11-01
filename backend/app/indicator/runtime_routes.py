@@ -16,6 +16,7 @@ from app.plugin_runtime.registry import default_runtime_registry_path
 
 INDICATOR_RUNTIME_ROUTES_SCHEMA_VERSION = 1
 INDICATOR_RUNTIME_ROUTES_ENV = "CANDLESCOPE_INDICATOR_RUNTIME_ROUTES"
+BUNDLED_INDICATOR_RUNTIME_ROUTES_ENV = "CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES"
 MAX_INDICATOR_RUNTIME_ROUTES_BYTES = 1024 * 1024
 MAX_INDICATOR_RUNTIME_ROUTES = 128
 
@@ -249,6 +250,14 @@ def load_indicator_runtime_routes_from_environment(
         if override is not None
         else default_indicator_runtime_routes_path(env)
     )
+    # Explicit environment/profile routes remain authoritative. Package-owned
+    # defaults are used only for a profile that has no route configuration.
+    if override is None and not path.exists():
+        bundled = env.get(BUNDLED_INDICATOR_RUNTIME_ROUTES_ENV)
+        if bundled is not None:
+            if not bundled.strip():
+                raise IndicatorRuntimeRoutesError(f"{BUNDLED_INDICATOR_RUNTIME_ROUTES_ENV} must not be empty")
+            return load_indicator_runtime_routes(Path(bundled), allow_missing=False)
     return load_indicator_runtime_routes(path, allow_missing=override is None)
 
 
