@@ -63,6 +63,25 @@ def test_acquisition_floor_precedes_all_pages_and_is_not_upgraded_after_read(dm,
     asyncio.run(check())
 
 
+def test_live_validation_uses_one_durable_read_without_a_new_block_view(dm, monkeypatch):
+    async def check():
+        reader = HistoryPrefixReader(dm.query_engine)
+        async with reader.stage(KEY, 0, 120 * DAY) as prefix:
+            pass
+        store = dm.query_engine.storage.revision_store
+        original = store.read_versions
+        calls = []
+        def read(series):
+            calls.append(series)
+            return original(series)
+        monkeypatch.setattr(store, 'read_versions', read)
+        monkeypatch.setattr(store, 'changes_since', lambda *_a, **_k: pytest.fail('live validation must not consume the shared invalidation cursor'))
+        reader.validate(prefix, storage=dm.query_engine.storage, manager=dm.shared_blocks,
+                        policy=dm.query_engine.history_policy)
+        assert len(calls) == 1
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('when', ['between_pages', 'after_last_page'])
 def test_revision_change_never_returns_a_mixed_prefix(dm, monkeypatch, when):
     reader = HistoryPrefixReader(dm.query_engine)

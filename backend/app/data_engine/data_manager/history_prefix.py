@@ -47,7 +47,7 @@ class HistoryPrefixReader:
 
     Complete pages are folded immediately; no list of input bars, page results
     or block handles survives to the next page. H127 cursors pin the revision
-    across pages. A final fresh B130 view catches changes after the last page.
+    across pages. A final fresh D126 version read catches changes after the last page.
     """
 
     def __init__(self, engine):
@@ -69,15 +69,19 @@ class HistoryPrefixReader:
     def validate(self, prefix, *, storage, manager, policy):
         """Worker-side durable fence, also reusable immediately before adoption."""
         engine = self.engine
+        adapter = manager.source
         if (engine.storage is not storage or engine.shared_blocks is not manager
                 or engine.history_policy is not policy
                 or prefix.binding != (id(storage), id(manager), id(policy))):
             raise BlockRevisionChanged("history prefix source binding changed")
-        with manager.view((prefix.summary.target,)) as view:
-            if view.revisions != prefix.summary.revisions:
-                raise BlockRevisionChanged("history prefix revision expired")
+        validator = getattr(adapter, 'validate_detached', None)
+        if (not callable(validator) or getattr(adapter, 'store', None) is not getattr(storage, 'revision_store', None)
+                or manager.snapshot()['closed']):
+            raise BlockRevisionChanged('history prefix source is unavailable')
+        validator(prefix.summary.revisions, acquisition_revision=prefix.acquisition_revision)
         if (engine.storage is not storage or engine.shared_blocks is not manager
-                or engine.history_policy is not policy):
+                or engine.history_policy is not policy or manager.source is not adapter
+                or manager.snapshot()['closed']):
             raise BlockRevisionChanged("history prefix source binding changed")
 
     @asynccontextmanager
