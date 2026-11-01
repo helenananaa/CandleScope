@@ -1,3 +1,5 @@
+> 历史记录（2026-10-29），不代表当前集成版本通过。当前范围以 `docs/qa/seconds-integration-20261101/qualification.json` 为准：普通 Binance USD-M 合约身份不再使用 continuous-contract 1s 别名；旧包、旧分支的测试与真实链路结果不能替代当前集成验收。
+
 # #131：1s 常规历史实施与验证
 
 基线：`origin/main` / `b84b5e3d514e43fca556613fe107e29d12f7a329`。
