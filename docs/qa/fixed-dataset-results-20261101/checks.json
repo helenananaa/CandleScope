@@ -1,0 +1,39 @@
+{
+  "scope": "Fixed immutable local dataset builtin cache identity and cross-client/restart reuse; finite first stage of169/170",
+  "current_fact": "Existing JSON disk cache already survived restart but keyed request-only IDs and lacked installed implementation identity",
+  "changes": [
+    "Hash installed builtin/shared input/resampling code, Python/platform, source dataset/epoch/checksum/basis, normalized parameters and interval",
+    "Rebind current request delivery IDs on cache hit",
+    "Successful envelopes only, checksum validation, atomic bounded compact write; old files preserved and ignored"
+  ],
+  "tests": "29 local API/service/import jobs +23research/offline/pinned dataset regressions; architecture0allowlist; failed-before cross-view/service-restart probe retained",
+  "native": "pending; no native acceptance claimed",
+  "limitations": [
+    "No physical migration of immutable bars or results to candlescope.db",
+    "No live/custom/Pine/Python result persistence, checkpoints or incremental-range reuse",
+    "Interactive API continues to reject a stale current epoch; frozen research runs retain their separate pinned revision contract",
+    "Per-entry bounds do not constitute a global disk budget"
+  ],
+  "artifacts": [
+    {
+      "path": "before.log.gz",
+      "sha256": "f3e373add2da3a35c6671fb3700878fb8a067199f0305456e2f037df133e1ed7"
+    },
+    {
+      "path": "after.log.gz",
+      "sha256": "f28354b0f0387b7e4f07a39f42d73d404b6eef10c5b6116920a8dd67d1b6fc2a"
+    },
+    {
+      "path": "regression.log.gz",
+      "sha256": "904a8ea9128acb51f8cb3c41c0071c803a05d682a8c634a7966aff4802073bb0"
+    },
+    {
+      "path": "boundaries.log.gz",
+      "sha256": "c7f88c97885aec98953dabdc4354c58ec59b2e846057cae580a18de69b08f76e"
+    },
+    {
+      "path": "architecture.log.gz",
+      "sha256": "e2ec53d38953e0905e69ca86e3ea1d5d69edc69bf185b6bf696b5438dded2775"
+    }
+  ]
+}
