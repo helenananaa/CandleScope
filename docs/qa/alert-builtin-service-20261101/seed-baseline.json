@@ -1,0 +1,444 @@
+{
+  "source_commit": "7bd37ef30345bdcfc89d1d40e2338466ae815ac2",
+  "input_sha256": "e667d371963cc739d3fca17df7f8f7a59b10c048d7a54051cfb0d6b16a94fc5a",
+  "transport": "Controlled deterministic bars; actual legacy calculators and public IndicatorEngine. No notifications or network.",
+  "policy": "legacy_confirmed_rolling250_v1",
+  "definitions": {
+    "rsi": [
+      "RSI",
+      {
+        "period": 14,
+        "source": "close"
+      },
+      "rsi"
+    ],
+    "macdHist": [
+      "MACD",
+      {
+        "fast": 12,
+        "slow": 26,
+        "signal": 9,
+        "source": "close"
+      },
+      "hist"
+    ],
+    "ma20": [
+      "MA",
+      {
+        "period": 20,
+        "source": "close"
+      },
+      "ma"
+    ]
+  },
+  "cases": [
+    {
+      "end": 20,
+      "forming": false,
+      "closed_count": 20,
+      "legacy": {
+        "rsi": 81.24506936757588,
+        "macdHist": null,
+        "ma20": 103.78029093058696
+      },
+      "same_seed_public": {
+        "rsi": 81.24506936757588,
+        "macdHist": null,
+        "ma20": 103.78029093058696
+      },
+      "long_seed_public": {
+        "rsi": 81.24506936757588,
+        "macdHist": null,
+        "ma20": 103.78029093058696
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 20,
+      "forming": true,
+      "closed_count": 19,
+      "legacy": {
+        "rsi": 78.2995426713877,
+        "macdHist": null,
+        "ma20": null
+      },
+      "same_seed_public": {
+        "rsi": 78.2995426713877,
+        "macdHist": null,
+        "ma20": null
+      },
+      "long_seed_public": {
+        "rsi": 78.2995426713877,
+        "macdHist": null,
+        "ma20": null
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 35,
+      "forming": false,
+      "closed_count": 35,
+      "legacy": {
+        "rsi": 66.34157810156793,
+        "macdHist": -1.501530679132296,
+        "ma20": 109.35269311321878
+      },
+      "same_seed_public": {
+        "rsi": 66.34157810156793,
+        "macdHist": -1.501530679132296,
+        "ma20": 109.35269311321878
+      },
+      "long_seed_public": {
+        "rsi": 66.34157810156793,
+        "macdHist": -1.501530679132296,
+        "ma20": 109.35269311321878
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 35,
+      "forming": true,
+      "closed_count": 34,
+      "legacy": {
+        "rsi": 64.03094433588674,
+        "macdHist": -1.6061813852578588,
+        "ma20": 108.97578370797828
+      },
+      "same_seed_public": {
+        "rsi": 64.03094433588674,
+        "macdHist": -1.6061813852578588,
+        "ma20": 108.97578370797828
+      },
+      "long_seed_public": {
+        "rsi": 64.03094433588674,
+        "macdHist": -1.6061813852578588,
+        "ma20": 108.97578370797828
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 60,
+      "forming": false,
+      "closed_count": 60,
+      "legacy": {
+        "rsi": 81.45519705882869,
+        "macdHist": 0.4639701443985862,
+        "ma20": 117.7858458270611
+      },
+      "same_seed_public": {
+        "rsi": 81.45519705882869,
+        "macdHist": 0.4639701443985862,
+        "ma20": 117.7858458270611
+      },
+      "long_seed_public": {
+        "rsi": 81.45519705882869,
+        "macdHist": 0.4639701443985862,
+        "ma20": 117.7858458270611
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 60,
+      "forming": true,
+      "closed_count": 59,
+      "legacy": {
+        "rsi": 79.4613941531028,
+        "macdHist": 0.16464447618665812,
+        "ma20": 117.4616494269332
+      },
+      "same_seed_public": {
+        "rsi": 79.4613941531028,
+        "macdHist": 0.16464447618665812,
+        "ma20": 117.4616494269332
+      },
+      "long_seed_public": {
+        "rsi": 79.4613941531028,
+        "macdHist": 0.16464447618665812,
+        "ma20": 117.4616494269332
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 249,
+      "forming": false,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "same_seed_public": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "long_seed_public": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 249,
+      "forming": true,
+      "closed_count": 248,
+      "legacy": {
+        "rsi": 51.461213661990996,
+        "macdHist": 0.7563219892929478,
+        "ma20": 94.96836399750138
+      },
+      "same_seed_public": {
+        "rsi": 51.461213661990996,
+        "macdHist": 0.7563219892929478,
+        "ma20": 94.96836399750138
+      },
+      "long_seed_public": {
+        "rsi": 51.461213661990996,
+        "macdHist": 0.7563219892929478,
+        "ma20": 94.96836399750138
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 250,
+      "forming": false,
+      "closed_count": 250,
+      "legacy": {
+        "rsi": 56.27904527724921,
+        "macdHist": 1.2187501815730992,
+        "ma20": 94.78118325662165
+      },
+      "same_seed_public": {
+        "rsi": 56.27904527724921,
+        "macdHist": 1.2187501815730992,
+        "ma20": 94.78118325662165
+      },
+      "long_seed_public": {
+        "rsi": 56.27904527724921,
+        "macdHist": 1.2187501815730992,
+        "ma20": 94.78118325662165
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 250,
+      "forming": true,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "same_seed_public": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "long_seed_public": {
+        "rsi": 54.59659215715584,
+        "macdHist": 1.0310376330517488,
+        "ma20": 94.87989933476454
+      },
+      "changed_with_long_seed": []
+    },
+    {
+      "end": 251,
+      "forming": false,
+      "closed_count": 250,
+      "legacy": {
+        "rsi": 56.38139866926917,
+        "macdHist": 1.299233434907515,
+        "ma20": 94.66956592335927
+      },
+      "same_seed_public": {
+        "rsi": 56.38139866926917,
+        "macdHist": 1.299233434907515,
+        "ma20": 94.66956592335927
+      },
+      "long_seed_public": {
+        "rsi": 56.38139884799431,
+        "macdHist": 1.2992334357288087,
+        "ma20": 94.66956592335927
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 251,
+      "forming": true,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 56.27904509783466,
+        "macdHist": 1.2187501806860896,
+        "ma20": 94.78118325662165
+      },
+      "same_seed_public": {
+        "rsi": 56.27904509783466,
+        "macdHist": 1.2187501806860896,
+        "ma20": 94.78118325662165
+      },
+      "long_seed_public": {
+        "rsi": 56.27904527724921,
+        "macdHist": 1.2187501815730992,
+        "ma20": 94.78118325662165
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 400,
+      "forming": false,
+      "closed_count": 250,
+      "legacy": {
+        "rsi": 85.40507154495407,
+        "macdHist": 0.7308107471963394,
+        "ma20": 130.02539053515764
+      },
+      "same_seed_public": {
+        "rsi": 85.40507154495407,
+        "macdHist": 0.7308107471963394,
+        "ma20": 130.02539053515764
+      },
+      "long_seed_public": {
+        "rsi": 85.40507147759418,
+        "macdHist": 0.7308107403086082,
+        "ma20": 130.02539053515764
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 400,
+      "forming": true,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 84.0404268154169,
+        "macdHist": 0.48128044577531703,
+        "ma20": 129.6389880104373
+      },
+      "same_seed_public": {
+        "rsi": 84.0404268154169,
+        "macdHist": 0.48128044577531703,
+        "ma20": 129.6389880104373
+      },
+      "long_seed_public": {
+        "rsi": 84.04042674136585,
+        "macdHist": 0.4812804383365705,
+        "ma20": 129.6389880104373
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 700,
+      "forming": false,
+      "closed_count": 250,
+      "legacy": {
+        "rsi": 81.90464014868694,
+        "macdHist": 0.611555556740143,
+        "ma20": 125.54785651080559
+      },
+      "same_seed_public": {
+        "rsi": 81.90464014868694,
+        "macdHist": 0.611555556740143,
+        "ma20": 125.54785651080559
+      },
+      "long_seed_public": {
+        "rsi": 81.90463994508049,
+        "macdHist": 0.6115555434979916,
+        "ma20": 125.54785651080559
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 700,
+      "forming": true,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 79.37678219914226,
+        "macdHist": 0.2754966143945272,
+        "ma20": 125.13392902785527
+      },
+      "same_seed_public": {
+        "rsi": 79.37678219914226,
+        "macdHist": 0.2754966143945272,
+        "ma20": 125.13392902785527
+      },
+      "long_seed_public": {
+        "rsi": 79.37678196171564,
+        "macdHist": 0.2754966000930077,
+        "ma20": 125.13392902785527
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 1000,
+      "forming": false,
+      "closed_count": 250,
+      "legacy": {
+        "rsi": 57.639215767457564,
+        "macdHist": 0.17795497536306937,
+        "ma20": 129.63640478961548
+      },
+      "same_seed_public": {
+        "rsi": 57.639215767457564,
+        "macdHist": 0.17795497536306937,
+        "ma20": 129.63640478961548
+      },
+      "long_seed_public": {
+        "rsi": 57.63921531183084,
+        "macdHist": 0.17795496639239516,
+        "ma20": 129.63640478961548
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    },
+    {
+      "end": 1000,
+      "forming": true,
+      "closed_count": 249,
+      "legacy": {
+        "rsi": 51.776118322863304,
+        "macdHist": -0.15509748965264814,
+        "ma20": 129.50522739646505
+      },
+      "same_seed_public": {
+        "rsi": 51.776118322863304,
+        "macdHist": -0.15509748965264814,
+        "ma20": 129.50522739646505
+      },
+      "long_seed_public": {
+        "rsi": 51.77611776999289,
+        "macdHist": -0.1550974993409957,
+        "ma20": 129.50522739646505
+      },
+      "changed_with_long_seed": [
+        "rsi",
+        "macdHist"
+      ]
+    }
+  ],
+  "conclusions": [
+    "Public formulas preserve legacy values with the same input window.",
+    "Rolling250 and long recursive seeds are incompatible calculation identities.",
+    "A forming slot consumes window capacity even though indicator values are confirmed-only.",
+    "MA-only finite windows may be shareable; do not infer RSI/MACD sharing from matching names."
+  ]
+}

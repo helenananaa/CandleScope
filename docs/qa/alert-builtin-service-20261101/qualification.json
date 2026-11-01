@@ -1,0 +1,57 @@
+{
+  "status": "P0 baseline complete; production integration not implemented",
+  "scope": "Finite builtin alert alias migration through a typed DataManager facade to the public indicator service. Keep existing alert rule IDs, lifecycle and notification owners.",
+  "seed_policy": "legacy_confirmed_rolling250_v1",
+  "baseline": {
+    "cases": 18,
+    "same_seed_public_exact_equal": true,
+    "different_recursive_seed_cases": 8,
+    "window": "At most250 source slots, including an optional forming slot. Only closed rows supply indicator formulas; forming observation may leave249 closed rows.",
+    "aliases": {
+      "rsi": {
+        "name": "RSI",
+        "params": {
+          "period": 14,
+          "source": "close"
+        },
+        "output": "rsi"
+      },
+      "macdHist": {
+        "name": "MACD",
+        "params": {
+          "fast": 12,
+          "slow": 26,
+          "signal": 9,
+          "source": "close"
+        },
+        "output": "hist"
+      },
+      "ma20": {
+        "name": "MA",
+        "params": {
+          "period": 20,
+          "source": "close"
+        },
+        "output": "ma"
+      }
+    }
+  },
+  "decisions": [
+    "Do not silently migrate rolling250 recursive indicators onto a longer chart seed. Sharing identity includes seed policy, exact input window/fingerprint, full semantic series identity, parameters and builtin code version.",
+    "Compute on the existing bounded builtin history owner and reuse the public result service; alerts must not import or initialize formula classes. Numeric output IDs are authoritative, not Render IR labels.",
+    "The DataManager facade acquires and validates canonical inputs; retain storage revision and event frontier fences through asynchronous compute. Invalid or unavailable dependencies block evaluation, including NOT.",
+    "Price-only rules retain a lightweight path and do not acquire indicator compute capacity.",
+    "Source gap, correction, reseed and rule-definition changes establish a comparison baseline without replaying notifications. A bar-close combination uses matching price and indicator frontiers.",
+    "Maintain explicit current-price plus latest-confirmed indicator semantics for existing intrabar rules; do not claim preview indicators or tick-level recovery.",
+    "Use existing AlertStore atomic eligibility checks and stable logical trigger identity. Do not use updatedAt as definition version: triggers themselves update it. Existing history dedup is capped by history retention, so persistent latest accepted cursor needs separate treatment.",
+    "Source event, calculation generation, rule definition and evaluation cursor must stay distinct.",
+    "No script/Pine/Python, frontend-widget authority, synthetic/multi-series inputs or new chart parameter-follow behavior in this finite stage."
+  ],
+  "remaining": [
+    "Implement typed facade and compatible shared numeric computation with bounded cancellation/revision checks.",
+    "Move alert calculation windows and aliases to the service; wire application lifecycle, consumer leases and no-chart behavior.",
+    "Persist definition/cursor fencing without resetting existing counts or replaying notifications.",
+    "Validate semantic equality, invalid/NOT, amendment/recovery, repeated deliveries, edit/disable/expiry, process restart and resource release.",
+    "Perform fixed-input performance comparison and native rule/notification/save/full-exit/restart acceptance; thenCI andmerge."
+  ]
+}
