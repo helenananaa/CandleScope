@@ -7,6 +7,7 @@ import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js
 import { createReplayBuiltinCompute } from "../replayBuiltinCompute.js";
 import { CANONICAL_HISTORY_REFRESH, ReplayCanonicalIndicators, replayIndicatorCalculationKey, type ReplayCanonicalBinding, type ReplayIndicatorPreparation } from "../replayCanonicalIndicators.js";
 import { ReplayHistoryProvider } from "../replayHistoryProvider.js";
+import { ReplayDataManager } from "../replayDataManager.js";
 import { replayDisplayBarToKline } from "../replaySeriesProjection.js";
 import type { ReplayBuiltinSeed } from "../replayBuiltinCompute.js";
 import type { ReplayDigest, ReplayDisplayBar } from "../replayTypes.js";
@@ -478,4 +479,32 @@ test("ready canonical results pass through the builtin cache before a slow sibli
   assert.equal((await work).results.length, 2);
   assert.deepEqual(seen, ["rsi", "slow"]);
   assert.deepEqual(progress.at(-1)?.pendingIds, []);
+});
+
+test("manager release cancels the full canonical calculation and fences partial script output", async () => {
+  const manager = new ReplayDataManager();
+  const lease = manager.createOperations({ runId: "run", purpose: "indicator", scope: "review" });
+  const release = lease.retain();
+  const store = storeWith(), submitted = job(store);
+  submitted.request.mode = "script";
+  let finish!: () => void;
+  let signal: AbortSignal | undefined;
+  const published: unknown[] = [];
+  const source = new ReplayCanonicalIndicators(store, () => binding, () => {}, fetch, noProjection,
+    async ({ jobs, signal: inputSignal, onResults }) => {
+      signal = inputSignal;
+      await new Promise<void>(resolve => { finish = resolve; });
+      const results = jobs.map(item => ({ clientId: item.clientId, jobKey: item.jobKey,
+        payload: parseIndicatorPayloadEnvelope({ ok: true, lines: [] }) }));
+      onResults?.(results);
+      return { ok: true, results };
+    }, lease.request.bind(lease));
+  const pending = source.compute({ jobs: [submitted], onResults: value => published.push(value) });
+  const canceled = assert.rejects(pending, { name: "AbortError" });
+  assert.equal(manager.diagnostics().requests, 1);
+  release(); await canceled;
+  assert.equal(signal?.aborted, true);
+  finish(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(published, []);
+  assert.equal(manager.diagnostics().activeOperations, 0);
 });

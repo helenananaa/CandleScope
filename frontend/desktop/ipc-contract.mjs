@@ -5,6 +5,7 @@ export const DESKTOP_IPC = Object.freeze({
   aiControlRequest: "candlescope:ai-control:request",
   aiControlReply: "candlescope:ai-control:reply",
   backendEndpoint: "candlescope:desktop:backend-endpoint",
+  replayPortfolioDownload: "candlescope:desktop:replay-portfolio-download",
   strategyStorageRead: "candlescope:strategy-storage:read",
   strategyStorageWrite: "candlescope:strategy-storage:write",
   controlRequest: "candlescope:control:request",

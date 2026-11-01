@@ -1,3 +1,6 @@
+import { ReplayDataManager, type ReplayOperationLease } from "./replayDataManager.js";
+import { managedTrainingHubApi } from "./managedReplayTransport.js";
+import { useReplayDataManager } from "./replayDataContext.js";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { type PreparationJob, type PreparationCapabilities, type prepareReplay } from "../data-preparation/api.js";
 import { PreparationApiError, PreparedReplayDeletedError } from "../data-preparation/api.js";
@@ -128,6 +131,7 @@ export interface TrainingHubApiBoundary {
 }
 
 export interface TrainingHubLifecycleOptions {
+  readonly dataManager?: ReplayDataManager;
   readonly draftStorage?: HubDraftStorage | null;
   readonly api?: TrainingHubApiBoundary;
   readonly navigateToRun?: (runId: string) => void;
@@ -207,16 +211,25 @@ export class TrainingHubLifecycle {
   private requestToken = 0;
   private started = false;
   private disposed = false;
+  private readonly operations: ReplayOperationLease;
+  private releaseOperations: (() => void) | null = null;
   private snapshot: TrainingHubSnapshot;
 
   constructor({
     api = defaultReplayV2Api,
+    dataManager = new ReplayDataManager(),
     navigateToRun = defaultNavigateToRun,
     launchContext,
     clearDeletedRunState = clearDeletedTrainingRunClientState,
     draftStorage = defaultHubDraftStorage(),
   }: TrainingHubLifecycleOptions = {}) {
-    this.api = api;
+    this.operations = dataManager.createOperations({ runId: "hub", purpose: "hub" });
+    this.api = managedTrainingHubApi({ request: (load, signal) => {
+      // Public actions may open preparation before the list has been started.
+      // Retain on the first actual request, never during an abandoned render.
+      if (!this.disposed) this.releaseOperations ??= this.operations.retain();
+      return this.operations.request(load, signal);
+    } }, api);
     this.navigateToRun = navigateToRun;
     this.launchContext = launchContext;
     this.clearDeletedRunState = clearDeletedRunState;
@@ -237,12 +250,16 @@ export class TrainingHubLifecycle {
 
   start(): void {
     if (this.started || this.disposed) return;
+    this.releaseOperations ??= this.operations.retain();
     this.started = true;
     void this.loadRuns(false, null);
   }
 
   refresh(): void {
-    if (this.disposed) return;
+    // PreparationJobsPanel may observe READY before createRun finishes reading
+    // that run. A list refresh must not steal its request token/navigation (or
+    // the token of another foreground dialog operation).
+    if (this.disposed || (this.operation !== null && this.operation !== "list")) return;
     void this.loadRuns(false, null);
   }
 
@@ -667,6 +684,8 @@ export class TrainingHubLifecycle {
     this.abortController.abort();
     this.storageAbortController.abort();
     this.catalogAbortController.abort();
+    this.releaseOperations?.();
+    this.releaseOperations = null;
     this.phase = "STOPPED";
     this.operation = null;
     this.publish();
@@ -944,12 +963,15 @@ class TrainingHubEffectGuard {
 export function useTrainingHub(
   options: TrainingHubLifecycleOptions = {},
 ): TrainingHubRuntime {
+  const root = useReplayDataManager();
   const { api, navigateToRun, launchContext } = options;
+  const dataManager = options.dataManager ?? root?.replay;
   const lifecycle = useMemo(() => new TrainingHubLifecycle({
+    ...(dataManager === undefined ? {} : { dataManager }),
     ...(api === undefined ? {} : { api }),
     ...(navigateToRun === undefined ? {} : { navigateToRun }),
     ...(launchContext === undefined ? {} : { launchContext }),
-  }), [api, launchContext, navigateToRun]);
+  }), [api, dataManager, launchContext, navigateToRun]);
   const guard = useMemo(() => new TrainingHubEffectGuard(), []);
   useEffect(() => guard.mount(lifecycle), [guard, lifecycle]);
   const snapshot = useSyncExternalStore(

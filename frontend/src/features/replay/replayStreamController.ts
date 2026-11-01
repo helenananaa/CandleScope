@@ -337,6 +337,19 @@ export class ReplayStreamController {
         && lastRevision !== null
         && lastVirtualTimeMs !== null
         && lastSourceSequence !== null;
+      // An idle actor has no catch-up events and reissues its current snapshot.
+      // Its terminal reset reason is historical, not a second fast-forward.
+      // Only a new transport with identical accepted authority can use this
+      // handoff; established-stream resets still require their atomic advance.
+      const isUnchangedHandoff = hasAuthorityFloor
+        && (this.state === "reconnecting" || this.state === "resyncing")
+        && (snapshot.state === "PAUSED" || snapshot.state === "ENDED")
+        && snapshot.sequence === lastSequence
+        && snapshot.revision === lastRevision
+        && snapshot.cursor.virtual_time_ms === lastVirtualTimeMs
+        && snapshot.cursor.source_sequence === lastSourceSequence
+        && this.lastStateHash !== null
+        && snapshot.state_hash === this.lastStateHash;
       const isIntentionalSeekReset = hasAuthorityFloor
         && snapshot.status_reason === "seek_complete"
         && snapshot.state === "PAUSED"
@@ -415,7 +428,8 @@ export class ReplayStreamController {
           || isFastForwardComplete
           || isFinalStateReset
         )
-        && !isIntentionalForwardReset) {
+        && !isIntentionalForwardReset
+        && !isUnchangedHandoff) {
         this.protocolFault(
           "fast-forward snapshot violated its atomic reset contract",
           generation,

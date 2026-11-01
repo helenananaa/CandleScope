@@ -1399,3 +1399,46 @@ test("reconnect handoffs retain transport, revision, time and source authority f
     controller.stop();
   }
 });
+
+for (const recovery of ["reconnect", "resync"] as const) {
+  for (const statusReason of ["fast_forward_summary_jump", "fast_forward_coalesced_prefix",
+    "fast_forward_complete", "fast_forward_final_state_complete", "tape_cohort_batch_complete"]) {
+    test(`${recovery} accepts an unchanged paused handoff after ${statusReason}`, () => {
+      const timers = new FakeTimers();
+      const sockets: FakeSocket[] = [];
+      const snapshots: number[] = [];
+      const controller = new ReplayStreamController({
+        sessionId: "session-0001", initialDataEpoch: replayDigest("c"),
+        baseUrl: "ws://example.test", timers,
+        socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
+        onSnapshot: snapshot => snapshots.push(snapshot.sequence),
+      });
+      const snapshot = replaySummaryJumpResetEvent({ sequence: 22, revision: 18,
+        sourceSequence: 9, virtualTimeMs: BASE_TIME_MS + 539_999, statusReason });
+      controller.start(); sockets[0]!.open(); sockets[0]!.message(snapshot);
+      if (recovery === "resync") controller.requestResync();
+      else sockets[0]!.close();
+      timers.runAll(); sockets[1]!.open(); sockets[1]!.message(snapshot);
+      assert.equal(controller.diagnostics().state, "connected");
+      assert.deepEqual(snapshots, [22, 22]);
+      // An unsolicited repetition on the established stream remains invalid.
+      sockets[1]!.message(snapshot);
+      assert.equal(controller.diagnostics().state, "resyncing");
+      controller.stop();
+    });
+  }
+}
+
+test("unchanged terminal handoffs require the accepted state hash", () => {
+  const timers = new FakeTimers(); const sockets: FakeSocket[] = [];
+  const controller = new ReplayStreamController({ sessionId: "session-0001",
+    baseUrl: "ws://example.test", timers,
+    socketFactory: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; } });
+  const snapshot = replaySummaryJumpResetEvent({ statusReason: "fast_forward_final_state_complete" });
+  controller.start(); sockets[0]!.open(); sockets[0]!.message(snapshot);
+  sockets[0]!.close(); timers.runAll(); sockets[1]!.open();
+  snapshot.state_hash = replayDigest("e"); snapshot.data.snapshot.state_hash = replayDigest("e");
+  sockets[1]!.message(snapshot);
+  assert.equal(controller.diagnostics().state, "resyncing");
+  controller.stop();
+});
