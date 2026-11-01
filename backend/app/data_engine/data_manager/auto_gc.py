@@ -532,19 +532,22 @@ async def run_auto_gc_once(data_manager: Any, policy: AutoGcPolicy | dict[str, A
     else:
         memory_dry_run = data_manager.plan_memory_gc()
     memory_plan = filter_auto_memory_plan(memory_dry_run, effective_policy)
-    memory_result = execute_memory_gc_plan(
-        data_manager,
-        memory_plan,
-    ) if memory_plan.get("victims") else {
-        **memory_plan,
-        "mode": "execute",
-        "status": "ok",
-        "removed_series": 0,
-        "trimmed_series": 0,
-        "removed_bars": 0,
-        "removed_estimated_bytes": 0,
-        "results": [],
-    }
+    async_memory_executor = getattr(data_manager, "execute_memory_gc_plan_async", None)
+    if memory_plan.get("victims"):
+        memory_result = (await async_memory_executor(memory_plan)
+                         if callable(async_memory_executor)
+                         else execute_memory_gc_plan(data_manager, memory_plan))
+    else:
+        memory_result = {
+            **memory_plan,
+            "mode": "execute",
+            "status": "ok",
+            "removed_series": 0,
+            "trimmed_series": 0,
+            "removed_bars": 0,
+            "removed_estimated_bytes": 0,
+            "results": [],
+        }
     constraints: list[dict[str, str]] = []
     memory_execution_status = str(
         memory_result.get("status") or "ok"
