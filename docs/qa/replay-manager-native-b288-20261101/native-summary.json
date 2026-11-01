@@ -1,0 +1,1050 @@
+{
+  "qualification": {
+    "sourceCommit": "b288a36c30e57a707a1ee8bc9eff2b3ee8b1d963",
+    "passed": true,
+    "stages": {
+      "basic": "acceptance-basic.json",
+      "lifecycle": "acceptance-lifecycle.json",
+      "indicator-retry": "acceptance-indicator-retry.json",
+      "download": "acceptance-download.json"
+    },
+    "financialOracle": "financial-oracle.json",
+    "strictSignatureBeforeAndAfter": true,
+    "at": "2026-11-01T08:09:51.105239+00:00",
+    "originalChainFailurePreserved": "missing-indicator-fixture-failure-chain-status.json",
+    "harnessCorrection": "Initial indicator setup attempted removal of a missing indicator. Retry inspects actual indicators before optional cleanup, asserts add succeeded, and reruns all numerical, visible and restart assertions without application edits."
+  },
+  "rawEvidenceDirectory": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-resize-advisory-native-20261101",
+  "package": {
+    "sourceCommit": "b288a36c30e57a707a1ee8bc9eff2b3ee8b1d963",
+    "zipSha256": "08b68b9fa83aa365f244047a737b9c9f7faf5f522948f5c6aaf115c8e5600022",
+    "asarSha256": "f0c48d38bf4c7a819117c169477095b20a59bc45c7e562e41025b976e42b1bc2",
+    "mismatches": []
+  },
+  "sourceFiles": 3100,
+  "distFiles": 162,
+  "financialOracle": {
+    "passed": true,
+    "source": "independent Decimal arithmetic from the finite OHLCV formula, configured 1 bps market slippage and 5 bps taker fees",
+    "initial_index": 826,
+    "exit_mark_index": 830,
+    "quantity": "0.01",
+    "entry": "30057.50545",
+    "exit": "30063.49335",
+    "fees": "0.30060500",
+    "realized_pnl": "0.0598790",
+    "cash_balance": "9999.75927400",
+    "scope": "two deterministic one-way approximate-model market fills; no historical-exact account claim"
+  },
+  "checks": {
+    "basic": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "packaged-launch",
+          "at": "2026-11-01T08:02:26.643Z",
+          "evidence": {}
+        },
+        {
+          "name": "created-paused",
+          "at": "2026-11-01T08:02:36.254Z",
+          "evidence": {
+            "ui": {
+              "class": "status-bar replay-status-bar",
+              "id": "status-bar",
+              "data-runtime-source": "replay",
+              "data-connection-status": "connected",
+              "data-market-shell-owner": "status-bar",
+              "data-replay-generation": "1",
+              "data-replay-session-state": "PAUSED",
+              "data-replay-adapter-state": "PAUSED",
+              "data-replay-source-sequence": "0",
+              "data-replay-revision": "1",
+              "data-replay-state-hash": "sha256:e2a79a3eadd73d2d1499b39f1b458eaa774053c1e57142bd396cf610013822fa",
+              "data-replay-cursor-ms": "1700049600000",
+              "data-replay-max-bar-ms": "1700049540000",
+              "data-replay-source-bar-count": "360",
+              "data-replay-source-series-version": "2",
+              "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+              "data-replay-viewer-bar-count": "360",
+              "data-replay-viewer-series-version": "1",
+              "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+              "data-replay-viewer-error": "",
+              "data-replay-viewer-loading": "false",
+              "data-replay-viewer-state-ready": "true",
+              "data-replay-base-interval": "1m",
+              "data-replay-source-interval-seconds": "60",
+              "data-replay-last-bar-closed": "true",
+              "data-replay-order-count": "0",
+              "data-replay-fill-count": "0",
+              "data-replay-revealed": "false",
+              "data-replay-history-epoch": "",
+              "data-replay-history-right-truncated": "false",
+              "data-replay-history-can-restore-latest": "false",
+              "data-replay-view-interval": "1m",
+              "data-replay-view-revision": "1",
+              "data-replay-clock-basis": "BASE_BAR",
+              "data-replay-clock-rate": "1",
+              "data-replay-control-pending": "",
+              "data-replay-integrity-operation": "",
+              "data-replay-time-disclosure-policy": "NONE",
+              "data-replay-result-label": "START_TIME_KNOWN",
+              "data-replay-public-time-projections": "0",
+              "data-replay-public-time-state": "ready",
+              "data-replay-review-read-only": "false",
+              "data-replay-review-timeline-sequence": "",
+              "data-replay-review-chart-fidelity": "",
+              "data-replay-review-original-verified": ""
+            }
+          }
+        },
+        {
+          "name": "buy-filled",
+          "at": "2026-11-01T08:02:38.588Z",
+          "evidence": {
+            "ui": {
+              "class": "status-bar replay-status-bar",
+              "id": "status-bar",
+              "data-runtime-source": "replay",
+              "data-connection-status": "connected",
+              "data-market-shell-owner": "status-bar",
+              "data-replay-generation": "1",
+              "data-replay-session-state": "PAUSED",
+              "data-replay-adapter-state": "PAUSED",
+              "data-replay-source-sequence": "1",
+              "data-replay-revision": "3",
+              "data-replay-state-hash": "sha256:2a97bee6c65c9e3087b067788f364a0736730605bd2a797de616a0f2ef710f54",
+              "data-replay-cursor-ms": "1700049659999",
+              "data-replay-max-bar-ms": "1700049600000",
+              "data-replay-source-bar-count": "361",
+              "data-replay-source-series-version": "3",
+              "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+              "data-replay-viewer-bar-count": "361",
+              "data-replay-viewer-series-version": "2",
+              "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+              "data-replay-viewer-error": "",
+              "data-replay-viewer-loading": "false",
+              "data-replay-viewer-state-ready": "true",
+              "data-replay-base-interval": "1m",
+              "data-replay-source-interval-seconds": "60",
+              "data-replay-last-bar-closed": "true",
+              "data-replay-order-count": "1",
+              "data-replay-fill-count": "1",
+              "data-replay-revealed": "false",
+              "data-replay-history-epoch": "",
+              "data-replay-history-right-truncated": "false",
+              "data-replay-history-can-restore-latest": "false",
+              "data-replay-view-interval": "1m",
+              "data-replay-view-revision": "1",
+              "data-replay-clock-basis": "BASE_BAR",
+              "data-replay-clock-rate": "1",
+              "data-replay-control-pending": "",
+              "data-replay-integrity-operation": "",
+              "data-replay-time-disclosure-policy": "NONE",
+              "data-replay-result-label": "START_TIME_KNOWN",
+              "data-replay-public-time-projections": "0",
+              "data-replay-public-time-state": "ready",
+              "data-replay-review-read-only": "false",
+              "data-replay-review-timeline-sequence": "",
+              "data-replay-review-chart-fidelity": "",
+              "data-replay-review-original-verified": ""
+            }
+          }
+        },
+        {
+          "name": "closed-cycle",
+          "at": "2026-11-01T08:02:43.621Z",
+          "evidence": {
+            "ui": {
+              "class": "status-bar replay-status-bar",
+              "id": "status-bar",
+              "data-runtime-source": "replay",
+              "data-connection-status": "connected",
+              "data-market-shell-owner": "status-bar",
+              "data-replay-generation": "1",
+              "data-replay-session-state": "PAUSED",
+              "data-replay-adapter-state": "PAUSED",
+              "data-replay-source-sequence": "6",
+              "data-replay-revision": "9",
+              "data-replay-state-hash": "sha256:0d55edb333c7d0eb0466ae631154e5438fe4c2aa88e690b62acae810e1408128",
+              "data-replay-cursor-ms": "1700049959999",
+              "data-replay-max-bar-ms": "1700049900000",
+              "data-replay-source-bar-count": "366",
+              "data-replay-source-series-version": "8",
+              "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+              "data-replay-viewer-bar-count": "366",
+              "data-replay-viewer-series-version": "7",
+              "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+              "data-replay-viewer-error": "",
+              "data-replay-viewer-loading": "false",
+              "data-replay-viewer-state-ready": "true",
+              "data-replay-base-interval": "1m",
+              "data-replay-source-interval-seconds": "60",
+              "data-replay-last-bar-closed": "true",
+              "data-replay-order-count": "2",
+              "data-replay-fill-count": "2",
+              "data-replay-revealed": "false",
+              "data-replay-history-epoch": "",
+              "data-replay-history-right-truncated": "false",
+              "data-replay-history-can-restore-latest": "false",
+              "data-replay-view-interval": "1m",
+              "data-replay-view-revision": "1",
+              "data-replay-clock-basis": "BASE_BAR",
+              "data-replay-clock-rate": "1",
+              "data-replay-control-pending": "",
+              "data-replay-integrity-operation": "",
+              "data-replay-time-disclosure-policy": "NONE",
+              "data-replay-result-label": "START_TIME_KNOWN",
+              "data-replay-public-time-projections": "0",
+              "data-replay-public-time-state": "ready",
+              "data-replay-review-read-only": "false",
+              "data-replay-review-timeline-sequence": "",
+              "data-replay-review-chart-fidelity": "",
+              "data-replay-review-original-verified": ""
+            }
+          }
+        },
+        {
+          "name": "saved-hub",
+          "at": "2026-11-01T08:02:44.359Z",
+          "evidence": {
+            "runId": "prepared-60fe0cc897a348f69176ce7ce3f4e2e7"
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:02:44.435Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:02:59.678Z",
+          "evidence": {
+            "elapsedMs": 15243
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:02:59.881Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart",
+          "at": "2026-11-01T08:03:23.322Z",
+          "evidence": {}
+        },
+        {
+          "name": "restored-paused",
+          "at": "2026-11-01T08:03:25.143Z",
+          "evidence": {
+            "ui": {
+              "class": "status-bar replay-status-bar",
+              "id": "status-bar",
+              "data-runtime-source": "replay",
+              "data-connection-status": "connected",
+              "data-market-shell-owner": "status-bar",
+              "data-replay-generation": "1",
+              "data-replay-session-state": "PAUSED",
+              "data-replay-adapter-state": "PAUSED",
+              "data-replay-source-sequence": "6",
+              "data-replay-revision": "10",
+              "data-replay-state-hash": "sha256:0d55edb333c7d0eb0466ae631154e5438fe4c2aa88e690b62acae810e1408128",
+              "data-replay-cursor-ms": "1700049959999",
+              "data-replay-max-bar-ms": "1700049900000",
+              "data-replay-source-bar-count": "366",
+              "data-replay-source-series-version": "2",
+              "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+              "data-replay-viewer-bar-count": "366",
+              "data-replay-viewer-series-version": "1",
+              "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+              "data-replay-viewer-error": "",
+              "data-replay-viewer-loading": "false",
+              "data-replay-viewer-state-ready": "true",
+              "data-replay-base-interval": "1m",
+              "data-replay-source-interval-seconds": "60",
+              "data-replay-last-bar-closed": "true",
+              "data-replay-order-count": "2",
+              "data-replay-fill-count": "2",
+              "data-replay-revealed": "false",
+              "data-replay-history-epoch": "",
+              "data-replay-history-right-truncated": "false",
+              "data-replay-history-can-restore-latest": "false",
+              "data-replay-view-interval": "1m",
+              "data-replay-view-revision": "1",
+              "data-replay-clock-basis": "BASE_BAR",
+              "data-replay-clock-rate": "1",
+              "data-replay-control-pending": "",
+              "data-replay-integrity-operation": "",
+              "data-replay-time-disclosure-policy": "NONE",
+              "data-replay-result-label": "START_TIME_KNOWN",
+              "data-replay-public-time-projections": "0",
+              "data-replay-public-time-state": "ready",
+              "data-replay-review-read-only": "false",
+              "data-replay-review-timeline-sequence": "",
+              "data-replay-review-chart-fidelity": "",
+              "data-replay-review-original-verified": ""
+            }
+          }
+        },
+        {
+          "name": "continued-after-restart",
+          "at": "2026-11-01T08:03:25.669Z",
+          "evidence": {
+            "ui": {
+              "class": "status-bar replay-status-bar",
+              "id": "status-bar",
+              "data-runtime-source": "replay",
+              "data-connection-status": "connected",
+              "data-market-shell-owner": "status-bar",
+              "data-replay-generation": "1",
+              "data-replay-session-state": "PAUSED",
+              "data-replay-adapter-state": "PAUSED",
+              "data-replay-source-sequence": "7",
+              "data-replay-revision": "11",
+              "data-replay-state-hash": "sha256:959ff87b9bf41c0b68f9d3ca948c849a2e7555a8a7c79e71d9a8cc03e6b31a10",
+              "data-replay-cursor-ms": "1700050019999",
+              "data-replay-max-bar-ms": "1700049960000",
+              "data-replay-source-bar-count": "367",
+              "data-replay-source-series-version": "3",
+              "data-replay-source-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000",
+              "data-replay-viewer-bar-count": "367",
+              "data-replay-viewer-series-version": "2",
+              "data-replay-viewer-series-key": "binance-spot-BTCUSDT-1m::source=replay::session=cb86b4a2bca443588c4e9adac4245d18::data=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595::timeline=1700049600000|viewer:1m|mapping:source-bucket-v3",
+              "data-replay-viewer-error": "",
+              "data-replay-viewer-loading": "false",
+              "data-replay-viewer-state-ready": "true",
+              "data-replay-base-interval": "1m",
+              "data-replay-source-interval-seconds": "60",
+              "data-replay-last-bar-closed": "true",
+              "data-replay-order-count": "2",
+              "data-replay-fill-count": "2",
+              "data-replay-revealed": "false",
+              "data-replay-history-epoch": "",
+              "data-replay-history-right-truncated": "false",
+              "data-replay-history-can-restore-latest": "false",
+              "data-replay-view-interval": "1m",
+              "data-replay-view-revision": "1",
+              "data-replay-clock-basis": "BASE_BAR",
+              "data-replay-clock-rate": "1",
+              "data-replay-control-pending": "",
+              "data-replay-integrity-operation": "",
+              "data-replay-time-disclosure-policy": "NONE",
+              "data-replay-result-label": "START_TIME_KNOWN",
+              "data-replay-public-time-projections": "0",
+              "data-replay-public-time-state": "ready",
+              "data-replay-review-read-only": "false",
+              "data-replay-review-timeline-sequence": "",
+              "data-replay-review-chart-fidelity": "",
+              "data-replay-review-original-verified": ""
+            }
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:03:25.817Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:03:42.086Z",
+          "evidence": {
+            "elapsedMs": 16269
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:03:42.374Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    },
+    "lifecycle": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:04:11.286Z",
+          "evidence": {}
+        },
+        {
+          "name": "resumed-single",
+          "at": "2026-11-01T08:04:14.558Z",
+          "evidence": {
+            "time": 1700050019999,
+            "historyWaitMs": 316,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 367,
+                "first": 1700028000,
+                "last": 1700049960,
+                "closedOHLCVCompared": 367,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 48
+              }
+            ]
+          }
+        },
+        {
+          "name": "play-pause",
+          "at": "2026-11-01T08:04:24.302Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 299,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              }
+            ]
+          }
+        },
+        {
+          "name": "two-private-sequences",
+          "at": "2026-11-01T08:04:25.004Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 382,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700048940,
+                  "to": 1700051340
+                },
+                "logical": {
+                  "from": 349.375,
+                  "to": 388.625
+                },
+                "visibleBars": 21
+              }
+            ]
+          }
+        },
+        {
+          "name": "independent-intervals-default-view",
+          "at": "2026-11-01T08:04:28.275Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 219,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700047140,
+                  "to": 1700052660
+                },
+                "logical": {
+                  "from": 319.375,
+                  "to": 410.625
+                },
+                "visibleBars": 51
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 74,
+                "first": 1700028000,
+                "last": 1700049900,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700048700,
+                  "to": 1700051400
+                },
+                "logical": {
+                  "from": 69.875,
+                  "to": 77.725
+                },
+                "visibleBars": 5
+              }
+            ]
+          }
+        },
+        {
+          "name": "independent-intervals",
+          "at": "2026-11-01T08:04:29.513Z",
+          "evidence": {
+            "time": 1700050199999,
+            "historyWaitMs": 380,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 370,
+                "first": 1700028000,
+                "last": 1700050140,
+                "closedOHLCVCompared": 370,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050140
+                },
+                "logical": {
+                  "from": 129.99999999999997,
+                  "to": 369
+                },
+                "visibleBars": 241
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 74,
+                "first": 1700028000,
+                "last": 1700049900,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700049900
+                },
+                "logical": {
+                  "from": 26,
+                  "to": 73
+                },
+                "visibleBars": 48
+              }
+            ]
+          }
+        },
+        {
+          "name": "offline-observed",
+          "at": "2026-11-01T08:04:35.232Z",
+          "evidence": {
+            "urls": [
+              "ws://127.0.0.1:55730/api/v1/stream/replay/runs/prepared-60fe0cc897a348f69176ce7ce3f4e2e7?protocol=replay.v3&projection=delta.v1",
+              "ws://127.0.0.1:55730/api/v1/stream/replay/cb86b4a2bca443588c4e9adac4245d18?data_epoch=sha256%3Aa7a142f76f2109c6e90d083c3d0a59dcce5c037ba9fb060285c82d7a246f8595"
+            ],
+            "time": 1700050199999,
+            "networkFailure": true
+          }
+        },
+        {
+          "name": "controller-reacquired",
+          "at": "2026-11-01T08:04:41.002Z",
+          "evidence": {}
+        },
+        {
+          "name": "reconnected-advanced",
+          "at": "2026-11-01T08:04:50.712Z",
+          "evidence": {
+            "time": 1700050259999,
+            "historyWaitMs": 347,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 371,
+                "first": 1700028000,
+                "last": 1700050200,
+                "closedOHLCVCompared": 371,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 129.99998333454133,
+                  "to": 369.9999833345413
+                },
+                "visibleBars": 242
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "bars": 74,
+                "first": 1700028000,
+                "last": 1700049900,
+                "closedOHLCVCompared": 0,
+                "visible": {
+                  "from": 1700035500,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 25.99999666690826,
+                  "to": 73.99999666690826
+                },
+                "visibleBars": 49
+              }
+            ]
+          }
+        },
+        {
+          "name": "recovery-duration",
+          "at": "2026-11-01T08:04:50.734Z",
+          "evidence": {
+            "elapsedMs": 15500
+          }
+        },
+        {
+          "name": "portfolio-empty-scope",
+          "at": "2026-11-01T08:04:58.319Z",
+          "evidence": {
+            "reason": "Single-market fixture has no multi-market portfolio interval export link."
+          }
+        },
+        {
+          "name": "closed-one-chart",
+          "at": "2026-11-01T08:04:58.870Z",
+          "evidence": {
+            "time": 1700050259999,
+            "historyWaitMs": 187,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "bars": 371,
+                "first": 1700028000,
+                "last": 1700050200,
+                "closedOHLCVCompared": 371,
+                "visible": {
+                  "from": 1700035740,
+                  "to": 1700050200
+                },
+                "logical": {
+                  "from": 129.99998333454127,
+                  "to": 369.9999833345413
+                },
+                "visibleBars": 242
+              }
+            ]
+          }
+        },
+        {
+          "name": "run-resources-released",
+          "at": "2026-11-01T08:04:59.974Z",
+          "evidence": {
+            "runId": "prepared-60fe0cc897a348f69176ce7ce3f4e2e7"
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:05:00.095Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:05:15.449Z",
+          "evidence": {
+            "elapsedMs": 15354
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:05:15.703Z",
+          "evidence": {
+            "allExited": true,
+            "elapsedMs": 15723
+          }
+        }
+      ]
+    },
+    "indicator": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:07:01.015Z",
+          "evidence": {
+            "group": "chart:replay:prepared-60fe0cc897a348f69176ce7ce3f4e2e7:workspace-default:cell-1"
+          }
+        },
+        {
+          "name": "indicator-precondition",
+          "at": "2026-11-01T08:07:01.031Z",
+          "evidence": {
+            "state": "ready",
+            "contextToken": "ui2cgyacmhn:5",
+            "snapshot": {
+              "identity": {
+                "runId": "prepared-60fe0cc897a348f69176ce7ce3f4e2e7",
+                "viewRevision": 3
+              },
+              "writable": true,
+              "computing": false,
+              "indicators": [],
+              "visibleRange": {
+                "barSpacing": 3.062240663900415,
+                "rightOffset": -1.6665458701936586e-05,
+                "time": {
+                  "from": 1700035799.999,
+                  "to": 1700050199.999
+                },
+                "rightmostTime": 1700050199.999,
+                "logical": {
+                  "from": 129.99998333454133,
+                  "to": 369.9999833345413
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "initial-ma20",
+          "at": "2026-11-01T08:07:02.159Z",
+          "evidence": {
+            "cursor": 1700050259999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 352,
+                "visibleCompared": 240,
+                "aggregateCompared": 0,
+                "points": 352,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30056
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "independent-period-ma20",
+          "at": "2026-11-01T08:07:06.763Z",
+          "evidence": {
+            "cursor": 1700050259999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 352,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 352,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050200
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30056
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050500
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.4625
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "advanced-ma20",
+          "at": "2026-11-01T08:07:09.918Z",
+          "evidence": {
+            "cursor": 1700050319999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 353,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 353,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050260
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050260,
+                  "value": 30058
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050500
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.2125
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:07:14.393Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:07:29.627Z",
+          "evidence": {
+            "elapsedMs": 15234
+          }
+        },
+        {
+          "name": "full-exit",
+          "at": "2026-11-01T08:07:29.703Z",
+          "evidence": {
+            "allExited": true
+          }
+        },
+        {
+          "name": "restart",
+          "at": "2026-11-01T08:07:59.029Z",
+          "evidence": {
+            "group": "chart:replay:prepared-60fe0cc897a348f69176ce7ce3f4e2e7:workspace-default:cell-1"
+          }
+        },
+        {
+          "name": "restored-ma20",
+          "at": "2026-11-01T08:08:00.821Z",
+          "evidence": {
+            "cursor": 1700050319999,
+            "charts": [
+              {
+                "cellId": "cell-1",
+                "interval": "1m",
+                "compared": 353,
+                "visibleCompared": 241,
+                "aggregateCompared": 0,
+                "points": 353,
+                "visible": {
+                  "from": 1700035860,
+                  "to": 1700050260
+                },
+                "first": {
+                  "time": 1700029140,
+                  "value": 30104.825
+                },
+                "last": {
+                  "time": 1700050260,
+                  "value": 30058
+                }
+              },
+              {
+                "cellId": "cell-2",
+                "interval": "5m",
+                "compared": 55,
+                "visibleCompared": 48,
+                "aggregateCompared": 2,
+                "points": 56,
+                "visible": {
+                  "from": 1700035800,
+                  "to": 1700050500
+                },
+                "first": {
+                  "time": 1700033700,
+                  "value": 30077
+                },
+                "last": {
+                  "time": 1700050200,
+                  "value": 30075.2125
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:08:00.912Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:08:16.243Z",
+          "evidence": {
+            "elapsedMs": 15331
+          }
+        },
+        {
+          "name": "final-exit",
+          "at": "2026-11-01T08:08:16.425Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    },
+    "download": {
+      "passed": true,
+      "errors": [],
+      "steps": [
+        {
+          "name": "launch",
+          "at": "2026-11-01T08:08:42.799Z",
+          "evidence": {}
+        },
+        {
+          "name": "curve-availability",
+          "at": "2026-11-01T08:08:45.449Z",
+          "evidence": {
+            "available": false,
+            "samples": 0
+          }
+        },
+        {
+          "name": "probe-scope",
+          "at": "2026-11-01T08:08:45.471Z",
+          "evidence": {
+            "method": "Real native bridge and DownloadItem stream; destination selected by the harness. Empty single-market export; nonempty curve UI and OS save dialog are not qualified."
+          }
+        },
+        {
+          "name": "download",
+          "at": "2026-11-01T08:08:48.654Z",
+          "evidence": {
+            "state": "completed",
+            "receivedBytes": 509,
+            "totalBytes": 509,
+            "path": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-resize-advisory-native-20261101/native-export-probe.ndjson",
+            "mime": "application/x-ndjson",
+            "bytes": 509,
+            "records": 2,
+            "terminal": {
+              "kind": "complete",
+              "records": 1,
+              "sha256": "3865bfaa990b76922c8252a45781404d3bba6820c1dc1c5c9504b8b829d9768d"
+            },
+            "sha256": "f5f78b5f92b25b78534775665353faa0019a69c6dca9184fe74af981fa942ab9"
+          }
+        },
+        {
+          "name": "native-events",
+          "at": "2026-11-01T08:08:48.661Z",
+          "evidence": [
+            {
+              "kind": "download",
+              "url": "http://127.0.0.1:61978/api/v1/replay/runs/prepared-60fe0cc897a348f69176ce7ce3f4e2e7/portfolio-equity/export"
+            }
+          ]
+        },
+        {
+          "name": "quit-requested",
+          "at": "2026-11-01T08:08:48.765Z",
+          "evidence": {}
+        },
+        {
+          "name": "quit-completed",
+          "at": "2026-11-01T08:09:03.980Z",
+          "evidence": {
+            "elapsedMs": 15215
+          }
+        },
+        {
+          "name": "exit",
+          "at": "2026-11-01T08:09:04.204Z",
+          "evidence": {
+            "allExited": true
+          }
+        }
+      ]
+    }
+  },
+  "receiptSha256": {
+    "acceptance-basic.json": "8fbd148b8d731cd26f068f5b5a9131b058af4df2d914f984a41561dde08606d2",
+    "acceptance-lifecycle.json": "b2cdd0736232e56c44c50b74e9a946d54fded652d8a91189a0d1ab18b73cf96f",
+    "acceptance-indicator-retry.json": "7b2a143017cfeeebaba8f3fe0741c40139dfce2e09702566c07a2d9568c621db",
+    "acceptance-download.json": "064b0ad9beecdbb18e7371ccb32e7fe39e56ae5f108c5401950d13ceae2d657c"
+  },
+  "localValidation": {
+    "log": "/tmp/candlescope180-resize-advisory-full-check.log",
+    "frontendTests": 4704,
+    "isolatedPerformanceTests": 1,
+    "desktopTests": 127,
+    "npmRunCheck": "passed"
+  },
+  "limitations": [
+    "finite synthetic 1m archives, 4000 rows per symbol and six-hour visible history",
+    "The original failed chain remains unchanged; corrected indicator setup was retried with the same installed binary",
+    "single-market portfolio export is empty; native bridge and DownloadItem transfer verified, OS save dialog not qualified",
+    "ALL_AVAILABLE cold performance, long disconnect/controller expiry, Windows and the complete 157-item matrix remain open"
+  ]
+}

@@ -1,0 +1,230 @@
+{
+  "schema": "candlescope.indicator-owner-qualification/1",
+  "source_commit": "9c986f6804006ae4631f34628f030fe2039b1cca",
+  "collection_commit": "9c986f6804006ae4631f34628f030fe2039b1cca",
+  "scope": "Builtin realtime serial ownership and separate builtin history capacity. Selected #120 P1/P2 contracts, not all #120 or all four goal batches.",
+  "tests": {
+    "backend_integration": "262 passed, 5 pre-existing warnings before warm-key followup",
+    "latest_owner_ws_warm_lifecycle": "77 passed after warm-key and terminal WebSocket fixes",
+    "latest_shutdown_and_source_recovery": "78 passed plus 1 dedicated source-readiness fence case",
+    "final_transport": "8 passed",
+    "final_compute_batch": "12 passed",
+    "compatibility": "75 passed, 1 skipped and 1 obsolete executor-test setup failure; corrected capacity test and all 12 compute-batch tests then passed",
+    "shutdown_first_run": "2 failures retained: a cold spawn used an unnecessarily short 2s IPC deadline; a real readiness-before-source race required the before_ready fence. Both corrected and latest suites pass",
+    "before_fix_reproduction": "warm resubscribe failed both thread and process with KeyError; retained log"
+  },
+  "native": {
+    "passed": true,
+    "platform": "macOS arm64",
+    "source_files": 965,
+    "dist_files": 163,
+    "steps": 13,
+    "exit_ms": [
+      30815,
+      16761
+    ],
+    "shutdown_log": "One expected Uvicorn graceful-shutdown timeout cancellation for the deliberately suspended HTTP compute. Full traceback preserved; all owned children reaped. No ordinary-flow ASGI exception.",
+    "transport": "packaged bundled backend, real public Binance HTTP and WebSocket, no response substitution",
+    "assembly": "APFS clone of first-batch installed bundle; current tracked backend/app copied, compiled by bundled Python, deep ad-hoc signed. Frontend, dependencies, SDK and runtime/control inputs unchanged from 1486207a.",
+    "checks": [
+      "two hosted MA charts and independent numerical oracle",
+      "shared same-definition instance",
+      "real new close with no spontaneous generation change",
+      "independent parameters",
+      "owned compute child failure and exactly one recovery",
+      "saved workspace and full process-tree exit",
+      "restart restores numerical values",
+      "last unsubscribe releases active references",
+      "quit reaps an owned suspended history child while a real HTTP compute is physically active"
+    ]
+  },
+  "attempts": {
+    "attempt1": "recovery reconnect became permanent HTTP fallback; fixed",
+    "attempt2": "original script passed, but audit found warm resubscribe KeyError recovery and receive-after-close ASGI error; superseded",
+    "attempt3": "QA default firstWindow30s expired before window opened; all owned processes subsequently exited via normal Browser.close; superseded",
+    "attempt4": "normal native flow and exactly-one fault recovery passed; extended later with an active suspended history job at quit",
+    "final": "fresh profile with QA firstWindow90s matching desktop startup budget; no production timeout change"
+  },
+  "performance": [
+    {
+      "instances": 1,
+      "history_jobs": 0,
+      "baseline_loop_p95_ms": 4.378540999823599,
+      "candidate_loop_p95_ms": 1.450457999453647,
+      "baseline_delivery_p95_ms": 26.75262500088138,
+      "candidate_delivery_p95_ms": 6.644374998359126,
+      "baseline_cpu_ms": 354.92400000000004,
+      "candidate_parent_realtime_cpu_ms": 599.5219999999999,
+      "candidate_history_process_cpu_ms": 0,
+      "realtime_peak_rss_bytes": 57835520,
+      "history_peak_rss_bytes": null
+    },
+    {
+      "instances": 16,
+      "history_jobs": 0,
+      "baseline_loop_p95_ms": 6.651249999777065,
+      "candidate_loop_p95_ms": 2.3100409998733085,
+      "baseline_delivery_p95_ms": 25.017542000568938,
+      "candidate_delivery_p95_ms": 15.333792000092217,
+      "baseline_cpu_ms": 764.3069999999999,
+      "candidate_parent_realtime_cpu_ms": 1319.834,
+      "candidate_history_process_cpu_ms": 0,
+      "realtime_peak_rss_bytes": 61571072,
+      "history_peak_rss_bytes": null
+    },
+    {
+      "instances": 64,
+      "history_jobs": 0,
+      "baseline_loop_p95_ms": 20.835833000091952,
+      "candidate_loop_p95_ms": 3.1786659983481513,
+      "baseline_delivery_p95_ms": 229.18091700194054,
+      "candidate_delivery_p95_ms": 48.13674999968498,
+      "baseline_cpu_ms": 1986.7140000000002,
+      "candidate_parent_realtime_cpu_ms": 3494.5120000000006,
+      "candidate_history_process_cpu_ms": 0,
+      "realtime_peak_rss_bytes": 67371008,
+      "history_peak_rss_bytes": null
+    },
+    {
+      "instances": 64,
+      "history_jobs": 2,
+      "baseline_loop_p95_ms": 92.63245799957076,
+      "candidate_loop_p95_ms": 3.818291999778012,
+      "baseline_delivery_p95_ms": 5155.964833000326,
+      "candidate_delivery_p95_ms": 1036.9889159992454,
+      "baseline_cpu_ms": 6969.944999999999,
+      "candidate_parent_realtime_cpu_ms": 4282.880000000001,
+      "candidate_history_process_cpu_ms": 6187.74,
+      "realtime_peak_rss_bytes": 67403776,
+      "history_peak_rss_bytes": 79544320
+    }
+  ],
+  "benchmark_source_commit": "1412410e10548d0cee26347180ee33c244891df5",
+  "parent_lifetime_peak_rss_bytes": {
+    "baseline": 110379008,
+    "candidate": 109314048
+  },
+  "performance_limits": "Shared local machine with other development processes active; one final paired run, not an SLA. CPU includes child processes; RSS values are individual lifetime peaks, not a simultaneous total. IPC counters include seeding and final result retrieval. Separate processes improve loop isolation at additional CPU and memory cost.",
+  "rollback": "INDICATOR_REALTIME_ISOLATED=0 and INDICATOR_HISTORY_PROCESS_ENABLED=0 before restart restore legacy execution; no persistent schema changes.",
+  "not_qualified": [
+    "Windows installed acceptance",
+    "all157 release acceptance",
+    "Pine/Python/backtest shared-resource budgets",
+    "all builtin formulas in native UI",
+    "H127/R129 adoption",
+    "cold provider-registry bootstrap latency",
+    "preview coalescing and general scheduler fairness"
+  ],
+  "artifacts": [
+    {
+      "file": "socket-final-baseline.json.gz",
+      "sha256": "9f1a6352a32737b1b956e654f8e2bb41f8de237ff987c1cca80cd28ecb928fd9",
+      "uncompressed_bytes": 109642
+    },
+    {
+      "file": "socket-final-processes.json.gz",
+      "sha256": "0cac5f084db0da1358d50d91ce84070bf1bb218089c79ebcac173098d8b82aa1",
+      "uncompressed_bytes": 145984
+    },
+    {
+      "file": "native-acceptance.json.gz",
+      "sha256": "c51c4eb5a0506ae44aaf9556160b8263b87f8076674f57ba0b1d7f42233e25bd",
+      "uncompressed_bytes": 249101
+    },
+    {
+      "file": "native-traffic.json.gz",
+      "sha256": "c3da1bbb8f918ec584af8ce7e9578d455240e32bb69b1d61f47a3e6543180626",
+      "uncompressed_bytes": 232707
+    },
+    {
+      "file": "native-assembly.json.gz",
+      "sha256": "9810f572ec649552128d52f68c8511611a9141efcf2ec99e3804c751807e7456",
+      "uncompressed_bytes": 667
+    },
+    {
+      "file": "native-source-package-manifest.json.gz",
+      "sha256": "3cbe82ceb53612e921a502505a463f8dba838fe3becb130a7543c149dbae41bd",
+      "uncompressed_bytes": 133856
+    },
+    {
+      "file": "native-backend.log.gz",
+      "sha256": "c1f5f0232237422245a154e3dc4ccb576aa8f4435509f26adf530057b79efe23",
+      "uncompressed_bytes": 51031
+    },
+    {
+      "file": "final-transport-regression.log.gz",
+      "sha256": "f3de5d571bdd5345c0d47cdefd22084e1203c9f024029da82de9112caeaa4a95",
+      "uncompressed_bytes": 2375
+    },
+    {
+      "file": "warm-final-tests.log.gz",
+      "sha256": "ef3600b0a843418c876788b31b6f1e45188b7ce5e937160698e89c16c2bbc9e8",
+      "uncompressed_bytes": 180
+    },
+    {
+      "file": "transport-final-tests.log.gz",
+      "sha256": "7a7f834efcc14cbf6c6942e4882a2fe2fe9b63758015d95a9f3970257aa04634",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "compatibility-tests.log.gz",
+      "sha256": "a95978e5b6514b23b0162a51a275ca18eb1e35addb5176cc71bd934e0ec391d8",
+      "uncompressed_bytes": 1963
+    },
+    {
+      "file": "compute-batch-final-tests.log.gz",
+      "sha256": "395ccfc91e6f820d2e04edf3eebe03cda80342eb4e344edcc8413f6e5ae91bc6",
+      "uncompressed_bytes": 711
+    },
+    {
+      "file": "reconnect-recovery-tests.log.gz",
+      "sha256": "457586367a90be5cbdc050d0e539b7f3a14769e2289ffb83f47ed2ff9f2f2fba",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "warm-resubscribe-before.log.gz",
+      "sha256": "31e38e8214e6a07c68c74043b628254f36c8a29951ae82a566ba3fe811b44976",
+      "uncompressed_bytes": 9327
+    },
+    {
+      "file": "shutdown-final-tests.log.gz",
+      "sha256": "0b3d132ed77e4839e84de99c0ec2e8713b845852703396536ffb397716eb9b96",
+      "uncompressed_bytes": 8897
+    },
+    {
+      "file": "shutdown-final2-tests.log.gz",
+      "sha256": "af7fec015f47ef99bb63d6cae93fa9e6d1fce0ca828a0b680856536624ee86ab",
+      "uncompressed_bytes": 1766
+    },
+    {
+      "file": "recovery-fence-final-tests.log.gz",
+      "sha256": "45c86f55c2d93df7bbe778227853d6c1759c63a885d9acf8f88b5252b9e090a1",
+      "uncompressed_bytes": 113
+    },
+    {
+      "file": "attempt1-native.json.gz",
+      "sha256": "7fe9cd75a873f17e8b63bdf3c6130b8e5e116899c2433028405298870cf3d5d2",
+      "uncompressed_bytes": 118276
+    },
+    {
+      "file": "attempt2-native.json.gz",
+      "sha256": "6c8345790fab6e378702cc2f365d9214134b4a51b7ed6c5b769fd8cfc8def580",
+      "uncompressed_bytes": 238947
+    },
+    {
+      "file": "attempt3-native.json.gz",
+      "sha256": "98178d5eea5a03545e98d6c747d1f2dd7040ec70ac28fee4eaaf2a319e131a84",
+      "uncompressed_bytes": 1177
+    },
+    {
+      "file": "attempt3-cleanup.json.gz",
+      "sha256": "dbd46ce261af9b777d4d9da3b09a1118548154ae89d1dd7d436c4397e4b7a339",
+      "uncompressed_bytes": 6865
+    },
+    {
+      "file": "attempt4-native.json.gz",
+      "sha256": "dd2cbfb2e9a194e11fb332b603873e1002202f330dc26f6f012c5f2a8a49cb45",
+      "uncompressed_bytes": 244929
+    }
+  ]
+}

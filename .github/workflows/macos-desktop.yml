@@ -73,7 +73,7 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: |
           export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
-          ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q \
+          ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
             tests/test_market_stream_version.py \
             tests/test_klines_api.py \
             tests/test_stream_klines_event_filter.py \
@@ -90,6 +90,11 @@ jobs:
             tests/test_history_archive_*.py \
             tests/test_official_chart_archive.py \
             tests/test_core_executors.py \
+            tests/test_process_lane.py \
+            tests/test_indicator_serial_owner.py \
+            tests/test_indicator_process_owner.py \
+            tests/test_indicator_history_worker.py \
+            tests/test_indicator_owner_ws.py \
             tests/test_proxy_pool_traffic.py \
             tests/test_proxy_pool_ws.py \
             tests/test_trusted_extensions.py \

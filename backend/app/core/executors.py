@@ -86,5 +86,7 @@ async def run_archive(func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
 
 
 def executors_snapshot() -> dict[str, Any]:
-    return {pool.name: pool.snapshot() for pool in
-            (_indicator_executor, _preparation_executor, _script_wait_executor, _storage_executor, _archive_executor)}
+    from app.indicator.history_worker import history_executor_snapshot
+    return {**{pool.name: pool.snapshot() for pool in
+            (_indicator_executor, _preparation_executor, _script_wait_executor, _storage_executor, _archive_executor)},
+            "indicator_history_process": history_executor_snapshot()}
