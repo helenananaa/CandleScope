@@ -46,7 +46,7 @@ Usage::
 """
 from __future__ import annotations
 
-from app.data_engine.storage.revisions import fenced_acquisition
+from app.data_engine.storage.revisions import fenced_acquisition, prepare_native_history_views
 from app.data_engine.memory_budget import budgeted_work, reserve_work
 
 import logging
@@ -354,6 +354,7 @@ class BackfillEngine:
                 # demand (not from a single ~1000-source-row chunk).
                 task.metadata = {**metadata, **task.metadata}
             status = BackfillStatus.FETCHING
+            await prepare_native_history_views(self._storage, plan.tasks)
             fetch_results = await self.fetcher.fetch(plan.tasks)
 
             fetch_error_summaries: list[str] = []

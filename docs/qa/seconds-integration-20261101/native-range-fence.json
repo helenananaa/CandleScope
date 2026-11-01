@@ -1,0 +1,20 @@
+{
+  "problem": "Whole-family acquisition rejects independent old native 1s REST window after live append, reproduced against real SQLite.",
+  "change": "Before HTTP, fingerprint <=32 windows /8192 total native 1s slots for Binance/Gate/Upbit spot. Atomically compare exact canonical window plus durable deletion floor before plain backfill write; advance only own committed changes. Derived, unknown, out-of-window, alternate identity/provenance and empty coverage remain strict. No timeout increase or new mutation log.",
+  "tests": "81 range/revision/empty/dependency regressions and24 range tests including full BackfillEngine transport-to-write integration pass (overlapping counts). Broader suite pending.",
+  "native": "pending; prior native10 still failed readiness and is retained",
+  "artifacts": [
+    {
+      "path": "disjoint-native-before.json.gz",
+      "sha256": "d49e6b2caafd4f456aa7b8676f11b3c6dd52d41030596cc1c159dcee0d1afa6a"
+    },
+    {
+      "path": "native-range-tests.log.gz",
+      "sha256": "6874df13ecd8b8953a03fea640af7cf0e72f4a1b3d788da60b4de6603e4701c3"
+    },
+    {
+      "path": "native-range-integration.log.gz",
+      "sha256": "390b6f9310e5f69969f3be6ad99367b4bf7bd78c23802a8c8d63bb14af378a86"
+    }
+  ]
+}

@@ -209,6 +209,7 @@ class Acquisition:
     # Only the active job's written series are retained. Persistent jobs keep
     # their initial revision on disk; after restart re-read/recompute inputs.
     accepted: dict[tuple, int] = field(default_factory=dict)
+    native_history_views: list = field(default_factory=list, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     def check(self, conn, values):
@@ -250,7 +251,7 @@ def acquisition_scope(acquisition):
 
 
 @contextmanager
-def guarded_write(conn, values, *, commit=True):
+def guarded_write(conn, values, *, commit=True, native_rows=None, source=None):
     """Hold optimistic check and SQL write in one SQLite writer transaction."""
     scope = _acquisition.get()
     if not conn.in_transaction:
@@ -261,15 +262,31 @@ def guarded_write(conn, values, *, commit=True):
             conn.commit()
         return
     with scope.lock:
-        scope.check(conn, values)
-        yield
         family = [(name, value) for name, value in zip(IDENTITY_COLUMNS, values) if name != "interval"]
-        accepted = {tuple(row[name] for name in IDENTITY_COLUMNS): int(row["revision"])
+        def versions():
+            return {tuple(row[name] for name in IDENTITY_COLUMNS): int(row["revision"])
                     for row in conn.execute("SELECT * FROM kline_series_changes WHERE " +
                         " AND ".join(f"{name}=?" for name, _ in family), tuple(v for _, v in family))}
+        from .native_history_fence import matching_view, fingerprint
+        view = matching_view(scope, values, native_rows, source) if commit else None
+        if view is None:
+            scope.check(conn, values)
+        else:
+            view.check(conn, scope)
+        before = versions() if view is not None else None
+        yield
+        accepted = versions()
+        # A native range view does not consume other intervals as input.
+        # Grant only mutations performed by this write, never unrelated family
+        # revisions that happened while REST was in flight.
+        if before is not None:
+            accepted = {key: rev for key, rev in accepted.items() if before.get(key) != rev}
+        digest = fingerprint(conn, values, view.start, view.end) if view else None
         if commit:
             conn.commit()
             scope.accepted.update(accepted)
+            if view is not None:
+                view.digest = digest
 
 
 def fenced_acquisition(function):
@@ -326,6 +343,13 @@ def acquisition_delete_floor(default):
     if scope is None:
         return default
     return scope.revision if scope.delete_revision is None else scope.delete_revision
+
+
+async def prepare_native_history_views(storage, tasks):
+    from app.core.executors import run_storage
+    from .native_history_fence import capture_native_history_views
+    await run_storage(capture_native_history_views, getattr(storage, "revision_store", None),
+                      _acquisition.get(), tasks)
 
 
 def register_derived(conn, values):
