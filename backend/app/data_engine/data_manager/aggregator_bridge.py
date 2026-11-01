@@ -157,7 +157,9 @@ class AggregatorBridge:
             event.detail = {**event.detail, "storage_revision": consumer.revision}
         if event.event_type in (DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
                                DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED):
-            accepted, _canonical = self._cache.upsert_if_accepted(event.key, event.bar)
+            accepted, _canonical = await self._cache.apply_protected(
+                self._cache.upsert_if_accepted, event.key, event.bar,
+            )
             if not accepted:
                 return
         self._mark_bar_received(event.key)

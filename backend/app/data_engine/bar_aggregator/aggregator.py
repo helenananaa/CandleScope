@@ -364,6 +364,12 @@ class BarAggregator:
         """Return all registered (symbol, interval) targets."""
         return self._router.get_targets()
 
+    def get_series_targets(self):
+        return self._router.get_series_targets()
+
+    def has_series_target(self, symbol, interval, exchange, market_type, identity) -> bool:
+        return self._router.has_series_target(symbol, interval, exchange, market_type, identity)
+
     # ── Public: Data Ingestion ───────────────────────────────
 
     async def on_market_event(self, event: Any) -> None:
