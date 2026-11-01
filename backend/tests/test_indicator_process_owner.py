@@ -17,7 +17,7 @@ def bars(count=30):
             for i in range(count)]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.parametrize('mode', ['thread', 'process'])
 async def test_warm_resubscribe_keeps_logical_key_diagnostic_frontier(mode):
     owner = SerialIndicatorOwner(execution_mode=mode)
@@ -35,7 +35,7 @@ async def test_warm_resubscribe_keeps_logical_key_diagnostic_frontier(mode):
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_process_owns_builtin_state_and_shutdown_reaps_owned_process():
     owner = SerialIndicatorOwner(execution_mode='process')
     events = []
@@ -68,7 +68,7 @@ async def test_process_owns_builtin_state_and_shutdown_reaps_owned_process():
     assert owner.snapshot()['serial_owner']['closed']
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_failed_process_is_replaced_and_old_release_cannot_change_new_reference():
     owner = SerialIndicatorOwner(execution_mode='process')
     try:
@@ -90,7 +90,7 @@ async def test_failed_process_is_replaced_and_old_release_cannot_change_new_refe
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_remote_admission_errors_preserve_existing_instance_and_worker(monkeypatch):
     from app.indicator.engine import IndicatorCapacityError, IndicatorParametersError
     monkeypatch.setenv('INDICATOR_APP_MAX_ACTIVE_TARGETS', '1')
@@ -114,7 +114,7 @@ async def test_remote_admission_errors_preserve_existing_instance_and_worker(mon
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_cancelled_waiter_keeps_physical_process_capacity_until_resume():
     from app.core.bounded_executor import ExecutorBusyError
@@ -147,7 +147,7 @@ async def test_cancelled_waiter_keeps_physical_process_capacity_until_resume():
         await owner.aclose()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 @pytest.mark.skipif(not hasattr(signal, 'SIGSTOP'), reason='POSIX owned-process suspension probe')
 async def test_shutdown_interrupts_owned_compute_and_drains_capacity():
     owner = SerialIndicatorOwner(execution_mode='process')
