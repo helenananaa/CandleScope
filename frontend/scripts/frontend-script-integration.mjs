@@ -15,7 +15,8 @@ const intervalAdmission = process.argv.includes("--interval-admission");
 const replay = process.argv.includes("--replay-visible");
 const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
-const fixture = indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const quickReplayStep = process.argv.includes("--quick-replay-step");
+const fixture = quickReplayStep ? "quick-replay-step-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -83,7 +84,9 @@ app.on("window-all-closed",()=>app.quit());
   child = spawn(chrome, args, { stdio: ["ignore", log, log] });
   fs.closeSync(log);
   let lines;
-  for (let i = 0; i < 100; i++) {
+  const browserStartDeadline = Date.now() + Math.min(120_000,
+    Math.max(10_000, Number(process.env.CANDLESCOPE_TEST_BROWSER_START_TIMEOUT_MS) || 10_000));
+  while (Date.now() < browserStartDeadline) {
     try { lines = fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").trim().split("\n"); break; } catch { /* browser not ready */ }
     if (native) {
       const match = fs.readFileSync(path.join(output, "chrome.log"), "utf8").match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)(\/devtools\/browser\/[^\s]+)/);
@@ -136,7 +139,7 @@ app.on("window-all-closed",()=>app.quit());
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow) {
+  if (!historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));
