@@ -1,0 +1,178 @@
+{
+  "schema": "candlescope.native-export-download/1",
+  "sourceCommit": "09e5259f35bfd44b8eef1f330a52473666d13b3a",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "launch",
+      "at": "2026-11-01T05:57:46.892Z",
+      "evidence": {
+        "identity": {
+          "packaged": true,
+          "pid": 23164,
+          "userData": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile",
+          "resources": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources"
+        },
+        "sidecar": {
+          "pid": 23168,
+          "running": true,
+          "startedAt": "2026-11-01T05:57:35.733Z",
+          "readyMs": 10178,
+          "command": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "args": [
+            "-m",
+            "app.desktop_sidecar",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0"
+          ],
+          "healthUrl": "http://127.0.0.1:55431/health",
+          "logPath": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/logs/backend-sidecar.log"
+        }
+      }
+    },
+    {
+      "name": "curve-availability",
+      "at": "2026-11-01T05:57:48.894Z",
+      "evidence": {
+        "available": false,
+        "samples": 0
+      }
+    },
+    {
+      "name": "probe-scope",
+      "at": "2026-11-01T05:57:48.903Z",
+      "evidence": {
+        "method": "Real native bridge and DownloadItem stream; destination selected by the harness. Empty single-market export; nonempty curve UI and OS save dialog are not qualified."
+      }
+    },
+    {
+      "name": "download",
+      "at": "2026-11-01T05:57:49.132Z",
+      "evidence": {
+        "state": "completed",
+        "receivedBytes": 509,
+        "totalBytes": 509,
+        "path": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/native-export-probe.ndjson",
+        "mime": "application/x-ndjson",
+        "bytes": 509,
+        "records": 2,
+        "terminal": {
+          "kind": "complete",
+          "records": 1,
+          "sha256": "f1fab505536b3a00f98d532fedbdfa70427baa9950e8ba763b4b0ddd06f66958"
+        },
+        "sha256": "3619f092a7a60bdac169f83bc1c214fb6e5949f615e80aa9284248dc74e7be6b"
+      }
+    },
+    {
+      "name": "native-events",
+      "at": "2026-11-01T05:57:49.141Z",
+      "evidence": [
+        {
+          "kind": "download",
+          "url": "http://127.0.0.1:55431/api/v1/replay/runs/prepared-8767219709d04a1aae2136e3b29e938e/portfolio-equity/export"
+        }
+      ]
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T05:57:49.260Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 23164,
+            "ppid": 23152,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 23166,
+            "ppid": 23164,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 23167,
+            "ppid": 23164,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 23168,
+            "ppid": 23164,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 23193,
+            "ppid": 23168,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 23208,
+            "ppid": 23164,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687861903 --launch-time-ticks=13978170531 --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=55431 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 23210,
+            "ppid": 23168,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(66)"
+          },
+          {
+            "pid": 23211,
+            "ppid": 23168,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=67, pipe_handle=69) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T05:58:04.557Z",
+      "evidence": {
+        "elapsedMs": 15297
+      }
+    },
+    {
+      "name": "exit",
+      "at": "2026-11-01T05:58:04.627Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 23164,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 23166,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 23167,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 23168,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 23193,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 23208,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/profile --app-path=/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687861903 --launch-time-ticks=13978170531 --shared-files --field-trial-handle=1718379636,r,14054243105437095940,7354763562223396543,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2507932744557222308,17993984704208584547,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=55431 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 23210,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(66)"
+          },
+          {
+            "pid": 23211,
+            "args": "/Users/ryanliang/.codex/worktrees/frontend-180-integration-20261101/CandleScope/output/pr180-native-host-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=67, pipe_handle=69) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}
