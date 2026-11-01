@@ -185,6 +185,9 @@ test("reconcileAsync rejects a stale candidate after another reconcile wins duri
 
   const result = await renderer.reconcileAsync(stale, {
     maxEntitiesPerChunk: 2,
+    // This race checks entity-count yields. Host scheduling may consume the
+    // time budget after a single entity; elapsed-time yields have separate tests.
+    monotonicNow: () => 0,
     yieldToHost: async () => {
       if (replaced) return;
       replaced = true;
