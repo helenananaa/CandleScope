@@ -226,18 +226,14 @@ class ReadOnlyAccountService:
             retry = min(retry*2,60)
 
     async def state(self) -> dict:
-        repo = self.repository
-        account,scans,coverage,gaps,snapshots,counts = await asyncio.gather(
-            asyncio.to_thread(repo.account),asyncio.to_thread(repo.scans),
-            asyncio.to_thread(repo.coverage),asyncio.to_thread(repo.gaps),
-            asyncio.to_thread(repo.snapshots,overview=True),asyncio.to_thread(repo.counts))
+        view = await asyncio.to_thread(self.repository.overview)
         sync = self.synchronizer
         return {"schemaVersion":1,"available":sys.platform == "darwin","venue":"okx",
                 "product":"perpetual","positionMode":"long_short_mode",
                 "settlements":["USDT","coin"],"readOnly":True,"historyMonths":3,
-                "account":account,"scans":scans,"coverage":coverage,"gaps":gaps,
+                **view,
                 "serviceError":self.service_error,
-                "snapshots":snapshots,"counts":counts,"reconciliation":"not_verified",
+                "reconciliation":"not_verified",
                 "stream":{"state":sync.stream_status if sync else "stopped",
                           "lastReceivedMs":sync.last_ws_received_ms if sync else None,
                           "error":sync.ws_error if sync else None},
