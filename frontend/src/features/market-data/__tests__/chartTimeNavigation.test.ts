@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { locateChartTime, planChartTimeSeek } from "../chartTimeNavigation.js";
-import { toEpochSeconds, type KlineBar } from "../marketDataTypes.js";
+import type { KlineBar } from "../marketDataTypes.js";
+import { epochSeconds } from "../../../test/testHelpers.js";
 
 const ms = (text: string) => Date.parse(text);
-const rows = (...times: number[]): KlineBar[] => times.map(time => ({ time: toEpochSeconds(time) }));
+const rows = (...times: number[]): KlineBar[] => times.map(time => ({ time: epochSeconds(time) }));
 
 test("date navigation fetches around the containing bar, without walking from now", () => {
   const target = ms("2024-02-10T12:04:59Z");
