@@ -84,6 +84,26 @@ def test_fresh_prefix_never_upgrades_the_acquisition_of_a_retained_live_tail(dm,
     asyncio.run(check())
 
 
+def test_failed_source_validation_signals_recovery_without_mutating_tail(dm, runtime, monkeypatch):
+    from app.data_engine.aggregation.blocks import BlockUnavailable
+    agg, service, recovery = runtime
+    async def check():
+        tail = replace(read_rows(dm)[-1], time=120 * DAY // 1000, volume=4)
+        await feed(agg, tail)
+        assert await service.seed(KEY, '121d', 0, 120 * DAY)
+        previous = actual(agg)
+        def fail(*_args, **_kwargs):
+            raise BlockUnavailable('source cannot prove its revision')
+        monkeypatch.setattr(service.reader, 'validate', fail)
+        with pytest.raises(BlockUnavailable):
+            await feed(agg, replace(tail, volume=5))
+        equal(actual(agg), previous)
+        assert recovery == [replace(KEY, interval='121d')]
+        assert service.metrics['failures'] == 1
+        await service.close()
+    asyncio.run(check())
+
+
 def test_empty_delete_repeated_stale_input_and_partial_repair_never_resurrect(dm, runtime):
     agg, service, recovery = runtime
     async def check():

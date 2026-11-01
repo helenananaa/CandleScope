@@ -48,13 +48,15 @@ class HistoryPrefixRuntime:
         self.tasks = set()
         self.seeding = set()
         self.closing = False
+        self.last_adoption = None
         self.metrics = dict(adoptions=0, validations=0, refreshes=0, empty=0, failures=0,
                             adopted_pages=0, adopted_storage_rows=0, adopted_cache_hits=0)
 
     def snapshot(self):
         return {**self.metrics, 'targets': len(self.targets), 'tasks': len(self.tasks),
                 'seeding': len(self.seeding), 'max_targets': self.MAX_TARGETS,
-                'max_tasks': self.MAX_TASKS, 'minimum_prefix_rows': self.MIN_ROWS, 'closing': self.closing}
+                'max_tasks': self.MAX_TASKS, 'minimum_prefix_rows': self.MIN_ROWS, 'closing': self.closing,
+                'last_adoption': dict(self.last_adoption) if self.last_adoption else None}
 
     def _current(self, slot):
         return (not self.closing and self.targets.get(slot.token[0]) is slot
@@ -67,6 +69,13 @@ class HistoryPrefixRuntime:
         token = self.aggregator.history_target_token(source, interval)
         slot = self.targets.get(token[0]) if token is not None else None
         return slot is not None and slot.token == token and self._current(slot)
+
+    def failed(self, slot):
+        if self._current(slot):
+            self.metrics['failures'] += 1
+            self.require_recovery(SeriesKey.create(slot.source.symbol, slot.token[0][3],
+                exchange=slot.source.exchange, market_type=slot.source.market_type,
+                identity=slot.source.identity))
 
     @asynccontextmanager
     async def _task(self):
@@ -112,6 +121,10 @@ class HistoryPrefixRuntime:
         self.metrics['adopted_pages'] += prefix.pages
         self.metrics['adopted_storage_rows'] += prefix.storage_rows
         self.metrics['adopted_cache_hits'] += prefix.cache_hits
+        self.last_adoption = dict(source=prefix.summary.target.topic, interval=slot.token[0][3],
+            start_ms=prefix.start_ms, through_ms=prefix.through_ms, pages=prefix.pages,
+            accepted_slots=prefix.summary.coverage.count, complete=prefix.complete,
+            storage_rows=prefix.storage_rows, cache_hits=prefix.cache_hits)
         return result
 
     async def seed(self, source, interval, start_ms, through_ms):

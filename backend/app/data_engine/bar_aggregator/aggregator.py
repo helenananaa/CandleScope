@@ -914,8 +914,12 @@ class BarAggregator:
         async with runtime.hold(exchange, market_type, symbol, interval, bar_input.identity) as slot:
             if slot is not None:
                 pipeline = self._pipelines[self._pipeline_key(interval, exchange, bar_input.identity)]
-                if not await runtime.before_input(slot, pipeline, bar_input, emit_events=emit_events):
-                    return
+                try:
+                    if not await runtime.before_input(slot, pipeline, bar_input, emit_events=emit_events):
+                        return
+                except Exception:
+                    runtime.failed(slot)
+                    raise
                 if not runtime._current(slot):
                     raise RuntimeError('history target detached before input adoption')
             return await self._apply_bar_input(exchange, market_type, symbol, interval,
@@ -1135,7 +1139,11 @@ class BarAggregator:
             current = pipeline.bar_state.get_active(state.exchange, state.market_type,
                                                     state.symbol, state.bucket_start_ms)
             if current is not None and slot is not None:
-                current = await runtime._refresh(slot, pipeline, current, emit_events=True)
+                try:
+                    current = await runtime._refresh(slot, pipeline, current, emit_events=True)
+                except Exception:
+                    runtime.failed(slot)
+                    raise
             yield current
 
     # ── Internal: Timeout Loop ───────────────────────────────
