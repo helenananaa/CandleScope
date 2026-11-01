@@ -26,7 +26,7 @@ import type {
   ReplayV2SubscriptionTier,
   ReplayViewerState,
 } from "./replayV2Types.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
+import { useReplayOperations } from "./useReplayOperations.js";
 import { parseReplayMarketTracksResponse } from "./replayV2Types.js";
 import { parseReplayDisplayProjection, type ReplayDisplayProjectionResponse } from "./replayDisplayProjection.js";
 import type { ReplayPeriodSummaryStatusResponse } from "./replayPeriodSummary.js";
@@ -415,6 +415,7 @@ export interface ReplayViewerRuntime {
 }
 
 export interface ReplayViewerRuntimeOptions {
+  readonly runId?: string;
   readonly controllerOnly?: boolean;
   readonly onSelectedSessionChange?: (sessionId: string) => void;
 }
@@ -437,6 +438,7 @@ export function useReplayViewerRuntime(
   runtime: ReplayRuntime,
   options: ReplayViewerRuntimeOptions = {},
 ): ReplayViewerRuntime {
+  const { operations, api, request: managedRequest } = useReplayOperations(options.runId, "viewer");
   const onSelectedSessionChange = options.onSelectedSessionChange;
   const controllerOnly = options.controllerOnly === true;
   const [viewerState, setViewerState] = useState<ReplayViewerState | null>(null);
@@ -592,8 +594,8 @@ export function useReplayViewerRuntime(
     setLoading(true);
     setError(null);
     void Promise.all([
-      defaultReplayV2Api.viewerBySession(sessionId, abort.signal),
-      defaultReplayV2Api.tracksBySession(sessionId, abort.signal),
+      api.viewerBySession(sessionId, abort.signal),
+      api.tracksBySession(sessionId, abort.signal),
     ]).then(([viewerResponse, tracksResponse]) => {
       const authoritative = tracksResponse.viewer_state.semantic_view_revision
         >= viewerResponse.viewer_state.semantic_view_revision
@@ -608,7 +610,7 @@ export function useReplayViewerRuntime(
       if (!abort.signal.aborted) setLoading(false);
     });
     return () => abort.abort();
-  }, [publishViewerState, reloadRevision, sessionId]);
+  }, [api, publishViewerState, reloadRevision, sessionId]);
 
   useEffect(() => {
     const runId = viewerState?.run_id;
@@ -617,7 +619,7 @@ export function useReplayViewerRuntime(
       return;
     }
     const abort = new AbortController();
-    void defaultReplayV2Api.periodSummaryStatusRun(runId, abort.signal)
+    void api.periodSummaryStatusRun(runId, abort.signal)
       .then((response) => {
         setPeriodSummary(response);
         setSummaryError(null);
@@ -628,7 +630,7 @@ export function useReplayViewerRuntime(
         setSummaryError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.summaryLoad"));
       });
     return () => abort.abort();
-  }, [reloadRevision, viewerState?.run_id]);
+  }, [api, reloadRevision, viewerState?.run_id]);
 
   useEffect(() => () => marketTracksRequestGate.cancel(), [marketTracksRequestGate]);
 
@@ -639,7 +641,7 @@ export function useReplayViewerRuntime(
     return runReplayMarketTracksRequest(
       marketTracksRequestGate,
       kind,
-      (signal) => defaultReplayV2Api.tracksRun(runId, signal),
+      (signal) => api.tracksRun(runId, signal),
       (response) => {
         if (!publishViewerState(response.viewer_state)) {
           throw new Error("authoritative replay viewer projection could not be prepared");
@@ -647,7 +649,7 @@ export function useReplayViewerRuntime(
         setMarketTracks(response);
       },
     );
-  }, [marketTracksRequestGate, publishViewerState]);
+  }, [api, marketTracksRequestGate, publishViewerState]);
 
   const refreshMarketTracks = useCallback(async (
     runId: string,
@@ -679,25 +681,26 @@ export function useReplayViewerRuntime(
   useEffect(() => {
     const runId = viewerState?.run_id;
     if (runId === undefined) return;
-    const stream = new ReplayTrainingRunStream({
+    const stream = operations.openResource(current => new ReplayTrainingRunStream({
       runId,
       onProjection: (response) => {
+        if (!current()) return;
         if (!publishViewerState(response.viewer_state)) return;
         streamedTracksRef.current = response;
         if (coordinatedPresentationRef.current) bufferedMarketTracksRef.current = response;
         else setMarketTracks(response);
       },
       onError: (cause, fatal) => {
-        if (fatal) setError(cause.message);
+        if (current() && fatal) setError(cause.message);
       },
-    });
-    stream.start();
+    }), value => value.stop());
+    try { stream.value.start(); } catch (cause) { stream.release(); throw cause; }
     return () => {
-      stream.stop();
+      stream.release();
       streamedTracksRef.current = null;
       if (tracksRecoveryTimerRef.current !== null) clearTimeout(tracksRecoveryTimerRef.current);
     };
-  }, [publishViewerState, viewerState?.run_id]);
+  }, [operations, publishViewerState, viewerState?.run_id]);
 
   useEffect(() => {
     if (controllerOnly) return;
@@ -706,7 +709,7 @@ export function useReplayViewerRuntime(
       if (!sessionId || !trackId || !dataEpoch || !displayInterval || !baseInterval
         || !sourceExchange || !sourceMarketType || !sourceSymbol) return;
       setTapeStatus({ store: seriesStore, loading: true, observation: null });
-      const tape = new ReplayTapeViewer({ sessionId, trackId, dataEpoch,
+      const tape = new ReplayTapeViewer({ sessionId, trackId, dataEpoch, request: managedRequest,
         identity: { exchange: sourceExchange, market_type: sourceMarketType, symbol: sourceSymbol,
           source_kind: "AGG_TRADE", base_interval: baseInterval, display_interval: displayInterval },
         source: sourceStore, target: seriesStore, authority: () => {
@@ -783,7 +786,7 @@ export function useReplayViewerRuntime(
         if (projectedBoundaryMs === boundaryMs) return;
         const request = requestGate.begin(requestKey);
         if (request === null) return;
-        void defaultReplayV2Api.displayProjectionBySession(
+        void api.displayProjectionBySession(
           sessionId,
           {
             trackId,
@@ -917,6 +920,8 @@ export function useReplayViewerRuntime(
       pendingSourceDeltas = [];
     };
   }, [
+    managedRequest,
+    api,
     controllerOnly,
     baseInterval,
     dataEpoch,
@@ -942,7 +947,7 @@ export function useReplayViewerRuntime(
     let timer: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
       try {
-        const response = await defaultReplayV2Api.advanceProgress(
+        const response = await api.advanceProgress(
           active.run_id,
           active.command_id,
           abort.signal,
@@ -961,7 +966,7 @@ export function useReplayViewerRuntime(
       abort.abort();
       if (timer !== null) clearTimeout(timer);
     };
-  }, [controlPending, allowBarDisplayCancellation]);
+  }, [controlPending, allowBarDisplayCancellation, api]);
 
   const buildCommand = useCallback((
     type: ReplayV2CommandType,
@@ -1014,7 +1019,7 @@ export function useReplayViewerRuntime(
     setError(null);
     try {
       recordPerfEvent("replay.control.dispatch", { commandId: command.command_id });
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
+      const result = await api.commandRun(command.run_id, command, undefined, { includeDisplayTail });
       recordPerfEvent("replay.control.response", { commandId: command.command_id, revision: result.revision });
       if (coordinated && result.data.market_tracks) {
         try {
@@ -1099,6 +1104,7 @@ export function useReplayViewerRuntime(
       }
     }
   }, [
+    api,
     buildCommand,
     failClosedAndRefreshMarketTracks,
     publishViewerState,
@@ -1129,7 +1135,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+      const result = await api.commandRun(command.run_id, command);
       publishViewerState(result.viewer_state);
       return result;
     } catch (cause) {
@@ -1152,7 +1158,7 @@ export function useReplayViewerRuntime(
         setViewerPending(false);
       }
     }
-  }, [buildCommand, failClosedAndRefreshMarketTracks, publishViewerState]);
+  }, [api, buildCommand, failClosedAndRefreshMarketTracks, publishViewerState]);
 
   const cancelAdvance = useCallback(async (): Promise<ReplayV2CommandResult> => {
     const active = controlRef.current;
@@ -1165,10 +1171,10 @@ export function useReplayViewerRuntime(
       { advance_command_id: active.command_id },
       "cancel",
     );
-    const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+    const result = await api.commandRun(command.run_id, command);
     setProgress(progressFromResult(result));
     return result;
-  }, [buildCommand, allowBarDisplayCancellation]);
+  }, [allowBarDisplayCancellation, buildCommand, api]);
 
   const submitTrackCommand = useCallback(async (
     type: Extract<ReplayV2CommandType,
@@ -1186,7 +1192,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+      const result = await api.commandRun(command.run_id, command);
       publishViewerState(result.viewer_state);
       await refreshMarketTracks(command.run_id);
       return result;
@@ -1200,7 +1206,7 @@ export function useReplayViewerRuntime(
         setViewerPending(false);
       }
     }
-  }, [buildCommand, failClosedAndRefreshMarketTracks, publishViewerState, refreshMarketTracks]);
+  }, [api, buildCommand, failClosedAndRefreshMarketTracks, publishViewerState, refreshMarketTracks]);
 
   const selectTrack = useCallback(async (trackId: string): Promise<ReplayV2CommandResult> => {
     const viewer = viewerRef.current;
@@ -1242,7 +1248,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     let plan;
     try {
-      plan = await defaultReplayV2Api.planMarketTrack(viewer.run_id, {
+      plan = await api.planMarketTrack(viewer.run_id, {
         exchange: identity.exchange,
         marketType: identity.marketType,
         symbol: identity.symbol,
@@ -1271,7 +1277,7 @@ export function useReplayViewerRuntime(
     ));
     if (track === undefined) throw new Error("created MarketTrack is missing from replay.v3");
     return track;
-  }, [refreshMarketTracks, submitTrackCommand]);
+  }, [api, refreshMarketTracks, submitTrackCommand]);
   const addAndSelectTrack = useCallback(async (identity: {
     readonly exchange: string; readonly marketType: string; readonly symbol: string;
   }): Promise<ReplayV2CommandResult> => {
@@ -1292,7 +1298,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.commandRun(command.run_id, command);
+      const result = await api.commandRun(command.run_id, command);
       publishViewerState(result.viewer_state);
       await refreshMarketTracks(command.run_id);
       return result;
@@ -1306,7 +1312,7 @@ export function useReplayViewerRuntime(
         setViewerPending(false);
       }
     }
-  }, [buildCommand, failClosedAndRefreshMarketTracks, publishViewerState, refreshMarketTracks]);
+  }, [api, buildCommand, failClosedAndRefreshMarketTracks, publishViewerState, refreshMarketTracks]);
 
   const previewOrder = useCallback(async (
     order: ReplayOrderRequest,
@@ -1319,7 +1325,7 @@ export function useReplayViewerRuntime(
     if (viewer === null || store.virtualTimeMs === null || store.sessionId === null) {
       throw new Error("replay.v3 viewer is not preview-ready");
     }
-    return defaultReplayV2Api.previewOrder(
+    return api.previewOrder(
       viewer.run_id,
       {
         protocol: "replay.v3",
@@ -1335,7 +1341,7 @@ export function useReplayViewerRuntime(
       },
       signal,
     );
-  }, [runtime.store]);
+  }, [api, runtime.store]);
 
   const orderCapacity = useCallback(async (
     context: ReplayOrderCapacityContext,
@@ -1347,7 +1353,7 @@ export function useReplayViewerRuntime(
     if (viewer === null || store.virtualTimeMs === null || store.sessionId === null) {
       throw new Error("replay.v3 viewer is not capacity-ready");
     }
-    return defaultReplayV2Api.orderCapacity(
+    return api.orderCapacity(
       viewer.run_id,
       {
         protocol: "replay.v3",
@@ -1362,7 +1368,7 @@ export function useReplayViewerRuntime(
       },
       signal,
     );
-  }, [runtime.store]);
+  }, [api, runtime.store]);
 
   const resyncHistoricalBook = useCallback(async (): Promise<void> => {
     const runId = viewerRef.current?.run_id;
@@ -1371,7 +1377,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     setError(null);
     try {
-      await defaultReplayV2Api.resyncHistoricalBook(runId);
+      await api.resyncHistoricalBook(runId);
       await refreshMarketTracks(runId);
     } catch (cause) {
       await failClosedAndRefreshMarketTracks(runId);
@@ -1380,7 +1386,7 @@ export function useReplayViewerRuntime(
     } finally {
       setViewerPending(false);
     }
-  }, [failClosedAndRefreshMarketTracks, refreshMarketTracks]);
+  }, [api, failClosedAndRefreshMarketTracks, refreshMarketTracks]);
 
   const auditAccount = useCallback(async (): Promise<ReplayAccountAuditResponse> => {
     const runId = viewerRef.current?.run_id;
@@ -1389,7 +1395,7 @@ export function useReplayViewerRuntime(
     setViewerPending(true);
     setError(null);
     try {
-      const audit = await defaultReplayV2Api.auditAccount(runId);
+      const audit = await api.auditAccount(runId);
       await refreshMarketTracks(runId);
       return audit;
     } catch (cause) {
@@ -1399,7 +1405,7 @@ export function useReplayViewerRuntime(
     } finally {
       setViewerPending(false);
     }
-  }, [failClosedAndRefreshMarketTracks, refreshMarketTracks]);
+  }, [api, failClosedAndRefreshMarketTracks, refreshMarketTracks]);
 
   const preparePeriodSummaries = useCallback(async (): Promise<void> => {
     const runId = viewerRef.current?.run_id;
@@ -1410,7 +1416,7 @@ export function useReplayViewerRuntime(
     setSummaryPreparing(true);
     setSummaryError(null);
     try {
-      const prepared = await defaultReplayV2Api.preparePeriodSummariesRun(runId);
+      const prepared = await api.preparePeriodSummariesRun(runId);
       setPeriodSummary({
         protocol: prepared.protocol,
         run_id: prepared.run_id,
@@ -1423,7 +1429,7 @@ export function useReplayViewerRuntime(
     } finally {
       setSummaryPreparing(false);
     }
-  }, [summaryPreparing]);
+  }, [api, summaryPreparing]);
 
   const actions = useMemo(() => ({
     setDisplayInterval, submitControl, cancelAdvance, selectTrack, setSubscriptionTier,

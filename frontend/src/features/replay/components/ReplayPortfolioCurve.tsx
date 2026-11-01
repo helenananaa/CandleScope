@@ -1,11 +1,13 @@
+import { requestNativePortfolioDownload } from "../portfolioDownload.js";
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../../i18n/index.js";
-import { defaultReplayV2Api } from "../replayV2Api.js";
 import { buildEquityPolyline } from "../replayIntegrityModel.js";
 import type { PortfolioCurveResponse } from "../portfolioCurve.js";
 
 export default function ReplayPortfolioCurve({ runId }: { readonly runId: string | null }) {
+  const { api } = useReplayOperations(runId, "rail");
   const [data, setData] = useState<PortfolioCurveResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +28,7 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
     setBusy(true);
     setError(null);
     try {
-      const result = await defaultReplayV2Api.portfolioEquityRun(runId, request.signal);
+      const result = await api.portfolioEquityRun(runId, request.signal);
       if (result.run_id !== runId) throw new Error("portfolio run changed");
       if (active.current === request) setData(result);
     } catch (cause) {
@@ -51,7 +53,13 @@ export default function ReplayPortfolioCurve({ runId }: { readonly runId: string
         <polyline points={points} fill="none" vectorEffect="non-scaling-stroke" />
       </svg>
       <p>{t("replay.portfolio.drawdown")}: {visible.summary?.max_drawdown}</p>
-      {runId !== null && <a href={defaultReplayV2Api.portfolioExportUrl(runId)} download>{t("replay.portfolio.export")}</a>}
+      {/* Downloads are browser-owned streams; do not buffer an unbounded export in the chart renderer. */}
+      {runId !== null && <a href={api.portfolioExportUrl(runId)} download onClick={event => {
+        const native = requestNativePortfolioDownload(runId);
+        if (native === null) return;
+        event.preventDefault();
+        void native.catch(cause => setError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.rt.integrityLoad")));
+      }}>{t("replay.portfolio.export")}</a>}
     </>}
   </details>;
 }

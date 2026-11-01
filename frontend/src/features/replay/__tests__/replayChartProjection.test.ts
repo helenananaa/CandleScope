@@ -5,21 +5,66 @@ import { buildReplayViewerSeriesKey } from "../replayViewerProjection.js";
 import { SeriesWindowStore } from "../../market-data/window/seriesWindowStore.js";
 import type { ReplayRuntimeLifecycle } from "../useReplayRuntime.js";
 import type { ReplayDisplayProjectionResponse } from "../replayDisplayProjection.js";
+import type { ReplayDigest } from "../replayTypes.js";
+import { createReplayMarketDataManager } from "../replayDataContext.js";
 
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
+test("transport reconnect keeps a coarse cell's admitted history while fencing old projection responses", async () => {
+  let notify = () => {};
+  const epoch = `sha256:${"a".repeat(64)}` as ReplayDigest;
+  let store = { sessionConfig: { source_kind: "bar", base_interval: "1m", symbol: "BTCUSDT", exchange: "binance", market_type: "spot" },
+    virtualTimeMs: 659999, dataEpoch: epoch, sessionId: "session", generation: 1, hasAuthoritativeSnapshot: true };
+  const source = new SeriesWindowStore({ seriesKey: "replay-test" });
+  const lifecycle = { store: { seriesStore: source }, getSnapshot: () => ({ store }),
+    subscribe: (listener: () => void) => { notify = listener; return () => { notify = () => {}; }; },
+  } as unknown as ReplayRuntimeLifecycle;
+  const requests: { signal?: AbortSignal; boundary: number; resolve: (value: ReplayDisplayProjectionResponse) => void }[] = [];
+  const projection = new ReplayChartProjection(lifecycle, "track-1", "5m", {
+    displayProjectionBySession: (_session, binding, signal) => new Promise(resolve => {
+      requests.push({ ...(signal ? { signal } : {}), boundary: binding.revealedBoundaryMs, resolve });
+    }),
+  });
+  const answer = (index: number) => requests[index]!.resolve({ protocol: "replay.v3", schema_version: "replay.display-projection.v1",
+    run_id: "run", projection_epoch: epoch, has_more: true, session_id: store.sessionId, track_id: "track-1",
+    data_epoch: store.dataEpoch, display_interval: "5m", revealed_boundary_ms: requests[index]!.boundary,
+    identity: { symbol: "BTCUSDT", exchange: "binance", market_type: "spot", source_kind: "BAR", base_interval: "1m", display_interval: "5m" },
+    bars: [{ open_time_ms: 600000, close_time_ms: 899999, open: "10", high: "12", low: "9", close: "11", volume: "1",
+      quote_volume: null, trades: null, taker_buy_base: null, taker_buy_quote: null,
+      first_base_open_ms: 600000, last_base_open_ms: 600000, component_count: 1, expected_components: 5, is_closed: false, synthetic: false }],
+  });
+  const release = projection.retain();
+  try {
+    answer(0); await settle();
+    projection.seriesStore.applyRange([0, 300].map(time => ({ time, open: 7, high: 8, low: 6, close: 7, volume: 1,
+      replayContextHistory: true, is_closed: true, replayClosed: true,
+      replayCloseTimeMs: time * 1000 + 299999, replayLastBaseOpenMs: time * 1000 + 240000 })));
+    store = { ...store, virtualTimeMs: 719999 }; notify(); await settle();
+    assert.equal(requests.length, 2);
+    store = { ...store, generation: 2 }; notify(); await settle();
+    assert.equal(requests[1]!.signal?.aborted, true, "old transport work cannot publish into the resumed cell");
+    assert.deepEqual(projection.seriesStore.snapshot().map(row => row.time), [0, 300, 600], "reconnect retains already admitted history");
+    requests[1]!.resolve({} as ReplayDisplayProjectionResponse); answer(2); await settle();
+    assert.deepEqual(projection.seriesStore.snapshot().map(row => row.time), [0, 300, 600]);
+    assert.equal(projection.getSnapshot().error, null);
+    store = { ...store, generation: 3, virtualTimeMs: 359999 }; notify(); await settle();
+    assert.equal(projection.seriesStore.barCount, 0, "a rewind still discards the old revealed window");
+  } finally { release(); }
+});
+
 test("same-market cells keep independent history windows while following one source", async () => {
+  const manager = createReplayMarketDataManager();
   const listeners = new Set<() => void>();
   const bar = (time: number) => ({ time, open: 10, high: 12, low: 9, close: 11, volume: 1 });
   const source = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-test" });
   source.replace([bar(600), bar(660)]);
   let store = { sessionConfig: { source_kind: "bar", base_interval: "1m", symbol: "BTCUSDT", exchange: "binance", market_type: "spot" },
-    virtualTimeMs: 720_000, dataEpoch: "epoch", sessionId: "session", generation: 1 };
+    virtualTimeMs: 720_000, dataEpoch: "epoch", sessionId: "session", generation: 1, hasAuthoritativeSnapshot: true };
   const lifecycle = { store: { seriesStore: source }, getSnapshot: () => ({ store }),
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   } as unknown as ReplayRuntimeLifecycle;
-  const past = new ReplayChartProjection(lifecycle, "track-1", "1m");
-  const latest = new ReplayChartProjection(lifecycle, "track-1", "1m");
+  const past = new ReplayChartProjection(lifecycle, "track-1", "1m", undefined, undefined, manager.replay, "run-a");
+  const latest = new ReplayChartProjection(lifecycle, "track-1", "1m", undefined, undefined, manager.replay, "run-b");
   assert.equal(past.seriesStore.seriesKey, buildReplayViewerSeriesKey(source, "1m"),
     "target identity exists before first render/retain so viewport hand-off is not superseded");
   const coarse = new ReplayChartProjection(lifecycle, "track-1", "5m");
@@ -27,6 +72,8 @@ test("same-market cells keep independent history windows while following one sou
   assert.notEqual(coarse.seriesStore.seriesKey, past.seriesStore.seriesKey);
   const releasePast = past.retain();
   const releaseLatest = latest.retain();
+  assert.equal(manager.diagnostics().replay.activeSequences, 2);
+  assert.deepEqual(manager.diagnostics().replay.sequences.map(item => item.identity?.runId), ["run-a", "run-b"]);
   past.seriesStore.maxBars = 2;
   past.seriesStore.applyRange([bar(300), bar(360)]);
   assert.equal(past.seriesStore.rightTruncated, true);
@@ -36,7 +83,19 @@ test("same-market cells keep independent history windows while following one sou
   listeners.forEach((notify) => notify()); await settle();
   assert.deepEqual(past.seriesStore.snapshot(), historical);
   assert.equal(latest.seriesStore.snapshot().at(-1)?.time, 720);
+  store = { ...store, generation: 2 };
+  listeners.forEach(notify => notify()); await settle();
+  assert.deepEqual(past.seriesStore.snapshot(), historical, "reconnect preserves the cell's independently paged window");
+  assert.equal(past.seriesStore.rightTruncated, true);
+  const frozen = latest.seriesStore.snapshot();
+  manager.closeAll();
+  source.applyRange([bar(780)]);
+  listeners.forEach(notify => notify()); await settle();
+  assert.deepEqual(latest.seriesStore.snapshot(), frozen, "manager shutdown also fences local projection updates");
   releasePast(); releaseLatest();
+  assert.equal(manager.diagnostics().replay.activeSequences, 0);
+  assert.equal(store.virtualTimeMs, 780_000, "display reads must not advance the replay clock");
+  manager.closeAll();
 });
 
 test("shared coarse charts serialize requests, invalidate old epochs and release independently", async () => {
