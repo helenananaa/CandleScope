@@ -103,6 +103,7 @@ jobs:
             tests/test_pyne_removal.py \
             tests/test_data_preparation.py \
             tests/test_replay_context_origin.py \
+            tests/test_replay_bounded_context.py \
             tests/test_replay_history_archive.py \
             tests/test_replay_v2_training_history.py \
             tests/test_replay_history_source_grid.py \

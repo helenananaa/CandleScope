@@ -26,6 +26,25 @@ class ReplayContextOrigin:
         return fingerprint({"contract": "replay-context-origin.v1", **asdict(self)})
 
 
+@dataclass(frozen=True)
+class ReplayContextScope:
+    """Immutable acquisition ownership before a provider origin is known.
+
+    start_ms is only the earliest representable source time. It does not assert
+    a listing date. Runs and cache generations still select distinct context
+    objects, while viewports of the same Run share their daily selections.
+    """
+
+    key: str
+    generation: int
+    start_ms: int
+    frozen_start_ms: int
+
+    @property
+    def revision(self):
+        return fingerprint({"contract": "replay-context-scope.v1", **asdict(self)})
+
+
 def source_key(binding, persisted):
     return fingerprint(
         {

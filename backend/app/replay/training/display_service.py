@@ -228,7 +228,16 @@ class TrainingDisplayService:
                 origin = None
                 if extend_context:
                     from .indicator_context import attach_context_history
-                    origin = attach_context_history(history, context, loop=loop, cancelled=cancelled)
+                    # Viewport math has an explicit finite warmup budget. MA,
+                    # BOLL and VOL are finite even in canonical mode. Their
+                    # requested inputs can be prepared without discovering the
+                    # provider's global first bar; recursive canonical seeds
+                    # and tape projections keep their verified-origin rule.
+                    discover_origin = tape or (
+                        display_math == "canonical" and name not in {"MA", "BOLL", "VOL"}
+                    )
+                    origin = attach_context_history(history, context, loop=loop,
+                        cancelled=cancelled, discover_origin=discover_origin)
                 if tape:
                     from .tape_indicator_history import TapeIndicatorHistory
                     history = TapeIndicatorHistory(context_history=history, projection=self._tape_projection,

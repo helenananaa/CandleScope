@@ -1,0 +1,40 @@
+{
+  "sourceBase": "e06607894b4890e6fe960a870a877475567e8f7c",
+  "problem": "ALL_AVAILABLE display MA fails when provider listing discovery is unavailable, despite local immutable context covering the requested bounded input",
+  "nativeBefore": {
+    "defaultCreateTradeRestart": true,
+    "MA20": false,
+    "visibleError": "MA: Could not read the provider history boundary",
+    "requestedDisplayMath": "viewport-v1",
+    "localArchiveRows": 4000,
+    "basicFinancialOracle": {
+      "cash": "9999.75927400",
+      "fees": "0.30060500",
+      "realizedPnl": "0.0598790"
+    }
+  },
+  "fix": "generation- and Run-scoped immutable acquisition ownership can be derived before a listing origin is known; bounded display math and finite canonical math use this ownership; canonical recursive math and tape projections retain verified-origin discovery",
+  "preserved": [
+    "existing verified origin revision contract",
+    "immutable daily selections shared by viewports of one Run",
+    "old cache generation and wrong history epoch rejected",
+    "execution/account snapshot unchanged by display preparation"
+  ],
+  "regressionBefore": {
+    "failed": 8,
+    "passed": 1,
+    "seconds": 11.54
+  },
+  "firstFixRegression": {
+    "passed": 9,
+    "seconds": 6.94
+  },
+  "owningRegression": {
+    "passed": 157,
+    "seconds": 40.8,
+    "warning": "existing Starlette TestClient BlockingPortal deprecation",
+    "scope": "12 backend test files; not the 157-item product acceptance matrix"
+  },
+  "CI": "new regression added to bundled Python macOS matrix; current head checks pending",
+  "nativeFixedCandidatePending": true
+}

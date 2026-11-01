@@ -26,6 +26,7 @@ from .replay_origin import (
     DAY,
     ReplayContextOrigin,
     ReplayContextOrigins,
+    ReplayContextScope,
     ReplayOriginResolver,
     context_request_identity,
     source_key,
@@ -60,7 +61,7 @@ class ReplayHistoryContext:
                 # no account/session or legacy source bytes are rewritten.
                 return ReplayContextOrigin(key, generation, start, start)
         selected = await self.preparation.storage(self.origins.get, key)
-        if selected is not None or not discover:
+        if selected is not None:
             return selected
         generation = await self.preparation.storage(self.origins.generation)
         frozen_start, _ = await asyncio.to_thread(_bound_source_start_ms,
@@ -68,6 +69,14 @@ class ReplayHistoryContext:
             actual_replay_start_ms=int(binding["history_policy"]["actual_replay_start_ms"]),
             fallback_start_ms=int(binding["history_policy"]["actual_visible_history_start_ms"]),
             interval_ms=60_000)
+        if not discover:
+            # A bounded display request needs stable ownership of its inputs,
+            # not a network probe of the provider's entire historical prefix.
+            # Do not persist this scope as a verified market listing boundary.
+            actual_start = int(binding["history_policy"]["actual_replay_start_ms"])
+            representable = max(0, actual_start - snapshot.replay_start_ms)
+            floor = (representable + 59_999) // 60_000 * 60_000
+            return ReplayContextScope(key, generation, floor, frozen_start)
         start = await self.origin_resolver(snapshot.identity, frozen_start)
         return await self.preparation.storage(self.origins.pin, key, generation, start, frozen_start)
 
