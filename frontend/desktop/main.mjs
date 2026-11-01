@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { downloadReplayPortfolio } from "./replay-portfolio-download.mjs";
 import { resolvePythonCommand } from "./python-runtime.mjs";
 import { desktopBackendEnvironment } from "./runtime-config.mjs";
 import { isTrustedAppUrl } from "./app-origin.mjs";
@@ -277,6 +278,7 @@ async function boot() {
     event.returnValue = strategyStorage.getItem(key);
   });
   trustedIpc.handle(DESKTOP_IPC.strategyStorageWrite, (_event, key, value) => strategyStorage.setItem(key, value));
+  trustedIpc.handle(DESKTOP_IPC.replayPortfolioDownload, (event, runId) => downloadReplayPortfolio(event.sender, backendPort, runId));
   trustedIpc.handle(DESKTOP_IPC.openAppPage, (_event, url) => manager.openAppPage(url));
 
   trustedIpc.handle(DESKTOP_IPC.bootstrap, (event) => {

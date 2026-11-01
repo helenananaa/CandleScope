@@ -77,11 +77,20 @@ results. Standalone injectable providers retain a direct request default; all
 production consumers supply a manager request boundary. Replay capability checks
 opened from a live workspace use that workspace's replay namespace, not live data.
 
-Portfolio export now owns the response body through download preparation. It
-preserves the existing NDJSON endpoint and filename; the browser saves the complete
-Blob after the operation succeeds. This path buffers the export before download.
-The pure URL helper remains available but production UI no longer navigates to it
-to start an unmanaged request.
+Portfolio exports are explicit file downloads, independent of transient chart/view
+leases. The managed API exposes the validated URL for browsers. Native applications
+use a trusted main-frame IPC command that accepts only a run ID; the host constructs
+the fixed loopback portfolio-export endpoint and starts Electron downloadURL. This
+streams the existing NDJSON attachment without relaxing navigation protection or
+accumulating it as a renderer Blob. UI data loading still uses operation leases,
+but leaving a chart does not cancel an already requested file.
+
+During reconnect/resync, a paused or ended actor with no catch-up events may
+reissue its current atomic snapshot with a historical fast-forward status reason.
+The client accepts that handoff only when sequence, revision, virtual time, source
+cursor and state hash all equal its accepted authority. A reset on an established
+stream still requires its original atomic progression. Epoch, backward-state,
+causality and payload checks remain enforced.
 
 ## Scope still open
 
@@ -91,7 +100,6 @@ saved-cursor/full-exit/restart, disconnect recovery and financial reference
 acceptance also remain open. No #166 checklist is
 declared fully passed by this patch.
 
-The base includes #175 and #173. The separately developing #174 B130 public-block
-PR and #147 seconds-history draft were checked before implementation; neither
-supplies this replay lifecycle namespace. This phase changes no backend storage,
-aggregation, download or revision authority.
+The integration base includes #175, #173, #174 B130 and #183 H127, plus the #178
+shared-input changes. The #147 seconds-history draft remains separate. This phase
+changes no backend storage, aggregation, download or revision authority.
