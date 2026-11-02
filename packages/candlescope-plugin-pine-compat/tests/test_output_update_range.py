@@ -69,6 +69,21 @@ def test_removing_the_last_marker_record_requests_complete_replacement():
         plugin.shutdown()
 
 
+@pytest.mark.parametrize("size", ["auto", "tiny", "small", "normal", "large", "huge"])
+def test_marker_sizes_use_the_symbolic_host_annotation_contract(size):
+    plugin = PineCompatRuntimePlugin()
+    try:
+        result = plugin.execute_batch(ExecuteBatchRequest(
+            source='//@version=6\nindicator("size")\nplotshape(true,style=shape.circle,size=size.'+size+')',
+            context=CONTEXT, bars=(make_bar(0, 101),)))
+        assert result.ok, result.diagnostics
+        marker = result.output.collections.markers[0]
+        assert marker["size"] == size
+        assert marker["data"][0]["size"] == size
+    finally:
+        plugin.shutdown()
+
+
 def test_unprovable_show_last_and_history_correction_request_full_replacement():
     plugin = PineCompatRuntimePlugin()
     bars = tuple(make_bar(i, 100+i) for i in range(20))

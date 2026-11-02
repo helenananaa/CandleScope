@@ -41,6 +41,8 @@ snapshot, including the retained host-time window. Native object scenes remain
 whole replacements. This optional metadata does not change Render IR mathematics
 or eliminate the remaining full native `result()` conversion. See
 [`RENDER_UPDATE_RANGES.md`](../../docs/architecture/RENDER_UPDATE_RANGES.md).
+Marker sizes use the symbolic `auto`/`tiny`/`small`/`normal`/`large`/`huge`
+values accepted by the host annotation protocol, not numeric chart-library sizes.
 
 Analysis exposes native
 `meta.hostRequirements`. Requested contexts are discovered from compiled HIR,

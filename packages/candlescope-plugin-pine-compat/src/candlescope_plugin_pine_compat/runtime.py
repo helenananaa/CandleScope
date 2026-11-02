@@ -757,14 +757,14 @@ def _marker_position(value: Any) -> str | None:
     return None
 
 
-def _marker_size(value: Any) -> int | None:
+def _marker_size(value: Any) -> str | None:
     return {
-        "tiny": 1,
-        "small": 2,
-        "normal": 3,
-        "large": 4,
-        "huge": 5,
-        "auto": 2,
+        "tiny": "tiny",
+        "small": "small",
+        "normal": "normal",
+        "large": "large",
+        "huge": "huge",
+        "auto": "auto",
     }.get(str(value or "size.auto").lower().removeprefix("size."))
 
 
