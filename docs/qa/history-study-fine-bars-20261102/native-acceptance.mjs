@@ -100,7 +100,7 @@ try {
  const left=live.find(surface=>surface.cellId==='cell-1'),right=live.find(surface=>surface.cellId==='cell-2');assert.ok(left&&right);
  const closed=left.rows.filter(row=>row.is_closed!==false&&row.time*1000+300_000<=Date.now());
  const runs=[];let run=[];for(const row of closed){if(run.length&&row.time!==run.at(-1).time+300){runs.push(run);run=[];}run.push(row);}runs.push(run);
- const selected=runs.sort((a,b)=>b.length-a.length)[0].slice(-100);assert.equal(selected.length,100);
+ const selected=runs.sort((a,b)=>b.length-a.length)[0].filter(row=>row.time*1000+300_000<=Date.now()-3_600_000).slice(-100);assert.equal(selected.length,100);
  const start=selected[0].time*1000,end=selected.at(-1).time*1000+300_000,cursor=selected[60].time*1000+150_000;
  const last=right.rows.at(-1).time-3600;await q.execute('cell-2','visibleTimeRange',{from:last-1800,to:last});await q.delay(200);
  const siblingBefore=(await q.query('cell-2')).snapshot.visibleRange;
