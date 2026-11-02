@@ -17,7 +17,7 @@ from app.data_engine.history.models import (
 )
 from app.data_engine.history.planner import HistoryRequestPlanner
 from app.data_engine.history.service import HistoryAvailabilityService
-from app.data_engine.interval_policy import last_closed_bar_open_ms
+from app.data_engine.interval_policy import last_closed_bar_open_ms, parse_interval_ms
 from app.data_engine.series_identity import identity_from_metadata
 from app.exchanges.models import HistoryAvailabilityPolicy
 from .backfill_contracts import HistoryPolicyResolver, RepairOutcome, RepairRequest
@@ -263,12 +263,14 @@ class BackfillHistoryPlanner:
         The existing scheduler owns the wait; ordinary viewport requests keep
         their current not-expected behavior.
         """
-        if (request.interval != "1s" or not request.metadata.get("source_gap_id")
+        width = parse_interval_ms(request.interval)
+        if (not request.interval.endswith("s") or width is None
+                or not request.metadata.get("source_gap_id")
                 or plan is None or not any(
                     item.reason is BoundaryReason.FORMING_BAR for item in plan.exclusions
                 )):
             return None
-        close_ms = (int(request.end_ms) // 1000 + 1) * 1000
+        close_ms = (int(request.end_ms) // width + 1) * width
         return max(.01, (close_ms - int(time.time() * 1000)) / 1000)
 
     @staticmethod

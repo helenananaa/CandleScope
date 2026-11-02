@@ -9,7 +9,7 @@ q.s.receipt.transport='Packaged bundled backend, real public Binance/Gate/Upbit 
 q.s.receipt.scope={platform:'macOS arm64',sources:['Binance spot1s','Binance custom7s','Gate spot1s','Upbit spot1s'],notCovered:['Windows','1s replay archives','ordinary USD-M1s','full157 release acceptance','all exchanges']};
 const sessions=[q.session('BTCUSDT','1s'),q.session('BTCUSDT','7s'),{exchange:'gate',marketType:'spot',symbol:'BTC/USDT',interval:'1s'},{exchange:'upbit',marketType:'spot',symbol:'BTC/KRW',interval:'1s'}];
 const api=async path=>q.s.page.evaluate(async url=>{const r=await fetch(url);return {status:r.status,body:await r.json()};},q.s.backend+path);
-let lastCircuitCheck=0;
+let lastCircuitCheck=0,lastContinuityCheck=0;
 async function checkCircuit(){
  if(Date.now()-lastCircuitCheck<2000)return;
  lastCircuitCheck=Date.now();
@@ -22,6 +22,11 @@ async function checkCircuit(){
   return null;
  }
  const circuit=visit(response.body);
+ if(Date.now()-lastContinuityCheck>=5000){
+  lastContinuityCheck=Date.now();
+  const snapshot=await api('/debug/snapshot');
+  await fs.appendFile(q.s.root+'/source-continuity.ndjson',JSON.stringify({at:new Date().toISOString(),continuity:snapshot.body?.market_data_control?.source_continuity})+'\n');
+ }
  if(circuit){
   const deadline=Math.max(Date.now()+Math.ceil(circuit.cooldown_remaining_seconds*1000),circuit.opened_at_ms+Number(circuit.last_headers?.['retry-after']||0)*1000)+1000;
   const evidence={circuit,retry_not_before_ms:deadline,retry_not_before_utc:new Date(deadline).toISOString()};

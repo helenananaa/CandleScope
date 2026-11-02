@@ -66,38 +66,42 @@ def test_native_seconds_are_market_scoped():
 
 @pytest.mark.anyio
 @pytest.mark.parametrize('mixed', [False, True])
+@pytest.mark.parametrize('interval', ['1s', '7s'])
 async def test_closed_source_second_gap_waits_for_local_close_instead_of_finishing_without_fetch(
-    sparse_storage, monkeypatch, tmp_path, mixed,
+    sparse_storage, monkeypatch, tmp_path, mixed, interval,
 ):
     from app.data_engine.data_manager.backfill_coordinator import BackfillCoordinator, RepairRequest
     from app.data_engine.storage.gap_ledger import GapLedger
     from tests.test_backfill_coordinator import _DataManager, _RepairReport, _ReconcileResult
-    clock = [NOW + 500]
+    width = int(interval[:-1]) * 1000
+    target = NOW // width * width
+    clock = [target + width - 500]
     monkeypatch.setattr('app.data_engine.data_manager.backfill_history.time.time', lambda: clock[0] / 1000)
     class Engine:
         def __init__(self): self.calls = []
         async def run(self, **kwargs):
             self.calls.append(kwargs)
-            rows = [{**row(at), 'open': 11, 'high': 11, 'low': 11, 'close': 11, 'volume': 0}
-                    for at in range(kwargs['range_start_ms'], kwargs['range_end_ms'] + 1, 1000)]
-            sparse_storage.upsert_bars('BTC/USDT', '1s', rows, 'backfill', exchange='gate', market_type='spot')
+            rows = [{**row(at), 'close_time': at + width - 1,
+                     'open': 11, 'high': 11, 'low': 11, 'close': 11, 'volume': 0}
+                    for at in range(kwargs['range_start_ms'], kwargs['range_end_ms'] + 1, width)]
+            sparse_storage.upsert_bars('BTC/USDT', interval, rows, 'backfill', exchange='gate', market_type='spot')
             return _RepairReport(status='completed', reconcile_result=_ReconcileResult(bars_written=len(rows)))
     engine, dm = Engine(), _DataManager()
     ledger = GapLedger(tmp_path / 'bars.sqlite')
     coordinator = BackfillCoordinator(storage=sparse_storage, bars_backfilled=dm.on_bars_backfilled,
         emit_event=dm.event_bus.emit, engine=engine, gap_ledger=ledger, loop=asyncio.get_running_loop())
-    request = RepairRequest(symbol='BTC/USDT', interval='1s', exchange='gate', market_type='spot',
-        start_ms=NOW - 1000 if mixed else NOW, end_ms=NOW, reason='tail_gap', requester='ingestion_gap',
+    request = RepairRequest(symbol='BTC/USDT', interval=interval, exchange='gate', market_type='spot',
+        start_ms=target - width if mixed else target, end_ms=target, reason='tail_gap', requester='ingestion_gap',
         metadata={'source_gap_id': 'confirmed-successor', 'requires_trusted_finality': True})
     task = asyncio.create_task(coordinator.request_and_wait(request))
     try:
         await asyncio.sleep(.05)
         assert not task.done(), 'a temporary forming exclusion must not settle source repair'
         assert not engine.calls
-        clock[0] = NOW + 1500
+        clock[0] = target + width + 500
         outcome = await asyncio.wait_for(task, 2)
         assert outcome.verified_contiguous is True and not outcome.retryable and outcome.attempts == 1
-        stored = sparse_storage.query_bars('BTC/USDT', '1s', start_ms=NOW, end_ms=NOW,
+        stored = sparse_storage.query_bars('BTC/USDT', interval, start_ms=target, end_ms=target,
                                           exchange='gate', market_type='spot')
         assert len(stored) == 1 and stored[0]['volume'] == 0
         assert len(engine.calls) == 1
