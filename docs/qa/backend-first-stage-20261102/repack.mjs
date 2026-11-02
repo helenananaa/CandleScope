@@ -19,6 +19,7 @@ await asar.createPackage(stage,next);
 const digest=b=>crypto.createHash('sha256').update(b).digest('hex');
 const hash=digest(asar.getRawHeader(next).headerString);
 fs.renameSync(next,path.join(resources,'app.asar'));
+asar.uncache(path.join(resources,'app.asar'));
 cp.execFileSync('/usr/libexec/PlistBuddy',['-c',`Set :ElectronAsarIntegrity:Resources/app.asar:hash ${hash}`,path.join(app,'Contents/Info.plist')]);
 cp.execFileSync('codesign',['--force','--deep','--sign','-',app],{stdio:'inherit'});
 cp.execFileSync('codesign',['--verify','--deep','--strict',app],{stdio:'inherit'});
