@@ -14,6 +14,7 @@ import { formatDateTime } from "../trading-accounts/tradingFormat.js";
 import type { HistoryStudyPlayback } from "./historyStudyPlayback.js";
 import type { StudyNote } from "./historyStudyTypes.js";
 import StudyNoteEditor from "./StudyNoteEditor.js";
+import { studyInputHasChanged } from "./historyStudyCorrections.js";
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
@@ -44,17 +45,9 @@ export default function HistoryStudyOverlay({ playback, manager, style, indicato
   // An old response is absent immediately when rewinding, before effects run.
   const notes = loaded?.cursor === cursorMs ? loaded.notes : [];
   useEffect(() => {
-    const saved = new Map(input.rows.map(row => [row.time, row]));
-    const changedRows = (rows: readonly import("../market-data/marketDataTypes.js").KlineBar[]) => rows.some(row => {
-      if (row.time < input.rows[0]!.time || row.time > input.rows.at(-1)!.time || row.is_closed === false) return false;
-      const original = saved.get(row.time);
-      return !original || ["open", "high", "low", "close", "volume", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote"]
-        .some(key => (original[key] ?? null) !== (row[key] ?? null))
-        || JSON.stringify(original.order_flow ?? null) !== JSON.stringify(row.order_flow ?? null);
-    });
     // Compare any currently known rows as well as later admitted corrections.
-    if (changedRows(manager.read(series).rows)) setChanged(true);
-    return manager.cache.subscribe(series, change => { if (changedRows(change.rows)) setChanged(true); });
+    if (studyInputHasChanged(input.rows, manager.read(series).rows)) setChanged(true);
+    return manager.cache.subscribe(series, change => { if (studyInputHasChanged(input.rows, change.rows)) setChanged(true); });
   }, [input.rows, manager, series]);
   useEffect(() => {
     if (!playing || editor) return;
@@ -106,6 +99,7 @@ export default function HistoryStudyOverlay({ playback, manager, style, indicato
       {(error || notesError) ? <p className="trading-error" role="alert">{t("study.error")}</p> : null}
       {error ? <button className="trading-button" type="button" onClick={onRetry}>{t("study.retry")}</button> : null}
       <ChartErrorBoundary><SingleChartPanes seriesStore={store} symbol={series.symbol} interval={series.interval}
+        drawingKeyBase={`history-study:${input.id}`} drawingReadOnly
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}
         theme={style.theme} customBg={style.customBg} inheritApplicationTheme={style.inheritApplicationTheme ?? true}

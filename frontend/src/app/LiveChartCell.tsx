@@ -788,6 +788,14 @@ function LiveChartCell({
   const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
+  const studyMaskedRef = useRef(study.masked);
+  useLayoutEffect(() => {
+    studyMaskedRef.current = study.masked;
+    if (study.masked) setQuickReplay(null);
+  }, [study.masked]);
+  const openTradeReplay = useCallback((request: QuickReplayRequest) => {
+    if (!studyMaskedRef.current) setQuickReplay(request);
+  }, []);
   const [studySetup, setStudySetup] = useState(false);
   const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && quickReplay === null && !study.masked,
     cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
@@ -811,7 +819,7 @@ function LiveChartCell({
         })),
       }),
     },
-    onOpenQuickReplay: setQuickReplay,
+    onOpenQuickReplay: openTradeReplay,
   }), [
     cell.indicators,
     chartSession.view.exchange,
@@ -820,6 +828,7 @@ function LiveChartCell({
     chartSession.view.symbol,
     chartSurface.actions,
     lastClose,
+    openTradeReplay,
   ]);
   const tradingOverlay = useTradingChartOverlay({
     enabled: true,
@@ -1088,7 +1097,7 @@ function LiveChartCell({
               onStrategyTesterModeChange={(value) => onStrategyTesterModeChange(cell.id, value)}
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
               active={active}
-              panelOpen={strategyPanelOpen}
+              panelOpen={strategyPanelOpen && !study.masked}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
@@ -1106,6 +1115,7 @@ function LiveChartCell({
       {active && portalHosts.topBar && createPortal(
         <TopBar
           {...model.topBar}
+          {...(study.masked && study.playback ? { studyContext: study.playback.input.series } : {})}
           identityAccessory={strategyEntryControl}
           intervalControl={<IntervalSelector {...model.intervalSelector} variant="compact" />}
           extensionControls={(
@@ -1146,7 +1156,7 @@ function LiveChartCell({
               : { onTogglePanelCollapsed: marketRail.onTogglePanelCollapsed })}
             viewHeights={marketRail.viewHeights}
             onViewHeightChange={marketRail.onViewHeightChange}
-            trading={tradingBinding}
+            {...(study.masked ? {} : { trading: tradingBinding })}
           />
         </Suspense>,
         portalHosts.rightRail,

@@ -7,7 +7,8 @@ q.s.receipt.sourceCommit = cp.execFileSync('git', ['rev-parse', 'HEAD'], {encodi
 q.s.receipt.scope = 'Packaged macOS arm64: account-free fixed-input current-interval studies, real manager history, revealed-prefix MA, independent chart/cursor, versioned review annotation, ordinary full exit/restart. Not finer-timeframe reconstruction, original-note sources, optional cursor linking, formal replay, arbitrary script causality or Windows acceptance.';
 let running = false;
 const studyRequests = [];
-const stamp = ms => new Date(ms).toISOString().slice(0,19);
+// Chromium normalizes an exact minute in datetime-local to omit :00 seconds.
+const stamp = ms => new Date(ms).toISOString().slice(0,19).replace(/:00$/, '');
 const cell = id => q.s.page.locator(`[data-chart-cell-id="${id}"]`);
 const region = id => q.s.page.locator(`[data-study-id="${id}"]`);
 const owner = (workspace, id) => Buffer.from(JSON.stringify([workspace,id])).toString('base64url');
@@ -91,8 +92,9 @@ function finances() {
 }
 try {
   await launch();
-  await q.configure([{session:q.session('BTCUSDT'),indicators:[{id:'study-ma-a',name:'MA',engineName:'MA',kind:'builtin',executionTarget:'hosted',params:{period:20},visible:true}]},
-    {session:q.session('ETHUSDT'),indicators:[{id:'study-ma-b',name:'MA',engineName:'MA',kind:'builtin',executionTarget:'hosted',params:{period:20},visible:true}]}],'split-vertical');
+  const configured=await q.configure([{session:q.session('BTCUSDT'),indicators:[{name:'MA',period:20}]},
+    {session:q.session('ETHUSDT'),indicators:[{name:'MA',period:20}]}],'split-vertical');
+  await q.record('workspace-configured',configured);assert.equal(configured.result.state,'ready');
   await q.ready(2,90_000);
   const workspace=(await q.inspect()).workspaceId;
   const beforeFinances=finances();
@@ -104,6 +106,10 @@ try {
   const saved=await read('/history-studies/views/'+owner(workspace,'cell-1'));
   assert.equal(saved.study.rows.length,160);assert.ok(saved.study.rows.at(-1).closeTimeMs>first.cursor);
   await q.record('frozen-prefetch-and-visible-prefix',await verify(first,first.cursor,'initial'));
+  assert.equal(await q.s.page.locator('[data-study-context="true"]').count(),1);
+  assert.equal(await q.s.page.locator('.alert-toggle-btn').count(),0);
+  assert.equal(await q.s.page.getByRole('button',{name:'交易账户',exact:true}).count(),0);
+  assert.equal(await region(first.studyId).getByText('共享历史已更新，本次研究仍保留已保存的输入。',{exact:true}).count(),0);
   const siblingAfter=(await q.query('cell-2')).snapshot.visibleRange;
   assert.deepEqual(siblingAfter.time,siblingBefore.time);assert.equal(siblingAfter.barSpacing,siblingBefore.barSpacing);
   await q.record('sibling-historical-window-preserved',{before:siblingBefore,after:siblingAfter});

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { t } from "../../i18n/index.js";
 import { JournalEditor } from "../trading-accounts/journalEditor.js";
 import type { HistoryStudyDataManager } from "./historyStudyDataManager.js";
@@ -10,6 +10,7 @@ export default function StudyNoteEditor({ manager, studyId, marketMs, note, onCh
   manager: HistoryStudyDataManager; studyId: string; marketMs: number; note: StudyNote | null;
   onChanged(): void; onClose(): void;
 }) {
+  const inputId = useId();
   const [editor] = useState(() => new JournalEditor<StudyNote>({
     key: `candlescope.study-note-draft.v1:${studyId}:${note?.id ?? marketMs}`,
     storage: () => localStorage,
@@ -21,8 +22,8 @@ export default function StudyNoteEditor({ manager, studyId, marketMs, note, onCh
   useEffect(() => { editor.activate(); editor.initialize(note); return () => editor.dispose(); }, [editor, note]);
   const save = async (close: boolean) => { if (await editor.flush()) { onChanged(); if (close) onClose(); } };
   return <section className="study-note-editor" aria-label={t("study.noteEdit")}>
-    <label>{t("study.noteBody")}<textarea value={state.fields.entryBasis ?? ""} disabled={!state.ready}
-      onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} /></label>
+    <label htmlFor={inputId}>{t("study.noteBody")}</label><textarea id={inputId} value={state.fields.entryBasis ?? ""} disabled={!state.ready}
+      onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
     <p className="trading-help">{t("study.noteHint")}</p>
     {state.error != null && <p role="alert">{t("study.error")}</p>}
     <div className="study-actions"><button type="button" className="trading-button" disabled={!state.ready || state.status === "saving"}
