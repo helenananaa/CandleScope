@@ -1005,6 +1005,38 @@ def _finish_plugin_snapshot_or_patch(
     reason: str,
 ) -> dict[str, Any]:
     if bar_time:
+        update = (payload.get("meta") or {}).get("outputUpdate")
+        if update is not None:
+            # Optional language-neutral output contract. Unknown/malformed
+            # ranges are safely delivered as a snapshot, never a tail guess.
+            if isinstance(update, dict) and update.get("schema") == "render.update-range/1" and update.get("mode") == "range":
+                changed = update.get("range")
+                if changed is None:
+                    start_s = end_s = int(bar_time)
+                elif (
+                    isinstance(changed, dict)
+                    and type(changed.get("start")) is int
+                    and type(changed.get("end")) is int
+                    and 0 <= changed["start"] <= changed["end"]
+                ):
+                    start_s, end_s = changed["start"], changed["end"]
+                else:
+                    return _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
+                patch = _patch_from_snapshot(payload, reason=reason, start_s=start_s, end_s=end_s)
+                # A changed range is authoritative, including point deletion.
+                patch["type"] = "indicator.replace_range"
+                return patch
+            snapshot = _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
+            if isinstance(update, dict) and update.get("schema") == "render.update-range/1" and update.get("mode") == "snapshot":
+                retained = update.get("range")
+                if (
+                    isinstance(retained, dict)
+                    and type(retained.get("start")) is int
+                    and type(retained.get("end")) is int
+                    and 0 <= retained["start"] <= retained["end"]
+                ):
+                    snapshot["range"] = dict(retained)
+            return snapshot
         return _patch_from_snapshot(
             payload,
             reason=reason,

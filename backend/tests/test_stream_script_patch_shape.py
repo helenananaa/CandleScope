@@ -8,9 +8,12 @@ replays it through the browser's parser, output reducer and result cache.
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from candlescope_plugin_sdk import (
     ExecuteBatchResult,
@@ -292,3 +295,38 @@ def test_builtin_patch_keeps_its_sliced_result_outputs() -> None:
     patch = payload_api._patch_from_snapshot(payload, reason="bar_update", start_s=20, end_s=20)
 
     assert patch["result"] == {"outputs": {"MA": {"data": [{"time": 20, "value": 2}]}}}
+
+
+def test_live_render_range_can_replace_points_before_the_current_bar() -> None:
+    bars = _bars(8)
+    start, end = bars[-4]["time"], bars[-2]["time"]
+    result = _pine_like_result(bars)
+    result = replace(result, meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "range",
+        "range": {"start": start, "end": end},
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert message["type"] == "indicator.replace_range"
+    assert message["range"] == {"start": start, "end": end}
+    assert [point["time"] for point in message["lines"][0]["data"]] == [bar["time"] for bar in bars[-4:-1]]
+    assert "result" not in message
+    assert message["drawings"] == result.output.collections.objects["pineScenes"]
+
+
+@pytest.mark.parametrize("update", [
+    {"schema": "render.update-range/1", "mode": "snapshot"},
+    {"schema": "render.update-range/next", "mode": "range", "range": {"start": T0, "end": T0}},
+    {"schema": "render.update-range/1", "mode": "range", "range": {"start": True, "end": T0}},
+    {"schema": "render.update-range/1", "mode": "range", "range": {"start": T0 + 60, "end": T0}},
+])
+def test_full_or_unproven_render_update_preserves_the_complete_snapshot(update) -> None:
+    bars = _bars(8)
+    result = replace(_pine_like_result(bars), meta={"outputUpdate": update})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert message["type"] == "indicator.snapshot"
+    assert len(message["lines"][0]["data"]) == 8
+    assert message["result"]

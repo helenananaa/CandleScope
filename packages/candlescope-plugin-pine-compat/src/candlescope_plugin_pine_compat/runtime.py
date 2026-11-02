@@ -1601,6 +1601,43 @@ def _output_patch(base: str, previous: _Normalized, current: _Normalized) -> Ren
     return RenderPatch(base=base, series=tuple(series), collections=collections, meta=current.meta)
 
 
+def _output_update(previous: _Normalized | None, current: _Normalized) -> dict[str, Any]:
+    """Time damage from the same accepted prefixes used by RenderPatch.
+
+    Include removed points as well as new points: a forming value can become
+    na, and a negative plot offset can change an older displayed timestamp.
+    Structural changes require a complete replacement. Native object scenes
+    remain whole replacements independently of this time range.
+    """
+    snapshot = {"schema": "render.update-range/1", "mode": "snapshot"}
+    if previous is None:
+        return snapshot
+    lower = upper = None
+    for name in _COLLECTIONS:
+        before, after = previous.collections[name], current.collections[name]
+        if len(before) != len(after):
+            return snapshot
+        per_bar = _PER_BAR_KEYS.get(name, ())
+        for prior, record in zip(before, after):
+            if prior.keys() != record.keys() or any(
+                prior[key] != record[key] for key in record if key not in per_bar
+            ):
+                return snapshot
+            for key in per_bar:
+                if key not in record:
+                    continue
+                keep = current.keeps.get((name, record["id"], key))
+                if keep is None or keep < 0 or keep > min(len(prior[key]), len(record[key])):
+                    return snapshot
+                for items in (prior[key], record[key]):
+                    for point in items[keep:]:
+                        timestamp = _item_time(point)
+                        lower = timestamp if lower is None else min(lower, timestamp)
+                        upper = timestamp if upper is None else max(upper, timestamp)
+    return {"schema": "render.update-range/1", "mode": "range",
+            "range": None if lower is None else {"start": lower, "end": upper}}
+
+
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
     """Expose the independently built Pine engine through protocol v1."""
 
@@ -1808,6 +1845,15 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             if patch is None:
                 normalized, inputs, meta = normalize()
                 output = _render_output(normalized)
+            if request.output_stream is not None:
+                meta["outputUpdate"] = _output_update(
+                    state.normalized if patch is not None and state is not None else None,
+                    normalized,
+                )
+                if meta["outputUpdate"]["mode"] == "snapshot":
+                    meta["outputUpdate"]["range"] = (
+                        {"start": host_times[0], "end": host_times[-1]} if host_times else None
+                    )
             meta.update(execution_meta)
             if libraries:
                 meta["libraryDigests"] = library_digests(request.options)
