@@ -8,14 +8,16 @@ import asyncio
 from dataclasses import replace
 import hashlib
 import json
+import os
 import sys
 ROOT=Path(__file__).resolve().parents[3]
 sys.path[:0]=[str(ROOT/'backend'),str(ROOT/'packages/candlescope-plugin-sdk/src')]
 from app.plugin_runtime.installer import PluginInstaller
 from app.plugin_runtime.supervisor import RuntimeSupervisor
 from app.plugin_runtime.registry import load_runtime_registry
-OUT=ROOT/'output/issue-152-pine-bridge-20261102'
-BUNDLE=OUT/'plugins/candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg'
+PRODUCT=ROOT/'output/issue-152-pine-bridge-20261102'
+OUT=Path(os.environ.get('PINE_QUALIFICATION_OUT', str(PRODUCT)))
+BUNDLE=PRODUCT/'plugins/candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg'
 PYTHON=Path('/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3.12')
 installer=PluginInstaller(root=OUT/'controlled-install',python_executable=PYTHON)
 result=installer.install(BUNDLE,expected_sha256='sha256:'+hashlib.sha256(BUNDLE.read_bytes()).hexdigest())
