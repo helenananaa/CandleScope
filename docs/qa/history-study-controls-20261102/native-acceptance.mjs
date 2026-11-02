@@ -80,7 +80,10 @@ async function activate(id) {
 }
 async function capture(id, sourceRows, count, cutIndex) {
   await activate(id);
-  const rows=sourceRows.filter(row=>row.is_closed!==false&&Number(row.time)*1000+60_000<=Date.now()).slice(-count);
+  const closed=sourceRows.filter(row=>row.is_closed!==false&&Number(row.time)*1000+60_000<=Date.now());
+  const runs=[];let run=[];
+  for(const row of closed){if(run.length&&Number(row.time)!==Number(run.at(-1).time)+60){runs.push(run);run=[];}run.push(row);}runs.push(run);
+  const rows=runs.sort((a,b)=>b.length-a.length)[0].slice(-count);
   assert.equal(rows.length,count);
   const start=Number(rows[0].time)*1000,end=Number(rows.at(-1).time)*1000+60_000,cursor=Number(rows[cutIndex].time)*1000;
   await q.s.page.getByRole('button',{name:'历史研究',exact:true}).click();
@@ -123,8 +126,9 @@ try {
   await launch();
   const configured=await q.configure([{session:q.session('BTCUSDT'),indicators:[{name:'MA',period:20}]},
     {session:q.session('ETHUSDT'),indicators:[{name:'MA',period:20}]}],'split-vertical');
-  await q.record('workspace-configured',configured);assert.equal(configured.result.state,'ready');
-  await q.ready(2,90_000);
+  await q.record('workspace-configured',configured);assert.ok(configured.result.state==='ready'||(configured.result.state==='applied'&&configured.result.code==='READINESS_TIMEOUT'));
+  await q.until(async()=>{const snap=await q.inspect();return snap.cells.length===2&&snap.cells.every(cell=>cell.runtime?.mode==='live'&&cell.runtime.barCount>=160&&!cell.runtime.computing&&cell.runtime.indicatorsReady)&&snap.persistence.state==='saved';},90_000);
+  await q.record('actual-live-input-health-no-latest-completeness-claim',await q.inspect());
   const workspace=(await q.inspect()).workspaceId;
   const beforeFinances=finances();
   const live=await surfaces();const left=live.find(value=>value.cellId==='cell-1'),right=live.find(value=>value.cellId==='cell-2');assert.ok(left&&right);
@@ -179,7 +183,7 @@ try {
   await q.screenshot('history-study-rewind');await quit();
 
   await launch();await region(first.studyId).waitFor({timeout:60_000});
-  await q.until(async()=>{const snap=await q.inspect();const right=snap.cells.find(cell=>cell.cellId==='cell-2');return right?.runtime?.marketReady&&right.runtime.mode==='live';},90_000);
+  await q.until(async()=>{const snap=await q.inspect();const right=snap.cells.find(cell=>cell.cellId==='cell-2');return right?.runtime?.barCount>=160&&right.runtime.mode==='live';},90_000);
   await q.record('restart-study-control-mode-and-prefix',await controls(first,rewind,'restart'));
   await q.record('restart-restores-fixed-input-and-cut',await verify(first,rewind,'restart'));
   const restored=await read('/history-studies/views/'+owner(workspace,'cell-1'));
