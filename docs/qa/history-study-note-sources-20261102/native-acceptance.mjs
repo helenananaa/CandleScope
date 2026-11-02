@@ -27,6 +27,11 @@ async function launch(){
  try{await q.record('packaged-launch',await q.launch({executablePath:launcher}));running=true;}
  catch(error){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw error;}
  q.s.page.on('request',request=>{if(request.url().includes('/journal-at-time'))sourceReads.push({at:Date.now(),url:request.url(),method:request.method()});});
+ await q.until(async()=>await q.s.page.getByRole('button',{name:'设置',exact:true}).isVisible());
+ if(await q.s.page.locator('.sym-modal-overlay').isVisible()){
+  await q.s.page.keyboard.press('Escape');await q.s.page.locator('.sym-modal-overlay').waitFor({state:'hidden'});
+  await q.record('closed-empty-online-symbol-picker',{action:'real Escape key; selected BTC cache unchanged; no online catalog claim'});
+ }
  await q.enableControl();
  const probe=await q.s.app.evaluate(async()=>{
   const {spawnSync}=await import('node:child_process');
