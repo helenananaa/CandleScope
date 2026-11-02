@@ -27,7 +27,10 @@ def test_frozen_input_independent_views_cursors_restart_and_uncertain_capture_re
     two = capture(repo, "workspace:cell-2", "hs_" + "c" * 32)
     assert one["study"]["rows"][-1]["closeTimeMs"] == 360_000
     one["study"]["rows"][-1]["close"] = 999
-    moved = repo.move("workspace:cell-1", ID, expected_revision=1, cursor_ms=120_000, active=True)
+    cursor = repo.move("workspace:cell-1", ID, expected_revision=1, cursor_ms=120_000, active=True)
+    assert cursor == {"studyId": ID, "revision": 2, "cursorMs": 120_000, "active": True}
+    assert len(str(cursor)) < 200  # per-step response is independent of history size
+    moved = repo.view("workspace:cell-1")
     assert moved["study"]["rows"][-1]["close"] == 11.
     assert repo.view("workspace:cell-2") == two
     assert capture(repo) == moved  # response retry cannot advance a cursor again
@@ -86,7 +89,11 @@ def test_annotations_are_explicit_supplements_have_versions_and_do_not_move_view
     assert repo.notes(ID, 120_000) == []
     assert repo.notes(ID, 180_000) == [note]
     changed = repo.save_note(ID, NOTE, {"entryBasis": "second"}, market_ms=180_000, expected_revision=1)
-    assert [row["fields"]["entryBasis"] for row in changed["revisions"]] == ["first", "second"]
+    assert changed["revisions"] == []  # cursor-driven lists never repeat old bodies
+    history = repo.note_history(ID, NOTE)
+    assert [row["fields"]["entryBasis"] for row in history["items"]] == ["first", "second"]
+    assert repo.note_history(ID, NOTE, limit=1)["nextBeforeRevision"] == 2
+    assert repo.note_history(ID, NOTE, before_revision=2, limit=1)["items"][0]["revision"] == 1
     assert repo.save_note(ID, NOTE, {"entryBasis": "first"}, market_ms=180_000, expected_revision=0) == changed
     with pytest.raises(StudyConflict):
         repo.save_note(ID, NOTE, {"entryBasis": "stale"}, market_ms=180_000, expected_revision=1)
@@ -94,6 +101,8 @@ def test_annotations_are_explicit_supplements_have_versions_and_do_not_move_view
         repo.save_note(ID, NOTE, {"entryBasis": "rewrite time"}, market_ms=120_000, expected_revision=2)
     assert repo.view("workspace:cell-1") == before
     assert HistoryStudyRepository(path).notes(ID, 180_000) == [changed]
+    with pytest.raises(ValueError):
+        repo.note_history("another-study", NOTE)
 
 
 @pytest.mark.parametrize("rows", [list(reversed(ROWS)), [ROWS[0], ROWS[0]],

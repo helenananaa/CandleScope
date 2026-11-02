@@ -1,6 +1,6 @@
 import { request } from "../../services/api.js";
 import { API_BASE } from "../../services/apiConfig.js";
-import type { HistoryStudyView, StudyNote, SavedStudySummary } from "./historyStudyTypes.js";
+import type { HistoryStudyView, HistoryStudyCursor, StudyNote, SavedStudySummary } from "./historyStudyTypes.js";
 
 type Method = "GET" | "POST" | "PATCH";
 type Transport = (path: string, options: { method?: Method; body?: unknown; signal: AbortSignal }) => Promise<unknown>;
@@ -30,7 +30,7 @@ export class HistoryStudyDataManager {
   }
   read(owner: string, signal?: AbortSignal) { return this.call<HistoryStudyView>(`/views/${pathId(owner)}`, "GET", undefined, signal); }
   capture(owner: string, input: unknown, signal?: AbortSignal) { return this.call<HistoryStudyView>(`/views/${pathId(owner)}`, "POST", input, signal); }
-  move(owner: string, body: unknown, signal?: AbortSignal) { return this.call<HistoryStudyView>(`/views/${pathId(owner)}`, "PATCH", body, signal); }
+  move(owner: string, body: unknown, signal?: AbortSignal) { return this.call<HistoryStudyCursor>(`/views/${pathId(owner)}`, "PATCH", body, signal); }
   saved(owner: string, signal?: AbortSignal) { return this.call<{ studies: SavedStudySummary[] }>(`/saved/${pathId(owner)}`, "GET", undefined, signal); }
   select(owner: string, action: "activate" | "remove", body: unknown, signal?: AbortSignal) {
     return this.call<HistoryStudyView>(`/saved/${pathId(owner)}/${action}`, "POST", body, signal);

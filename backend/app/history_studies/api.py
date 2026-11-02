@@ -165,3 +165,10 @@ async def save_note(request: Request, study_id: StudyId):
     value = await body(request, Note)
     return await invoke(request, "save_note", study_id, value.id, value.fields,
                         market_ms=value.marketTimeMs, expected_revision=value.expectedRevision)
+
+
+@router.get("/{study_id}/notes/{note_id}/revisions")
+async def note_history(request: Request, study_id: StudyId, note_id: NoteId,
+                       beforeRevision: int = 101, limit: int = 20):
+    return await invoke(request, "note_history", study_id, note_id,
+                        before_revision=beforeRevision, limit=limit)

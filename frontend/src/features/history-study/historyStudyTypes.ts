@@ -23,6 +23,7 @@ export interface HistoryStudyView {
   cursorMs: number | null;
   study: HistoryStudy | null;
 }
+export interface HistoryStudyCursor { studyId: string; revision: number; active: boolean; cursorMs: number }
 export interface StudyNote {
   id: string;
   fields: Record<string, string>;

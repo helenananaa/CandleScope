@@ -80,11 +80,22 @@ class HistoryStudyRepository:
 
     @staticmethod
     def _expect(db, owner, revision, study_id=None):
-        current = HistoryStudyRepository._view(db, owner)
+        row = db.execute("SELECT * FROM views WHERE owner=?", (owner,)).fetchone()
+        current = {"revision": row["revision"] if row else 0, "studyId": row["study_id"] if row else None}
         if current["revision"] != revision or (study_id is not None
-                and (not current["study"] or current["study"]["id"] != study_id)):
+                and current["studyId"] != study_id):
             raise StudyConflict("Study changed in another window; reload before saving")
         return current
+
+    @staticmethod
+    def _stored_cursor(db, study_id, cursor):
+        # Read only immutable bounds. Cursor steps do not materialize all
+        # captured rows as Python objects or send them over the wire again.
+        bounds = db.execute("SELECT json_extract(input_json,'$.rows[0].time')*1000, "
+                            "json_extract(input_json,'$.rows[#-1].closeTimeMs') FROM studies WHERE id=?",
+                            (study_id,)).fetchone()
+        if bounds is None or type(cursor) is not int or not bounds[0] <= cursor <= bounds[1]:
+            raise ValueError("Cursor is outside the saved study input")
 
     @staticmethod
     def _cursor(study, cursor):
@@ -128,12 +139,12 @@ class HistoryStudyRepository:
 
     def move(self, owner, study_id, *, expected_revision, cursor_ms, active):
         with self.transaction() as db:
-            current = self._expect(db, owner, expected_revision, study_id)
-            self._cursor(current["study"], cursor_ms)
+            self._expect(db, owner, expected_revision, study_id)
+            self._stored_cursor(db, study_id, cursor_ms)
             db.execute("UPDATE views SET revision=revision+1,cursor_ms=?,active=? WHERE owner=?",
                        (cursor_ms, int(active), owner))
             db.execute("UPDATE studies SET cursor_ms=? WHERE id=?", (cursor_ms, study_id))
-            return self._view(db, owner)
+            return {"studyId": study_id, "revision": expected_revision + 1, "cursorMs": cursor_ms, "active": active}
 
     def saved(self, owner):
         with self.transaction() as db:
@@ -162,7 +173,7 @@ class HistoryStudyRepository:
                 raise ValueError("Saved study does not belong to this chart")
             db.execute("DELETE FROM note_revisions WHERE note_id IN (SELECT id FROM notes WHERE study_id=?)", (study_id,))
             db.execute("DELETE FROM notes WHERE study_id=?", (study_id,))
-            if current["study"] and current["study"]["id"] == study_id:
+            if current["studyId"] == study_id:
                 db.execute("UPDATE views SET study_id=NULL,cursor_ms=NULL,active=0,revision=revision+1 WHERE owner=?", (owner,))
             else:
                 db.execute("UPDATE views SET revision=revision+1 WHERE owner=?", (owner,))
@@ -172,34 +183,42 @@ class HistoryStudyRepository:
     @staticmethod
     def _note(db, note_id):
         note = db.execute("SELECT * FROM notes WHERE id=?", (note_id,)).fetchone()
-        revisions = db.execute("SELECT * FROM note_revisions WHERE note_id=? ORDER BY revision", (note_id,)).fetchall()
-        last = revisions[-1]
+        last = db.execute("SELECT * FROM note_revisions WHERE note_id=? ORDER BY revision DESC LIMIT 1", (note_id,)).fetchone()
         return {"id": note_id, "fields": json.loads(last["fields_json"]),
                 "revisionCount": last["revision"], "marketTimeMs": note["market_ms"],
                 "createdAtMs": note["created_ms"], "updatedAtMs": last["saved_ms"], "reviewNote": True,
-                "revisions": [{"revision": row["revision"], "savedAtMs": row["saved_ms"],
-                               "fields": json.loads(row["fields_json"])} for row in revisions]}
+                "revisions": []}
 
     def notes(self, study_id, cursor_ms):
         with self.transaction() as db:
-            study = db.execute("SELECT input_json FROM studies WHERE id=?", (study_id,)).fetchone()
-            if study is None:
-                raise ValueError("Study does not exist")
-            self._cursor(json.loads(study[0]), cursor_ms)
+            self._stored_cursor(db, study_id, cursor_ms)
             return [self._note(db, row[0]) for row in db.execute(
                 "SELECT id FROM notes WHERE study_id=? AND market_ms<=? ORDER BY market_ms,created_ms,id",
                 (study_id, cursor_ms)).fetchall()]
+
+    def note_history(self, study_id, note_id, *, before_revision=101, limit=20):
+        if type(before_revision) is not int or not 1 <= before_revision <= 101 or type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("Invalid annotation history page")
+        with self.transaction() as db:
+            note = db.execute("SELECT id FROM notes WHERE study_id=? AND id=?", (study_id, note_id)).fetchone()
+            if note is None:
+                raise ValueError("Annotation does not belong to this study")
+            rows = db.execute("SELECT * FROM note_revisions WHERE note_id=? AND revision<? ORDER BY revision DESC LIMIT ?",
+                              (note_id, before_revision, limit + 1)).fetchall()
+            page = rows[:limit]
+            return {"items": [{"revision": row["revision"], "savedAtMs": row["saved_ms"],
+                               "fields": json.loads(row["fields_json"])} for row in reversed(page)],
+                    "nextBeforeRevision": page[-1]["revision"] if len(rows) > limit else None}
 
     def save_note(self, study_id, note_id, fields, *, market_ms, expected_revision):
         try:
             fields = normalize_fields(fields)
         except TradingAccountError as exc:
             raise ValueError(str(exc)) from None
+        if len(json.dumps(fields, ensure_ascii=False).encode("utf-8")) > 64_000:
+            raise ValueError("Annotation text exceeds 64 KB")
         with self.transaction() as db:
-            study = db.execute("SELECT input_json FROM studies WHERE id=?", (study_id,)).fetchone()
-            if study is None:
-                raise ValueError("Study does not exist")
-            self._cursor(json.loads(study[0]), market_ms)
+            self._stored_cursor(db, study_id, market_ms)
             note = db.execute("SELECT * FROM notes WHERE id=?", (note_id,)).fetchone()
             if note is not None:
                 if note["study_id"] != study_id or note["market_ms"] != market_ms:

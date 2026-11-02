@@ -60,9 +60,11 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
           const view = current.current.view!;
           // Set the recovery mask before a durable mode transition can commit.
           if (target.active) hint(owner, true);
-          const next = await manager.historyStudy.move(owner, { studyId: view.study!.id,
+          const committed = await manager.historyStudy.move(owner, { studyId: view.study!.id,
             expectedRevision: view.revision, ...target });
           if (token !== epoch.current) return false;
+          if (committed.studyId !== view.study!.id) throw new Error("Invalid study cursor response");
+          const next = { ...view, revision: committed.revision, cursorMs: committed.cursorMs, active: committed.active };
           current.current = { ...current.current, view: next };
           if (!queue.current) {
             playback.seek(next.cursorMs!);

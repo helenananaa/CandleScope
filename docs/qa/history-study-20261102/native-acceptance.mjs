@@ -124,7 +124,10 @@ try {
   await region(first.studyId).getByText(text+' updated v2',{exact:true}).waitFor();
   const notes=await read(`/history-studies/${first.studyId}/notes?cursorMs=${first.cursor}`);
   assert.equal(notes.notes.length,1);const note=notes.notes[0];assert.equal(note.reviewNote,true);assert.equal(note.marketTimeMs,first.cursor);
-  assert.ok(note.updatedAtMs>note.marketTimeMs);assert.equal(note.revisions.length,2);assert.equal(note.revisions[0].fields.entryBasis,text);
+  assert.ok(note.updatedAtMs>note.marketTimeMs);assert.equal(note.revisionCount,2);
+  const history=await read(`/history-studies/${first.studyId}/notes/${note.id}/revisions`);
+  assert.equal(history.items.length,2);assert.equal(history.items[0].fields.entryBasis,text);
+  note.revisions=history.items;
   await q.record('review-annotation-versions-and-real-write-time',note);
   const rewind=Number(first.rows[50].time)*1000+30_000;
   await region(first.studyId).getByLabel('回放时刻（UTC）',{exact:true}).fill(stamp(rewind));
