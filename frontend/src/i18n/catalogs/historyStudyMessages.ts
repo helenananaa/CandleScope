@@ -1,4 +1,9 @@
 export const historyStudyEnglish = {
+  "study.sourceInterval": "Source candle interval",
+  "study.fineProjection": "Larger candles use only closed {interval} source candles revealed by the cursor. Steps follow source closes.",
+  "study.missingFine": "{count} display candles are unavailable because their revealed source history has gaps.",
+  "study.fineHint": "The 5,000-candle limit applies to the source interval. A finer source can reconstruct an unfinished display candle; it does not provide tick-level prices.",
+
   "study.title": "Historical study",
   "study.capture": "Start study",
   "study.resume": "Resume saved study",
@@ -42,6 +47,11 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceInterval": "细数据周期",
+  "study.fineProjection": "大周期 K 线仅用游标前已收盘的 {interval} 细数据重建；单步按细数据收盘推进。",
+  "study.missingFine": "{count} 根显示 K 线因已揭示细数据有缺口而暂不可用。",
+  "study.fineHint": "5,000 根上限按细数据周期计算。细数据可重建形成中大周期，但不代表逐笔价格路径。",
+
   "study.title": "历史研究", "study.capture": "开始研究", "study.resume": "继续已保存的研究",
   "study.scope": "在当前图表研究历史，无需账户或下单。保存固定区间的已收盘行情，其他实时图保留各自的视图。",
   "study.range": "最多保存 5,000 根 K 线，结束时间不包含在内。缺失行情只按所选区间加载。",
@@ -63,6 +73,11 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceInterval": "細資料週期",
+  "study.fineProjection": "大週期 K 線僅用游標前已收盤的 {interval} 細資料重建；單步按細資料收盤推進。",
+  "study.missingFine": "{count} 根顯示 K 線因已揭示細資料有缺口而暫不可用。",
+  "study.fineHint": "5,000 根上限按細資料週期計算。細資料可重建形成中大週期，但不代表逐筆價格路徑。",
+
   "study.title": "歷史研究", "study.capture": "開始研究", "study.resume": "繼續已儲存的研究",
   "study.scope": "在目前圖表研究歷史，無需帳戶或下單。儲存固定區間的已收盤行情，其他即時圖保留各自的檢視。",
   "study.range": "最多儲存 5,000 根 K 線，結束時間不包含在內。缺少的行情只按所選區間載入。",
@@ -84,6 +99,11 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceInterval": "元データの足の周期",
+  "study.fineProjection": "大きな足はカーソルまでに確定した {interval} 足のみで再構築します。ステップは元の足の確定時刻へ進みます。",
+  "study.missingFine": "公開済み元データに欠落があるため、{count} 本の表示足は利用できません。",
+  "study.fineHint": "5,000 本の上限は元データの周期に適用します。未確定の大きな足を再構築できますが、ティック単位の価格経路ではありません。",
+
   "study.title": "履歴研究", "study.capture": "研究を開始", "study.resume": "保存した研究を再開",
   "study.scope": "口座や注文を使わず、このチャートで履歴を研究します。確定した足の区間を保存し、他のリアルタイムチャートの表示は維持します。",
   "study.range": "最大 5,000 本の足を保存します。終了時刻は含みません。不足する履歴は指定区間だけを読み込みます。",
@@ -105,6 +125,11 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceInterval": "원본 봉 주기",
+  "study.fineProjection": "큰 봉은 커서 이전에 마감된 {interval} 원본 봉만으로 재구성합니다. 단계 이동은 원본 봉 마감을 따릅니다.",
+  "study.missingFine": "공개된 원본 데이터에 공백이 있어 표시 봉 {count}개를 사용할 수 없습니다.",
+  "study.fineHint": "5,000개 제한은 원본 봉 주기에 적용됩니다. 더 짧은 봉으로 미완성 큰 봉을 재구성할 수 있지만 틱 단위 가격 경로는 아닙니다.",
+
   "study.title": "과거 데이터 연구", "study.capture": "연구 시작", "study.resume": "저장된 연구 계속",
   "study.scope": "계좌나 주문 없이 이 차트에서 과거 데이터를 연구합니다. 확정된 봉 구간을 저장하며 다른 실시간 차트의 화면은 유지됩니다.",
   "study.range": "최대 5,000개 봉을 저장합니다. 종료 시각은 포함하지 않습니다. 부족한 데이터는 선택한 구간만 불러옵니다.",
@@ -126,6 +151,11 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceInterval": "Intervalo dos candles de origem",
+  "study.fineProjection": "Candles maiores usam apenas candles de {interval} fechados e revelados pelo cursor. Os passos seguem o fechamento da origem.",
+  "study.missingFine": "{count} candles de exibição estão indisponíveis por lacunas no histórico revelado de origem.",
+  "study.fineHint": "O limite de 5.000 candles vale para o intervalo de origem. Uma origem menor pode reconstruir um candle maior aberto, mas não fornece os preços de cada negócio.",
+
   "study.title": "Estudo histórico", "study.capture": "Iniciar estudo", "study.resume": "Retomar estudo salvo",
   "study.scope": "Analise o histórico deste gráfico sem conta ou ordens. Salve um intervalo fixo de candles fechados; os outros gráficos ao vivo mantêm suas próprias visualizações.",
   "study.range": "Salve até 5.000 candles. O horário final não está incluído. O histórico ausente é carregado apenas para o intervalo selecionado.",

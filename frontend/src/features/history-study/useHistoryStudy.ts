@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
+import { intervalTiles } from "../../utils/intervals.js";
 import { resolveKlineSeriesIdentity } from "../market-data/klineSeriesIdentity.js";
 import type { MarketDataManager } from "../market-data/manager/marketDataManager.js";
 import type { MarketSeries } from "../market-data/marketDataTypes.js";
@@ -84,13 +85,13 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
     return task;
   }, [manager, owner, publish]);
 
-  const capture = useCallback(async (series: MarketSeries, startMs: number, endMs: number, cursorMs: number) => {
+  const capture = useCallback(async (series: MarketSeries, startMs: number, endMs: number, cursorMs: number, sourceInterval = series.interval) => {
     if (!manager || current.current.owner !== owner || current.current.loading || current.current.busy) return false;
     const token = epoch.current, view = current.current.view;
     if (!view) { publish({ error: new Error("study_unavailable") }); return false; }
-    const timeline = createIntervalTimeline(series.interval);
+    const timeline = createIntervalTimeline(sourceInterval);
     const from = timeline?.floor(startMs / 1000), to = timeline?.floor((endMs - 1) / 1000);
-    if (!timeline || from == null || to == null || from > to || endMs > Date.now()) {
+    if (!timeline || !intervalTiles(sourceInterval, series.interval) || from == null || to == null || from > to || endMs > Date.now()) {
       publish({ error: new Error("study_range_invalid") }); return false;
     }
     let count = 0;
@@ -99,17 +100,18 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
     }
     const seriesWithIdentity = { exchange: series.exchange, marketType: series.marketType,
       symbol: series.symbol, interval: series.interval, ...resolveKlineSeriesIdentity(series.exchange, series) };
-    const retain = manager.cache.retain(seriesWithIdentity, { from, to });
+    const sourceSeries = { ...seriesWithIdentity, interval: sourceInterval };
+    const retain = manager.cache.retain(sourceSeries, { from, to });
     const controller = new AbortController();
     captures.current.add(controller);
     publish({ busy: true, error: null });
     try {
       const reader = createManagedReplayHistoryReader(manager);
-      const result = await loadReplayBars(seriesWithIdentity, from, to, controller.signal, reader);
+      const result = await loadReplayBars(sourceSeries, from, to, controller.signal, reader);
       if (token !== epoch.current) return false;
       // The common cache admits whole responses atomically. Capture one current
       // verified range, rather than stitching detached pages of different reads.
-      const snapshot = manager.read(seriesWithIdentity, { from, to, finalOnly: true });
+      const snapshot = manager.read(sourceSeries, { from, to, finalOnly: true });
       if (result.truncated || !snapshot.complete || !snapshot.rows.length || snapshot.rows.length > 5000) throw new Error("study_history_pending");
       const rows = snapshot.rows.map(row => ({ time: Number(row.time), open: row.open, high: row.high,
         low: row.low, close: row.close, volume: row.volume,
@@ -117,7 +119,7 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
           .filter(key => row[key] !== undefined).map(key => [key, row[key]])) }));
       hint(owner, true);
       const next = await manager.historyStudy.capture(owner, { id: `hs_${crypto.randomUUID().replaceAll("-", "")}`,
-        series: seriesWithIdentity, rows, cursorMs: Math.max(rows[0]!.time * 1000,
+        series: seriesWithIdentity, ...(sourceInterval === series.interval ? {} : { sourceSeries }), rows, cursorMs: Math.max(rows[0]!.time * 1000,
           Math.min(timeline.next(rows.at(-1)!.time)! * 1000, cursorMs)), expectedRevision: view.revision }, controller.signal);
       if (token !== epoch.current) return false;
       publish({ view: next, playback: new HistoryStudyPlayback(next.study!, next.cursorMs!), busy: false });

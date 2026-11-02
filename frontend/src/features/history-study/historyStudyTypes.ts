@@ -13,6 +13,7 @@ export interface StudyBar extends Record<string, unknown> {
 export interface HistoryStudy {
   id: string;
   series: MarketSeries;
+  sourceSeries?: MarketSeries;
   capturedAtMs: number;
   inputKind: "captured-market-history";
   rows: readonly StudyBar[];

@@ -135,4 +135,36 @@ def test_api_is_local_bounded_and_routes_through_common_manager(tmp_path, monkey
                 "cursorMs": 240_000, "expectedRevision": 1, "active": True})).status_code == 200
             assert (await client.patch("/history-studies/views/a", json={"studyId": ID,
                 "cursorMs": 120_000, "expectedRevision": 1, "active": True})).status_code == 409
+            fine = await client.post("/history-studies/views/fine", json={**body,
+                "id": "hs_" + "f" * 32, "series": {**SERIES, "interval": "5m"}, "sourceSeries": SERIES})
+            assert fine.status_code == 200
+            assert fine.json()["study"]["rows"][0]["closeTimeMs"] == 120_000
+            assert fine.json()["study"]["sourceSeries"]["interval"] == "1m"
     asyncio.run(run())
+
+
+def test_finer_capture_keeps_source_and_display_semantics_and_restores_without_reloading(tmp_path):
+    path = tmp_path / "fine.sqlite3"
+    repo = HistoryStudyRepository(path, clock=lambda: 1_000_000)
+    display = {**SERIES, "interval": "5m"}
+    result = repo.capture("fine", ID, display, ROWS, source_series=SERIES,
+                          cursor_ms=180_000, expected_revision=0)
+    assert result["study"]["series"]["interval"] == "5m"
+    assert result["study"]["sourceSeries"] == SERIES
+    assert result["study"]["rows"][0]["closeTimeMs"] == 120_000
+    moved = repo.move("fine", ID, cursor_ms=210_000, expected_revision=1, active=True)
+    assert "rows" not in moved and len(str(moved)) < 200
+    assert HistoryStudyRepository(path).view("fine")["study"] == result["study"]
+    assert repo.saved("fine")[0]["series"] == display
+    assert repo.capture("fine", ID, display, ROWS, source_series=SERIES,
+                        cursor_ms=180_000, expected_revision=0)["cursorMs"] == 210_000
+
+
+@pytest.mark.parametrize("source", [{**SERIES, "symbol": "ETHUSDT"},
+    {**SERIES, "volumeSemantics": "quote_asset"}, {**SERIES, "interval": "3m"}])
+def test_incompatible_finer_series_never_creates_a_saved_study(tmp_path, source):
+    repo = HistoryStudyRepository(tmp_path / "fine.sqlite3", clock=lambda: 1_000_000)
+    with pytest.raises(ValueError):
+        repo.capture("fine", ID, {**SERIES, "interval": "5m"}, ROWS,
+                     source_series=source, cursor_ms=180_000, expected_revision=0)
+    assert repo.view("fine")["study"] is None

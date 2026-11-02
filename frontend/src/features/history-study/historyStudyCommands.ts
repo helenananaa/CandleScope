@@ -27,9 +27,11 @@ export function historyStudyCommands(input: {
   return {
     id: `study:${input.cellId}`, title: `Historical study ${input.cellId}: revealed data and committed cursor`,
     context: () => ({ mode: "history-study", studyId: playback.input.id, series: playback.input.series,
+      sourceSeries: playback.input.sourceSeries ?? playback.input.series,
       cursorMs: playback.cursorMs, revision: input.revision, version: Number(playback.store.version),
       ready: outputReady(), playing: input.playing }),
     snapshot: () => ({ mode: "history-study", studyId: playback.input.id, series: playback.input.series,
+      sourceSeries: playback.input.sourceSeries ?? playback.input.series, missingBuckets: playback.missingBuckets,
       cursorMs: playback.cursorMs, revision: input.revision, capturedAtMs: playback.input.capturedAtMs,
       barCount: playback.store.barCount, firstTime: playback.store.first()?.time ?? null, lastTime: playback.store.last()?.time ?? null,
       boundsMs: { from: playback.minimumMs, to: playback.maximumMs }, busy: input.busy,

@@ -69,6 +69,7 @@ class Bar(Model):
 class Capture(Model):
     id: StudyId
     series: Series
+    sourceSeries: Series | None = None
     rows: list[Bar] = Field(min_length=1, max_length=5000)
     cursorMs: int = Field(ge=0)
     expectedRevision: int = Field(ge=0)
@@ -128,7 +129,8 @@ async def capture(request: Request, owner: Owner):
     value = await body(request, Capture)
     return await invoke(request, "capture", owner, value.id, value.series.model_dump(),
                         [bar.model_dump(exclude_unset=True) for bar in value.rows], cursor_ms=value.cursorMs,
-                        expected_revision=value.expectedRevision)
+                        expected_revision=value.expectedRevision,
+                        source_series=value.sourceSeries.model_dump() if value.sourceSeries else None)
 
 
 @router.patch("/views/{owner}")

@@ -12,7 +12,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from app.data_engine.interval_policy import parse_interval_spec
+from app.data_engine.interval_policy import interval_tiles, parse_interval_spec
 from app.trading_accounts.models import TradingAccountError, normalize_fields
 
 
@@ -103,9 +103,14 @@ class HistoryStudyRepository:
         if type(cursor) is not int or not rows[0]["time"] * 1000 <= cursor <= rows[-1]["closeTimeMs"]:
             raise ValueError("Cursor is outside the saved study input")
 
-    def capture(self, owner, study_id, series, rows, *, cursor_ms, expected_revision):
-        spec = parse_interval_spec(series["interval"])
-        if spec is None or not 1 <= len(rows) <= 5000:
+    def capture(self, owner, study_id, series, rows, *, cursor_ms, expected_revision, source_series=None):
+        source = source_series or series
+        spec = parse_interval_spec(source["interval"])
+        target = parse_interval_spec(series["interval"])
+        if (spec is None or target is None or not interval_tiles(spec, target)
+                or {k: v for k, v in source.items() if k != "interval"}
+                != {k: v for k, v in series.items() if k != "interval"}
+                or not 1 <= len(rows) <= 5000):
             raise ValueError("Unsupported study interval or input size")
         now, previous, captured = self.clock(), -1, []
         for bar in rows:
@@ -119,6 +124,8 @@ class HistoryStudyRepository:
             previous = opened
             captured.append({**bar, "closeTimeMs": closed, "is_closed": True})
         data = {"series": series, "rows": captured, "inputKind": "captured-market-history"}
+        if source_series is not None:
+            data["sourceSeries"] = source_series
         self._cursor(data, cursor_ms)
         encoded = json.dumps(data, allow_nan=False, separators=(",", ":"), sort_keys=True)
         with self.transaction() as db:

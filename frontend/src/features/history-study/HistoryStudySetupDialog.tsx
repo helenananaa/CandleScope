@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
+import { intervalTiles } from "../../utils/intervals.js";
 import { formatUtcDateTimeInput, parseUtcDateTimeInput } from "../../utils/utcDateTimeInput.js";
 import type { KlineBar, MarketSeries } from "../market-data/marketDataTypes.js";
 import type { HistoryStudyDataManager } from "./historyStudyDataManager.js";
@@ -13,7 +14,7 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
   owner: string; manager: HistoryStudyDataManager;
   onSelect(id: string, action: "activate" | "remove"): Promise<boolean>;
   series: MarketSeries; bars: readonly KlineBar[]; busy: boolean; error: unknown;
-  onCapture(series: MarketSeries, startMs: number, endMs: number, cursorMs: number): Promise<boolean>;
+  onCapture(series: MarketSeries, startMs: number, endMs: number, cursorMs: number, sourceInterval?: string): Promise<boolean>;
   onClose(): void;
 }) {
   useLocale();
@@ -27,6 +28,7 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
     return { start: formatUtcDateTimeInput(start), end: formatUtcDateTimeInput(end), cursor: formatUtcDateTimeInput(cursor) };
   });
   const [invalid, setInvalid] = useState(false);
+  const [sourceInterval, setSourceInterval] = useState(series.interval);
   const [saved, setSaved] = useState<SavedStudySummary[]>([]);
   const [remove, setRemove] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -45,7 +47,7 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
       setInvalid(true); return;
     }
     setInvalid(false);
-    if (await onCapture(series, start, end, cursor)) onClose();
+    if (await onCapture(series, start, end, cursor, sourceInterval)) onClose();
   }
   return <dialog ref={dialog} className="chart-time-dialog" aria-label={t("study.title")}
     onCancel={event => { if (busy) event.preventDefault(); else onClose(); }}>
@@ -63,6 +65,13 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
       </section>}
       {listError && <p role="alert">{t("study.error")}</p>}
       <p>{t("study.scope")}</p><p>{t("study.range")}</p>
+      <label>{t("study.sourceInterval")}<select value={sourceInterval} disabled={busy}
+        onChange={event => setSourceInterval(event.target.value)}>
+        <option value={series.interval}>{series.interval}</option>
+        {["1m", "5m", "1h", "1d"].filter(candidate => intervalTiles(candidate, series.interval)
+          && !intervalTiles(series.interval, candidate)).map(candidate => <option key={candidate} value={candidate}>{candidate}</option>)}
+      </select></label>
+      <p>{t("study.fineHint")}</p>
       {(["start", "end", "cursor"] as const).map(key => <label key={key}>
         {t(key === "start" ? "study.start" : key === "end" ? "study.end" : "study.cursor")}
         <input type="datetime-local" step="1" required value={values[key]} disabled={busy}

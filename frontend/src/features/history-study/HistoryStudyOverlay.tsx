@@ -32,6 +32,7 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
   useLocale();
   const { input, store, cursorMs } = playback;
   const series = input.series;
+  const sourceSeries = input.sourceSeries ?? series;
   const surface = useChartSurfaceRuntime();
   const controlAbort = useRef<AbortController | null>(null);
   useLayoutEffect(() => {
@@ -58,9 +59,9 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
   const notes = loaded?.cursor === cursorMs ? loaded.notes : [];
   useEffect(() => {
     // Compare any currently known rows as well as later admitted corrections.
-    if (studyInputHasChanged(input.rows, manager.read(series).rows)) setChanged(true);
-    return manager.cache.subscribe(series, change => { if (studyInputHasChanged(input.rows, change.rows)) setChanged(true); });
-  }, [input.rows, manager, series]);
+    if (studyInputHasChanged(input.rows, manager.read(sourceSeries).rows)) setChanged(true);
+    return manager.cache.subscribe(sourceSeries, change => { if (studyInputHasChanged(input.rows, change.rows)) setChanged(true); });
+  }, [input.rows, manager, sourceSeries]);
   useEffect(() => {
     if (!playing || editor) return;
     let cancelled = false;
@@ -135,7 +136,9 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
         indicatorHlines={indicators.view.hlines} indicatorBgcolors={indicators.view.bgcolors} indicatorBarcolors={indicators.view.barcolors} /></ChartErrorBoundary>
     </div><aside className="quick-replay-side" aria-label={t("study.notes")}>
       <h3>{t("study.fixed")}</h3><p className="trading-help">{t("study.savedAt", { time: formatDateTime(input.capturedAtMs) })}</p>
-      <p className="trading-help">{t("study.closedOnly")}</p>{changed && <p role="status">{t("study.changed")}</p>}
+      <p className="trading-help">{t(input.sourceSeries ? "study.fineProjection" : "study.closedOnly", { interval: sourceSeries.interval })}</p>
+      {playback.missingBuckets.length > 0 && <p role="status">{t("study.missingFine", { count: playback.missingBuckets.length })}</p>}
+      {changed && <p role="status">{t("study.changed")}</p>}
       {(unsupported.length > 0 || indicators.view.activeIndicators.some(item => item.error)) && <section aria-label={t("study.indicatorUnavailable")}>
         <h3>{t("study.indicatorUnavailable")}</h3><ul>
           {unsupported.map(({ indicator, support }) => <li key={indicator.id}>{indicator.name ?? indicator.id}: {support.reason}</li>)}
