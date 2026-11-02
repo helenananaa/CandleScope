@@ -1,0 +1,540 @@
+{
+  "passed": true,
+  "scope": "Real RuntimeSupervisor framing, installed freshly built source SDK/bridge wheels, unchanged verified native engine. Existing16output +44input walk assertions unmodified, including journals/restarts/corrections/rolling windows/eviction. No HTTP/UI/external market.",
+  "install": {
+    "runtimeId": "candlescope.pine-compat",
+    "version": "0.4.0",
+    "installationId": "f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+    "activationId": "2f729a150745436e8c58055f30cb51f5",
+    "changed": true,
+    "reusedInstallation": false,
+    "installationPath": "/Users/ryanliang/.codex/worktrees/issue-152-pine-bridge-20261102/CandleScope/output/issue-152-pine-bridge-20261102/controlled-install/installs/candlescope.pine-compat/f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+    "registryPath": "/Users/ryanliang/.codex/worktrees/issue-152-pine-bridge-20261102/CandleScope/output/issue-152-pine-bridge-20261102/controlled-install/runtime-registry.json",
+    "restartRequired": true
+  },
+  "snapshots": [
+    {
+      "id": "candlescope.pine-compat",
+      "state": "stopped",
+      "enabled": true,
+      "autoStart": false,
+      "required": false,
+      "expected": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "protocol": "candlescope.script-runtime/1"
+      },
+      "pid": null,
+      "generation": 2,
+      "starts": 2,
+      "restarts": 1,
+      "requests": 22,
+      "failures": 0,
+      "remoteErrors": 0,
+      "startedAt": "2026-11-02T10:11:27.917986+00:00",
+      "lastRequestAt": "2026-11-02T10:11:28.121045+00:00",
+      "negotiatedFeatures": [
+        "source-analysis/1",
+        "batch-execution/1",
+        "render.line-series/1",
+        "render.histogram-series/1",
+        "render.structured-output/1",
+        "render.native-scene/1",
+        "render.output-patch/1",
+        "batch-execution.bars-patch/1"
+      ],
+      "descriptor": {
+        "id": "candlescope.pine-compat",
+        "name": "Pine Compatibility Runtime",
+        "version": "0.4.0",
+        "package": "candlescope-plugin-pine-compat",
+        "languages": [
+          {
+            "id": "pine",
+            "name": "Pine Script",
+            "extensions": [
+              ".pine"
+            ],
+            "aliases": [
+              "pine",
+              "pinescript"
+            ]
+          }
+        ],
+        "features": [
+          "source-analysis/1",
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1",
+          "render.output-patch/1",
+          "batch-execution.bars-patch/1"
+        ],
+        "requiredHostFeatures": [
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1"
+        ],
+        "meta": {
+          "engine": "pine-compat-runtime",
+          "engineVersion": "0.3.3+cs.1",
+          "expectedEngineVersion": "0.3.3+cs.1",
+          "engineVersionVerified": true,
+          "analysisSchemaVersion": 6,
+          "runtimeSchemaVersion": 9,
+          "renderMetadataVersion": 1,
+          "executorBoundary": "sidecar-inline",
+          "sourceSnapshot": false,
+          "closedBarsOnly": false,
+          "formingBar": true,
+          "incremental": true,
+          "sessionTransport": "executeBatch-full-snapshot",
+          "sessionCapacity": 8,
+          "historyPlanning": "host-range-warmup",
+          "hostCapabilities": {
+            "chartContext": {
+              "symbolFeatures": [
+                "syminfo.prefix",
+                "syminfo.ticker",
+                "syminfo.tickerid"
+              ],
+              "timeframeFeatures": [
+                "timeframe.isdaily",
+                "timeframe.isdwm",
+                "timeframe.isintraday",
+                "timeframe.isminutes",
+                "timeframe.ismonthly",
+                "timeframe.isseconds",
+                "timeframe.isweekly",
+                "timeframe.multiplier",
+                "timeframe.period"
+              ]
+            }
+          },
+          "renderCoverage": [
+            "plot.line",
+            "plot.histogram",
+            "plot.columns",
+            "plotshape.supported-subset",
+            "hline",
+            "fill",
+            "bgcolor",
+            "barcolor",
+            "alert",
+            "native-line-label-box-curved-polyline-linefill-table-scene",
+            "plotchar-plotarrow-plotbar-plotcandle-gradient-fill"
+          ],
+          "unsupportedRenderKinds": [
+            "strategy"
+          ],
+          "drawingProjection": "chart-native-objects/1",
+          "ui": {
+            "languages": {
+              "pine": {
+                "monacoLanguage": "pine",
+                "starterSource": "//@version=6\nindicator(\"My Indicator\", overlay=true)\n\nlength = input.int(20, \"Length\", minval=1)\nma = ta.sma(close, length)\nplot(ma, \"MA\", color=color.orange)\n"
+              }
+            }
+          }
+        }
+      },
+      "lastFailure": null,
+      "lastRemoteError": null
+    },
+    {
+      "id": "candlescope.pine-compat",
+      "state": "stopped",
+      "enabled": true,
+      "autoStart": false,
+      "required": false,
+      "expected": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "protocol": "candlescope.script-runtime/1"
+      },
+      "pid": null,
+      "generation": 2,
+      "starts": 2,
+      "restarts": 1,
+      "requests": 22,
+      "failures": 0,
+      "remoteErrors": 0,
+      "startedAt": "2026-11-02T10:11:27.838414+00:00",
+      "lastRequestAt": "2026-11-02T10:11:28.128902+00:00",
+      "negotiatedFeatures": [
+        "source-analysis/1",
+        "batch-execution/1",
+        "render.line-series/1",
+        "render.histogram-series/1",
+        "render.structured-output/1",
+        "render.native-scene/1",
+        "render.output-patch/1",
+        "batch-execution.bars-patch/1"
+      ],
+      "descriptor": {
+        "id": "candlescope.pine-compat",
+        "name": "Pine Compatibility Runtime",
+        "version": "0.4.0",
+        "package": "candlescope-plugin-pine-compat",
+        "languages": [
+          {
+            "id": "pine",
+            "name": "Pine Script",
+            "extensions": [
+              ".pine"
+            ],
+            "aliases": [
+              "pine",
+              "pinescript"
+            ]
+          }
+        ],
+        "features": [
+          "source-analysis/1",
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1",
+          "render.output-patch/1",
+          "batch-execution.bars-patch/1"
+        ],
+        "requiredHostFeatures": [
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1"
+        ],
+        "meta": {
+          "engine": "pine-compat-runtime",
+          "engineVersion": "0.3.3+cs.1",
+          "expectedEngineVersion": "0.3.3+cs.1",
+          "engineVersionVerified": true,
+          "analysisSchemaVersion": 6,
+          "runtimeSchemaVersion": 9,
+          "renderMetadataVersion": 1,
+          "executorBoundary": "sidecar-inline",
+          "sourceSnapshot": false,
+          "closedBarsOnly": false,
+          "formingBar": true,
+          "incremental": true,
+          "sessionTransport": "executeBatch-full-snapshot",
+          "sessionCapacity": 8,
+          "historyPlanning": "host-range-warmup",
+          "hostCapabilities": {
+            "chartContext": {
+              "symbolFeatures": [
+                "syminfo.prefix",
+                "syminfo.ticker",
+                "syminfo.tickerid"
+              ],
+              "timeframeFeatures": [
+                "timeframe.isdaily",
+                "timeframe.isdwm",
+                "timeframe.isintraday",
+                "timeframe.isminutes",
+                "timeframe.ismonthly",
+                "timeframe.isseconds",
+                "timeframe.isweekly",
+                "timeframe.multiplier",
+                "timeframe.period"
+              ]
+            }
+          },
+          "renderCoverage": [
+            "plot.line",
+            "plot.histogram",
+            "plot.columns",
+            "plotshape.supported-subset",
+            "hline",
+            "fill",
+            "bgcolor",
+            "barcolor",
+            "alert",
+            "native-line-label-box-curved-polyline-linefill-table-scene",
+            "plotchar-plotarrow-plotbar-plotcandle-gradient-fill"
+          ],
+          "unsupportedRenderKinds": [
+            "strategy"
+          ],
+          "drawingProjection": "chart-native-objects/1",
+          "ui": {
+            "languages": {
+              "pine": {
+                "monacoLanguage": "pine",
+                "starterSource": "//@version=6\nindicator(\"My Indicator\", overlay=true)\n\nlength = input.int(20, \"Length\", minval=1)\nma = ta.sma(close, length)\nplot(ma, \"MA\", color=color.orange)\n"
+              }
+            }
+          }
+        }
+      },
+      "lastFailure": null,
+      "lastRemoteError": null
+    },
+    {
+      "id": "candlescope.pine-compat",
+      "state": "stopped",
+      "enabled": true,
+      "autoStart": false,
+      "required": false,
+      "expected": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "protocol": "candlescope.script-runtime/1"
+      },
+      "pid": null,
+      "generation": 3,
+      "starts": 3,
+      "restarts": 2,
+      "requests": 73,
+      "failures": 0,
+      "remoteErrors": 0,
+      "startedAt": "2026-11-02T10:11:30.259913+00:00",
+      "lastRequestAt": "2026-11-02T10:11:30.452226+00:00",
+      "negotiatedFeatures": [
+        "source-analysis/1",
+        "batch-execution/1",
+        "render.line-series/1",
+        "render.histogram-series/1",
+        "render.structured-output/1",
+        "render.native-scene/1",
+        "render.output-patch/1",
+        "batch-execution.bars-patch/1"
+      ],
+      "descriptor": {
+        "id": "candlescope.pine-compat",
+        "name": "Pine Compatibility Runtime",
+        "version": "0.4.0",
+        "package": "candlescope-plugin-pine-compat",
+        "languages": [
+          {
+            "id": "pine",
+            "name": "Pine Script",
+            "extensions": [
+              ".pine"
+            ],
+            "aliases": [
+              "pine",
+              "pinescript"
+            ]
+          }
+        ],
+        "features": [
+          "source-analysis/1",
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1",
+          "render.output-patch/1",
+          "batch-execution.bars-patch/1"
+        ],
+        "requiredHostFeatures": [
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1"
+        ],
+        "meta": {
+          "engine": "pine-compat-runtime",
+          "engineVersion": "0.3.3+cs.1",
+          "expectedEngineVersion": "0.3.3+cs.1",
+          "engineVersionVerified": true,
+          "analysisSchemaVersion": 6,
+          "runtimeSchemaVersion": 9,
+          "renderMetadataVersion": 1,
+          "executorBoundary": "sidecar-inline",
+          "sourceSnapshot": false,
+          "closedBarsOnly": false,
+          "formingBar": true,
+          "incremental": true,
+          "sessionTransport": "executeBatch-full-snapshot",
+          "sessionCapacity": 8,
+          "historyPlanning": "host-range-warmup",
+          "hostCapabilities": {
+            "chartContext": {
+              "symbolFeatures": [
+                "syminfo.prefix",
+                "syminfo.ticker",
+                "syminfo.tickerid"
+              ],
+              "timeframeFeatures": [
+                "timeframe.isdaily",
+                "timeframe.isdwm",
+                "timeframe.isintraday",
+                "timeframe.isminutes",
+                "timeframe.ismonthly",
+                "timeframe.isseconds",
+                "timeframe.isweekly",
+                "timeframe.multiplier",
+                "timeframe.period"
+              ]
+            }
+          },
+          "renderCoverage": [
+            "plot.line",
+            "plot.histogram",
+            "plot.columns",
+            "plotshape.supported-subset",
+            "hline",
+            "fill",
+            "bgcolor",
+            "barcolor",
+            "alert",
+            "native-line-label-box-curved-polyline-linefill-table-scene",
+            "plotchar-plotarrow-plotbar-plotcandle-gradient-fill"
+          ],
+          "unsupportedRenderKinds": [
+            "strategy"
+          ],
+          "drawingProjection": "chart-native-objects/1",
+          "ui": {
+            "languages": {
+              "pine": {
+                "monacoLanguage": "pine",
+                "starterSource": "//@version=6\nindicator(\"My Indicator\", overlay=true)\n\nlength = input.int(20, \"Length\", minval=1)\nma = ta.sma(close, length)\nplot(ma, \"MA\", color=color.orange)\n"
+              }
+            }
+          }
+        }
+      },
+      "lastFailure": null,
+      "lastRemoteError": null
+    },
+    {
+      "id": "candlescope.pine-compat",
+      "state": "stopped",
+      "enabled": true,
+      "autoStart": false,
+      "required": false,
+      "expected": {
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "protocol": "candlescope.script-runtime/1"
+      },
+      "pid": null,
+      "generation": 3,
+      "starts": 3,
+      "restarts": 2,
+      "requests": 71,
+      "failures": 0,
+      "remoteErrors": 0,
+      "startedAt": "2026-11-02T10:11:30.171694+00:00",
+      "lastRequestAt": "2026-11-02T10:11:30.459700+00:00",
+      "negotiatedFeatures": [
+        "source-analysis/1",
+        "batch-execution/1",
+        "render.line-series/1",
+        "render.histogram-series/1",
+        "render.structured-output/1",
+        "render.native-scene/1",
+        "render.output-patch/1"
+      ],
+      "descriptor": {
+        "id": "candlescope.pine-compat",
+        "name": "Pine Compatibility Runtime",
+        "version": "0.4.0",
+        "package": "candlescope-plugin-pine-compat",
+        "languages": [
+          {
+            "id": "pine",
+            "name": "Pine Script",
+            "extensions": [
+              ".pine"
+            ],
+            "aliases": [
+              "pine",
+              "pinescript"
+            ]
+          }
+        ],
+        "features": [
+          "source-analysis/1",
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1",
+          "render.output-patch/1",
+          "batch-execution.bars-patch/1"
+        ],
+        "requiredHostFeatures": [
+          "batch-execution/1",
+          "render.line-series/1",
+          "render.histogram-series/1",
+          "render.structured-output/1",
+          "render.native-scene/1"
+        ],
+        "meta": {
+          "engine": "pine-compat-runtime",
+          "engineVersion": "0.3.3+cs.1",
+          "expectedEngineVersion": "0.3.3+cs.1",
+          "engineVersionVerified": true,
+          "analysisSchemaVersion": 6,
+          "runtimeSchemaVersion": 9,
+          "renderMetadataVersion": 1,
+          "executorBoundary": "sidecar-inline",
+          "sourceSnapshot": false,
+          "closedBarsOnly": false,
+          "formingBar": true,
+          "incremental": true,
+          "sessionTransport": "executeBatch-full-snapshot",
+          "sessionCapacity": 8,
+          "historyPlanning": "host-range-warmup",
+          "hostCapabilities": {
+            "chartContext": {
+              "symbolFeatures": [
+                "syminfo.prefix",
+                "syminfo.ticker",
+                "syminfo.tickerid"
+              ],
+              "timeframeFeatures": [
+                "timeframe.isdaily",
+                "timeframe.isdwm",
+                "timeframe.isintraday",
+                "timeframe.isminutes",
+                "timeframe.ismonthly",
+                "timeframe.isseconds",
+                "timeframe.isweekly",
+                "timeframe.multiplier",
+                "timeframe.period"
+              ]
+            }
+          },
+          "renderCoverage": [
+            "plot.line",
+            "plot.histogram",
+            "plot.columns",
+            "plotshape.supported-subset",
+            "hline",
+            "fill",
+            "bgcolor",
+            "barcolor",
+            "alert",
+            "native-line-label-box-curved-polyline-linefill-table-scene",
+            "plotchar-plotarrow-plotbar-plotcandle-gradient-fill"
+          ],
+          "unsupportedRenderKinds": [
+            "strategy"
+          ],
+          "drawingProjection": "chart-native-objects/1",
+          "ui": {
+            "languages": {
+              "pine": {
+                "monacoLanguage": "pine",
+                "starterSource": "//@version=6\nindicator(\"My Indicator\", overlay=true)\n\nlength = input.int(20, \"Length\", minval=1)\nma = ta.sma(close, length)\nplot(ma, \"MA\", color=color.orange)\n"
+              }
+            }
+          }
+        }
+      },
+      "lastFailure": null,
+      "lastRemoteError": null
+    }
+  ]
+}

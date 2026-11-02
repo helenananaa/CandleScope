@@ -47,7 +47,7 @@ from .host_inputs import chart_metadata, execution_times, indicator_request_bars
 from .libraries import LIBRARY_PARAMETER, library_digests, library_sources
 from .currency_inputs import currency_rates
 from .object_scene import object_scenes
-from .sessions import PineSessions
+from .sessions import PineSessions, RetainedInputPrefix
 
 RUNTIME_ID = "candlescope.pine-compat"
 PLUGIN_NAME = "Pine Compatibility Runtime"
@@ -507,6 +507,7 @@ def _reused_prefix(bars: tuple[Any, ...], previous: tuple[Any, ...] | None) -> t
 def _normalize_bars(
     request: ExecuteBatchRequest,
     previous: tuple[tuple[Any, ...], list[dict[str, float | int]], list[int]] | None = None,
+    *, prefix_capture: list[RetainedInputPrefix] | None = None,
 ) -> tuple[list[dict[str, float | int]], list[int]]:
     """Validate and convert bars; ``previous`` is an earlier (bars, result) to reuse."""
     if len(request.bars) > MAX_BARS:
@@ -515,6 +516,8 @@ def _normalize_bars(
             f"Too many Pine bars: {len(request.bars)} > {MAX_BARS}",
         )
     start, keep = _reused_prefix(request.bars, previous[0] if previous is not None else None)
+    if prefix_capture is not None and previous is not None and keep:
+        prefix_capture.append(RetainedInputPrefix(previous[1], start, keep))
     # Reused rows passed every check below at the same window position.
     runtime_bars: list[dict[str, float | int]] = previous[1][start:start + keep] if keep else []
     host_times: list[int] = previous[2][start:start + keep] if keep else []
@@ -1677,8 +1680,10 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                 return ExecuteBatchResult(ok=False, diagnostics=diagnostics)
             window_key = request.options.get("pineSessionId")
             window_key = window_key if isinstance(window_key, str) and window_key else None
+            prefix_capture: list[RetainedInputPrefix] = []
             runtime_bars, host_times = _normalize_bars(
-                request, self._windows.pop(window_key, None) if window_key else None)
+                request, self._windows.pop(window_key, None) if window_key else None,
+                prefix_capture=prefix_capture)
             if window_key:
                 self._windows[window_key] = (request.bars, runtime_bars, host_times)
                 while len(self._windows) > self._sessions.capacity:
@@ -1748,6 +1753,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
                     epoch=request.options.get("pineSessionEpoch", "0"),
                     providers=host_environment.get("contexts", []),
                     verify_history_clocks=isinstance(request.options.get("pineExecutionTimeMs"), list),
+                    validated_prefix=prefix_capture[0] if prefix_capture else None,
                 )
             else:
                 raw = engine.run_script(request.source, runtime_bars, **options,
