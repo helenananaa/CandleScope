@@ -240,7 +240,9 @@ def _descriptor() -> RuntimeDescriptor:
             "closedBarsOnly": False,
             "formingBar": True,
             "incremental": True,
-            "sessionTransport": "executeBatch-full-snapshot",
+            "sessionTransport": "executeBatch-negotiated-patches",
+            "outputUpdateSchema": "render.update-range/1",
+            "nativeResultMaterialization": "full",
             "sessionCapacity": 8,
             "historyPlanning": "host-range-warmup",
             "hostCapabilities": {"chartContext": chart_context},
@@ -1845,7 +1847,7 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             if patch is None:
                 normalized, inputs, meta = normalize()
                 output = _render_output(normalized)
-            if request.output_stream is not None:
+            if session_id or forming:
                 meta["outputUpdate"] = _output_update(
                     state.normalized if patch is not None and state is not None else None,
                     normalized,

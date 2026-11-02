@@ -18,13 +18,15 @@ The schema is `render.update-range/1`:
 - `mode: "range"`, `range: null`: there is no changed timed output. Whole native
   drawing scenes are still authoritative replacements, as before.
 
-The Pine bridge emits this metadata only when the host requested output-stream
-revisions. It derives a range from the same proven normalized prefixes used for
+The Pine bridge emits this metadata for realtime execution. With negotiated
+output-stream revisions it derives a range from the same proven prefixes used for
 RenderPatch, including both removed old points and appended new points. It does
 not subtract an interval from source time, infer a regular calendar, or compare
 complete output history on each tick. Changes to collection identities or record
 headers conservatively request a snapshot. Object scenes are already delivered
 whole and do not participate in timed range inference.
+Without a proven output base, the full result requests a snapshot; it cannot
+promise that only the current source-bar timestamp changed.
 
 The host uses its existing `indicator.replace_range` envelope for a proven
 range, slices every timed projection consistently, and omits the unused nested

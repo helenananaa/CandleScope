@@ -101,6 +101,10 @@ def assert_same(patched, full):
         assert patched.meta["outputUpdate"]["schema"] == "render.update-range/1"
         assert patched.meta["outputUpdate"]["mode"] in {"snapshot", "range"}
     patched = replace(patched, meta={key: value for key, value in patched.meta.items() if key != "outputUpdate"})
+    if full.ok:
+        assert full.meta["outputUpdate"]["schema"] == "render.update-range/1"
+        assert full.meta["outputUpdate"]["mode"] == "snapshot"
+    full = replace(full, meta={key: value for key, value in full.meta.items() if key != "outputUpdate"})
     assert patched == full
     # Byte-identical wire, key order included.
     assert json.dumps(patched.to_wire()) == json.dumps(full.to_wire())

@@ -31,8 +31,18 @@ forming replacements, confirmation and appends. A host that negotiated
 with complete Render IR snapshots, as do all other hosts. With
 `batch-execution.bars-patch/1` the host sends only the bars after those the runtime
 already holds; the SDK rebuilds the full window, and bars kept from the previous
-request are not normalized again. HTTP computations are independent. Analysis
-exposes native
+request are not normalized again. HTTP computations are independent.
+
+Realtime results additionally report `meta.outputUpdate` with schema
+`render.update-range/1`. A proven range covers changed displayed timestamps,
+including removed points and negative plot offsets; the host replaces that
+range. Resets, structural changes or an unproven output base request a complete
+snapshot, including the retained host-time window. Native object scenes remain
+whole replacements. This optional metadata does not change Render IR mathematics
+or eliminate the remaining full native `result()` conversion. See
+[`RENDER_UPDATE_RANGES.md`](../../docs/architecture/RENDER_UPDATE_RANGES.md).
+
+Analysis exposes native
 `meta.hostRequirements`. Requested contexts are discovered from compiled HIR,
 including imported libraries and conservative nested-context expansion. Dynamic
 symbols/timeframes require explicit context data; ambiguous warmup requires an
