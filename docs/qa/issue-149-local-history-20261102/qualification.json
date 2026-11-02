@@ -43,5 +43,15 @@
     "typecheck": true,
     "owning_OI_product_changed": false,
     "native_qualified": false
+  },
+  "main220_preflight": {
+    "source": "56bdd999",
+    "native_qualified": false,
+    "app_launched": false,
+    "strict_signature": true,
+    "source_sdk_files": 1037,
+    "built_files": 161,
+    "plugin_assets": 9,
+    "plugin_wheel_source_files": 76
   }
 }
