@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-02",
+  "source": "2bcd66ea1843820956b88774e8323ce5b6c1cfed",
+  "base": "af7e2951ea185d937add4852c305f4b7142c814c",
+  "integrated": {
+    "210": "3c5101ac: Python batch author/runtime, exact script input ranges and both default packaged runtimes",
+    "212": "c9f8562c: committed account snapshots and shared post-commit notification lifecycle"
+  },
+  "merge_fix": "Equivalent stale-reconcile clock injections from two branches were both retained by automatic merge. TypeScript caught the duplicate property; retain one injected clock and the complete original test assertions. Original typecheck log is preserved locally.",
+  "validation": {
+    "backend_and_python_plugin": "230 passed, 0 failed, 0 skipped in 25.27s using actual bundled Python; includes account streams, postcommit updates, shutdown, strategy routing, script range identity, serialization, fixed caches, practice accounts, replay HTTP/Node and scheduler boundaries.",
+    "frontend": 4786,
+    "isolated_performance_gate": 1,
+    "desktop_host": 127,
+    "frontend_failed_or_skipped": 0,
+    "architecture_plugin_i18n_typecheck_lint_and_production_build": "passed; existing cleanup-ref lint warning and large bundle notice remain",
+    "desktop_target_build": "VITE_DESKTOP_BUILD=1 build passed in 8.84s",
+    "runtime_asset_reuse": "Requirements, CCXT lock, all packages, desktop source and plugin build inputs unchanged from the qualified Python author branch. Assembly verifies both full package sizes and hashes before reuse.",
+    "main_alignment": "main1988a9b8 (#211) merged through the stability branch; no further backend/app, frontend or package changes relative to the tested integration."
+  },
+  "pending": [
+    "Exact-head cloud CI",
+    "Combined packaged Python editor/closed update/restart and account snapshot push/restart checks"
+  ],
+  "limits": "Development integration only. Standalone source PR native receipts retain their original application revisions; no full product, Windows, arbitrary script causality or stateful Python qualification."
+}
