@@ -1094,10 +1094,11 @@ class LocalDatasetService:
         return self.get_manifest(dataset_id)
 
     @staticmethod
-    def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    def _write_json(path: Path, payload: dict[str, Any], *, compact: bool = False) -> None:
         temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
         with temporary.open("w", encoding="utf-8", newline="\n") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            json.dump(payload, handle, ensure_ascii=False, indent=None if compact else 2,
+                      separators=(",", ":") if compact else None, sort_keys=True)
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
@@ -1129,13 +1130,20 @@ class LocalDatasetService:
             / f"{cache_key}.json"
         )
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
+            # Cache corruption is a miss; immutable source validation above is
+            # still mandatory even when a result file exists.
+            if path.stat().st_size > 64 * 1024 * 1024:
+                return None
+            envelope = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(envelope, dict) or envelope.get("schema") != "local-analysis-cache/2":
+                return None
+            payload = envelope.get("payload")
+            encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            if envelope.get("sha256") != hashlib.sha256(encoded).hexdigest():
+                return None
+            return payload if isinstance(payload, dict) else None
+        except (OSError, ValueError, TypeError):
             return None
-        except (OSError, json.JSONDecodeError):
-            path.unlink(missing_ok=True)
-            return None
-        return payload if isinstance(payload, dict) else None
 
     def write_analysis_cache(
         self,
@@ -1146,11 +1154,19 @@ class LocalDatasetService:
         payload: dict[str, Any],
     ) -> None:
         self._validated_revision_dir(dataset_id, data_epoch)
+        if re.fullmatch(r"[0-9a-f]{64}", cache_key) is None:
+            raise ValueError("cache_key must be a SHA-256 hex digest")
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        if len(encoded) > 32 * 1024 * 1024:
+            return
         directory = (
             self.root / ".cache" / dataset_id / data_epoch.removeprefix("sha256:")
         )
         directory.mkdir(parents=True, exist_ok=True)
-        self._write_json(directory / f"{cache_key}.json", payload)
+        self._write_json(directory / f"{cache_key}.json", {
+            "schema": "local-analysis-cache/2",
+            "sha256": hashlib.sha256(encoded).hexdigest(), "payload": payload,
+        }, compact=True)
 
     def list_datasets(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         if not self.root.exists():

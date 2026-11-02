@@ -1,7 +1,7 @@
 """SQLite persistence for trading accounts, practice orders, fills and journal.
 
-One connection guarded by a re-entrant lock; every public mutation is one
-transaction. Decimal values are stored as canonical text.
+The primary writer is guarded by a re-entrant lock; financial projections
+use thread-owned read-only WAL snapshots. Decimal values are canonical text.
 """
 from __future__ import annotations
 
@@ -173,6 +173,7 @@ class TradingStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._read_state = threading.local()
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -207,6 +208,44 @@ class TradingStore:
                 self._conn.execute("COMMIT")
 
     @contextmanager
+    def read_snapshot(self) -> Iterator[None]:
+        """One committed ledger generation without blocking local matching.
+
+        File readers use a thread-owned read-only WAL connection. A projection
+        called inside its own write transaction must see that uncommitted write
+        and must leave its commit/rollback ownership with the caller.
+        """
+        if getattr(self._read_state, "connection", None) is not None:
+            yield
+            return
+        with self._lock:
+            if self._conn.in_transaction or str(self.path) == ":memory:":
+                owns_read = not self._conn.in_transaction
+                if owns_read:
+                    self._conn.execute("BEGIN")
+                self._read_state.connection = self._conn
+                try:
+                    yield
+                finally:
+                    del self._read_state.connection
+                    if owns_read and self._conn.in_transaction:
+                        self._conn.execute("ROLLBACK")
+                return
+        db = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True,
+                             timeout=5, isolation_level=None)
+        db.row_factory = sqlite3.Row
+        try:
+            db.execute("PRAGMA query_only=ON")
+            db.execute("BEGIN")
+            self._read_state.connection = db
+            try:
+                yield
+            finally:
+                del self._read_state.connection
+        finally:
+            db.close()
+
+    @contextmanager
     def locked(self) -> Iterator[None]:
         with self._lock:
             yield
@@ -237,10 +276,16 @@ class TradingStore:
         return cursor.rowcount
 
     def one(self, sql: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
+        reader = getattr(self._read_state, "connection", None)
+        if reader is not None:
+            return _row(reader.execute(sql, params).fetchone())
         with self._lock:
             return _row(self._conn.execute(sql, params).fetchone())
 
     def all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        reader = getattr(self._read_state, "connection", None)
+        if reader is not None:
+            return _rows(reader.execute(sql, params).fetchall())
         with self._lock:
             return _rows(self._conn.execute(sql, params).fetchall())
 
@@ -323,11 +368,16 @@ class TradingStore:
 
     # ── practice cursors ────────────────────────────────────────
 
-    def cursor(self, exchange: str, market_type: str, symbol: str) -> dict[str, Any] | None:
-        row = self.one(
-            "SELECT * FROM practice_cursors WHERE exchange = ? AND market_type = ? AND symbol = ?",
-            (exchange, market_type, symbol),
-        )
+    def cursor(self, exchange: str, market_type: str, symbol: str, *, current: bool = False) -> dict[str, Any] | None:
+        sql = "SELECT * FROM practice_cursors WHERE exchange = ? AND market_type = ? AND symbol = ?"
+        params = (exchange, market_type, symbol)
+        if current:
+            # Initializing the shared execution cache must never install an
+            # older cursor captured by an account-view ledger snapshot.
+            with self._lock:
+                row = _row(self._conn.execute(sql, params).fetchone())
+        else:
+            row = self.one(sql, params)
         if row is not None:
             row["closes_only"] = bool(row["closes_only"])
         return row
