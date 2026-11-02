@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -24,6 +22,7 @@ from app.local_data import (
     LocalImportJobManager,
     LocalImportOptions,
 )
+from app.local_data.analysis_cache import bind_results, result_key
 from app.local_data.indicator_compute import (
     LOCAL_INDICATOR_NAMES,
     MAX_LOCAL_INDICATOR_BARS,
@@ -382,18 +381,12 @@ async def compute_local_indicators(
             body.interval or manifest["interval"],
         )
         effective_interval = plan.target.canonical
-        cache_key = hashlib.sha256(
-            json.dumps(
-                {"interval": effective_interval, "requests": request_payload},
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        cached = service.read_analysis_cache(
-            dataset_id,
-            data_epoch=body.data_epoch,
-            cache_key=cache_key,
-        )
+        cache_key = result_key(manifest=manifest, interval=effective_interval,
+                               requests=request_payload)
+        cached = (service.read_analysis_cache(
+            dataset_id, data_epoch=body.data_epoch, cache_key=cache_key,
+        ) if cache_key is not None else None)
+        cached = bind_results(cached, request_payload) if cached is not None else None
         if cached is not None:
             cached["cache"] = "hit"
             return cached
@@ -417,12 +410,11 @@ async def compute_local_indicators(
         result["derived"] = plan.derived
         result["aggregation_factor"] = plan.factor
         result["cache"] = "miss"
-        service.write_analysis_cache(
-            dataset_id,
-            data_epoch=body.data_epoch,
-            cache_key=cache_key,
-            payload=result,
-        )
+        if cache_key is not None and result.get("ok") is True:
+            service.write_analysis_cache(
+                dataset_id, data_epoch=body.data_epoch,
+                cache_key=cache_key, payload=result,
+            )
         return result
 
     try:
