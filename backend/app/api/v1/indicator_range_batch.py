@@ -10,6 +10,7 @@ from app.api.v1.stream_indicator_payloads import (
     _compute_builtin_range_patch_from_bars,
     _compute_plugin_range_patch_from_bars,
     _indicator_warmup_bars,
+    _indicator_compute_query_bounds,
     _unbound_indicator_runtime_service,
     _query_indicator_compute_bars_async,
     _replace_range_from_snapshot,
@@ -175,6 +176,15 @@ async def compute_indicator_range_batch_async(
         async def _compute() -> dict[str, Any]:
             bars = await _shared_bars()
             if job.meta.get("kind") == "script":
+                # The bars cache and physical query may cover other jobs. A
+                # script must receive the same input domain as a standalone
+                # request, including its own calendar-defined warmup. Later
+                # jobs must never consume a finite author window or introduce
+                # future inputs into an earlier calculation.
+                _, end_ms, compute_start_ms, _ = _indicator_compute_query_bounds(
+                    dm, job.meta, job.start, job.end, warmup_bars=_job_warmup(job),
+                )
+                bars = [bar for bar in bars if compute_start_ms <= int(bar.time)*1000 <= end_ms]
                 return await script_runtime_service.execute(
                     _script_runtime_request(
                         job.meta,

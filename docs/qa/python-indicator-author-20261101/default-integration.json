@@ -1,0 +1,37 @@
+{
+  "scope": "Python packaged default activation and closed-only host scheduling; native editor/chart qualification pending",
+  "tests": "121 host runtime/routes/bootstrap/script websocket/Python checks pass, including50forming updates produce0computations and oneconfirmedclose computes. Earlier95route/bootstrap/Python checks overlap.10desktop runtime preparation/cache tests andarchitecture pass.",
+  "bundle": "Real desktop preparation built current SDK, Pine bridge and Python bridge, used pinned verified Pine engine cache, produced both bundle entries and default route file, installed/probed both runtimes in fresh isolated root. Download/wheel cache APFS-cloned into task output; source caches preserved.",
+  "routing": "Explicit environment/profile files take priority. Package route fallback is strict and used only for unconfigured profiles. Default CLI routing still Pine; desktop asset route adds Python.",
+  "test_failure": "Three initial new fixture tests failed because LOCALAPPDATA is ignored onPOSIX. Corrected fixture toCANDLE_DATA_DIR. A newly created test route file outside temp was checked against expected contents and creation evidence then removed to restore absence; cleanup receipt retained.",
+  "artifacts": [
+    {
+      "path": "default-routing-tests.log.gz",
+      "sha256": "e43263f479728af9f0c6cc753ac610a3ae64fb6cb4dc6ae428bd895c38c069a0"
+    },
+    {
+      "path": "default-routing-tests2.log.gz",
+      "sha256": "d0aceb7293f7a01e692eb34ac73140a2ca7e8a1b77f380b9635abc73ccf618db"
+    },
+    {
+      "path": "closed-routing-tests.log.gz",
+      "sha256": "ddaf773170117db5cac87f70619ddcb7200b8894a224b531a55dfdc33a5ccbe8"
+    },
+    {
+      "path": "test-route-cleanup.json.gz",
+      "sha256": "d8ff88875604c5b22b7366b96d29cfe3d614c88c8ec38f38ef9fc1a804c54ef0"
+    },
+    {
+      "path": "desktop-plugin-build.log.gz",
+      "sha256": "25193ba77ef58d2592c32b19372296bd636a0e2e12c70d34c0899ba1ad483c83"
+    },
+    {
+      "path": "desktop-runtime-tests.log.gz",
+      "sha256": "0dd89b1a9c34f905d785a586d9a7e1c174678d9a7ccd6b5054c3e5fe57fb7e52"
+    },
+    {
+      "path": "architecture.log.gz",
+      "sha256": "ce71147bafab75fff355b00226a57578d84e372e91381815f910f1c54d0f7244"
+    }
+  ]
+}

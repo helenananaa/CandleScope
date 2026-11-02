@@ -1,0 +1,38 @@
+{
+  "stage": "In-progress public SDK and local managed installation; not default app/native qualification",
+  "tests": "47 author/executor/runtime tests including real JSON Lines subprocess handshake/analyze/execute, numeric SMA oracle, window metadata and forming-tail exclusion",
+  "packaging": "Current Python0.1.0 and SDK0.2.1 wheels built; fixed-probe .cspkg verified and installed through real PluginInstaller into isolated output profile. Managed supervisor analyze+execute hashes passed.",
+  "prior_failure": "Installer probe1 omitted required expected_sha256 argument before installation; corrected probe2 passed. Both raw logs retained.",
+  "remaining": [
+    "Default bundled activation and editor/catalog/native chart/restart acceptance",
+    "Parent-sidecar death supervision of fresh worker",
+    "Optional dependency and incremental modes",
+    "Windows native execution/process-tree qualification"
+  ],
+  "artifacts": [
+    {
+      "path": "sdk-runtime-tests.log.gz",
+      "sha256": "7c0005167145d1246858521f375f57cff58da8e0f720587466daf8c7e6bbaebb"
+    },
+    {
+      "path": "wheel-build.log.gz",
+      "sha256": "bbea5c2a301a5020ba3c0f836d5893f597f92fd524125f795b15574ca7b91f42"
+    },
+    {
+      "path": "sdk-wheel-build.log.gz",
+      "sha256": "c1c3dfe2f23887535c4c87c78dfc7190163a665cccfce442ee1afdfc020f24a6"
+    },
+    {
+      "path": "bundle-build.log.gz",
+      "sha256": "ee3963ac59c3427989673dd9e238535ae940c4484382a2600cb57c11342ec007"
+    },
+    {
+      "path": "installer-probe.log.gz",
+      "sha256": "aef2ebcc36bde2897a46d5bacb556636414b9d38a7e1be0c545adbaba755b529"
+    },
+    {
+      "path": "installer-probe2.log.gz",
+      "sha256": "99639c72b7ffbc3bc20e35997e08efd05bdb8c26ddc9b19b1ece1c5ee39ac3ed"
+    }
+  ]
+}

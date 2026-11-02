@@ -1,0 +1,12 @@
+{
+  "status": "component-verified; native qualification remains pending",
+  "problem": "Actual Python finite-window3 earlier request returned3points alone but0 when batched with later range; shared query passed future inputs into every script.",
+  "fixes": [
+    "Use each script job own target and same calendar warmup bounds as standalone query",
+    "Keep opaque script output snapshot/inflight reuse exact target range; canonical bars can still be shared and clipped",
+    "Include WS historyLimit in script execution identity to distinguish fixed seed from HTTP warmup"
+  ],
+  "tests": "128 passed: batch, result cache, runtime service, render serialization, WS shape and actual Python author/executor/SDK tests. New cases exercise Python/Pine/community label, unequal warmup, covering raw bars/output/inflight and WS history input identities.",
+  "actual_probe": "Actual Python executor before/after: earlier job now same3numeric points alone and batched; source code untouched.",
+  "limitations": "This deterministic proof does not establish the cause of every prior native missing point. Full editor/save/newclose/restart acceptance still required."
+}

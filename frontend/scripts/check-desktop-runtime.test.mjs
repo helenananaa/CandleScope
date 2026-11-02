@@ -33,39 +33,43 @@ function fixture(t, platform = "darwin", arch = "arm64") {
   const writeManifest = (value) => fs.writeFileSync(
     path.join(pluginsRoot, "manifest.json"), JSON.stringify(value),
   );
-  writeManifest({ schemaVersion: 2, plugins: [plugin] });
+  const pythonBytes = Buffer.from("isolated Python indicator bundle fixture");
+  const python = { runtimeId: "candlescope.python-indicator", filename: "python.cspkg", size: pythonBytes.length,
+    sha256: `sha256:${createHash("sha256").update(pythonBytes).digest("hex")}` };
+  fs.writeFileSync(path.join(pluginsRoot, python.filename), pythonBytes);
+  writeManifest({ schemaVersion: 2, plugins: [plugin, python] });
   return {
     context: { packager: { projectDir }, electronPlatformName: platform, arch: Arch[arch] },
-    plugin, pluginsRoot, writeManifest, controlRoot,
+    plugin, python, pluginsRoot, writeManifest, controlRoot,
   };
 }
 
 for (const [platform, arch] of [["darwin", "arm64"], ["darwin", "x64"], ["win32", "x64"], ["linux", "x64"]]) {
-  test(`packaging accepts the single verified Pine runtime for ${platform}/${arch}`, async (t) => {
+  test(`packaging accepts both verified Pine and Python runtimes for ${platform}/${arch}`, async (t) => {
     const { context } = fixture(t, platform, arch);
     await checkDesktopRuntime(context);
   });
 }
 
 test("packaging rejects absent, malformed, duplicate, and retired runtime selections", async (t) => {
-  const { context, plugin, writeManifest } = fixture(t);
-  for (const plugins of [undefined, null, {}, [], [null], [plugin, plugin],
+  const { context, plugin, python, writeManifest } = fixture(t);
+  for (const plugins of [undefined, null, {}, [], [null], [plugin], [python], [plugin, plugin], [python, python], [plugin, null],
     [{ ...plugin, runtimeId: "candlescope.pyne" }],
-    [plugin, { ...plugin, runtimeId: "candlescope.pyne" }]]) {
+    [plugin, { ...plugin, runtimeId: "candlescope.pyne" }], [plugin, python, python]]) {
     writeManifest({ schemaVersion: 2, plugins });
-    await assert.rejects(checkDesktopRuntime(context), /bundled Pine runtime/);
+    await assert.rejects(checkDesktopRuntime(context), /bundled first-party runtimes/);
   }
   writeManifest({ schemaVersion: 1, plugins: [plugin] });
-  await assert.rejects(checkDesktopRuntime(context), /bundled Pine runtime/);
+  await assert.rejects(checkDesktopRuntime(context), /bundled first-party runtimes/);
 });
 
 test("packaging still enforces bundle size and hash", async (t) => {
-  const { context, plugin, pluginsRoot, writeManifest } = fixture(t);
-  writeManifest({ schemaVersion: 2, plugins: [{ ...plugin, size: plugin.size + 1 }] });
+  const { context, plugin, python, pluginsRoot, writeManifest } = fixture(t);
+  writeManifest({ schemaVersion: 2, plugins: [{ ...plugin, size: plugin.size + 1 }, python] });
   await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch/);
-  writeManifest({ schemaVersion: 2, plugins: [plugin] });
-  fs.writeFileSync(path.join(pluginsRoot, plugin.filename), Buffer.alloc(plugin.size));
-  await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch/);
+  writeManifest({ schemaVersion: 2, plugins: [plugin, python] });
+  fs.writeFileSync(path.join(pluginsRoot, python.filename), Buffer.alloc(python.size));
+  await assert.rejects(checkDesktopRuntime(context), /Bundled runtime hash mismatch: candlescope.python-indicator/);
 });
 
 test("packaging rejects a modified desktop control adapter", async (t) => {
