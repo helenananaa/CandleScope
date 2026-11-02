@@ -256,6 +256,10 @@ function LiveChartCell({
   recordMultiChartCellRender(cell.id);
   useLocale();
   const marketWorkspaceResources = useMarketDataWorkspaceResources();
+  const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
+  const studyOwner = historyStudyOwner(workspaceId, cell.id);
+  const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
+  const liveControlsEnabled = !study.masked && !study.pending && !study.busy;
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
     data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,
   }) : null, [cell.id, marketWorkspaceResources]);
@@ -548,8 +552,17 @@ function LiveChartCell({
     indicators.status.computing,
     sourceMarketData.actions.holdHistoryHydrationForIndicators,
   );
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (study.masked && study.playback) return; // The visible study reports its own prefix below.
+    if (study.pending || study.masked || study.busy) {
+      onControlObservation?.(cell.id, { mode: "restoring-study", session: cell.session,
+        indicatorSignature: "", marketReady: false, indicatorsReady: false, barCount: 0, loading: true,
+        initialHistoryPending: true, loadingMoreLeft: false, paused: true, computing: false,
+        indicatorErrors: [], indicatorOutputPoints: [], error: study.error ? String(study.error) : null });
+      return;
+    }
     onControlObservation?.(cell.id, {
+      mode: "live",
       session: { exchange: chartSession.view.exchange, marketType: chartSession.view.marketType,
         symbol: chartSession.view.symbol, interval: chartSession.view.interval },
       indicatorSignature: indicatorSignature(indicators.view.activeIndicators),
@@ -570,7 +583,8 @@ function LiveChartCell({
   }, [cell.id, chartSession.view.exchange, chartSession.view.marketType, chartSession.view.symbol,
     chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
     sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
-    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation]);
+    sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation,
+    study.pending, study.masked, study.playback, study.busy, study.error, cell.session]);
   useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
     indicators: indicators.view.activeIndicators,
@@ -675,15 +689,16 @@ function LiveChartCell({
 
   useControlCommands(() => chartCommands({ cellId: cell.id, session: chartSession, indicators,
     settings: { settings: combinedSettings, setSettings: setCombinedSettings, resolvedTheme },
-    marketData: sourceMarketData, surface: chartSurface, drawings }));
-  useControlCommands(() => drawingCommands(cell.id, chartSurface, drawings, chartSession.view.sessionKey));
-  useControlCommands(() => exportCommands(cell.id, exportFlow));
+    marketData: sourceMarketData, surface: chartSurface, drawings }), liveControlsEnabled);
+  useControlCommands(() => drawingCommands(cell.id, chartSurface, drawings, chartSession.view.sessionKey), liveControlsEnabled);
+  useControlCommands(() => exportCommands(cell.id, exportFlow), liveControlsEnabled);
   const [pluginControlSession] = useState(() => new PluginControlSession());
-  useControlCommands(() => pluginCommands(cell.id, plugins, pluginControlSession));
-  useControlCommands(() => ({ id: `panels:${cell.id}`, title: "Chart panels", context: () => ({ session: chartSession.view.sessionKey }),
-    snapshot: () => ({ indicators: showIndicatorPanel, settings: showSettings, alerts: showAlertsPanel, strategy: strategyPanelOpen }), commands: [
+  useControlCommands(() => pluginCommands(cell.id, plugins, pluginControlSession), liveControlsEnabled);
+  useControlCommands(() => ({ id: `panels:${cell.id}`, title: "Chart panels", context: () => ({ session: chartSession.view.sessionKey, historical: study.masked }),
+    snapshot: () => ({ indicators: showIndicatorPanel, settings: showSettings, alerts: !study.masked && showAlertsPanel, strategy: !study.masked && strategyPanelOpen }), commands: [
       command("show", "Open/close a chart panel. Rediscover commands after opening lazy strategy or settings panels.",
         object({ panel: choice(["indicators", "settings", "alerts", "strategy"]), visible: bool }), ({ panel, visible }) => {
+          if (study.masked && (panel === "alerts" || panel === "strategy")) throw new Error("HISTORICAL_STUDY_ACTIVE");
           if (panel === "indicators") setShowIndicatorPanel(visible);
           if (panel === "settings") setShowSettings(visible);
           if (panel === "alerts") setShowAlertsPanel(visible);
@@ -785,9 +800,6 @@ function LiveChartCell({
   }, [chartSurface.actions]);
 
 
-  const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
-  const studyOwner = historyStudyOwner(workspaceId, cell.id);
-  const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
   const studyMaskedRef = useRef(study.masked);
   useLayoutEffect(() => {
     studyMaskedRef.current = study.masked;
@@ -1066,6 +1078,7 @@ function LiveChartCell({
           )}
           {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
+              cellId={cell.id} revision={study.view!.revision} onControlObservation={onControlObservation}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={study.move} onRetry={study.retry} />
           </Suspense>}
@@ -1076,7 +1089,7 @@ function LiveChartCell({
           {!study.masked && study.error && <div className="study-recovery-message" role="alert">
             {t("study.error")} <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button>
           </div>}
-          {active && model.chartWorkspace.exportPanel.isOpen && (
+          {active && !study.masked && model.chartWorkspace.exportPanel.isOpen && (
             <Suspense fallback={null}>
               <ExportPanel {...model.chartWorkspace.exportPanel} />
             </Suspense>

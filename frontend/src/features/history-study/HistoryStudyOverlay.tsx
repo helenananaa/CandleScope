@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
+import { useControlCommands } from "../app-control/useControlCommands.js";
+import { indicatorSignature, type ControlCellObservation } from "../app-control/controlModel.js";
+import { historyStudyCommands } from "./historyStudyCommands.js";
 import { ChartErrorBoundary } from "../../app/AppProviders.js";
 import SingleChartPanes from "../../components/SingleChartPanes.js";
 import { t } from "../../i18n/index.js";
@@ -18,7 +22,9 @@ import { studyInputHasChanged } from "./historyStudyCorrections.js";
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
+export default function HistoryStudyOverlay({ cellId, revision, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
+  cellId: string; revision: number;
+  onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
   onMove(cursorMs: number, active?: boolean): Promise<boolean>; onRetry(): void;
@@ -26,6 +32,12 @@ export default function HistoryStudyOverlay({ playback, manager, style, indicato
   useLocale();
   const { input, store, cursorMs } = playback;
   const series = input.series;
+  const surface = useChartSurfaceRuntime();
+  const controlAbort = useRef<AbortController | null>(null);
+  useLayoutEffect(() => {
+    const controller = new AbortController(); controlAbort.current = controller;
+    return () => { controller.abort(); if (controlAbort.current === controller) controlAbort.current = null; };
+  }, [input.id]);
   const [playing, setPlaying] = useState(false);
   const [value, setValue] = useState(() => formatUtcDateTimeInput(cursorMs));
   const [invalid, setInvalid] = useState(false);
@@ -83,6 +95,20 @@ export default function HistoryStudyOverlay({ playback, manager, style, indicato
     exchange: series.exchange, marketType: series.marketType, symbol: series.symbol, interval: series.interval,
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });
+  useControlCommands(() => historyStudyCommands({ cellId, playback, revision, busy: busy || editor !== null, playing,
+    renderedVersion: version, indicators, surface, data: manager.historyStudy, move: onMove, play: setPlaying,
+    signal: () => controlAbort.current?.signal ?? null }));
+  useLayoutEffect(() => {
+    onControlObservation?.(cellId, { mode: "history-study", study: { id: input.id, cursorMs, revision }, session: series,
+      indicatorSignature: indicatorSignature(indicators.view.activeIndicators),
+      marketReady: true, indicatorsReady: !indicators.status.computing && indicators.view.activeIndicators.every(item =>
+        !item.error && (item.visible === false || item.lines?.some(line => line.data.length > 0))),
+      barCount: rows.length, loading: busy, initialHistoryPending: false, loadingMoreLeft: false,
+      paused: !playing, computing: indicators.status.computing, indicatorErrors: indicators.view.activeIndicators.flatMap(item => item.error ? [item.error] : []),
+      indicatorOutputPoints: indicators.view.activeIndicators.map(item => item.lines?.reduce((n, line) => n + line.data.length, 0) ?? 0),
+      error: error ? String(error) : null });
+  }, [busy, cellId, cursorMs, error, indicators.status.computing, indicators.view.activeIndicators, input.id, onControlObservation, playing, revision, rows.length, series]);
+  useLayoutEffect(() => () => onControlObservation?.(cellId, null), [cellId, onControlObservation]);
   async function jump() {
     const target = parseUtcDateTimeInput(value);
     if (target === null || target < playback.minimumMs || target > playback.maximumMs) { setInvalid(true); return; }
@@ -98,7 +124,7 @@ export default function HistoryStudyOverlay({ playback, manager, style, indicato
     <div className="quick-replay-body"><div className="quick-replay-chart">
       {(error || notesError) ? <p className="trading-error" role="alert">{t("study.error")}</p> : null}
       {error ? <button className="trading-button" type="button" onClick={onRetry}>{t("study.retry")}</button> : null}
-      <ChartErrorBoundary><SingleChartPanes seriesStore={store} symbol={series.symbol} interval={series.interval}
+      <ChartErrorBoundary><SingleChartPanes ref={surface.ref} seriesStore={store} symbol={series.symbol} interval={series.interval}
         drawingKeyBase={`history-study:${input.id}`} drawingReadOnly
         loading={false} dataMeta={dataMeta} datasetKey={input.id} upColor={style.upColor} downColor={style.downColor}
         {...(style.chartType === undefined ? {} : { chartType: normalizeMainChartType(style.chartType) })}

@@ -145,6 +145,6 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
 
   const own = state.owner === owner ? state : null;
   return { ...own, capture, move, select, retry: () => setReload(value => value + 1),
-    masked: Boolean(own?.view?.active || ((!own || own.loading || !own.view) && activeHint(owner))),
+    masked: Boolean(!own || own.loading || own.view?.active || (!own.view && activeHint(owner))),
     active: Boolean(own?.view?.active), pending: !own || own.loading, error: own?.error ?? null };
 }
