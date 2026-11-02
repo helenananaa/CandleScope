@@ -1,0 +1,203 @@
+{
+  "passed": false,
+  "coverage": "Native1fresh default Python/Pine installation/catalog.2editor language/starteravailable butnullwarmupflatprotocolfailed;fixedby29c1.3offscreenpointassertion,actualviewportrequestendedbeforethemissingtime.4full500/481valuespass,newclosearrived,thenhelperfailedfinitewindowborderafterhistoryprefixexpanded.5preview/full500/newclose/saveandfirstnormalexitpass;restorednumericcoveragepartial412vs481atfirstreadyframe.6helperwindowcriterionyielded0comparablesinvisibleolderwindow. No whole native acceptance.",
+  "remaining": "Resolve correct declared batch-window/rendered coverage contract and await actualcomplete hydration; retain strictnumeric/source/save/restart requirements. Do not blindly rerun or classifyeverymissingpointashelpererror.",
+  "artifacts": [
+    {
+      "path": "1/acceptance.json.gz",
+      "sha256": "040f09859a7ef50af92bfd556f68f39d1f7c0bd7b7d71723ffb65a5257bec6a7"
+    },
+    {
+      "path": "1/traffic.json.gz",
+      "sha256": "b90433f1433162ea4dee03516dd69cbebe91a5b936862fc47a9157c2d4f2e7dc"
+    },
+    {
+      "path": "1/source-match.log.gz",
+      "sha256": "65fd8c95ccedcbc57f0ce7586a1b44a9ab45e58e18b3830152e848efd797c4b0"
+    },
+    {
+      "path": "1/assembly.json.gz",
+      "sha256": "9c27f06192d7af5df29288eb35d4e9395f215f6132e4e9174aad1a911e5da19c"
+    },
+    {
+      "path": "1/native-run.log.gz",
+      "sha256": "f85b01cefcb68777c08e5f073574a0569b77e38e974e620749501914251dfa85"
+    },
+    {
+      "path": "1/failure.png",
+      "sha256": "978279b471635475b1a6fd942484e93f765faa8a6e06b8c67a6ee1d07043f3b5"
+    },
+    {
+      "path": "2/acceptance.json.gz",
+      "sha256": "05c50a0e7429f993cb2dc2d7d91765982fdafb84f005cd6b786354328f802dce"
+    },
+    {
+      "path": "2/traffic.json.gz",
+      "sha256": "97f12eed0882bd85c032c1fbe199b45aa8e31febf631ecbe3f80f6a7e2fcc416"
+    },
+    {
+      "path": "2/source-match.log.gz",
+      "sha256": "65fd8c95ccedcbc57f0ce7586a1b44a9ab45e58e18b3830152e848efd797c4b0"
+    },
+    {
+      "path": "2/assembly.json.gz",
+      "sha256": "9c27f06192d7af5df29288eb35d4e9395f215f6132e4e9174aad1a911e5da19c"
+    },
+    {
+      "path": "2/native-run.log.gz",
+      "sha256": "f85b01cefcb68777c08e5f073574a0569b77e38e974e620749501914251dfa85"
+    },
+    {
+      "path": "2/native-run2.log.gz",
+      "sha256": "4df80d6bdfcf2d39b495c670ea55b454db1d1e56b42cd893bdb51035826b35c1"
+    },
+    {
+      "path": "2/python-editor.png",
+      "sha256": "5135c705c14ff4d36f454afae8a7c4b54a7ab268b1414c7a874a81e0c6b16485"
+    },
+    {
+      "path": "2/failure.png",
+      "sha256": "56aa3426feb9e3a7644ecc39169f04e307b523dab711ce4a4adafe06badf90d1"
+    },
+    {
+      "path": "3/acceptance.json.gz",
+      "sha256": "3aca01ed29fbf9f9ad3db60eb4680c272891374ddc76b027b54474e5261be994"
+    },
+    {
+      "path": "3/traffic.json.gz",
+      "sha256": "a6b392bef1b8d971c555fa431755ccd3fb5493a118c4c4b2724ede8421f0321c"
+    },
+    {
+      "path": "3/source-match.log.gz",
+      "sha256": "0e183f82efbfaff340ade1c57af651a1cbaf58d4c60cab1689f84cb5bbc1d18c"
+    },
+    {
+      "path": "3/signature-before.log.gz",
+      "sha256": "aaa36d302b70ed1e2d0079720209d77a136d19db4d9ef29186e5ec8061392fc7"
+    },
+    {
+      "path": "3/assembly.json.gz",
+      "sha256": "5e7f6ba39d0aba035417ca49dc2ae34f9b1f8c7d46e3283de51e5992cd7c3df6"
+    },
+    {
+      "path": "3/native-run3.log.gz",
+      "sha256": "ae6f2f475d750c533f5742b6cbbd4efd9c8a60fc1e945786e71a9ec9ae5221eb"
+    },
+    {
+      "path": "3/python-editor.png",
+      "sha256": "c2a344f9d17a906c5d72c47634cd6fbfdc391b38760cee098bac52766eb80214"
+    },
+    {
+      "path": "3/failure.png",
+      "sha256": "7585968a935c744ede030fcb2d715b810841f4de8c15ce6f22062a68913e8fd1"
+    },
+    {
+      "path": "4/acceptance.json.gz",
+      "sha256": "c5649b287ed7ed4e4e17b24c27e0031105fbbc73b64aa0ae4621d9747980ff3f"
+    },
+    {
+      "path": "4/traffic.json.gz",
+      "sha256": "449ffb6d90dc89925e9fb7eca9f10d24e568e95e20c7f159c9a217106943526b"
+    },
+    {
+      "path": "4/source-match.log.gz",
+      "sha256": "d7ea215fc789883d3b1450bb841c102c4cf538ad6678d765e99fd7bd0f516194"
+    },
+    {
+      "path": "4/assembly.json.gz",
+      "sha256": "baaf998eaa41cc8169fa5e8b72c15cdab59918169f1d1cee0d2335d87f3ced39"
+    },
+    {
+      "path": "4/native-run4.log.gz",
+      "sha256": "1068f4ec1ffdab55e6ec2c7f1f9cccc783954baa727243b821fa6c0dc1536dd2"
+    },
+    {
+      "path": "4/python-editor.png",
+      "sha256": "8198d765cd75bb5737e39ef044136733ca68525425d80aef2e62d0a6e9151512"
+    },
+    {
+      "path": "4/python-saved.png",
+      "sha256": "5a9d8bdb229744ae777ab2235f76c760dc004757ed5c4f209efe7476f9a1f77f"
+    },
+    {
+      "path": "4/failure.png",
+      "sha256": "e7f335704fe121d1513d498e965247a795f91e1a78288ed5689b0a5be5d32d62"
+    },
+    {
+      "path": "5/acceptance.json.gz",
+      "sha256": "a66d5af689433c697f5aefc66ab76823561b00b550aa8b1d2c3e38d004359925"
+    },
+    {
+      "path": "5/traffic.json.gz",
+      "sha256": "1cf48cc11e59eae417e5f63415ea62307316def6219835469876109d77347b34"
+    },
+    {
+      "path": "5/failure-chart-data.json.gz",
+      "sha256": "c66651fa4a3e66b48d7e5cb9b548cf70b0cf23ebe0d8b9ecfc323bee741cca6c"
+    },
+    {
+      "path": "5/source-match.log.gz",
+      "sha256": "d7ea215fc789883d3b1450bb841c102c4cf538ad6678d765e99fd7bd0f516194"
+    },
+    {
+      "path": "5/signature-before.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "5/assembly.json.gz",
+      "sha256": "baaf998eaa41cc8169fa5e8b72c15cdab59918169f1d1cee0d2335d87f3ced39"
+    },
+    {
+      "path": "5/native-run5.log.gz",
+      "sha256": "e970c64311a4fb2cff3cf6b6ec381ca2cc10483821d7ddaae8e5c947648273e1"
+    },
+    {
+      "path": "5/python-editor.png",
+      "sha256": "e6604bf4593c0d34d96f5f3b0c4d18fd20f78dc0e43360529822bffdcf5cd4e8"
+    },
+    {
+      "path": "5/python-saved.png",
+      "sha256": "2d9e7d0d6f61b8164c2d950ebb908ded8b50053dd828fee8b3f3691e4fa9757d"
+    },
+    {
+      "path": "5/failure.png",
+      "sha256": "784b6cd3395bddac5d57a7b46274ebc2ad71bdb3a6df96d3c1f48108e1b04117"
+    },
+    {
+      "path": "6/acceptance.json.gz",
+      "sha256": "f57cc1c8fee808ae798d3ddf7aeb4c4072dc21474f182c0b3ff144790f32e1ea"
+    },
+    {
+      "path": "6/traffic.json.gz",
+      "sha256": "ddbf78db252810bdd791c4648d25f657ae50d5348d9fa9bd3480cd653d509f8f"
+    },
+    {
+      "path": "6/failure-chart-data.json.gz",
+      "sha256": "710e5ebe7da84254a19ad406e17cd6008d98c81a285004e770bc5e3c918d232c"
+    },
+    {
+      "path": "6/source-match.log.gz",
+      "sha256": "d7ea215fc789883d3b1450bb841c102c4cf538ad6678d765e99fd7bd0f516194"
+    },
+    {
+      "path": "6/signature-before.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "6/assembly.json.gz",
+      "sha256": "baaf998eaa41cc8169fa5e8b72c15cdab59918169f1d1cee0d2335d87f3ced39"
+    },
+    {
+      "path": "6/native-run6.log.gz",
+      "sha256": "56bfc8b6b9b0e250c4b2ef1b364ae6322ab56f27cd72d05a2de31bc1fdec9465"
+    },
+    {
+      "path": "6/python-editor.png",
+      "sha256": "d43083306dc8f429ffa7ba5d60ae0d3658a4a225a41dc272896967318293e30e"
+    },
+    {
+      "path": "6/failure.png",
+      "sha256": "2b6763a201ee826f5dbf73d107aa04b3bded34b1921ba6dab55fd821f1042198"
+    }
+  ]
+}

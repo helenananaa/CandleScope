@@ -1,0 +1,16 @@
+{
+  "main": "d2bcd416b89ca40dbe89b3ec4aa2e450335fef02",
+  "change": "Merged current main205 restored-session canonical identity fix; disjoint4frontendfiles. Control/workspace tests and fresh VITE_DESKTOP_BUILD production build23.24s passed.",
+  "native3": "Source29c1matched;catalog/editor/preview ready passed after nullable fix, but helper compared unrequested offscreen point1793526780 while actualviewportrequestended1793521500. Not a proven algorithm defect.",
+  "helper": "Now compares every visible closed point with >=10samples plus separately computes complete500closedbar snapshot through real packaged SDK, checking all481SMA20outputs. Newclose waits for actuallatest rendered SMA20, then save/restart retained.",
+  "artifacts": [
+    {
+      "path": "main205-control-tests.log.gz",
+      "sha256": "ffa1cc003ef36361913b64203156a7ebe5b266b972d1964a6127eb5b4768d765"
+    },
+    {
+      "path": "main205-frontend-build.log.gz",
+      "sha256": "6ed79e49235e38601ead15e752759c9e76968bcc55c8d8211df2c0d1e9dee376"
+    }
+  ]
+}
