@@ -1,0 +1,236 @@
+[
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": false,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.498666,
+        "total_ms": 33.784584,
+        "tick_p50_ms": 0.327542,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 20.041744,
+        "total_ms": 181.052744,
+        "tick_p50_ms": 1.763583,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 93.898002,
+        "total_ms": 950.713167,
+        "tick_p50_ms": 9.397708,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 0
+  },
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": true,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.499084,
+        "total_ms": 27.885795,
+        "tick_p50_ms": 0.270458,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 19.354753,
+        "total_ms": 109.143168,
+        "tick_p50_ms": 1.073375,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 95.694958,
+        "total_ms": 625.538496,
+        "tick_p50_ms": 6.197291,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 0
+  },
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": true,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.497288,
+        "total_ms": 28.06346,
+        "tick_p50_ms": 0.272,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 19.354628,
+        "total_ms": 108.911629,
+        "tick_p50_ms": 1.073042,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 93.896713,
+        "total_ms": 600.170085,
+        "tick_p50_ms": 5.941833,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 1
+  },
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": false,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.511417,
+        "total_ms": 33.713868,
+        "tick_p50_ms": 0.326416,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 19.866174,
+        "total_ms": 176.564131,
+        "tick_p50_ms": 1.737084,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 94.042536,
+        "total_ms": 944.94004,
+        "tick_p50_ms": 9.402625,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 1
+  },
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": false,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.49158,
+        "total_ms": 33.289084,
+        "tick_p50_ms": 0.3235,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 19.854125,
+        "total_ms": 175.788044,
+        "tick_p50_ms": 1.735542,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 94.851371,
+        "total_ms": 965.092884,
+        "tick_p50_ms": 9.58175,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 2
+  },
+  {
+    "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+    "tracemalloc": false,
+    "cprofile": false,
+    "validated_prefix": true,
+    "measurements": [
+      {
+        "history_rows": 1000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 2.46391,
+        "total_ms": 27.607706,
+        "tick_p50_ms": 0.2675,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 10000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 19.298587,
+        "total_ms": 109.072545,
+        "tick_p50_ms": 1.067125,
+        "python_peak_bytes": null
+      },
+      {
+        "history_rows": 50000,
+        "ticks": 100,
+        "patches": 100,
+        "full_native_results": 100,
+        "native_result_ms": 94.175335,
+        "total_ms": 601.000506,
+        "tick_p50_ms": 5.915375,
+        "python_peak_bytes": null
+      }
+    ],
+    "trial": 2
+  }
+]

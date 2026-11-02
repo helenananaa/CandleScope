@@ -1,0 +1,403 @@
+{
+  "scope": "Actual pinned native engine; direct source bridge; tracemalloc enabled; no IPC or external market. Native conversion timing is included in total.",
+  "tracemalloc": false,
+  "cprofile": true,
+  "measurements": [
+    {
+      "history_rows": 100,
+      "ticks": 20,
+      "patches": 20,
+      "full_native_results": 20,
+      "native_result_ms": 0.174164,
+      "total_ms": 14.547168,
+      "tick_p50_ms": 0.694042,
+      "python_peak_bytes": null,
+      "profile_top": [
+        {
+          "file": "runtime.py",
+          "line": 1670,
+          "function": "execute_batch",
+          "calls": 20,
+          "total_ms": 0.7554310000000001,
+          "cumulative_ms": 13.967374000000001
+        },
+        {
+          "file": "runtime.py",
+          "line": 1571,
+          "function": "_output_patch",
+          "calls": 20,
+          "total_ms": 0.260797,
+          "cumulative_ms": 3.9464140000000003
+        },
+        {
+          "file": "sessions.py",
+          "line": 196,
+          "function": "execute",
+          "calls": 20,
+          "total_ms": 0.46470200000000006,
+          "cumulative_ms": 2.031334
+        },
+        {
+          "file": "runtime.py",
+          "line": 912,
+          "function": "_normalize_output",
+          "calls": 20,
+          "total_ms": 0.665644,
+          "cumulative_ms": 1.6404150000000002
+        },
+        {
+          "file": "runtime.py",
+          "line": 401,
+          "function": "_analyze_native",
+          "calls": 20,
+          "total_ms": 0.19679900000000003,
+          "cumulative_ms": 1.591541
+        },
+        {
+          "file": "runtime.py",
+          "line": 1543,
+          "function": "_record_patches",
+          "calls": 160,
+          "total_ms": 0.433275,
+          "cumulative_ms": 1.4872490000000003
+        },
+        {
+          "file": "sessions.py",
+          "line": 127,
+          "function": "commit",
+          "calls": 20,
+          "total_ms": 0.07863,
+          "cumulative_ms": 1.218083
+        },
+        {
+          "file": "models.py",
+          "line": 989,
+          "function": "__post_init__",
+          "calls": 80,
+          "total_ms": 0.22491000000000003,
+          "cumulative_ms": 1.2088750000000001
+        },
+        {
+          "file": "models.py",
+          "line": 102,
+          "function": "_json_value",
+          "calls": 680,
+          "total_ms": 0.6118250000000001,
+          "cumulative_ms": 1.174625
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.isinstance>",
+          "calls": 6520,
+          "total_ms": 0.7482270000000001,
+          "cumulative_ms": 1.172008
+        },
+        {
+          "file": "models.py",
+          "line": 1027,
+          "function": "__post_init__",
+          "calls": 80,
+          "total_ms": 0.20258700000000002,
+          "cumulative_ms": 1.096299
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.all>",
+          "calls": 620,
+          "total_ms": 0.418366,
+          "cumulative_ms": 0.872238
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.any>",
+          "calls": 220,
+          "total_ms": 0.158359,
+          "cumulative_ms": 0.707231
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'get' of 'dict' objects>",
+          "calls": 4900,
+          "total_ms": 0.6903110000000001,
+          "cumulative_ms": 0.6903110000000001
+        },
+        {
+          "file": "runtime.py",
+          "line": 361,
+          "function": "_feature_is_host_blocked",
+          "calls": 80,
+          "total_ms": 0.08599100000000001,
+          "cumulative_ms": 0.6301640000000001
+        }
+      ]
+    },
+    {
+      "history_rows": 1000,
+      "ticks": 20,
+      "patches": 20,
+      "full_native_results": 20,
+      "native_result_ms": 0.745873,
+      "total_ms": 18.918293,
+      "tick_p50_ms": 0.863042,
+      "python_peak_bytes": null,
+      "profile_top": [
+        {
+          "file": "runtime.py",
+          "line": 1670,
+          "function": "execute_batch",
+          "calls": 20,
+          "total_ms": 0.9584060000000001,
+          "cumulative_ms": 17.797084
+        },
+        {
+          "file": "sessions.py",
+          "line": 196,
+          "function": "execute",
+          "calls": 20,
+          "total_ms": 1.94246,
+          "cumulative_ms": 4.307500000000001
+        },
+        {
+          "file": "runtime.py",
+          "line": 1571,
+          "function": "_output_patch",
+          "calls": 20,
+          "total_ms": 0.26816700000000004,
+          "cumulative_ms": 3.867122
+        },
+        {
+          "file": "runtime.py",
+          "line": 912,
+          "function": "_normalize_output",
+          "calls": 20,
+          "total_ms": 0.755139,
+          "cumulative_ms": 1.904376
+        },
+        {
+          "file": "runtime.py",
+          "line": 401,
+          "function": "_analyze_native",
+          "calls": 20,
+          "total_ms": 0.20404100000000003,
+          "cumulative_ms": 1.6391250000000002
+        },
+        {
+          "file": "runtime.py",
+          "line": 1543,
+          "function": "_record_patches",
+          "calls": 160,
+          "total_ms": 0.423714,
+          "cumulative_ms": 1.4087910000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.all>",
+          "calls": 620,
+          "total_ms": 0.95193,
+          "cumulative_ms": 1.405477
+        },
+        {
+          "file": "sessions.py",
+          "line": 127,
+          "function": "commit",
+          "calls": 20,
+          "total_ms": 0.082292,
+          "cumulative_ms": 1.258873
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.isinstance>",
+          "calls": 6520,
+          "total_ms": 0.781303,
+          "cumulative_ms": 1.239506
+        },
+        {
+          "file": "models.py",
+          "line": 102,
+          "function": "_json_value",
+          "calls": 680,
+          "total_ms": 0.6086050000000001,
+          "cumulative_ms": 1.175294
+        },
+        {
+          "file": "models.py",
+          "line": 989,
+          "function": "__post_init__",
+          "calls": 80,
+          "total_ms": 0.18454700000000002,
+          "cumulative_ms": 1.123417
+        },
+        {
+          "file": "models.py",
+          "line": 1027,
+          "function": "__post_init__",
+          "calls": 80,
+          "total_ms": 0.206163,
+          "cumulative_ms": 1.1035000000000001
+        },
+        {
+          "file": "models.py",
+          "line": 652,
+          "function": "__post_init__",
+          "calls": 40,
+          "total_ms": 0.13476000000000002,
+          "cumulative_ms": 1.000337
+        },
+        {
+          "file": "runtime.py",
+          "line": 507,
+          "function": "_normalize_bars",
+          "calls": 20,
+          "total_ms": 0.152829,
+          "cumulative_ms": 0.824044
+        },
+        {
+          "file": "measure_bridge.py",
+          "line": 25,
+          "function": "result",
+          "calls": 20,
+          "total_ms": 0.031582000000000006,
+          "cumulative_ms": 0.763668
+        }
+      ]
+    },
+    {
+      "history_rows": 10000,
+      "ticks": 20,
+      "patches": 20,
+      "full_native_results": 20,
+      "native_result_ms": 6.228709,
+      "total_ms": 70.147918,
+      "tick_p50_ms": 3.329542,
+      "python_peak_bytes": null,
+      "profile_top": [
+        {
+          "file": "runtime.py",
+          "line": 1670,
+          "function": "execute_batch",
+          "calls": 20,
+          "total_ms": 3.5048540000000004,
+          "cumulative_ms": 61.18908100000001
+        },
+        {
+          "file": "sessions.py",
+          "line": 196,
+          "function": "execute",
+          "calls": 20,
+          "total_ms": 18.532487,
+          "cumulative_ms": 27.712916
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.all>",
+          "calls": 620,
+          "total_ms": 7.886728000000001,
+          "cumulative_ms": 8.469371
+        },
+        {
+          "file": "runtime.py",
+          "line": 507,
+          "function": "_normalize_bars",
+          "calls": 20,
+          "total_ms": 1.154787,
+          "cumulative_ms": 8.111875000000001
+        },
+        {
+          "file": "models.py",
+          "line": 652,
+          "function": "__post_init__",
+          "calls": 40,
+          "total_ms": 0.232827,
+          "cumulative_ms": 8.060872999999999
+        },
+        {
+          "file": "runtime.py",
+          "line": 488,
+          "function": "_reused_prefix",
+          "calls": 20,
+          "total_ms": 0.12837,
+          "cumulative_ms": 6.864457
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<built-in method builtins.next>",
+          "calls": 60,
+          "total_ms": 6.672754,
+          "cumulative_ms": 6.675921000000001
+        },
+        {
+          "file": "measure_bridge.py",
+          "line": 25,
+          "function": "result",
+          "calls": 20,
+          "total_ms": 0.065289,
+          "cumulative_ms": 6.267793000000001
+        },
+        {
+          "file": "~",
+          "line": 0,
+          "function": "<method 'result' of 'builtins.RealtimeSession' objects>",
+          "calls": 20,
+          "total_ms": 6.188750000000001,
+          "cumulative_ms": 6.188750000000001
+        },
+        {
+          "file": "measure_bridge.py",
+          "line": 40,
+          "function": "request",
+          "calls": 20,
+          "total_ms": 1.112921,
+          "cumulative_ms": 5.522709000000001
+        },
+        {
+          "file": "runtime.py",
+          "line": 1571,
+          "function": "_output_patch",
+          "calls": 20,
+          "total_ms": 0.40582,
+          "cumulative_ms": 5.275496
+        },
+        {
+          "file": "runtime.py",
+          "line": 912,
+          "function": "_normalize_output",
+          "calls": 20,
+          "total_ms": 1.0946980000000002,
+          "cumulative_ms": 4.185506
+        },
+        {
+          "file": "dataclasses.py",
+          "line": 1540,
+          "function": "replace",
+          "calls": 20,
+          "total_ms": 0.133208,
+          "cumulative_ms": 4.16575
+        },
+        {
+          "file": "sessions.py",
+          "line": 127,
+          "function": "commit",
+          "calls": 20,
+          "total_ms": 0.14283200000000001,
+          "cumulative_ms": 2.6845830000000004
+        },
+        {
+          "file": "runtime.py",
+          "line": 401,
+          "function": "_analyze_native",
+          "calls": 20,
+          "total_ms": 0.281175,
+          "cumulative_ms": 2.2536690000000004
+        }
+      ]
+    }
+  ]
+}
