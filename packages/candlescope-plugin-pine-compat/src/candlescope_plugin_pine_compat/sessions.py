@@ -74,6 +74,18 @@ class RecordedSession:
 
 
 @dataclass
+class RetainedInputPrefix:
+    """Private normalizer proof over SDK-owned immutable Bar objects.
+
+    Never deserialize this from request options. The exact prior normalized
+    window must still belong to this session; a journal restore has no proof.
+    """
+    window: list[dict]
+    start: int
+    keep: int
+
+
+@dataclass
 class Session:
     identity: Any
     native: Any
@@ -94,6 +106,8 @@ class Session:
     last_observation: str | None = None
     # Last output returned to a host that accepts output patches (runtime-owned).
     output: Any = None
+    input_window: Any = field(default=None, repr=False, compare=False)
+    input_offset: int | None = None
 
     def confirm(self, rows, clocks=None):
         for row in rows:
@@ -193,7 +207,7 @@ class PineSessions:
                            for key, (rows, forming) in providers.items()}
         return entry
 
-    def execute(self, engine, source, bars, options, *, session_id, forming, execution_times=None, calculation_bars_count=None, request_observation=None, epoch="0", providers=(), verify_history_clocks=False):
+    def execute(self, engine, source, bars, options, *, session_id, forming, execution_times=None, calculation_bars_count=None, request_observation=None, epoch="0", providers=(), verify_history_clocks=False, validated_prefix=None):
         native_options, request_updates = requested_tail(options, bars[-1]["time"] if forming else None)
         observed_at = session_requests.observation_clock(engine, request_observation)
         identity_options = options
@@ -222,6 +236,13 @@ class PineSessions:
             offset = entry.positions.get(confirmed[0]["time"], -1)
         retained = len(entry.confirmed) - max(0, offset) if entry else 0
         overlap = min(len(confirmed), retained)
+        immutable_overlap = (
+            entry is not None and isinstance(validated_prefix, RetainedInputPrefix)
+            and validated_prefix.window is entry.input_window
+            and entry.input_offset is not None
+            and entry.input_offset + validated_prefix.start == offset
+            and validated_prefix.keep >= overlap
+        )
         reset = (
             entry is None
             or entry.identity != identity
@@ -229,7 +250,8 @@ class PineSessions:
             or (verify_history_clocks and execution_times is not None and execution_times[:overlap] != entry.clocks[offset:offset+overlap])
             or (observed_at is not None and not session_requests.immutable_prefix(entry.requested, incoming))
             # A shortened tail is replayed, never truncated beneath the native session.
-            or offset < 0 or overlap < retained or confirmed[:overlap] != entry.confirmed[offset:]
+            or offset < 0 or overlap < retained
+            or (not immutable_overlap and confirmed[:overlap] != entry.confirmed[offset:])
             or (entry.forming_time is not None and not has_time(bars, entry.forming_time))
         )
         if not reset and observed_at is not None and observed_at < entry.observed_at:
@@ -325,6 +347,8 @@ class PineSessions:
                 if entry.pending is not None and (reset or appended):
                     entry.pending.append(["$requested", [appended], {}])
                 entry.observed_at = observed_at
+            entry.input_window = bars
+            entry.input_offset = entry.positions.get(bars[0]["time"]) if bars else None
             if session_id:
                 self.entries[session_id] = entry
                 self.entries.move_to_end(session_id)
