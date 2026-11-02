@@ -6,6 +6,7 @@ exercise temporal projections; no human historical-authorship claim is made.
 from pathlib import Path
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -19,7 +20,9 @@ source, out = (Path(value).resolve() for value in sys.argv[1:])
 assert out.is_relative_to(root / "output")
 destination = out / "profile/data/candlescope.db"
 assert not destination.exists(), "Preserve previous QA profiles"
-commands = subprocess.check_output(["ps", "-axo", "command="], text=True).splitlines()
+processes = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True).splitlines()
+commands = [row.strip().split(maxsplit=1)[1] for row in processes
+            if int(row.strip().split(maxsplit=1)[0]) != os.getpid()]
 assert not any(command.strip().startswith(str(source.parents[2] / "Installed App/CandleScope.app") + "/") for command in commands)
 assert not any(command.strip().startswith(str(out / "Installed App/CandleScope.app") + "/") for command in commands)
 destination.parent.mkdir(parents=True, exist_ok=True)
