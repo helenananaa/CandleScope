@@ -296,6 +296,11 @@ async def _init_trading_accounts() -> None:
             market=DataManagerMarket(data_manager) if data_manager is not None else None,
         )
         app.state.trading_accounts = service
+        from app.data_engine.data_manager.core import DataManagerCore
+        core = getattr(app.state, "data_manager_core", None)
+        if core is None:
+            core = app.state.data_manager_core = DataManagerCore()
+        core.bind_trading(service)
         if data_manager is not None:
             practice_runtime = PracticeRuntime(service, data_manager)
             await practice_runtime.start()
@@ -969,6 +974,9 @@ async def shutdown_event() -> None:
             print(f"[shutdown] Practice runtime shutdown error: {exc}")
     trading_accounts = getattr(app.state, "trading_accounts", None)
     if trading_accounts is not None:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            core.close_trading()
         trading_accounts.store.close()
 
     alert_runtime = getattr(app.state, "alert_runtime", None)

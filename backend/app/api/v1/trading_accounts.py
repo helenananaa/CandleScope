@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+import json
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.core.executors import run_storage
 from app.trading_accounts.models import TradingAccountError
@@ -13,14 +14,25 @@ from app.trading_accounts.service import TradingAccountService
 router = APIRouter(prefix="/trading", tags=["trading-accounts"])
 
 
-def _service(request: Request) -> TradingAccountService:
+def _manager(request: Request):
     service = getattr(request.app.state, "trading_accounts", None)
     if not isinstance(service, TradingAccountService):
         raise HTTPException(status_code=503, detail={
             "code": "TRADING_UNAVAILABLE",
             "message": "Trading accounts are unavailable",
         })
-    return service
+    from app.data_engine.data_manager.core import DataManagerCore
+    core = getattr(request.app.state, "data_manager_core", None)
+    if core is None:
+        core = request.app.state.data_manager_core = DataManagerCore()
+    return core.bind_trading(service)
+
+
+def _service(request: Request) -> TradingAccountService:
+    try:
+        return _manager(request).control_plane()
+    except TradingAccountError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.to_dict()) from exc
 
 
 async def _call(func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
@@ -39,6 +51,28 @@ def _body(payload: Any) -> dict[str, Any]:
 
 
 # ── accounts ────────────────────────────────────────────────────
+
+@router.get("/accounts/{account_id}/events")
+async def account_events(request: Request, account_id: str):
+    try:
+        subscription = await _manager(request).subscribe_state(account_id)
+    except TradingAccountError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.to_dict()) from exc
+
+    async def stream():
+        try:
+            async for event in subscription.events():
+                yield json.dumps(event, ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        finally:
+            subscription.close()
+    class OwnedTradingResponse(StreamingResponse):
+        async def __call__(self, scope, receive, send):
+            try:
+                await super().__call__(scope, receive, send)
+            finally:
+                subscription.close()
+    return OwnedTradingResponse(stream(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "Content-Encoding": "identity", "X-Accel-Buffering": "no"})
 
 @router.get("/accounts")
 async def list_accounts(request: Request) -> dict:

@@ -18,8 +18,22 @@ rail contributions cannot replace it, because it can place orders.
 `tradingAccountsStore.ts` holds the selected account's accounts, summary, trades
 and journal once per window. The rail panel (`useTradingAccountsRuntime`) and
 every live chart cell (`useTradingChartOverlay`) read it and keep it retained;
-polling runs while anything is retained, every 2 s after the previous response
-while a practice account has positions or working orders, else every 15 s.
+one per-account NDJSON state stream runs while anything is retained. Practice
+accounts use committed replacements instead of the old 2 s / 15 s polling.
+The last consumer closes only its view stream; background matching keeps its
+own market demand. Manual accounts retain a 15 s snapshot revalidation because
+they have no practice valuation lease. Injected read ports without streaming
+keep the legacy read interface.
+
+Each connection starts with a complete snapshot and orders replacements by its
+own epoch/sequence. The separate persistent ledger cursor covers summary,
+trades and journal in one read-only WAL snapshot. Unflushed quote observations
+may advance connection sequence without advancing the ledger cursor. The
+matcher still flushes a no-fill cursor at its existing 10 s cadence. Heartbeats
+perform no database reads; silent connections expire after 30 s and reconnect
+to a complete snapshot. Errors, old connection callbacks and mismatched account
+or ledger identities cannot replace the current view. This is a current-state
+protocol, not an exactly-once financial event log.
 
 ## Live chart overlay
 

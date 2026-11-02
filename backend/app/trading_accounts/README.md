@@ -4,6 +4,22 @@ Local trading accounts, practice matching and the trade journal. Persistence is
 `DATA_DIR/trading-accounts.sqlite3`; snapshot images live in
 `DATA_DIR/trading-snapshots/`. HTTP: `app.api.v1.trading_accounts`.
 
+Control/read adapters enter `DataManagerCore.trading`, which delegates to the
+existing service; it does not merge practice, private-account, replay or strategy
+ledgers. `/accounts/{id}/events` sends complete NDJSON replacement views after
+committed writes or successfully applied valuation observations. Persistent
+ledger epoch/sequence rolls back with the ledger; connection epoch/sequence also
+orders unflushed valuation observations. Summary, trades and journal share one
+read-only WAL snapshot and one temporary trade projection. Journal read failure
+is explicit and does not hide valid financial views.
+
+The existing committed-wakeup helper coalesces notifications. The manager limits
+subscriptions to 16 and reads at most once per second per subscription, with
+read-free 15 s heartbeats. Closing views releases subscriptions, not background
+matching. Reconnect always obtains a complete state; the stream is not a
+resumable fill log. Cross-process writer notification, hedge positions and full
+issue #177 qualification are outside this first stage.
+
 - `models.py`: validation, decimal handling, error codes.
 - `store.py`: SQLite schema and queries (one lock, one transaction per mutation).
 - `trades.py`: pure flat-to-flat grouping of fills into trades; reversals split
