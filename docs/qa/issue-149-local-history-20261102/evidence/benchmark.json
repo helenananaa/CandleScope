@@ -1,0 +1,25 @@
+{
+  "baseline": "1988a9b8ecefac1d325447f570c3a1dd0435a028",
+  "scope": "Controlled 100 aligned final samples; real factory, native normalizer, SQLite and durable writer; zero external network. 1 cold + 50 hot reads. Latency is local fixture evidence, not exchange/native performance.",
+  "equal_data": true,
+  "before": {
+    "requests": 51,
+    "cold_ms": 2690.9083329992427,
+    "hot_p50_ms": 3.251542000725749,
+    "hot_p95_ms": 3.672417000416317,
+    "hot_p99_ms": 4.00712500049849,
+    "cpu_ms": 2043.3780000000002,
+    "rows_written": 5100,
+    "rows": 100
+  },
+  "after": {
+    "requests": 1,
+    "cold_ms": 4.732999999760068,
+    "hot_p50_ms": 1.2739169997075805,
+    "hot_p95_ms": 1.5494580002268776,
+    "hot_p99_ms": 1.9651250004244503,
+    "cpu_ms": 65.68299999999994,
+    "rows_written": 100,
+    "rows": 100
+  }
+}
