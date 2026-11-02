@@ -1,0 +1,124 @@
+{
+  "schema": "candlescope.strategy-manager-tcp-evidence/1",
+  "sourceCommit": "813cf68ef169090435c83e244669e28e4677b411",
+  "transport": "actual frontend API and StrategyDataManager over loopback TCP to production app.desktop_sidecar in LOCAL_OFFLINE mode; no mocked responses",
+  "nativePackageAcceptance": false,
+  "passed": true,
+  "completed": {
+    "runId": "bt_69a3594ec44e49b9a2afc8ffde4f2d51",
+    "snapshotHash": "sha256:ff2b93491605a649ecc1e628e962fc4925126d6659663043dc5f87f0aaf667db",
+    "cacheKey": "bt_69a3594ec44e49b9a2afc8ffde4f2d51|local-f55e9928bbe14158b499dff984a9a378|sha256:0528dc9488004eb4d4078c8fb3880532b2cd6385b8f884c383543b22251b4df7|sha256:ff2b93491605a649ecc1e628e962fc4925126d6659663043dc5f87f0aaf667db|sha256:ca176d8f5882f7567ce7d6f469b0b2b398a34e4590dcbcd03a0a296c92770d51|sha256:8e413e165020f48d0bc095251aec7b7c0878c40b951fb00e4e86499573300598",
+    "bars": 600,
+    "metrics": {
+      "ambiguity_count": 0,
+      "fill_count": 508,
+      "realized_net_pnl": "-803.7515412168049013875687940",
+      "rejected_order_count": 0,
+      "risk_rejection_count": 0,
+      "trade_count": 478,
+      "win_rate": "0.8786610878661087866108786611",
+      "winning_trade_count": 420
+    },
+    "diagnostics": {
+      "closed": false,
+      "operations": 0,
+      "streams": 0,
+      "results": {
+        "entries": 1,
+        "keys": [
+          "bt_69a3594ec44e49b9a2afc8ffde4f2d51|local-f55e9928bbe14158b499dff984a9a378|sha256:0528dc9488004eb4d4078c8fb3880532b2cd6385b8f884c383543b22251b4df7|sha256:ff2b93491605a649ecc1e628e962fc4925126d6659663043dc5f87f0aaf667db|sha256:ca176d8f5882f7567ce7d6f469b0b2b398a34e4590dcbcd03a0a296c92770d51|sha256:8e413e165020f48d0bc095251aec7b7c0878c40b951fb00e4e86499573300598"
+        ]
+      },
+      "runs": [
+        {
+          "runId": "bt_69a3594ec44e49b9a2afc8ffde4f2d51",
+          "state": "COMPLETED",
+          "snapshotHash": "sha256:ff2b93491605a649ecc1e628e962fc4925126d6659663043dc5f87f0aaf667db",
+          "configHash": "sha256:3e7c3ddc23073d143fd52f7d741f104295b3f2ce0f8b6a83242a3d5e1366e867",
+          "progress": null
+        }
+      ]
+    }
+  },
+  "restartCacheKey": "bt_69a3594ec44e49b9a2afc8ffde4f2d51|local-f55e9928bbe14158b499dff984a9a378|sha256:0528dc9488004eb4d4078c8fb3880532b2cd6385b8f884c383543b22251b4df7|sha256:ff2b93491605a649ecc1e628e962fc4925126d6659663043dc5f87f0aaf667db|sha256:ca176d8f5882f7567ce7d6f469b0b2b398a34e4590dcbcd03a0a296c92770d51|sha256:8e413e165020f48d0bc095251aec7b7c0878c40b951fb00e4e86499573300598",
+  "failurePropagation": {
+    "runId": "bt_c394ae9abc294874be90a76e65e02c8f",
+    "diagnostic": {
+      "code": "PROVIDER_PROTOCOL_VIOLATION",
+      "message": "PROVIDER_PROTOCOL_VIOLATION: PROVIDER_PROTOCOL_VIOLATION: manager-tcp-intentional-failure",
+      "details": {},
+      "action": "fix-strategy",
+      "sourceDiagnostics": []
+    }
+  },
+  "wholeRunChildUpdates": [
+    {
+      "type": "status",
+      "state": "QUEUED"
+    },
+    {
+      "type": "progress",
+      "state": "RUNNING"
+    },
+    {
+      "type": "progress",
+      "state": "RUNNING"
+    },
+    {
+      "type": "progress",
+      "state": "COMPLETING"
+    },
+    {
+      "type": "completed",
+      "state": "COMPLETED"
+    }
+  ],
+  "fullBackendRestarts": [
+    {
+      "index": 1,
+      "mode": "LOCAL_OFFLINE",
+      "liveManager": {
+        "status": "not_initialized"
+      },
+      "network": {
+        "installed": true,
+        "policy": "loopback_only",
+        "blocked_attempts": 0
+      },
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "index": 2,
+      "mode": "LOCAL_OFFLINE",
+      "liveManager": {
+        "status": "not_initialized"
+      },
+      "network": {
+        "installed": true,
+        "policy": "loopback_only",
+        "blocked_attempts": 0
+      },
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "runTransport": {
+    "eventStreams": 3,
+    "statusPollsDuringRun": 0,
+    "resultIdentityReads": "one per result load; completed restore has one additional initial lookup"
+  },
+  "artifacts": "output/issue165-manager-tcp-20261101",
+  "fixtureCorrections": [
+    ".mts extension required for ESM top-level await outside frontend package",
+    "QA draft ID corrected to existing draft-* schema; HTTP 422 and original logs retained"
+  ],
+  "limitations": [
+    "source TCP verification is not installed native UI acceptance",
+    "fixed history increment only; batch/multi-mode/live handoff and full issue165 remain open"
+  ]
+}

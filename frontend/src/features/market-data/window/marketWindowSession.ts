@@ -15,7 +15,8 @@ export type MarketWindowReader = SeriesWindowView & {
 };
 
 export type WindowCommand = (
-  | { type: "replace" | "range" | "correct"; rows: readonly KlineBarInput[] }
+  | { type: "replace"; rows: readonly KlineBarInput[]; rightEdgeCurrent?: boolean }
+  | { type: "range" | "correct"; rows: readonly KlineBarInput[] }
   | { type: "forward"; rows: readonly KlineBarInput[]; reachedLatest?: boolean }
   | { type: "tick"; row: KlineBarInput }
   | { type: "clear" }
@@ -282,7 +283,9 @@ export class MarketWindowSession {
     const detail: WindowDeltaDetail = command.source === undefined ? {} : { source: command.source };
     let delta: WindowDelta;
     switch (command.type) {
-      case "replace": delta = store.replace(command.rows, detail); break;
+      case "replace": delta = store.replace(command.rows, detail, {
+        rightEdgeCurrent: command.rightEdgeCurrent ?? true,
+      }); break;
       case "range": delta = store.applyRange(command.rows, detail); break;
       case "correct": delta = store.correctWindow(command.rows, detail); break;
       case "forward":

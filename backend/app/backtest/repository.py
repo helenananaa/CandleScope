@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar, cast
 
 from .schema import apply_schema
+from .run_updates import run_updates_for
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -37,6 +38,7 @@ class BacktestRepository:
         self.path = Path(path)
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.RLock()
+        self.run_updates = run_updates_for(self.path)
 
     @_locked
     def open(self, *, now_ms: int) -> None:
@@ -419,6 +421,7 @@ class BacktestRepository:
             values,
         )
         self.connection.commit()
+        self.run_updates.notify(run_id)
 
     @_locked
     def compare_and_set_run_state(
@@ -447,7 +450,93 @@ class BacktestRepository:
             values,
         )
         self.connection.commit()
+        if cursor.rowcount == 1:
+            self.run_updates.notify(run_id)
         return cursor.rowcount == 1
+
+    @_locked
+    def fail_run(
+        self, run_id: str, *, expected_state: str, expected_generation: int | None,
+        updated_at_ms: int, code: str, message: str, preserve_checkpoint: bool,
+    ) -> bool:
+        """Commit the fenced failure and its diagnostic before notifying readers."""
+        connection = self.connection
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            record = connection.execute(
+                "SELECT state, generation FROM backtest_runs WHERE run_id = ?", (run_id,),
+            ).fetchone()
+            if (record is None or record["state"] != expected_state
+                or (expected_generation is not None and record["generation"] != expected_generation)):
+                connection.rollback()
+                return False
+            checkpoint = connection.execute(
+                "SELECT sequence, state_hash FROM backtest_checkpoints WHERE run_id = ? ORDER BY sequence DESC LIMIT 1",
+                (run_id,),
+            ).fetchone()
+            details = json.dumps({
+                "code": code, "message": message[:4096], "generation": record["generation"],
+                "checkpointPreserved": preserve_checkpoint and checkpoint is not None,
+                "checkpointSequence": None if checkpoint is None else checkpoint["sequence"],
+                "checkpointHash": None if checkpoint is None else checkpoint["state_hash"],
+            }, sort_keys=True, separators=(",", ":"))
+            ordinal = connection.execute(
+                "SELECT COALESCE(MAX(ordinal), 0) + 1 FROM backtest_audit WHERE run_id = ?", (run_id,),
+            ).fetchone()[0]
+            digest = "sha256:" + hashlib.sha256(f"{run_id}:{ordinal}:fail:{details}".encode()).hexdigest()
+            connection.execute(
+                "INSERT INTO backtest_audit(run_id, ordinal, action, actor, details_json, chain_hash) VALUES (?, ?, 'fail', 'host', ?, ?)",
+                (run_id, ordinal, details, digest),
+            )
+            connection.execute(
+                "UPDATE backtest_runs SET state = 'FAILED', updated_at_ms = ?, failure_code = ? WHERE run_id = ?",
+                (updated_at_ms, code, run_id),
+            )
+            if not preserve_checkpoint:
+                connection.execute("DELETE FROM backtest_checkpoint_chunks WHERE run_id = ?", (run_id,))
+                connection.execute("DELETE FROM backtest_checkpoints WHERE run_id = ?", (run_id,))
+            connection.commit()
+            self.run_updates.notify(run_id)
+            return True
+        except BaseException:
+            connection.rollback()
+            raise
+
+    @_locked
+    def read_run_progress(self, run_id: str) -> dict[str, Any] | None:
+        """Read one committed status view without expanding checkpoints or result rows."""
+        connection = self.connection
+        connection.execute("SAVEPOINT run_progress")
+        try:
+            row = connection.execute(
+                "SELECT run_id, state, fidelity_mode, source_event_kind, strategy_revision_id, dataset_id, data_epoch, "
+                "snapshot_hash, config_hash, engine_version, generation, failure_code, created_at_ms, updated_at_ms "
+                "FROM backtest_runs WHERE run_id = ?", (run_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            run = dict(row)
+            checkpoint = connection.execute(
+                "SELECT sequence, generation, state_hash, created_at_ms FROM backtest_checkpoints "
+                "WHERE run_id = ? ORDER BY sequence DESC LIMIT 1", (run_id,),
+            ).fetchone()
+            failure = None
+            if run["state"] == "FAILED":
+                audit = connection.execute(
+                    "SELECT details_json FROM backtest_audit WHERE run_id = ? AND action = 'fail' ORDER BY ordinal DESC LIMIT 1",
+                    (run_id,),
+                ).fetchone()
+                details = json.loads(audit["details_json"]) if audit is not None else {}
+                matching = details.get("code") == run["failure_code"] and details.get("generation", run["generation"]) == run["generation"]
+                failure = {"code": run["failure_code"] or "RUN_FAILED",
+                           "message": str((details.get("message") if matching else None) or run["failure_code"] or "Run failed")[:4096]}
+            report = connection.execute(
+                "SELECT report_hash, generated_at_ms FROM backtest_reports WHERE run_id = ?", (run_id,),
+            ).fetchone() if run["state"] == "COMPLETED" else None
+            return {"run": run, "checkpoint": None if checkpoint is None else dict(checkpoint),
+                    "failure": failure, "result": None if report is None else dict(report)}
+        finally:
+            connection.execute("RELEASE run_progress")
 
     @_locked
     def insert_study(self, payload: dict[str, Any]) -> None:
@@ -610,6 +699,7 @@ class BacktestRepository:
                 (payload["run_id"], payload["sequence"]),
             )
             connection.commit()
+            self.run_updates.notify(str(payload["run_id"]))
             return True
         except Exception:
             connection.rollback()
@@ -1316,6 +1406,7 @@ class BacktestRepository:
             )
             connection.execute("DELETE FROM backtest_checkpoint_chunks WHERE run_id = ?", (run_id,))
             connection.commit()
+            self.run_updates.notify(run_id)
         except Exception:
             connection.rollback()
             raise

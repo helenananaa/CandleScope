@@ -5,6 +5,19 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhMO = {
+  "chartTime.title": "跳轉到日期",
+  "chartTime.shortcut": "跳轉到日期（Alt+G）",
+  "chartTime.input": "日期和時間（UTC）",
+  "chartTime.hint": "保留目前週期和縮放。開啟時間聯動的圖表會按各自週期定位同一目標。",
+  "chartTime.invalid": "請輸入有效的 UTC 日期和時間，不能晚於現在。",
+  "chartTime.loading": "正在載入目標區間…可以提交新的日期。",
+  "chartTime.located": "已定位：{time} UTC。",
+  "chartTime.nearest": "該時刻沒有 K 線，已定位最近可用 K 線：{time} UTC。",
+  "chartTime.empty": "目標附近未找到 K 線，請選擇其他日期。",
+  "chartTime.unavailable": "未能定位該時刻。載入失敗時保留原視圖，請重試。",
+  "chartTime.linkFailed": "部分聯動圖表未能定位目標。",
+  "chartTime.close": "關閉",
+  "chartTime.go": "跳轉",
   ...intervalBasisMessages["zh-Hant"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時間加上前向視窗包含未來行情。請選擇更早的起點或縮短前向視窗；只能使用已收盤的歷史 K 線。",

@@ -1,0 +1,13 @@
+{
+  "trigger": "a new host run fails while an earlier completed result remains retained",
+  "before": "error panel shows failure but footer says completed",
+  "after": "host execution/error state takes priority over the retained result; native mode and no-data status preserve their own precedence",
+  "checks": {
+    "statusTestsPassed": 4,
+    "typecheck": true,
+    "eslint": true,
+    "productionBuildSeconds": 25.33
+  },
+  "nativeFollowupPending": true,
+  "priorNativeSource": "2e414c5fff1d7527d3315634a343f00325dfd58a"
+}

@@ -5,6 +5,19 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ro = {
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["ro"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Începutul și fereastra înainte includ lumânări viitoare. Alegeți un început mai devreme sau scurtați fereastra; sunt disponibile doar lumânări istorice închise.",
