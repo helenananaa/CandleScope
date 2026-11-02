@@ -10,5 +10,6 @@
     "This is a test-contract repair, not proof that all unknown-origin or unavailable historical ranges can be loaded.",
     "No weakening of volume, origin, reveal or account validation.",
     "Current-head CI remains required before integration."
-  ]
+  ],
+  "disposition": "DO NOT INTEGRATE this alternative test patch. Concurrent PR211 commit358e4996 fixes the generator while retaining the original cold frontend probe. START is a mathematical reference origin; the earlier description treating it as a proven listing boundary was an unsupported interpretation. Explicitly pinning it changes the tested cold-start condition. Retain this branch only as independent reproduction/alternative evidence."
 }
