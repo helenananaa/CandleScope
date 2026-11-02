@@ -21,8 +21,8 @@
     "diff_check": "passed"
   },
   "pending": [
-    "Exact-head cloud CI",
-    "Packaged native combined cold-chart, fixed dataset cache, practice account save/full-exit/restart checks"
+    "Exact-head cloud CI"
   ],
-  "limits": "Development integration candidate only. Prior source PR receipts remain scoped to their original revisions. No Windows or full product acceptance claim."
+  "native": "stability-native-qualification.json: actual arm64 combination passed fixed dataset cache, practice financial projections and cold 5m chart with save/full-process exit/restart. Original harness failures are retained.",
+  "limits": "Current-head CI remains a merge gate. Prior source PR receipts remain scoped to their original revisions. No Windows or full product acceptance claim."
 }
