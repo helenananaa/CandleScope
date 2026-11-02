@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "source": "cb9dcce1b0b7753cde56f63f3c828151a3d34d30",
+  "scope": "Regression of the shared postcommit wakeup refactor: offline imported fixed-history strategy research, not private account push acceptance.",
+  "steps": 13,
+  "source_files": 975,
+  "dist_files": 158,
+  "source_mismatches": 0,
+  "strict_signature_before_after": true,
+  "actual_imported_bars": 600,
+  "actual_fills": 508,
+  "restored_report_hash_and_metrics": "identical",
+  "failure_display": "actual worker error appears in UI and durable FAILED state",
+  "offline_network_blocked_attempts": 0,
+  "full_owned_exits_ms": [
+    432,
+    435
+  ],
+  "renderer_errors": 0,
+  "visual": "Restored research screenshot inspected;600sourcebars/478trades/508fills are visible; no account or Windows acceptance claimed.",
+  "attempt1": "Preserved repeated-initial-navigation ERR_ABORTED; acknowledged exact QA error dialog and all owned processes exited normally."
+}
