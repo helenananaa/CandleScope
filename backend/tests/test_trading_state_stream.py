@@ -228,3 +228,21 @@ def test_snapshot_reads_fills_once_and_journal_failure_keeps_financial_views(tmp
         assert calls==[aid,aid]
         assert not hasattr(service._projection_state,'trades')
     finally:core.close_trading();store.close()
+
+
+def test_corrupt_optional_journal_metadata_cannot_hide_committed_positions(tmp_path):
+    store,service,aid,core,manager=make_fixture(tmp_path)
+    try:
+        service.place_order(aid,{**INSTRUMENT,'side':'buy','type':'market','qty':'1','referencePrice':'100'})
+        note=service.create_entry(aid,{**INSTRUMENT,'kind':'note','body':'original','fields':{}})
+        expected=service.account_summary(aid)
+        with store.transaction() as db:
+            db.execute("UPDATE journal_revisions SET fields_json='{' WHERE entry_id=?",(note['id'],))
+        state=service.account_state(aid)
+        assert state['summary']==expected and state['entries'] is None and state['journalError']
+        trade=state['trades'][0]
+        for key in ('openQty','avgEntryPrice','markPrice','fees','unrealizedPnl'):
+            assert trade[key]==expected['positions'][0][key]
+        # Damaged optional bytes remain available for diagnosis/recovery.
+        assert store.one('SELECT fields_json FROM journal_revisions WHERE entry_id=?',(note['id'],))['fields_json']=='{'
+    finally:core.close_trading();store.close()

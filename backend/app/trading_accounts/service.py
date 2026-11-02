@@ -415,12 +415,15 @@ class TradingAccountService(JournalService):
         self._projection_state.trades = {}
         try:
             summary = self.account_summary(account_id)
-            trades = self.list_trades(account_id)["trades"]
             try:
+                trades = self.list_trades(account_id)["trades"]
                 entries, journal_error = self.list_entries(account_id)["entries"], None
             except Exception:
                 # Keep financial views available if optional journal decoding
                 # fails. No empty journal is advertised as a successful read.
+                trades = [trade.to_dict(mark=self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
+                                        if trade.status == "open" else None)
+                          for trade in list(reversed(self._trades(account_id)))[:200]]
                 entries, journal_error = None, "Trading journal unavailable"
             return {"cursor": cursor, "summary": summary, "trades": trades,
                     "entries": entries, "journalError": journal_error}
