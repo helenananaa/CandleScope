@@ -366,6 +366,11 @@ class BinanceExchangeProtocol:
         return stream_type not in {"openInterest", "premiumIndex"}
 
     def extract_http_rows(self, payload: Any, stream_type: Any) -> list[Any]:
+        actual_type = getattr(stream_type, "stream_type", stream_type)
+        if (getattr(actual_type, "value", actual_type) == "openInterest"
+                and getattr(stream_type, "interval", None) is not None
+                and not isinstance(payload, list)):
+            raise RuntimeError("Native OI history requires an array response")
         if isinstance(payload, list):
             return payload
         return [payload]

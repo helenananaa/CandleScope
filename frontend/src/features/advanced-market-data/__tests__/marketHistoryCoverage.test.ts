@@ -4,9 +4,37 @@ import test from "node:test";
 import {
   clampHistoryRangeToNow,
   coverageForHistoryPage,
+  coverageRangesForHistoryPage,
+  HistoryGapRetryBudget,
   mergeHistoryCoverage,
   nextUncoveredHistoryRange,
 } from "../marketHistoryCoverage.js";
+
+test("explicit committed ranges preserve holes even on short pages or partial failures", () => {
+  const requested = { startMs: 1000, endMs: 9000 };
+  const payload = {
+    count: 2, complete: false, has_more: false, retryable: true,
+    coverage: { earliest_ms: 1000, latest_ms: 8000, complete: false,
+      ranges: [{ start_ms: 1000, end_ms: 1999 }, { start_ms: 8000, end_ms: 9000 }] },
+  };
+  const ranges = coverageRangesForHistoryPage(requested, payload, "backward");
+  assert.deepEqual(nextUncoveredHistoryRange(ranges, requested), { startMs: 2000, endMs: 7999 });
+  assert.equal(coverageForHistoryPage(requested, payload, "backward"), null);
+  assert.deepEqual(coverageRangesForHistoryPage(requested, { ...payload,
+    excluded_ranges: [{ start_ms: 2000, end_ms: 7999, reason: "outside_upstream_retention" }],
+  }, "backward"), [requested]);
+});
+
+test("unknown empty native pages do not cause unlimited automatic retries", () => {
+  const budget = new HistoryGapRetryBudget();
+  assert.equal(budget.fail("empty"), true);
+  assert.equal(budget.fail("empty"), true);
+  assert.equal(budget.fail("empty"), false);
+  assert.equal(budget.blocked("empty"), true);
+  assert.equal(budget.blocked("other"), false);
+  budget.clear();
+  assert.equal(budget.blocked("empty"), false);
+});
 
 test("future-only market history ranges are not requested", () => {
   assert.equal(clampHistoryRangeToNow({ startMs: 2_001, endMs: 3_000 }, 2_000), null);

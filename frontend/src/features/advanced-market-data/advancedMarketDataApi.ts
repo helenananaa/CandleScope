@@ -12,6 +12,7 @@ import type {
 } from "./advancedMarketDataTypes.js";
 
 interface MarketHistoryQuery {
+  mode?: "local_only" | "fill_missing" | "refresh";
   period?: string | null;
   view?: "hybrid" | null;
   startMs?: number | null;
@@ -58,6 +59,7 @@ export async function fetchAdvancedMarketHistory(
     endMs = null,
     limit = 1000,
     signal,
+    mode,
   }: MarketHistoryQuery = {},
 ): Promise<MarketHistoryPayload> {
   const payload = await request(buildUrl("/market/history", {
@@ -65,6 +67,7 @@ export async function fetchAdvancedMarketHistory(
     market_type: identity.marketType,
     symbol: identity.symbol,
     channel,
+    mode,
     period,
     view,
     start_ms: startMs,

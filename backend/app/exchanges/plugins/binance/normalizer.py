@@ -960,6 +960,16 @@ class BinanceNormalizer:
             return None
 
         historical = "sumOpenInterest" in payload
+        if historical:
+            if any(isinstance(payload.get(name), bool) for name in ("sumOpenInterest", "sumOpenInterestValue")):
+                raise ValueError("OI history values must be numeric")
+            if "timestamp" not in payload or isinstance(payload["timestamp"], bool):
+                raise ValueError("OI history requires its original timestamp")
+            expected_symbol = self._symbols.normalize(
+                self._descriptor.symbol, self._descriptor.market_type,
+            ).upper()
+            if payload.get("symbol") is not None and str(payload["symbol"]).upper() != expected_symbol:
+                raise ValueError("OI history symbol does not match the request")
         value = payload.get("sumOpenInterest" if historical else "openInterest")
         if value in (None, ""):
             return None
@@ -969,6 +979,11 @@ class BinanceNormalizer:
         data = {"open_interest": float(value)}
         if historical and payload.get("sumOpenInterestValue") not in (None, ""):
             data["open_interest_value"] = float(payload["sumOpenInterestValue"])
+        if historical and (
+            event_time_ms < 0 or not float(payload["timestamp"]).is_integer()
+            or any(not math.isfinite(value) or value < 0 for value in data.values())
+        ):
+            raise ValueError("Invalid OI history timestamp or value")
         return self._event(
             event_type=StreamType.OPEN_INTEREST,
             event_time_ms=event_time_ms,
