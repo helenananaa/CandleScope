@@ -1,0 +1,52 @@
+{
+  "schema": "candlescope.history-study-navigation-qualification/1",
+  "productCommit": "8d2b59901e63e9e134125a2f6de3f13c6e2a5d71",
+  "packagedSourceCommit": "74d1a54bd956daae1f5441a0dec6505451859d8d",
+  "basePR": 225,
+  "checks": {
+    "frontend": 4822,
+    "performance": 1,
+    "desktop": 128,
+    "failed": 0,
+    "skipped": 0,
+    "architecture": true,
+    "plugins": true,
+    "i18nLocales": 30,
+    "i18nKeys": 5342,
+    "typecheck": true,
+    "lint": true,
+    "productionAndDesktopBuild": true
+  },
+  "native": {
+    "passed": true,
+    "steps": 14,
+    "rendererErrors": [],
+    "normalOwnedExitMs": [
+      1510,
+      3166
+    ],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "sourceMismatches": [],
+    "strictSignatureAfterExit": {
+      "exitCode": 0
+    },
+    "proof": [
+      "Real POST committed input then lost HTTP acknowledgement: authoritative read held; restoring-study has zero visible bars and neither study nor live control groups; exactly one immutable input after recovery.",
+      "Real PATCH committed rewind then lost acknowledgement: recovery restores committed revision/cursor and hides previously visible future original text.",
+      "UTC view date centered current prefix without cursor/bar-count/revision change; later-than-cursor date rejected.",
+      "Two independent study cursors and original fixed input survive complete exit and restart; financial/journal fixture table counts unchanged."
+    ],
+    "network": "Both native launches use sandbox-exec: loopback allowed, remote denied. Actual main-process child probe returned EPERM before remote connect. Warm real public DB; no online latest/cold/private proof.",
+    "faultInjection": "route.fetch executed actual writes; only response acknowledgement aborted, actual GET held then continued; no substituted response body.",
+    "fixture": "Synthetic note save times via real owning service; not historical human authorship evidence."
+  },
+  "preservedFailures": [
+    "First native harness unroute raced the held read continuation and caused an unhandled Playwright route already handled error. Real capture/mask steps exist but that attempt is not a completed pass; no normal exit/restart qualification. Exact executable audit found no remaining owned app/sidecar. Fixed harness awaits continuation before unroute."
+  ],
+  "limits": [
+    "Current candidate is stacked on #225 and has not yet integrated main #220 Pine bridge changes.",
+    "Does not add study cursor/mode linking, formal/strategy replay or public old-version cache API.",
+    "Not a full engine/runtime rebuild, Windows, online cold loading, broad performance or full release acceptance."
+  ]
+}
