@@ -1,0 +1,19 @@
+{
+  "source": "e6411752",
+  "packaged_head": "c988a462ebd52624305903c50e6544f3722aab67",
+  "local_regression": "193 passed, 2 skipped; main211 integration",
+  "native_passed": false,
+  "public_cooldown_respected": "Launched08:59 UTC after08:57:59.888 deadline; no new418 recorded.",
+  "data_quality": "Real Binance spot1s/custom7s, Gate1s, Upbit1s all reached marketReady with >=100 verified final rows per captured range. No substituted responses.",
+  "failure": "Upbit MA5 stayed indicatorsReady=false with outputPoints0; other charts had nonzero output. Shared indicator owner repeatedly entered recovering due Gate source_gap_timeout and other source resync reasons; final exact cause/repair still under investigation.",
+  "native_scope_not_qualified": [
+    "All4 MA numerical values",
+    "Save and restart"
+  ],
+  "normal_full_exit_ms": 4429,
+  "renderer_errors": 0,
+  "source_files": 982,
+  "built_files": 161,
+  "strict_signature_before_after": true,
+  "next": "Reproduce source-continuity recovery at integration boundary; do not loosen strict continuity or relabel missing indicators as a pass."
+}
