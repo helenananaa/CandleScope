@@ -580,6 +580,7 @@ export default function StrategyResearchApp({
   const shellShared = {
     visualState,
     nativeStatus: nativeMode ? nativeStatus : undefined,
+    hostStatus: nativeMode ? undefined : researchRun.error ? "FAILED" as const : researchRun.runStatus,
     source,
     ...(importedManifest ? { sourceLabel: `${importedManifest.name} · ${importedManifest.symbol}` }
       : source?.kind === "CURRENT_CHART" ? { sourceLabel: `${source.symbol} · ${source.interval} · ${source.exchange}` } : {}),

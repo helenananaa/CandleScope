@@ -1,0 +1,845 @@
+[
+  {
+    "receipt": "acceptance.json",
+    "sha256": "a56aecd054a47ef26c7456abec0656a1e6d4deb3a1fa4cb7efcabb43edcf84e6",
+    "sourceCommit": "7b173ff8edc1a8b5b5a346ccb0a926108b395540",
+    "passed": true,
+    "errors": [],
+    "steps": [
+      {
+        "name": "initial-data-has-no-5m-bars",
+        "at": "2026-11-01T07:39:04.128Z",
+        "evidence": {
+          "seeded": [
+            [
+              "1m",
+              8000
+            ]
+          ]
+        }
+      },
+      {
+        "name": "independent-date-seek",
+        "at": "2026-11-01T07:39:55.079Z",
+        "evidence": {
+          "message": "已定位：2023-11-15 14:54:00 UTC。",
+          "before": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 8,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 1087,
+                  "to": 1147
+                },
+                "time": {
+                  "from": 1793515080,
+                  "to": 1793518680
+                }
+              },
+              "rowCount": 1148,
+              "firstTime": 1700239920,
+              "lastTime": 1793518680
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "1m",
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 8,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 1087,
+                  "to": 1147
+                },
+                "time": {
+                  "from": 1793515080,
+                  "to": 1793518680
+                }
+              },
+              "rowCount": 1148,
+              "firstTime": 1700239920,
+              "lastTime": 1793518680
+            }
+          ],
+          "after": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 220,
+                  "to": 280
+                },
+                "time": {
+                  "from": 1700058240,
+                  "to": 1700061840
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700045040,
+              "lastTime": 1700075040
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "1m",
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 8,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 1087,
+                  "to": 1147
+                },
+                "time": {
+                  "from": 1793515080,
+                  "to": 1793518680
+                }
+              },
+              "rowCount": 1148,
+              "firstTime": 1700239920,
+              "lastTime": 1793518680
+            }
+          ]
+        }
+      },
+      {
+        "name": "live-traffic-does-not-pull-history",
+        "at": "2026-11-01T07:39:59.098Z",
+        "evidence": {
+          "first": 1700045040,
+          "last": 1700075040,
+          "rightTruncated": true
+        }
+      },
+      {
+        "name": "linked-attempt-0",
+        "at": "2026-11-01T07:40:17.873Z",
+        "evidence": {
+          "message": "已定位：2023-11-15 23:14:00 UTC。 部分联动图表未能定位目标。",
+          "partial": true,
+          "charts": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 220,
+                  "to": 280
+                },
+                "time": {
+                  "from": 1700088240,
+                  "to": 1700091840
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700075040,
+              "lastTime": 1700105040
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "5m",
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 8,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 5.684341886080802e-14,
+                  "to": 504
+                },
+                "time": {
+                  "from": 1793368500,
+                  "to": 1793520000
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1793368500,
+              "lastTime": 1793518800
+            }
+          ]
+        }
+      },
+      {
+        "name": "linked-attempt-1",
+        "at": "2026-11-01T07:40:22.912Z",
+        "evidence": {
+          "message": "已定位：2023-11-15 23:14:00 UTC。",
+          "partial": false,
+          "charts": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 220,
+                  "to": 280
+                },
+                "time": {
+                  "from": 1700088240,
+                  "to": 1700091840
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700075040,
+              "lastTime": 1700105040
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "5m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 0.6772277227722773,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": -1.9999999999999432,
+                  "to": 502
+                },
+                "time": {
+                  "from": 1700014800,
+                  "to": 1793519400
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700014800,
+              "lastTime": 1700164800
+            }
+          ]
+        }
+      },
+      {
+        "name": "cold-5m-chart-matches-backend",
+        "at": "2026-11-01T07:40:22.978Z",
+        "evidence": {
+          "rows": 501,
+          "complete": true,
+          "historyState": "ready",
+          "first": 1700014800,
+          "last": 1700164800
+        }
+      },
+      {
+        "name": "linked-independent-intervals",
+        "at": "2026-11-01T07:40:23.024Z",
+        "evidence": {
+          "message": "已定位：2023-11-15 23:14:00 UTC。",
+          "charts": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 220,
+                  "to": 280
+                },
+                "time": {
+                  "from": 1700088240,
+                  "to": 1700091840
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700075040,
+              "lastTime": 1700105040
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "5m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 0.6772277227722773,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": -1.9999999999999432,
+                  "to": 502
+                },
+                "time": {
+                  "from": 1700014800,
+                  "to": 1793519400
+                }
+              },
+              "rowCount": 501,
+              "firstTime": 1700014800,
+              "lastTime": 1700164800
+            }
+          ]
+        }
+      },
+      {
+        "name": "quit-requested",
+        "at": "2026-11-01T07:40:23.300Z",
+        "evidence": {
+          "ownedProcessCount": 8
+        }
+      },
+      {
+        "name": "quit-completed",
+        "at": "2026-11-01T07:40:38.588Z",
+        "evidence": {
+          "elapsedMs": 15288
+        }
+      },
+      {
+        "name": "normal-exit",
+        "at": "2026-11-01T07:40:38.797Z",
+        "evidence": {
+          "allExited": true,
+          "ownedProcessCount": 8
+        }
+      }
+    ]
+  },
+  {
+    "receipt": "acceptance-restart.json",
+    "sha256": "79253449ac6b58d54efe5720baa4ce9435735a4bc2f7cb85c6561f50e3e47bba",
+    "sourceCommit": "7b173ff8edc1a8b5b5a346ccb0a926108b395540",
+    "passed": true,
+    "errors": [],
+    "steps": [
+      {
+        "name": "restarted-workspace",
+        "at": "2026-11-01T07:42:28.691Z",
+        "evidence": {
+          "cells": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rows": 500,
+              "first": 1793488920,
+              "last": 1793518860,
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 439,
+                  "to": 499
+                },
+                "time": {
+                  "from": 1793515260,
+                  "to": 1793518860
+                }
+              }
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "5m",
+              "rows": 500,
+              "first": 1793368800,
+              "last": 1793518500,
+              "rightTruncated": false,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 0.6772277227722773,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": -2.999999999999943,
+                  "to": 501
+                },
+                "time": {
+                  "from": 1793368800,
+                  "to": 1793519100
+                }
+              }
+            }
+          ],
+          "linkGroups": {
+            "group-primary": {
+              "id": "group-primary",
+              "name": "主控组",
+              "color": "#4f7cff",
+              "parentId": null,
+              "peerPolicy": {
+                "market": true,
+                "interval": false,
+                "crosshair": true,
+                "timeAnchor": true,
+                "dateRange": false,
+                "chartStyle": false,
+                "drawings": false,
+                "indicators": {
+                  "definitions": true,
+                  "parameters": true,
+                  "visual": false,
+                  "paneLayout": false
+                }
+              },
+              "receiveFromParent": {
+                "market": true,
+                "interval": false,
+                "crosshair": true,
+                "timeAnchor": false,
+                "dateRange": true,
+                "chartStyle": false,
+                "drawings": false,
+                "indicators": {
+                  "definitions": true,
+                  "parameters": true,
+                  "visual": false,
+                  "paneLayout": false
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "historical-navigation-after-restart",
+        "at": "2026-11-01T07:42:30.527Z",
+        "evidence": {
+          "message": "已定位：2023-11-15 23:14:00 UTC。",
+          "charts": [
+            {
+              "cellId": "cell-1",
+              "interval": "1m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 5.60655737704918,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": 220,
+                  "to": 280
+                },
+                "time": {
+                  "from": 1700088240,
+                  "to": 1700091840
+                }
+              }
+            },
+            {
+              "cellId": "cell-2",
+              "interval": "5m",
+              "rightTruncated": true,
+              "canvas": {
+                "options": {
+                  "rightOffset": 5,
+                  "barSpacing": 0.6772277227722773,
+                  "minBarSpacing": 0.5,
+                  "maxBarSpacing": 0,
+                  "fixLeftEdge": false,
+                  "fixRightEdge": false,
+                  "lockVisibleTimeRangeOnResize": false,
+                  "rightBarStaysOnScroll": false,
+                  "borderVisible": true,
+                  "borderColor": "#1e293b",
+                  "visible": true,
+                  "timeVisible": true,
+                  "secondsVisible": false,
+                  "shiftVisibleRangeOnNewBar": true,
+                  "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+                  "ticksVisible": false,
+                  "uniformDistribution": false,
+                  "minimumHeight": 0,
+                  "allowBoldLabels": true,
+                  "ignoreWhitespaceIndices": false,
+                  "enableConflation": false,
+                  "conflationThresholdFactor": 1,
+                  "precomputeConflationOnInit": false,
+                  "precomputeConflationPriority": "background"
+                },
+                "logical": {
+                  "from": -1.9999999999999432,
+                  "to": 502
+                },
+                "time": {
+                  "from": 1700014800,
+                  "to": 1793519100
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "return-to-live",
+        "at": "2026-11-01T07:42:32.401Z",
+        "evidence": {
+          "last": 1793518860,
+          "rightTruncated": false,
+          "canvas": {
+            "options": {
+              "rightOffset": 5,
+              "barSpacing": 5.60655737704918,
+              "minBarSpacing": 0.5,
+              "maxBarSpacing": 0,
+              "fixLeftEdge": false,
+              "fixRightEdge": false,
+              "lockVisibleTimeRangeOnResize": false,
+              "rightBarStaysOnScroll": false,
+              "borderVisible": true,
+              "borderColor": "#1e293b",
+              "visible": true,
+              "timeVisible": true,
+              "secondsVisible": false,
+              "shiftVisibleRangeOnNewBar": true,
+              "allowShiftVisibleRangeOnWhitespaceReplacement": false,
+              "ticksVisible": false,
+              "uniformDistribution": false,
+              "minimumHeight": 0,
+              "allowBoldLabels": true,
+              "ignoreWhitespaceIndices": false,
+              "enableConflation": false,
+              "conflationThresholdFactor": 1,
+              "precomputeConflationOnInit": false,
+              "precomputeConflationPriority": "background"
+            },
+            "logical": {
+              "from": 1170.4659999989426,
+              "to": 1230.4659999989426
+            },
+            "time": {
+              "from": 1793499120,
+              "to": 1793502780
+            }
+          }
+        }
+      },
+      {
+        "name": "quit-requested",
+        "at": "2026-11-01T07:42:32.567Z",
+        "evidence": {
+          "ownedProcessCount": 8
+        }
+      },
+      {
+        "name": "quit-completed",
+        "at": "2026-11-01T07:42:47.943Z",
+        "evidence": {
+          "elapsedMs": 15376
+        }
+      },
+      {
+        "name": "normal-exit",
+        "at": "2026-11-01T07:42:48.134Z",
+        "evidence": {
+          "allExited": true,
+          "ownedProcessCount": 8
+        }
+      }
+    ]
+  }
+]

@@ -1,3 +1,4 @@
+import { readStrategyRunStream, StrategyRunStreamError, type StrategyRunUpdate } from "./backtestRunStream.js";
 import { API_BASE } from "../../services/apiConfig.js";
 import { preparationRequest, waitForPreparation, type PreparationJob } from "../data-preparation/api.js";
 import type {
@@ -209,6 +210,7 @@ export interface BacktestApiClient {
     signal?: AbortSignal,
   ): Promise<BacktestRunRecord>;
   getRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
+  streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
   exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
@@ -448,6 +450,16 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
           body: JSON.stringify(body),
         }, signal)),
       );
+    },
+    async streamRun(runId, signal, onUpdate) {
+      const response = await fetch(`${base}/runs/${encodeURIComponent(runId)}/events`, requestOptions({
+        headers: { Accept: "application/x-ndjson" },
+      }, signal));
+      if (!response.ok) await readJson(response);
+      if (!response.body || !response.headers.get("content-type")?.startsWith("application/x-ndjson")) {
+        throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "The backend did not return a strategy result stream");
+      }
+      return readStrategyRunStream({ body: response.body, runId, ...(signal ? { signal } : {}), ...(onUpdate ? { onUpdate } : {}) });
     },
     async getRun(runId, signal) {
       return readJson(await fetch(

@@ -75,7 +75,9 @@ def market_row(timestamp):
         "high": price + 2,
         "low": price - 2,
         "close": price,
-        "volume": index + 1,
+        # Bounded display reads may precede the reference mathematical origin
+        # before canonical indicator initialization discovers that origin.
+        "volume": abs(index) + 1,
     }
 
 

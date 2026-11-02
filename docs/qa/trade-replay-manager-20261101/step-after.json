@@ -1,0 +1,36 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "browser": "Chrome/156.0.8078.74",
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "passed": true,
+        "scope": "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance",
+        "pendingLast": {
+          "time": 1699995600,
+          "open": 100,
+          "high": 102,
+          "low": 99,
+          "close": 101,
+          "volume": 1,
+          "is_closed": true
+        },
+        "resolvedLast": {
+          "time": 1699999200,
+          "open": 100,
+          "high": 102,
+          "low": 99,
+          "close": 101,
+          "volume": 1,
+          "is_closed": true
+        }
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "passed": true,
+  "browserExitCode": 0
+}

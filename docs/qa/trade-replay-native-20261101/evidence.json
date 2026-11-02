@@ -1,0 +1,75 @@
+{
+  "schema": "candlescope.trade-replay-native-evidence/1",
+  "recordedAt": "2026-11-01T09:45:27.577382+00:00",
+  "sourceCommit": "434185b8f31b03a31cf71720bfe95177e17630ee",
+  "platform": "macOS arm64",
+  "zipSha256": "b018c422e1421f4be3ce9712d03f89f3d6de595be2d0577487fb3c61a0979a3e",
+  "asarSha256": "9f35efb4afa1ff6fd558d979c9e3c061330ca8b9bf134f6c08a7e7cbcf4c3574",
+  "packageSourceMismatches": [],
+  "strictSignatureBefore": true,
+  "strictSignatureAfter": true,
+  "functionalPassed": true,
+  "rendererErrors": [],
+  "checks": [
+    "configuration-result",
+    "configuration-ready",
+    "initial-replay",
+    "revealed-coarse-bar",
+    "fine-step-no-future",
+    "return-live",
+    "quit-requested",
+    "quit-completed",
+    "full-exit",
+    "restored-identical-control-request",
+    "restart-persistence",
+    "quit-requested",
+    "quit-completed",
+    "final-exit"
+  ],
+  "fixture": {
+    "symbol": "QAFIXTUREUSDT",
+    "source": "Private synthetic final rows in aligned-15m-bars.sqlite3, real packaged backend and chart transport; no response substitution",
+    "rows1m": 7200,
+    "rows5m": 1440,
+    "rows15m": 480,
+    "originMs": 1699999200000,
+    "coarseInterval": "15m",
+    "fineInterval": "1m",
+    "futureHigh": 999999,
+    "futureIndex": 4804,
+    "fineCursorIndex": 4803,
+    "revealedPrefix": [
+      4800,
+      4801,
+      4802
+    ]
+  },
+  "control": {
+    "at": "2026-11-01T09:44:36.395233+00:00",
+    "controlSource": "9860e6a7ae9051222ae8287b668e643678f0f4f8",
+    "candidateSource": "434185b8f31b03a31cf71720bfe95177e17630ee",
+    "equalFiles": {
+      "frontend/src/features/app-control/controlController.test.ts": "bfdcfe90fdd0ea1402e095a607772ee163eebcc1c68a4caaed593b2eeda23eac",
+      "frontend/src/features/app-control/controlController.ts": "6cefdf33aa02c19024fdef7e833ff3e9f82ac02c909c022430dbaeac50e5e9ca",
+      "frontend/src/features/chart-workspace/__tests__/chartWorkspaceControl.test.ts": "b8c67caa492049a2de2ff8dbf315bd8bd439ba52a0eb2d020556a9ec6c01020c",
+      "frontend/src/features/chart-workspace/chartWorkspaceBulkUpdate.ts": "23d254ee47db69b02c7e421b47bee81c29fc089384186d834e95011ded14b132"
+    },
+    "nativeStep": "restored-identical-control-request"
+  },
+  "limitations": [
+    "Replay cursor restarts at entry; saved note and ledger persist.",
+    "Native oracle uses 15m to 1m, while 5m behavior remains covered by prior source/browser checks.",
+    "Manual QA account only; no exchange order or provider qualification.",
+    "Sibling live chart/order-book startup status is not a general live transport acceptance.",
+    "No Windows, formal replay, strategy replay, full issue 179 or 157-item acceptance claim."
+  ],
+  "preservedFailedAttempts": [
+    "old 8af candidate control TARGET_CHANGED",
+    "copied empty cache owner bound to old profile path",
+    "untrusted synthetic bars replaced by legitimate repair",
+    "whole-day BTC archive replaced overlapping synthetic data",
+    "other-instrument replay defaults to 15m",
+    "original 5m seed origin was not aligned to 15m"
+  ],
+  "localEvidenceRoot": "/Users/ryanliang/.codex/worktrees/lightweight-replay-manager-20261101/CandleScope/output/issue179-control-native-20261101"
+}

@@ -79,6 +79,7 @@ jobs:
             tests/test_stream_klines_event_filter.py \
             tests/test_kline_batch_stream.py \
             tests/test_backfill_coordinator.py \
+            tests/test_backfill_interest_priority.py \
             tests/test_public_admission.py \
             tests/test_backfill_rate_limit.py \
             tests/test_ccxt_shared_markets.py \
@@ -102,6 +103,7 @@ jobs:
             tests/test_pyne_removal.py \
             tests/test_data_preparation.py \
             tests/test_replay_context_origin.py \
+            tests/test_replay_bounded_context.py \
             tests/test_replay_history_archive.py \
             tests/test_replay_v2_training_history.py \
             tests/test_replay_history_source_grid.py \

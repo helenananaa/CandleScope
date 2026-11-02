@@ -349,7 +349,7 @@ export function useDrawingToolbarController({
   const currentCursor = findVariant(CURSOR_VARIANTS, currentCursorId);
   const currentFreehandId = activeFreehandVariant?.id ?? freehandVariant;
   const currentFreehand = findVariant(FREEHAND_VARIANTS, currentFreehandId);
-  const currentLine = findVariant(LINE_VARIANTS, lineVariant);
+  const currentLine = activeLineVariant ?? findVariant(LINE_VARIANTS, lineVariant);
   const currentShape = findVariant(SHAPE_VARIANTS, shapeVariant);
   const currentPosition = findVariant(POSITION_VARIANTS, posVariant);
 
@@ -425,7 +425,7 @@ export function useDrawingToolbarController({
     isShapeActive,
     isTextActive,
     lineBtnRef,
-    lineVariant,
+    lineVariant: activeLineVariant?.id ?? lineVariant,
     posBtnRef,
     posVariant,
     shapeBtnRef,

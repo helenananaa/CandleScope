@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRecord } from "../../backtestApi.js";
 import type { BacktestRunRecord } from "../../backtestTypes.js";
+import { StrategyRunStreamError } from "../../backtestRunStream.js";
 import {
   buildChartStrategyRunBody,
   chartStrategyQuickPresetIdForMarket,
@@ -14,6 +15,7 @@ import {
   type ChartStrategyRunApi,
 } from "../chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../chartStrategyTesterUiModel.js";
+import { StrategyDataManager, type StrategyDataApi } from "../../../market-data/manager/strategyDataManager.js";
 
 const request: ChartStrategyRunRequest = {
   cellScope: "workspace\u0000cell-1",
@@ -504,6 +506,42 @@ function importedApi(calls: string[], epoch = importedSource.dataEpoch): ChartSt
     },
   };
 }
+
+test("fixed-history DataManager owns the actual research stream without Run polling", async () => {
+  const calls: string[] = [], states: string[] = [];
+  const api: StrategyDataApi = {
+    ...importedApi(calls),
+    async getRun() { throw new Error("Research must not poll the Run endpoint"); },
+    async getReport() { throw new Error("Result loading is a separate operation"); },
+    async getChart() { throw new Error("Result loading is a separate operation"); },
+    async cancelRun() { throw new Error("Releasing a consumer must not cancel execution"); },
+    async streamRun(runId, signal, onUpdate) {
+      calls.push("stream");
+      assert.equal(runId, completed().run_id);
+      assert.equal(signal?.aborted, false);
+      onUpdate?.({ type: "progress", run: { ...completed(), state: "RUNNING" }, progress: null });
+      onUpdate?.({ type: "completed", run: completed(), progress: null });
+      return completed();
+    },
+  };
+  const manager = new StrategyDataManager(api);
+  const outcome = await manager.runResearch({ request, source: importedSource, onRunUpdate: run => states.push(run.state) });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.equal(outcome.kind === "TERMINAL" && outcome.run.state, "COMPLETED");
+  assert.equal(outcome.frozenContext?.snapshotHash, importedPreview().snapshot_hash);
+  assert.equal(calls.filter(call => call === "stream").length, 1);
+  assert.deepEqual(states, ["RUNNING", "COMPLETED"]);
+  assert.equal(manager.diagnostics().operations, 0);
+  assert.equal(manager.diagnostics().streams, 0);
+  manager.dispose();
+});
+
+test("committed provider failure retains its code, reason and recovery action in research diagnostics", () => {
+  const failure = chartStrategyRunDiagnostics(new StrategyRunStreamError("PROVIDER_CRASH_UNRECOVERABLE", "strategy crashed at sequence 12"));
+  assert.equal(failure.code, "PROVIDER_CRASH_UNRECOVERABLE");
+  assert.equal(failure.message, "strategy crashed at sequence 12");
+  assert.equal(failure.action, "fix-strategy");
+});
 
 test("imported dataset previews and freezes without materialize or online resolve", async () => {
   const calls: string[] = [];

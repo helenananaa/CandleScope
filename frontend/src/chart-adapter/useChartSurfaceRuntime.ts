@@ -27,6 +27,7 @@ export interface ChartSurfaceHandle {
   getVisibleRange(): ChartSurfaceVisibleRange | null;
   setLinkedCrosshairTime(time: number | null): boolean;
   setLinkedVisibleTimeAnchor(time: number): boolean;
+  centerVisibleTime(time: number, viewport?: ChartSurfaceVisibleRange): boolean;
   setLinkedVisibleTimeRange(range: ChartSurfaceLinkedTimeRange): boolean;
   subscribeLinkedViewportReady(listener: (generation: number) => void): () => void;
   subscribeDrawingRevision(listener: (scopeKey: string, revision: number) => void): () => void;
@@ -53,6 +54,10 @@ export function useChartSurfaceRuntime() {
 
   const setLinkedVisibleTimeAnchor = useCallback((time: number) => (
     callChartSurface(ref, "setLinkedVisibleTimeAnchor", false, time)
+  ), []);
+
+  const centerVisibleTime = useCallback((time: number, viewport?: ChartSurfaceVisibleRange) => (
+    callChartSurface(ref, "centerVisibleTime", false, time, viewport)
   ), []);
 
   const setLinkedVisibleTimeRange = useCallback((range: ChartSurfaceLinkedTimeRange) => (
@@ -105,6 +110,7 @@ export function useChartSurfaceRuntime() {
     getVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,
@@ -123,6 +129,7 @@ export function useChartSurfaceRuntime() {
     getVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,

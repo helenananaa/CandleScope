@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TransportKlineResponse } from "../../services/apiPayloadParsers.js";
+import type { KlineFetchResult } from "../market-data/klineContracts.js";
+import { epochSeconds } from "../../test/testHelpers.js";
 import { loadReplayBars, ReplayHistoryPendingError } from "./quickReplayData.js";
 
 const input = { exchange: "okx", marketType: "futures", symbol: "ETH-USDT-SWAP", interval: "1h" };
-const bar = (time: number, close = 10) => ({ time, open: 10, high: 11, low: 9, close, volume: 1 });
-const ready = (time: number): TransportKlineResponse => ({ data: [bar(time)], history_state: "ready", complete: true, retryable: false, all_rows_final: true });
+const bar = (time: number, close = 10) => ({ time: epochSeconds(time), open: 10, high: 11, low: 9, close, volume: 1 });
+const ready = (time: number): KlineFetchResult => ({ data: [bar(time)], history_state: "ready", complete: true, retryable: false, all_rows_final: true });
 
 test("cold repair retries the same range and publishes only the final snapshot", async () => {
   const calls: number[] = [];
-  const responses: TransportKlineResponse[] = [
+  const responses: KlineFetchResult[] = [
     { data: [], history_state: "pending", retryable: true },
     { data: [bar(7200, 99)], history_state: "pending", retryable: true },
     ready(7200),
@@ -24,7 +25,7 @@ test("cold repair retries the same range and publishes only the final snapshot",
 
 test("repair attempts do not consume backwards pagination budget", async () => {
   const ends: number[] = [];
-  const responses: TransportKlineResponse[] = [
+  const responses: KlineFetchResult[] = [
     { data: [], history_state: "pending" },
     { ...ready(7200), truncated: true, next_end_ms: 3600000 },
     ready(0),
@@ -67,5 +68,41 @@ test("leaving replay cancels repair before another request or a late ready resul
       wait: async () => { controller.abort(); },
     }), { name: "AbortError" });
     assert.equal(calls, 1);
+  }
+});
+
+test("an inclusive pagination cursor at the requested start still loads the first candle", async () => {
+  const ends: number[] = [];
+  const result = await loadReplayBars(input, 0, 10800, undefined, {
+    fetchRange: async (...args) => {
+      ends.push(args[3]);
+      return ends.length === 1 ? { ...ready(7200), truncated: true, next_end_ms: 0 } : ready(0);
+    },
+    wait: async () => {},
+  });
+  assert.deepEqual(ends, [10800, 0]);
+  assert.deepEqual(result.bars.map(row => row.time), [0, 7200]);
+  assert.equal(result.truncated, false);
+});
+
+test("a capped response without a continuation remains visibly truncated", async () => {
+  const result = await loadReplayBars(input, 0, 10800, undefined, {
+    fetchRange: async () => ({ ...ready(7200), truncated: true }),
+    wait: async () => {},
+  });
+  assert.equal(result.truncated, true);
+});
+
+test("forming or unproven candles cannot become the frozen replay history", async () => {
+  const unproven = ready(0);
+  delete unproven.all_rows_final;
+  for (const response of [
+    unproven,
+    { ...ready(0), data: [{ ...bar(0), is_closed: false }] },
+  ]) {
+    await assert.rejects(loadReplayBars(input, 0, 10800, undefined, {
+      fetchRange: async () => response,
+      wait: async () => {},
+    }), ReplayHistoryPendingError);
   }
 });

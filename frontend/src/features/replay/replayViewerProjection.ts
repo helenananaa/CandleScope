@@ -368,9 +368,23 @@ export function rebuildReplayViewerSeries(
     displayInterval,
   );
   const previousRows = target.snapshot();
+  const contextRows = preserveContextHistory
+    ? revealedContextRows(previousRows, publicTimeMs)
+    : [];
+  if (preserveContextHistory) {
+    // A server display window may extend before the bounded execution source.
+    // Keep its closed, already revealed prefix when cache preparation runs
+    // before the next authoritative display response, as the delta path does.
+    contextRows.push(...carriedRevealedProjectionRows(
+      previousRows,
+      projectedRows,
+      publicTimeMs,
+    ));
+    contextRows.sort((left, right) => Number(left.time) - Number(right.time));
+  }
   const rows = preserveContextHistory
     ? mergeDisplayContextWithProjection(
-        revealedContextRows(previousRows, publicTimeMs),
+        contextRows,
         projectedRows,
       )
     : projectedRows;

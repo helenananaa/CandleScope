@@ -1,0 +1,19 @@
+{
+  "main": "0d9fb60e23c08b28edcf9f4eaf8e5dfcb1dd7199",
+  "change": "retain strategy stream close and awaited history prefix runtime close during DataManager shutdown",
+  "managerSha256": "3d7239b19c9f7f730de7d160beeee7995ca2a8b4df609259af174f606c1bd2a1",
+  "combinedSource": "9b06e80774075b152d9b798e71ce5274fa54f9d8",
+  "combinedBackendTests": {
+    "passed": 220,
+    "seconds": 76.39,
+    "warning": "existing Starlette anyio BlockingPortal deprecation"
+  },
+  "previousNativeSource": "1acdfd6295cc8087e8892499148e3242b1c33edd",
+  "newCombinedNativePending": true,
+  "CI": "must rerun for updated head before merge",
+  "exactBranchBackendTests": {
+    "passed": 55,
+    "seconds": 109.01,
+    "warning": "Starlette testclient deprecated BlockingPortal alias"
+  }
+}

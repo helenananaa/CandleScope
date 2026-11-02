@@ -102,3 +102,11 @@ test("auto-select defaults off and reflects an enabled preference beside continu
     assert.ok(html.indexOf('data-drawing-tool="continuous"') < html.indexOf('data-drawing-tool="auto-select"'));
   }
 });
+
+test("source range variants keep their own toolbar identity and translated title", () => {
+  for (const [tool, label] of [["measure-price", "Price range"], ["measure-time", "Time range"], ["measure-price-time", "Price and time range"]] as const) {
+    const html = renderInEnglish(<DrawingToolbar activeTool={tool} penColor="#f59e0b" penSize={2}
+      onClearAll={() => {}} onToggleDrawingsHidden={() => {}} onPositionSizeChange={() => {}} />);
+    assert.ok(buttonTag(html, `data-drawing-tool="${tool}"`).includes(label));
+  }
+});

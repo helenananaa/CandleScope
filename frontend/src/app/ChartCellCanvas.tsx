@@ -29,6 +29,7 @@ export interface ChartCellCanvasProps {
   pluginChartLayerSource?: PluginChartLayerSource | null;
   errorBoundary?: ComponentType<PropsWithChildren>;
   drawingInteractionReady?: boolean;
+  drawingControlsHost?: HTMLElement | null;
   onDrawingInteractionReadyChange?: (ready: boolean) => void;
   paused?: boolean;
 }
@@ -44,6 +45,7 @@ function ChartCellCanvas({
   pluginChartLayerSource = null,
   errorBoundary = ChartErrorBoundary,
   drawingInteractionReady = false,
+  drawingControlsHost = null,
   onDrawingInteractionReadyChange,
   paused = false,
 }: ChartCellCanvasProps) {
@@ -74,10 +76,12 @@ function ChartCellCanvas({
     ),
     onDrawingInteractionReadyChange: handleDrawingInteractionReadyChange,
     externalPriceLineSource: accountPriceLineSource,
+    drawingControlsHost,
   }), [
     accountPriceLineSource,
     chart.chartProps,
     drawingInteractionReady,
+    drawingControlsHost,
     handleDrawingInteractionReadyChange,
   ]);
   const supplementalPanes = React.useMemo(

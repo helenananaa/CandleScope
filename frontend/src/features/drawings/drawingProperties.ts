@@ -26,7 +26,7 @@ export function parseCoordinateDraft(draft: readonly CoordinateDraft[], original
 export function drawingCoordinates(saved: SavedDrawing): readonly DrawingCoordinate[] | null {
   let points: readonly DrawingDataPoint[];
   if (saved.type === "axis-line") points = saved.dataPoint ? [saved.dataPoint] : [];
-  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure") points = saved.dataPoints ?? [];
+  else if (saved.type === "line" || saved.type === "shape" || saved.type === "fibonacci" || saved.type === "angle-measure" || saved.type === "range-measure") points = saved.dataPoints ?? [];
   else return null;
   if (!points.length || points.length > 3 || points.some((point) =>
     typeof point.time !== "number" || !Number.isFinite(point.time) || !Number.isFinite(point.price)
@@ -83,7 +83,7 @@ export function drawingPropertiesCandidate(
       || coordinates.some((point) => !Number.isFinite(point.price) || !formatCoordinateTime(point.time))) return null;
     if (candidate.type === "axis-line" && candidate.dataPoint && coordinates[0]) {
       candidate.dataPoint = { ...candidate.dataPoint, ...coordinates[0] };
-    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure") {
+    } else if (candidate.type === "line" || candidate.type === "shape" || candidate.type === "fibonacci" || candidate.type === "angle-measure" || candidate.type === "range-measure") {
       candidate.dataPoints = (candidate.dataPoints ?? []).map((point, index) => ({ ...point, ...coordinates[index] }));
     } else return null;
   }
