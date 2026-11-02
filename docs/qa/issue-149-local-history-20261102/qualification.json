@@ -33,7 +33,15 @@
     "Stable fixed archive inventory integration with #146"
   ],
   "network_gate": {
-    "retry_not_before_utc": "2026-11-02T08:57:59.888Z",
-    "reason": "Existing seconds native Binance IP418; no public market requests or native fresh-catalog starts before deadline."
+    "retry_not_before_utc": "2026-11-02T16:14:01.202Z",
+    "reason": "New source-close seconds native BinanceIP418 at10:03UTC; strict public retry gate retained."
+  },
+  "main217": {
+    "source": "85f55f15",
+    "backend_tests": 107,
+    "frontend_tests": 81,
+    "typecheck": true,
+    "owning_OI_product_changed": false,
+    "native_qualified": false
   }
 }
