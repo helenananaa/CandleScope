@@ -22,6 +22,7 @@ import {
 import type { DrawingKind, SavedDrawing } from "../drawingTypes.js";
 
 const ID_PREFIX: Readonly<Record<DrawingKind, string>> = Object.freeze({
+  "range-measure": "measure",
   line: "ln",
   "axis-line": "ax",
   "angle-measure": "ang",
@@ -108,6 +109,14 @@ function createEntityFromSavedDrawing(item: SavedDrawing, id: string): DrawingEn
   let style: DrawingStyle;
 
   switch (item.type) {
+    case "range-measure":
+      geometry = { kind: "range-measure", measureType: item.measureType, dataPoints: item.dataPoints };
+      style = {
+        kind: "range-measure",
+        ...(item.color === undefined ? {} : { color: item.color }),
+        ...(item.lineWidth === undefined ? {} : { lineWidth: item.lineWidth }),
+      };
+      break;
     case "line":
       geometry = {
         kind: "line",
@@ -263,6 +272,10 @@ export function savedDrawingFromEntity(entity: DrawingEntity): SavedDrawing | nu
     copyDefinedFields(candidate, style, ["hidden", "locked", "visibleIntervals"]);
 
     switch (canonical.kind) {
+      case "range-measure":
+        copyDefinedFields(candidate, geometry, ["measureType", "dataPoints"]);
+        copyDefinedFields(candidate, style, ["color", "lineWidth"]);
+        break;
       case "line":
         copyDefinedFields(candidate, geometry, ["lineType", "dataPoints"]);
         copyDefinedFields(candidate, style, ["color", "lineWidth"]);

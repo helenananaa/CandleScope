@@ -3146,3 +3146,46 @@ test("left-anchored position panel keeps a fixed gap while chart zoom changes po
   assert.equal(panelGap(normal), 8);
   assert.equal(panelGap(zoomed), 8);
 });
+
+test("source range measurement keeps its values across projection scales and exposes body/endpoint hits", () => {
+  const entity = createDrawingEntity({
+    id: "ruler", kind: "range-measure",
+    geometry: { kind: "range-measure", measureType: "price-time", dataPoints: [{ time: 40, price: 50 }, { time: 100, price: 100 }] },
+    style: { kind: "range-measure", color: "#f00", lineWidth: 2 },
+  });
+  const document = createDrawingDocument({ scopeKey: "rulers", entities: [entity] });
+  const first = project(document, createFrame(), createAdapter(), undefined, "ruler");
+  const zoomed = project(document, createFrame(), createAdapter({ projectX: (time) => time * 1.5 }), undefined, "ruler");
+  assert.ok(first && zoomed);
+  const spec = first.entities[0]?.renderSpec;
+  const zoomSpec = zoomed.entities[0]?.renderSpec;
+  assert.ok(spec?.op === "range-measure" && zoomSpec?.op === "range-measure");
+  assert.equal(spec.labelText, "Δ +50 (+100%) · Δt +1m");
+  assert.equal(zoomSpec.labelText, spec.labelText);
+  assert.notDeepEqual(entityPoints(first, "ruler"), entityPoints(zoomed, "ruler"));
+  assert.equal(hitTestDrawingScreenDisplayList(first, 40, 50)?.pointIndex, 0);
+  assert.equal(hitTestDrawingScreenDisplayList(first, 100, 100)?.pointIndex, 1);
+  assert.equal(hitTestDrawingScreenDisplayList(first, 70, 75)?.pointIndex, -1);
+  const gap = project(document, createFrame(), createAdapter({ gapTime: 100 }));
+  assert.equal(gap?.entities.length, 0, "unresolved anchors must not produce fabricated measurements");
+});
+
+test("ruler labels stay inside the visible pane after an interval change without moving source anchors", () => {
+  const entity = createDrawingEntity({
+    id: "edge-ruler", kind: "range-measure",
+    geometry: { kind: "range-measure", measureType: "price-time", dataPoints: [{ time: 180, price: 2 }, { time: 195, price: 15 }] },
+    style: { kind: "range-measure", color: "#f00", lineWidth: 2 },
+  });
+  const document = createDrawingDocument({ scopeKey: "rulers", entities: [entity] });
+  const display = project(document, createFrame({ width: 320 }), createAdapter({ projectX: time => time + 120 }));
+  assert.ok(display);
+  const points = entityPoints(display, "edge-ruler");
+  assert.deepEqual(Array.from(points.slice(0, 4)), [300, 2, 315, 15]);
+  assert.ok(points[4]! >= 4 && points[6]! <= 316, "both horizontal label edges are visible");
+  assert.ok(points[5]! >= 4 && points[7]! <= 196, "the label stays below the pane top");
+  const spec = display.entities[0]?.renderSpec;
+  assert.ok(spec?.op === "range-measure");
+  assert.equal(spec.labelText, "Δ +13 (+650%) · Δt +15s");
+  const outside = project(document, createFrame({ width: 320 }), createAdapter({ projectX: time => time + 400 }));
+  assert.equal(outside?.entities.length, 0, "off-screen rulers do not produce floating edge labels");
+});

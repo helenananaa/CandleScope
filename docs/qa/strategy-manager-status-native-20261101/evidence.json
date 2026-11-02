@@ -1,0 +1,68 @@
+{
+  "schema": "candlescope.strategy-manager-status-native-evidence/1",
+  "sourceCommit": "1acdfd6295cc8087e8892499148e3242b1c33edd",
+  "zipSha256": "ed46883634908c25be7c51288d2ebe957c1abc6b9f71b7e92911d545fbaa49d8",
+  "asarSha256": "103778c06c49c0cddff258b5385df386d00098dc8fc23f22bb230bcb1b8cef9f",
+  "sourceFiles": 3110,
+  "distFiles": 158,
+  "sourceMismatches": [],
+  "passed": true,
+  "rendererErrors": [],
+  "signatureBefore": true,
+  "signatureAfter": true,
+  "fullOwnedProcessExits": 2,
+  "metrics": {
+    "ambiguity_count": 0,
+    "fill_count": 508,
+    "realized_net_pnl": "-803.7515412168049013875687940",
+    "rejected_order_count": 0,
+    "risk_rejection_count": 0,
+    "trade_count": 478,
+    "win_rate": "0.8786610878661087866108786611",
+    "winning_trade_count": 420
+  },
+  "reportHashes": {
+    "decision": "sha256:bbc407e1019bfa33a106cfc7373c75f99663d6c624e3ad6e7abf5eef4331b816",
+    "fill": "9dc82358d2a73476f8ceee8a23621d92f49a070317b44dbca5af4b21e7dda2e7",
+    "ledger": "4e79c06efaa2721b9e0a7c4fc74d53cf362cbebcade047c4ef93bbd702354d53",
+    "report": "sha256:b714d99607ea3d52d7ed731b2306a015f555130f6754487af8e0d9a0dc7c5f70"
+  },
+  "restartReportHashes": {
+    "decision": "sha256:bbc407e1019bfa33a106cfc7373c75f99663d6c624e3ad6e7abf5eef4331b816",
+    "fill": "9dc82358d2a73476f8ceee8a23621d92f49a070317b44dbca5af4b21e7dda2e7",
+    "ledger": "4e79c06efaa2721b9e0a7c4fc74d53cf362cbebcade047c4ef93bbd702354d53",
+    "report": "sha256:b714d99607ea3d52d7ed731b2306a015f555130f6754487af8e0d9a0dc7c5f70"
+  },
+  "failureVisible": {
+    "runId": "bt_2a238ab0afb8442ba0f5974fe8102116",
+    "message": "PROVIDER_PROTOCOL_VIOLATION: PROVIDER_PROTOCOL_VIOLATION: native-manager-intentional-failure"
+  },
+  "failureFooterAssertion": "这次运行未完成",
+  "fixtureMethod": {
+    "method": "published host-strategy source and flush commands; no response substitution",
+    "sourceVerified": true
+  },
+  "offlineIsolation": {
+    "runtime_mode": "LOCAL_OFFLINE",
+    "data_manager": {
+      "status": "not_initialized"
+    },
+    "network": {
+      "installed": true,
+      "policy": "loopback_only",
+      "blocked_attempts": 0
+    }
+  },
+  "checks": {
+    "hostStatusTests": 4,
+    "typecheck": true,
+    "eslint": true,
+    "productionBuildSeconds": 25.33
+  },
+  "limitations": [
+    "macOS arm64; not full issue165 or 157-item qualification",
+    "Error fixture uses published editor source/flush commands; editor clipboard/paste is not qualified",
+    "Prior failed QA attempts and earlier native footer defect are retained in prior output and evidence directories"
+  ],
+  "artifacts": "output/issue165-status-native-20261101"
+}

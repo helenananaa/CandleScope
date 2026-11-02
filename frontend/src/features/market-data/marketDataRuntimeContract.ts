@@ -4,6 +4,7 @@ import type { IndicatorRangeEvent, CrosshairData } from "./klineContracts.js";
 import type { KlineBar } from "./marketDataTypes.js";
 import type { ChartDataCommitMeta } from "./useChartDataRuntime.js";
 import type { SeriesWindowView } from "./window/seriesWindowView.js";
+import type { ChartTimeSeekResult } from "./chartTimeNavigation.js";
 
 /**
  * Source-neutral market-data boundary consumed by page shells and chart views.
@@ -59,6 +60,7 @@ export interface MarketDataRuntimeContract {
     loadMoreLeft(oldestLoadedTime?: number | null): Promise<void>;
     loadMoreRight?(): Promise<boolean>;
     restoreLatestWindow?(): Promise<boolean>;
+    seekToTime?(requestedTimeMs: number): Promise<ChartTimeSeekResult>;
     onCrosshairMove(data: CrosshairData | null | undefined): void;
     onVisibleRangeChange(range: unknown): void;
     consumeIndicatorRangeRequest(requestId: number): void;

@@ -6,9 +6,10 @@ import { t } from "../../../i18n/index.js";
 import { nativeRunFeedback, type NativeFeedbackStatus } from "../../backtest/native/nativeDiagnostics.js";
 import type { NativeRun } from "../../backtest/native/nativeBacktestApi.js";
 import { StrategyResearchShell } from "../StrategyResearchShell.js";
+import type { ChartStrategyTesterStatus } from "../../backtest/chart-tester/chartStrategyTesterState.js";
 
-function footer(nativeStatus?: NativeFeedbackStatus, hasData = true) {
-  const html = renderToStaticMarkup(<StrategyResearchShell visualState="completed" nativeStatus={nativeStatus}
+function footer(nativeStatus?: NativeFeedbackStatus, hasData = true, hostStatus?: ChartStrategyTesterStatus) {
+  const html = renderToStaticMarkup(<StrategyResearchShell visualState="completed" nativeStatus={nativeStatus} hostStatus={hostStatus}
     source={hasData ? { schemaVersion: "candlescope.research-source/1", kind: "IMPORTED_DATASET", datasetId: "fixture", dataEpoch: "sha256:fixture", interval: "1m" } : null}
     libraryEnabled libraryOpen={false} currentChartEnabled={false} onOpenLibrary={() => {}} onSelectCurrentChart={() => {}}
     pageExportRef={null} controls={null} runtimeMode="LIVE" intervalSelector={null} toolbar={null} exportOverlay={null}
@@ -22,6 +23,20 @@ test("selected failed native history overrides an earlier completed host run in 
   const feedback = nativeRunFeedback({ current, historical, error: "", busy: false, needsData: false });
   assert.equal(footer(feedback.status), t("strategy.status", { state: t("strategyReview.status.failed") }));
   assert.notEqual(footer(feedback.status), footer());
+});
+
+test("host execution state overrides a retained completed result", () => {
+  for (const [status, key] of [
+    ["RESOLVING", "chartTester.status.resolving"], ["QUEUED", "chartTester.status.queued"],
+    ["RUNNING", "chartTester.status.running"], ["FAILED", "chartTester.status.failed"],
+    ["NEEDS_DATA", "chartTester.status.needs_data"], ["UNSUPPORTED", "chartTester.status.unsupported"],
+    ["STALE", "chartTester.status.stale"],
+  ] as const) {
+    assert.equal(footer(undefined, true, status), t("strategy.status", { state: t(key) }));
+    assert.notEqual(footer(undefined, true, status), footer());
+  }
+  assert.equal(footer("running", true, "FAILED"), t("strategy.status", { state: t("strategyReview.status.running") }));
+  assert.equal(footer(undefined, false, "FAILED"), t("strategy.status", { state: t("research.source.none") }));
 });
 
 test("native running, canceled and interrupted views cannot inherit completed footer status", () => {

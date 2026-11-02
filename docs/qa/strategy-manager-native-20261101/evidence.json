@@ -1,0 +1,69 @@
+{
+  "schema": "candlescope.strategy-manager-native-evidence/1",
+  "sourceCommit": "2e414c5fff1d7527d3315634a343f00325dfd58a",
+  "zipSha256": "e70f362b7939bceb1d3368994efaed5ca9053a34e893f453ae141e74a76cf0a6",
+  "asarSha256": "734b0659deec85617063c7fc94a747d7db6c5ba79c5f822961524059f3149afe",
+  "sourceFiles": 3110,
+  "distFiles": 158,
+  "sourceMismatches": [],
+  "nativePassed": true,
+  "rendererErrors": [],
+  "signatureBefore": true,
+  "signatureAfter": true,
+  "fullOwnedProcessExits": 2,
+  "metrics": {
+    "ambiguity_count": 0,
+    "fill_count": 508,
+    "realized_net_pnl": "-803.7515412168049013875687940",
+    "rejected_order_count": 0,
+    "risk_rejection_count": 0,
+    "trade_count": 478,
+    "win_rate": "0.8786610878661087866108786611",
+    "winning_trade_count": 420
+  },
+  "reportHashes": {
+    "decision": "sha256:bbc407e1019bfa33a106cfc7373c75f99663d6c624e3ad6e7abf5eef4331b816",
+    "fill": "9dc82358d2a73476f8ceee8a23621d92f49a070317b44dbca5af4b21e7dda2e7",
+    "ledger": "4e79c06efaa2721b9e0a7c4fc74d53cf362cbebcade047c4ef93bbd702354d53",
+    "report": "sha256:a262087a92854f077d8dce307037803fa7d03dc69e15d6222e20e23af776447e"
+  },
+  "restartReportHashes": {
+    "decision": "sha256:bbc407e1019bfa33a106cfc7373c75f99663d6c624e3ad6e7abf5eef4331b816",
+    "fill": "9dc82358d2a73476f8ceee8a23621d92f49a070317b44dbca5af4b21e7dda2e7",
+    "ledger": "4e79c06efaa2721b9e0a7c4fc74d53cf362cbebcade047c4ef93bbd702354d53",
+    "report": "sha256:a262087a92854f077d8dce307037803fa7d03dc69e15d6222e20e23af776447e"
+  },
+  "failureVisible": {
+    "runId": "bt_9f79b24cb28f4175ada288e25ce0cc41",
+    "message": "PROVIDER_PROTOCOL_VIOLATION: PROVIDER_PROTOCOL_VIOLATION: native-manager-intentional-failure"
+  },
+  "offlineIsolation": {
+    "runtime_mode": "LOCAL_OFFLINE",
+    "data_manager": {
+      "status": "not_initialized"
+    },
+    "network": {
+      "installed": true,
+      "policy": "loopback_only",
+      "blocked_attempts": 0
+    }
+  },
+  "sourceFixtureMethod": {
+    "method": "published host-strategy source and flush commands; no response substitution",
+    "sourceVerified": true
+  },
+  "scope": [
+    "Actual native UI CSV import, template choice, permission confirmation and Run",
+    "One NDJSON subscription per execution; one committed result identity lookup, no run-state polling",
+    "600 bars, completed financial report and full exit/restart restore",
+    "Deterministic runtime failure shown by the UI after published source/flush editor commands",
+    "LOCAL_OFFLINE has no live market manager and zero blocked external network attempts"
+  ],
+  "limitations": [
+    "macOS arm64 only; full issue165 and 157-item acceptance not claimed",
+    "Native error fixture set via published editor commands; clipboard/edit-context paste behavior is not qualified",
+    "Failed QA selector, response-observer, autoindent, clipboard and load/quit attempts retained under output directory; they are not counted as passes",
+    "Screenshot follow-up found that a failed host run retained the completed footer from an earlier result; corrected in a later source commit, requiring new package verification. This evidence does not qualify that later footer correction."
+  ],
+  "artifacts": "output/issue165-strategy-native-20261101"
+}

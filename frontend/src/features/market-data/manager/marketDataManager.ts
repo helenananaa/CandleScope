@@ -292,7 +292,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     const logical = this.sharedStreams.diagnostics();
     return { ...this.transport.diagnostics(), logicalSubscribers: logical.logicalSubscribers,
       sharedInstruments: logical.entries.length, rejectedRealtime: this.rejectedRealtime, rangeHits: this.rangeHits, beforeHits: this.beforeHits, historyHits: this.historyHits,
-      cache: this.cache.diagnostics(), replay: this.replay.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
+      cache: this.cache.diagnostics(), ...super.diagnostics(), warmStreams: this.warmStreams.diagnostics(), healthRecovery: this.healthRecovery.diagnostics(), warming: this.warmQueue.diagnostics() };
   }
 
   closeAll(): void {

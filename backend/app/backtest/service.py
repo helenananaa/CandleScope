@@ -5408,43 +5408,20 @@ class BacktestService:
         if current not in {RunState.PREPARING, RunState.RUNNING, RunState.COMPLETING}:
             return
         code = str(getattr(exc, "code", None) or "PROVIDER_CRASH_UNRECOVERABLE")
-        failed = transition(current, RunState.FAILED)
-        changed = self.repository.compare_and_set_run_state(
+        transition(current, RunState.FAILED)
+        self.repository.fail_run(
             run_id,
             expected_state=current.value,
             expected_generation=expected_generation,
-            state=failed.value,
             updated_at_ms=stamp,
-            failure_code=code,
-        )
-        if changed:
-            checkpoint = self.repository.latest_checkpoint(run_id)
-            preserve = code in {
-                "PROVIDER_TIMEOUT",
-                "PROVIDER_CRASH_UNRECOVERABLE",
-                "CHECKPOINT_CORRUPT",
-                "DATASET_IDENTITY_CHANGED",
-                "DATA_SNAPSHOT_MISMATCH",
-                "DATA_GAP_REJECTED",
+            code=code,
+            message=str(exc),
+            preserve_checkpoint=code in {
+                "PROVIDER_TIMEOUT", "PROVIDER_CRASH_UNRECOVERABLE", "CHECKPOINT_CORRUPT",
+                "DATASET_IDENTITY_CHANGED", "DATA_SNAPSHOT_MISMATCH", "DATA_GAP_REJECTED",
                 "BACKTEST_STORAGE_TRANSIENT",
-            }
-            if not preserve:
-                self.repository.delete_checkpoints(run_id)
-            self._audit(
-                run_id,
-                "fail",
-                {
-                    "code": code,
-                    "message": str(exc),
-                    "checkpointPreserved": bool(preserve and checkpoint is not None),
-                    "checkpointSequence": (
-                        None if checkpoint is None else int(checkpoint["sequence"])
-                    ),
-                    "checkpointHash": (
-                        None if checkpoint is None else str(checkpoint["state_hash"])
-                    ),
-                },
-            )
+            },
+        )
 
     def _transition_run(
         self,

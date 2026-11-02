@@ -1,4 +1,5 @@
 import { resolveChartLinkTargetsForChannel } from "./chartWorkspaceLinkModel.js";
+import type { ChartTimeSeekResult } from "../market-data/chartTimeNavigation.js";
 import type {
   ChartCellId,
   ChartLinkGroupId,
@@ -119,6 +120,10 @@ function viewportEventKey(event: Pick<RetainedViewportEvent, "sourceCellId" | "k
 
 export class ChartLinkCoordinator {
   private readonly surfaces = new Map<ChartCellId, LinkedSurfaceRegistration>();
+  private readonly timeNavigators = new Map<ChartCellId, {
+    scopeKey: ChartWorkspaceId;
+    seek(timeMs: number): Promise<ChartTimeSeekResult>;
+  }>();
   private readonly viewportIssueListeners = new Set<ViewportIssueListener>();
   private readonly viewportStateByScope = new Map<ChartWorkspaceId, WorkspaceViewportState>();
   private publishingCrosshair = false;
@@ -199,6 +204,36 @@ export class ChartLinkCoordinator {
   subscribeViewportIssue(listener: ViewportIssueListener): () => void {
     this.viewportIssueListeners.add(listener);
     return () => { this.viewportIssueListeners.delete(listener); };
+  }
+
+  registerTimeNavigator(cellId: ChartCellId, seek: (timeMs: number) => Promise<ChartTimeSeekResult>,
+    scopeKey: ChartWorkspaceId = this.scopeKey): () => void {
+    const registration = { scopeKey, seek };
+    this.timeNavigators.set(cellId, registration);
+    return () => { if (this.timeNavigators.get(cellId) === registration) this.timeNavigators.delete(cellId); };
+  }
+
+  /** Explicit navigation loads each target's own series before positioning it.
+   * It is distinct from the ordinary drag/zoom viewport broadcasts. */
+  seekToTime(sourceCellId: ChartCellId, requestedTimeMs: number): Promise<Array<{
+    cellId: ChartCellId; result: ChartTimeSeekResult;
+  }>> {
+    if (!Number.isSafeInteger(requestedTimeMs) || requestedTimeMs < 0) return Promise.resolve([]);
+    const ids = new Set([sourceCellId,
+      ...resolveChartLinkTargetsForChannel(this.document, sourceCellId, "timeAnchor").map((target) => target.cellId),
+      ...resolveChartLinkTargetsForChannel(this.document, sourceCellId, "dateRange").map((target) => target.cellId),
+    ]);
+    const pending = [...ids].flatMap((cellId) => {
+      const navigator = this.timeNavigators.get(cellId);
+      if (!navigator || navigator.scopeKey !== this.scopeKey) return [];
+      return [navigator.seek(requestedTimeMs).catch((): ChartTimeSeekResult => ({
+        status: "unavailable", requestedTimeMs,
+      })).then((result) => ({ cellId, result }))];
+    });
+    if (!this.forwardingRemote) this.workspaceBus?.publishLink({
+      workspaceId: this.scopeKey, sourceCellId, kind: "dateSeek", payload: { requestedTimeMs },
+    });
+    return Promise.all(pending);
   }
 
   getViewportIssue(): ChartLinkViewportIssue | null {
@@ -385,6 +420,9 @@ export class ChartLinkCoordinator {
       } else if (event.kind === "dateRange") {
         const range = (event.payload as { range?: ChartLinkedTimeRange } | null)?.range;
         if (range) this.publishDateRange(event.sourceCellId, range);
+      } else if (event.kind === "dateSeek") {
+        const timeMs = (event.payload as { requestedTimeMs?: unknown } | null)?.requestedTimeMs;
+        if (typeof timeMs === "number") void this.seekToTime(event.sourceCellId, timeMs);
       } else if (event.kind === "drawings") {
         const payload = event.payload as { revision?: unknown; scopeKey?: unknown } | null;
         if (typeof payload?.revision === "number" && typeof payload.scopeKey === "string") {

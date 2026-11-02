@@ -15602,6 +15602,10 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .drawing-object-list button:disabled { opacity: .45; cursor: default; }
 .drawing-object-list button[aria-pressed='true'] { color: var(--text-accent); }
 .drawing-object-list .drawing-object-trigger { height: 34px; width: 34px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 2px 8px #0001; }
+.chart-cell-drawing-controls { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.chart-cell-drawing-controls[hidden] { display: none; }
+.drawing-object-list[data-placement='header'] { position: static; }
+.drawing-object-list[data-placement='header'] .drawing-object-trigger { width: 24px; height: 22px; min-width: 24px; padding: 0; background: transparent; border: 0; box-shadow: none; }
 .drawing-object-panel { width: min(360px, calc(100vw - 16px)); }
 .drawing-object-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 10px 12px; }
 .drawing-object-group h4 { display: flex; justify-content: space-between; gap: 10px; margin: 14px 8px 8px; color: var(--text-secondary); font-size: var(--font-size-xs); font-weight: 600; }

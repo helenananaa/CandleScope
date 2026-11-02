@@ -1,0 +1,82 @@
+{
+  "baselineSource": "e06607894b4890e6fe960a870a877475567e8f7c",
+  "scope": "per-case packaged native evidence; original serial chain failed and is not promoted to PASS",
+  "cases": {
+    "date": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "date.json.gz",
+      "sha256": "95fc8dc6f3e564ee5fae53d9e10b79b29bc8b96e5f92faed070ed0272b6fb7bc"
+    },
+    "date-restart": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "date-restart.json.gz",
+      "sha256": "05514b178215c5708ed1a9f32bc9bb1a2c70ad4a5546dc127a21be038beacbf8"
+    },
+    "rulers": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "rulers.json.gz",
+      "sha256": "69a38693892df85a8b6090c0f23b2f8df8b0d3c021852fd7b925803dcb33f398"
+    },
+    "style": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "style.json.gz",
+      "sha256": "90a08a92f232a4b0411c69f62cdaf4abc7a9a2ace62126778d22cd0795fd1369"
+    },
+    "viewport": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "viewport.json.gz",
+      "sha256": "b65cfb8ee1e90a2796f632cd825628cd9f92841722abe67981d0f150fb3a7ddf"
+    },
+    "account-overlays": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "account-overlays.json.gz",
+      "sha256": "4c5c881625fb78b71ff62a11c3cdcfae1e34a1c3b61fbaae12f66ad6fc4723c4"
+    },
+    "fixed-history": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "fixed-history.json.gz",
+      "sha256": "78a5bcee79179518d2af16368d1f3a58dd2935df1de25e1ede73ee30085aa923"
+    },
+    "lightweight-replay-local-baseline": {
+      "passed": true,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "lightweight-replay-local-baseline.json.gz",
+      "sha256": "8b65004fd6383ed2eee18a6348bbb0c3599bea8769b675e17e241d00e671dbdc"
+    },
+    "online-replay-failed": {
+      "passed": false,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "online-replay-failed.json.gz",
+      "sha256": "8ac58e20b5929753459f5f2ff7c0c93adf934f0efdc085940ed7322e54d3874c"
+    },
+    "strategy-first-restart-failed": {
+      "passed": false,
+      "sourceCommit": "e06607894b4890e6fe960a870a877475567e8f7c",
+      "rendererErrors": 0,
+      "receipt": "strategy-first-restart-failed.json.gz",
+      "sha256": "8f95a6ee74e0ae0f0fdbe7b5a00c11e40793a745190d36e93594c5bf4be18e48"
+    }
+  },
+  "limits": [
+    "lightweight replay proof uses explicitly synthetic current market baseline; online cold baseline failed under provider rate-limit circuit",
+    "first fixed-history restart driver failed during duplicate initial page navigation; fixed driver and new profile passed",
+    "these baseline cases do not qualify later replay runtime changes; new candidate default ALL_AVAILABLE/MA full restart remains pending",
+    "no Windows qualification or full product acceptance"
+  ]
+}

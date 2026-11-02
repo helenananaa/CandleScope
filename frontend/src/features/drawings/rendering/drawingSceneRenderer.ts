@@ -8,6 +8,7 @@ import type {
   DrawingScreenDisplayList,
 } from "./drawingDisplayList.js";
 import { drawAngleSceneEntity } from "./drawingSceneAnglePainter.js";
+import { drawRangeSceneEntity } from "./drawingSceneRangePainter.js";
 import { drawFibonacciSceneEntity } from "./drawingSceneFibonacciPainter.js";
 import { drawTextSceneEntity } from "./drawingSceneTextPainter.js";
 import { drawPositionSceneEntity } from "./drawingScenePositionPainter.js";
@@ -495,6 +496,8 @@ export class DrawingSceneRenderer implements PrimitivePaneRenderer {
               horizontalPixelRatio,
               verticalPixelRatio,
             );
+          } else if (op === "range-measure") {
+            drawRangeSceneEntity(scope.context, entity, plan, horizontalPixelRatio, verticalPixelRatio);
           } else if (op === "angle") {
             drawAngleSceneEntity(
               scope.context,

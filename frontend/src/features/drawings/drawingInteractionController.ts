@@ -1,3 +1,4 @@
+import { measureDrawingRange, rangeMeasurementLabel } from "./rangeMeasurement.js";
 import { drawingObjectOrder } from "./drawingObjectApi.js";
 import { projectStrokeForDrag, type SavedStroke } from "./interaction/freehandDrag.js";
 import { drawingToolForSavedObject, isAutomaticObjectEditing, rememberAutomaticObjectTool, automaticObjectTool, clearAutomaticObjectTool } from "./drawingAutoSelection.js";
@@ -157,6 +158,7 @@ import {
 import type {
   ActiveDrawingMovePayload,
   AngleToolId,
+  RangeMeasureToolId,
   AxisLineToolId,
   BasicLineToolId,
   DrawingAnchorMode,
@@ -261,8 +263,8 @@ type TwoPointDrawingPrimitive = LineDrawingPrimitive
   | AngleMeasurementPrimitive
   | FibonacciDrawingPrimitive
   | ShapeDrawingPrimitive;
-type LineToolId = BasicLineToolId | AxisLineToolId | AngleToolId;
-type TwoPointCreationTool = BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
+type LineToolId = RangeMeasureToolId | BasicLineToolId | AxisLineToolId | AngleToolId;
+type TwoPointCreationTool = RangeMeasureToolId | BasicLineToolId | AngleToolId | FibonacciToolId | ShapeToolId;
 
 function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolId {
   return tool === "line-segment"
@@ -271,6 +273,9 @@ function isLineToolId(tool: DrawingToolId | null | undefined): tool is LineToolI
     || tool === "line-horizontal"
     || tool === "line-vertical"
     || tool === "line-cross"
+    || tool === "measure-price"
+    || tool === "measure-time"
+    || tool === "measure-price-time"
     || tool === "angle-measure";
 }
 
@@ -296,6 +301,9 @@ function isTwoPointCreationTool(
   return tool === "line-segment"
     || tool === "line-ray"
     || tool === "line-infinite"
+    || tool === "measure-price"
+    || tool === "measure-time"
+    || tool === "measure-price-time"
     || tool === "angle-measure"
     || tool === "fibonacci"
     || tool === "shape-rectangle"
@@ -779,6 +787,20 @@ export function dynamicDecorationsForSavedDrawingDraft(
           handles: Object.freeze([first, last]),
         }),
       ]);
+    }
+    if (saved.type === "range-measure") {
+      const measurement = measureDrawingRange(saved.dataPoints);
+      if (!measurement) return [];
+      const corner = Object.freeze({ x: last.x, y: first.y });
+      const label = Object.freeze({
+        anchor: Object.freeze({ x: (first.x + last.x) / 2, y: Math.min(first.y, last.y) - 12 }),
+        text: rangeMeasurementLabel(measurement, saved.measureType),
+      });
+      return [
+        Object.freeze({ type: "box", box: { x: Math.min(first.x, last.x), y: Math.min(first.y, last.y), width: Math.abs(last.x - first.x), height: Math.abs(last.y - first.y) }, color, dashed: true }),
+        Object.freeze({ type: "line", from: first, to: corner, color, lineWidth, dashed: saved.measureType === "price", label, handles: Object.freeze([first, last]) }),
+        Object.freeze({ type: "line", from: corner, to: last, color, lineWidth, dashed: saved.measureType === "time" }),
+      ];
     }
     if (saved.type === "angle-measure") {
       const decoration = buildAngleDynamicOverlayDecoration(
@@ -4060,7 +4082,7 @@ export function useDrawing({
 
         // Hit existing element?
         const hit = automaticHit || hitTestInteractive(pos.x, pos.y);
-        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "fibonacci" || hit.type === "shape")) {
+        if (hit && (hit.type === "line" || hit.type === "axis-line" || hit.type === "angle" || hit.type === "range-measure" || hit.type === "fibonacci" || hit.type === "shape")) {
           const saved = savedDrawingFromInteractionHit(hit);
           const id = saved?.id;
           if (!saved || !id) return;

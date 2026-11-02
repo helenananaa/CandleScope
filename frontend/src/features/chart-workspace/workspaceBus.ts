@@ -6,7 +6,7 @@ import type {
   ChartWorkspaceLibrarySnapshot,
 } from "./chartWorkspaceTypes.js";
 
-export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "drawings" | "timeAnchor";
+export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor";
 
 export interface WorkspaceBusLinkEvent {
   eventId?: string;
@@ -57,7 +57,7 @@ function isLinkEvent(value: unknown): value is WorkspaceBusLinkEvent {
     && typeof event?.workspaceId === "string"
     && typeof event.sourceWindowId === "string"
     && typeof event.sourceCellId === "string"
-    && ["crosshair", "dateRange", "drawings", "timeAnchor"].includes(String(event.kind));
+    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor"].includes(String(event.kind));
 }
 
 function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceLibrarySnapshot {

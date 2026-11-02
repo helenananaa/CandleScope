@@ -84,6 +84,9 @@ with TestClient(app) as client:
     assert capabilities.json()["flags"]["BACKTEST_ENABLED"] is True
     assert hasattr(app.state, "local_offline_runtime")
     assert hasattr(app.state, "backtest_runtime")
+    assert app.state.data_manager is None
+    assert app.state.data_manager_core.strategy.service is app.state.backtest_service
+    assert app.state.data_manager_core.strategy.diagnostics()["subscriptions"] == 0
     assert not hasattr(app.state, "plugin_runtime_host")
 """
     environment = source_checkout_environment()
