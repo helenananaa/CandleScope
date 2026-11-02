@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "releaseStatus": "desktop-source-build-unpublished",
+  "plugin": {
+    "id": "candlescope.pine-compat",
+    "package": "candlescope-plugin-pine-compat",
+    "version": "0.4.0"
+  },
+  "python": {
+    "requires": ">=3.11,<3.14",
+    "module": "candlescope_plugin_pine_compat"
+  },
+  "wheels": {
+    "candlescope-plugin-pine-compat": {
+      "version": "0.4.0",
+      "artifactFilename": "candlescope_plugin_pine_compat-0.4.0-py3-none-any.whl",
+      "sha256": "sha256:5878bf5e3e16fdf23fe3f4e575d9944cb95a72d5f5db592acc6748cff8198db0",
+      "size": 246017
+    },
+    "candlescope-plugin-sdk": {
+      "version": "0.2.1",
+      "artifactFilename": "candlescope_plugin_sdk-0.2.1-py3-none-any.whl",
+      "sha256": "sha256:ede643202d9026bd53e9438b06c1737e4e15b5fb6f6a13a69a1abb46324f9e7b",
+      "size": 493770
+    },
+    "pine-compat-runtime": {
+      "version": "0.3.3+cs.1",
+      "artifactFilename": "pine_compat_runtime-0.3.3+cs.1-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "sha256:06c0095639b0b0678bb9ff9c058ea192b3263213b3fee56ba6ba432c039e738e",
+      "size": 4289825
+    }
+  },
+  "probe": {
+    "source": "//@version=5\nindicator(\"CSPKG Pine Probe\", overlay=false)\nplot(close * 2, \"Close x2\", color=color.green)\n",
+    "context": {
+      "exchange": "binance",
+      "marketType": "spot",
+      "symbol": "BTCUSDT",
+      "interval": "1m"
+    },
+    "bars": [
+      {
+        "time": 1700000000,
+        "open": 100,
+        "high": 102,
+        "low": 99,
+        "close": 101,
+        "volume": 10,
+        "isClosed": true
+      },
+      {
+        "time": 1700000060,
+        "open": 101,
+        "high": 103,
+        "low": 100,
+        "close": 102,
+        "volume": 11,
+        "isClosed": true
+      }
+    ],
+    "params": {},
+    "options": {},
+    "analysisSha256": "sha256:50cb14c7713a4f942f5dd906310ee7aaa785c3090cd2d3886f3c82a6e0ee5b62",
+    "executionSha256": "sha256:b18b584f5bff54a253b0028a03cf267f83eac1fec364d252a2e453f99e35de57"
+  },
+  "engineProvenance": {
+    "commit": "c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+    "version": "0.3.3+cs.1",
+    "archive": {
+      "filename": "pine-compat-runtime-c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc.tar.gz",
+      "url": "https://codeload.github.com/helenananaa/pine-compat-runtime/tar.gz/c0ecc3bde5eece9c4f2a63c6785aec9c5e571acc",
+      "sha256": "sha256:d7da1e620453bd978ea7afd76642717462d0bacf1000bc248f1acaa238a8b695"
+    },
+    "bridge": "candlescope-plugin-pine-compat",
+    "patch": "packages/candlescope-plugin-pine-compat/engine-patches/host-contracts-v2.patch",
+    "patchSha256": "sha256:53cc3758f4fb575d02e00094b5b8a29ff35e2992eddd57273ff72b1af6485ec3"
+  },
+  "bridgeSourceSha256": "sha256:9b6fb85c1cbd026f65197ecc9fbc233efca5cc51ba043d60e5b462c53e7000f7",
+  "sdkSourceSha256": "sha256:d6e20003b51a291bac46b5238b3b262dd246a458ec2bf763fcd954d5cc9b83db"
+}

@@ -1,0 +1,121 @@
+{
+  "sourceCommit": "72178d6d67f963deda63022ad13cb52e587602df",
+  "productSource": "40f2b544",
+  "bundleSha256": "13a57c1901dd0a902fdefcea73ccabb5c8f3c93acba1b16ef74b6ad3d1f9cb09",
+  "trials": 9,
+  "stoppedProcesses": 18,
+  "scope": "Negotiated current patches vs disabled negotiation on the SAME source, not a pre/post optimization comparison. OutputUpdate is transport scope and independently verified; all other complete caller fields compare equal. Concurrent external local CPU load observed; timing is no performance SLO.",
+  "measurements": [
+    {
+      "history": 1000,
+      "full": [
+        {
+          "roundTripP50Ms": 34.027333,
+          "requestBytesP50": 101410.0,
+          "responseBytesP50": 137772.0
+        },
+        {
+          "roundTripP50Ms": 33.111604,
+          "requestBytesP50": 101410.0,
+          "responseBytesP50": 137772.0
+        },
+        {
+          "roundTripP50Ms": 29.5952705,
+          "requestBytesP50": 101410.0,
+          "responseBytesP50": 137772.0
+        }
+      ],
+      "patch": [
+        {
+          "roundTripP50Ms": 3.1045835,
+          "requestBytesP50": 553.0,
+          "responseBytesP50": 3079.5
+        },
+        {
+          "roundTripP50Ms": 3.344042,
+          "requestBytesP50": 553.0,
+          "responseBytesP50": 3079.5
+        },
+        {
+          "roundTripP50Ms": 2.934771,
+          "requestBytesP50": 553.0,
+          "responseBytesP50": 3079.5
+        }
+      ]
+    },
+    {
+      "history": 10000,
+      "full": [
+        {
+          "roundTripP50Ms": 301.98729149999997,
+          "requestBytesP50": 1010410.0,
+          "responseBytesP50": 1361774.0
+        },
+        {
+          "roundTripP50Ms": 415.639146,
+          "requestBytesP50": 1010410.0,
+          "responseBytesP50": 1361774.0
+        },
+        {
+          "roundTripP50Ms": 400.75191700000005,
+          "requestBytesP50": 1010410.0,
+          "responseBytesP50": 1361774.0
+        }
+      ],
+      "patch": [
+        {
+          "roundTripP50Ms": 5.91875,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3085.5
+        },
+        {
+          "roundTripP50Ms": 9.4355835,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3085.5
+        },
+        {
+          "roundTripP50Ms": 8.4975625,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3085.5
+        }
+      ]
+    },
+    {
+      "history": 50000,
+      "full": [
+        {
+          "roundTripP50Ms": 1958.2617500000001,
+          "requestBytesP50": 5050410.0,
+          "responseBytesP50": 6801774.0
+        },
+        {
+          "roundTripP50Ms": 1083.1781455,
+          "requestBytesP50": 5050410.0,
+          "responseBytesP50": 6801774.0
+        },
+        {
+          "roundTripP50Ms": 1048.367729,
+          "requestBytesP50": 5050410.0,
+          "responseBytesP50": 6801774.0
+        }
+      ],
+      "patch": [
+        {
+          "roundTripP50Ms": 21.03275,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3087.5
+        },
+        {
+          "roundTripP50Ms": 11.534521,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3087.5
+        },
+        {
+          "roundTripP50Ms": 11.889521,
+          "requestBytesP50": 554.0,
+          "responseBytesP50": 3087.5
+        }
+      ]
+    }
+  ]
+}
