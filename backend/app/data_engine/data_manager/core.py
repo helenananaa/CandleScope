@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .strategy import StrategyDataManager
+from .account import ReadOnlyAccountDataManager
 
 if TYPE_CHECKING:
     from app.backtest.service import BacktestService
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 class DataManagerCore:
     def __init__(self) -> None:
         self.strategy: StrategyDataManager | None = None
+        self.readonly_account: ReadOnlyAccountDataManager | None = None
 
     def bind_strategy(self, service: BacktestService, runtime: BacktestRuntime | None = None) -> StrategyDataManager:
         if self.strategy is not None:
@@ -25,3 +27,15 @@ class DataManagerCore:
     def close_strategy(self) -> None:
         if self.strategy is not None:
             self.strategy.close()
+
+    def bind_readonly_account(self, service) -> ReadOnlyAccountDataManager:
+        if self.readonly_account is not None:
+            if self.readonly_account.service is not service:
+                raise RuntimeError("read-only account service is already bound")
+            return self.readonly_account
+        self.readonly_account = ReadOnlyAccountDataManager(service)
+        return self.readonly_account
+
+    def close_readonly_account(self) -> None:
+        if self.readonly_account is not None:
+            self.readonly_account.close()

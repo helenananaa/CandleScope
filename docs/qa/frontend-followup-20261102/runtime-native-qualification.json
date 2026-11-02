@@ -1,0 +1,211 @@
+{
+  "date": "2026-11-02",
+  "applicationSource": "615fd0c23995ab5155329098b5197171763e0a06",
+  "graphOnlyAlignment": "75ca1d74849d05b699ab5b1e5ddeb55ac8a8df40",
+  "passed": true,
+  "assembly": "Qualified stability candidate runtime cloned with APFS; current backend compiled with bundled Python, current desktop frontend rebuilt/repacked, unchanged verified Pine+Python package assets reused after input-tree/hash checks, root ad-hoc signed. Not a fresh full runtime/engine build.",
+  "integrity": {
+    "backendAndSharedSourceFiles": 976,
+    "desktopFrontendFiles": 161,
+    "mismatchesBeforeAndAfter": 0,
+    "strictSignatureAfter": true
+  },
+  "scenarios": {
+    "python": {
+      "steps": 11,
+      "rendererErrors": 0,
+      "normalOwnedExitsMs": [
+        15246,
+        15274
+      ],
+      "independentSMA20Points": 481,
+      "maximumError": 2.9103830456733704e-11,
+      "actualNewConfirmedClose": true,
+      "saveAndRestart": true
+    },
+    "account": {
+      "steps": 7,
+      "rendererErrors": 0,
+      "normalOwnedExitsMs": [
+        15228,
+        15236
+      ],
+      "noStatusPollingObservationMs": 6200,
+      "releaseAndReopen": true,
+      "persistentCursorAndStateAfterRestart": true,
+      "exactBalance": "1234.567890123456789"
+    },
+    "fixed": {
+      "steps": 12,
+      "rendererErrors": 0,
+      "normalOwnedExitsMs": [
+        15871,
+        15890,
+        15885
+      ],
+      "csvRows": 500,
+      "independentMA20Points": 481,
+      "independentMA5Points": 496,
+      "maximumError": 0,
+      "crossDeliveryIdsRebound": true,
+      "twoRestartsCacheHit": true
+    }
+  },
+  "failuresPreserved": [
+    "Initial frontend typecheck found duplicate equivalent monotonicNow fixture properties from branch merge; retained one injection, all original assertions and full checks then passed.",
+    "Account attempt1: hidden retained panel was mistaken for visible by count(); durable restored status/cursor API equality already passed, native locator timed out. Keep original receipt/screenshot/log. Only QA now uses isVisible(), expands through the real UI and passes."
+  ],
+  "limits": [
+    "One local macOS arm64 combined candidate; no Windows, x64 installed acceptance or full 157-item product acceptance.",
+    "Python standard-library finite-window batch stage; no arbitrary script causality, strategy eligibility, stateful/incremental or optional dependency qualification.",
+    "Readonly account uses a disabled synthetic persisted account, actual guarded local durable disconnect and event stream. No credentials, private exchange synchronization, two venues or practice push claim.",
+    "Fixed CSV scenario qualifies cache reuse and numeric results; installed calendar dependency invalidation is separately exercised by the real API regression, not by modifying a signed native bundle.",
+    "Existing scoped cold-history/practice and native qualifications retain their original sources. They are not reported as rerun full matching or order-book recovery on this combined candidate."
+  ],
+  "artifacts": [
+    {
+      "path": "runtime-native/account-acceptance.json.gz",
+      "sha256": "bfd9caa6a597e9044f1c9a003317c6280db935dfb7e2ff653e3b117b0183ff34"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/acceptance.json.gz",
+      "sha256": "5f8550143b8e2705b17988bc47aa18fb9dd2187089d09889559014821e239256"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/account-native.log.gz",
+      "sha256": "ba5b668f0d38c89a788d3a96951a4de3e3d45338a9ba9f514b7b494ec2a255e8"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/committed-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/failure.png",
+      "sha256": "7861ac773f091d495bafec5210a9a1fe8642ce411191933a3781fc5f6cddf08b"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/initial-account-stream.png",
+      "sha256": "56ff00858335ac18727d351535d1e4b85bf72b67209ac9e36e8ac29f84241db1"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/reopened-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "runtime-native/account-attempt-1/traffic.json.gz",
+      "sha256": "f0b298956142b0e8239e63732155af21f2f29240699a7dbfa4a4ff139be54cc4"
+    },
+    {
+      "path": "runtime-native/account-native.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "runtime-native/account-traffic.json.gz",
+      "sha256": "f8471016c957daba81068bbdfdb7eba316e7cf6dce0ebe1b05f9fde13b1b07d2"
+    },
+    {
+      "path": "runtime-native/assembly.json.gz",
+      "sha256": "ce61d102f269f54f2a87e005703d1d3dd34c502b8c4ed0620989406dc52f88a6"
+    },
+    {
+      "path": "runtime-native/committed-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "runtime-native/compute-responses.json.gz",
+      "sha256": "9e61e698cb2c3a548861260d42af8e0e10d56aca6a04c65d52b733f2b93a4c3d"
+    },
+    {
+      "path": "runtime-native/fixed-acceptance.json.gz",
+      "sha256": "384a3cbbc1912846428b9a1ddfd1c62bf7113d06ec1361f39ab70e5659fb91b6"
+    },
+    {
+      "path": "runtime-native/fixed-ma20.png",
+      "sha256": "941edf29d62ae4264284eab757fadebce24106d88e8595a206385f2e962d9cf9"
+    },
+    {
+      "path": "runtime-native/fixed-native.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "runtime-native/fixed-traffic.json.gz",
+      "sha256": "fb24128b7248145bd5cb4024a4eeb4999263bfe1687ed2b191cad8f91216a0c6"
+    },
+    {
+      "path": "runtime-native/initial-account-stream.png",
+      "sha256": "56ff00858335ac18727d351535d1e4b85bf72b67209ac9e36e8ac29f84241db1"
+    },
+    {
+      "path": "runtime-native/python-acceptance.json.gz",
+      "sha256": "7e36b3f7d6db73ba5b3e8215d6061ceca13a8d756c197dd66b4c0cfa9521b98c"
+    },
+    {
+      "path": "runtime-native/python-editor.png",
+      "sha256": "23f32780dd3fe3990d4cd72ba5f49030a088b1a60b14af578aa30847c1b86d1d"
+    },
+    {
+      "path": "runtime-native/python-native.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "runtime-native/python-saved.png",
+      "sha256": "c293eed569ea5f621cc3fa738f15126dcc308270bed810830f7c8cd87a24414b"
+    },
+    {
+      "path": "runtime-native/python-traffic.json.gz",
+      "sha256": "80222baa5826eafbd8f37318d9bcd91aa8df71c42667b5dfe48f46ac8dc971bc"
+    },
+    {
+      "path": "runtime-native/restored-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "runtime-native/restored-fixed-ma5.png",
+      "sha256": "4949ceb68cfe05454daa7feba859228bcf9ec1a45a9f4f2c7826ea4907601416"
+    },
+    {
+      "path": "runtime-native/restored-python.png",
+      "sha256": "861f0f5955d95e37109dbc8fd074aa3c15f05e116c439b3d113e650a34c93464"
+    },
+    {
+      "path": "runtime-native/signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "runtime-native/source-match-after.log.gz",
+      "sha256": "06123f9495f33a62014d48412d4fd0f75ea053d0be3c2a229b58a0d9a560945e"
+    },
+    {
+      "path": "runtime-native/source-match-before.log.gz",
+      "sha256": "16ea83af815b2d1a928bb2fafda1400a81cb1a86cc306e9988783e8b7420cc3b"
+    },
+    {
+      "path": "runtime-native/source-package-manifest.json.gz",
+      "sha256": "557edee2c8c7f4844f78190aa61cff197396e53bf74209dcc1ac78f18012c809"
+    },
+    {
+      "path": "runtime-native/checks/frontend-check.log.gz",
+      "sha256": "8b5d02a4780794ee81febdfb05554687912982caab6709e2219d41b5c424950c"
+    },
+    {
+      "path": "runtime-native/checks/frontend-check-after.log.gz",
+      "sha256": "a9e1adc6f80c618cbef31a5453fa8787da84c7cd3cc22dea97c6f54c315e6b7f"
+    },
+    {
+      "path": "runtime-native/checks/desktop-build.log.gz",
+      "sha256": "0d68af0e39e34c785af16b4202d495522383ead162d90a66a8f0b070857ee7f0"
+    },
+    {
+      "path": "runtime-native/checks/backend-tests.log.gz",
+      "sha256": "2ecb11c762cfb2ac8344a5ebb3cfde5a4dec969b8e656c68f6a0bf3ca52ff12c"
+    },
+    {
+      "path": "runtime-native/checks/backend-calendar.log.gz",
+      "sha256": "3baabc9f18d7efd1ec70c1aa7111f61353ae4321b75ea212066bfb71783ac6f2"
+    },
+    {
+      "path": "runtime-native/checks/backend-calendar.xml.gz",
+      "sha256": "c3074b175a42cbe0d5d45db9fdfd57088d815de60e52df18d1c0816e1015f2c2"
+    }
+  ]
+}

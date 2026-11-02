@@ -1,0 +1,86 @@
+{
+  "passed": true,
+  "application": "2ad72d25d7d3ed8b8fa05533208c692cb68dd6cb",
+  "steps": 11,
+  "platform": "macOS arm64 packaged app",
+  "source_files": 970,
+  "dist_files": 162,
+  "mismatches": 0,
+  "strict_signature_before_after": true,
+  "exits_ms": [
+    15426,
+    15415
+  ],
+  "renderer_errors": [],
+  "numeric": "Preview,actualnewclose,andrestoredvisiblelatest500window eachchecked481SMA20values, maxerror4.3655745685100555e-11.IndependentAPI500inputs481outputs alsoeachpassed. Initial/restoreactualnativeReturntorealtimebuttonusedonlywhenpresent; no narrowerartificialviewport.",
+  "functionality": "Freshprofileauto-installsbundledPython/Pine; catalog/editorstarterpreview; UIpreset save; real newconfirmedWSclose; fullownedprocess-exit/relaunch restorescript/language andnumerics; finalfullownedexit.",
+  "visual": "Editor/saved/restored screenshots inspected. Python author entry andorangeSMAoverlay visible; savedpreset appearsinaddedpanel. Otherwidgets/performance notqualified.",
+  "assembly": "Previouslyverifiedstandalone runtime andsamePython/Pinebuiltbundles reused withunchanged plugin/SDK/preparationsources; freshcurrentmain208frontenddesktopbuild andfullcurrentbackendcopy. Notfreshfullruntimeorpluginbuild.",
+  "limitations": [
+    "Finite defaultstdlib closed-only batch stage only",
+    "No optionaldependencyprofiles/statefulincremental/causalstrategyqualification",
+    "NoWindows/full153/full157releaseacceptance"
+  ],
+  "artifacts": [
+    {
+      "path": "native7/acceptance.json.gz",
+      "sha256": "a342d60f25134bcc19fe29daab1a0a89838bace3eec29111e47a51c53999cb46"
+    },
+    {
+      "path": "native7/assembly.json.gz",
+      "sha256": "0f98fafe3d08bc2eb94882b1c21e5e452cf438a8922929932a1bb59e0b0c24fa"
+    },
+    {
+      "path": "native7/assembly.log.gz",
+      "sha256": "c6c58326eee0f6138cfff6a810878f33afec131c47059b713a7cf0f38aa8fcc9"
+    },
+    {
+      "path": "native7/backend-sidecar.log.gz",
+      "sha256": "1c3c7136327d9b28ec51e3a459a0dc497102b28806af4a9f5b21cad17e7eca57"
+    },
+    {
+      "path": "native7/native-run7.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "native7/python-editor.png",
+      "sha256": "f21175a281164179d6e4ecbdfeffce15d7e912073c9614dc51cdf735cb0dc568"
+    },
+    {
+      "path": "native7/python-saved.png",
+      "sha256": "e18a1a36d4dd76218f6f36f83ab3609755f83824602e52e60844747617d4ec6a"
+    },
+    {
+      "path": "native7/restored-python.png",
+      "sha256": "bd5abef0ea5a48ece74b418343182ff1bb6ebf757c15867e0e6db0be8607b15c"
+    },
+    {
+      "path": "native7/runtime-reuse.json.gz",
+      "sha256": "036d8b0ba59b33f001143019b9997a8c0f84d7b902adb78b51da9e02b095c793"
+    },
+    {
+      "path": "native7/signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "native7/signature-before.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "native7/source-match-after.log.gz",
+      "sha256": "cd158035da5696f888c2e9713fe4fbc99bfe658009b827d4b02cecaa754275f7"
+    },
+    {
+      "path": "native7/source-match.log.gz",
+      "sha256": "cd158035da5696f888c2e9713fe4fbc99bfe658009b827d4b02cecaa754275f7"
+    },
+    {
+      "path": "native7/source-package-manifest.json.gz",
+      "sha256": "d40d2e98af99c4428551434de66f97ef47448829938d401d24ac5746ca307c06"
+    },
+    {
+      "path": "native7/traffic.json.gz",
+      "sha256": "a4f13b81fa37636adcecd9af6aa73f7422c655855c02e845db4f9a48b8ea4775"
+    }
+  ]
+}

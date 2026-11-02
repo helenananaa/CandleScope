@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from collections import OrderedDict
 from types import SimpleNamespace
 from typing import Any, Callable
@@ -410,6 +411,24 @@ async def test_sidecar_ws_subscription_replaces_incremental_seed_with_read_only_
     assert len(host.requests) == 1
     assert host.requests[0].context.interval == "3m"
     assert connection.droppable[0]["range"] == {"start": 840, "end": 840}
+
+
+@pytest.mark.anyio
+async def test_closed_only_runtime_ignores_forming_burst_but_computes_confirmed_close():
+    class ClosedHost(_RecordingSidecarHost):
+        async def descriptor(self, runtime_id):
+            return replace(await super().descriptor(runtime_id),meta={"closedBarsOnly":True})
+    dm=_RecordingDataManager(_bars([300,480,660]))
+    host=ClosedHost();connection=_SidecarConnection(dm=dm,service=_sidecar_service(host))
+    await connection.subscribe('closed-only')
+    forming=BarData(time=840,open=103,high=105,low=102,close=104,volume=13,is_closed=False)
+    for _ in range(50):
+        await connection.realtime_callback()(_realtime_event(DataEventType.BAR_UPDATED,forming))
+    assert not host.requests and not dm.query_calls and 'closed-only' not in connection.custom_tasks
+    closed=replace(forming,is_closed=True);dm.bars.append(closed)
+    await connection.realtime_callback()(_realtime_event(DataEventType.BAR_CLOSED,closed))
+    await connection.custom_tasks['closed-only']
+    assert len(host.requests)==1 and host.requests[0].bars[-1].is_closed
 
 
 @pytest.mark.anyio
