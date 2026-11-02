@@ -9,7 +9,29 @@ q.s.receipt.transport='Packaged bundled backend, real public Binance/Gate/Upbit 
 q.s.receipt.scope={platform:'macOS arm64',sources:['Binance spot1s','Binance custom7s','Gate spot1s','Upbit spot1s'],notCovered:['Windows','1s replay archives','ordinary USD-M1s','full157 release acceptance','all exchanges']};
 const sessions=[q.session('BTCUSDT','1s'),q.session('BTCUSDT','7s'),{exchange:'gate',marketType:'spot',symbol:'BTC/USDT',interval:'1s'},{exchange:'upbit',marketType:'spot',symbol:'BTC/KRW',interval:'1s'}];
 const api=async path=>q.s.page.evaluate(async url=>{const r=await fetch(url);return {status:r.status,body:await r.json()};},q.s.backend+path);
-async function ready(indicators=false){return q.until(async()=>{const s=await q.inspect();await fs.writeFile(q.s.root+'/latest-workspace.next.json',JSON.stringify(s,null,2));await fs.rename(q.s.root+'/latest-workspace.next.json',q.s.root+'/latest-workspace.json');return s.cells.length===4&&s.persistence.state==='saved'&&s.cells.every(c=>c.runtime.marketReady&&!c.runtime.loading&&c.runtime.barCount>=10&&(!indicators||(c.runtime.indicatorsReady&&!c.runtime.computing&&!c.runtime.indicatorErrors?.length&&c.runtime.indicatorOutputPoints?.some(n=>n>0))))?s:(await q.delay(1000),false);},360000);}
+let lastCircuitCheck=0;
+async function checkCircuit(){
+ if(Date.now()-lastCircuitCheck<2000)return;
+ lastCircuitCheck=Date.now();
+ const response=await api('/api/v1/settings/storage/health');
+ function visit(value){
+  if(!value||typeof value!=='object')return null;
+  const circuit=value.global_circuit;
+  if(circuit?.open&&circuit.last_status_code===418&&circuit.cooldown_remaining_seconds>0)return circuit;
+  for(const child of Object.values(value)){const found=visit(child);if(found)return found;}
+  return null;
+ }
+ const circuit=visit(response.body);
+ if(circuit){
+  const deadline=Math.max(Date.now()+Math.ceil(circuit.cooldown_remaining_seconds*1000),circuit.opened_at_ms+Number(circuit.last_headers?.['retry-after']||0)*1000)+1000;
+  const evidence={circuit,retry_not_before_ms:deadline,retry_not_before_utc:new Date(deadline).toISOString()};
+  q.s.receipt.publicCooldown=evidence;
+  await fs.writeFile(q.s.root+'/new-cooldown.json',JSON.stringify(evidence,null,2));
+  await q.record('public-ip-circuit-stop',evidence);
+  throw new Error('PUBLIC_COOLDOWN_STOP: '+evidence.retry_not_before_utc);
+ }
+}
+async function ready(indicators=false){return q.until(async()=>{await checkCircuit();const s=await q.inspect();await fs.writeFile(q.s.root+'/latest-workspace.next.json',JSON.stringify(s,null,2));await fs.rename(q.s.root+'/latest-workspace.next.json',q.s.root+'/latest-workspace.json');return s.cells.length===4&&s.persistence.state==='saved'&&s.cells.every(c=>c.runtime.marketReady&&!c.runtime.loading&&c.runtime.barCount>=10&&(!indicators||(c.runtime.indicatorsReady&&!c.runtime.computing&&!c.runtime.indicatorErrors?.length&&c.runtime.indicatorOutputPoints?.some(n=>n>0))))?s:(await q.delay(1000),false);},360000);}
 async function range(session,first,last){const p=new URLSearchParams({exchange:session.exchange,market_type:session.marketType,symbol:session.symbol,interval:session.interval,start_ms:String(first*1000),end_ms:String(last*1000),repair:'none',wait_ms:'0',strict:'false'});const started=Date.now();let attempts=0;while(true){const r=await api('/api/v1/klines/range?'+p);attempts++;const clipped=r.body.complete&&Number.isFinite(r.body.effective_end_ms)&&r.body.effective_end_ms<last*1000;if(r.status!==200||(r.body.complete&&!clipped)||(!r.body.retryable&&!clipped)||Date.now()-started>=180000){q.s.receipt.rangeReads??=[];q.s.receipt.rangeReads.push({session,first,last,attempts,elapsedMs:Date.now()-started,status:r.status,historyState:r.body.history_state,effectiveEndMs:r.body.effective_end_ms,complete:r.body.complete,retryable:r.body.retryable,missingRanges:r.body.missing_ranges,cache:r.body.cache});return r;}await q.delay(200);}}
 async function verify(){const charts=await capture(q);assert.equal(charts.length,4);const out=[];
  for(let i=0;i<4;i++){const chart=charts.find(c=>c.cellId==='cell-'+(i+1));assert.ok(chart);const bars=chart.bars.filter(b=>b.is_closed).slice(-100);assert.ok(bars.length>=9,chart.cellId);
@@ -26,7 +48,7 @@ try{
  for(const exchange of ['binance','gate','upbit']){
   const caps=await api('/api/v1/exchanges/'+exchange+'/capabilities');assert.equal(caps.status,200);
   const symbols=await q.until(async()=>{
-   const result=await api('/api/v1/symbols/exchange-info?exchange='+exchange+'&market_type=spot&search=BTC');
+   const result=await api('/api/v1/symbols/exchange-info?exchange='+exchange+'&market_type=spot&search=BTC');await checkCircuit();
    if(result.status===200)return result;
    await q.record('catalog-pending-'+exchange,result);
    assert.equal(result.status,503);assert.equal(result.body.detail?.retryable,true);

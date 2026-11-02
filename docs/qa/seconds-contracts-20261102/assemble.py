@@ -1,10 +1,11 @@
 """Build a reviewable local candidate using the previously qualified runtime."""
 from pathlib import Path
 import shutil
+import os
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / 'output/seconds-contracts-20261102/native'
+OUT = Path(os.environ.get('CANDLESCOPE_BATCH1_QA_ROOT', str(ROOT / 'output/seconds-contracts-20261102/native')))
 APP = OUT / 'Installed App/CandleScope.app'
 SOURCE = Path('/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/Installed App/CandleScope.app')
 assert not APP.exists(), 'Preserve earlier candidates; do not overwrite a receipt'

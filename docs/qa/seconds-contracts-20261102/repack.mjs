@@ -3,7 +3,7 @@ import path from 'node:path';
 import cp from 'node:child_process';
 import crypto from 'node:crypto';
 import {createRequire} from 'node:module';
-const root=process.cwd(),out=path.join(root,'output/seconds-contracts-20261102/native');
+const root=process.cwd(),out=process.env.CANDLESCOPE_BATCH1_QA_ROOT??path.join(root,'output/seconds-contracts-20261102/native');
 const app=path.join(out,'Installed App/CandleScope.app'),resources=path.join(app,'Contents/Resources');
 const asar=createRequire(path.join(root,'frontend/package.json'))('@electron/asar');
 const stage=path.join(out,'frontend-repack');
