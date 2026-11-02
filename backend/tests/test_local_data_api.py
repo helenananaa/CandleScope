@@ -625,3 +625,40 @@ def test_failed_local_indicator_results_are_not_persisted(tmp_path, monkeypatch)
     assert list((tmp_path / 'local-data' / '.cache').rglob('*.json')) == []
     result = client.post(path, json=body).json()
     assert result['ok'] is True and result['cache'] == 'miss'
+
+
+def test_persisted_results_revalidate_installed_calendar_dependencies(tmp_path, monkeypatch):
+    """A restart after a boundary implementation/rules update cannot reuse old math."""
+    from app.local_data import analysis_cache
+
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post('/api/v1/local/imports/csv', params={
+        'name': 'Calendar cache', 'symbol': 'BTCUSDT', 'interval': '1m', 'timestamp_unit': 's',
+    }, content='time,open,high,low,close\n1704067200,1,3,1,2\n1704067260,2,4,2,3\n',
+        headers={'content-type': 'text/csv'}).json()
+    path = f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch"
+    body = {'data_epoch': imported['data_epoch'], 'requests': [
+        {'jobKey': 'job', 'clientId': 'view', 'name': 'MA', 'params': {'period': 2}},
+    ]}
+    analysis_cache.implementation_revision.cache_clear()
+    try:
+        assert client.post(path, json=body).json()['cache'] == 'miss'
+        assert client.post(path, json=body).json()['cache'] == 'hit'
+        original_read = Path.read_bytes
+        for dependency in ('calendar_basis.py', 'calendar-v1.json'):
+            # Simulate the bytes installed by an application update without
+            # editing the checkout or changing imported modules in this process.
+            with monkeypatch.context() as patch:
+                def updated_read(file, dependency=dependency):
+                    value = original_read(file)
+                    return value + b'\n' if file.name == dependency else value
+                patch.setattr(Path, 'read_bytes', updated_read)
+                analysis_cache.implementation_revision.cache_clear()
+                changed = client.post(path, json=body)
+                assert changed.status_code == 200, changed.text
+                assert changed.json()['cache'] == 'miss', dependency
+                assert client.post(path, json=body).json()['cache'] == 'hit'
+            analysis_cache.implementation_revision.cache_clear()
+            assert client.post(path, json=body).json()['cache'] == 'hit'
+    finally:
+        analysis_cache.implementation_revision.cache_clear()
