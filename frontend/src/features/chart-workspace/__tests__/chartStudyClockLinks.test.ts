@@ -30,6 +30,7 @@ function nativeNetwork() {
   const wire: WorkspaceBusLinkEvent[] = [];
   const delayedWindows = new Set<string>();
   const delayedEvents: Array<{ windowId: string; event: WorkspaceBusLinkEvent }> = [];
+  const deferNext = new Set<string>(), delayedPublications: Array<() => void> = [];
   let hold = false;
   const bus = (windowId: string) => ({ windowId, isNative: () => true,
     subscribeLink: (listener: (event: WorkspaceBusLinkEvent) => void) => { receivers.set(windowId, listener); return () => receivers.delete(windowId); },
@@ -40,15 +41,19 @@ function nativeNetwork() {
       }
     },
     publishOrderedLink: (event: WorkspaceBusLinkEvent) => new Promise<WorkspaceBusLinkEvent>((resolve, reject) => {
-      const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
-      for (const [id, receive] of receivers) if (id !== windowId) {
-        if (delayedWindows.has(id)) delayedEvents.push({ windowId: id, event: stamped }); else receive(stamped);
-      }
-      if (hold) deferred.push({ resolve: () => resolve(stamped), reject }); else resolve(stamped);
+      const publish = () => {
+        const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
+        for (const [id, receive] of receivers) if (id !== windowId) {
+          if (delayedWindows.has(id)) delayedEvents.push({ windowId: id, event: stamped }); else receive(stamped);
+        }
+        if (hold) deferred.push({ resolve: () => resolve(stamped), reject }); else resolve(stamped);
+      };
+      if (deferNext.delete(windowId)) delayedPublications.push(publish); else publish();
     }),
   }) as unknown as WorkspaceBusClient;
   return { bus, wire, hold: () => { hold = true; }, release: (index = 0) => deferred.splice(index, 1)[0]!.resolve(),
     reject: (index = 0) => deferred.splice(index, 1)[0]!.reject(new Error("Ordering reply lost")),
+    deferNextPublication: (windowId: string) => deferNext.add(windowId), dispatchDelayedPublication: () => delayedPublications.shift()!(),
     delayFor: (windowId: string) => delayedWindows.add(windowId),
     deliverDelayed: () => { const next = delayedEvents.shift()!; receivers.get(next.windowId)!(next.event); },
     deliverAllDelayed: () => { while (delayedEvents.length) { const next = delayedEvents.shift()!; receivers.get(next.windowId)!(next.event); } } };
@@ -83,6 +88,16 @@ test("disabled cursor policy leaves siblings unchanged; enabled policy uses each
   doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor = true;
   assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), true);
   assert.deepEqual(b.calls, [600_000]); assert.equal(a.state.revision, 4);
+});
+
+test("isolated playback remains available without a linked leader or desktop bus", async () => {
+  const links = new ChartStudyClockLinks(document(false), "workspace"), a = clock();
+  links.register("cell-1", a.port, "workspace");
+  assert.equal(links.canStartAutomatic("cell-1", "workspace"), true);
+  const tick = links.beginUserAction("cell-1", "workspace", "tick");
+  a.state.cursorMs = 660_000;
+  assert.equal(await links.publishUserMove(tick), true); assert.equal(a.state.cursorMs, 660_000);
+  assert.equal(links.canStartAutomatic("missing", "workspace"), false);
 });
 
 test("a closed layout cell is excluded even before its old renderer registration is released", async () => {
@@ -184,6 +199,44 @@ test("a lost source ordering reply is not success, and queued clocks wait for an
   a.state.active = true;
   const retry = left.publishUserMove(left.beginUserAction("cell-1", "workspace")); await flush(); network.release();
   assert.equal(await retry, true); assert.equal(b.state.cursorMs, 600_000); assert.equal(left.getIssue("cell-1", "workspace"), null);
+  releaseA(); releaseB();
+});
+
+test("a new explicit clock preempts an automatic tick waiting for its source reply", async () => {
+  const doc = document(), network = nativeNetwork();
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  assert.equal(await left.publishUserMove(left.beginUserAction("cell-1", "workspace")), true);
+  network.hold(); a.state.cursorMs = 660_000;
+  const tick = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "tick")); await flush();
+  b.state.cursorMs = 300_000;
+  const rewind = right.publishUserMove(right.beginUserAction("cell-2", "workspace")); await flush();
+  assert.equal(a.state.cursorMs, 300_000); // No wait for the old automatic reply.
+  network.release(1); network.release(); await Promise.all([tick, rewind]);
+  assert.equal(a.state.cursorMs, 300_000); assert.equal(b.state.cursorMs, 300_000);
+  assert.equal(left.canStartAutomatic("cell-1", "workspace"), false);
+  assert.equal(right.canStartAutomatic("cell-2", "workspace"), true);
+  releaseA(); releaseB();
+});
+
+test("an old automatic publication arriving at the authority later cannot steal a newer explicit leader", async () => {
+  const doc = document(), network = nativeNetwork();
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  assert.equal(await left.publishUserMove(left.beginUserAction("cell-1", "workspace")), true);
+  a.state.cursorMs = 660_000; network.deferNextPublication("main");
+  const tick = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "tick")); await flush();
+  b.state.cursorMs = 300_000;
+  assert.equal(await right.publishUserMove(right.beginUserAction("cell-2", "workspace")), true);
+  network.dispatchDelayedPublication(); await tick;
+  assert.equal(a.state.cursorMs, 300_000); assert.equal(b.state.cursorMs, 300_000);
+  assert.equal(left.canStartAutomatic("cell-1", "workspace"), false);
+  assert.equal(right.canStartAutomatic("cell-2", "workspace"), true);
+  assert.equal(left.getIssue("cell-1", "workspace"), null);
   releaseA(); releaseB();
 });
 

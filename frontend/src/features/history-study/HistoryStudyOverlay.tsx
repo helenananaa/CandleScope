@@ -31,7 +31,7 @@ import type { ChartStudyClockIssue } from "../chart-workspace/chartStudyClockLin
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
+export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onAutomaticMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
   cellId: string; revision: number;
   onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
   accountOverlay?: ChartAccountOverlaySettings | undefined;
@@ -39,6 +39,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
   onMove(cursorMs: number, active?: boolean): Promise<boolean>; onRetry(): void;
+  onAutomaticMove(cursorMs: number): Promise<boolean>;
   onEditingChanged(editing: boolean): void; cursorLinkIssue: ChartStudyClockIssue | null; onRetryCursorLink(): void;
   onFollowReady(pause: (() => void) | null): void; onPlayStart(): void;
 }) {
@@ -92,10 +93,10 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cursorMs >= playback.maximumMs) { setPlaying(false); return; }
-      void onMove(playback.stepTarget(1)).then(ok => { if (!cancelled && !ok) setPlaying(false); });
+      void onAutomaticMove(playback.stepTarget(1)).then(ok => { if (!cancelled && !ok) setPlaying(false); });
     }, 700);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [cursorMs, editor, onMove, playback, playing]);
+  }, [cursorMs, editor, onAutomaticMove, playback, playing]);
   useEffect(() => {
     if (!active || editor) return;
     const handler = (event: KeyboardEvent) => {

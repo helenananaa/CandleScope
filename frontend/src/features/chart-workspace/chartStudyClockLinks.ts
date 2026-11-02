@@ -16,9 +16,10 @@ export type ChartStudyClockStatus = "moved" | "inactive" | "out-of-range" | "edi
 export interface ChartStudyClockIssue { sourceCellId: string; failed: Array<{ cellId: string; status: ChartStudyClockStatus }> }
 interface Intent {
   scope: string; cellId: string; generation: number;
+  operation: "cursor" | "tick"; leaderOrder: number;
   settled: Promise<void>; release(): void;
 }
-interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number }
+interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number; operation: "cursor" | "tick"; leaderOrder: number }
 interface Registration { scope: string; port: ChartStudyClockPort }
 interface Pending {
   scope: string; sourceCellId: string; order: number | null;
@@ -32,7 +33,10 @@ function payload(value: unknown): Payload | null {
   return typeof row.requestId === "string" && row.requestId.length <= 128
     && typeof row.studyId === "string" && row.studyId.length <= 128
     && Number.isSafeInteger(row.cursorMs) && row.cursorMs! >= 0
-    && Number.isSafeInteger(row.revision) && row.revision! >= 0 ? row as Payload : null;
+    && Number.isSafeInteger(row.revision) && row.revision! >= 0
+    && (row.operation === "cursor" || row.operation === "tick")
+    && Number.isSafeInteger(row.leaderOrder) && row.leaderOrder! >= 0
+    && (row.operation !== "tick" || row.leaderOrder! > 0) ? row as Payload : null;
 }
 function orderOf(event: WorkspaceBusLinkEvent): number | null {
   const match = /^link-([1-9][0-9]*)$/.exec(event.eventId ?? "");
@@ -54,12 +58,14 @@ function boundedOrderReply(reply: Promise<WorkspaceBusLinkEvent>): Promise<Works
 export class ChartStudyClockLinks {
   private registrations = new Map<string, Registration>();
   private lastOrder = new Map<string, number>();
+  private leaderOrder = new Map<string, number>();
+  private leaderSource = new Map<string, string>();
   private generations = new Map<string, number>();
   private pending = new Map<string, Pending>();
   private issues = new Map<string, ChartStudyClockIssue>();
   private latestRequest = new Map<string, string>();
   private userIntents = new Map<string, Intent>();
-  private uncertainOrder = new Set<string>();
+  private uncertainOrder = new Map<string, "cursor" | "tick">();
   private listeners = new Set<() => void>();
   private bus: WorkspaceBusClient | null = null;
   private localOrder = 0;
@@ -70,7 +76,7 @@ export class ChartStudyClockLinks {
       for (const intent of this.userIntents.values()) intent.release();
       this.userIntents.clear(); this.uncertainOrder.clear();
       for (const requestId of [...this.pending.keys()]) this.finish(requestId, false);
-      this.lastOrder.clear(); this.generations.clear(); this.latestRequest.clear();
+      this.lastOrder.clear(); this.leaderOrder.clear(); this.leaderSource.clear(); this.generations.clear(); this.latestRequest.clear();
       this.issues.clear(); this.emit();
     }
     this.document = document; this.scope = scope;
@@ -112,7 +118,13 @@ export class ChartStudyClockLinks {
     return resolveChartLinkTargetsForChannel(this.document, sourceCellId, "studyCursor")
       .filter(target => visible.has(target.cellId)).map(target => target.cellId);
   }
-  beginUserAction(cellId: string, scope: string): Intent {
+  canStartAutomatic(cellId: string, scope: string): boolean {
+    if (scope !== this.scope || this.registrations.get(cellId)?.scope !== scope || this.userIntents.has(cellId)) return false;
+    if (!this.targets(cellId).length) return true;
+    return !this.uncertainOrder.has(cellId) && (this.leaderOrder.get(cellId) ?? 0) > 0
+      && this.leaderSource.get(cellId) === `${this.bus?.windowId ?? "local-window"}\u0000${cellId}`;
+  }
+  beginUserAction(cellId: string, scope: string, operation: "cursor" | "tick" = "cursor"): Intent {
     this.userIntents.get(cellId)?.release();
     const generation = (this.generations.get(cellId) ?? 0) + 1;
     this.generations.set(cellId, generation);
@@ -120,7 +132,7 @@ export class ChartStudyClockLinks {
     if (this.issues.delete(cellId)) this.emit();
     let release = () => {};
     const settled = new Promise<void>(resolve => { release = resolve; });
-    const intent = { scope, cellId, generation, settled, release };
+    const intent = { scope, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0, settled, release };
     this.userIntents.set(cellId, intent);
     return intent;
   }
@@ -147,6 +159,8 @@ export class ChartStudyClockLinks {
     if (!state.active || state.pending || state.committing || state.editing || !state.studyId || state.cursorMs === null) return false;
     const targets = this.targets(intent.cellId);
     if (!targets.length) return true;
+    if (intent.operation === "tick" && (intent.leaderOrder <= 0
+      || this.leaderSource.get(intent.cellId) !== `${this.bus?.windowId ?? "local-window"}\u0000${intent.cellId}`)) return false;
     const requestId = crypto.randomUUID();
     this.latestRequest.set(intent.cellId, requestId);
     const result = new Promise<boolean>(resolve => {
@@ -156,7 +170,8 @@ export class ChartStudyClockLinks {
     });
     const event: WorkspaceBusLinkEvent & { kind: "studyCursor" } = { workspaceId: this.scope, sourceCellId: intent.cellId,
       sourceWindowId: this.bus?.windowId ?? "local-window", kind: "studyCursor",
-      payload: { requestId, cursorMs: state.cursorMs, studyId: state.studyId, revision: state.revision } satisfies Payload };
+      payload: { requestId, cursorMs: state.cursorMs, studyId: state.studyId, revision: state.revision,
+        operation: intent.operation, leaderOrder: intent.operation === "tick" ? intent.leaderOrder : 0 } satisfies Payload };
     try {
       // Browser pages have no central clock ordering authority. Only this
       // renderer is supported there; desktop windows use the main-process stamp.
@@ -167,12 +182,19 @@ export class ChartStudyClockLinks {
       const order = orderOf(ordered);
       const acknowledged = payload(ordered.payload);
       if (order === null || acknowledged?.requestId !== requestId || acknowledged.cursorMs !== state.cursorMs
-        || acknowledged.studyId !== state.studyId || acknowledged.revision !== state.revision) throw new Error("Invalid clock acknowledgement");
+        || acknowledged.studyId !== state.studyId || acknowledged.revision !== state.revision
+        || acknowledged.operation !== intent.operation
+        || acknowledged.leaderOrder !== (intent.operation === "tick" ? intent.leaderOrder : 0)) throw new Error("Invalid clock acknowledgement");
       if (pending) {
         pending.order = order;
         for (const [cellId, value] of pending.results) if (value && value.order !== order) pending.results.set(cellId, null);
       }
-      this.lastOrder.set(intent.cellId, Math.max(this.lastOrder.get(intent.cellId) ?? 0, order));
+      const leader = intent.operation === "tick" ? intent.leaderOrder : order;
+      const previousLeader = this.leaderOrder.get(intent.cellId) ?? 0;
+      if (leader > previousLeader || (leader === previousLeader && order > (this.lastOrder.get(intent.cellId) ?? 0))) {
+        this.leaderOrder.set(intent.cellId, leader); this.lastOrder.set(intent.cellId, order);
+        this.leaderSource.set(intent.cellId, `${event.sourceWindowId}\u0000${intent.cellId}`);
+      }
       if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.delete(intent.cellId);
       // Peers may have sent an older clock while this local write/IPC was in
       // flight. Stamp the source before releasing those queued deliveries.
@@ -183,7 +205,7 @@ export class ChartStudyClockLinks {
       // The host may have broadcast our committed operation before losing its
       // reply. Until an explicit retry confirms an order, don't apply queued
       // older clocks over the known local committed cut.
-      if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.add(intent.cellId);
+      if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.set(intent.cellId, intent.operation);
       this.finish(requestId, true);
     }
     return result;
@@ -191,11 +213,21 @@ export class ChartStudyClockLinks {
   private async receive(event: WorkspaceBusLinkEvent) {
     const body = payload(event.payload), order = orderOf(event);
     if (!body || order === null || event.workspaceId !== this.scope) return;
+    const leader = body.operation === "tick" ? body.leaderOrder : order;
+    if (leader > order) return;
     const targets = this.targets(event.sourceCellId);
     await Promise.all(targets.map(async cellId => {
       // A local operation orders itself only after durable commit. Await its
       // order (not peer acknowledgements) before comparing an incoming event.
-      while (this.userIntents.has(cellId)) await this.userIntents.get(cellId)!.settled;
+      while (this.userIntents.has(cellId)) {
+        const local = this.userIntents.get(cellId)!;
+        // A new explicit leader supersedes an unfinished automatic tick. The
+        // tick keeps its old leader stamp even if its commit arrives later.
+        if (local.operation === "tick" && leader > (this.leaderOrder.get(cellId) ?? 0)) {
+          this.cancelUserAction(local); break;
+        }
+        await local.settled;
+      }
       if (event.workspaceId !== this.scope) return;
       const registration = this.registrations.get(cellId);
       if (!registration || registration.scope !== this.scope) {
@@ -203,9 +235,15 @@ export class ChartStudyClockLinks {
         return; // A native peer may be owned by another renderer; await its ack.
       }
       let status: ChartStudyClockStatus;
-      if (this.uncertainOrder.has(cellId)) status = "unavailable";
-      else if (order <= (this.lastOrder.get(cellId) ?? 0)) status = "superseded";
+      const previousLeader = this.leaderOrder.get(cellId) ?? 0;
+      const source = `${event.sourceWindowId}\u0000${event.sourceCellId}`;
+      if (this.uncertainOrder.get(cellId) === "cursor"
+        || (this.uncertainOrder.has(cellId) && leader <= previousLeader)) status = "unavailable";
+      else if (leader < previousLeader || (leader === previousLeader && order <= (this.lastOrder.get(cellId) ?? 0))) status = "superseded";
+      else if (body.operation === "tick" && leader === previousLeader && this.leaderSource.get(cellId) !== source) status = "superseded";
       else {
+        this.leaderOrder.set(cellId, leader); this.uncertainOrder.delete(cellId);
+        this.leaderSource.set(cellId, source);
         this.lastOrder.set(cellId, order);
         this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
         this.latestRequest.delete(cellId);

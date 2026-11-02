@@ -277,9 +277,9 @@ function LiveChartCell({
     const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
     void linkCoordinator.studyClocks.publishUserMove(intent);
   }, [cell.id, linkCoordinator, workspaceId]);
-  const moveStudy = useCallback(async (cursorMs: number, active = true) => {
+  const moveStudy = useCallback(async (cursorMs: number, active = true, automatic = false) => {
     if (studyEditing.current) return false;
-    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId, automatic ? "tick" : "cursor");
     try {
       const committed = await moveStudyCursor(cursorMs, active);
       if (committed && active) void linkCoordinator.studyClocks.publishUserMove(intent);
@@ -287,6 +287,10 @@ function LiveChartCell({
       return committed;
     } catch (error) { linkCoordinator.studyClocks.cancelUserAction(intent); throw error; }
   }, [cell.id, linkCoordinator, moveStudyCursor, workspaceId]);
+  const advanceStudyAutomatically = useCallback((cursorMs: number) => {
+    if (!linkCoordinator.studyClocks.canStartAutomatic(cell.id, workspaceId)) return Promise.resolve(false);
+    return moveStudy(cursorMs, true, true);
+  }, [cell.id, linkCoordinator, moveStudy, workspaceId]);
   const liveControlsEnabled = !study.masked && !study.pending && !study.busy;
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
     data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,
@@ -1111,6 +1115,7 @@ function LiveChartCell({
               linkCoordinator={linkCoordinator} workspaceId={workspaceId}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={moveStudy} onRetry={study.retry}
+              onAutomaticMove={advanceStudyAutomatically}
               onEditingChanged={setStudyEditing} onFollowReady={setStudyFollowReady} onPlayStart={retryCursorLink}
               cursorLinkIssue={cursorLinkIssue} onRetryCursorLink={retryCursorLink} />
           </Suspense>}
