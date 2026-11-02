@@ -5,7 +5,7 @@ import os
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = Path(os.environ.get('CANDLESCOPE_BATCH1_QA_ROOT', str(ROOT / 'output/seconds-contracts-20261102/native')))
+OUT = Path(os.environ.get('CANDLESCOPE_BATCH1_QA_ROOT', str(ROOT / 'output/seconds-contracts-20261102/native-current-plugins')))
 APP = OUT / 'Installed App/CandleScope.app'
 SOURCE = Path('/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/Installed App/CandleScope.app')
 assert not APP.exists(), 'Preserve earlier candidates; do not overwrite a receipt'
@@ -21,5 +21,15 @@ for name in subprocess.check_output(['git', 'ls-files', '-z', 'backend/app'], cw
         target = resources / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target)
+# Mirror current pure-Python SDK bytes into both packaged lookup locations.
+for package, module_name in [('candlescope-plugin-sdk','candlescope_plugin_sdk'),
+                             ('candlescope-backtest-sdk','candlescope_backtest_sdk')]:
+    source_module = ROOT / 'packages' / package / 'src' / module_name
+    for target in [resources / 'packages' / package / 'src' / module_name,
+                   resources / 'python-runtime/site-packages' / module_name]:
+        shutil.rmtree(target, ignore_errors=True)
+        shutil.copytree(source_module, target, ignore=shutil.ignore_patterns('__pycache__'))
 subprocess.run([str(resources / 'python-runtime/python/bin/python3.12'), '-m', 'compileall', '-q', str(resources / 'backend/app')], check=True)
+subprocess.run([str(Path('/Users/ryanliang/CandleScope/backend/.venv/bin/python')),
+                str(ROOT / 'docs/qa/seconds-contracts-20261102/build_current_plugins.py')], cwd=ROOT, check=True)
 subprocess.run(['node', str(ROOT / 'docs/qa/seconds-contracts-20261102/repack.mjs')], cwd=ROOT, check=True)

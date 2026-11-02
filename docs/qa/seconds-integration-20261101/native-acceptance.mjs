@@ -3,6 +3,8 @@ import cp from 'node:child_process';
 import fs from 'node:fs/promises';
 import * as q from '../backend-batch1-20261101/driver.mjs';
 import {capture} from '../backend-batch1-20261101/value-probe.mjs';
+import {assertPublicGate} from '../seconds-contracts-20261102/public-gate.mjs';
+await assertPublicGate(q.s.root);
 q.s.receipt.schema='candlescope.seconds-native/1';
 q.s.receipt.sourceCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 q.s.receipt.transport='Packaged bundled backend, real public Binance/Gate/Upbit HTTP and WebSocket; no substituted responses.';
