@@ -14,7 +14,10 @@ export interface ChartStudyClockPort {
 }
 export type ChartStudyClockStatus = "moved" | "inactive" | "out-of-range" | "editing" | "unavailable" | "failed" | "superseded";
 export interface ChartStudyClockIssue { sourceCellId: string; failed: Array<{ cellId: string; status: ChartStudyClockStatus }> }
-interface Intent { scope: string; cellId: string; generation: number }
+interface Intent {
+  scope: string; cellId: string; generation: number;
+  settled: Promise<void>; release(): void;
+}
 interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number }
 interface Registration { scope: string; port: ChartStudyClockPort }
 interface Pending {
@@ -36,6 +39,14 @@ function orderOf(event: WorkspaceBusLinkEvent): number | null {
   const order = match ? Number(match[1]) : NaN;
   return Number.isSafeInteger(order) ? order : null;
 }
+function boundedOrderReply(reply: Promise<WorkspaceBusLinkEvent>): Promise<WorkspaceBusLinkEvent> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Clock ordering reply timed out")), 5_000);
+    reply.then(value => { clearTimeout(timer); resolve(value); }, error => {
+      clearTimeout(timer); reject(error instanceof Error ? error : new Error("Clock ordering reply failed"));
+    });
+  });
+}
 
 /** Optional durable study-clock actions, separate from viewport links and
  * formal replay clocks. Targets retain their own immutable inputs and refuse
@@ -47,6 +58,8 @@ export class ChartStudyClockLinks {
   private pending = new Map<string, Pending>();
   private issues = new Map<string, ChartStudyClockIssue>();
   private latestRequest = new Map<string, string>();
+  private userIntents = new Map<string, Intent>();
+  private uncertainOrder = new Set<string>();
   private listeners = new Set<() => void>();
   private bus: WorkspaceBusClient | null = null;
   private localOrder = 0;
@@ -54,6 +67,8 @@ export class ChartStudyClockLinks {
 
   updateDocument(document: ChartWorkspaceDocument, scope: string) {
     if (scope !== this.scope) {
+      for (const intent of this.userIntents.values()) intent.release();
+      this.userIntents.clear(); this.uncertainOrder.clear();
       for (const requestId of [...this.pending.keys()]) this.finish(requestId, false);
       this.lastOrder.clear(); this.generations.clear(); this.latestRequest.clear();
       this.issues.clear(); this.emit();
@@ -80,6 +95,9 @@ export class ChartStudyClockLinks {
     return () => {
       if (this.registrations.get(cellId) !== registration) return;
       this.registrations.delete(cellId);
+      const intent = this.userIntents.get(cellId);
+      if (intent) this.cancelUserAction(intent);
+      this.uncertainOrder.delete(cellId);
       this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
       this.latestRequest.delete(cellId);
       if (this.issues.delete(cellId)) this.emit();
@@ -95,13 +113,32 @@ export class ChartStudyClockLinks {
       .filter(target => visible.has(target.cellId)).map(target => target.cellId);
   }
   beginUserAction(cellId: string, scope: string): Intent {
+    this.userIntents.get(cellId)?.release();
     const generation = (this.generations.get(cellId) ?? 0) + 1;
     this.generations.set(cellId, generation);
     this.latestRequest.delete(cellId);
     if (this.issues.delete(cellId)) this.emit();
-    return { scope, cellId, generation };
+    let release = () => {};
+    const settled = new Promise<void>(resolve => { release = resolve; });
+    const intent = { scope, cellId, generation, settled, release };
+    this.userIntents.set(cellId, intent);
+    return intent;
+  }
+  cancelUserAction(intent: Intent): void {
+    if (this.userIntents.get(intent.cellId) === intent) this.userIntents.delete(intent.cellId);
+    // Exiting a study is independent from cursor following. A confirmed live
+    // target must not inherit an old study's unconfirmed ordering fence.
+    try {
+      const state = this.registrations.get(intent.cellId)?.port.read();
+      if (state && !state.active && !state.pending) this.uncertainOrder.delete(intent.cellId);
+    } catch { /* A closing owner remains unavailable. */ }
+    intent.release();
   }
   async publishUserMove(intent: Intent): Promise<boolean> {
+    try { return await this.publishCommittedUserMove(intent); }
+    finally { this.cancelUserAction(intent); }
+  }
+  private async publishCommittedUserMove(intent: Intent): Promise<boolean> {
     if (intent.scope !== this.scope || intent.generation !== this.generations.get(intent.cellId)) return false;
     const registration = this.registrations.get(intent.cellId);
     if (!registration || registration.scope !== this.scope) return false;
@@ -123,18 +160,32 @@ export class ChartStudyClockLinks {
     try {
       // Browser pages have no central clock ordering authority. Only this
       // renderer is supported there; desktop windows use the main-process stamp.
-      const ordered = this.bus?.isNative() ? await this.bus.publishOrderedLink(event)
+      const ordered = this.bus?.isNative() ? await boundedOrderReply(this.bus.publishOrderedLink(event))
         : { ...event, eventId: `link-${++this.localOrder}` };
       const pending = this.pending.get(requestId);
-      if (!pending || intent.scope !== this.scope) return result;
+      if (intent.scope !== this.scope) return result;
       const order = orderOf(ordered);
-      if (order === null || payload(ordered.payload)?.requestId !== requestId) throw new Error("Invalid clock acknowledgement");
-      pending.order = order;
-      for (const [cellId, value] of pending.results) if (value && value.order !== order) pending.results.set(cellId, null);
+      const acknowledged = payload(ordered.payload);
+      if (order === null || acknowledged?.requestId !== requestId || acknowledged.cursorMs !== state.cursorMs
+        || acknowledged.studyId !== state.studyId || acknowledged.revision !== state.revision) throw new Error("Invalid clock acknowledgement");
+      if (pending) {
+        pending.order = order;
+        for (const [cellId, value] of pending.results) if (value && value.order !== order) pending.results.set(cellId, null);
+      }
       this.lastOrder.set(intent.cellId, Math.max(this.lastOrder.get(intent.cellId) ?? 0, order));
+      if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.delete(intent.cellId);
+      // Peers may have sent an older clock while this local write/IPC was in
+      // flight. Stamp the source before releasing those queued deliveries.
+      this.cancelUserAction(intent);
       void this.receive(ordered);
       this.completeIfReady(requestId);
-    } catch { this.finish(requestId, true); }
+    } catch {
+      // The host may have broadcast our committed operation before losing its
+      // reply. Until an explicit retry confirms an order, don't apply queued
+      // older clocks over the known local committed cut.
+      if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.add(intent.cellId);
+      this.finish(requestId, true);
+    }
     return result;
   }
   private async receive(event: WorkspaceBusLinkEvent) {
@@ -142,13 +193,18 @@ export class ChartStudyClockLinks {
     if (!body || order === null || event.workspaceId !== this.scope) return;
     const targets = this.targets(event.sourceCellId);
     await Promise.all(targets.map(async cellId => {
+      // A local operation orders itself only after durable commit. Await its
+      // order (not peer acknowledgements) before comparing an incoming event.
+      while (this.userIntents.has(cellId)) await this.userIntents.get(cellId)!.settled;
+      if (event.workspaceId !== this.scope) return;
       const registration = this.registrations.get(cellId);
       if (!registration || registration.scope !== this.scope) {
         if (!this.bus?.isNative()) this.result(event, body, cellId, order, "unavailable");
         return; // A native peer may be owned by another renderer; await its ack.
       }
       let status: ChartStudyClockStatus;
-      if (order <= (this.lastOrder.get(cellId) ?? 0)) status = "superseded";
+      if (this.uncertainOrder.has(cellId)) status = "unavailable";
+      else if (order <= (this.lastOrder.get(cellId) ?? 0)) status = "superseded";
       else {
         this.lastOrder.set(cellId, order);
         this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
@@ -202,7 +258,10 @@ export class ChartStudyClockLinks {
   private finish(requestId: string, report: boolean) {
     const pending = this.pending.get(requestId); if (!pending) return;
     clearTimeout(pending.timer); this.pending.delete(requestId);
-    const failed = [...pending.results].flatMap(([cellId, value]) => value?.status === "moved" || value?.status === "inactive" ? [] : [{ cellId, status: value?.status ?? "unavailable" as const }]);
+    const failed = [...pending.results].flatMap(([cellId, value]) => {
+      const status = pending.order === null ? "unavailable" : value?.status ?? "unavailable";
+      return status === "moved" || status === "inactive" ? [] : [{ cellId, status }];
+    });
     if (report && pending.scope === this.scope && this.latestRequest.get(pending.sourceCellId) === requestId) {
       if (failed.length) this.issues.set(pending.sourceCellId, { sourceCellId: pending.sourceCellId, failed });
       else this.issues.delete(pending.sourceCellId);

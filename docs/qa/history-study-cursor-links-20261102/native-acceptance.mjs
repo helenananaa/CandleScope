@@ -83,7 +83,7 @@ async function command(groupId,name,args={},windowId='main-window'){
  const result=await q.until(async()=>{const value=await q.s.control.call('request.get',{requestId});return value.final?value:false;});
  assert.equal(result.state,'applied',JSON.stringify(result));return result;
 }
-const document=async()=> (await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot.document;
+const document=async()=> (await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot?.document??null;
 const state=(id,windowId='main-window')=>q.s.control.call('app.query',{windowId,groupId:'study:'+id,command:'inspect',args:{}}).then(value=>value.snapshot);
 const at=async(id,time,windowId='main-window')=>q.until(async()=>{const value=await state(id,windowId);return value?.cursorMs===time&&!value.busy?value:false;});
 async function pageFor(windowId){
@@ -104,11 +104,12 @@ try{
  const workspace=(await q.inspect()).workspaceId;
  await pin('cell-1',fixture.a);await pin('cell-2',fixture.a);
  const a=await capture('cell-1'),b=await capture('cell-2','1m');assert.ok(a&&b&&a!==b);
- const doc=await document(),groupId=Object.keys(doc.linkGroups)[0];assert.ok(groupId);
+ const doc=await q.until(document),groupId=Object.keys(doc.linkGroups)[0];assert.ok(groupId);
  assert.equal(doc.linkGroups[groupId].peerPolicy.studyCursor,false);
  await command('workspace','setLinkGroup',{cellIds:['cell-1','cell-2'],groupId});
  await execute('cell-1','seekCursor',{timeMs:fixture.afterMs});await at('cell-1',fixture.afterMs);
  assert.equal((await state('cell-2')).cursorMs,fixture.beforeMs);
+ await region(a).getByText('Native original future version two',{exact:true}).waitFor();
  await q.record('default-off-retains-independent-cursors',{a:await state('cell-1'),b:await state('cell-2')});
  await command('workspace','updateLinkPolicy',{groupId,relationship:'peers',patch:{studyCursor:true}});
  await execute('cell-1','seekCursor',{timeMs:fixture.earlyMs});await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.earlyMs);
@@ -122,10 +123,10 @@ try{
  await region(b).getByRole('button',{name:'保存并关闭',exact:true}).click();
  await region(a).getByRole('button',{name:'重试游标联动',exact:true}).click();await at('cell-2',fixture.beforeMs);
  await command('workspace','createWindow');
- const topology=await q.until(async()=>{const value=await document();return Object.keys(value.windows).length===2?value:false;});
+ const topology=await q.until(async()=>{const value=await document();return value&&Object.keys(value.windows).length===2?value:false;});
  const secondId=Object.keys(topology.windows).find(id=>id!=='main-window');assert.ok(secondId);
  secondPage=await pageFor(secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:secondId,message:error.message}));
- const otherSnap=await q.until(async()=>{try{const value=(await q.s.control.call('workspace.inspect',{windowId:secondId})).snapshot;return value.ready&&value.cells.length===2?value:false;}catch{return false;}},90_000);
+ const otherSnap=await q.until(async()=>{try{const value=(await q.s.control.call('workspace.inspect',{windowId:secondId})).snapshot;return value.ready&&value.cells.length===2&&value.cells.every(cell=>cell.runtime?.mode==='live'&&cell.runtime.barCount>=20)?value:false;}catch{return false;}},90_000);
  const targetId=otherSnap.cells[0].cellId,otherId=otherSnap.cells[1].cellId;
  // A new window duplicates chart configuration, but owner ids do not copy saved studies.
  assert.equal(otherSnap.cells[0].runtime.mode,'live');
@@ -146,6 +147,7 @@ try{
  // The duplicated live sibling stays linked: cursor policy must skip it without entering a study.
  await command('workspace','setLinkGroup',{cellIds:[targetId],groupId},secondId);
  await execute('cell-1','seekCursor',{timeMs:fixture.afterMs});await at('cell-2',fixture.afterMs);await at(targetId,fixture.afterMs,secondId);
+ await secondPage.locator(`[data-study-id="${c}"]`).getByText('Native original future version two',{exact:true}).waitFor();
  const live=(await q.s.control.call('workspace.inspect',{windowId:secondId})).snapshot.cells.find(cell=>cell.cellId===otherId);
  assert.equal(live.runtime.mode,'live');
  await q.record('actual-desktop-window-follows-without-entering-live-sibling',{secondId,targetId,source:await state('cell-1'),target:await state(targetId,secondId),liveSibling:live.runtime});

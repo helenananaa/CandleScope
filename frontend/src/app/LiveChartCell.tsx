@@ -260,14 +260,16 @@ function LiveChartCell({
   const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
+  const moveStudyCursor = study.move;
+  const readStudyClock = study.readClock;
   const studyEditing = useRef(false);
   const pauseStudy = useRef<(() => void) | null>(null);
   const setStudyEditing = useCallback((editing: boolean) => { studyEditing.current = editing; }, []);
   const setStudyFollowReady = useCallback((pause: (() => void) | null) => { pauseStudy.current = pause; }, []);
   const clockPort = useMemo(() => ({ read: () => {
-    const state = study.readClock();
+    const state = readStudyClock();
     return { ...state, pending: state.pending || (state.active && pauseStudy.current === null), editing: studyEditing.current };
-  }, move: (cursorMs: number) => { pauseStudy.current?.(); return study.move(cursorMs); } }), [study.move, study.readClock]);
+  }, move: (cursorMs: number) => { pauseStudy.current?.(); return moveStudyCursor(cursorMs); } }), [moveStudyCursor, readStudyClock]);
   useEffect(() => linkCoordinator.studyClocks.register(cell.id, clockPort, workspaceId), [cell.id, clockPort, linkCoordinator, workspaceId]);
   const cursorLinkIssue = useSyncExternalStore(linkCoordinator.studyClocks.subscribe,
     () => linkCoordinator.studyClocks.getIssue(cell.id, workspaceId), () => null);
@@ -278,10 +280,13 @@ function LiveChartCell({
   const moveStudy = useCallback(async (cursorMs: number, active = true) => {
     if (studyEditing.current) return false;
     const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
-    const committed = await study.move(cursorMs, active);
-    if (committed && active) void linkCoordinator.studyClocks.publishUserMove(intent);
-    return committed;
-  }, [cell.id, linkCoordinator, study.move, workspaceId]);
+    try {
+      const committed = await moveStudyCursor(cursorMs, active);
+      if (committed && active) void linkCoordinator.studyClocks.publishUserMove(intent);
+      else linkCoordinator.studyClocks.cancelUserAction(intent);
+      return committed;
+    } catch (error) { linkCoordinator.studyClocks.cancelUserAction(intent); throw error; }
+  }, [cell.id, linkCoordinator, moveStudyCursor, workspaceId]);
   const liveControlsEnabled = !study.masked && !study.pending && !study.busy;
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
     data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,

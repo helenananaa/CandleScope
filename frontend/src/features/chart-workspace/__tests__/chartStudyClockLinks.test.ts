@@ -26,22 +26,32 @@ function clock(cursorMs = 600_000, patch: Partial<ChartStudyClockState> = {}) {
 function nativeNetwork() {
   let order = 0;
   const receivers = new Map<string, (event: WorkspaceBusLinkEvent) => void>();
-  const deferred: Array<() => void> = [];
+  const deferred: Array<{ resolve(): void; reject(error: Error): void }> = [];
   const wire: WorkspaceBusLinkEvent[] = [];
+  const delayedWindows = new Set<string>();
+  const delayedEvents: Array<{ windowId: string; event: WorkspaceBusLinkEvent }> = [];
   let hold = false;
   const bus = (windowId: string) => ({ windowId, isNative: () => true,
     subscribeLink: (listener: (event: WorkspaceBusLinkEvent) => void) => { receivers.set(windowId, listener); return () => receivers.delete(windowId); },
     publishLink: (event: Omit<WorkspaceBusLinkEvent, "sourceWindowId">) => {
       const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
-      for (const [id, receive] of receivers) if (id !== windowId) receive(stamped);
+      for (const [id, receive] of receivers) if (id !== windowId) {
+        if (delayedWindows.has(id)) delayedEvents.push({ windowId: id, event: stamped }); else receive(stamped);
+      }
     },
-    publishOrderedLink: (event: WorkspaceBusLinkEvent) => new Promise<WorkspaceBusLinkEvent>(resolve => {
+    publishOrderedLink: (event: WorkspaceBusLinkEvent) => new Promise<WorkspaceBusLinkEvent>((resolve, reject) => {
       const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
-      for (const [id, receive] of receivers) if (id !== windowId) receive(stamped);
-      if (hold) deferred.push(() => resolve(stamped)); else resolve(stamped);
+      for (const [id, receive] of receivers) if (id !== windowId) {
+        if (delayedWindows.has(id)) delayedEvents.push({ windowId: id, event: stamped }); else receive(stamped);
+      }
+      if (hold) deferred.push({ resolve: () => resolve(stamped), reject }); else resolve(stamped);
     }),
   }) as unknown as WorkspaceBusClient;
-  return { bus, wire, hold: () => { hold = true; }, release: (index = 0) => deferred.splice(index, 1)[0]!() };
+  return { bus, wire, hold: () => { hold = true; }, release: (index = 0) => deferred.splice(index, 1)[0]!.resolve(),
+    reject: (index = 0) => deferred.splice(index, 1)[0]!.reject(new Error("Ordering reply lost")),
+    delayFor: (windowId: string) => delayedWindows.add(windowId),
+    deliverDelayed: () => { const next = delayedEvents.shift()!; receivers.get(next.windowId)!(next.event); },
+    deliverAllDelayed: () => { while (delayedEvents.length) { const next = delayedEvents.shift()!; receivers.get(next.windowId)!(next.event); } } };
 }
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
@@ -131,9 +141,50 @@ test("a delayed old source IPC result cannot overwrite a newer received cursor o
   b.state.cursorMs = 300_000; b.state.revision++;
   const second = right.publishUserMove(right.beginUserAction("cell-2", "workspace")); await flush();
   assert.equal(c.state.cursorMs, 300_000);
-  network.release(1); await second; network.release(); await first;
+  network.release(1); network.release(); await Promise.all([first, second]);
   assert.equal(a.state.cursorMs, 300_000); assert.equal(c.state.cursorMs, 300_000);
   assert.deepEqual(c.calls, [300_000]); assert.equal(left.getIssue("cell-1", "workspace"), null); releaseA(); releaseB();
+});
+
+test("an older incoming clock cannot overwrite a new local rewind while its ordering reply is pending", async () => {
+  const doc = document(), network = nativeNetwork();
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  network.hold(); network.delayFor("second");
+  const first = left.publishUserMove(left.beginUserAction("cell-1", "workspace"));
+  await flush();
+  b.state.cursorMs = 300_000; b.state.revision++;
+  const second = right.publishUserMove(right.beginUserAction("cell-2", "workspace"));
+  await flush(); network.deliverDelayed(); await flush();
+  network.release(1); network.release(); await flush(); network.deliverAllDelayed(); await Promise.all([first, second]);
+  assert.equal(a.state.cursorMs, 300_000); assert.equal(b.state.cursorMs, 300_000);
+  releaseA(); releaseB();
+});
+
+test("a lost source ordering reply is not success, and queued clocks wait for an explicit confirmed retry", async () => {
+  const doc = document(), network = nativeNetwork();
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  network.hold();
+  const first = left.publishUserMove(left.beginUserAction("cell-1", "workspace")); await flush();
+  b.state.cursorMs = 300_000; b.state.revision++;
+  const second = right.publishUserMove(right.beginUserAction("cell-2", "workspace")); await flush();
+  network.reject(); await flush(); network.release();
+  assert.equal(await first, false); assert.equal(await second, false);
+  assert.equal(a.state.cursorMs, 600_000); assert.equal(b.state.cursorMs, 300_000); assert.deepEqual(a.calls, []);
+  assert.equal(left.getIssue("cell-1", "workspace")!.failed[0]!.status, "unavailable");
+  a.state.active = false; left.cancelUserAction(left.beginUserAction("cell-1", "workspace"));
+  b.state.cursorMs = 350_000;
+  const liveSkipped = right.publishUserMove(right.beginUserAction("cell-2", "workspace")); await flush(); network.release();
+  assert.equal(await liveSkipped, true); assert.deepEqual(a.calls, []); assert.equal(a.state.active, false);
+  a.state.active = true;
+  const retry = left.publishUserMove(left.beginUserAction("cell-1", "workspace")); await flush(); network.release();
+  assert.equal(await retry, true); assert.equal(b.state.cursorMs, 600_000); assert.equal(left.getIssue("cell-1", "workspace"), null);
+  releaseA(); releaseB();
 });
 
 test("owner changes and replaced registrations fence an in-flight target acknowledgement", async () => {
