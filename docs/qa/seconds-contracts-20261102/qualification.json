@@ -1,0 +1,10 @@
+{
+  "baseline": "0574bbfc",
+  "before": "3failed: calendar unknown-origin and ordinary USD-M1s rejection assertions.",
+  "finding": "Registered binance/futures still rejects1s, while explicitly admitted binanceusdm/swap.linear can build1s via trade history. Neither advertises native1s. Kraken non-native7m now uses its admitted event-time trade route; raw native1m boundaries remain unqualified and are rejected.",
+  "change": "Keep native capability exclusion and real ordinary-contract endpoint test. Assert explicit TRADE route with no native/base interval for admitted USD-M; use Kraken native1m as unknown-boundary rejection and verify7m TRADE separately.",
+  "after": "164passed: calendar, admission, resolution, native seconds, trade pagination/reduction/sources, durable seconds lifecycle and priority interests.",
+  "product_source_changed": false,
+  "native": "Prior seconds native18 remains incomplete; this test-contract correction does not qualify new native history/MA/save/restart.",
+  "ci": "New exact-head CI required before merge."
+}
