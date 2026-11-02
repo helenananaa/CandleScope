@@ -1,14 +1,15 @@
 {
   "date": "2026-11-02",
-  "source": "2bcd66ea1843820956b88774e8323ce5b6c1cfed",
+  "source": "615fd0c23995ab5155329098b5197171763e0a06",
   "base": "af7e2951ea185d937add4852c305f4b7142c814c",
   "integrated": {
     "210": "3c5101ac: Python batch author/runtime, exact script input ranges and both default packaged runtimes",
-    "212": "c9f8562c: committed account snapshots and shared post-commit notification lifecycle"
+    "212": "c9f8562c: committed account snapshots and shared post-commit notification lifecycle",
+    "216": "d877efff full branch: persistent history-interest/scoped scheduling, atomic practice ledger snapshots, fixed dataset identity; a6e292f8 additionally fingerprints installed calendar implementation and basis rules"
   },
   "merge_fix": "Equivalent stale-reconcile clock injections from two branches were both retained by automatic merge. TypeScript caught the duplicate property; retain one injected clock and the complete original test assertions. Original typecheck log is preserved locally.",
   "validation": {
-    "backend_and_python_plugin": "230 passed, 0 failed, 0 skipped in 25.27s using actual bundled Python; includes account streams, postcommit updates, shutdown, strategy routing, script range identity, serialization, fixed caches, practice accounts, replay HTTP/Node and scheduler boundaries.",
+    "backend_and_python_plugin": "231 passed, 0 failed, 0 skipped in 22.25s with actual bundled Python, after calendar dependency fix; includes real installed-dependency invalidation API regression.",
     "frontend": 4786,
     "isolated_performance_gate": 1,
     "desktop_host": 127,
@@ -16,11 +17,11 @@
     "architecture_plugin_i18n_typecheck_lint_and_production_build": "passed; existing cleanup-ref lint warning and large bundle notice remain",
     "desktop_target_build": "VITE_DESKTOP_BUILD=1 build passed in 8.84s",
     "runtime_asset_reuse": "Requirements, CCXT lock, all packages, desktop source and plugin build inputs unchanged from the qualified Python author branch. Assembly verifies both full package sizes and hashes before reuse.",
-    "main_alignment": "main1988a9b8 (#211) merged through the stability branch; no further backend/app, frontend or package changes relative to the tested integration."
+    "main_alignment": "main1988a9b8 and complete PR216d877efff ancestry integrated; after source615fd0c only QA/graph changes, no application difference.",
+    "combined_native": "Passed Python editor/preview, actual confirmed-close/restart; synthetic readonly push/reopen/decimal/cursor restart; imported CSV cache/numeric/2 restarts. 7 normal successful owned exits, 0 renderer errors. See runtime-native-qualification.json."
   },
   "pending": [
-    "Exact-head cloud CI",
-    "Combined packaged Python editor/closed update/restart and account snapshot push/restart checks"
+    "Exact final-head cloud CI before merge"
   ],
-  "limits": "Development integration only. Standalone source PR native receipts retain their original application revisions; no full product, Windows, arbitrary script causality or stateful Python qualification."
+  "limits": "Scoped macOS arm64 combined native qualification; source PR financial/cold-history component and native evidence retains its own versions. No full product, Windows, arbitrary script causality, stateful Python or real private-account synchronization claim."
 }
