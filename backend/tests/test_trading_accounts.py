@@ -259,7 +259,9 @@ def test_journal_at_time_bounds_and_http_adapter_keep_account_and_instrument_sco
         service.test_clock.now += 1
         service.create_entry(account["id"], {**instrument, "kind": "quick", "body": f"note-{i}"})
     service.create_entry(other["id"], {**instrument, "kind": "quick", "body": "foreign"})
-    app = FastAPI(); app.include_router(trading_router); app.state.trading_accounts = service
+    app = FastAPI()
+    app.include_router(trading_router)
+    app.state.trading_accounts = service
     client = TestClient(app)
     params = {**instrument, "cursorMs": service.test_clock.now + 1, "limit": 2}
     result = client.get(f"/trading/accounts/{account['id']}/journal-at-time", params=params)
@@ -316,8 +318,8 @@ def test_journal_at_time_caps_text_without_relabeling_an_existing_version_as_mis
     assert len(json.dumps(projected).encode()) < 550_000
 
 
-def bar(time_s: int, o: str, h: str, l: str, c: str) -> dict[str, Any]:
-    return {"time": time_s, "open": D(o), "high": D(h), "low": D(l), "close": D(c)}
+def bar(time_s: int, o: str, h: str, low: str, c: str) -> dict[str, Any]:
+    return {"time": time_s, "open": D(o), "high": D(h), "low": D(low), "close": D(c)}
 
 
 INSTRUMENT = {"exchange": "binance", "marketType": "futures", "symbol": "BTCUSDT"}

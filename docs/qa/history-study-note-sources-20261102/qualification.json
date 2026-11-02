@@ -1,0 +1,107 @@
+{
+  "schema": "candlescope.study-original-note-sources-qualification/1",
+  "applicationSource": "5777242cacb57a90526237fb8dfb42f1cb06e42a",
+  "checks": {
+    "frontend": 4811,
+    "performance": 1,
+    "desktop": 127,
+    "backendSourceAccount": 43,
+    "backendActualCandidateAccountAndStudy": 57,
+    "failed": 0,
+    "ruff": "0.14.7: app modules and complete touched account test file passed",
+    "typeLintArchitecturePluginI18n": "passed; inherited single lint warning; 30 locales/5340 keys",
+    "productionAndDesktopBuild": true,
+    "runtimeWarning": "Inherited Starlette TestClient/anyio.abc.BlockingPortal deprecation; retained, no dependency change"
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "passed": true,
+    "steps": 15,
+    "normalExitMs": [
+      1187,
+      1267
+    ],
+    "rendererErrors": [],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "mismatches": [],
+    "strictSignatureExit": 0,
+    "ownedProcessesAbsent": true,
+    "appAsarSha256": "04a4d025d09fc9ebafe9db2668b360c67a3f31d39f253143a3cb138804be1a80",
+    "networkIsolation": {
+      "policySha256": "cf35cca89f2e1b677995e788c0fe365bf627c641f260a3e4ea80cbde31a0c60e",
+      "launcherSha256": "008492c4ed2a92e607bcd34338f91c868bc3f7c795ae990289eefadf2d75ed3a",
+      "launcher": "/Users/ryanliang/.codex/worktrees/history-study-note-sources-20261102/CandleScope/output/history-study-note-sources-loopback-qualified-20261102/loopback-launcher.sh",
+      "executable": "/Users/ryanliang/.codex/worktrees/history-study-note-sources-20261102/CandleScope/output/history-study-note-sources-loopback-qualified-20261102/Installed App/CandleScope.app/Contents/MacOS/CandleScope"
+    },
+    "childRemoteDenyProbes": [
+      {
+        "status": 0,
+        "stdout": "{\"remoteErrno\": 1, \"remoteDeniedBeforeConnection\": true}\n",
+        "stderr": ""
+      },
+      {
+        "status": 0,
+        "stdout": "{\"remoteErrno\": 1, \"remoteDeniedBeforeConnection\": true}\n",
+        "stderr": ""
+      }
+    ],
+    "fixture": {
+      "schema": "candlescope.study-original-notes-fixture/1",
+      "scope": "Synthetic note timestamps via real owning service; warm real public market DB; fresh QA study/financial/control state; no actual historical human-author claim",
+      "source": "/Users/ryanliang/.codex/worktrees/history-study-controls-20261102/CandleScope/output/history-study-controls-read-fence-native-20261102/profile/data/candlescope.db",
+      "sourceSha256": "f143aa82aa9a4959ddaa4053c2543506b0fed24310a36e13a7ae8aba2634408e",
+      "destinationSha256": "159fc6572e7dbaa29e42d2adf7b8b1220f958fb012cce8422648d070422b8623",
+      "a": "acc_fa35e277540dc9987e1d",
+      "b": "acc_a3277d042d31439bd65c",
+      "original": "je_b1ecb58dcfa130185be7",
+      "future": "je_2421dbf9d07e20188869",
+      "review": "je_c45f8abf21e81c10c15b",
+      "legacy": "je_43384eba4fabd8402e40",
+      "other": "je_7d3399f962c2496890cf",
+      "fromMs": 1793607180000,
+      "toMs": 1793616780000,
+      "beforeMs": 1793613180000,
+      "afterMs": 1793614380000,
+      "earlyMs": 1793608680000,
+      "counts": {
+        "accounts": 2,
+        "orders": 0,
+        "fills": 0,
+        "cash_flows": 0,
+        "journal_entries": 5,
+        "journal_revisions": 6
+      }
+    },
+    "scope": [
+      "Actual protected local owning-service/API and frontend manager reads; no response mocking",
+      "Two same-market charts with independently pinned original-note sources",
+      "Original note v1 -> v2 -> rewind v1 after latest/future text had been prefetched",
+      "Future-created original note and future market-anchor supplement hidden; legacy incomplete version explicit with no latest fallback",
+      "Later supplement actual write timestamp retained; source switch does not move either cursor or alter sibling",
+      "Save/full exit/restart preserves fixed market input, per-chart source and original-note cursor projection",
+      "Existing accounts/orders/fills/cash/journal-entry/revision counts unchanged during UI flow"
+    ]
+  },
+  "boundedReadPolicy": {
+    "records": 100,
+    "perNoteSerializedTextBytes": 65536,
+    "projectionSerializedTextBytes": 512000,
+    "oversize": "Keep revision/time metadata and explicit textUnavailable; no original record mutation. Unit evidence, not separately forced oversized native fixture."
+  },
+  "preservedFailures": [
+    "Initial TypeScript journal transport promised typed data while generic request returns unknown; corrected transport boundary and owner/cursor validation, full rerun passed.",
+    "First native: a symbol picker intercepted settings; retained full failed profile/receipt. Subsequent QA closes an actually visible picker with real Escape; no product change.",
+    "Second native: Playwright main evaluation has no dynamic import callback; replaced only the QA probe with native process.getBuiltinModule.",
+    "Ruff found two new test semicolons and an existing ambiguous helper parameter; split statements and renamed the fixture parameter, all57 tests reran.",
+    "Before any app launch, sandbox policy parser required localhost syntax; a guessed Python executable path was absent. Corrected to actual interpreter and verified loopback success / remote EPERM."
+  ],
+  "limits": [
+    "OS loopback-only QA launcher; real app remains LIVE UI but cannot reach remote sockets. This is local cached-history/note qualification, not normal online/latest/cold/private exchange qualification.",
+    "Controlled synthetic note save times created via real owning service; not evidence that a human wrote these notes historically. Warm real market DB only, fresh financial/study/control profile.",
+    "Source owns all original records; projection does not read financial trades/plans/snapshots or copy journals into public market cache.",
+    "Qualified runtime/plugin assets reused after input/hash checks; current backend compiled/frontend rebuilt and signed, not fresh engine build or CI package.",
+    "Optional mode/cursor links, formal replay/imported replay sources, arbitrary script/Python replay, full157 and Windows remain outside this slice."
+  ],
+  "ci": "Final delivery head pending; keep PR open until exact-head CI and intended integration checks complete"
+}
