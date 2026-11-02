@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { createIntervalTimeline } from "../../utils/intervalTimeline.js";
@@ -29,6 +29,7 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
   });
   const [invalid, setInvalid] = useState(false);
   const [sourceInterval, setSourceInterval] = useState(series.interval);
+  const sourceId = useId();
   const [saved, setSaved] = useState<SavedStudySummary[]>([]);
   const [remove, setRemove] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -65,12 +66,12 @@ export default function HistoryStudySetupDialog({ owner, manager, onSelect, seri
       </section>}
       {listError && <p role="alert">{t("study.error")}</p>}
       <p>{t("study.scope")}</p><p>{t("study.range")}</p>
-      <label>{t("study.sourceInterval")}<select value={sourceInterval} disabled={busy}
+      <label htmlFor={sourceId}>{t("study.sourceInterval")}</label><select id={sourceId} value={sourceInterval} disabled={busy}
         onChange={event => setSourceInterval(event.target.value)}>
         <option value={series.interval}>{series.interval}</option>
         {["1m", "5m", "1h", "1d"].filter(candidate => intervalTiles(candidate, series.interval)
           && !intervalTiles(series.interval, candidate)).map(candidate => <option key={candidate} value={candidate}>{candidate}</option>)}
-      </select></label>
+      </select>
       <p>{t("study.fineHint")}</p>
       {(["start", "end", "cursor"] as const).map(key => <label key={key}>
         {t(key === "start" ? "study.start" : key === "end" ? "study.end" : "study.cursor")}
