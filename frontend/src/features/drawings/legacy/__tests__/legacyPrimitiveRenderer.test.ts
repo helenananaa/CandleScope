@@ -184,9 +184,6 @@ test("reconcileAsync rejects a stale candidate after another reconcile wins duri
   let replaced = false;
 
   const result = await renderer.reconcileAsync(stale, {
-    // This case counts entity chunks; host preemption must not add a timed
-    // yield. The elapsed work budget has separate injected-clock coverage.
-    monotonicNow: () => 0,
     maxEntitiesPerChunk: 2,
     // This race checks entity-count yields. Host scheduling may consume the
     // time budget after a single entity; elapsed-time yields have separate tests.
