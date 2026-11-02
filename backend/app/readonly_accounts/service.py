@@ -27,6 +27,9 @@ async def start_account_service(app, root: Path) -> None:
     try:
         owner = await asyncio.to_thread(ReadOnlyAccountService, root, network_options=saved_network_options)
         app.state.readonly_account_service = owner
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            core.bind_readonly_account(owner)
         await owner.start()
     except Exception as exc:
         # An unavailable account store or Keychain must not prevent charts from opening.
@@ -75,6 +78,7 @@ class ReadOnlyAccountService:
             await asyncio.wait_for(client.close(), timeout=10)
         except Exception:
             self.service_error = "ACCOUNT_RESOURCE_CLEANUP_FAILED"
+            self.notify_state_changed()
 
     def _vault(self):
         return self.vault_factory(self.root)
@@ -104,6 +108,7 @@ class ReadOnlyAccountService:
             task.cancel()
             await asyncio.gather(task,return_exceptions=True)
         self.synchronizer = None
+        self.notify_state_changed()
 
     async def close(self) -> None:
         async with self._control:
@@ -203,9 +208,10 @@ class ReadOnlyAccountService:
                     client = self.client_factory(credentials,**self.network_options())
                 finally:
                     credentials.clear()
-                sync = AccountSynchronizer(self.repository,client)
+                sync = AccountSynchronizer(self.repository,client, state_changed=self.notify_state_changed)
                 client._observe = sync.observe
                 self.synchronizer = sync
+                self.notify_state_changed()
                 await sync.initialize(account["venue_uid"])
                 await sync.run()
             except asyncio.CancelledError:
@@ -218,12 +224,16 @@ class ReadOnlyAccountService:
                     return
             finally:
                 self.synchronizer = None
+                self.notify_state_changed()
                 if client is not None:
                     await self._close_client(client)
             if self.service_error == "ACCOUNT_RESOURCE_CLEANUP_FAILED":
                 return
             await asyncio.sleep(retry)
             retry = min(retry*2,60)
+
+    def notify_state_changed(self) -> None:
+        self.repository.updates.notify("state")
 
     async def state(self) -> dict:
         view = await asyncio.to_thread(self.repository.overview)

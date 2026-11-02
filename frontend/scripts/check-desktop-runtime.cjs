@@ -15,10 +15,11 @@ module.exports = async (context) => {
   }
   const pluginsRoot = path.join(root, "plugins");
   const plugins = JSON.parse(fs.readFileSync(path.join(pluginsRoot, "manifest.json"), "utf8"));
-  if (plugins.schemaVersion !== 2 || !Array.isArray(plugins.plugins)
-      || plugins.plugins.length !== 1
-      || plugins.plugins[0]?.runtimeId !== "candlescope.pine-compat") {
-    throw new Error("Prepare the bundled Pine runtime before packaging.");
+  const expected = new Set(["candlescope.pine-compat", "candlescope.python-indicator"]);
+  const ids = Array.isArray(plugins.plugins) ? plugins.plugins.map(plugin => plugin?.runtimeId) : [];
+  if (plugins.schemaVersion !== 2 || ids.length !== expected.size
+      || new Set(ids).size !== expected.size || ids.some(id => !expected.has(id))) {
+    throw new Error("Prepare the bundled first-party runtimes (Pine and Python) before packaging.");
   }
   for (const plugin of plugins.plugins) {
     const bytes = fs.readFileSync(path.join(pluginsRoot, plugin.filename));

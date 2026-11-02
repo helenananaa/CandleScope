@@ -1,0 +1,20 @@
+{
+  "problem": "Native Python preview failed frontend finite-value contract because public RenderIR aligned None warmup entered flat lines asnull.",
+  "change": "Keep original aligned RenderIR includingNone. Emit onlynumeric samples in established flatline/normalized envelope. Existing chart line alignment inserts whitespace at missingfixedintervalsamples, avoiding fabricatedzero/bridged gaps.",
+  "tests": "64 serializer/Python/sidecar regressions and existing chart-series gap/whitespace tests pass.",
+  "native": "Native2failed pre-fix with actualfrontendcontract error; patched native3pending. No acceptance yet.",
+  "artifacts": [
+    {
+      "path": "nullable-render-tests.log.gz",
+      "sha256": "e89094cec5299abb125b4ec9da62cbb5bd54716b12795373b161588c7fe5cf0b"
+    },
+    {
+      "path": "gap-render-tests.log.gz",
+      "sha256": "94ab95108b1156f0f3252572bf5e948c0c38442eb00a8f884ded7613bb0fd7a6"
+    },
+    {
+      "path": "frontend-desktop-build.log.gz",
+      "sha256": "8da1900c17f0c1a944c121500f039b0773d8d646f704198c75b0980a821dc3e6"
+    }
+  ]
+}

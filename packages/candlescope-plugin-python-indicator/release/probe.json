@@ -1,0 +1,33 @@
+{
+  "source": "INDICATOR={'name':'Python Probe','window':2}\ndef compute(bars, params):\n return {'lines':{'main':[value*2 for value in bars['close']]}}\n",
+  "context": {
+    "exchange": "binance",
+    "marketType": "spot",
+    "symbol": "BTCUSDT",
+    "interval": "1m"
+  },
+  "bars": [
+    {
+      "time": 1700000000,
+      "open": 100.0,
+      "high": 102.0,
+      "low": 99.0,
+      "close": 101.0,
+      "volume": 10.0,
+      "isClosed": true
+    },
+    {
+      "time": 1700000060,
+      "open": 101.0,
+      "high": 103.0,
+      "low": 100.0,
+      "close": 102.0,
+      "volume": 11.0,
+      "isClosed": true
+    }
+  ],
+  "params": {},
+  "options": {},
+  "analysisSha256": "sha256:ae8f9d0b71d7a5901d8e3bf9d73f93733b6a15539ffefa8c526b456c0f115bf6",
+  "executionSha256": "sha256:3b9ce82e39fffb570ed670724947deb9cf0b438ea91cb0df85bb0001f9b936d8"
+}

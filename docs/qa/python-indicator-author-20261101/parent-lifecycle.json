@@ -1,0 +1,27 @@
+{
+  "tests": "48 author/executor/SDK/real JSON Lines checks passed, including real controller termination and observed worker process exit.",
+  "change": "Fresh POSIX worker monitors runtime parent and terminates own process group if parent exits. Existing normal completion and timeout cleanup retained.",
+  "packaging": "Updated wheel and .cspkg built; real managed installer analyze/execute fixed probe passed in isolated test profile.",
+  "limitations": [
+    "Windows parent/process-tree native qualification remains separate",
+    "Default bundled app activation, editor and chart/native restart still pending"
+  ],
+  "artifacts": [
+    {
+      "path": "parent-lifecycle-tests.log.gz",
+      "sha256": "367af8c5f9f9bbfb1ee3b34dd54b6e0b7dd26561b593d126cdfa759520964740"
+    },
+    {
+      "path": "lifecycle-wheel.log.gz",
+      "sha256": "d62fefd47fde8861a09914ed3761329ec906ef3db1dbbbfef174edb8034e82a3"
+    },
+    {
+      "path": "lifecycle-bundle.log.gz",
+      "sha256": "cb634ac51a9bd04b149b71e7cde1bd1fbaef252e47e741e24c0b0c08c96aa459"
+    },
+    {
+      "path": "lifecycle-install.log.gz",
+      "sha256": "54f37db3cba045862022909cfdb6b7b67dd04c3e49b488eef8fea75c1d97373a"
+    }
+  ]
+}
