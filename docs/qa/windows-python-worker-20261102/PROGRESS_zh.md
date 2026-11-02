@@ -1,0 +1,11 @@
+# Windows Python worker 独立校验
+
+基于main #224/437eba53。macOS上Python worker组合为29通过、2个Windows原生用例跳过，不能据此推导Windows AppContainer路径通过。私人Windows隧道两次仅返回MCP SSE 429，没有远端命令执行证据。
+
+增加独立windows-latest任务，使用正式后端依赖、Python3.12和当前worker/SDK源码，执行完整test_python_strategy_runtime.py。测试只使用本地受控策略、临时文件和回环listener，不启动桌面应用、行情DataManager或请求交易所。独立于macOS任务运行，不将Windows作为本地macOS开发前置。
+
+Windows原生用例包括SDK可用但不能读host-private.txt/连接真实回环listener，以及两次一次性profile启停后共享SDK/worker文件ACL恢复基线。新增正对照先证明普通宿主进程能读取该合成文件并连接listener，避免把目标本身不可达误判为沙箱隔离。
+
+JUnit核验器要求真实Windows解释器、完整用例无skip/failure/error，并明确要求冷SDK字节保存、原生文件/回环拒绝及ACL回收三个用例实际通过。回执绑定Git提交和worker/SDK源码SHA；源字节变化使资格失败。失败时仍上传原JUnit和解释原因，不把无报告或跳过当成功。
+
+此任务的通过范围仅限worker/控制策略、字节保存和AppContainer生命周期；不代表Windows安装包、桌面UI、长期资源或完整产品验收。当前Windows运行尚未完成，不作通过声明。
