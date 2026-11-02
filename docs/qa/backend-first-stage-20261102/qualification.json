@@ -120,5 +120,12 @@
       "path": "evidence/attempt1-live-acceptance.json.gz",
       "sha256": "92a39d2dc0b2c7ca6707034d4e1e8efeecfdf3d9d5c87095925c99650507a3d4"
     }
-  ]
+  ],
+  "main211_integration": {
+    "merge_source": "b393ac0d",
+    "main": "1988a9b8ecefac1d325447f570c3a1dd0435a028",
+    "tests": 314,
+    "passed": true,
+    "native_scope": "Original native source a6e292f8; merged #211 has its own native evidence. No claim of rerun combined native source."
+  }
 }
