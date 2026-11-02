@@ -29,6 +29,9 @@ export type DrawingToolId =
   | "line-vertical"
   | "line-cross"
   | "angle-measure"
+  | "measure-price"
+  | "measure-time"
+  | "measure-price-time"
   | "fibonacci"
   | "position-long"
   | "position-short"
@@ -42,12 +45,15 @@ export type PassiveCursorToolId = Extract<DrawingToolId, `cursor-${string}`>;
 export type BasicLineToolId = "line-segment" | "line-ray" | "line-infinite";
 export type AxisLineToolId = "line-horizontal" | "line-vertical" | "line-cross";
 export type AngleToolId = "angle-measure";
+export type RangeMeasureType = "price" | "time" | "price-time";
+export type RangeMeasureToolId = `measure-${RangeMeasureType}`;
 export type FibonacciToolId = "fibonacci";
 export type PositionToolId = "position-long" | "position-short";
 export type ShapeToolId = "shape-rectangle" | "shape-ellipse";
 export type FreehandToolId = "pen" | "highlighter";
 
 export type DrawingKind =
+  | "range-measure"
   | "line"
   | "axis-line"
   | "angle-measure"
@@ -59,6 +65,7 @@ export type DrawingKind =
   | "highlighter";
 
 export type DrawingHitType =
+  | "range-measure"
   | "line"
   | "axis-line"
   | "angle"
@@ -296,6 +303,14 @@ export interface SavedAngleDrawing extends SavedDrawingBase<"angle-measure"> {
   lineWidth?: number;
 }
 
+/** Measurements retain two source anchors; values never depend on pixel scale. */
+export interface SavedRangeMeasureDrawing extends SavedDrawingBase<"range-measure"> {
+  measureType: RangeMeasureType;
+  dataPoints: DrawingDataPoint[];
+  color?: string;
+  lineWidth?: number;
+}
+
 export interface SavedTextDrawing extends SavedDrawingBase<"text"> {
   dataPoint?: DrawingDataPoint;
   text?: string;
@@ -374,6 +389,7 @@ export type SavedHighlighterDrawing = SavedDrawingBase<"highlighter"> & SavedFre
 };
 
 export type SavedDrawing =
+  | SavedRangeMeasureDrawing
   | SavedLineDrawing
   | SavedAxisLineDrawing
   | SavedAngleDrawing

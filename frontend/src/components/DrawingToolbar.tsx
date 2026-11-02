@@ -20,6 +20,7 @@ import {
   supportsDrawingTool,
 } from "../features/drawings/drawingCapabilities.js";
 import { t } from "../i18n/index.js";
+import { resolveDrawingHostInteractionSurfaceMode } from "../features/drawings/interactionSurfaceMode.js";
 import { useLocale } from "../i18n/useLocale.js";
 import { markPerfOnce } from "../runtime/performance/perfMarks";
 import DrawingActionButtons from "./drawing/DrawingActionButtons.js";
@@ -149,7 +150,8 @@ const DrawingToolbar = memo(function DrawingToolbar({
     }
   }, [drawingAnchorMode, onToolChange]);
   const isVariantDisabled = useCallback(
-    (variant: ToolbarVariant<DrawingToolId>) => !supportsDrawingTool(drawingAnchorMode, variant.id),
+    (variant: ToolbarVariant<DrawingToolId>) => !supportsDrawingTool(drawingAnchorMode, variant.id)
+      || (variant.id.startsWith("measure-") && resolveDrawingHostInteractionSurfaceMode() !== "overlay"),
     [drawingAnchorMode],
   );
 

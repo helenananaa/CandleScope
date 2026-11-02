@@ -586,6 +586,33 @@ test("per-interval viewer cache reactivates a warm store without rebuilding it",
   assert.equal(oneMinute.last()?.time, baseBar(10).time);
 });
 
+test("cache preparation retains complete server history beyond the bounded base window on advance", () => {
+  const source = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-base" });
+  source.replace(Array.from({ length: 10 }, (_, index) => baseBar(index + 10)));
+  const cache = new ReplayViewerSeriesCache();
+  const cursor = (HOUR_START + 20 * 60) * 1_000 - 1;
+  const viewer = cache.prepare(source, "1m", "5m", cursor);
+  // A cold authoritative display response can reach further left than the
+  // bounded execution window. These complete candles have no context flag.
+  const loaded = aggregateReplayBaseBars(
+    Array.from({ length: 20 }, (_, index) => baseBar(index)), "1m", "5m",
+  );
+  viewer.replace(loaded);
+  cache.markSynchronized(viewer, source, cursor);
+
+  source.applyRange([baseBar(20)]);
+  cache.prepare(source, "1m", "5m", cursor + 60_000);
+
+  assert.deepEqual(viewer.snapshot().slice(0, 2).map(row => ({
+    time: row.time, close: row.close, context: row.replayContextHistory,
+  })), loaded.slice(0, 2).map(row => ({
+    time: row.time, close: row.close, context: true,
+  })));
+  assert.equal(viewer.last()?.replayClosed, false);
+  assert.equal(viewer.last()?.replayContextHistory, undefined);
+  assert.equal(viewer.barCount, 5);
+});
+
 test("semantically equivalent interval aliases share one prepared cache store", () => {
   const source = new SeriesWindowStore({ intervalSeconds: 60, seriesKey: "replay-base" });
   source.replace(Array.from({ length: 60 }, (_, index) => baseBar(index)));

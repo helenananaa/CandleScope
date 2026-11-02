@@ -7,6 +7,42 @@ import type { KlineApi, KlineFetchResult } from "../klineContracts.js";
 const key = "binance-spot-BTCUSDT-1m";
 const rows = (...times: number[]) => times.map((time) => ({ time, open: 1, high: 2, low: 0, close: 1, volume: 3 }));
 
+test("a direct historical window rejects live tail traffic until explicit navigation returns it", () => {
+  const workspace = new MarketWindowRegistry();
+  const historical = workspace.createWindow("historical"), live = workspace.createWindow("live");
+  const historicalToken = historical.prepareSelection(key), liveToken = live.prepareSelection(key);
+  historical.activate(historicalToken); live.activate(liveToken);
+  historical.transact(historicalToken, () => {
+    historical.getOrCreate(key, { intervalSeconds: 60 });
+    historical.apply(key, { type: "replace", rows: rows(60, 120, 180), rightEdgeCurrent: false });
+  });
+  live.transact(liveToken, () => {
+    live.getOrCreate(key, { intervalSeconds: 60 });
+    live.apply(key, { type: "replace", rows: rows(360, 420, 480) });
+  });
+  const reader = historical.get(key)!;
+  assert.equal(reader.rightTruncated, true);
+  historical.transact(historicalToken, () => {
+    historical.apply(key, { type: "tick", row: rows(540)[0]! });
+    historical.apply(key, { type: "range", rows: rows(360, 420, 480) });
+  });
+  live.transact(liveToken, () => live.apply(key, { type: "tick", row: rows(540)[0]! }));
+  assert.deepEqual(reader.snapshot().map(row => row.time), [60, 120, 180]);
+  assert.equal(live.get(key)!.last()!.time, 540);
+  historical.transact(historicalToken, () => historical.apply(key, {
+    type: "forward", rows: rows(240, 300, 360), reachedLatest: false,
+  }));
+  assert.equal(reader.last()!.time, 360);
+  assert.equal(reader.rightTruncated, true);
+  historical.transact(historicalToken, () => historical.apply(key, {
+    type: "replace", rows: rows(420, 480, 540), rightEdgeCurrent: true,
+  }));
+  historical.transact(historicalToken, () => historical.apply(key, { type: "tick", row: rows(600)[0]! }));
+  assert.equal(reader.rightTruncated, false);
+  assert.equal(reader.last()!.time, 600);
+  historical.close(); live.close();
+});
+
 test("same-series windows navigate and return live independently", () => {
   const workspace = new MarketWindowRegistry({ maxBars: 3 });
   const a = workspace.createWindow("a");

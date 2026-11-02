@@ -5,6 +5,7 @@ export function drawingToolForSavedObject(drawing: SavedDrawing): DrawingToolId 
   switch (drawing.type) {
     case "line": return drawing.lineType ?? "line-segment";
     case "axis-line": return `line-${drawing.axisLineType ?? "horizontal"}`;
+    case "range-measure": return `measure-${drawing.measureType}`;
     case "angle-measure": return "angle-measure";
     case "shape": return `shape-${drawing.shapeType ?? "rectangle"}`;
     case "position": return `position-${drawing.direction ?? "long"}`;

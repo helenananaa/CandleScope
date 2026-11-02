@@ -38,11 +38,12 @@ test("Phase 6 adds committed freehand kinds without changing the Phase 4 checkpo
   assert.equal(isPhase6SceneDrawingKind(null), false);
 });
 
-test("Phase 8 assigns static scene ownership to all nine drawing kinds", () => {
+test("Phase 8 assigns static scene ownership to all drawing kinds, including source range measurements", () => {
   assert.deepEqual([...PHASE8_SCENE_DRAWING_KINDS], [
     "line",
     "axis-line",
     "angle-measure",
+    "range-measure",
     "text",
     "fibonacci",
     "position",

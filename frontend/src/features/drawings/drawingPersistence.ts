@@ -58,6 +58,7 @@ export const MAX_SAVED_FREEHAND_POINTS = 32_768;
 export const MAX_SAVED_FREEHAND_SPANS = 16_384;
 
 const SAVED_DRAWING_TYPES = new Set<DrawingKind>([
+  "range-measure",
   "line",
   "axis-line",
   "angle-measure",
@@ -235,6 +236,13 @@ export function normalizeSavedDrawingItem(item: unknown): SavedDrawing | null {
   const base = savedBase(item);
   const style = savedStyle(item);
   switch (item.type) {
+    case "range-measure": {
+      const dataPoints = parseDrawingDataPoints(item.dataPoints);
+      if (!dataPoints || dataPoints.length !== 2
+        || dataPoints.some((point) => !Number.isFinite(point.time) || point.logical !== undefined)
+        || (item.measureType !== "price" && item.measureType !== "time" && item.measureType !== "price-time")) return null;
+      return { type: "range-measure", ...base, ...style, measureType: item.measureType, dataPoints };
+    }
     case "line": {
       const dataPoints = hasOwn(item, "dataPoints")
         ? parseDrawingDataPoints(item.dataPoints)
@@ -619,6 +627,7 @@ function serializePrimitiveFields(prim: PersistableDrawingPrimitive): UnknownRec
 }
 
 const STRICT_SAVED_FIELDS: Readonly<Record<DrawingKind, readonly string[]>> = Object.freeze({
+  "range-measure": Object.freeze(["id", "measureType", "dataPoints", "color", "lineWidth"]),
   line: Object.freeze(["id", "lineType", "dataPoints", "color", "lineWidth"]),
   "axis-line": Object.freeze(["id", "axisLineType", "dataPoint", "color", "lineWidth"]),
   "angle-measure": Object.freeze(["id", "dataPoints", "color", "lineWidth"]),

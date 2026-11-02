@@ -1,0 +1,131 @@
+{
+  "source": "a6e292f8a44c3897607cc3b21e9f117c9997036c",
+  "passed": true,
+  "backend_regressions": 264,
+  "cold_5m_first_request_to_ready_ms": 4183,
+  "native_steps": 20,
+  "normal_owned_exits_ms": [
+    15243,
+    15257,
+    15882,
+    15883,
+    15357
+  ],
+  "renderer_errors": 0,
+  "source_files": 971,
+  "built_files": 162,
+  "strict_signature_before_after": true,
+  "financial_oracle": {
+    "initialBalance": "10000",
+    "fees": "0.0390779074",
+    "balance": "9999.9609220926",
+    "unrealizedPnl": "-0.0078148",
+    "equity": "9999.9531072926",
+    "matched": true,
+    "scope": "Single isolated practice buy; same persisted fills and current recorded marks. No real-account execution."
+  },
+  "runtime": "Qualified H127 standalone runtime clone; current backend/current rebuilt frontend. Not a fresh runtime build.",
+  "ci": "Exact delivery head must pass before merge.",
+  "limits": [
+    "Unscoped scheduling and concurrent WAL atomicity are deterministic component regressions; native verifies cold charts and account use/restart.",
+    "Native fixed cache uses standard 1m MA; calendar dependency invalidation is API regression evidence.",
+    "No complete issue closure, Windows or full157 qualification."
+  ],
+  "artifacts": [
+    {
+      "path": "evidence/regression-venv.log.gz",
+      "sha256": "b9aca689cb5aadbc4051c4c8c4394daaad564e5dff14f7806f80d6b173f81a83"
+    },
+    {
+      "path": "evidence/calendar-before.log.gz",
+      "sha256": "a3a15e7751003ba927ca371dee46fe8f99f5ee0f54312e95ac64689119109bec"
+    },
+    {
+      "path": "evidence/regression-calendar-fixed.log.gz",
+      "sha256": "d6ac8ac4854f49bf24ee68182c7b5bbdc3751a0eecd02fb526f043efce56d694"
+    },
+    {
+      "path": "evidence/build.log.gz",
+      "sha256": "0f2f0188a96044c3f82d5fe06de0f6c40edeb587f4178f7f9e921176d043b6e9"
+    },
+    {
+      "path": "evidence/architecture.log.gz",
+      "sha256": "ce71147bafab75fff355b00226a57578d84e372e91381815f910f1c54d0f7244"
+    },
+    {
+      "path": "evidence/assembly.log.gz",
+      "sha256": "a5c0add17dde361c6eb3f8dde18a054735c530ca5d899dc95678e49761a2fab7"
+    },
+    {
+      "path": "evidence/repack-resume.log.gz",
+      "sha256": "0b190ea5afe057ac9d5dccef52a6250825c0cc044ed4060a60abd66d0213afbf"
+    },
+    {
+      "path": "evidence/verified-after.log.gz",
+      "sha256": "32b7a71d007cf2fe2135e374bb9da0a9dca2363122d51ade3cf81d972e257a41"
+    },
+    {
+      "path": "evidence/native-live.log.gz",
+      "sha256": "821ae734280378a2cfb6f3c7db195b09a982ce26035b6bd976c4930b79c9a226"
+    },
+    {
+      "path": "evidence/native-live-attempt2.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "evidence/native-fixed.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "evidence/live-acceptance.json.gz",
+      "sha256": "65fa6358b527f3c6f99800081dad02189fc2fa754f695662e2d397d4dd7f1a70"
+    },
+    {
+      "path": "evidence/live-traffic.json.gz",
+      "sha256": "1b8aa2b9f4f5c195df36919f5b9b7279b7bce8f8e412e9503b5fa7dbe403f51b"
+    },
+    {
+      "path": "evidence/acceptance.json.gz",
+      "sha256": "06453602cf627060046daff8649abe71d5fb4ed2fe40f568a7666ad1c0131f43"
+    },
+    {
+      "path": "evidence/traffic.json.gz",
+      "sha256": "57ea11f2b415ec48d2fb216531abfce20f9f37db29fd9334c79b0db651cd9106"
+    },
+    {
+      "path": "evidence/compute-responses.json.gz",
+      "sha256": "6765758d79958b2e4f33da3a9b83c3a6c89256a09093de203549231bbd8e50dd"
+    },
+    {
+      "path": "evidence/financial-oracle.json.gz",
+      "sha256": "c2b1e6b73f01be0437251f0817dced0b128bec37a710d3f3b8433e60b5bf3839"
+    },
+    {
+      "path": "evidence/source-package-manifest.json.gz",
+      "sha256": "156754147fc1506d0055aa18bcf6a3757123043d116aef6271715fabf4be4e62"
+    },
+    {
+      "path": "evidence/verified-after.json.gz",
+      "sha256": "68140352bf7ccd9e541f8dd51e82bccab10df4baaedf829f1c74ed2fc282c15f"
+    },
+    {
+      "path": "evidence/attempt1-traffic.json.gz",
+      "sha256": "b3aaa2dd1e31623686ca78042145f287421582a5b5caa5faa2afb6e2f7121ec9"
+    },
+    {
+      "path": "evidence/attempt1-acceptance.json.gz",
+      "sha256": "92a39d2dc0b2c7ca6707034d4e1e8efeecfdf3d9d5c87095925c99650507a3d4"
+    },
+    {
+      "path": "evidence/attempt1-live-acceptance.json.gz",
+      "sha256": "92a39d2dc0b2c7ca6707034d4e1e8efeecfdf3d9d5c87095925c99650507a3d4"
+    }
+  ],
+  "main211_integration": {
+    "merge_source": "b393ac0d",
+    "main": "1988a9b8ecefac1d325447f570c3a1dd0435a028",
+    "tests": 314,
+    "passed": true,
+    "native_scope": "Original native source a6e292f8; merged #211 has its own native evidence. No claim of rerun combined native source."
+  }
+}

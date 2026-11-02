@@ -54,7 +54,7 @@ def await_context(coroutine, *, loop, cancelled):
         ) from exc
 
 
-def attach_context_history(history, context, *, loop, cancelled):
+def attach_context_history(history, context, *, loop, cancelled, discover_origin=True):
     args = history.arguments
     binding, persisted = args["binding"], args["persisted"]
     repository, _ = _progressive_repository(
@@ -62,7 +62,8 @@ def attach_context_history(history, context, *, loop, cancelled):
     )
     origin = await_context(
         context.origin(
-            binding=binding, persisted=persisted, repository=repository, discover=True
+            binding=binding, persisted=persisted, repository=repository,
+            discover=discover_origin,
         ),
         loop=loop,
         cancelled=cancelled,

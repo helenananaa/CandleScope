@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-02",
+  "pr": 211,
+  "baseline": "0c71732ebb4c51309102ec93313fe4543a3682e7",
+  "failed_ci": "https://github.com/helenananaa/CandleScope/actions/runs/41316151207",
+  "failure": "Both architectures reject negative fixture BAR volume in real preparation/review/canonical-reload integration for NONE and HIDE_ALL disclosure.",
+  "diagnosis": "The synthetic market uses START as its mathematical reference origin. Bounded display requests intentionally defer origin discovery and can read earlier source times; index + 1 generated negative volume for those times. Production domain validation correctly rejects it. This is not evidence of negative real-provider data.",
+  "change": "Use abs(index) + 1 for synthetic volume. Data at and after START is unchanged. Keep the real HTTP/Node parser, full 1m/5m/90m integration assertions and production validation intact.",
+  "before": {
+    "command": "python -m pytest -q tests/test_replay_frontend_history_integration.py -k real_preparation_review --maxfail=1",
+    "result": "1 failed, 1 deselected",
+    "seconds": 4.60,
+    "error": "ReplayHistoryProtocolError: BAR volume cannot be negative"
+  },
+  "after": {
+    "failed_cases": "2 passed, 1 deselected in 6.86s",
+    "development_python": "50 passed in 21.44s",
+    "bundled_python": "50 passed in 24.29s",
+    "bundled_command": "PYTHONPATH=frontend/.desktop-runtime/runtime/site-packages frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning backend/tests/test_replay_frontend_history_integration.py backend/tests/test_replay_indicator_prepared_context.py backend/tests/test_replay_bounded_context.py backend/tests/test_replay_context_origin.py backend/tests/test_replay_indicator_context_ranges.py --junitxml=docs/qa/frontend-followup-20261102/replay-context-tests.xml",
+    "warnings": "Two existing websockets/uvicorn legacy deprecation warnings; no skipped asynchronous tests.",
+    "diff_check": "passed",
+    "ruff": "Existing I001 import-order finding is identical at the baseline and modified file; no new lint finding."
+  },
+  "scope": {
+    "application_code_changed": false,
+    "new_native_acceptance": false,
+    "previous_native_evidence": "../replay-bounded-context-20261101/native-final.json",
+    "ci": "A new exact-head run is required before merge.",
+    "product_acceptance": "This test-fixture repair does not extend the previous native acceptance or complete the product acceptance matrix."
+  }
+}

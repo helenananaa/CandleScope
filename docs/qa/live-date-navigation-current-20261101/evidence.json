@@ -1,0 +1,48 @@
+{
+  "sourceCommit": "7ebe9e3428abd9be0d0e9e2227c2c298485b5793",
+  "zipSha256": "66e7237f580f4433fa933fd60534f5f337e989fc4580716f67de89ee3a7aaeb7",
+  "asarSha256": "ba57f41c068c20223fa32bef0d605d6fb28172a474db455add8dc8917c9d86ee",
+  "sourceFiles": 3115,
+  "distFiles": 165,
+  "mismatches": [],
+  "signature": {
+    "before": "strict deep PASS",
+    "after": "strict deep PASS"
+  },
+  "native": {
+    "basic": true,
+    "restart": true,
+    "rendererErrors": 0,
+    "normalFullExits": 2,
+    "initialData": "finite synthetic 1m only; no seeded 5m",
+    "initialCold5m": {
+      "rows": 500,
+      "healthSamples": 11,
+      "withinOriginal60s": true
+    },
+    "linkedHistory": {
+      "firstAttempt": "explicit partial unavailable; peer keeps live window",
+      "secondExplicitAttempt": "1m and 5m both centered; 501 rows each",
+      "comparison": "5m time/OHLCV equal complete bundled backend range, all 501 rows"
+    },
+    "independent": "UTC Alt+G centers selected 1m without changing zoom or sibling absolute time; live traffic does not pull historical view",
+    "restartBehavior": "1m/5m and link policy restore; historical re-seek and return-to-live PASS; historical viewport itself is not persisted"
+  },
+  "backendRepair": {
+    "source": "72149f59f5c16129de8bd54fdd4d0d10935fd1bb",
+    "exactBackendAppFiles": 912,
+    "tests": 165,
+    "seconds": 15.12
+  },
+  "limits": [
+    "macOS arm64 candidate only; Windows independent",
+    "live online chart first increment of #186; not full issue closure",
+    "1m synthetic oracle and provider 5m do not claim common aggregation source",
+    "not full 157-item release acceptance"
+  ],
+  "previousFailuresPreserved": [
+    "854e77e9 cold 5m pending at 60s",
+    "6233c8cf cold initial load recovered but historical linked 5m failed after 20 retries"
+  ],
+  "CI": "pending current PR head"
+}
