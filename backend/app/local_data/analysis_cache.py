@@ -28,7 +28,8 @@ def implementation_revision() -> str:
     paths.update((root / 'local_data').glob('*.py'))
     paths.update(root / name for name in (
         'data_engine/data_manager/models.py', 'data_engine/interval_policy.py',
-        'data_engine/bar_basis.py',
+        'data_engine/bar_basis.py', 'data_engine/calendar_basis.py',
+        'data_engine/basis_rules/calendar-v1.json',
     ))
     digest = hashlib.sha256()
     digest.update(f'{sys.version}:{platform.system()}:{platform.machine()}'.encode())
