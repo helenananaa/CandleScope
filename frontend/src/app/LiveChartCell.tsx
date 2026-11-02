@@ -21,6 +21,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type CSSProperties,
   type ReactNode,
@@ -259,6 +260,28 @@ function LiveChartCell({
   const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
+  const studyEditing = useRef(false);
+  const pauseStudy = useRef<(() => void) | null>(null);
+  const setStudyEditing = useCallback((editing: boolean) => { studyEditing.current = editing; }, []);
+  const setStudyFollowReady = useCallback((pause: (() => void) | null) => { pauseStudy.current = pause; }, []);
+  const clockPort = useMemo(() => ({ read: () => {
+    const state = study.readClock();
+    return { ...state, pending: state.pending || (state.active && pauseStudy.current === null), editing: studyEditing.current };
+  }, move: (cursorMs: number) => { pauseStudy.current?.(); return study.move(cursorMs); } }), [study.move, study.readClock]);
+  useEffect(() => linkCoordinator.studyClocks.register(cell.id, clockPort, workspaceId), [cell.id, clockPort, linkCoordinator, workspaceId]);
+  const cursorLinkIssue = useSyncExternalStore(linkCoordinator.studyClocks.subscribe,
+    () => linkCoordinator.studyClocks.getIssue(cell.id, workspaceId), () => null);
+  const retryCursorLink = useCallback(() => {
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
+    void linkCoordinator.studyClocks.publishUserMove(intent);
+  }, [cell.id, linkCoordinator, workspaceId]);
+  const moveStudy = useCallback(async (cursorMs: number, active = true) => {
+    if (studyEditing.current) return false;
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
+    const committed = await study.move(cursorMs, active);
+    if (committed && active) void linkCoordinator.studyClocks.publishUserMove(intent);
+    return committed;
+  }, [cell.id, linkCoordinator, study.move, workspaceId]);
   const liveControlsEnabled = !study.masked && !study.pending && !study.busy;
   const marketController = useMemo(() => marketWorkspaceResources ? new ChartMarketController({
     data: marketWorkspaceResources.dataFlow.forChart(`chart:${cell.id}`), owner: `chart:${cell.id}`,
@@ -1082,7 +1105,9 @@ function LiveChartCell({
               accountOverlay={cell.accountOverlay}
               linkCoordinator={linkCoordinator} workspaceId={workspaceId}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
-              active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={study.move} onRetry={study.retry} />
+              active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={moveStudy} onRetry={study.retry}
+              onEditingChanged={setStudyEditing} onFollowReady={setStudyFollowReady} onPlayStart={retryCursorLink}
+              cursorLinkIssue={cursorLinkIssue} onRetryCursorLink={retryCursorLink} />
           </Suspense>}
           {study.masked && !study.playback && <div className="history-study-mask" role="status">
             {t(study.error ? "study.error" : "study.loading")}

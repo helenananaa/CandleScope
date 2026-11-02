@@ -18,7 +18,7 @@ export const sessionSchema = schema<ChartSession>(sessionInput.jsonSchema, (v) =
   return parsed;
 });
 const policyInput = object({ market: optional(bool), interval: optional(bool), crosshair: optional(bool), timeAnchor: optional(bool), dateRange: optional(bool), drawings: optional(bool), chartStyle: optional(bool),
-    accountSource: optional(bool), tradingOverlays: optional(bool), noteOverlays: optional(bool),
+    accountSource: optional(bool), tradingOverlays: optional(bool), noteOverlays: optional(bool), studyCursor: optional(bool),
     indicators: optional(object({ definitions: optional(bool), parameters: optional(bool), visual: optional(bool), paneLayout: optional(bool) })) });
 export const chartLinkPolicySchema = schema<ChartLinkGroupSettingsPatch>(policyInput.jsonSchema, (v) => policyInput.parse(v) as ChartLinkGroupSettingsPatch);
 

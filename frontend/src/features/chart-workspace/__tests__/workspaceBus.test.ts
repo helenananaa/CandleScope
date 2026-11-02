@@ -11,8 +11,28 @@ const { WorkspaceBusHub } = createRequire(import.meta.url)("../../../../desktop/
     register(windowId: string, send: (message: unknown) => void): void;
     connect(windowId: string, snapshot: unknown): WorkspaceBusState;
     commit(windowId: string, payload: unknown): WorkspaceBusState;
+    publishLink(windowId: string, payload: unknown): unknown;
   };
 };
+
+test("native ordered clock returns the desktop hub stamp rather than a renderer-local sequence", async () => {
+  const originalWindow = globalThis.window;
+  const hub = new WorkspaceBusHub(), remote: unknown[] = [];
+  hub.register("main-window", () => {}); hub.register("other-window", event => remote.push(event));
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    workspaceBusPublishLink: async (event: unknown) => hub.publishLink("main-window", event),
+  } } });
+  try {
+    const bus = new WorkspaceBusClient("main-window");
+    const result = await bus.publishOrderedLink({ workspaceId: "workspace-default", sourceCellId: "cell-1", kind: "studyCursor",
+      payload: { requestId: "cursor-1", studyId: "hs_saved", revision: 3, cursorMs: 600_000 } });
+    assert.equal(result.eventId, "link-1");
+    assert.deepEqual(remote, [{ type: "link", event: result }]);
+  } finally {
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
 
 test("current frontend workspace restores and commits through the real desktop hub", async () => {
   const originalWindow = globalThis.window;

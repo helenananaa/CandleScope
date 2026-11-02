@@ -6,7 +6,7 @@ import type {
   ChartWorkspaceLibrarySnapshot,
 } from "./chartWorkspaceTypes.js";
 
-export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor";
+export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor" | "studyCursor" | "studyCursorResult";
 
 export interface WorkspaceBusLinkEvent {
   eventId?: string;
@@ -57,7 +57,7 @@ function isLinkEvent(value: unknown): value is WorkspaceBusLinkEvent {
     && typeof event?.workspaceId === "string"
     && typeof event.sourceWindowId === "string"
     && typeof event.sourceCellId === "string"
-    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor"].includes(String(event.kind));
+    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor", "studyCursor", "studyCursorResult"].includes(String(event.kind));
 }
 
 function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceLibrarySnapshot {
@@ -150,10 +150,27 @@ export class WorkspaceBusClient {
     this.linkPublishes += 1;
     const bridge = globalThis.window?.candlescopeDesktop;
     if (bridge) {
-      void bridge.workspaceBusPublishLink(linkEvent);
+      // A closing peer can reject IPC. Clock acknowledgements have an explicit
+      // origin timeout; viewport broadcasts have no durable success promise.
+      void bridge.workspaceBusPublishLink(linkEvent).catch(() => {});
       return;
     }
     this.channel?.postMessage({ type: "link", event: linkEvent });
+  }
+
+  /** Durable clock actions need the main-process ordering stamp, including
+   * for peers in this renderer. Ordinary viewport broadcasts stay fire-and-forget. */
+  async publishOrderedLink(event: Omit<WorkspaceBusLinkEvent, "sourceWindowId" | "kind"> & { kind: "studyCursor" }): Promise<WorkspaceBusLinkEvent> {
+    const bridge = globalThis.window?.candlescopeDesktop;
+    if (!bridge) throw new Error("Ordered cross-window clocks require the desktop host");
+    this.linkPublishes += 1;
+    const result = await bridge.workspaceBusPublishLink({ ...event, sourceWindowId: this.windowId }) as { event?: unknown } | null;
+    if (!isLinkEvent(result?.event) || result.event.kind !== event.kind
+      || result.event.workspaceId !== event.workspaceId || result.event.sourceCellId !== event.sourceCellId
+      || result.event.sourceWindowId !== this.windowId || !/^link-[1-9][0-9]*$/.test(result.event.eventId ?? "")) {
+      throw new Error("Invalid ordered workspace clock acknowledgement");
+    }
+    return result.event;
   }
 
   reportWindow(state: { focused: boolean; visible: boolean }): void {

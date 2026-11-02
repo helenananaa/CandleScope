@@ -1,4 +1,9 @@
 export const historyStudyEnglish = {
+  "study.cursorLink": "Study replay cursor",
+  "study.cursorLinkDesc": "Off by default. Follow the same absolute time in open studies and pause their own playback. Unavailable, note-editing or out-of-range studies report a failure. Live charts stay live; closed layouts are excluded. Cross-window following requires the desktop app.",
+  "study.cursorLinkFailed": "{count} chart(s) did not follow. Check that their studies are open, no note is being edited and the time is inside their saved range, then retry.",
+  "study.cursorLinkRetry": "Retry cursor linking",
+
   "study.viewDate": "Go to view date",
   "study.viewDateHint": "Move the viewport within revealed history without changing replay time. To reveal later data, explicitly change replay time.",
 
@@ -60,6 +65,11 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.cursorLink": "研究回放游标",
+  "study.cursorLinkDesc": "默认关闭。仅让已打开的研究图跟随同一回放时刻，并暂停目标自己的播放。研究不可用、正在编辑笔记或超出范围时会提示；实时图保持实时，已关闭的布局不参与联动。跨窗口联动需要桌面应用。",
+  "study.cursorLinkFailed": "{count} 张图未同步。请检查目标是否已打开研究、未在编辑笔记、时刻在保存范围内，然后重试。",
+  "study.cursorLinkRetry": "重试游标联动",
+
   "study.viewDate": "定位视图日期",
   "study.viewDateHint": "仅在已揭示的历史中移动视图，不改变回放时刻。查看更晚行情须明确改变回放时刻。",
 
@@ -99,6 +109,11 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.cursorLink": "研究回放游標",
+  "study.cursorLinkDesc": "預設關閉。僅讓已開啟的研究圖跟隨同一回放時刻，並暫停目標自己的播放。研究無法使用、正在編輯筆記或超出範圍時會提示；即時圖保持即時，已關閉的版面不參與聯動。跨視窗聯動需要桌面應用程式。",
+  "study.cursorLinkFailed": "{count} 張圖未同步。請檢查目標是否已開啟研究、未在編輯筆記、時刻在儲存範圍內，然後重試。",
+  "study.cursorLinkRetry": "重試游標聯動",
+
   "study.viewDate": "定位視圖日期",
   "study.viewDateHint": "僅在已揭示的歷史中移動視圖，不改變回放時刻。查看較晚行情須明確改變回放時刻。",
 
@@ -138,6 +153,11 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.cursorLink": "研究リプレイのカーソル",
+  "study.cursorLinkDesc": "既定ではオフです。開いている研究だけを同じ絶対時刻に移動し、移動先の再生を一時停止します。利用不可、ノート編集中、範囲外の研究は失敗として表示します。ライブチャートは変更せず、閉じたレイアウトは対象外です。ウィンドウ間の同期にはデスクトップアプリが必要です。",
+  "study.cursorLinkFailed": "{count} 個のチャートを同期できませんでした。研究が開いていて、ノート編集中ではなく、保存範囲内の時刻であることを確認して再試行してください。",
+  "study.cursorLinkRetry": "カーソル同期を再試行",
+
   "study.viewDate": "表示日時へ移動",
   "study.viewDateHint": "公開済みの履歴内で表示位置だけを移動し、リプレイ時刻は変えません。後のデータを見るにはリプレイ時刻を明示的に変更してください。",
 
@@ -177,6 +197,11 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.cursorLink": "연구 재생 커서",
+  "study.cursorLinkDesc": "기본적으로 꺼져 있습니다. 열린 연구만 같은 절대 시각으로 이동하고 대상의 자체 재생을 일시 중지합니다. 연구가 사용 불가, 노트 편집 중 또는 범위 밖이면 실패를 표시합니다. 실시간 차트는 유지하고 닫힌 레이아웃은 제외합니다. 창 간 동기화에는 데스크톱 앱이 필요합니다.",
+  "study.cursorLinkFailed": "차트 {count}개를 동기화하지 못했습니다. 연구가 열려 있고 노트를 편집 중이 아니며 저장 범위 안의 시각인지 확인한 후 다시 시도하세요.",
+  "study.cursorLinkRetry": "커서 동기화 재시도",
+
   "study.viewDate": "보기 날짜로 이동",
   "study.viewDateHint": "공개된 과거 데이터 안에서 보기만 이동하며 재생 시각은 바꾸지 않습니다. 이후 데이터를 보려면 재생 시각을 명시적으로 변경하세요.",
 
@@ -216,6 +241,11 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.cursorLink": "Cursor do replay de estudo",
+  "study.cursorLinkDesc": "Desativado por padrão. Apenas estudos abertos seguem o mesmo instante absoluto e pausam sua própria reprodução. Estudos indisponíveis, com anotações em edição ou fora do intervalo indicam falha. Gráficos ao vivo permanecem ao vivo; gráficos fechados ficam fora da sincronização. A sincronização entre janelas exige o aplicativo desktop.",
+  "study.cursorLinkFailed": "{count} gráficos não acompanharam. Confira se os estudos estão abertos, sem anotações em edição e se o instante está no intervalo salvo; depois tente novamente.",
+  "study.cursorLinkRetry": "Tentar sincronizar o cursor novamente",
+
   "study.viewDate": "Ir para a data na visualização",
   "study.viewDateHint": "Mova a visualização apenas pelo histórico revelado, sem alterar o momento da reprodução. Para revelar dados posteriores, altere esse momento explicitamente.",
 

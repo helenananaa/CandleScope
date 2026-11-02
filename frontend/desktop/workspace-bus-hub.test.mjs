@@ -169,6 +169,29 @@ test("date seeks reach a second window immediately without changing workspace pe
   assert.equal(hub.diagnostics().counts.commits, 0);
 });
 
+test("study clock publishes return the same main-process order delivered to remote peers", () => {
+  const received = [];
+  const hub = new WorkspaceBusHub();
+  hub.register("main-window", message => received.push(["main-window", message]));
+  hub.register("window-2", message => received.push(["window-2", message]));
+  const connected = hub.connect("main-window", snapshot());
+  received.length = 0;
+  const event = { workspaceId: "workspace-default", sourceWindowId: "main-window", sourceCellId: "cell-1",
+    kind: "studyCursor", payload: { requestId: "cursor-1", studyId: "hs_saved", revision: 3, cursorMs: 600_000 } };
+  const reply = hub.publishLink("main-window", event);
+  assert.equal(reply.ok, true); assert.equal(reply.coalesced, false);
+  assert.equal(reply.event.eventId, "link-1");
+  assert.equal(received.length, 1); assert.equal(received[0][0], "window-2");
+  assert.deepEqual(reply.event, received[0][1].event);
+  const ack = hub.publishLink("window-2", { ...event, sourceWindowId: "window-2", sourceCellId: "cell-2",
+    kind: "studyCursorResult", payload: { requestId: "cursor-1", order: 1, status: "moved" } });
+  assert.deepEqual(ack, { ok: true, coalesced: false });
+  const next = hub.publishLink("window-2", { ...event, sourceWindowId: "window-2", sourceCellId: "cell-2" });
+  assert.equal(next.event.eventId, "link-3");
+  assert.equal(hub.diagnostics().sequence, connected.sequence);
+  assert.equal(hub.diagnostics().counts.commits, 0);
+});
+
 test("window crash removes health, pending events, and elects a recoverable writer", () => {
   const hub = new WorkspaceBusHub();
   hub.register("main-window", () => {});

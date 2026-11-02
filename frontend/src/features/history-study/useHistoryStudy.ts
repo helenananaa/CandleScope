@@ -167,7 +167,17 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
   }, [manager, owner, publish]);
 
   const own = state.owner === owner ? state : null;
-  return { ...own, playback: own?.readRequired ? null : own?.playback ?? null, capture, move, select, retry: () => setReload(value => value + 1),
+  const readClock = useCallback(() => {
+    const value = current.current;
+    const matches = value.owner === owner;
+    return { active: matches && Boolean(value.view?.active), committing: value.busy,
+      pending: !matches || value.loading || value.readRequired || !value.view || (value.busy && !writing.current),
+      studyId: matches ? value.view?.study?.id ?? null : null, revision: matches ? value.view?.revision ?? 0 : 0,
+      cursorMs: matches ? value.view?.cursorMs ?? null : null,
+      minimumMs: matches ? value.playback?.minimumMs ?? null : null,
+      maximumMs: matches ? value.playback?.maximumMs ?? null : null };
+  }, [owner]);
+  return { ...own, playback: own?.readRequired ? null : own?.playback ?? null, capture, move, select, readClock, retry: () => setReload(value => value + 1),
     masked: Boolean(!own || own.loading || own.readRequired || own.view?.active || (!own.view && activeHint(owner))),
     active: Boolean(own?.view?.active), pending: !own || own.loading || own.readRequired, error: own?.error ?? null };
 }
