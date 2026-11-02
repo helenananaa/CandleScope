@@ -1,0 +1,23 @@
+{
+  "stage": "Consistent ledger reads for account summary, trades, stats and trade detail. Not issue177 complete.",
+  "baseline_main": "006f4e79399ac8c4c1c66442586be3889d5eebbe",
+  "before": "Real SQLite/threaded writer repro returned new balance1050.0000000000000000001 alongside old empty positions, mixing one atomic deposit+fill generation.",
+  "after": "Thread-owned read-only WAL snapshot returns old1000/empty positions, next read returns new1050.0000000000000000001 and exact0.1234567890123456789 position. Same-store matching writer commits while reader is paused.",
+  "regression_tests": 85,
+  "covered": [
+    "Concurrent local writer does not block on projection computation",
+    "Nested reads keep snapshot",
+    "Read inside writer leaves commit and rollback with writer",
+    "Read errors close read-only connection and leave writer usable",
+    "In-memory SQLite compatibility",
+    "Old ledger view cannot prime shared matching feed with old cursor"
+  ],
+  "native": "Not run for this phase. No native or complete restart acceptance claimed.",
+  "ci": "Added new regression to macOS bundled Python matrix; exact-head CI pending. Development PR only.",
+  "scope_limits": [
+    "Quotes/feed timing remain separately timestamped live observations; this only makes account ledger rows coherent",
+    "No new matching or financial formula",
+    "No DataManager practice push, hedge dual positions or multicurrency ledger",
+    "No Windows or full157 acceptance"
+  ]
+}

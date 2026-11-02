@@ -133,6 +133,7 @@ jobs:
             tests/test_readonly_*.py \
             tests/test_account_product_integration.py \
             tests/test_trading_accounts.py \
+            tests/test_trading_account_snapshot.py \
             --junitxml=../output/replay-range-regression.xml
       - name: Verify relocated ZIP and native runtime
         env:
