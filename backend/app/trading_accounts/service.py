@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
+from functools import wraps
 from typing import Any, Callable, Protocol
 
 from .journal import (
@@ -178,6 +179,14 @@ def _bar_decimal(bar: dict[str, Any], key: str) -> Decimal:
     if isinstance(value, Decimal):
         return value
     return Decimal(repr(value) if isinstance(value, float) else str(value))
+
+
+def _ledger_snapshot(method):
+    @wraps(method)
+    def read(self, *args, **kwargs):
+        with self.store.read_snapshot():
+            return method(self, *args, **kwargs)
+    return read
 
 
 class TradingAccountService(JournalService):
@@ -367,6 +376,7 @@ class TradingAccountService(JournalService):
             return cursor.last_close, cursor.observed_ms, "stale"
         return None, None, "none"
 
+    @_ledger_snapshot
     def account_summary(self, account_id: str) -> dict[str, Any]:
         account = self._account(account_id)
         trades = self._trades(account_id)
@@ -428,6 +438,7 @@ class TradingAccountService(JournalService):
     #  Trades
     # ══════════════════════════════════════════════════════════
 
+    @_ledger_snapshot
     def list_trades(self, account_id: str, *, status: str | None = None, limit: int = 200) -> dict[str, Any]:
         self._account(account_id)
         trades = self._trades(account_id)
@@ -455,6 +466,7 @@ class TradingAccountService(JournalService):
             out.append(view)
         return {"trades": out}
 
+    @_ledger_snapshot
     def account_stats(
         self,
         account_id: str,
@@ -508,6 +520,7 @@ class TradingAccountService(JournalService):
                 return trade
         raise not_found("Trade")
 
+    @_ledger_snapshot
     def trade_detail(self, account_id: str, trade_id: str) -> dict[str, Any]:
         self._account(account_id)
         trades = self._trades(account_id)
@@ -874,7 +887,7 @@ class TradingAccountService(JournalService):
         with self.store.locked():
             feed = self._feeds.get(instrument)
             if feed is None:
-                row = self.store.cursor(*instrument)
+                row = self.store.cursor(*instrument, current=True)
                 if row is None:
                     return None
                 cursor = _cursor_from_row(row)

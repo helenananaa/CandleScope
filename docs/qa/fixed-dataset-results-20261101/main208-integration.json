@@ -1,0 +1,8 @@
+{
+  "main": "cd7a77de35333c5f8c18ee353b2fc038e40bd076",
+  "mergeHead": "a96b90d577d6b61d612ef5a05dab992f2eb932a4",
+  "tests": "52 passed; unhandled-coroutine warnings promoted to errors",
+  "ciBefore": "macOS41295088038 both architectures failed34 async tests because old branch predated main202 runner fixes;1065 passed1skipped. Current main merged without runtime cache changes.",
+  "native": "Existing27715c finite fixed CSV/source/param/restart evidence retained. Current merge regression is source evidence, not new joint native acceptance.",
+  "remaining": "Exact newhead CI before merge"
+}

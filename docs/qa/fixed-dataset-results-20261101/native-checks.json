@@ -1,0 +1,125 @@
+{
+  "source": "27715c022c2b32711ee2e0c558e18141a6ce6ed6",
+  "passed": true,
+  "steps": 12,
+  "native": "macOS arm64 installed packaged app; existing H127 runtime cloned and current966backend/desktop plus163builtfrontend files verified before/after; strict signing before/after. Not a fresh runtime build.",
+  "values": "500 real locally imported CSV rows, MA20 481points and MA5 496points exactly match independent arithmetic before and after restarts. Current delivery IDs rebound on persisted cache hit.",
+  "exits_ms": [
+    15894,
+    15963,
+    15907
+  ],
+  "errors": {
+    "renderer": 0,
+    "sidecar_error_traceback_cancelled_deadline_text": 0,
+    "limitation": "Sidecar output does not capture every structured logger message; not a blanket zero backend error claim."
+  },
+  "prior_failures": [
+    "Assembly attempt1 exited120; staging preserved, cause unconfirmed; resume succeeded",
+    "Native1 cloned test origin port collision, never reached functional checks",
+    "Native2 cloned preparation owner mismatch, never reached functionality; forced owned Electron cleanup recorded. Final attempt3 uses new DBs/origin and only preinstalled plugins/catalog seed."
+  ],
+  "limitations": [
+    "Finite fixed builtin cache stage only; no database migration, no full169/170 completion, no global cache budget",
+    "No Windows native or all157 acceptance",
+    "Screenshots reviewed; library drawer overlays right chart side, no full visual acceptance claim"
+  ],
+  "artifacts": [
+    {
+      "path": "native/acceptance.json.gz",
+      "sha256": "6c40eb56a985850695b3732107cb6192f1fc2899e39acbff98936fc70cebc79e"
+    },
+    {
+      "path": "native/traffic.json.gz",
+      "sha256": "b5d746215e2896d24ed03cd0057a5fca631ce2e8891cc6cbe45114d6cc7b6da5"
+    },
+    {
+      "path": "native/compute-responses.json.gz",
+      "sha256": "6b545c482c555542200ca5624e69eecb67087a1054c823da8124ec611670982f"
+    },
+    {
+      "path": "native/source-package-manifest.json.gz",
+      "sha256": "cfbf74cc3d23cc93101b052a925fd7a8f982a189c0de78ee5ed6115fe1523355"
+    },
+    {
+      "path": "native/assembly.json.gz",
+      "sha256": "e95d2cdcd9b55e61099d46e50dae9bc759e3353e9d040262762643669b100e77"
+    },
+    {
+      "path": "native/profile-seed.json.gz",
+      "sha256": "4d6a135ac6dbc9f08c096dd918f4c748eedf4067ac928327780645739b522401"
+    },
+    {
+      "path": "native/fixed-source.csv.gz",
+      "sha256": "ffc3251eba30e69a4e017c433b46636f91886c0a6059fcb9f9913bf2bfcebb1f"
+    },
+    {
+      "path": "native/native-run.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "native/fixed-ma20.png",
+      "sha256": "59ff84eaf551b1563e961c0ab07450d75faff6f3baa64757df31f4ea5c1f2ec7"
+    },
+    {
+      "path": "native/fixed-ma5.png",
+      "sha256": "cc1fce9b61352f53df2cd27edd36ede2d2ff8d65b788e52b3dc9de1e88eeb82c"
+    },
+    {
+      "path": "native/restored-fixed-ma5.png",
+      "sha256": "7b25cf882b22b19953f982e7bb3e1b236025d453d18791b12f1cbf79459d0ea4"
+    },
+    {
+      "path": "native/backend-sidecar.log.gz",
+      "sha256": "9525ed76e10e948c9b358d654205e4b792ab597302687898bdd015f64f74f59b"
+    },
+    {
+      "path": "native/attempt1/acceptance.json.gz",
+      "sha256": "d2890bcbddb259e08266e2a21294620e218bfc590d25fa27b98a58b0d90f9e45"
+    },
+    {
+      "path": "native/attempt1/native-run.log.gz",
+      "sha256": "47085b30ce8ad37991117dcd849bf12bcfd330a36d4bc908c01420476c7b1cbb"
+    },
+    {
+      "path": "native/attempt1/profile-logs-desktop-startup-error.log.gz",
+      "sha256": "398991cd05d5d1fd4924df90f2364f6513d696c10a210ddaa5545f41da4adbcc"
+    },
+    {
+      "path": "native/attempt1/profile-logs-backend-sidecar.log.gz",
+      "sha256": "297e3a89ae2026e0e8971c779e690c16977a3138a5c043e6917a3c3ecb308f91"
+    },
+    {
+      "path": "native/attempt2/acceptance.json.gz",
+      "sha256": "c9a9e56d77c82fd3b9a11f8d9202ae46b07bcfc12b3be11d194185a7bbed2fbd"
+    },
+    {
+      "path": "native/attempt2/native-run.log.gz",
+      "sha256": "0ebc6b630bdef2316b0224fe68bfcc3d78ed627544460a19f6d929a206cbb9ff"
+    },
+    {
+      "path": "native/attempt2/profile-logs-desktop-startup-error.log.gz",
+      "sha256": "b0b66476855fda6515e1dcacfd4497ca2bf283ce10b29a2394edd313c2ad17cb"
+    },
+    {
+      "path": "native/attempt2/profile-logs-backend-sidecar.log.gz",
+      "sha256": "a079f25e6a7c2917ddb191b3ee8e64da7f58e7927972910efa48e817019aa46d"
+    },
+    {
+      "path": "native/attempt2/forced-host-exit.json.gz",
+      "sha256": "4cc33280e2b98f3319748435f51ffb8bb8189578a485fbe06c2b0db07528c686"
+    },
+    {
+      "path": "native/source-match.log.gz",
+      "sha256": "921371a260f159ee9948843881fd5ba15c3e8cd4918fcedb2943827a750f4e76"
+    },
+    {
+      "path": "native/source-match-after.log.gz",
+      "sha256": "921371a260f159ee9948843881fd5ba15c3e8cd4918fcedb2943827a750f4e76"
+    },
+    {
+      "path": "native/signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    }
+  ]
+}
