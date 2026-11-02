@@ -133,7 +133,7 @@ async function verify(id,windowId,input,cursor){
  },30_000);
 }
 try{
- await launch();await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.earlyMs);await at(topology.targetId,fixture.earlyMs,topology.secondId);
+ await launch();secondPage=await pageFor(topology.secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:topology.secondId,message:error.message}));await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.earlyMs);await at(topology.targetId,fixture.earlyMs,topology.secondId);
  const workspace=(await q.inspect()).workspaceId;
  const a=(await read('/history-studies/views/'+owner(workspace,'cell-1'))).study;
  const b=(await read('/history-studies/views/'+owner(workspace,'cell-2'))).study;
