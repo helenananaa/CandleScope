@@ -1,0 +1,14 @@
+{
+  "baseline_main": "006f4e79",
+  "candidate": "0c71732e",
+  "before": "Main corresponding integration cases2passed; candidate2failed with volume cannot be negative.",
+  "cause": "The fixture declares START as its listing boundary, but the frontend test relied on a first RSI request to discover that boundary implicitly. Bounded viewport math intentionally stopped that global probe; later coarse reads let the fixture manufacture negative-volume prelisting rows. Production validation correctly rejects them.",
+  "change": "Canonical review/reload fixture explicitly discovers its known origin before UI/HTTP checks, and asserts no prelisting downloads. Added a separate unknown-origin malformed-provider case verifying explicit DATASET_INCOMPLETE, no hidden global probe and unchanged run state.",
+  "validation": "26passed covering real frontend HTTP history integration, bounded origin-unavailable context and official origins; two existing WebSocket deprecation warnings.",
+  "product_source_changed": false,
+  "limits": [
+    "This is a test-contract repair, not proof that all unknown-origin or unavailable historical ranges can be loaded.",
+    "No weakening of volume, origin, reveal or account validation.",
+    "Current-head CI remains required before integration."
+  ]
+}
