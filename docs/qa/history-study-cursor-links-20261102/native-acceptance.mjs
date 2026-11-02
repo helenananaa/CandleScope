@@ -104,9 +104,17 @@ try{
  const workspace=(await q.inspect()).workspaceId;
  await pin('cell-1',fixture.a);await pin('cell-2',fixture.a);
  const a=await capture('cell-1'),b=await capture('cell-2','1m');assert.ok(a&&b&&a!==b);
- const doc=await q.until(document),groupId=Object.keys(doc.linkGroups)[0];assert.ok(groupId);
- assert.equal(doc.linkGroups[groupId].peerPolicy.studyCursor,false);
- await command('workspace','setLinkGroup',{cellIds:['cell-1','cell-2'],groupId});
+ const independent=await q.until(async()=>{
+  const left=await state('cell-1'),right=await state('cell-2');
+  return left?.indicators.length===1&&right?.indicators.length===1&&!left.computing&&!right.computing?{left,right}:false;
+ });
+ assert.equal(independent.left.indicators[0].outputPoints,independent.left.barCount-19);
+ await q.record('independent-study-indicators-preserved',independent);
+ const doc=await q.until(document),oldGroups=new Set(Object.keys(doc.linkGroups));
+ await command('workspace','createLinkGroup',{cellIds:['cell-1','cell-2']});
+ const grouped=await q.until(async()=>{const value=await document();return value&&Object.keys(value.linkGroups).some(id=>!oldGroups.has(id))?value:false;});
+ const groupId=Object.keys(grouped.linkGroups).find(id=>!oldGroups.has(id));assert.ok(groupId);
+ assert.equal(grouped.linkGroups[groupId].peerPolicy.studyCursor,false);
  await execute('cell-1','seekCursor',{timeMs:fixture.afterMs});await at('cell-1',fixture.afterMs);
  assert.equal((await state('cell-2')).cursorMs,fixture.beforeMs);
  await region(a).getByText('Native original future version two',{exact:true}).waitFor();
@@ -114,6 +122,7 @@ try{
  await command('workspace','updateLinkPolicy',{groupId,relationship:'peers',patch:{studyCursor:true}});
  await execute('cell-1','seekCursor',{timeMs:fixture.earlyMs});await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.earlyMs);
  assert.equal((await state('cell-2')).series.interval,'5m');
+ assert.equal((await state('cell-1')).indicators.length,1);assert.equal((await state('cell-2')).indicators.length,1);
  await q.record('same-window-follows-absolute-cut-with-own-period',{a:await state('cell-1'),b:await state('cell-2')});
  await region(b).getByRole('button',{name:'添加复盘补记',exact:true}).click();
  await execute('cell-1','seekCursor',{timeMs:fixture.beforeMs});await at('cell-1',fixture.beforeMs);

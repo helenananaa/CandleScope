@@ -12,8 +12,42 @@ const { WorkspaceBusHub } = createRequire(import.meta.url)("../../../../desktop/
     connect(windowId: string, snapshot: unknown): WorkspaceBusState;
     commit(windowId: string, payload: unknown): WorkspaceBusState;
     publishLink(windowId: string, payload: unknown): unknown;
+    diagnostics(): { hasSnapshot: boolean };
   };
 };
+
+test("ordinary native windows attach link messages without bootstrapping layout authority", async () => {
+  const originalWindow = globalThis.window;
+  const hub = new WorkspaceBusHub(), listeners = new Set<(event: unknown) => void>(), received: unknown[] = [];
+  let registrations = 0;
+  hub.register("other-window", () => {});
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    onWorkspaceBusEvent: (listener: (event: unknown) => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+    workspaceBusRegisterLinks: async () => {
+      registrations++; hub.register("main-window", event => listeners.forEach(listener => listener(event)));
+      return { ok: true, windowId: "main-window" };
+    },
+    workspaceBusConnect: async () => { throw new Error("Link-only registration must not own the layout snapshot"); },
+  } } });
+  const bus = new WorkspaceBusClient("main-window");
+  try {
+    const first = bus.attachLinks(), second = bus.attachLinks(); await Promise.all([first.ready, second.ready]);
+    bus.subscribeLink(event => received.push(event));
+    hub.publishLink("other-window", { workspaceId: "workspace-default", sourceWindowId: "other-window", sourceCellId: "cell-2",
+      kind: "dateSeek", payload: { requestedTimeMs: 600_000 } });
+    assert.equal(received.length, 1); assert.equal(registrations, 1);
+    assert.equal(bus.current.ready, false); assert.equal(hub.diagnostics().hasSnapshot, false);
+    first.release(); assert.equal(listeners.size, 1);
+    second.release(); assert.equal(listeners.size, 0);
+    const stale = bus.attachLinks(); await stale.ready; bus.dispose();
+    const replacement = bus.attachLinks(); await replacement.ready; stale.release();
+    assert.equal(listeners.size, 1); replacement.release(); assert.equal(listeners.size, 0);
+  } finally {
+    bus.dispose();
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
 
 test("native ordered clock returns the desktop hub stamp rather than a renderer-local sequence", async () => {
   const originalWindow = globalThis.window;

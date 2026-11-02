@@ -78,6 +78,9 @@ export class WorkspaceBusClient {
   private bridgeUnsubscribe: (() => void) | null = null;
   private channel: BroadcastChannel | null = null;
   private connected = false;
+  private linkAttachments = 0;
+  private linkAttachmentEpoch = 0;
+  private linkRegistration: Promise<void> | null = null;
   private linkPublishes = 0;
   private conflicts = 0;
 
@@ -93,6 +96,29 @@ export class WorkspaceBusClient {
 
   get current(): WorkspaceBusState {
     return this.state;
+  }
+
+  /** Register message delivery without adopting the 64-chart snapshot/CAS
+   * authority. Ordinary multi-window workspaces retain their storage owner. */
+  attachLinks(): { ready: Promise<void>; release(): void } {
+    const bridge = globalThis.window?.candlescopeDesktop;
+    if (!bridge) return { ready: Promise.resolve(), release: () => {} };
+    this.linkAttachments += 1;
+    const epoch = this.linkAttachmentEpoch;
+    this.bridgeUnsubscribe ??= bridge.onWorkspaceBusEvent(message => this.handleMessage(message));
+    const ready = this.connected ? Promise.resolve() : this.linkRegistration ??= Promise.resolve().then(async () => {
+      if (!bridge.workspaceBusRegisterLinks) throw new Error("Native workspace links are unavailable");
+      const result = await bridge.workspaceBusRegisterLinks() as { ok?: boolean; windowId?: string } | null;
+      if (!result?.ok || result.windowId !== this.windowId) throw new Error("Native workspace link registration failed");
+    });
+    let released = false;
+    return { ready, release: () => {
+      if (released || epoch !== this.linkAttachmentEpoch) return;
+      released = true; this.linkAttachments -= 1;
+      if (this.linkAttachments === 0 && !this.connected) {
+        this.bridgeUnsubscribe?.(); this.bridgeUnsubscribe = null; this.linkRegistration = null;
+      }
+    } };
   }
 
   async connect(snapshot: ChartWorkspaceLibrarySnapshot): Promise<WorkspaceBusState> {
@@ -224,6 +250,7 @@ export class WorkspaceBusClient {
   }
 
   dispose(): void {
+    this.linkAttachmentEpoch += 1; this.linkAttachments = 0; this.linkRegistration = null;
     this.bridgeUnsubscribe?.();
     this.bridgeUnsubscribe = null;
     this.channel?.close();
