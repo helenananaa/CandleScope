@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-02",
+  "application_source": "4a981dac98d0df802b279f764c8e4d88d4a81bae",
+  "base": "358e49965fef5504ab73d96933cd2c02705b7120",
+  "integrated": {
+    "213": "3e9ebdf217c7a5fd4c3eada2ef4bd3d0165d474d",
+    "207": "8ae8d7007beeee9dfc0df6caecd2570a5a22c86c",
+    "214": "33ebd1e4cca6b54b07b3172e2b056bde1c711fbc"
+  },
+  "merge_conflicts": false,
+  "frontend_and_packages_unchanged_from_base": true,
+  "validation": {
+    "runtime": "Actual standalone bundled Python and site-packages from the frontend-final-integration worktree; application and SDK imports resolve to this worktree.",
+    "tests": 265,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 23.94,
+    "coverage": "Scheduler interest/coordinator/public admission/rate limits; local dataset API/service; practice snapshots/accounts; real HTTP/Node replay integration and bounded context.",
+    "warnings": "Three existing Starlette/websockets/uvicorn deprecations.",
+    "receipt": "output/frontend-stability-20261102/backend.xml",
+    "diff_check": "passed"
+  },
+  "pending": [
+    "Exact-head cloud CI",
+    "Packaged native combined cold-chart, fixed dataset cache, practice account save/full-exit/restart checks"
+  ],
+  "limits": "Development integration candidate only. Prior source PR receipts remain scoped to their original revisions. No Windows or full product acceptance claim."
+}
