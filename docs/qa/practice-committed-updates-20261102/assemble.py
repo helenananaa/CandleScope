@@ -30,4 +30,6 @@ for package, module_name in [('candlescope-plugin-sdk','candlescope_plugin_sdk')
         shutil.rmtree(target, ignore_errors=True)
         shutil.copytree(source_module, target, ignore=shutil.ignore_patterns('__pycache__'))
 subprocess.run([str(resources / 'python-runtime/python/bin/python3.12'), '-m', 'compileall', '-q', str(resources / 'backend/app')], check=True)
+subprocess.run([str(Path('/Users/ryanliang/CandleScope/backend/.venv/bin/python')),
+                str(ROOT / 'docs/qa/practice-committed-updates-20261102/build_current_plugins.py')], cwd=ROOT, check=True)
 subprocess.run(['node', str(ROOT / 'docs/qa/practice-committed-updates-20261102/repack.mjs')], cwd=ROOT, check=True)

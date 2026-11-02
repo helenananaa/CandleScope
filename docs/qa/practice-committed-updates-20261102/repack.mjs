@@ -24,7 +24,12 @@ cp.execFileSync('/usr/libexec/PlistBuddy',['-c',`Set :ElectronAsarIntegrity:Reso
 cp.execFileSync('codesign',['--force','--deep','--sign','-',app],{stdio:'inherit'});
 cp.execFileSync('codesign',['--verify','--deep','--strict',app],{stdio:'inherit'});
 fs.rmSync(stage,{recursive:true});
-const files={},dist={},mismatches=[];
+const files={},dist={},plugins={},mismatches=[];
+function pluginFiles(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){
+ const file=path.join(dir,e.name);if(e.isDirectory())pluginFiles(file);
+ else plugins[path.relative(resources,file)]=digest(fs.readFileSync(file));
+}}
+pluginFiles(path.join(resources,'python-runtime/plugins'));
 for(const file of cp.execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\0').filter(Boolean)){
  if(file.startsWith('backend/app/')||file.startsWith('frontend/desktop/')||file.startsWith('packages/candlescope-plugin-sdk/src/')||file.startsWith('packages/candlescope-backtest-sdk/src/')){
   files[file]=digest(fs.readFileSync(file));
@@ -41,7 +46,7 @@ function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){
 walk(path.join(root,'frontend/dist'));
 const receipt={sourceCommit:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
  assembly:'Local macOS arm64 candidate: qualified H127 runtime clone, current tracked backend, newly built current frontend and desktop, updated ASAR integrity, deep ad-hoc signing. Not a fresh runtime build or official CI artifact.',
- app,files,dist,mismatches,asarHeaderSha256:hash,asarSha256:digest(fs.readFileSync(path.join(resources,'app.asar')))};
+ app,files,dist,plugins,mismatches,asarHeaderSha256:hash,asarSha256:digest(fs.readFileSync(path.join(resources,'app.asar')))};
 fs.writeFileSync(path.join(out,'source-package-manifest.json'),JSON.stringify(receipt,null,2)+'\n');
 if(mismatches.length)throw new Error(JSON.stringify(mismatches));
 console.log(JSON.stringify({sourceCommit:receipt.sourceCommit,sourceFiles:Object.keys(files).length,builtFiles:Object.keys(dist).length,mismatches}));
