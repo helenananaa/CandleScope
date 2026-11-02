@@ -74,7 +74,9 @@ async function capture(id){
  return cell(id).locator('[data-study-id]').getAttribute('data-study-id');
 }
 async function dropAcknowledgement(id, method, trigger){
- let releaseRead, sawRead, sawCommit;
+ let releaseRead, sawRead, sawCommit, completedRead;
+ const continuationErrors=[];
+ const continued=new Promise(resolve=>{completedRead=resolve;});
  const held=new Promise(resolve=>{releaseRead=resolve;});
  const reading=new Promise(resolve=>{sawRead=resolve;});
  const committing=new Promise(resolve=>{sawCommit=resolve;});
@@ -85,7 +87,11 @@ async function dropAcknowledgement(id, method, trigger){
    dropped=true;const response=await route.fetch();assert.equal(response.status(),200);
    observed=await response.json();sawCommit();await route.abort('connectionfailed');return;
   }
-  if(route.request().method()==='GET'&&dropped){sawRead();await held;}
+  if(route.request().method()==='GET'&&dropped){
+   sawRead();await held;
+   try{await route.continue();}catch(error){continuationErrors.push(String(error));}finally{completedRead();}
+   return;
+  }
   await route.continue();
  };
  await q.s.page.route(pattern,intercept);
@@ -100,7 +106,8 @@ async function dropAcknowledgement(id, method, trigger){
   const groups=(await q.s.control.call('app.commands',{windowId:'main-window'})).groups;
   assert.ok(!groups.some(group=>group.id==='study:'+id||group.id==='chart:'+id));
   await q.record('committed-response-dropped-and-authoritative-read-held',{method,observed,runtime:state.runtime,studyAndLiveCommandsAbsent:true});
- }finally{releaseRead();await q.s.page.unroute(pattern,intercept);}
+ }finally{releaseRead();await continued;await q.s.page.unroute(pattern,intercept);}
+ assert.deepEqual(continuationErrors,[]);
  return{result:await operation,committed:observed};
 }
 try{

@@ -159,7 +159,7 @@ test("date seeks reach a second window immediately without changing workspace pe
   hub.register("main-window", () => {});
   hub.register("window-2", message => received.push(message));
   const connected = hub.connect("main-window", snapshot());
-  const payload = { timeMs: 1_793_500_000_000 };
+  const payload = { requestedTimeMs: 1_793_500_000_000 };
   assert.equal(hub.publishLink("main-window", {
     workspaceId: "workspace-default", sourceWindowId: "main-window", sourceCellId: "cell-1",
     kind: "dateSeek", payload,
