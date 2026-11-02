@@ -49,6 +49,7 @@ sdk_digest = sources.source_digest(ROOT / "packages/candlescope-plugin-sdk")
 assert pine_lock["sdkSourceSha256"] == python_lock["sdkSourceSha256"] == sdk_digest
 assert pine_lock["bridgeSourceSha256"] == sources.source_digest(ROOT / "packages/candlescope-plugin-pine-compat")
 assert python_lock["sourceSha256"] == sources.source_digest(ROOT / "packages/candlescope-plugin-python-indicator")
+assert python_lock["probeSha256"] == "sha256:" + hashlib.sha256((ROOT / "packages/candlescope-plugin-python-indicator/release/probe.json").read_bytes()).hexdigest()
 assert pine_lock["engineProvenance"] == recipe["engines"]["pine-compat-runtime"]
 for item in plugins["plugins"]:
     wheels = ([{"filename": row["artifactFilename"], "sha256": row["sha256"]} for row in pine_lock["wheels"].values()]
