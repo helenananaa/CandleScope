@@ -1,0 +1,11 @@
+{
+  "verifiedAt": "2026-11-02T10:53:41.997Z",
+  "sourceCommit": "19d2558c708b7a68ab4c40084e2b87f043a5c2b1",
+  "sourceFiles": 1037,
+  "builtFiles": 161,
+  "mismatches": [
+    "backend/app/backtest/strategy/python_runner.py"
+  ],
+  "strictSignature": false,
+  "signatureError": "Error: Command failed: codesign --verify --deep --strict /Users/ryanliang/.codex/worktrees/practice-committed-updates-20261102/CandleScope/output/practice-committed-updates-20261102/offline-strategy-native/Installed App/CandleScope.app"
+}
