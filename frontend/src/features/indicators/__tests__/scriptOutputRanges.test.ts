@@ -36,7 +36,9 @@ for (const fixture of fixtures.cases) test(`real Pine output range adopts ${fixt
         const normalized = normalizeIndicatorPayload(payload, id);
         lines = normalized.lines;
         state = indicatorOutputReducer(state, { type: "snapshot", indicatorId: id, normalized, schema: [] });
-        cacheIndicatorSnapshot(indicator, context, normalized, [], { range: payload.range });
+        const range = payload.range;
+        assert.ok(range);
+        cacheIndicatorSnapshot(indicator, context, normalized, [], { range });
       },
       onReplaceRange: (id, payload) => {
         assert.equal(id, indicator.id);

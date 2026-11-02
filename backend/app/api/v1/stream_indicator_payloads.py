@@ -1005,11 +1005,17 @@ def _finish_plugin_snapshot_or_patch(
     reason: str,
 ) -> dict[str, Any]:
     if bar_time:
-        update = (payload.get("meta") or {}).get("outputUpdate")
-        if update is not None:
+        metadata = payload.get("meta")
+        if isinstance(metadata, dict) and "outputUpdate" in metadata:
+            update = metadata["outputUpdate"]
             # Optional language-neutral output contract. Unknown/malformed
             # ranges are safely delivered as a snapshot, never a tail guess.
-            if isinstance(update, dict) and update.get("schema") == "render.update-range/1" and update.get("mode") == "range":
+            if (
+                isinstance(update, dict)
+                and update.get("schema") == "render.update-range/1"
+                and update.get("mode") == "range"
+                and "range" in update
+            ):
                 changed = update.get("range")
                 if changed is None:
                     start_s = end_s = int(bar_time)
@@ -1027,7 +1033,11 @@ def _finish_plugin_snapshot_or_patch(
                 patch["type"] = "indicator.replace_range"
                 return patch
             snapshot = _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
-            if isinstance(update, dict) and update.get("schema") == "render.update-range/1" and update.get("mode") == "snapshot":
+            if (
+                isinstance(update, dict)
+                and update.get("schema") == "render.update-range/1"
+                and update.get("mode") == "snapshot"
+            ):
                 retained = update.get("range")
                 if (
                     isinstance(retained, dict)

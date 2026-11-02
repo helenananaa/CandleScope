@@ -316,6 +316,9 @@ def test_live_render_range_can_replace_points_before_the_current_bar() -> None:
 
 
 @pytest.mark.parametrize("update", [
+    None,
+    "unrecognized update",
+    {"schema": "render.update-range/1", "mode": "range"},
     {"schema": "render.update-range/1", "mode": "snapshot"},
     {"schema": "render.update-range/next", "mode": "range", "range": {"start": T0, "end": T0}},
     {"schema": "render.update-range/1", "mode": "range", "range": {"start": True, "end": T0}},
