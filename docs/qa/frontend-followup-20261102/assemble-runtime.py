@@ -18,7 +18,11 @@ subprocess.run(["git", "diff", "--exit-code", "HEAD"], cwd=ROOT, check=True)
 subprocess.run(["git", "diff", "--exit-code", "codex/python-indicator-author-20261101", "HEAD", "--",
                 "backend/requirements.txt", "backend/requirements-parquet.txt", "backend/ccxt-fork.lock.json",
                 "packages", "frontend/desktop", "frontend/scripts/desktop-plugin-sources.json",
-                "frontend/scripts/prepare-desktop-plugins.py"], cwd=ROOT, check=True)
+                "frontend/scripts/prepare-desktop-plugins.py",
+                # Repacked JavaScript only; engine/runtime and all other desktop
+                # inputs retain the equality check. Source verifier covers ASAR.
+                ":(exclude)frontend/desktop/workspace-bus-hub.mjs",
+                ":(exclude)frontend/desktop/workspace-bus-hub.test.mjs"], cwd=ROOT, check=True)
 assets = args.plugin_assets.resolve()
 plugins = json.loads((assets / "manifest.json").read_text())
 assert plugins["schemaVersion"] == 2

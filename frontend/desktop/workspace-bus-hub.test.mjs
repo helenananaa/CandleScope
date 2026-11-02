@@ -153,6 +153,22 @@ test("crosshair storms coalesce without changing persistent sequence", () => {
   assert.equal(hub.diagnostics().counts.commits, 0);
 });
 
+test("date seeks reach a second window immediately without changing workspace persistence", () => {
+  const received = [];
+  const hub = new WorkspaceBusHub();
+  hub.register("main-window", () => {});
+  hub.register("window-2", message => received.push(message));
+  const connected = hub.connect("main-window", snapshot());
+  const payload = { timeMs: 1_793_500_000_000 };
+  assert.equal(hub.publishLink("main-window", {
+    workspaceId: "workspace-default", sourceWindowId: "main-window", sourceCellId: "cell-1",
+    kind: "dateSeek", payload,
+  }).coalesced, false);
+  assert.deepEqual(received.filter(message => message.type === "link").map(message => message.event.payload), [payload]);
+  assert.equal(hub.diagnostics().sequence, connected.sequence);
+  assert.equal(hub.diagnostics().counts.commits, 0);
+});
+
 test("window crash removes health, pending events, and elects a recoverable writer", () => {
   const hub = new WorkspaceBusHub();
   hub.register("main-window", () => {});

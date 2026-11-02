@@ -372,14 +372,14 @@ function LiveChartCell({
     visibleRangeScope: cellStorageScope,
   });
   useEffect(
-    () => linkCoordinator.register(cell.id, chartSurface.actions, workspaceId),
-    [cell.id, chartSurface.actions, linkCoordinator, workspaceId],
+    () => study.masked ? undefined : linkCoordinator.register(cell.id, chartSurface.actions, workspaceId),
+    [cell.id, chartSurface.actions, linkCoordinator, workspaceId, study.masked],
   );
   useEffect(
-    () => chartSurface.actions.subscribeDrawingRevision((scopeKey, revision) => {
+    () => study.masked ? undefined : chartSurface.actions.subscribeDrawingRevision((scopeKey, revision) => {
       linkCoordinator.publishDrawingRevision(cell.id, scopeKey, revision);
     }),
-    [cell.id, chartSurface.actions, linkCoordinator],
+    [cell.id, chartSurface.actions, linkCoordinator, study.masked],
   );
   const plugins = usePluginPlatformRuntime({
     exchange: chartSession.view.exchange,
@@ -1080,6 +1080,7 @@ function LiveChartCell({
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
               cellId={cell.id} revision={study.view!.revision} onControlObservation={onControlObservation}
               accountOverlay={cell.accountOverlay}
+              linkCoordinator={linkCoordinator} workspaceId={workspaceId}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={study.move} onRetry={study.retry} />
           </Suspense>}

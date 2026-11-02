@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChartSurfaceRuntime } from "../../chart-adapter/useChartSurfaceRuntime.js";
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { indicatorSignature, type ControlCellObservation } from "../app-control/controlModel.js";
@@ -21,13 +21,20 @@ import StudyNoteEditor from "./StudyNoteEditor.js";
 import { studyInputHasChanged } from "./historyStudyCorrections.js";
 import { useHistoryStudyJournal } from "./useHistoryStudyJournal.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
+import type { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
+import { useChartViewportLink } from "../chart-workspace/useChartViewportLink.js";
+import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
+import ChartTimeNavigationDialog from "../market-data/ChartTimeNavigationDialog.js";
+import { locateStudyViewportTime } from "./historyStudyNavigation.js";
+import { createStudyLinkSurface } from "./historyStudyLinkSurface.js";
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
+export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
   cellId: string; revision: number;
   onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
   accountOverlay?: ChartAccountOverlaySettings | undefined;
+  workspaceId: string; linkCoordinator: ChartLinkCoordinator;
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
   onMove(cursorMs: number, active?: boolean): Promise<boolean>; onRetry(): void;
@@ -90,6 +97,16 @@ export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, 
   }, [active, editor, onMove, playback]);
   const version = Number(store.version);
   const rows = store.snapshot();
+  const renderedVersion = useRef(version);
+  useLayoutEffect(() => { renderedVersion.current = version; }, [version]);
+  const linkedSurface = useMemo(() => createStudyLinkSurface(playback, () => renderedVersion.current, surface.actions), [playback, surface.actions]);
+  useEffect(() => linkCoordinator.register(cellId, linkedSurface, workspaceId), [cellId, linkCoordinator, linkedSurface, workspaceId]);
+  const linkedViewport = useChartViewportLink(linkCoordinator, cellId, `history-study:${input.id}`);
+  const seekToTime = useCallback(async (timeMs: number) => locateStudyViewportTime({ store,
+    interval: series.interval, minimumMs: playback.minimumMs, cursorMs: playback.cursorMs }, timeMs), [playback, series.interval, store]);
+  const navigationSource = useMemo(() => ({ actions: { seekToTime } }), [seekToTime]);
+  const navigation = useChartTimeNavigation({ active, enabled: true, cellId, workspaceId,
+    sessionKey: `history-study:${input.id}:${cursorMs}`, marketData: navigationSource, surface: surface.actions, links: linkCoordinator });
   const dataMeta = useMemo<ChartDataCommitMeta>(() => ({ version, status: "ready", source: "history-study",
     seriesKey: store.seriesKey, bars: rows.length, firstTime: rows[0]?.time ?? null, lastTime: rows.at(-1)?.time ?? null,
     coverage: { from: rows[0]?.time ?? null, to: rows.at(-1)?.time ?? null, bars: rows.length },
@@ -137,6 +154,8 @@ export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, 
         followLatest canLoadMoreLeft={false} canRestoreLatestWindow={false}
         mainOverlayLines={indicators.view.mainOverlayLines} subPanes={indicators.view.subPanes}
         indicatorMarkers={indicators.view.markers} indicatorFills={indicators.view.fills}
+        onCrosshairMove={value => linkCoordinator.publishCrosshair(cellId, typeof value?.time === "number" ? value.time : null)}
+        onUserViewportRangeChange={linkedViewport}
         indicatorHlines={indicators.view.hlines} indicatorBgcolors={indicators.view.bgcolors} indicatorBarcolors={indicators.view.barcolors} /></ChartErrorBoundary>
     </div><aside className="quick-replay-side" aria-label={t("study.notes")}>
       <h3>{t("study.fixed")}</h3><p className="trading-help">{t("study.savedAt", { time: formatDateTime(input.capturedAtMs) })}</p>
@@ -187,10 +206,14 @@ export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, 
         onClick={() => setPlaying(v => !v)}>{t(playing ? "study.pause" : "study.play")}</button>
       <button type="button" className="trading-button" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
         onClick={() => { setPlaying(false); void onMove(playback.stepTarget(1)); }}>{t("study.next")}</button>
+      <button type="button" className="trading-button" onClick={() => navigation.setOpen(true)}>{t("study.viewDate")}</button>
       <label>{t("study.cursor")}<input type="datetime-local" step="1" value={value} disabled={!!editor}
         onChange={e => setValue(e.target.value)} /></label>
       <button type="button" className="trading-button" disabled={!!editor} onClick={() => { void jump(); }}>{t("study.seek")}</button>
       {invalid && <span role="alert">{t("study.invalidRange")}</span>}
     </footer>
+    {navigation.open && <ChartTimeNavigationDialog cellId={cellId} onClose={() => navigation.setOpen(false)}
+      onSubmit={navigation.submit} initialTimeMs={(rows.at(-1)?.time ?? cursorMs / 1000) * 1000}
+      hint={t("study.viewDateHint")} />}
   </div>;
 }

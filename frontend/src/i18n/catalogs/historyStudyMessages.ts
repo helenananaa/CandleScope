@@ -1,4 +1,7 @@
 export const historyStudyEnglish = {
+  "study.viewDate": "Go to view date",
+  "study.viewDateHint": "Move the viewport within revealed history without changing replay time. To reveal later data, explicitly change replay time.",
+
   "study.sourceTextLimit": "This version exceeds the study text limit. Its content is not displayed.",
 
   "study.sourceNotesLimit": "Showing the most recent 100 notes visible at this replay time.",
@@ -57,6 +60,9 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.viewDate": "定位视图日期",
+  "study.viewDateHint": "仅在已揭示的历史中移动视图，不改变回放时刻。查看更晚行情须明确改变回放时刻。",
+
   "study.sourceTextLimit": "本版本文本超过研究视图的读取上限，未显示内容。",
 
   "study.sourceNotesLimit": "仅显示当前回放时刻可见的最近 100 条来源笔记。",
@@ -93,6 +99,9 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.viewDate": "定位視圖日期",
+  "study.viewDateHint": "僅在已揭示的歷史中移動視圖，不改變回放時刻。查看較晚行情須明確改變回放時刻。",
+
   "study.sourceTextLimit": "本版本文字超過研究視圖的讀取上限，未顯示內容。",
 
   "study.sourceNotesLimit": "僅顯示目前回放時刻可見的最近 100 則來源筆記。",
@@ -129,6 +138,9 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.viewDate": "表示日時へ移動",
+  "study.viewDateHint": "公開済みの履歴内で表示位置だけを移動し、リプレイ時刻は変えません。後のデータを見るにはリプレイ時刻を明示的に変更してください。",
+
   "study.sourceTextLimit": "この版の文章は研究ビューの読み込み上限を超えているため、内容を表示していません。",
 
   "study.sourceNotesLimit": "このリプレイ時刻で参照できる最新 100 件の元のノートを表示しています。",
@@ -165,6 +177,9 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.viewDate": "보기 날짜로 이동",
+  "study.viewDateHint": "공개된 과거 데이터 안에서 보기만 이동하며 재생 시각은 바꾸지 않습니다. 이후 데이터를 보려면 재생 시각을 명시적으로 변경하세요.",
+
   "study.sourceTextLimit": "이 버전의 텍스트가 연구 보기의 읽기 제한을 초과하여 내용을 표시하지 않습니다.",
 
   "study.sourceNotesLimit": "이 재생 시각에 볼 수 있는 최근 원본 노트 100개만 표시합니다.",
@@ -201,6 +216,9 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.viewDate": "Ir para a data na visualização",
+  "study.viewDateHint": "Mova a visualização apenas pelo histórico revelado, sem alterar o momento da reprodução. Para revelar dados posteriores, altere esse momento explicitamente.",
+
   "study.sourceTextLimit": "O texto desta versão excede o limite de leitura da análise. O conteúdo não é exibido.",
 
   "study.sourceNotesLimit": "Exibindo as 100 notas de origem mais recentes visíveis neste momento da reprodução.",
