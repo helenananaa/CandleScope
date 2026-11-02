@@ -29,3 +29,11 @@ measure_bridge.py 使用实际 engine + 当前 source SDK/bridge，同输入 EMA
 ## 未完成资格
 
 后端 host 集成21项通过。真实 sidecar/native 包默认路径、保存/完全退出/重启及 CI 尚需独立回执。更完整的 #152 原生输出变化消费与稳定 tick 无 result() 路径仍未实现；本 PR 不关闭整个 issue，不在 bridge 复制另一份 Pine 引擎或通过截短历史获得收益。Windows 单独资格。
+
+## 当前源码 wheel 与真实隔离进程补充
+
+本地重建 SDK/bridge wheel，SDK canonical SHA256 与已合格配方相同；桥接 wheel 为7fb01a231083f06ba34ef2475679b1006e2630ec4364707e1a8e108eb6ba5403。重用未改 engine wheel 的06c009...摘要经原锁核对，使用正式 build_locked_bundle 与 PluginInstaller 创建全新安装，不改保留环境。bundle SHA256 f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912。此为本地受控包，非重新编译engine或正式发布。
+
+qualify_bundle.py 仅把现有宿主测试的进程入口替换为该全新安装的 Python -I + wheel imports，保留原16步输出与44步输入断言，包括tick/收盘/滚窗/旧历史修正/多个订阅/会话淘汰/进程重启/journal恢复。60步比较通过，4个自有隔离进程正常停止。比较完整输入/输出与协商补丁结果一致。没有网络、HTTP/UI、真实市场或原生保存重启性能结论。
+
+先前直接从通用开发venv运行源码sidecar测试时，父进程PYTHONPATH并不会传入安全子进程，故2项在handshake报缺少pine_compat；并非产品补丁失败。原始失败保留；改用正式安装wheel解决，未放宽安全环境隔离。
