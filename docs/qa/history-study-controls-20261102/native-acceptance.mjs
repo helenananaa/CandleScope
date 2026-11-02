@@ -140,9 +140,9 @@ try {
   assert.equal(blocked.result.code,'HISTORICAL_STUDY_ACTIVE');await q.record('live-configuration-rejected',blocked);
   const oldToken=(await groups()).find(group=>group.id==='study:cell-1').contextToken;
   const range={from:Number(first.rows[20].time),to:Number(first.rows[80].time)};
-  assert.equal((await studyExecute('cell-1','visibleTimeRange',range)).result.state,'applied');
+  assert.equal((await studyExecute('cell-1','visibleTimeRange',range)).state,'applied');
   assert.equal(Number(await region(first.studyId).getAttribute('data-study-cursor-ms')),first.cursor);
-  assert.equal((await studyExecute('cell-1','timeAnchor',{time:Number(first.rows[120].time)})).result.state,'failed');
+  assert.equal((await studyExecute('cell-1','timeAnchor',{time:Number(first.rows[120].time)})).state,'failed');
   await q.record('study-viewport-does-not-seek',{range,cursor:first.cursor,oldToken});
   assert.equal(await q.s.page.locator('[data-study-context="true"]').count(),1);
   assert.equal(await q.s.page.locator('.alert-toggle-btn').count(),0);
@@ -168,10 +168,10 @@ try {
   note.revisions=history.items;
   await q.record('review-annotation-versions-and-real-write-time',note);
   const rewind=Number(first.rows[50].time)*1000+30_000;
-  assert.equal((await studyExecute('cell-1','seekCursor',{timeMs:rewind})).result.state,'applied');
+  assert.equal((await studyExecute('cell-1','seekCursor',{timeMs:rewind})).state,'applied');
   await q.record('rewind-hides-forming-candle-and-recomputes-prefix',await verify(first,rewind,'rewind'));
   await q.record('rewind-control-prefix',await controls(first,rewind,'rewind'));
-  const conflict=await studyExecute('cell-1','play',{},oldToken);assert.equal(conflict.result.message,'CONTEXT_CONFLICT');
+  const conflict=await studyExecute('cell-1','play',{},oldToken);assert.equal(conflict.message,'CONTEXT_CONFLICT');
   assert.deepEqual((await studyQuery('cell-1','notes')).output.notes,[]);
   await q.record('stale-context-and-future-notes-rejected',{conflict});
   assert.equal(await region(first.studyId).getByText(text+' updated v2',{exact:true}).count(),0);
@@ -198,7 +198,7 @@ try {
   await verify(first,first.cursor,'forward');await region(first.studyId).getByText(text+' updated v2',{exact:true}).waitFor();
   await q.record('forward-reveals-supplement-without-changing-second',{first:await verify(first,first.cursor,'first-forward'),second:await verify(second,second.cursor+60_000,'second-unchanged')});
   await q.screenshot('two-independent-history-studies');
-  assert.equal((await studyExecute('cell-1','exit')).result.state,'applied');await region(first.studyId).waitFor({state:'hidden'});
+  assert.equal((await studyExecute('cell-1','exit')).state,'applied');await region(first.studyId).waitFor({state:'hidden'});
   await q.until(async()=>{const listed=await groups();return listed.some(group=>group.id==='chart:cell-1')&&!listed.some(group=>group.id==='study:cell-1');});
   assert.equal((await studyQuery('cell-1','bars',{limit:1})).state,'failed');
   assert.equal((await q.query('cell-1')).state,'ready');
