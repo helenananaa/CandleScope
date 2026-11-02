@@ -156,6 +156,17 @@ async def create_entry(request: Request, account_id: str, payload: Any = Body(..
     return await _call(_service(request).create_entry, account_id, _body(payload))
 
 
+@router.get("/accounts/{account_id}/journal-at-time")
+async def journal_at_time(request: Request, account_id: str,
+                          exchange: str = Query(max_length=32),
+                          market_type: str = Query(alias="marketType", max_length=32),
+                          symbol: str = Query(max_length=40),
+                          cursor_ms: int = Query(alias="cursorMs", ge=0, le=253402300799999),
+                          limit: int = Query(default=100, ge=1, le=100)) -> dict:
+    return await _call(_service(request).journal_at_time, account_id, exchange=exchange,
+                       market_type=market_type, symbol=symbol, cursor_ms=cursor_ms, limit=limit)
+
+
 @router.get("/journal/{entry_id}")
 async def entry_detail(request: Request, entry_id: str) -> dict:
     return await _call(_service(request).entry_detail, entry_id)

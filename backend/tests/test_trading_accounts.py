@@ -192,6 +192,110 @@ def service(tmp_path: Path):
     store.close()
 
 
+def test_journal_at_time_reads_real_revisions_and_hides_future_text_without_financial_reads(service, monkeypatch):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    clock = service.test_clock
+    first_time = clock.now
+    note = service.create_entry(account["id"], {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT",
+        "kind": "quick", "body": "earlier", "fields": {"entryBasis": "earlier"}})
+    clock.now += 2000
+    edited_time = clock.now
+    service.save_entry(note["id"], {"body": "future", "fields": {"entryBasis": "future"}})
+    assert "revisions" not in service.list_entries(account["id"])["entries"][0]
+    clock.now += 2000
+    service.create_entry(account["id"], {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT",
+        "kind": "quick", "body": "future-created"})
+    before = {table: service.store.one(f"SELECT COUNT(*) AS n FROM {table}")["n"]
+              for table in ("accounts", "orders", "fills", "cash_flows", "journal_entries", "journal_revisions")}
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("At-time text must not materialize financial data or snapshots")
+    monkeypatch.setattr(service, "_trades", forbidden)
+    monkeypatch.setattr(service.store, "snapshots", forbidden)
+    params = {"exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT"}
+    assert service.journal_at_time(account["id"], cursor_ms=first_time, **params)["original"] == []
+    for cursor, text in ((edited_time, "earlier"), (edited_time + 1, "future"), (edited_time, "earlier")):
+        result = service.journal_at_time(account["id"], cursor_ms=cursor, **params)
+        assert len(result["original"]) == 1 and result["reviews"] == []
+        item = result["original"][0]
+        assert item["body"] == text and item["fields"]["entryBasis"] == text
+        assert item["savedAtMs"] == (first_time if text == "earlier" else edited_time)
+        assert not item["historyUnavailable"]
+        assert not {"tags", "tradeId", "plan", "snapshots", "revisions", "fieldTiming"}.intersection(item)
+    assert service.journal_at_time(account["id"], cursor_ms=edited_time + 1, **{**params, "symbol": "ETHUSDT"})["original"] == []
+    after = {table: service.store.one(f"SELECT COUNT(*) AS n FROM {table}")["n"] for table in before}
+    assert after == before
+
+
+def test_journal_at_time_preserves_missing_history_supplement_write_time_and_historical_deletion(service):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    clock = service.test_clock
+    start = clock.now
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    note = service.create_entry(account["id"], {**instrument, "kind": "quick", "body": "legacy latest"})
+    with service.store.transaction() as db:
+        db.execute("UPDATE journal_revisions SET history_complete=0 WHERE entry_id=?", (note["id"],))
+    clock.now += 10_000
+    review = service.create_entry(account["id"], {**instrument, "kind": "quick", "body": "later review", "marketTimeMs": start + 1})
+    params = {"exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT"}
+    result = service.journal_at_time(account["id"], cursor_ms=start + 2, **params)
+    assert result["original"][0]["historyUnavailable"]
+    assert result["original"][0]["body"] == "" and result["original"][0]["fields"] == {}
+    assert result["reviews"][0]["reviewNote"] and result["reviews"][0]["body"] == "later review"
+    assert result["reviews"][0]["savedAtMs"] == clock.now
+    assert service.journal_at_time(account["id"], cursor_ms=start + 1, **params)["reviews"] == []
+    clock.now += 10_000
+    service.delete_entry(note["id"])
+    assert len(service.journal_at_time(account["id"], cursor_ms=clock.now, **params)["original"]) == 1
+    assert service.journal_at_time(account["id"], cursor_ms=clock.now + 1, **params)["original"] == []
+    service.delete_entry(review["id"])
+    assert service.journal_at_time(account["id"], cursor_ms=start + 2, **params)["reviews"] == []
+
+
+def test_journal_at_time_bounds_and_http_adapter_keep_account_and_instrument_scope(service):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    other = service.create_account({"kind": "manual", "name": "Other"})
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    for i in range(4):
+        service.test_clock.now += 1
+        service.create_entry(account["id"], {**instrument, "kind": "quick", "body": f"note-{i}"})
+    service.create_entry(other["id"], {**instrument, "kind": "quick", "body": "foreign"})
+    app = FastAPI(); app.include_router(trading_router); app.state.trading_accounts = service
+    client = TestClient(app)
+    params = {**instrument, "cursorMs": service.test_clock.now + 1, "limit": 2}
+    result = client.get(f"/trading/accounts/{account['id']}/journal-at-time", params=params)
+    assert result.status_code == 200
+    assert result.json()["hasMore"]
+    assert [note["body"] for note in result.json()["original"]] == ["note-2", "note-3"]
+    for patch in ({"limit": 0}, {"limit": 101}, {"cursorMs": -1}):
+        assert client.get(f"/trading/accounts/{account['id']}/journal-at-time", params={**params, **patch}).status_code == 422
+    assert client.get("/trading/accounts/not-an-account/journal-at-time", params=params).status_code == 404
+
+
+def test_journal_at_time_uses_one_committed_generation_for_entry_and_text(service, monkeypatch):
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    note = service.create_entry(account["id"], {**instrument, "kind": "quick", "body": "before"})
+    writer_store = TradingStore(service.store.path)
+    writer = TradingAccountService(writer_store, snapshot_dir=service.snapshot_dir,
+                                   market=FakeMarket(), clock=lambda: service.test_clock.now + 1000)
+    original = service.store.all
+    changed = False
+    def between(sql, params=()):
+        nonlocal changed
+        rows = original(sql, params)
+        if "FROM journal_entries" in sql and not changed:
+            changed = True
+            writer.save_entry(note["id"], {"body": "after"})
+        return rows
+    monkeypatch.setattr(service.store, "all", between)
+    params = {"exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT", "cursor_ms": service.test_clock.now + 2000}
+    try:
+        assert service.journal_at_time(account["id"], **params)["original"][0]["body"] == "before"
+        assert service.journal_at_time(account["id"], **params)["original"][0]["body"] == "after"
+    finally:
+        writer_store.close()
+
+
 def bar(time_s: int, o: str, h: str, l: str, c: str) -> dict[str, Any]:
     return {"time": time_s, "open": D(o), "high": D(h), "low": D(l), "close": D(c)}
 

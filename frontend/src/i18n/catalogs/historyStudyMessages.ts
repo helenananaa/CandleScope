@@ -1,4 +1,12 @@
 export const historyStudyEnglish = {
+  "study.sourceNotesLimit": "Showing the most recent 100 notes visible at this replay time.",
+
+  "study.sourceNotes": "Source account notes",
+  "study.sourceNotesHint": "Choose this chart’s account and enable Notes in Trades & notes. Original records show the version saved before this replay time.",
+  "study.sourceAccount": "Source: {name}",
+  "study.sourceNotesLoading": "Reading source notes…",
+  "study.sourceVersion": "Saved version {revision}",
+
   "study.sourceInterval": "Source candle interval",
   "study.fineProjection": "Larger candles use only closed {interval} source candles revealed by the cursor. Steps follow source closes.",
   "study.missingFine": "{count} display candles are unavailable because their revealed source history has gaps.",
@@ -47,6 +55,14 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceNotesLimit": "仅显示当前回放时刻可见的最近 100 条来源笔记。",
+
+  "study.sourceNotes": "来源账户笔记",
+  "study.sourceNotesHint": "在当前图的“交易与笔记”中选择账户并开启笔记。原始记录显示回放时刻之前已保存的版本。",
+  "study.sourceAccount": "来源：{name}",
+  "study.sourceNotesLoading": "正在读取来源笔记…",
+  "study.sourceVersion": "已保存版本 {revision}",
+
   "study.sourceInterval": "细数据周期",
   "study.fineProjection": "大周期 K 线仅用游标前已收盘的 {interval} 细数据重建；单步按细数据收盘推进。",
   "study.missingFine": "{count} 根显示 K 线因已揭示细数据有缺口而暂不可用。",
@@ -73,6 +89,14 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceNotesLimit": "僅顯示目前回放時刻可見的最近 100 則來源筆記。",
+
+  "study.sourceNotes": "來源帳戶筆記",
+  "study.sourceNotesHint": "在目前圖表的「交易與筆記」中選擇帳戶並啟用筆記。原始記錄顯示回放時刻之前已儲存的版本。",
+  "study.sourceAccount": "來源：{name}",
+  "study.sourceNotesLoading": "正在讀取來源筆記…",
+  "study.sourceVersion": "已儲存版本 {revision}",
+
   "study.sourceInterval": "細資料週期",
   "study.fineProjection": "大週期 K 線僅用游標前已收盤的 {interval} 細資料重建；單步按細資料收盤推進。",
   "study.missingFine": "{count} 根顯示 K 線因已揭示細資料有缺口而暫不可用。",
@@ -99,6 +123,14 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceNotesLimit": "このリプレイ時刻で参照できる最新 100 件の元のノートを表示しています。",
+
+  "study.sourceNotes": "元の口座ノート",
+  "study.sourceNotesHint": "このチャートの「取引とノート」で口座を選び、ノートを有効にしてください。元の記録にはリプレイ時刻より前に保存された版を表示します。",
+  "study.sourceAccount": "参照元：{name}",
+  "study.sourceNotesLoading": "元のノートを読み込み中…",
+  "study.sourceVersion": "保存版 {revision}",
+
   "study.sourceInterval": "元データの足の周期",
   "study.fineProjection": "大きな足はカーソルまでに確定した {interval} 足のみで再構築します。ステップは元の足の確定時刻へ進みます。",
   "study.missingFine": "公開済み元データに欠落があるため、{count} 本の表示足は利用できません。",
@@ -125,6 +157,14 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceNotesLimit": "이 재생 시각에 볼 수 있는 최근 원본 노트 100개만 표시합니다.",
+
+  "study.sourceNotes": "원본 계정 노트",
+  "study.sourceNotesHint": "이 차트의 거래 및 노트에서 계정을 선택하고 노트를 켜세요. 원본 기록은 재생 시각 이전에 저장된 버전을 표시합니다.",
+  "study.sourceAccount": "출처: {name}",
+  "study.sourceNotesLoading": "원본 노트를 읽는 중…",
+  "study.sourceVersion": "저장된 버전 {revision}",
+
   "study.sourceInterval": "원본 봉 주기",
   "study.fineProjection": "큰 봉은 커서 이전에 마감된 {interval} 원본 봉만으로 재구성합니다. 단계 이동은 원본 봉 마감을 따릅니다.",
   "study.missingFine": "공개된 원본 데이터에 공백이 있어 표시 봉 {count}개를 사용할 수 없습니다.",
@@ -151,6 +191,14 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceNotesLimit": "Exibindo as 100 notas de origem mais recentes visíveis neste momento da reprodução.",
+
+  "study.sourceNotes": "Notas da conta de origem",
+  "study.sourceNotesHint": "Escolha a conta deste gráfico e ative Notas em Negociações e notas. Os registros originais mostram a versão salva antes deste momento da reprodução.",
+  "study.sourceAccount": "Origem: {name}",
+  "study.sourceNotesLoading": "Carregando as notas de origem…",
+  "study.sourceVersion": "Versão salva {revision}",
+
   "study.sourceInterval": "Intervalo dos candles de origem",
   "study.fineProjection": "Candles maiores usam apenas candles de {interval} fechados e revelados pelo cursor. Os passos seguem o fechamento da origem.",
   "study.missingFine": "{count} candles de exibição estão indisponíveis por lacunas no histórico revelado de origem.",

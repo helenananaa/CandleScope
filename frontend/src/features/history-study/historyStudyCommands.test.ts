@@ -80,10 +80,11 @@ test("cursor actions use durable movement, reject out-of-range input and invalid
 
 test("late notes are rejected after rewind, including an intrabar rewind without a bar-store revision", async () => {
   const f = fixture();
+  f.playback.seek(950_000);
   let resolve!: (value: unknown) => void;
   f.input.data = new HistoryStudyDataManager(() => new Promise(done => { resolve = done; }));
   const pending = f.query("notes");
-  f.playback.seek(850_000);
+  f.playback.seek(925_000);
   resolve({ notes: [{ marketTimeMs: 900_000, fields: { entryBasis: "future" } }] });
   const result = await pending;
   assert.equal(result.state, "failed");
@@ -100,4 +101,20 @@ test("study teardown aborts an in-flight note reader and removes its commands", 
   assert.equal((await pending).state, "failed");
   assert.equal((await f.query("bars", { limit: 1 })).message, "GROUP_UNAVAILABLE");
   assert.equal(f.input.data.diagnostics().requests, 0);
+});
+
+test("source notes cannot retain the previous cursor's text across an intrabar rewind", async () => {
+  const f = fixture();
+  f.playback.seek(950_000);
+  const version = Number(f.playback.store.version);
+  f.input.journal = { enabled: true, accountId: "a", accountName: "Source", cursorMs: 950_000, hasMore: false,
+    loading: false, error: null, original: [{ id: "note", accountId: "a", marketTimeMs: 940_000,
+      createdAtMs: 940_000, savedAtMs: 940_000, revision: 1, fields: {}, body: "later text", reviewNote: false, historyUnavailable: false }], reviews: [] };
+  assert.equal((await f.query("originalNotes", { limit: 1 })).state, "ready");
+  f.playback.seek(925_000);
+  assert.equal(Number(f.playback.store.version), version);
+  assert.equal((await f.query("originalNotes", { limit: 1 })).message, "COMMAND_DISABLED");
+  f.input.journal = { ...f.input.journal, cursorMs: 925_000, original: [] };
+  const result = await f.query("originalNotes", { limit: 1 });
+  assert.deepEqual((result.output as { notes: unknown[] }).notes, []);
 });

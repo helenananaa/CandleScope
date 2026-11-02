@@ -4,12 +4,14 @@ import { choice, empty, nullable, number, object } from "../app-control/commandS
 import type { IndicatorRuntime } from "../indicators/indicatorRuntimeContract.js";
 import type { HistoryStudyPlayback } from "./historyStudyPlayback.js";
 import type { HistoryStudyDataManager } from "./historyStudyDataManager.js";
+import type { StudyJournalView } from "./historyStudyJournal.js";
 
 export function historyStudyCommands(input: {
   cellId: string; playback: HistoryStudyPlayback; revision: number; busy: boolean; playing: boolean;
   renderedVersion: number; indicators: IndicatorRuntime; surface: ChartSurfaceRuntime;
   data: HistoryStudyDataManager; move(cursorMs: number, active?: boolean): Promise<boolean>; play(value: boolean): void;
   signal?(): AbortSignal | null;
+  journal?: StudyJournalView;
 }): ControlCommandGroup {
   const { playback, surface, indicators } = input;
   const current = () => input.renderedVersion === Number(playback.store.version);
@@ -28,10 +30,16 @@ export function historyStudyCommands(input: {
     id: `study:${input.cellId}`, title: `Historical study ${input.cellId}: revealed data and committed cursor`,
     context: () => ({ mode: "history-study", studyId: playback.input.id, series: playback.input.series,
       sourceSeries: playback.input.sourceSeries ?? playback.input.series,
+      journal: input.journal ? { enabled: input.journal.enabled, accountId: input.journal.accountId,
+        loading: input.journal.loading, error: input.journal.error,
+        visible: [...input.journal.original, ...input.journal.reviews].map(note => [note.id, note.revision, note.historyUnavailable]) } : null,
       cursorMs: playback.cursorMs, revision: input.revision, version: Number(playback.store.version),
       ready: outputReady(), playing: input.playing }),
     snapshot: () => ({ mode: "history-study", studyId: playback.input.id, series: playback.input.series,
       sourceSeries: playback.input.sourceSeries ?? playback.input.series, missingBuckets: playback.missingBuckets,
+      journal: input.journal ? { enabled: input.journal.enabled, accountId: input.journal.accountId,
+        loading: input.journal.loading, error: input.journal.error,
+        originalCount: input.journal.original.length, reviewCount: input.journal.reviews.length } : null,
       cursorMs: playback.cursorMs, revision: input.revision, capturedAtMs: playback.input.capturedAtMs,
       barCount: playback.store.barCount, firstTime: playback.store.first()?.time ?? null, lastTime: playback.store.last()?.time ?? null,
       boundsMs: { from: playback.minimumMs, to: playback.maximumMs }, busy: input.busy,
@@ -39,6 +47,13 @@ export function historyStudyCommands(input: {
       indicators: indicators.view.activeIndicators.map(({ id, name, error, lines }) => ({ id, name, error,
         outputPoints: outputReady() ? lines?.reduce((n, line) => n + line.data.filter(point => point.time <= (playback.store.last()?.time ?? -1)).length, 0) ?? 0 : 0 })) }),
     commands: [
+      command("originalNotes", "Read bounded visible account-note text versions from this chart's selected source. Later annotations are explicitly marked; missing historical versions have no latest-text fallback.",
+        object({ limit: number(1, 10, true) }), ({ limit }) => ({ enabled: input.journal?.enabled ?? false,
+          accountId: input.journal?.accountId ?? null, loading: input.journal?.loading ?? false, error: input.journal?.error ?? null,
+          hasMore: Boolean(input.journal?.hasMore || ((input.journal?.original.length ?? 0) + (input.journal?.reviews.length ?? 0) > limit)),
+          notes: [...(input.journal?.original ?? []), ...(input.journal?.reviews ?? [])]
+            .sort((a, b) => a.marketTimeMs - b.marketTimeMs).slice(-limit) }), { readOnly: true,
+          available: () => current() && (!input.journal || input.journal.cursorMs === playback.cursorMs) }),
       command("bars", "Read a bounded tail of revealed study candles only; never the retained future input or live source.",
         object({ limit: number(1, 500, true) }), ({ limit }) => playback.store.snapshot().slice(-limit), { readOnly: true }),
       command("indicatorOutputs", "Read bounded output from the committed revealed prefix. Wait for computing=false after a cursor change.",

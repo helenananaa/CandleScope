@@ -19,12 +19,15 @@ import type { HistoryStudyPlayback } from "./historyStudyPlayback.js";
 import type { StudyNote } from "./historyStudyTypes.js";
 import StudyNoteEditor from "./StudyNoteEditor.js";
 import { studyInputHasChanged } from "./historyStudyCorrections.js";
+import { useHistoryStudyJournal } from "./useHistoryStudyJournal.js";
+import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ cellId, revision, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
+export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
   cellId: string; revision: number;
   onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
+  accountOverlay?: ChartAccountOverlaySettings | undefined;
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
   onMove(cursorMs: number, active?: boolean): Promise<boolean>; onRetry(): void;
@@ -33,6 +36,7 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
   const { input, store, cursorMs } = playback;
   const series = input.series;
   const sourceSeries = input.sourceSeries ?? series;
+  const journal = useHistoryStudyJournal(manager.historyStudy, accountOverlay, series, cursorMs);
   const surface = useChartSurfaceRuntime();
   const controlAbort = useRef<AbortController | null>(null);
   useLayoutEffect(() => {
@@ -97,7 +101,7 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });
   useControlCommands(() => historyStudyCommands({ cellId, playback, revision, busy: busy || editor !== null, playing,
-    renderedVersion: version, indicators, surface, data: manager.historyStudy, move: onMove, play: setPlaying,
+    renderedVersion: version, indicators, surface, data: manager.historyStudy, move: onMove, play: setPlaying, journal,
     signal: () => controlAbort.current?.signal ?? null }));
   useLayoutEffect(() => {
     onControlObservation?.(cellId, { mode: "history-study", study: { id: input.id, cursorMs, revision }, session: series,
@@ -158,6 +162,23 @@ export default function HistoryStudyOverlay({ cellId, revision, onControlObserva
       {editor && <StudyNoteEditor key={`${input.id}:${editor.note?.id ?? editor.marketMs}`} manager={manager.historyStudy}
         studyId={input.id} marketMs={editor.marketMs} note={editor.note}
         onChanged={() => setRefreshNotes(n => n + 1)} onClose={() => setEditor(null)} />}
+      <section aria-label={t("study.sourceNotes")}><h3>{t("study.sourceNotes")}</h3>
+        {!journal.enabled || !journal.accountId ? <p className="trading-help">{t("study.sourceNotesHint")}</p> : <>
+          <p>{t("study.sourceAccount", { name: journal.accountName ?? journal.accountId })}</p>
+          {journal.loading && <p role="status">{t("study.sourceNotesLoading")}</p>}
+          {journal.error && <><p role="alert" className="trading-error">{journal.error}</p>
+            <button className="trading-button" type="button" onClick={journal.retry}>{t("shell.retry")}</button></>}
+          {journal.hasMore && <p>{t("study.sourceNotesLimit")}</p>}
+          {!journal.loading && !journal.original.length && !journal.reviews.length && <p>{t("trading.replay.noNotes")}</p>}
+          <ul className="trading-quick-notes">{[...journal.original, ...journal.reviews].sort((a, b) => a.marketTimeMs - b.marketTimeMs).map(note => <li key={note.id}>
+            {note.reviewNote && <strong>{t("trading.journal.reviewNote")}</strong>}
+            <time>{t("study.noteMarketTime", { time: formatDateTime(note.marketTimeMs) })}</time>
+            <time>{t("study.noteWriteTime", { time: formatDateTime(note.savedAtMs) })}</time>
+            <small>{t("study.sourceVersion", { revision: note.revision })}</small>
+            <p>{note.historyUnavailable ? t("trading.replay.noteHistoryUnavailable") : note.body || Object.values(note.fields).filter(Boolean).join("\n")}</p>
+          </li>)}</ul>
+        </>}
+      </section>
     </aside></div>
     <footer className="history-study-controls"><button type="button" className="trading-button" disabled={busy || !!editor || cursorMs <= playback.minimumMs}
       onClick={() => { setPlaying(false); void onMove(playback.stepTarget(-1)); }}>{t("study.previous")}</button>

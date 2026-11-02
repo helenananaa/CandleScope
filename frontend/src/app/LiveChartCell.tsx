@@ -1079,6 +1079,7 @@ function LiveChartCell({
           {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
               cellId={cell.id} revision={study.view!.revision} onControlObservation={onControlObservation}
+              accountOverlay={cell.accountOverlay}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={study.move} onRetry={study.retry} />
           </Suspense>}

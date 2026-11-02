@@ -173,6 +173,51 @@ class JournalService:
             ]
         }
 
+    def journal_at_time(self, account_id: str, *, exchange: str, market_type: str,
+                        symbol: str, cursor_ms: int, limit: int = 100) -> dict[str, Any]:
+        """Bounded text-only projection; never reads trades, marks or snapshots.
+
+        Original text/deletions use the same exclusive save-time boundary as
+        quick replay. Later supplements use their market anchor and retain
+        actual write time. One WAL generation fences metadata and revisions.
+        """
+        if type(cursor_ms) is not int or not 0 <= cursor_ms <= 253402300799999:
+            raise invalid("Invalid journal cursor")
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise invalid("Invalid journal limit")
+        instrument = normalize_instrument(exchange, market_type, symbol)
+        with self.store.read_snapshot():
+            self._account(account_id)
+            entries = self.store.all(
+                "SELECT id,created_at_ms,updated_at_ms,market_time_ms FROM journal_entries "
+                "WHERE account_id=? AND exchange=? AND market_type=? AND symbol=? AND ("
+                "(market_time_ms IS NULL AND created_at_ms<? AND (deleted=0 OR updated_at_ms>=?)) OR "
+                "(market_time_ms IS NOT NULL AND market_time_ms<? AND deleted=0)) "
+                "ORDER BY COALESCE(market_time_ms,created_at_ms) DESC,id DESC LIMIT ?",
+                (account_id, *instrument, cursor_ms, cursor_ms, cursor_ms, limit + 1),
+            )
+            original, reviews = [], []
+            for entry in entries[:limit]:
+                review = entry["market_time_ms"] is not None
+                revision = self.store.one(
+                    "SELECT revision,saved_at_ms,fields_json,body,history_complete FROM journal_revisions "
+                    "WHERE entry_id=? " + ("" if review else "AND saved_at_ms<? ")
+                    + "ORDER BY revision DESC LIMIT 1",
+                    (entry["id"],) if review else (entry["id"], cursor_ms),
+                )
+                unavailable = revision is None or (not review and not revision["history_complete"])
+                note = {"id": entry["id"], "accountId": account_id,
+                    "marketTimeMs": entry["market_time_ms"] if review else entry["created_at_ms"],
+                    "createdAtMs": entry["created_at_ms"],
+                    "savedAtMs": revision["saved_at_ms"] if revision else entry["created_at_ms"],
+                    "revision": revision["revision"] if revision else 0,
+                    "fields": {} if unavailable else json.loads(revision["fields_json"]),
+                    "body": "" if unavailable else revision["body"],
+                    "reviewNote": review, "historyUnavailable": unavailable}
+                (reviews if review else original).append(note)
+            return {"accountId": account_id, "cursorMs": cursor_ms,
+                "original": original[::-1], "reviews": reviews[::-1], "hasMore": len(entries) > limit}
+
     def create_entry(self, account_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         with self.store.locked():
             return self._create_entry(account_id, payload)
