@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+
+def test_public_nullable_warmup_preserves_ir_and_finite_flat_chart_protocol():
+    from candlescope_plugin_sdk import ExecuteBatchResult,RenderOutput,LineSeries,LinePoint
+    from app.indicator.serialization import serialize_plugin_runtime_result
+    result=ExecuteBatchResult(ok=True,output=RenderOutput(series=(LineSeries(
+        id='ma',title='MA',points=(LinePoint(1,None),LinePoint(2,10),LinePoint(3,None),LinePoint(4,20))),)))
+    payload=serialize_plugin_runtime_result(result)
+    assert payload['lines'][0]['data']==[{'time':2,'value':10.0},{'time':4,'value':20.0}]
+    assert payload['result']['series'][0]['data']==[
+        {'time':1,'value':None},{'time':2,'value':10.0},{'time':3,'value':None},{'time':4,'value':20.0}]
+
 import json
 from pathlib import Path
 

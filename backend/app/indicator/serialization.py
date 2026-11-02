@@ -425,7 +425,10 @@ def _flat_lines_from_render_series(result: ExecuteBatchResult) -> list[dict[str,
             "type": item.series_type,
             "pane": item.pane,
             "scale": item.scale,
-            "data": [point.to_wire() for point in item.points],
+            # Render IR retains explicit nulls for aligned warmup/missing
+            # values. The established flat chart protocol accepts only finite
+            # numeric points; absent samples stay absent, never become zero.
+            "data": [point.to_wire() for point in item.points if point.value is not None],
             "color": style.get("color", "#f59e0b"),
             "lineWidth": style.get("lineWidth", 2),
             "lineStyle": style.get("lineStyle", 0),

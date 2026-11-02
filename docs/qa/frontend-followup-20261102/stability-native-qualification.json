@@ -1,0 +1,186 @@
+{
+  "date": "2026-11-02",
+  "applicationSource": "4a981dac98d0df802b279f764c8e4d88d4a81bae",
+  "passed": true,
+  "candidate": "APFS clone of qualified PR211 official arm64 frontend/runtime; current backend copied and compiled. Not a fresh full runtime build.",
+  "backendFiles": 919,
+  "sourceAndSignatureBeforeAfter": true,
+  "fixedCache": {
+    "importedRows": 500,
+    "MA20Points": 481,
+    "MA5Points": 496,
+    "maximumArithmeticError": 0,
+    "currentRequestIdsReboundOnCacheHit": true,
+    "normalExitsMs": [
+      16005,
+      15938,
+      15364
+    ]
+  },
+  "practice": {
+    "fixture": "Explicit synthetic persisted closed practice trade; no native matching claim",
+    "preciseBalance": "1002.468835780246913578",
+    "preciseNetPnl": "2.468835780246913578",
+    "statisticsNetPnl": "2.46883578",
+    "summaryTradesStatsDetailSameAfterRestart": true,
+    "normalExitsMs": [
+      15223,
+      15258
+    ]
+  },
+  "coldChart": {
+    "symbol": "SOLUSDT",
+    "interval": "5m",
+    "persistedTargetRowsBeforeLaunch": 0,
+    "targetReadyMs": 4083,
+    "closedRowsMatchedBackendBeforeAndAfterRestart": 500,
+    "independentBTC1mAbsoluteTimeAndZoomPreserved": true,
+    "normalExitsMs": [
+      16524,
+      15254
+    ]
+  },
+  "rendererErrors": 0,
+  "screenshotsReviewed": true,
+  "failuresPreserved": [
+    "Practice attempt1: oracle string retained a trailing zero; normalize independent Decimal text, preserve production precision.",
+    "Practice attempts2/3: exact tab name omitted the accessible review badge; inspect DOM, correct locator without application changes.",
+    "Practice attempt4: harness retried before previous owned exit completed; single-instance launch exited before functionality. Original attempt3 final receipt and explicit overlap record retained.",
+    "Cold attempt1: incorrectly compared logical indices across a legitimate 1000-row hydration prepend; absolute time and zoom remained unchanged.",
+    "Cold attempt2: raw API oracle used open_time milliseconds instead of normalized time seconds; corrected to the production response contract."
+  ],
+  "limits": [
+    "One local macOS arm64 combination, not Windows/x64 installation or complete product acceptance.",
+    "Cold target uses an existing isolated QA profile with other market history, while this target has zero persisted 5m rows. Earlier BTC and ETH attempts are not relabelled passing cold samples.",
+    "Native cold behavior is not deterministic reproduction or before/after performance attribution of the unscoped scheduler race; that contract retains component regression evidence.",
+    "Practice concurrency is verified with actual SQLite/thread component tests; native scenario verifies persisted financial projections, UI and restart with a synthetic closed trade.",
+    "Separate order-book pane showed connecting during the screenshot; this candidate does not qualify order-book recovery.",
+    "Current-head cloud CI and required source review remain merge gates."
+  ],
+  "artifacts": [
+    {
+      "path": "native/assembly.json.gz",
+      "sha256": "b22b77ad61a051a6fae6fea05dbb640b8f6ba320fb722556e1a787a0108fc704"
+    },
+    {
+      "path": "native/backend-sidecar.log.gz",
+      "sha256": "590c4983f7385d6efb99a595b576e5f7bc497f03d8796b617ab12c7d2f4da45a"
+    },
+    {
+      "path": "native/backend-tests.xml.gz",
+      "sha256": "b784539ea528b26655d255e8a988d0034b359e816e644cce063e7cf79d51838d"
+    },
+    {
+      "path": "native/cold-attempt1/acceptance.json.gz",
+      "sha256": "dcd88d3ee42960e31f176020dabbb349b11665c23d2315610f46ff57dea26379"
+    },
+    {
+      "path": "native/cold-attempt1/traffic.json.gz",
+      "sha256": "0bfd3db6b3010e9b7a56e542d0b82675ca0c6f3bca8a21bbc72f439325200cbf"
+    },
+    {
+      "path": "native/cold-attempt2/acceptance.json.gz",
+      "sha256": "e672fcd1b3187b6e85b3b9c1dfcc5fa14d46b51fc43f6df3dc0d284dac848206"
+    },
+    {
+      "path": "native/cold-attempt2/traffic.json.gz",
+      "sha256": "d68451871bef10f89d71c802c971f7abc86bcc9652de1bb8050896a9d96b6de7"
+    },
+    {
+      "path": "native/cold-chart-acceptance.json.gz",
+      "sha256": "27a0983c9d5511e437e2b7e722a47eb0a40c410e007c57c26da19ac8f9757226"
+    },
+    {
+      "path": "native/cold-chart-traffic.json.gz",
+      "sha256": "82883d8e073171c89e33d165e08dcf5c1cec7e83d6137c49fdf76543a1e1e82c"
+    },
+    {
+      "path": "native/cold-five-minute-restored.png",
+      "sha256": "1d128e41a6e7dac6f7ca793a96a5e8213ebf9d70c0bbf804572d46d4c0bd5503"
+    },
+    {
+      "path": "native/cold-five-minute.png",
+      "sha256": "035d22e461554af9e7f8b6639520323d7de7db767d93b4c29f35f1309f53410d"
+    },
+    {
+      "path": "native/fixed-cache-acceptance.json.gz",
+      "sha256": "d6b00a4d7ad086ca08cc0ab74a740168fb866927735beaf434f98531e2dfd561"
+    },
+    {
+      "path": "native/fixed-cache-traffic.json.gz",
+      "sha256": "735fa5876b8d65392c058218fb4f624c7381919c4e0f3d356d50adc9be0e5ee6"
+    },
+    {
+      "path": "native/fixed-compute-responses.json.gz",
+      "sha256": "1d3d5ec45010351ebae48bd44375a0bd9399b325e977a6d2aa31c4409b212b58"
+    },
+    {
+      "path": "native/fixed-ma20.png",
+      "sha256": "941edf29d62ae4264284eab757fadebce24106d88e8595a206385f2e962d9cf9"
+    },
+    {
+      "path": "native/post-run-integrity.json.gz",
+      "sha256": "34e7d0dfdf364ea78eab2416bc4455518592e407518d061f4b81d07c69946a02"
+    },
+    {
+      "path": "native/practice-acceptance.json.gz",
+      "sha256": "e2ee0a2c53c8f0e8dc7939dfc36523a3c5d16c5ea30d57e6d8c33746bbf4784b"
+    },
+    {
+      "path": "native/practice-attempt1/acceptance.json.gz",
+      "sha256": "af240a32aa1bce3cea4846270ced74e96fffa7e5ceca87f53b41144e661d6e68"
+    },
+    {
+      "path": "native/practice-attempt1/practice-fixture.json.gz",
+      "sha256": "109b2d409f942c6f56d7d9b21bb376341d1efc994e0f27602dec1df951515739"
+    },
+    {
+      "path": "native/practice-attempt1/traffic.json.gz",
+      "sha256": "70693dc882cff384a3d26b9ac49ab0ed8e4e0c4fae2c27def9f3b554b35f5729"
+    },
+    {
+      "path": "native/practice-attempt2/acceptance.json.gz",
+      "sha256": "db88d797f0d0db096d4e9186f5444b32a2f7faa31460eab25e14e59e3057fa08"
+    },
+    {
+      "path": "native/practice-attempt2/practice-fixture.json.gz",
+      "sha256": "7aaa6e644155ba10502ca017fa83071a71bab6c4547362e3365a24ba0891c496"
+    },
+    {
+      "path": "native/practice-attempt2/traffic.json.gz",
+      "sha256": "06f4e2fd21936fe204293a19867d2b21bb3c55c3a646cb6ab5274d2aa67739e5"
+    },
+    {
+      "path": "native/practice-attempt3/acceptance.json.gz",
+      "sha256": "fd2f28dcc40d6ab3dcefe0b26b2d0654710589ae2cb128d7b1b684ce45933841"
+    },
+    {
+      "path": "native/practice-attempt3/practice-fixture.json.gz",
+      "sha256": "7aaa6e644155ba10502ca017fa83071a71bab6c4547362e3365a24ba0891c496"
+    },
+    {
+      "path": "native/practice-attempt3/traffic.json.gz",
+      "sha256": "b7511eaf1657efa4d8c82243f0465b64b5aba81f2a4d50bffe17d6bedf6d820f"
+    },
+    {
+      "path": "native/practice-attempt4-overlap.json.gz",
+      "sha256": "ac80560d976b8db4421f0e3bb94d33788ca53531d0d2a942c005085a9559e925"
+    },
+    {
+      "path": "native/practice-fixture.json.gz",
+      "sha256": "7aaa6e644155ba10502ca017fa83071a71bab6c4547362e3365a24ba0891c496"
+    },
+    {
+      "path": "native/practice-snapshot-restored.png",
+      "sha256": "d423e910c5900afa32a18c34ff8ef749cd287ffec3d1b0552983108d3e455949"
+    },
+    {
+      "path": "native/practice-traffic.json.gz",
+      "sha256": "02ed9643fc453340ef23314b6c06fac915baab2e40b8a0ba28b9032aa93c8643"
+    },
+    {
+      "path": "native/restored-fixed-ma5.png",
+      "sha256": "f8db4b4ab61a3e00c467ed3be60b67dbaa6761705cd0aa98505b70d6e5ae5cfa"
+    }
+  ]
+}
