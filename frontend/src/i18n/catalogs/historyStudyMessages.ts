@@ -1,4 +1,6 @@
 export const historyStudyEnglish = {
+  "study.sourceTextLimit": "This version exceeds the study text limit. Its content is not displayed.",
+
   "study.sourceNotesLimit": "Showing the most recent 100 notes visible at this replay time.",
 
   "study.sourceNotes": "Source account notes",
@@ -55,6 +57,8 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceTextLimit": "本版本文本超过研究视图的读取上限，未显示内容。",
+
   "study.sourceNotesLimit": "仅显示当前回放时刻可见的最近 100 条来源笔记。",
 
   "study.sourceNotes": "来源账户笔记",
@@ -89,6 +93,8 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceTextLimit": "本版本文字超過研究視圖的讀取上限，未顯示內容。",
+
   "study.sourceNotesLimit": "僅顯示目前回放時刻可見的最近 100 則來源筆記。",
 
   "study.sourceNotes": "來源帳戶筆記",
@@ -123,6 +129,8 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceTextLimit": "この版の文章は研究ビューの読み込み上限を超えているため、内容を表示していません。",
+
   "study.sourceNotesLimit": "このリプレイ時刻で参照できる最新 100 件の元のノートを表示しています。",
 
   "study.sourceNotes": "元の口座ノート",
@@ -157,6 +165,8 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceTextLimit": "이 버전의 텍스트가 연구 보기의 읽기 제한을 초과하여 내용을 표시하지 않습니다.",
+
   "study.sourceNotesLimit": "이 재생 시각에 볼 수 있는 최근 원본 노트 100개만 표시합니다.",
 
   "study.sourceNotes": "원본 계정 노트",
@@ -191,6 +201,8 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.sourceTextLimit": "O texto desta versão excede o limite de leitura da análise. O conteúdo não é exibido.",
+
   "study.sourceNotesLimit": "Exibindo as 100 notas de origem mais recentes visíveis neste momento da reprodução.",
 
   "study.sourceNotes": "Notas da conta de origem",

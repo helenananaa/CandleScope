@@ -296,6 +296,26 @@ def test_journal_at_time_uses_one_committed_generation_for_entry_and_text(servic
         writer_store.close()
 
 
+def test_journal_at_time_caps_text_without_relabeling_an_existing_version_as_missing_history(service):
+    import json
+    account = service.create_account({"kind": "manual", "name": "Source"})
+    instrument = {"exchange": "binance", "marketType": "spot", "symbol": "BTCUSDT"}
+    note = service.create_entry(account["id"], {**instrument, "kind": "quick", "body": "large version",
+        "fields": {f"field{i}": "x" * 20_000 for i in range(6)}})
+    params = {"exchange": "binance", "market_type": "spot", "symbol": "BTCUSDT"}
+    result = service.journal_at_time(account["id"], cursor_ms=service.test_clock.now + 1, **params)["original"][0]
+    assert result["revision"] == 1 and not result["historyUnavailable"]
+    assert result["textUnavailable"] and result["body"] == "" and result["fields"] == {}
+    assert len(service.entry_detail(note["id"])["fields"]["field0"]) == 20_000
+    for i in range(30):
+        service.test_clock.now += 1
+        service.create_entry(account["id"], {**instrument, "kind": "quick", "body": str(i).zfill(2) + "x" * 19_998})
+    projected = service.journal_at_time(account["id"], cursor_ms=service.test_clock.now + 1, **params)
+    assert len(projected["original"]) == 31
+    assert sum(not item["textUnavailable"] for item in projected["original"]) == 25
+    assert len(json.dumps(projected).encode()) < 550_000
+
+
 def bar(time_s: int, o: str, h: str, l: str, c: str) -> dict[str, Any]:
     return {"time": time_s, "open": D(o), "high": D(h), "low": D(l), "close": D(c)}
 

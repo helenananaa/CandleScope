@@ -32,7 +32,7 @@ export function historyStudyCommands(input: {
       sourceSeries: playback.input.sourceSeries ?? playback.input.series,
       journal: input.journal ? { enabled: input.journal.enabled, accountId: input.journal.accountId,
         loading: input.journal.loading, error: input.journal.error,
-        visible: [...input.journal.original, ...input.journal.reviews].map(note => [note.id, note.revision, note.historyUnavailable]) } : null,
+        visible: [...input.journal.original, ...input.journal.reviews].map(note => [note.id, note.revision, note.historyUnavailable, note.textUnavailable]) } : null,
       cursorMs: playback.cursorMs, revision: input.revision, version: Number(playback.store.version),
       ready: outputReady(), playing: input.playing }),
     snapshot: () => ({ mode: "history-study", studyId: playback.input.id, series: playback.input.series,

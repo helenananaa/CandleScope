@@ -175,7 +175,8 @@ export default function HistoryStudyOverlay({ cellId, revision, accountOverlay, 
             <time>{t("study.noteMarketTime", { time: formatDateTime(note.marketTimeMs) })}</time>
             <time>{t("study.noteWriteTime", { time: formatDateTime(note.savedAtMs) })}</time>
             <small>{t("study.sourceVersion", { revision: note.revision })}</small>
-            <p>{note.historyUnavailable ? t("trading.replay.noteHistoryUnavailable") : note.body || Object.values(note.fields).filter(Boolean).join("\n")}</p>
+            <p>{note.historyUnavailable ? t("trading.replay.noteHistoryUnavailable") : note.textUnavailable
+              ? t("study.sourceTextLimit") : note.body || Object.values(note.fields).filter(Boolean).join("\n")}</p>
           </li>)}</ul>
         </>}
       </section>

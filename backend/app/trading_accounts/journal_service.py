@@ -197,23 +197,32 @@ class JournalService:
                 (account_id, *instrument, cursor_ms, cursor_ms, cursor_ms, limit + 1),
             )
             original, reviews = [], []
+            remaining_bytes = 512_000
             for entry in entries[:limit]:
                 review = entry["market_time_ms"] is not None
                 revision = self.store.one(
-                    "SELECT revision,saved_at_ms,fields_json,body,history_complete FROM journal_revisions "
+                    "SELECT revision,saved_at_ms,history_complete,"
+                    "length(CAST(fields_json AS BLOB))+length(CAST(json_quote(body) AS BLOB)) AS text_bytes,"
+                    "CASE WHEN length(CAST(fields_json AS BLOB))+length(CAST(json_quote(body) AS BLOB))<=65536 "
+                    "THEN fields_json END AS fields_json,"
+                    "CASE WHEN length(CAST(fields_json AS BLOB))+length(CAST(json_quote(body) AS BLOB))<=65536 "
+                    "THEN body END AS body FROM journal_revisions "
                     "WHERE entry_id=? " + ("" if review else "AND saved_at_ms<? ")
                     + "ORDER BY revision DESC LIMIT 1",
                     (entry["id"],) if review else (entry["id"], cursor_ms),
                 )
                 unavailable = revision is None or (not review and not revision["history_complete"])
+                text_unavailable = not unavailable and (revision["text_bytes"] > min(65_536, remaining_bytes))
+                if not unavailable and not text_unavailable:
+                    remaining_bytes -= revision["text_bytes"]
                 note = {"id": entry["id"], "accountId": account_id,
                     "marketTimeMs": entry["market_time_ms"] if review else entry["created_at_ms"],
                     "createdAtMs": entry["created_at_ms"],
                     "savedAtMs": revision["saved_at_ms"] if revision else entry["created_at_ms"],
                     "revision": revision["revision"] if revision else 0,
-                    "fields": {} if unavailable else json.loads(revision["fields_json"]),
-                    "body": "" if unavailable else revision["body"],
-                    "reviewNote": review, "historyUnavailable": unavailable}
+                    "fields": {} if unavailable or text_unavailable else json.loads(revision["fields_json"]),
+                    "body": "" if unavailable or text_unavailable else revision["body"],
+                    "reviewNote": review, "historyUnavailable": unavailable, "textUnavailable": text_unavailable}
                 (reviews if review else original).append(note)
             return {"accountId": account_id, "cursorMs": cursor_ms,
                 "original": original[::-1], "reviews": reviews[::-1], "hasMore": len(entries) > limit}

@@ -3,6 +3,7 @@
 export interface StudyJournalNote {
   id: string; accountId: string; marketTimeMs: number; createdAtMs: number; savedAtMs: number;
   revision: number; fields: Record<string, string>; body: string; reviewNote: boolean; historyUnavailable: boolean;
+  textUnavailable?: boolean;
 }
 export interface StudyJournalView {
   enabled: boolean; accountId: string | null; accountName: string | null; cursorMs: number; loading: boolean; error: string | null;
