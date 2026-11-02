@@ -1,0 +1,19 @@
+{
+  "stage": "In-progress Python indicator author/runtime implementation for153; foundation only, not available in app yet",
+  "contract": "python.indicator.batch/1 ordinary compute(bars,params); literal optional INDICATOR metadata, immutable OHLCV columns and parameters, exact position-aligned declared outputs, None warmup, finite values, no automatic causal certification",
+  "execution": "Fresh interpreter per batch, -I isolated import environment, timeout process-group termination on POSIX including successful descendants, bounded result files and author stdout isolation. Process boundary, not complete security sandbox. Windows descendant cleanup remains pending platform qualification.",
+  "tests": "42 real author/executor tests passed; static analysis does not execute module, fresh globals, actual subprocess deadlines/crashes/child cleanup, no silent window truncation",
+  "remaining": [
+    "SDK RuntimeDescriptor/analyze/executeBatch adapter",
+    "Author parameter schema and host window preparation",
+    "Bundled activation and editor integration",
+    "Chart history/realtime/save/full-owned-exit/restart acceptance",
+    "Optional dependency profiles and explicit incremental stage"
+  ],
+  "artifacts": [
+    {
+      "path": "author-executor-tests.log.gz",
+      "sha256": "5261678bbdd97cf73689795b6e70a6766d2dfa5149104851f394550858f72043"
+    }
+  ]
+}

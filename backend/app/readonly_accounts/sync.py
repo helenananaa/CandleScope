@@ -71,7 +71,8 @@ def uncovered_ranges(start: int, end: int, coverage: list[dict]) -> list[tuple[i
 
 
 class AccountSynchronizer:
-    def __init__(self, repository: AccountRepository, client, *, now_ms=None):
+    def __init__(self, repository: AccountRepository, client, *, now_ms=None, state_changed=None):
+        self.state_changed = state_changed or (lambda: None)
         self.repository = repository
         self.client = client
         self.now_ms = now_ms or (lambda:int(time.time()*1000))
@@ -127,6 +128,7 @@ class AccountSynchronizer:
             self.overflow = True
             self.ws_error = "ACCOUNT_STREAM_OVERFLOW"
         self.changed.set()
+        self.state_changed()
 
     async def consume(self) -> None:
         while True:
@@ -139,6 +141,7 @@ class AccountSynchronizer:
                 self.ws_error = next(iter(self.channel_errors.values()),None)
                 self.stream_status = "reconnecting" if self.channel_errors else "observed"
                 self.changed.set()
+                self.state_changed()
             finally:
                 self.queue.task_done()
 
@@ -159,6 +162,7 @@ class AccountSynchronizer:
                 self.stream_status = "reconnecting"
                 self.ws_error = self.channel_errors[channel] = error_code(exc)
                 self.changed.set()
+                self.state_changed()
                 await asyncio.sleep(delay)
                 delay = min(delay*2,60)
 

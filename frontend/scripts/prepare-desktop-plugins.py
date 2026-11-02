@@ -185,7 +185,8 @@ def main():
     # hidden by a same-version cached wheel from an earlier package.
     with tempfile.TemporaryDirectory(prefix="bridges-", dir=args.cache) as temporary:
         built = Path(temporary)
-        packages = ["candlescope-plugin-sdk", *(e["bridge"] for e in recipe["engines"].values())]
+        packages = ["candlescope-plugin-sdk", "candlescope-plugin-python-indicator",
+                    *(e["bridge"] for e in recipe["engines"].values())]
         for name in packages:
             run([args.uv, "build", "--wheel", "--python", sys.executable, "--out-dir", built, REPO / "packages" / name])
         canonicalizer = module(REPO / "packages/candlescope-plugin-pine-compat/scripts/canonicalize_wheel.py", "desktop_canonicalizer")
@@ -235,6 +236,32 @@ def main():
                 "platform": {"system": platform.system(), "machine": platform.machine(),
                              "implementation": platform.python_implementation(), "pythonVersion": python_version},
             })
+        python_package = REPO / "packages/candlescope-plugin-python-indicator"
+        python_builder = module(python_package / "scripts/build_bundle.py", "desktop_python_indicator_builder")
+        python_wheels = [next(built.glob("candlescope_plugin_python_indicator-*.whl")),
+                         next(built.glob("candlescope_plugin_sdk-*.whl"))]
+        python_bundle = args.output / f"candlescope-plugin-python-indicator-0.1.0-{target}.cspkg"
+        python_result = python_builder.build(python_wheels, python_bundle)
+        entries.append({
+            "runtimeId": "candlescope.python-indicator", "package": "candlescope-plugin-python-indicator",
+            "version": "0.1.0", "filename": python_bundle.name,
+            "sha256": python_result.sha256, "size": python_result.size,
+            "platform": {"system": platform.system(), "machine": platform.machine(),
+                         "implementation": platform.python_implementation(), "pythonVersion": python_version},
+        })
+        (args.output / "python-indicator.lock.json").write_text(json.dumps({
+            "releaseStatus": "desktop-source-build-unpublished",
+            "sourceSha256": source_digest(python_package),
+            "sdkSourceSha256": source_digest(REPO / "packages/candlescope-plugin-sdk"),
+            "probeSha256": sha(python_package / "release/probe.json"),
+            "wheels": [{"filename": p.name, "sha256": sha(p)} for p in python_wheels],
+        }, indent=2) + "\n")
+        (args.output / "indicator-runtime-routes.json").write_text(json.dumps({
+            "schemaVersion": 1, "routes": [
+                {"language": "pine", "mode": "sidecar", "runtimeId": "candlescope.pine-compat"},
+                {"language": "python", "mode": "sidecar", "runtimeId": "candlescope.python-indicator"},
+            ],
+        }, indent=2) + "\n")
         manifest = {"schemaVersion": 2, "releaseStatus": "desktop-source-build-unpublished", "plugins": entries}
         (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         shutil.copy2(RECIPE, sources_out / RECIPE.name)

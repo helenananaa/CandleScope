@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-02",
+  "applicationSource": "f4d271a5fd5f9aef493107e87317f049c631f970",
+  "passed": true,
+  "steps": 7,
+  "sourceFiles": 975,
+  "distFiles": 158,
+  "mismatches": [],
+  "strictSignature": true,
+  "assembly": "APFS clone of exact-head already assembled app; fresh independent QA profile, not a fresh runtime build.",
+  "fixture": "Explicit synthetic disabled OKX profile without credentials. Native guarded disconnect mutation changes committed status error->disconnected. No exchange private calls.",
+  "push": {
+    "beforeSequence": 8,
+    "afterSequence": 9,
+    "epochUnchanged": true,
+    "observationMs": 6200,
+    "rendererStatusPolls": 0,
+    "eventsConnectionsFirstOpen": 1,
+    "eventsConnectionsAfterReopen": 2
+  },
+  "precision": "1234.567890123456789 balance and 0.1234567890123456789 fill contracts retained.",
+  "restore": "Complete status snapshot and cursor identical after normal full exit and restart.",
+  "normalExitsMs": [
+    15313,
+    15236
+  ],
+  "rendererErrors": 0,
+  "screenshotsReviewed": true,
+  "limits": [
+    "Not real OKX ingestion/synchronization, two-venue common sync flow, practice account push or exactly-once financial events.",
+    "No cross-process private writer notification, Windows or full product acceptance.",
+    "Public chart/other pane readiness is outside this disabled-account test.",
+    "Current-head CI and integration with other candidates remain required before merge."
+  ],
+  "artifacts": [
+    {
+      "path": "native-account-20261102/acceptance.json.gz",
+      "sha256": "77f9514b3b55a92f7a2519d40664229621107188ae31454f5205317804960cc6"
+    },
+    {
+      "path": "native-account-20261102/backend-sidecar.log.gz",
+      "sha256": "c3f015b34227adb626442e24fda0745f6a32452bfcf8b5a56a2ae74d45bc9dc3"
+    },
+    {
+      "path": "native-account-20261102/clone.json.gz",
+      "sha256": "4cac57aeb49e65da97eaa056223a6794594130bba58d3052e52761790d3ef3c1"
+    },
+    {
+      "path": "native-account-20261102/committed-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "native-account-20261102/initial-account-stream.png",
+      "sha256": "56ff00858335ac18727d351535d1e4b85bf72b67209ac9e36e8ac29f84241db1"
+    },
+    {
+      "path": "native-account-20261102/reopened-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "native-account-20261102/restored-account-stream.png",
+      "sha256": "1687e854c59c32fd9416d611842f0d19e2890ec225472026eb31d19432d7a913"
+    },
+    {
+      "path": "native-account-20261102/source-package-manifest.json.gz",
+      "sha256": "b66831ca17e46b8bd865f1695f60e7ee99f72a54462885374472d116327b266b"
+    },
+    {
+      "path": "native-account-20261102/traffic.json.gz",
+      "sha256": "1f0ccb2118984dc75a9fcec31add94aa8a17dab23a94e253f7ec3d7aa5e05f53"
+    }
+  ]
+}
