@@ -7,6 +7,8 @@ valuation observations, which retain the existing ten-second cursor flush.
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
+from dataclasses import dataclass
 import time
 import uuid
 
@@ -14,6 +16,13 @@ from app.core.executors import run_storage
 from app.trading_accounts.models import TradingAccountError
 
 SCHEMA = 'candlescope.trading-account-state/1'
+
+
+@dataclass
+class _ReadBatch:
+    task: asyncio.Task | None = None
+    readers: int = 0
+    accepting: bool = True
 
 
 class TradingStateSubscription:
@@ -33,7 +42,7 @@ class TradingStateSubscription:
         if self._updates.closed:
             raise asyncio.CancelledError
         self._updates.clear_before_read()
-        state = await run_storage(self.owner.service.account_state, self.account_id)
+        state = await self.owner.read_state(self.account_id)
         if self._updates.closed:
             raise asyncio.CancelledError
         self._last_read = time.monotonic()
@@ -88,6 +97,42 @@ class TradingAccountDataManager:
         self._subscriptions = set()
         self._closed = False
         self._control_requests = 0
+        self._read_batches = {}
+        self._read_jobs = set()
+
+    async def read_state(self, account_id):
+        if self._closed:
+            raise TradingAccountError('TRADING_UNAVAILABLE', 'Trading accounts are unavailable', status=503)
+        batch = self._read_batches.get(account_id)
+        if batch is None or not batch.accepting:
+            batch = _ReadBatch()
+            async def read():
+                # Only collect readers BEFORE acquiring the WAL snapshot.
+                # Joining an already-running snapshot could clear a new
+                # subscriber's commit wakeup then return pre-commit state.
+                await asyncio.sleep(.005)
+                batch.accepting = False
+                return await run_storage(self.service.account_state, account_id)
+            batch.task = asyncio.create_task(read())
+            self._read_batches[account_id] = batch
+            self._read_jobs.add(batch.task)
+            def done(task):
+                self._read_jobs.discard(task)
+                if not task.cancelled():
+                    task.exception()  # Consume errors even if all readers left.
+            batch.task.add_done_callback(done)
+        batch.readers += 1
+        try:
+            # Releasing one view cannot cancel a sibling's shared read. Each
+            # subscriber owns its delivered copy and previous-state comparison.
+            return deepcopy(await asyncio.shield(batch.task))
+        finally:
+            batch.readers -= 1
+            if batch.readers == 0:
+                if self._read_batches.get(account_id) is batch:
+                    self._read_batches.pop(account_id, None)
+                if not batch.task.done():
+                    batch.task.cancel()
 
     def control_plane(self):
         if self._closed:
@@ -113,7 +158,9 @@ class TradingAccountDataManager:
         self._closed = True
         for subscription in tuple(self._subscriptions):
             subscription.close()
+        for task in tuple(self._read_jobs):
+            task.cancel()
 
     def diagnostics(self):
         return {'closed': self._closed, 'subscriptions': len(self._subscriptions),
-                'control_requests': self._control_requests}
+                'control_requests': self._control_requests, 'read_jobs': len(self._read_jobs)}

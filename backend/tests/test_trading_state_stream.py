@@ -246,3 +246,68 @@ def test_corrupt_optional_journal_metadata_cannot_hide_committed_positions(tmp_p
         # Damaged optional bytes remain available for diagnosis/recovery.
         assert store.one('SELECT fields_json FROM journal_revisions WHERE entry_id=?',(note['id'],))['fields_json']=='{'
     finally:core.close_trading();store.close()
+
+
+def test_same_account_readers_share_only_the_pre_snapshot_batch_and_own_their_outputs(tmp_path):
+    async def run():
+        store,service,aid,core,manager=make_fixture(tmp_path)
+        original=service.account_state;calls=[]
+        def count(account):calls.append(account);return original(account)
+        service.account_state=count
+        try:
+            a,b=await asyncio.gather(manager.subscribe_state(aid),manager.subscribe_state(aid))
+            ae,be=a.events(),b.events()
+            first,second=await asyncio.gather(anext(ae),anext(be))
+            assert calls==[aid]
+            first['state']['summary']['balance']='modified by one consumer'
+            first['state']['trades'].append({'not':'a ledger fact'})
+            assert second['state']['summary']['balance']=='1000' and second['state']['trades']==[]
+            assert service.account_summary(aid)['balance']=='1000'
+            await ae.aclose();await be.aclose()
+        finally:core.close_trading();store.close()
+    asyncio.run(run())
+
+
+def test_reader_joining_after_commit_cannot_join_an_older_running_snapshot(tmp_path):
+    async def run():
+        store,service,aid,core,manager=make_fixture(tmp_path)
+        original=service.account_state;captured=threading.Event();release=threading.Event();calls=[]
+        def blocked(account):
+            state=original(account);calls.append(account)
+            if len(calls)==1:
+                captured.set();assert release.wait(2)
+            return state
+        service.account_state=blocked
+        try:
+            old=asyncio.create_task(manager.subscribe_state(aid))
+            assert await asyncio.to_thread(captured.wait,1)
+            with store.transaction() as db:db.execute("UPDATE cash_flows SET amount='1001' WHERE account_id=?",(aid,))
+            new=asyncio.create_task(manager.subscribe_state(aid))
+            await asyncio.sleep(.02);release.set()
+            a,b=await asyncio.gather(old,new)
+            ae,be=a.events(),b.events()
+            assert (await anext(ae))['state']['summary']['balance']=='1000'
+            assert (await anext(be))['state']['summary']['balance']=='1001'
+            assert (await asyncio.wait_for(anext(ae),1))['state']['summary']['balance']=='1001'
+            await ae.aclose();await be.aclose()
+        finally:release.set();core.close_trading();store.close()
+    asyncio.run(run())
+
+
+def test_one_cancelled_prepare_cannot_cancel_the_sibling_shared_read(tmp_path):
+    async def run():
+        store,service,aid,core,manager=make_fixture(tmp_path)
+        original=service.account_state;calls=[]
+        def count(account):calls.append(account);return original(account)
+        service.account_state=count
+        try:
+            a=asyncio.create_task(manager.subscribe_state(aid));b=asyncio.create_task(manager.subscribe_state(aid))
+            await asyncio.sleep(0);a.cancel()
+            with pytest.raises(asyncio.CancelledError):await a
+            survivor=await asyncio.wait_for(b,1)
+            event=survivor.events();assert (await anext(event))['state']['summary']['balance']=='1000'
+            assert calls==[aid] and manager.diagnostics()['subscriptions']==1
+            await event.aclose();await asyncio.sleep(0)
+            assert not manager._read_batches and manager.diagnostics()['read_jobs']==0
+        finally:core.close_trading();store.close()
+    asyncio.run(run())

@@ -15,7 +15,7 @@ is explicit and does not hide valid financial views.
 
 The existing committed-wakeup helper coalesces notifications. The manager limits
 subscriptions to 16 and reads at most once per second per subscription, with
-read-free 15 s heartbeats. Closing views releases subscriptions, not background
+read-free 15 s heartbeats. Same-account readers may share a 5 ms batch only before a WAL snapshot starts; late readers acquire a new snapshot. Delivered views are independently copied, and the last reader releases its task. Closing views releases subscriptions, not background
 matching. Reconnect always obtains a complete state; the stream is not a
 resumable fill log. Cross-process writer notification, hedge positions and full
 issue #177 qualification are outside this first stage.
