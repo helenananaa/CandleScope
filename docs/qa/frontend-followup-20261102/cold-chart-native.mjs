@@ -8,6 +8,7 @@ q.s.receipt.sourceCommit = cp.execFileSync('git', ['rev-parse','HEAD'], {encodin
 q.s.receipt.transport = 'Packaged bundled backend; real public provider traffic, ordinary app requests, no substituted responses or limiter reset.';
 q.s.receipt.scope = 'Cold 5m chart, independent historical sibling viewport, backend row equality, persisted interval selection and normal full-process restart. This is not a before/after performance attribution or a deterministic native reproduction of the unscoped-interest race.';
 let running = false;
+const targetSymbol=process.env.CANDLESCOPE_COLD_SYMBOL ?? 'BTCUSDT';
 async function launch() {
   try { await q.record('launch', await q.launch()); running = true; await q.enableControl(); }
   catch (error) { running = Boolean(q.s.app); q.s.identity ??= {pid:q.s.app?.process()?.pid}; throw error; }
@@ -40,13 +41,14 @@ async function verifyRows(name) {
   const rows = chart.rows.filter(row=>row.is_closed!==false);
   assert.ok(rows.length >= 499);
   const url = new URL(q.s.backend+'/api/v1/klines/range');
-  for (const [key,value] of Object.entries({symbol:'BTCUSDT', interval:'5m', start_ms:rows[0].time*1000,
+  for (const [key,value] of Object.entries({symbol:targetSymbol, interval:'5m', start_ms:rows[0].time*1000,
     end_ms:rows.at(-1).time*1000, exchange:'binance', market_type:'spot', repair:'none', strict:'true'})) url.searchParams.set(key,String(value));
   const answer = await q.s.page.evaluate(async url=>{const r=await fetch(url);return {status:r.status,body:await r.json()};},String(url));
   assert.equal(answer.status,200);
+  assert.equal(answer.body.complete,true); assert.equal(answer.body.all_rows_final,true);
   const bars = answer.body.data; assert.equal(bars.length, rows.length);
   for (let i=0;i<rows.length;i++) {
-    assert.equal(Number(bars[i].open_time)/1000,Number(rows[i].time));
+    assert.equal(Number(bars[i].time),Number(rows[i].time));
     for (const field of ['open','high','low','close','volume']) assert.equal(Number(bars[i][field]),Number(rows[i][field]));
   }
   await q.record(name,{compared:rows.length,first:rows[0].time,last:rows.at(-1).time});
@@ -54,9 +56,9 @@ async function verifyRows(name) {
 try {
   const database=q.s.root+'/profile/data/candlescope.db';
   const count=Number(cp.execFileSync('/Users/ryanliang/CandleScope/backend/.venv/bin/python',['-c',
-    "import sqlite3,sys;db=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True);print(db.execute(\"select count(*) from klines where symbol='BTCUSDT' and interval='5m'\").fetchone()[0])",database],{encoding:'utf8'}));
+    "import sqlite3,sys;db=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True);print(db.execute(\"select count(*) from klines where symbol=? and interval='5m'\",(sys.argv[2],)).fetchone()[0])",database,targetSymbol],{encoding:'utf8'}));
   assert.equal(count,0,'preserve previous data; do not relabel a warm 5m series as cold');
-  await q.record('no-persisted-target-bars',{symbol:'BTCUSDT',interval:'5m',count});
+  await q.record('no-persisted-target-bars',{symbol:targetSymbol,interval:'5m',count});
   await launch();
   const configured=await q.configure([{session:q.session('BTCUSDT'),indicators:[]},{session:q.session('BTCUSDT'),indicators:[]}],'split-vertical');
   assert.equal(configured.result.state,'ready'); await q.ready(2,60_000);
@@ -64,9 +66,15 @@ try {
   const end=left.rows.at(-1).time-3600;
   assert.equal((await q.execute('cell-1','visibleTimeRange',{from:end-1800,to:end})).state,'applied');
   await q.delay(500); const before=(await q.query('cell-1')).snapshot.visibleRange;
-  const started=Date.now(); assert.equal((await q.execute('cell-2','interval',{interval:'5m'})).state,'applied');
+  const started=Date.now(); assert.equal((await q.execute('cell-2','session',q.session(targetSymbol,'5m'))).state,'applied');
   await q.ready(2,60_000); const elapsedMs=Date.now()-started;
-  const after=(await q.query('cell-1')).snapshot.visibleRange; assert.deepEqual(after,before);
+  const after=(await q.query('cell-1')).snapshot.visibleRange;
+  await q.record('cold-target-sibling-observation',{elapsedMs,before,after});
+  // Hydration can prepend 1000 rows and shift logical indices while keeping
+  // the same screen range. Check absolute time and zoom, not index equality.
+  assert.deepEqual(after.time,before.time); assert.equal(after.rightmostTime,before.rightmostTime);
+  assert.ok(Math.abs(after.barSpacing-before.barSpacing)<1e-8);
+  assert.ok(Math.abs((after.logical.to-after.logical.from)-(before.logical.to-before.logical.from))<1e-8);
   await q.record('cold-target-ready-and-sibling-preserved',{elapsedMs,before,after});
   await verifyRows('cold-closed-rows-match-backend'); await q.screenshot('cold-five-minute'); await quit();
   await launch(); await q.ready(2,60_000);
