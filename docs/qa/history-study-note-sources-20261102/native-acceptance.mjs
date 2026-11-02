@@ -33,8 +33,8 @@ async function launch(){
   await q.record('closed-empty-online-symbol-picker',{action:'real Escape key; selected BTC cache unchanged; no online catalog claim'});
  }
  await q.enableControl();
- const probe=await q.s.app.evaluate(async()=>{
-  const {spawnSync}=await import('node:child_process');
+ const probe=await q.s.app.evaluate(()=>{
+  const {spawnSync}=process.getBuiltinModule('node:child_process');
   const python=process.resourcesPath+'/python-runtime/python/bin/python3';
   const code="import errno,json,socket;s=socket.socket();s.settimeout(1)\ntry:s.connect(('192.0.2.1',443));raise AssertionError('Remote connection allowed')\nexcept OSError as e:assert e.errno in (errno.EPERM,errno.EACCES),(e.errno,str(e));print(json.dumps({'remoteErrno':e.errno,'remoteDeniedBeforeConnection':True}))\nfinally:s.close()";
   const result=spawnSync(python,['-B','-c',code],{encoding:'utf8',env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});
