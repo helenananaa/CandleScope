@@ -254,6 +254,24 @@ class BackfillHistoryPlanner:
         return self._history_service.calendars.get(calendar_id)
 
     @staticmethod
+    def source_second_close_delay(request: RepairRequest, plan: HistoryPlan | None) -> float | None:
+        """Keep a source-owned second gap pending across the local close edge.
+
+        A provider's successor/closed observation can arrive while the host
+        still classifies that second as forming. A temporary no-fetch outcome
+        must not finish its sole repair request or truncate the gap's tail.
+        The existing scheduler owns the wait; ordinary viewport requests keep
+        their current not-expected behavior.
+        """
+        if (request.interval != "1s" or not request.metadata.get("source_gap_id")
+                or plan is None or not any(
+                    item.reason is BoundaryReason.FORMING_BAR for item in plan.exclusions
+                )):
+            return None
+        close_ms = (int(request.end_ms) // 1000 + 1) * 1000
+        return max(.01, (close_ms - int(time.time() * 1000)) / 1000)
+
+    @staticmethod
     def no_fetch_outcome(
         request: RepairRequest,
         plan: HistoryPlan | None,

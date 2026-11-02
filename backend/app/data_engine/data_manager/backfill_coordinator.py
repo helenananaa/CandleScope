@@ -2244,6 +2244,10 @@ class BackfillCoordinator:
             self._complete(request, outcome)
             return request.request_id, future
         prepared = self._history_planner.prepare(request)
+        if self._history_planner.source_second_close_delay(request, prepared.plan) is not None:
+            # Preserve the exact source gap, including a temporarily forming
+            # tail. _run_with_retries defers it without occupying a worker.
+            prepared.request = request
         if prepared.request is None:
             self._ledger_mark_history_deferred(request, prepared.plan)
             future = self._future_for(request)
@@ -2354,6 +2358,11 @@ class BackfillCoordinator:
     async def _run_with_retries(self, request: RepairRequest) -> RepairOutcome:
         next_attempt = request._retry_attempt
         prepared = self._history_planner.prepare(request)
+        close_delay = self._history_planner.source_second_close_delay(request, prepared.plan)
+        if close_delay is not None:
+            # No physical attempt occurred. Preserve the retry budget while
+            # yielding this slot until the host can fetch the closed second.
+            raise RepairRetryDeferred(close_delay, max(0, next_attempt - 1))
         if prepared.request is None:
             return self._history_planner.no_fetch_outcome(request, prepared.plan)
         request = prepared.request
