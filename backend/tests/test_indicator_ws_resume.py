@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 import threading
 from types import SimpleNamespace
 
@@ -305,6 +307,18 @@ def test_indicator_critical_queue_evicts_preview_or_requires_resync() -> None:
         assert queue.empty()  # terminal until a fresh connection/snapshot
 
     asyncio.run(_run())
+
+
+def test_pine_output_time_replacement_requires_resync_instead_of_preview_coalescing() -> None:
+    fixture = json.loads((Path(__file__).parent / "fixtures/plugin_runtime/script-output-ranges.json").read_text())
+    update = next(case["update"] for case in fixture["cases"] if case["id"] == "negative-line")
+    assert update["reason"] == "bar_update"
+    assert update["type"] == "indicator.replace_range"
+    queue = asyncio.Queue(maxsize=1)
+    _queue_indicator_message(queue, update)
+    _queue_indicator_message(queue, update)
+    assert queue.get_nowait()["type"] == "resync_required"
+    assert queue.empty()
 
 
 def test_indicator_seed_cache_is_bounded_lru() -> None:

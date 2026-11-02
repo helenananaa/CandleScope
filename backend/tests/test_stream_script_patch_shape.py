@@ -330,3 +330,16 @@ def test_full_or_unproven_render_update_preserves_the_complete_snapshot(update) 
     assert message["type"] == "indicator.snapshot"
     assert len(message["lines"][0]["data"]) == 8
     assert message["result"]
+
+
+def test_complete_render_update_preserves_retained_time_coverage_before_slid_input() -> None:
+    retained = _bars(8)
+    full_range = {"start": retained[0]["time"], "end": retained[-1]["time"]}
+    result = replace(_pine_like_result(retained), meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "snapshot", "range": full_range,
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), retained[-3:], result, bar_time=retained[-1]["time"],
+    )
+    assert message["range"] == full_range
+    assert len(message["lines"][0]["data"]) == 8

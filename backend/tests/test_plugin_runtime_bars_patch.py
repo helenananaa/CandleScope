@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -164,12 +165,20 @@ async def test_patched_requests_give_callers_the_full_request_result(tmp_path) -
             expected = await full.execute_batch(sdk_request)
             actual = await patched.execute_batch(sdk_request)
             assert expected.ok, expected.diagnostics
-            assert actual == expected, events
+            # A missing input base forces a full output adoption even when
+            # the control process can keep its output patch. Ignore only
+            # this new transport scope when comparing complete semantics.
+            for result in (actual, expected):
+                assert result.meta["outputUpdate"]["schema"] == "render.update-range/1"
+                assert result.meta["outputUpdate"]["mode"] in {"snapshot", "range"}
+            semantic = lambda result: replace(result, meta={key: value for key, value in result.meta.items() if key != "outputUpdate"})
+            assert semantic(actual) == semantic(expected), events
             assert actual.bars_revision is None and actual.output_revision is None
             this = sent[mark:]
             if action == "tick":
                 assert [count for _patch, count in this] == [1] and this[0][0]["base"], (this, events)
             if action == "forget":
+                assert actual.meta["outputUpdate"]["mode"] == "snapshot"
                 assert [patch["base"] for patch, _count in this] == ["forgotten", None], (this, events)
                 assert this[1][1] == len(sdk_request.bars)
     finally:
