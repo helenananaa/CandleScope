@@ -7,6 +7,8 @@ import * as q from '../backend-batch1-20261101/driver.mjs';
 
 q.s.receipt.schema='candlescope.history-study-cursor-links-native/1';
 q.s.receipt.sourceCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+q.s.receipt.applicationSourceCommit=JSON.parse(await fs.readFile(q.s.root+'/assembly.json','utf8')).sourceCommit;
+q.s.receipt.buildFlags={VITE_DESKTOP_BUILD:'1',VITE_MULTI_WINDOW_ENABLED:'1',VITE_MULTI_CHART_16_ENABLED:false,VITE_MULTI_CHART_64_ENABLED:false};
 q.s.receipt.scope='Actual packaged macOS arm64 optional study clock links: default off, independent input/periods, source notes, target editing/availability, absolute cursor, playback leadership, two actual windows and full exit/restart. Explicit multi-window build/runtime flag; no formal replay or order qualification.';
 q.s.receipt.transport='Real packaged app/bundled backend on warm actual public-market DB; macOS sandbox loopback only; no response substitution.';
 q.s.env.MULTI_WINDOW_ENABLED='1';
@@ -84,8 +86,8 @@ async function command(groupId,name,args={},windowId='main-window'){
  assert.equal(result.state,'applied',JSON.stringify(result));return result;
 }
 const document=async()=> (await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot?.document??null;
-const state=(id,windowId='main-window')=>q.s.control.call('app.query',{windowId,groupId:'study:'+id,command:'inspect',args:{}}).then(value=>value.snapshot);
-const at=async(id,time,windowId='main-window')=>q.until(async()=>{const value=await state(id,windowId);return value?.cursorMs===time&&!value.busy?value:false;});
+const state=(id,windowId='main-window')=>q.until(async()=>{const value=await q.s.control.call('app.query',{windowId,groupId:'study:'+id,command:'inspect',args:{}});return value.snapshot??false;});
+const at=async(id,time,windowId='main-window')=>q.until(async()=>{const value=await state(id,windowId);return value?.cursorMs===time&&!value.busy&&!value.computing?value:false;});
 async function pageFor(windowId){
  return q.until(async()=>{
   for(const page of q.s.app.windows())try{
@@ -165,6 +167,7 @@ try{
  await q.until(async()=>!(await state(targetId,secondId)).busy);
  await command('study:'+targetId,'play',{},secondId);
  await q.until(async()=>(await state('cell-1')).playing===false&&(await state(targetId,secondId)).playing===true);
+ await q.until(async()=>(await state(targetId,secondId)).cursorMs>fixture.beforeMs);
  await command('study:'+targetId,'pause',{},secondId);
  await q.until(async()=>{const left=await state('cell-1'),right=await state(targetId,secondId);return left.cursorMs===right.cursorMs&&right.playing===false?{left,right}:false;});
  await q.record('playback-start-takes-lead-without-feedback',{source:await state(targetId,secondId),follower:await state('cell-1')});
