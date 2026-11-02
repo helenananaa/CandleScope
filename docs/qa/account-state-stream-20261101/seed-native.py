@@ -1,6 +1,10 @@
 from pathlib import Path
+import os
 from app.readonly_accounts.repository import AccountRepository
-root=Path(__file__).resolve().parents[3]/'output/account-state-stream-native-20261101/profile/data/readonly-accounts'
+repo=Path(__file__).resolve().parents[3]
+output=Path(os.environ.get('CANDLESCOPE_ACCOUNT_STREAM_QA_ROOT',repo/'output/account-state-stream-native-20261101')).resolve()
+assert output.is_relative_to(repo/'output'), 'Use only this worktree QA output'
+root=output/'profile/data/readonly-accounts'
 r=AccountRepository(root)
 r.bind('NATIVE-SYNTHETIC-FIXTURE','',1704067200000)
 r.status('error',error='ACCOUNT_NETWORK_UNAVAILABLE',enabled=False)

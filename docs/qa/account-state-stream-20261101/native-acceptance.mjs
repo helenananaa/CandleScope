@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import cp from 'node:child_process';
 import * as q from '../backend-batch1-20261101/driver.mjs';
-q.s.root=process.cwd()+'/output/account-state-stream-native-20261101';
+q.s.root=process.env.CANDLESCOPE_ACCOUNT_STREAM_QA_ROOT ?? process.cwd()+'/output/account-state-stream-native-20261101';
 q.s.receipt.schema='candlescope.account-state-stream-native/1';
 q.s.receipt.sourceCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 q.s.receipt.transport='Packaged bundled backend, actual guarded localhost stream/POST and UI; explicitly synthetic persisted disabled account without credentials or exchange account calls.';

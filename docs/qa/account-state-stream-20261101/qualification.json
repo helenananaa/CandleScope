@@ -3,7 +3,7 @@
   "backend_initial": 197,
   "dedicated_stream_tests_after_route_health_additions": 6,
   "frontend": "25 tests passed before adding replay tests; current combined result pending",
-  "native": "pending",
+  "native": "passed scoped disabled-account push and restart; native-account-qualification-20261102.json",
   "limitations": [
     "No two-venue common sync flow",
     "Not every financial event is delivered; snapshots deliberately coalesce",
@@ -15,6 +15,6 @@
   "typecheck_current_main_201": "passed",
   "plugin_architecture": "passed",
   "shared_postcommit_refactor_native_regression": "passed13steps;600bars508fills;same saved report after full owned exit/restart;explicit offline network attempts0",
-  "account_push_native": "pending",
+  "account_push_native": "passed7steps on application f4d271a5; guarded committed status mutation, zero status polls, subscription close/reopen, exact decimals and persistent cursor after normal full exits/restart; synthetic disabled profile without credentials",
   "lifecycle_tests": 7
 }
