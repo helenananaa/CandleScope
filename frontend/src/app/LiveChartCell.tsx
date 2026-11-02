@@ -1,6 +1,9 @@
 import ChartAccountOverlayMenu from "../features/trading-accounts/ChartAccountOverlayMenu.js";
 import type { ChartAccountOverlaySettings } from "../features/chart-workspace/chartAccountOverlaySettings.js";
 import { useChartTimeNavigation } from "../features/market-data/useChartTimeNavigation.js";
+import { useHistoryStudy } from "../features/history-study/useHistoryStudy.js";
+import { historyStudyOwner } from "../features/history-study/historyStudyOwner.js";
+import "../features/history-study/historyStudy.css";
 import { applicationSettingsPatch, nextCellChartSettings } from "../features/chart-workspace/chartWorkspaceChartSettings.js";
 import { useCellChartTheme } from "../features/settings/chartAppearanceSettings.js";
 import { ChartIntervalUnavailable } from "./ChartIntervalUnavailable.js";
@@ -132,6 +135,8 @@ const DrawingToolbar = lazy(() => {
 });
 const RightMarketRail = lazy(() => import("./RightMarketRail.js"));
 const QuickReplayOverlay = lazy(() => import("../features/trading-accounts/QuickReplayOverlay.js"));
+const HistoryStudyOverlay = lazy(() => import("../features/history-study/HistoryStudyOverlay.js"));
+const HistoryStudySetupDialog = lazy(() => import("../features/history-study/HistoryStudySetupDialog.js"));
 const loadChartStrategyTesterCellBridge = () => import(
   "../features/backtest/chart-tester/ChartStrategyTesterCellBridge.js"
 );
@@ -781,7 +786,10 @@ function LiveChartCell({
 
 
   const [quickReplay, setQuickReplay] = useState<QuickReplayRequest | null>(null);
-  const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && quickReplay === null,
+  const studyOwner = historyStudyOwner(workspaceId, cell.id);
+  const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
+  const [studySetup, setStudySetup] = useState(false);
+  const timeNavigation = useChartTimeNavigation({ active, enabled: !obscured && quickReplay === null && !study.masked,
     cellId: cell.id, workspaceId, sessionKey: chartSession.view.sessionKey,
     marketData: sourceMarketData, surface: chartSurface.actions, links: linkCoordinator });
   const exitQuickReplay = useCallback(() => setQuickReplay(null), []);
@@ -991,7 +999,7 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
-          <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={quickReplay !== null} />
+          <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={quickReplay !== null || study.masked} />
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
             layoutCellIds={layoutCellIds}
@@ -1034,9 +1042,9 @@ function LiveChartCell({
             drawingInteractionReady={drawingInteractionReady}
             drawingControlsHost={drawingControlsHost}
             onDrawingInteractionReadyChange={setDrawingInteractionReady}
-            paused={obscured || quickReplay !== null}
+            paused={obscured || quickReplay !== null || study.masked}
           />}
-          {quickReplay && (
+          {quickReplay && !study.masked && (
             <Suspense fallback={null}>
               <QuickReplayOverlay
                 key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
@@ -1047,6 +1055,18 @@ function LiveChartCell({
               />
             </Suspense>
           )}
+          {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
+            <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
+              manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
+              active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={study.move} onRetry={study.retry} />
+          </Suspense>}
+          {study.masked && !study.playback && <div className="history-study-mask" role="status">
+            {t(study.error ? "study.error" : "study.loading")}
+            {study.error ? <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button> : null}
+          </div>}
+          {!study.masked && study.error && <div className="study-recovery-message" role="alert">
+            {t("study.error")} <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button>
+          </div>}
           {active && model.chartWorkspace.exportPanel.isOpen && (
             <Suspense fallback={null}>
               <ExportPanel {...model.chartWorkspace.exportPanel} />
@@ -1091,6 +1111,8 @@ function LiveChartCell({
           extensionControls={(
             <>
               {workspaceControls}
+              {!study.active && <button type="button" className="ui-control" disabled={study.pending || study.busy || quickReplay !== null}
+                onClick={() => { if (!study.view) study.retry(); else setStudySetup(true); }}>{t("study.title")}</button>}
               {timeNavigation.available && <button type="button" className="ui-control"
                 title={t("chartTime.shortcut")} onClick={() => timeNavigation.setOpen(true)}>{t("chartTime.title")}</button>}
               <PluginUiErrorBoundary>
@@ -1135,6 +1157,10 @@ function LiveChartCell({
           {timeNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog
             key={chartSession.view.sessionKey} cellId={cell.id} onClose={() => timeNavigation.setOpen(false)}
             onSubmit={timeNavigation.submit} /></Suspense>}
+          {studySetup && marketWorkspaceResources && <Suspense fallback={null}><HistoryStudySetupDialog key={`${workspaceId}:${cell.id}`}
+            owner={studyOwner} manager={marketWorkspaceResources.dataManager.historyStudy} onSelect={study.select}
+            series={liveSourceSession} bars={sourceMarketData.view.bars} busy={study.busy ?? false} error={study.error}
+            onCapture={study.capture} onClose={() => setStudySetup(false)} /></Suspense>}
           <PluginUiErrorBoundary>
             <PluginLiveControl runtime={plugins} />
           </PluginUiErrorBoundary>
