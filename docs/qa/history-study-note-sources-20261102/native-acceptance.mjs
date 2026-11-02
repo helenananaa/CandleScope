@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
 import cp from 'node:child_process';
 import fs from 'node:fs/promises';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
 import * as q from '../backend-batch1-20261101/driver.mjs';
 
 q.s.receipt.schema='candlescope.history-study-note-sources-native/1';
 q.s.receipt.sourceCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 q.s.receipt.scope='Packaged macOS arm64 original-note time projection on controlled persisted manual-account fixtures, real fixed public-market input, actual owning service/API and manager, per-chart sources, rewind, missing history, supplements and full exit/restart. Synthetic note save times are not real historical human-authorship evidence; no order or private exchange qualification.';
+q.s.receipt.transport='Actual packaged app/bundled backend over loopback HTTP/WS; macOS process sandbox denies outbound remote sockets; warm committed real public-market DB; no response mocking or online-latest claim.';
 const fixture=JSON.parse(await fs.readFile(q.s.root+'/fixture.json','utf8'));
+const policy=await fs.readFile(fileURLToPath(new URL('./loopback-only.sb',import.meta.url)));
+await fs.writeFile(q.s.root+'/loopback-only.sb',policy);
+const shellQuote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+const executable=q.s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope';
+const launcher=q.s.root+'/loopback-launcher.sh';
+await fs.writeFile(launcher,'#!/bin/sh\nexec /usr/bin/sandbox-exec -f '+shellQuote(q.s.root+'/loopback-only.sb')+' '+shellQuote(executable)+' "$@"\n',{mode:0o700});
+q.s.receipt.networkIsolation={policySha256:crypto.createHash('sha256').update(policy).digest('hex'),launcherSha256:crypto.createHash('sha256').update(await fs.readFile(launcher)).digest('hex'),launcher,executable};
 let running=false;
 const sourceReads=[];
 const cell=id=>q.s.page.locator(`[data-chart-cell-id="${id}"]`);
@@ -14,10 +24,19 @@ const region=id=>q.s.page.locator(`[data-study-id="${id}"]`);
 const stamp=ms=>new Date(ms).toISOString().slice(0,19).replace(/:00$/,'');
 const owner=(workspace,id)=>Buffer.from(JSON.stringify([workspace,id])).toString('base64url');
 async function launch(){
- try{await q.record('packaged-launch',await q.launch());running=true;}
+ try{await q.record('packaged-launch',await q.launch({executablePath:launcher}));running=true;}
  catch(error){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw error;}
  q.s.page.on('request',request=>{if(request.url().includes('/journal-at-time'))sourceReads.push({at:Date.now(),url:request.url(),method:request.method()});});
  await q.enableControl();
+ const probe=await q.s.app.evaluate(async()=>{
+  const {spawnSync}=await import('node:child_process');
+  const python=process.resourcesPath+'/python-runtime/python/bin/python3';
+  const code="import errno,json,socket;s=socket.socket();s.settimeout(1)\ntry:s.connect(('192.0.2.1',443));raise AssertionError('Remote connection allowed')\nexcept OSError as e:assert e.errno in (errno.EPERM,errno.EACCES),(e.errno,str(e));print(json.dumps({'remoteErrno':e.errno,'remoteDeniedBeforeConnection':True}))\nfinally:s.close()";
+  const result=spawnSync(python,['-B','-c',code],{encoding:'utf8',env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}});
+  return{status:result.status,stdout:result.stdout,stderr:result.stderr};
+ });
+ assert.equal(probe.status,0,JSON.stringify(probe));assert.equal(JSON.parse(probe.stdout).remoteDeniedBeforeConnection,true);
+ await q.record('actual-sandboxed-child-remote-denial',probe);
 }
 async function quit(){await q.quit();await q.exited();running=false;await q.record('full-owned-exit',{elapsedMs:Date.now()-q.s.quitStartedAt,processes:q.s.quitPids});}
 const query=(id,command='inspect',args={})=>q.s.control.call('app.query',{windowId:'main-window',groupId:'study:'+id,command,args});
