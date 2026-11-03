@@ -214,6 +214,11 @@ try{
  await execute('cell-1','exit');await live('cell-1');await live('cell-2');await live(targetId,secondId);await live(liveId,secondId);
  await resumeWithPeerCommitHeld();await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.beforeMs);await at(targetId,fixture.afterMs,secondId);await live(liveId,secondId);
  assert.equal((await view('cell-1')).study.id,a.id);assert.equal((await view('cell-2')).study.id,b.id);assert.equal((await view(targetId)).study.id,c.id);
+ await region(b.id).getByText('Native original version one',{exact:true}).waitFor();
+ assert.equal(await region(b.id).getByText('Native original future version two',{exact:true}).count(),0);
+ await secondPage.locator(`[data-study-id="${c.id}"]`).getByText('Native original future version two',{exact:true}).waitFor();
+ assert.equal(await region(a.id).getByText('Native original version one',{exact:true}).count(),0);
+ assert.equal(await region(a.id).getByText('Native original future version two',{exact:true}).count(),0);
  await modeButton().waitFor();assert.equal((await view(liveId)).study,null);
  await q.record('mode-only-resumes-own-inputs-and-own-cuts-unprepared-chart-explicit',{a:await state('cell-1'),b:await state('cell-2'),c:await state(targetId,secondId),unprepared:await view(liveId)});
  await execute('cell-1','seekCursor',{timeMs:fixture.earlyMs});await modeButton().waitFor();
@@ -231,6 +236,7 @@ try{
  const dInput=(await view(liveId)).study;
  const math=async()=>({a:await verify('cell-1','main-window',a,fixture.earlyMs),b:await verify('cell-2','main-window',b,fixture.earlyMs),c:await verify(targetId,secondId,c,fixture.earlyMs),d:await verify(liveId,secondId,dInput,fixture.earlyMs)});
  await q.record('mode-and-cursor-enter-own-inputs-at-one-causal-cut',await math());
+ for(const [page,id] of [[q.s.page,a.id],[q.s.page,b.id],[secondPage,c.id],[secondPage,d]])for(const text of ['Native original version one','Native original future version two','Native future-created note'])assert.equal(await page.locator(`[data-study-id="${id}"]`).getByText(text,{exact:true}).count(),0);
  await lostExit();assert.deepEqual(counts(),fixture.counts);
  await q.until(async()=>(await q.inspect()).persistence.state==='saved');await q.screenshot('mode-links-live-recovered');await quit();
  await launch();secondPage=await pageFor(secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:secondId,message:error.message}));
