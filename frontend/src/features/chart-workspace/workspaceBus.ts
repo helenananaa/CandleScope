@@ -3,6 +3,7 @@ import type {
   ChartCellId,
   ChartWindowId,
   ChartWorkspaceId,
+  ChartWorkspaceDocument,
   ChartWorkspaceLibrarySnapshot,
 } from "./chartWorkspaceTypes.js";
 
@@ -65,6 +66,7 @@ function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceL
 }
 
 export class WorkspaceBusClient {
+  private revisionWaiters = new Set<(error?: Error) => void>();
   private state: WorkspaceBusState = {
     ok: true,
     ready: false,
@@ -96,6 +98,22 @@ export class WorkspaceBusClient {
 
   get current(): WorkspaceBusState {
     return this.state;
+  }
+
+  waitForWorkspaceRevision(workspaceId: string, minimumRevision: number, timeoutMs = 5_000,
+    accepts?: (document: ChartWorkspaceDocument) => boolean): Promise<void> {
+    if (!Number.isSafeInteger(minimumRevision) || minimumRevision < 0 || timeoutMs <= 0) return Promise.reject(new Error("Invalid workspace configuration revision"));
+    return new Promise((resolve, reject) => {
+      const check = (error?: Error) => {
+        const document = this.state.snapshot?.workspaces.find(record => record.id === workspaceId)?.document;
+        if (!error && !(this.state.ready && this.state.ok && (this.state.revisions[workspaceId] ?? -1) >= minimumRevision
+          && (!accepts || (document && accepts(document))))) return;
+        this.revisionWaiters.delete(check); clearTimeout(timer);
+        if (error) reject(error); else resolve();
+      };
+      const timer = setTimeout(() => check(new Error("Workspace configuration was not committed in time")), timeoutMs);
+      this.revisionWaiters.add(check); check();
+    });
   }
 
   /** Register message delivery without adopting the 64-chart snapshot/CAS
@@ -250,6 +268,7 @@ export class WorkspaceBusClient {
   }
 
   dispose(): void {
+    for (const waiter of [...this.revisionWaiters]) waiter(new Error("Workspace connection closed"));
     this.linkAttachmentEpoch += 1; this.linkAttachments = 0; this.linkRegistration = null;
     this.bridgeUnsubscribe?.();
     this.bridgeUnsubscribe = null;
@@ -264,6 +283,9 @@ export class WorkspaceBusClient {
       revisions: { ...state.revisions },
       snapshot: state.snapshot ? cloneSnapshot(state.snapshot) : null,
     };
+    // Own commit replies update authority without notifying React's snapshot
+    // merge lane. Configuration barriers must also observe those replies.
+    for (const waiter of [...this.revisionWaiters]) waiter();
     if (notify) for (const listener of [...this.snapshotListeners]) listener(this.state);
   }
 

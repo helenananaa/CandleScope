@@ -108,6 +108,37 @@ test("current frontend workspace restores and commits through the real desktop h
   }
 });
 
+test("configuration barriers observe an own commit without a snapshot echo and reject when the client closes", async () => {
+  const originalWindow = globalThis.window, hub = new WorkspaceBusHub();
+  hub.register("main-window", () => {});
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    onWorkspaceBusEvent: () => () => {},
+    workspaceBusConnect: async ({ snapshot }: { snapshot: unknown }) => hub.connect("main-window", snapshot),
+    workspaceBusCommit: async (value: unknown) => hub.commit("main-window", value),
+  } } });
+  const bus = new WorkspaceBusClient("main-window");
+  try {
+    const record = createDefaultChartWorkspaceRecord(1), snapshot = { activeWorkspaceId: record.id, workspaces: [record] };
+    await bus.connect(snapshot);
+    let confirmed = false;
+    const wait = bus.waitForWorkspaceRevision(record.id, record.document.revision + 1).then(() => { confirmed = true; });
+    let policyConfirmed = false;
+    const policy = bus.waitForWorkspaceRevision(record.id, record.document.revision, 5_000,
+      document => document.linkGroups["group-primary"]?.peerPolicy.studyMode === true).then(() => { policyConfirmed = true; });
+    await Promise.resolve(); assert.equal(confirmed, false);
+    assert.equal(policyConfirmed, false);
+    const edited = structuredClone(snapshot); edited.workspaces[0]!.document.revision++;
+    edited.workspaces[0]!.document.linkGroups["group-primary"]!.peerPolicy.studyMode = true;
+    await bus.commit(edited); await Promise.all([wait, policy]); assert.equal(confirmed, true); assert.equal(policyConfirmed, true);
+    const closed = bus.waitForWorkspaceRevision(record.id, edited.workspaces[0]!.document.revision + 1);
+    bus.dispose(); await assert.rejects(closed, /closed/);
+  } finally {
+    bus.dispose();
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
+
 test("rejected native restore surfaces its error instead of resolving an unready state", async () => {
   const originalWindow = globalThis.window;
   Object.defineProperty(globalThis, "window", {

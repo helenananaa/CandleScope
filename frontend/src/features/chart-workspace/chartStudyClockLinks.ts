@@ -21,7 +21,7 @@ interface Intent {
   operation: Operation; leaderOrder: number;
   settled: Promise<void>; release(): void;
 }
-interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number; operation: Operation; leaderOrder: number; active?: boolean }
+interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number; configurationRevision: number; configurationKey: string; operation: Operation; leaderOrder: number; active?: boolean }
 interface Registration { scope: string; port: ChartStudyClockPort }
 interface Pending {
   scope: string; sourceCellId: string; order: number | null; operation: "mode" | "cursor";
@@ -36,6 +36,8 @@ function payload(value: unknown): Payload | null {
     && typeof row.studyId === "string" && row.studyId.length <= 128
     && Number.isSafeInteger(row.cursorMs) && row.cursorMs! >= 0
     && Number.isSafeInteger(row.revision) && row.revision! >= 0
+    && Number.isSafeInteger(row.configurationRevision) && row.configurationRevision! >= 0
+    && typeof row.configurationKey === "string" && row.configurationKey.length <= 32_768
     && (row.operation === "cursor" || row.operation === "tick" || row.operation === "mode")
     && (row.operation !== "mode" || typeof row.active === "boolean")
     && Number.isSafeInteger(row.leaderOrder) && row.leaderOrder! >= 0
@@ -73,6 +75,7 @@ export class ChartStudyClockLinks {
   private bus: WorkspaceBusClient | null = null;
   private localOrder = 0;
   private scopeEpoch = 0;
+  private documentWaiters = new Set<() => void>();
   constructor(private document: ChartWorkspaceDocument, private scope: string) {}
 
   updateDocument(document: ChartWorkspaceDocument, scope: string) {
@@ -85,6 +88,32 @@ export class ChartStudyClockLinks {
       this.issues.clear(); this.emit();
     }
     this.document = document; this.scope = scope;
+    for (const waiter of [...this.documentWaiters]) waiter();
+  }
+  private waitForDocumentRevision(revision: number, sourceCellId: string, key: string, epoch: number, timeoutMs = 5_000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (epoch === this.scopeEpoch && (this.document.revision < revision || this.configurationKey(sourceCellId) !== key)) return;
+        this.documentWaiters.delete(check); clearTimeout(timer);
+        if (epoch !== this.scopeEpoch) reject(new Error("Study workspace changed")); else resolve();
+      };
+      const timer = setTimeout(() => { this.documentWaiters.delete(check); reject(new Error("Study configuration did not reach this chart")); }, timeoutMs);
+      this.documentWaiters.add(check); check();
+    });
+  }
+  private async committedConfiguration(intent: Intent): Promise<{ revision: number; key: string }> {
+    const bus = this.bus;
+    if (!bus?.isNative()) return { revision: this.document.revision, key: this.configurationKey(intent.cellId) };
+    const deadline = Date.now() + 5_000;
+    const remaining = () => { const value = deadline - Date.now(); if (value <= 0) throw new Error("Study configuration timed out"); return value; };
+    for (;;) {
+      const revision = this.document.revision;
+      const key = this.configurationKey(intent.cellId);
+      await bus.waitForWorkspaceRevision(intent.scope, revision, remaining(), document => this.configurationKey(intent.cellId, document) === key);
+      await this.waitForDocumentRevision(Math.max(revision, bus.current.revisions[intent.scope] ?? revision), intent.cellId, key, intent.epoch, remaining());
+      if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || bus !== this.bus) throw new Error("Study configuration owner changed");
+      if (this.document.revision <= (bus.current.revisions[intent.scope] ?? -1)) return { revision: this.document.revision, key };
+    }
   }
   connectWorkspaceBus(bus: WorkspaceBusClient | null): () => void {
     this.bus = bus;
@@ -122,10 +151,16 @@ export class ChartStudyClockLinks {
     return scope === this.scope ? this.issues.get(this.issueKey(cellId, "mode")) ?? this.issues.get(this.issueKey(cellId, "cursor")) ?? null : null;
   }
   private emit() { for (const listener of this.listeners) listener(); }
-  private targets(sourceCellId: string, operation: Operation = "cursor"): string[] {
-    const visible = new Set(Object.values(this.document.windows).flatMap(window => visibleCellIds(window.layoutTree)));
-    return resolveChartLinkTargetsForChannel(this.document, sourceCellId, operation === "mode" ? "studyMode" : "studyCursor")
+  private targets(sourceCellId: string, operation: Operation = "cursor", document = this.document): string[] {
+    const visible = new Set(Object.values(document.windows).flatMap(window => visibleCellIds(window.layoutTree)));
+    return resolveChartLinkTargetsForChannel(document, sourceCellId, operation === "mode" ? "studyMode" : "studyCursor")
       .filter(target => visible.has(target.cellId)).map(target => target.cellId);
+  }
+  private configurationKey(sourceCellId: string, document = this.document): string {
+    // Revisions can coincide between optimistic edits in different windows.
+    // Compare the effective routing too, without coupling clocks to styles or
+    // copying another chart's data/configuration into the recipient.
+    return JSON.stringify([this.targets(sourceCellId, "mode", document).sort(), this.targets(sourceCellId, "cursor", document).sort()]);
   }
   canStartAutomatic(cellId: string, scope: string): boolean {
     if (scope !== this.scope || this.registrations.get(cellId)?.scope !== scope || this.userIntents.has(cellId)) return false;
@@ -181,9 +216,21 @@ export class ChartStudyClockLinks {
     const event: WorkspaceBusLinkEvent & { kind: "studyCursor" | "studyMode" } = { workspaceId: this.scope, sourceCellId: intent.cellId,
       sourceWindowId: this.bus?.windowId ?? "local-window", kind: intent.operation === "mode" ? "studyMode" : "studyCursor",
       payload: { requestId, cursorMs: state.cursorMs, studyId: state.studyId, revision: state.revision,
+        configurationRevision: this.document.revision,
+        configurationKey: this.configurationKey(intent.cellId),
         operation: intent.operation, leaderOrder: intent.operation === "tick" ? intent.leaderOrder : 0,
         ...(intent.operation === "mode" ? { active: state.active } : {}) } satisfies Payload };
     try {
+      const configuration = await this.committedConfiguration(intent);
+      if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)
+        || this.registrations.get(intent.cellId) !== registration || !this.pending.has(requestId)) {
+        this.finish(requestId, false); return result;
+      }
+      const currentTargets = this.targets(intent.cellId, intent.operation);
+      if (!currentTargets.length) { this.finish(requestId, false); return result; }
+      this.pending.get(requestId)!.results = new Map(currentTargets.map(cellId => [cellId, null]));
+      (event.payload as Payload).configurationRevision = configuration.revision;
+      (event.payload as Payload).configurationKey = configuration.key;
       // Browser pages have no central clock ordering authority. Only this
       // renderer is supported there; desktop windows use the main-process stamp.
       const ordered = this.bus?.isNative() ? await boundedOrderReply(this.bus.publishOrderedLink(event))
@@ -197,6 +244,7 @@ export class ChartStudyClockLinks {
       if (order === null || acknowledged?.requestId !== requestId || acknowledged.cursorMs !== state.cursorMs
         || acknowledged.studyId !== state.studyId || acknowledged.revision !== state.revision
         || acknowledged.operation !== intent.operation
+        || acknowledged.configurationRevision !== configuration.revision || acknowledged.configurationKey !== configuration.key
         || (intent.operation === "mode" && acknowledged.active !== state.active)
         || acknowledged.leaderOrder !== (intent.operation === "tick" ? intent.leaderOrder : 0)) throw new Error("Invalid clock acknowledgement");
       if (pending) {
@@ -229,6 +277,8 @@ export class ChartStudyClockLinks {
     const body = payload(event.payload), order = orderOf(event);
     if (!body || order === null || event.workspaceId !== this.scope) return;
     if ((body.operation === "mode") !== (event.kind === "studyMode")) return;
+    try { await this.waitForDocumentRevision(body.configurationRevision, event.sourceCellId, body.configurationKey, epoch); } catch { return; }
+    if (epoch !== this.scopeEpoch || event.workspaceId !== this.scope) return;
     const leader = body.operation === "tick" ? body.leaderOrder : order;
     if (leader > order) return;
     const targets = this.targets(event.sourceCellId, body.operation);

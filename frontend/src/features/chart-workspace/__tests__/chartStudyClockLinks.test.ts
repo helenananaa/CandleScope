@@ -37,6 +37,7 @@ function nativeNetwork() {
   const deferNext = new Set<string>(), delayedPublications: Array<() => void> = [];
   let hold = false;
   const bus = (windowId: string) => ({ windowId, isNative: () => true,
+    current: { revisions: { workspace: 0 } }, waitForWorkspaceRevision: async () => {},
     subscribeLink: (listener: (event: WorkspaceBusLinkEvent) => void) => { receivers.set(windowId, listener); return () => receivers.delete(windowId); },
     publishLink: (event: Omit<WorkspaceBusLinkEvent, "sourceWindowId">) => {
       const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
@@ -63,6 +64,40 @@ function nativeNetwork() {
     deliverAllDelayed: () => { while (delayedEvents.length) { const next = delayedEvents.shift()!; receivers.get(next.windowId)!(next.event); } } };
 }
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test("a mode action waits for its configuration commit before broadcasting", async () => {
+  const doc = document(); doc.revision = 4; doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  const remote = structuredClone(doc); remote.revision = 3; remote.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = false;
+  const network = nativeNetwork(), bus = network.bus("main"), left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(remote, "workspace");
+  const a = clock(), b = clock(120_000, { active: false, followReady: false });
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  let committed = () => {}; const held = new Promise<void>(resolve => { committed = resolve; });
+  bus.waitForWorkspaceRevision = async () => held;
+  const releaseA = left.connectWorkspaceBus(bus), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  const action = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "mode"));
+  try {
+    await flush(); assert.equal(network.wire.filter(event => event.kind === "studyMode").length, 0);
+    right.updateDocument(doc, "workspace"); bus.current.revisions.workspace = 4; committed();
+    assert.equal(await action, true); assert.equal(b.state.active, true);
+  } finally { committed(); left.updateDocument(doc, "closed"); right.updateDocument(doc, "closed"); await action; releaseA(); releaseB(); }
+});
+
+test("a remote mode event waits for the committed policy to reach the rendered document", async () => {
+  for (const remoteRevision of [3, 4]) {
+  const doc = document(); doc.revision = 4; doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  const remote = structuredClone(doc); remote.revision = remoteRevision; remote.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = false;
+  const network = nativeNetwork(), bus = network.bus("main"), left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(remote, "workspace");
+  bus.current.revisions.workspace = 4;
+  const a = clock(), b = clock(120_000, { active: false, followReady: false });
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(bus), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  const action = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "mode"));
+  try {
+    await flush(); assert.equal(b.state.active, false);
+    right.updateDocument(doc, "workspace"); await flush(); assert.equal(b.state.active, true); assert.equal(await action, true);
+  } finally { left.updateDocument(doc, "closed"); right.updateDocument(doc, "closed"); await action; releaseA(); releaseB(); }
+  }
+});
 
 test("legacy documents default cursor links off; an explicit choice survives the actual workspace restore", () => {
   const doc = document();
@@ -387,7 +422,7 @@ test("owner changes and replaced registrations fence an in-flight target acknowl
   let finish: ((value: boolean) => void) | undefined;
   b.port.move = () => new Promise(resolve => { finish = resolve; });
   links.register("cell-1", a.port, "workspace"); const unregister = links.register("cell-2", b.port, "workspace");
-  const result = links.publishUserMove(links.beginUserAction("cell-1", "workspace"));
+  const result = links.publishUserMove(links.beginUserAction("cell-1", "workspace")); await flush();
   unregister(); links.register("cell-2", clock(10).port, "workspace"); finish!(true);
   assert.equal(await result, false);
   assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "superseded");
