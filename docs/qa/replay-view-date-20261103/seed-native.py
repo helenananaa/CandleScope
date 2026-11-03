@@ -8,6 +8,7 @@ assert root.name.startswith('replay-view-date-native-') and root.parent.name=='o
 database=Path(os.environ['KLINES_DB_PATH']).resolve()
 assert database==root/'profile/data/candlescope.db' and not database.exists()
 fixture.FIXTURE_SYMBOLS=(("BTCUSDT",30000.0),("ETHUSDT",2000.0))
+fixture.FIXTURE_ROWS=15000
 fixture._seed_klines()
 from app.data_engine.storage.klines_repo import upsert_klines
 with sqlite3.connect(database) as db:
