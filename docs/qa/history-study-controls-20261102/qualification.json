@@ -1,0 +1,62 @@
+{
+  "schema": "candlescope.history-study-control-qualification/1",
+  "applicationSource": "087236f3ecbdab5880785ef85d13fe887973eed2",
+  "qaSource": "72ce5068c8532911ee87a967d8947ba735b6b09f",
+  "local": {
+    "frontend": 4800,
+    "performance": 1,
+    "desktop": 127,
+    "failures": 0,
+    "typecheck": true,
+    "lint": "0 errors; inherited SingleChartPanes cleanup ref warning",
+    "architecture": true,
+    "plugins": true,
+    "locales": 30,
+    "productionBuild": true,
+    "desktopBuild": true
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "passed": true,
+    "steps": 22,
+    "rendererErrors": [],
+    "normalExitMs": [
+      15244,
+      15334
+    ],
+    "configurationReceipt": "ready",
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "mismatches": [],
+    "strictSignatureExit": 0,
+    "appAsarSha256": "48e8f349b1f14f9330da304738f321b6e7a28e6f5ec9b3c4ddbac9c1dedee0d7",
+    "ownedProcessesAbsent": true,
+    "scope": [
+      "study command bars/indicators and workspace diagnostics use actual revealed prefix",
+      "old live/chart/drawing/export/plugin control groups absent in study and restored on exit",
+      "live workspace replacement rejected before mutation",
+      "viewport navigation does not seek; future time anchor rejected",
+      "durable seek rewind rejects old context and hides future supplement",
+      "full restart restores paused study/control mode/cursor",
+      "independent second study and independently calculated MA20",
+      "no financial/account/order/fill/journal side effects"
+    ]
+  },
+  "preservedFailures": [
+    {
+      "attempt": "history-study-controls-native-20261102",
+      "cause": "Harness assumed generic command request receipts had configuration helper result wrapper; corrected only assertions",
+      "productChanged": false
+    },
+    {
+      "attempt": "history-study-controls-native-final-20261102",
+      "cause": "Warm public history had a 45 minute gap; latest request correctly returned applied READINESS_TIMEOUT with 454 rows. Retained and not counted as latest readiness acceptance",
+      "productChanged": false
+    }
+  ],
+  "limits": [
+    "Warm committed public-market QA input; no online cold or current latest completeness claim",
+    "Runtime/plugin assets reused after input checks; current frontend rebuilt; not a fresh engine build or official CI artifact",
+    "Not arbitrary extension host service causality, finer-period reconstruction, original note sources, optional linking, formal replay, full 157 items or Windows qualification"
+  ]
+}

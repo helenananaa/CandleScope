@@ -28,9 +28,9 @@ export async function until(check, timeout=25000) {
   while(Date.now()<end) { last=await check(); if(last) return last; await delay(200); }
   throw new Error('Timed out waiting for acceptance state');
 }
-export async function launch() {
+export async function launch({executablePath = s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope'} = {}) {
   s.startedAt=Date.now();
-  s.app=await _electron.launch({executablePath:s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope',
+  s.app=await _electron.launch({executablePath,
     args:['--no-sandbox'], env:{...s.env,
       CANDLESCOPE_DESKTOP_USER_DATA:s.root+'/profile',CANDLE_DATA_DIR:s.root+'/profile/data',
       CANDLESCOPE_DESKTOP_UI_PORT:'0',CANDLESCOPE_DESKTOP_BACKEND_PORT:'0',

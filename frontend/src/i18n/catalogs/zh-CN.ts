@@ -1,6 +1,8 @@
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
+import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
+  ...historyStudyChinese,
   "chartTime.title": "跳转到日期",
   "chartTime.shortcut": "跳转到日期（Alt+G）",
   "chartTime.input": "日期和时间（UTC）",

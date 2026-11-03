@@ -1,0 +1,68 @@
+{
+  "schema": "candlescope.history-study-navigation-worker-main-qualification/1",
+  "packagedSourceCommit": "501dde0fcada4d783a1787a1fe5c75280f95503e",
+  "includesMain": "437eba53a52f7decadcc459746002f1da44b1cb5",
+  "frontendProductionTree": "Byte-identical to f1f6ec5f/74d1a54b; #224 changes backend worker launch flags, its tests/CI and QA only.",
+  "checks": {
+    "frontend": 4822,
+    "performance": 1,
+    "desktop": 128,
+    "failed": 0,
+    "skipped": 0,
+    "architecture": true,
+    "plugins": true,
+    "i18nLocales": 30,
+    "i18nKeys": 5342,
+    "typecheck": true,
+    "lint": true,
+    "productionAndDesktopBuild": true,
+    "actualBundledBackend": 65,
+    "bundledBackendSkipped": 2,
+    "bundledBackendWarnings": "One inherited Starlette anyio BlockingPortal deprecation.",
+    "skipReason": "Windows AppContainer-only tests on macOS; not counted as passes."
+  },
+  "native": {
+    "passed": true,
+    "steps": 14,
+    "rendererErrors": [],
+    "normalOwnedExitMs": [
+      1542,
+      3301
+    ],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "sourceMismatches": [],
+    "strictSignatureAfterExit": {
+      "exitCode": 0
+    },
+    "proof": [
+      "Real POST committed input then lost HTTP acknowledgement: authoritative read held; restoring-study has zero visible bars and neither study nor live control groups; exactly one immutable input after recovery.",
+      "Real PATCH committed rewind then lost acknowledgement: recovery restores committed revision/cursor and hides previously visible future original text.",
+      "UTC view date centered current prefix without cursor/bar-count/revision change; later-than-cursor date rejected.",
+      "Two independent study cursors and original fixed input survive complete exit and restart; financial/journal fixture table counts unchanged."
+    ],
+    "network": "Both native launches use sandbox-exec: loopback allowed, remote denied. Actual main-process child probe returned EPERM before remote connect. Warm real public DB; no online latest/cold/private proof.",
+    "faultInjection": "route.fetch executed actual writes; only response acknowledgement aborted, actual GET held then continued; no substituted response body.",
+    "fixture": "Synthetic note save times via real owning service; not historical human authorship evidence.",
+    "strictSignatureAfterTests": {
+      "exitCode": 0
+    },
+    "pluginAssets": 9,
+    "pluginAssetMismatches": [],
+    "actualEnabledPineBundle": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+    "actualEnabledPythonBundle": "sha256:0d0c04773d003872fbcf897fed6d5f893ac27e3d3bfb6f55aa71dc9e6e089f48",
+    "strictSignatureAfterTestsAndBothExits": {
+      "exitCode": 0
+    },
+    "sourceSDKFiles": 60,
+    "sourceSDKMismatches": []
+  },
+  "workerProof": "Tests import the actual candidate history/journal/python_runner modules and assert packaged ownership; SDK_SRC points inside the candidate. The official cold-worker regression copies that actual SDK without caches to a controlled temporary tree and exercises prepare/warmup/step/close without new bytecode. Fixtures are tracked SMA-cross inputs; no native end-to-end strategy/financial claim from these CLI tests.",
+  "scope": "Current frontend/desktop/backend compiled/repacked, current-source bridge provenance and wheel bytes checked, unchanged native engine reused. Native sandboxed warm public-market fixtures, controlled journal save times, actual committed service writes with acknowledgement drops; no substituted data bodies.",
+  "limits": [
+    "Not a fresh engine/runtime build or official CI package.",
+    "No Windows, online cold/latest/private-exchange or broad performance qualification.",
+    "Does not implement study mode/cursor links, full formal/strategy replay or finish their original issues."
+  ],
+  "ci": "Final documentation head remains the merge gate; no use of superseded f1f6ec5f checks after integrating #224."
+}
