@@ -100,6 +100,8 @@ function LiveWorkspaceApp() {
   const workspaceBus = CHART_WORKSPACE_FEATURE_FLAGS.multiChart64Enabled
     ? defaultWorkspaceBus(desktopWindowManager.windowId)
     : null;
+  const linkBus = workspaceBus ?? (CHART_WORKSPACE_FEATURE_FLAGS.multiWindowEnabled && globalThis.window?.candlescopeDesktop
+    ? defaultWorkspaceBus(desktopWindowManager.windowId) : null);
   const workspace = useChartWorkspaceRuntime({ windowId: desktopWindowManager.windowId });
   useChartAiControl(workspace, "market");
   const appControl = useAppControl(workspace, desktopWindowManager.windowId);
@@ -199,13 +201,18 @@ function LiveWorkspaceApp() {
       workspace.view.activeWorkspaceId,
     );
   }, [linkCoordinator, workspace.view.activeWorkspaceId, workspace.view.document]);
-  useEffect(
-    () => linkCoordinator.connectWorkspaceBus(workspaceBus),
-    [linkCoordinator, workspaceBus],
-  );
   useEffect(() => {
-    if (!workspaceBus) return undefined;
-    const report = () => workspaceBus.reportWindow({
+    let cancelled = false;
+    const transport = linkBus?.attachLinks();
+    void transport?.ready.catch((error: unknown) => {
+      if (!cancelled) setDesktopError(error instanceof Error ? error.message : String(error));
+    });
+    const release = linkCoordinator.connectWorkspaceBus(linkBus);
+    return () => { cancelled = true; release(); transport?.release(); };
+  }, [linkBus, linkCoordinator]);
+  useEffect(() => {
+    if (!linkBus) return undefined;
+    const report = () => linkBus.reportWindow({
       focused: document.hasFocus(),
       visible: document.visibilityState !== "hidden",
     });
@@ -224,7 +231,7 @@ function LiveWorkspaceApp() {
       window.removeEventListener("focus", reportWithVisibility);
       window.removeEventListener("blur", reportWithVisibility);
     };
-  }, [workspaceBus]);
+  }, [linkBus]);
   useEffect(() => {
     const capacityProbe = new URLSearchParams(location.search).get("capacityProbe");
     if (capacityProbe !== "phase7" && capacityProbe !== "phase8") return undefined;

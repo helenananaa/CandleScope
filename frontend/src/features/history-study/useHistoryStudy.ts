@@ -49,13 +49,15 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
 
   const move = useCallback((cursorMs: number, active = true): Promise<boolean> => {
     const state = current.current;
-    if (!manager || !state.view?.study || !state.playback || state.owner !== owner || state.readRequired || state.loading
+    if (!manager || !state.view?.study || (!state.playback && !active) || state.owner !== owner || state.readRequired || state.loading
       || (state.busy && !writing.current)) return Promise.resolve(false);
     const token = epoch.current;
-    const playback = state.playback!;
+    const playback = state.playback ?? new HistoryStudyPlayback(state.view.study, state.view.cursorMs!);
     queue.current = { cursorMs: Math.max(playback.minimumMs, Math.min(playback.maximumMs, cursorMs)), active };
     if (writing.current) return writing.current;
-    publish({ busy: true, error: null });
+    // A live target entering its saved study must hide the live surface before
+    // the mode write can commit, including while its acknowledgement is held.
+    publish({ busy: true, readRequired: !state.view.active, error: null });
     const task = Promise.resolve().then(async () => {
       try {
         while (queue.current && token === epoch.current) {
@@ -167,7 +169,18 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
   }, [manager, owner, publish]);
 
   const own = state.owner === owner ? state : null;
-  return { ...own, playback: own?.readRequired ? null : own?.playback ?? null, capture, move, select, retry: () => setReload(value => value + 1),
+  const readClock = useCallback(() => {
+    const value = current.current;
+    const matches = value.owner === owner;
+    const input = matches ? value.view?.study : null;
+    return { active: matches && Boolean(value.view?.active), committing: value.busy,
+      pending: !matches || value.loading || value.readRequired || !value.view || (value.busy && !writing.current),
+      studyId: matches ? value.view?.study?.id ?? null : null, revision: matches ? value.view?.revision ?? 0 : 0,
+      cursorMs: matches ? value.view?.cursorMs ?? null : null,
+      minimumMs: input?.rows[0] ? input.rows[0].time * 1000 : null,
+      maximumMs: input?.rows.at(-1)?.closeTimeMs ?? null };
+  }, [owner]);
+  return { ...own, playback: own?.readRequired ? null : own?.playback ?? null, capture, move, select, readClock, retry: () => setReload(value => value + 1),
     masked: Boolean(!own || own.loading || own.readRequired || own.view?.active || (!own.view && activeHint(owner))),
     active: Boolean(own?.view?.active), pending: !own || own.loading || own.readRequired, error: own?.error ?? null };
 }
