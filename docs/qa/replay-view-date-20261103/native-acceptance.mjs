@@ -16,10 +16,11 @@ await fs.writeFile(root+'/loopback-only.sb',policy);
 const quote=value=>"'"+value.replaceAll("'","'\\''")+"'",executable=root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope',launcher=root+'/loopback-launcher.sh';
 await fs.writeFile(launcher,'#!/bin/sh\nexec /usr/bin/sandbox-exec -f '+quote(root+'/loopback-only.sb')+' '+quote(executable)+' "$@"\n',{mode:0o700});
 q.s.receipt.networkPolicySha256=crypto.createHash('sha256').update(policy).digest('hex');
-const history=[];let running=false,runId;
+const history=[],historyReplies=[];let running=false,runId;
 async function launch(){
  try{await q.record('packaged-launch',await q.launch({executablePath:launcher}));running=true;}catch(error){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw error;}
  q.s.page.on('request',r=>{if(/\/replay\/.*\/history\?/.test(r.url()))history.push({url:r.url(),method:r.method(),at:Date.now()});});
+ q.s.page.on('response',async r=>{if(!/\/replay\/.*\/history\?/.test(r.url()))return;try{const b=await r.json();historyReplies.push({url:r.url(),status:r.status(),body:{...b,bars:b.bars?{count:b.bars.length,first:b.bars[0],last:b.bars.at(-1)}:undefined}});}catch(error){historyReplies.push({url:r.url(),status:r.status(),error:String(error)});}});
  await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor();await q.s.page.waitForLoadState('load');
  const probe=await q.s.app.evaluate(()=>{const {spawnSync}=process.getBuiltinModule('node:child_process');return spawnSync(process.resourcesPath+'/python-runtime/python/bin/python3',['-B','-c',"import errno,socket;s=socket.socket();s.settimeout(1)\ntry:s.connect(('192.0.2.1',443));raise AssertionError('remote allowed')\nexcept OSError as e:assert e.errno in (errno.EPERM,errno.EACCES);print(e.errno)\nfinally:s.close()"],{encoding:'utf8',env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}}).status;});assert.equal(probe,0);
 }
@@ -74,6 +75,7 @@ try{
  await q.s.page.locator('[data-replay-action="advance-base"]').click();
  await q.until(async()=>Number(await q.s.page.locator('[data-replay-cursor-ms]').first().getAttribute('data-replay-cursor-ms'))>initialCursor);await ready();
  const original=await facts();
+ await q.until(async()=>Number(await q.s.page.locator('[data-replay-cell-diagnostics]').first().getAttribute('data-replay-boundary-ms'))===original.cursors[0].virtual_time_ms);
  const target=Date.parse('2023-11-17T12:30:00Z');assert.ok((await capture(q))[0].bars[0].time*1000>target,'Target must require real bounded history, not only a loaded row');
  const readsBefore=history.length,message=await navigate('2023-11-17T12:30:00',{shortcut:true});
  assert.ok(history.length>readsBefore);assert.deepEqual(await facts(),original);
@@ -93,7 +95,7 @@ try{
  const linkedTarget=Date.parse('2023-11-17T16:00:00Z');await navigate('2023-11-17T16:00:00');
  const linked=await capture(q);for(const c of linked){assert.ok(c.visible&&Number(c.visible.from)<=linkedTarget/1000&&Number(c.visible.to)>=linkedTarget/1000);assert.ok(c.bars.every(b=>b.time*1000<=original.cursors[0].virtual_time_ms));}
  assert.deepEqual(await facts(),original);await q.record('linked-periods-locate-one-time-without-advancing-authoritative-run',{charts:await barsEvidence(),state:await facts()});
- const readCount=history.length;await navigate('2023-11-24T12:02:00',{located:false});assert.equal(history.length,readCount);assert.deepEqual(await facts(),original);await q.record('unrevealed-date-cannot-read-or-advance-run',{historyRequests:readCount});
+ const readCount=history.length;await navigate(new Date(original.cursors[0].virtual_time_ms+60000).toISOString().slice(0,19),{located:false});assert.equal(history.length,readCount);assert.deepEqual(await facts(),original);await q.record('unrevealed-date-cannot-read-or-advance-run',{historyRequests:readCount});
  await q.screenshot('replay-date-linked');const savedRunId=runId;await q.s.page.getByRole('button',{name:'存档大厅',exact:true}).click();await q.s.page.getByRole('button',{name:'新建训练',exact:true}).waitFor();await quit();
  await launch();await q.s.page.goto(new URL('/replay.html',q.s.page.url()).href);await q.s.page.locator('.training-hub-card').filter({hasText:'Native date shown'}).getByRole('button',{name:'继续训练',exact:true}).click();await ready();
  runId=new URL(q.s.page.url()).searchParams.get('run');assert.equal(runId,savedRunId);assert.deepEqual(await facts(),original);await navigate('2023-11-17T18:00:00');assert.deepEqual(await facts(),original);await q.record('complete-restart-restores-clock-account-and-view-only-navigation',{runId,state:await facts(),charts:await barsEvidence()});
@@ -101,4 +103,4 @@ try{
  assert.notEqual(runId,savedRunId);assert.equal(await q.s.page.getByRole('button',{name:'定位视图日期',exact:true}).count(),0);await q.s.page.keyboard.press('Alt+g');assert.equal(await q.s.page.getByRole('dialog',{name:'跳转到日期',exact:true}).count(),0);
  await q.record('hidden-calendar-training-has-no-absolute-date-input-or-shortcut',{runId,policy:'HIDE_ALL'});await q.screenshot('replay-date-hidden');await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){process.exitCode=1;q.s.receipt.failure=String(error.stack||error);if(q.s.page){await q.screenshot('replay-date-failure').catch(()=>{});q.s.receipt.body=await q.s.page.locator('body').innerText().catch(String);}}
-finally{if(running)try{await quit();}catch(error){q.s.receipt.exitFailure=String(error.stack||error);}q.s.receipt.historyRequests=history;await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure}));}
+finally{if(running)try{await quit();}catch(error){q.s.receipt.exitFailure=String(error.stack||error);}q.s.receipt.historyRequests=history;q.s.receipt.historyReplies=historyReplies;await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure}));}
