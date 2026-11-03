@@ -95,8 +95,10 @@ try{
  await q.record('independent-date-navigation-keeps-other-period-viewport-and-run-clock',{charts:await barsEvidence(),peerBefore});
  await command('workspace','createLinkGroup',{cellIds:['cell-1','cell-2']});const doc=await document(),groupId=doc.cells['cell-1'].linkGroupId;assert.ok(groupId);
  await command('workspace','updateLinkPolicy',{groupId,relationship:'peers',patch:{timeAnchor:true,dateRange:false}});
- const linkedTarget=Date.parse('2023-11-17T16:00:00Z');await navigate('2023-11-17T16:00:00');
- const linked=await capture(q);for(const c of linked){assert.ok(c.visible&&Number(c.visible.from)<=linkedTarget/1000&&Number(c.visible.to)>=linkedTarget/1000);assert.ok(c.bars.every(b=>b.time*1000<=original.cursors[0].virtual_time_ms));}
+ const linkedTarget=Date.parse('2023-11-17T12:30:00Z'),linkedMessage=await navigate('2023-11-17T12:30:00');
+ await q.record('linked-date-accepted-before-native-paint',{message:linkedMessage,charts:await barsEvidence()});
+ const linked=await q.until(async()=>{const charts=await capture(q);return charts.length===2&&charts.every(c=>c.visible&&Number(c.visible.from)<=linkedTarget/1000&&Number(c.visible.to)>=linkedTarget/1000)?charts:false;});
+ for(const c of linked)assert.ok(c.bars.every(b=>b.time*1000<=original.cursors[0].virtual_time_ms));
  assert.deepEqual(await facts(),original);await q.record('linked-periods-locate-one-time-without-advancing-authoritative-run',{charts:await barsEvidence(),state:await facts()});
  const readCount=history.length;await navigate(new Date(original.cursors[0].virtual_time_ms+60000).toISOString().slice(0,19),{located:false});assert.equal(history.length,readCount);assert.deepEqual(await facts(),original);await q.record('unrevealed-date-cannot-read-or-advance-run',{historyRequests:readCount});
  await q.screenshot('replay-date-linked');const savedRunId=runId;await q.s.page.getByRole('button',{name:'存档大厅',exact:true}).click();await q.s.page.getByRole('button',{name:'新建训练',exact:true}).waitFor();await quit();
@@ -105,5 +107,5 @@ try{
  await q.s.page.getByRole('button',{name:'存档大厅',exact:true}).click();await q.s.page.getByRole('button',{name:'新建训练',exact:true}).waitFor();await create('HIDE_ALL','Native date hidden');
  assert.notEqual(runId,savedRunId);assert.equal(await q.s.page.getByRole('button',{name:'定位视图日期',exact:true}).count(),0);await q.s.page.keyboard.press('Alt+g');assert.equal(await q.s.page.getByRole('dialog',{name:'跳转到日期',exact:true}).count(),0);
  await q.record('hidden-calendar-training-has-no-absolute-date-input-or-shortcut',{runId,policy:'HIDE_ALL'});await q.screenshot('replay-date-hidden');await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
-}catch(error){process.exitCode=1;q.s.receipt.failure=String(error.stack||error);if(q.s.page){await q.screenshot('replay-date-failure').catch(()=>{});q.s.receipt.body=await q.s.page.locator('body').innerText().catch(String);}}
+}catch(error){process.exitCode=1;q.s.receipt.failure=String(error.stack||error);if(q.s.page){await q.screenshot('replay-date-failure').catch(()=>{});q.s.receipt.body=await q.s.page.locator('body').innerText().catch(String);q.s.receipt.charts=await barsEvidence().catch(String);}}
 finally{if(running)try{await quit();}catch(error){q.s.receipt.exitFailure=String(error.stack||error);}q.s.receipt.historyRequests=history;q.s.receipt.historyReplies=historyReplies;await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure}));}
