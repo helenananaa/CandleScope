@@ -4,7 +4,7 @@ import type { ChartWorkspaceDocument } from "./chartWorkspaceTypes.js";
 import type { WorkspaceBusClient, WorkspaceBusLinkEvent } from "./workspaceBus.js";
 
 export interface ChartStudyClockState {
-  active: boolean; pending: boolean; committing: boolean; editing: boolean;
+  active: boolean; pending: boolean; committing: boolean; editing: boolean; followReady: boolean;
   studyId: string | null; revision: number; cursorMs: number | null;
   minimumMs: number | null; maximumMs: number | null;
 }
@@ -252,6 +252,7 @@ export class ChartStudyClockLinks {
         try { state = registration.port.read(); } catch { /* Report an unavailable owner below. */ }
         if (!state || state.pending) status = "unavailable";
         else if (!state.active || !state.studyId) status = "inactive";
+        else if (!state.followReady) status = "unavailable";
         else if (state.editing) status = "editing";
         else if (state.minimumMs === null || state.maximumMs === null || body.cursorMs < state.minimumMs || body.cursorMs > state.maximumMs) status = "out-of-range";
         else {

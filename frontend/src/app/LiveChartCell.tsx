@@ -268,7 +268,9 @@ function LiveChartCell({
   const setStudyFollowReady = useCallback((pause: (() => void) | null) => { pauseStudy.current = pause; }, []);
   const clockPort = useMemo(() => ({ read: () => {
     const state = readStudyClock();
-    return { ...state, pending: state.pending || (state.active && pauseStudy.current === null), editing: studyEditing.current };
+    // An acknowledged durable cut can be published while its restored surface
+    // remounts. Receiving a peer cut still requires the local playback owner.
+    return { ...state, followReady: pauseStudy.current !== null, editing: studyEditing.current };
   }, move: (cursorMs: number) => { pauseStudy.current?.(); return moveStudyCursor(cursorMs); } }), [moveStudyCursor, readStudyClock]);
   useEffect(() => linkCoordinator.studyClocks.register(cell.id, clockPort, workspaceId), [cell.id, clockPort, linkCoordinator, workspaceId]);
   const cursorLinkIssue = useSyncExternalStore(linkCoordinator.studyClocks.subscribe,

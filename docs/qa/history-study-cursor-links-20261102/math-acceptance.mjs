@@ -132,6 +132,36 @@ async function verify(id,windowId,input,cursor){
   }catch(error){q.s.receipt.lastMathError=String(error);return false;}
  },30_000);
 }
+async function moveWithLostAcknowledgement(topology){
+ let committed, heldRead=false, dropped=false, release;
+ const held=new Promise(resolve=>{release=resolve;});
+ const pattern='**/api/v1/history-studies/views/**';
+ const intercept=async route=>{
+  if(route.request().method()==='PATCH'&&!dropped){
+   dropped=true;const response=await route.fetch();assert.equal(response.status(),200);
+   committed=await response.json();await route.abort('connectionfailed');return;
+  }
+  if(route.request().method()==='GET'&&dropped){heldRead=true;await held;}
+  await route.continue();
+ };
+ await q.s.page.route(pattern,intercept);
+ let operation;
+ try{
+  operation=execute('cell-1','seekCursor',{timeMs:fixture.afterMs});
+  await q.until(()=>committed&&heldRead);
+  await cell('cell-1').locator('.history-study-mask').waitFor();
+  assert.equal(await cell('cell-1').locator('[data-study-id]').count(),0);
+  const snap=await q.inspect(),source=snap.cells.find(value=>value.cellId==='cell-1');
+  assert.equal(source.runtime.mode,'restoring-study');assert.equal(source.runtime.barCount,0);
+  await at('cell-2',fixture.earlyMs);await at(topology.targetId,fixture.earlyMs,topology.secondId);
+  await q.record('real-commit-with-lost-response-keeps-unknown-source-masked-and-peers-at-prior-cut',{committed,source:source.runtime});
+ }finally{release();}
+ try{
+  const commandReceipt=await operation;
+  await at('cell-1',fixture.afterMs);await at('cell-2',fixture.afterMs);await at(topology.targetId,fixture.afterMs,topology.secondId);
+  await q.record('authoritative-recovery-publishes-confirmed-cut-across-both-native-windows',{commandReceipt,committed});
+ }finally{await q.s.page.unroute(pattern,intercept);}
+}
 try{
  await launch();secondPage=await pageFor(topology.secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:topology.secondId,message:error.message}));await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.earlyMs);await at(topology.targetId,fixture.earlyMs,topology.secondId);
  const workspace=(await q.inspect()).workspaceId;
@@ -139,7 +169,8 @@ try{
  const b=(await read('/history-studies/views/'+owner(workspace,'cell-2'))).study;
  const c=(await read('/history-studies/views/'+owner(workspace,topology.targetId))).study;
  assert.ok(new Set([a.id,b.id,c.id]).size===3);
- await execute('cell-1','seekCursor',{timeMs:fixture.afterMs});
+ if(process.env.CANDLESCOPE_STUDY_DROP_ACK==='1')await moveWithLostAcknowledgement(topology);
+ else await execute('cell-1','seekCursor',{timeMs:fixture.afterMs});
  await at('cell-2',fixture.afterMs);await at(topology.targetId,fixture.afterMs,topology.secondId);
  const forward={a:await verify('cell-1','main-window',a,fixture.afterMs),b:await verify('cell-2','main-window',b,fixture.afterMs),c:await verify(topology.targetId,topology.secondId,c,fixture.afterMs)};
  assert.equal(forward.a.indicatorId,forward.c.indicatorId);

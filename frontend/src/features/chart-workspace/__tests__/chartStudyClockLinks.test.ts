@@ -17,7 +17,7 @@ function document(enabled = true) {
   return result;
 }
 function clock(cursorMs = 600_000, patch: Partial<ChartStudyClockState> = {}) {
-  const state: ChartStudyClockState = { active: true, pending: false, committing: false, editing: false,
+  const state: ChartStudyClockState = { active: true, pending: false, committing: false, editing: false, followReady: true,
     studyId: "hs_input", revision: 4, cursorMs, minimumMs: 0, maximumMs: 1_000_000, ...patch };
   const calls: number[] = [];
   const port: ChartStudyClockPort = { read: () => state, move: async target => { calls.push(target); state.cursorMs = target; state.revision++; return true; } };
@@ -98,6 +98,21 @@ test("isolated playback remains available without a linked leader or desktop bus
   a.state.cursorMs = 660_000;
   assert.equal(await links.publishUserMove(tick), true); assert.equal(a.state.cursorMs, 660_000);
   assert.equal(links.canStartAutomatic("missing", "workspace"), false);
+});
+
+test("a recovered committed source publishes before its surface remounts, but an unmounted active target refuses following", async () => {
+  const links = new ChartStudyClockLinks(document(), "workspace");
+  const a = clock(600_000, { followReady: false }), b = clock(120_000);
+  links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), true);
+  assert.deepEqual(b.calls, [600_000]);
+  b.state.followReady = false; a.state.cursorMs = 300_000;
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), false);
+  assert.deepEqual(b.calls, [600_000]);
+  assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "unavailable");
+  b.state.active = false;
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), true);
+  assert.deepEqual(b.calls, [600_000]);
 });
 
 test("a closed layout cell is excluded even before its old renderer registration is released", async () => {
