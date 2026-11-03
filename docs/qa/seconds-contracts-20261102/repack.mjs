@@ -45,7 +45,8 @@ function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){
 }}
 walk(path.join(root,'frontend/dist'));
 const receipt={sourceCommit:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
- assembly:'Local macOS arm64 candidate: qualified H127 runtime clone, current tracked backend, newly built current frontend and desktop, updated ASAR integrity, deep ad-hoc signing. Not a fresh runtime build or official CI artifact.',
+ assembly:'Local macOS arm64 candidate: verified runtime clone, current tracked backend and SDK, newly built frontend/desktop/plugin bridges, updated ASAR integrity and deep ad-hoc signing. Full standalone runtime build not performed.',
+ runtimeSource:process.env.CANDLESCOPE_QA_RUNTIME_SOURCE??'qualified retained H127 app',
  app,files,dist,plugins,mismatches,asarHeaderSha256:hash,asarSha256:digest(fs.readFileSync(path.join(resources,'app.asar')))};
 fs.writeFileSync(path.join(out,'source-package-manifest.json'),JSON.stringify(receipt,null,2)+'\n');
 if(mismatches.length)throw new Error(JSON.stringify(mismatches));

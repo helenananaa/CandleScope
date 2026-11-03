@@ -5,8 +5,11 @@ import * as q from '../backend-batch1-20261101/driver.mjs';
 import {capture} from '../backend-batch1-20261101/value-probe.mjs';
 import {assertPublicGate} from '../seconds-contracts-20261102/public-gate.mjs';
 await assertPublicGate(q.s.root);
+assert.equal(await fs.stat(q.s.root+'/profile').then(()=>true,error=>{if(error.code==='ENOENT')return false;throw error;}),false,'Preserve earlier native profiles; select a new isolated candidate root');
+const manifest=JSON.parse(await fs.readFile(q.s.root+'/source-package-manifest.json','utf8'));
 q.s.receipt.schema='candlescope.seconds-native/1';
-q.s.receipt.sourceCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+q.s.receipt.driverCommit=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+q.s.receipt.sourceCommit=manifest.sourceCommit;
 q.s.receipt.transport='Packaged bundled backend, real public Binance/Gate/Upbit HTTP and WebSocket; no substituted responses.';
 q.s.receipt.scope={platform:'macOS arm64',sources:['Binance spot1s','Binance custom7s','Gate spot1s','Upbit spot1s'],notCovered:['Windows','1s replay archives','ordinary USD-M1s','full157 release acceptance','all exchanges']};
 const sessions=[q.session('BTCUSDT','1s'),q.session('BTCUSDT','7s'),{exchange:'gate',marketType:'spot',symbol:'BTC/USDT',interval:'1s'},{exchange:'upbit',marketType:'spot',symbol:'BTC/KRW',interval:'1s'}];
@@ -48,9 +51,11 @@ async function verify(){const charts=await capture(q);assert.equal(charts.length
  return out;}
 async function values(){const charts=await capture(q),out=[];for(const chart of charts){const bars=chart.bars.filter(b=>b.is_closed);assert.equal(chart.lines.length,1);const line=chart.lines[0],points=new Map(line.data.map(p=>[Number(p.time),p.value]));const view=(await q.query(chart.cellId)).snapshot.visibleRange?.time;assert.ok(view);let checked=0,maxError=0;for(let i=4;i<bars.length;i++){if(bars[i].time<view.from||bars[i].time>view.to)continue;const actual=points.get(bars[i].time),expected=bars.slice(i-4,i+1).reduce((n,b)=>n+b.close,0)/5;assert.ok(actual!==undefined,chart.cellId+' missing visible MA5 '+bars[i].time);const error=Math.abs(actual-expected);assert.ok(error<Math.max(1e-7,Math.abs(expected)*1e-10));maxError=Math.max(maxError,error);checked++;}assert.ok(checked>=3);out.push({cellId:chart.cellId,checked,maxError});}return out;}
 let running=false;
-async function launch(){try{await q.record('packaged-launch',await q.launch());running=true;await q.enableControl();}catch(e){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw e;}}
-async function quit(){await q.quit();await q.exited();running=false;await q.record('full-process-exit',{allExited:true,elapsedMs:Date.now()-q.s.quitStartedAt,processes:q.s.quitPids});}
+function verifyPackage(){cp.execFileSync('node',['docs/qa/seconds-contracts-20261102/verify.mjs'],{stdio:'inherit',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}});}
+async function launch(){await assertPublicGate(q.s.root);try{await q.record('packaged-launch',await q.launch());running=true;await q.enableControl();}catch(e){running=Boolean(q.s.app);q.s.identity??={pid:q.s.app?.process()?.pid};throw e;}}
+async function quit(){await q.quit();assert.equal(await q.exited(),true);running=false;await q.record('full-process-exit',{allExited:true,elapsedMs:Date.now()-q.s.quitStartedAt,processes:q.s.quitPids});verifyPackage();await q.record('package-after-full-exit',JSON.parse(await fs.readFile(q.s.root+'/verified-after.json','utf8')));}
 try{
+ verifyPackage();await fs.copyFile(q.s.root+'/verified-after.json',q.s.root+'/verified-before.json');
  await launch();
  for(const exchange of ['binance','gate','upbit']){
   const caps=await api('/api/v1/exchanges/'+exchange+'/capabilities');assert.equal(caps.status,200);

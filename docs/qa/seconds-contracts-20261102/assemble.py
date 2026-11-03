@@ -7,9 +7,10 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(os.environ.get('CANDLESCOPE_BATCH1_QA_ROOT', str(ROOT / 'output/seconds-contracts-20261102/native-current-plugins')))
 APP = OUT / 'Installed App/CandleScope.app'
-SOURCE = Path('/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/Installed App/CandleScope.app')
+SOURCE = Path(os.environ.get('CANDLESCOPE_QA_RUNTIME_SOURCE', '/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/Installed App/CandleScope.app'))
 assert not APP.exists(), 'Preserve earlier candidates; do not overwrite a receipt'
 assert (ROOT / 'frontend/dist/index.html').exists()
+subprocess.run(['codesign', '--verify', '--deep', '--strict', str(SOURCE)], check=True)
 for name in ('requirements.txt', 'ccxt-fork.lock.json'):
     assert (SOURCE / 'Contents/Resources/backend' / name).read_bytes() == (ROOT / 'backend' / name).read_bytes(), name
 APP.parent.mkdir(parents=True, exist_ok=True)
