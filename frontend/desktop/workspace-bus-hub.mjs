@@ -98,7 +98,7 @@ function validateLinkEvent(value) {
   if (!validId(value.workspaceId)
     || !validId(value.sourceWindowId)
     || !validId(value.sourceCellId)
-    || !["crosshair", "timeAnchor", "dateRange", "drawings"].includes(value.kind)) {
+    || !["crosshair", "timeAnchor", "dateRange", "dateSeek", "drawings"].includes(value.kind)) {
     throw new TypeError("Workspace link event identity is invalid");
   }
   const payload = structuredClone(value.payload);

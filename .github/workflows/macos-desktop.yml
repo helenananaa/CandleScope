@@ -101,6 +101,7 @@ jobs:
             tests/test_proxy_pool_ws.py \
             tests/test_trusted_extensions.py \
             tests/test_settings_api.py \
+            tests/test_history_studies.py \
             tests/test_pyne_removal.py \
             tests/test_data_preparation.py \
             tests/test_replay_context_origin.py \

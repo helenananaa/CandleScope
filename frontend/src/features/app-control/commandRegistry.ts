@@ -95,6 +95,7 @@ export class AppCommandRegistry {
       if (!selected.available()) throw new Error("COMMAND_DISABLED");
       if (!query && this.token(entry) !== (input as ReturnType<typeof executeInput.parse>).expectedContext) throw new Error("CONTEXT_CONFLICT");
       const args = selected.validate(input.args ?? {});
+      const readContext = query ? this.token(entry) : null;
       if (!query && !selected.interrupt) {
         if (this.mutationPending) throw new Error("CONTROL_BUSY");
         this.mutationPending = true; ownsMutation = true;
@@ -103,7 +104,13 @@ export class AppCommandRegistry {
       const output = await selected.execute(args);
       // React actions publish their new runtime in the next commit. This is an acknowledgement, never a generic readiness claim.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      if (this.groups.get(input.groupId)?.owner !== entry.owner) return { state: "applied", code: "TARGET_UNMOUNTED", readiness: "unverified", output: output ?? null };
+      if (this.groups.get(input.groupId)?.owner !== entry.owner) return query
+        ? { state: "failed", code: "TARGET_UNMOUNTED", readiness: "unverified" }
+        : { state: "applied", code: "TARGET_UNMOUNTED", readiness: "unverified", output: output ?? null };
+      // Never attach a new context token to an old read result. In particular,
+      // a study rewind can happen during the executor or the React yield above.
+      if (query && this.token(entry) !== readContext) return { state: "failed", code: "CONTEXT_CHANGED", readiness: "unverified",
+        message: "The target changed during this read; rediscover and query again." };
       return { state: query ? "ready" : "applied", readiness: query ? "observed" : "command-acknowledged",
         contextToken: this.token(entry), output: output ?? null, snapshot: entry.group.snapshot() };
     } catch (error) {

@@ -20,11 +20,12 @@ export interface JournalDraft {
   quickPending?: { text: string; clientEntryId: string };
   pendingSave?: JournalSubmission;
 }
-export interface JournalEditorState {
+export type EditableJournalNote = Pick<JournalEntry, "id" | "fields" | "revisionCount">;
+export interface JournalEditorState<T extends EditableJournalNote = JournalEntry> {
   ready: boolean;
   fields: Fields;
   quickText: string;
-  note: JournalEntry | null;
+  note: T | null;
   status: "idle" | "saving" | "saved" | "failed";
   recovered: boolean;
   error: unknown;
@@ -39,8 +40,8 @@ const equal = (a: Fields, b: Fields) => {
 export const journalClientId = () => `je_${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`;
 
 /** One mounted editor owns its save queue. Drafts are synchronous and profile-local. */
-export class JournalEditor {
-  private state: JournalEditorState = {
+export class JournalEditor<T extends EditableJournalNote = JournalEntry> {
+  private state: JournalEditorState<T> = {
     ready: false, fields: {}, quickText: "", note: null, status: "idle", recovered: false, error: null,
   };
   private listeners = new Set<() => void>();
@@ -53,19 +54,19 @@ export class JournalEditor {
   constructor(private options: {
     key: string;
     storage: () => StoragePort;
-    create: (fields: Fields, clientEntryId: string) => Promise<JournalEntry>;
-    save: (id: string, fields: Fields, expectedRevision: number) => Promise<JournalEntry>;
+    create: (fields: Fields, clientEntryId: string) => Promise<T>;
+    save: (id: string, fields: Fields, expectedRevision: number) => Promise<T>;
     quick: (body: string, clientEntryId: string) => Promise<unknown>;
     newId?: () => string;
   }) {}
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = () => this.state;
-  private publish(update: Partial<JournalEditorState>) {
+  private publish(update: Partial<JournalEditorState<T>>) {
     this.state = { ...this.state, ...update };
     this.listeners.forEach((listener) => listener());
   }
   private newId() { return (this.options.newId ?? journalClientId)(); }
-  initialize(note: JournalEntry | null, defaults: Fields = {}) {
+  initialize(note: T | null, defaults: Fields = {}) {
     if (this.state.ready) return;
     let recovered: JournalDraft | null = null;
     try {
@@ -196,7 +197,7 @@ export class JournalEditor {
       .finally(() => { this.quickSaving = null; });
     return this.quickSaving;
   };
-  adopt(note: JournalEntry) {
+  adopt(note: T) {
     if (!this.draft || this.dirty) return;
     this.savedFields = note.fields;
     this.draft = { ...this.draft, entryId: note.id, expectedRevision: note.revisionCount, fields: note.fields };

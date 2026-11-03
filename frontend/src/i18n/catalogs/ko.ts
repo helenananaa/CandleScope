@@ -1,3 +1,4 @@
+import { historyStudyKorean } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -5,6 +6,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...historyStudyKorean,
   "chartTime.title": "날짜로 이동",
   "chartTime.shortcut": "날짜로 이동 (Alt+G)",
   "chartTime.input": "날짜 및 시간(UTC)",

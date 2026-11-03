@@ -1,0 +1,44 @@
+{
+  "commit": "848644af30cf6c8bda623609ef7cc16619ef17df",
+  "sourceComparison": [
+    {
+      "path": "backend\\app\\backtest\\strategy\\python_runner.py",
+      "match": "CRLF-checkout"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\__init__.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\batch.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\contract.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\errors.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\json_codec.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\models.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\schema.py",
+      "match": "exact"
+    },
+    {
+      "path": "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\worker.py",
+      "match": "exact"
+    }
+  ],
+  "requiredCasesCheckedInRawJUnit": true,
+  "rawJUnitCases": 10,
+  "runUrl": "https://github.com/helenananaa/CandleScope/actions/runs/41454219240"
+}

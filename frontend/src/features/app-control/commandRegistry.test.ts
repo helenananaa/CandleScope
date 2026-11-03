@@ -108,3 +108,36 @@ test("reactive proxies become JSON data; a non-data result preserves an applied 
   const mutation = await registry.execute({ id: "e", method: "app.execute", params: { windowId: "w", groupId: "json", command: "bad", requestId: "e", expectedContext: registry.list()[0]!.contextToken } }, "w");
   assert.equal(mutation.state, "applied"); assert.equal(mutation.code, "RESULT_UNAVAILABLE"); assert.equal(mutation.readiness, "unverified");
 });
+
+test("a rewind during a read never returns an old future result with the new context token", async () => {
+  const registry = new AppCommandRegistry(); let cursor = 100, resolve!: (value: unknown) => void;
+  registry.register({ id: "study", title: "Study", context: () => ({ cursor }), snapshot: () => ({ cursor }), commands: [
+    command("notes", "Notes", empty, () => new Promise(done => { resolve = done; }), { readOnly: true }),
+  ] });
+  const pending = registry.execute({ id: "q", method: "app.query", params: { windowId: "w", groupId: "study", command: "notes" } }, "w");
+  cursor = 50; resolve({ body: "future text" });
+  const result = await pending;
+  assert.equal(result.state, "failed"); assert.equal(result.code, "CONTEXT_CHANGED");
+  assert.equal("output" in result, false); assert.equal("snapshot" in result, false);
+});
+
+test("even synchronous reads are fenced across the registry's UI publication yield", async () => {
+  const registry = new AppCommandRegistry(); let cursor = 100;
+  registry.register({ id: "study", title: "Study", context: () => ({ cursor }), snapshot: () => ({ cursor }), commands: [
+    command("bars", "Bars", empty, () => ({ futurePrice: cursor }), { readOnly: true }),
+  ] });
+  const pending = registry.execute({ id: "q", method: "app.query", params: { windowId: "w", groupId: "study", command: "bars" } }, "w");
+  cursor = 50;
+  assert.equal((await pending).code, "CONTEXT_CHANGED");
+});
+
+test("a removed read target cannot publish its old payload", async () => {
+  const registry = new AppCommandRegistry(); let resolve!: (value: unknown) => void;
+  const release = registry.register({ id: "study", title: "Study", context: () => 0, snapshot: () => 0, commands: [
+    command("notes", "Notes", empty, () => new Promise(done => { resolve = done; }), { readOnly: true }),
+  ] });
+  const pending = registry.execute({ id: "q", method: "app.query", params: { windowId: "w", groupId: "study", command: "notes" } }, "w");
+  release(); resolve({ body: "old text" });
+  const result = await pending;
+  assert.equal(result.state, "failed"); assert.equal(result.code, "TARGET_UNMOUNTED"); assert.equal("output" in result, false);
+});
