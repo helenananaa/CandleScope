@@ -1,0 +1,11 @@
+# Python策略日志预算与响应时序
+
+触发：PR200 ded422e7 的 x64 CI 运行41552885166/job125644575770，在1212项通过、3项跳过后，100000字节日志预算测试未抛STDERR_TOO_LARGE。主线程读取stdout响应后检查异步stderr标志，线程调度可能使成功响应先被接受。CI原始日志保留。
+
+独立复现不依赖线程概率：实际SDK worker子进程 prepare 打印100000字节，独立同时收集stdout/stderr；旧worker无条件返回ok:true。文本和binary buffer两例旧代码都失败。初版测试遗漏subprocess导入，已纠正；before.log.gz是纠正后的2项真实断言失败。
+
+修复：SDK worker对其标准文本及binary日志接口共享64KiB累计预算，最多发65537字节以保留宿主原有管道监控；超限后在同一执行线程发布STDERR_TOO_LARGE协议失败，停止当前批次，不再执行后续步骤。宿主识别此失败码并完整关闭子进程。原异步管道监控保留，直接fd写入仍由既有宿主监控处理；这里不声称任意本机代码都不能绕过Python日志对象。无新网络权限或金融计算变化。
+
+验证：Bundled Python/完整CI依赖执行34项runtime、批处理、bundle与host真实金融结果测试通过，2项Windows AppContainer专用测试在macOS跳过。覆盖64KiB边界、UTF8字节计数、文本/binary/write-lines及超限批次不执行第二步。旧x64CI失败须由新head跨架构CI重新验证；Windows实际资格依工作流结果。SDK冷导入无pyc测试仍通过。
+
+本分支基于当前main2aaec6fc，独立于PR200后端秒线改动。
