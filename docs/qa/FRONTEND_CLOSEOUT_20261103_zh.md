@@ -11,7 +11,7 @@
 | 逐图持久历史研究、回退与补记、控制读取隔离、细周期重建、原始笔记版本、日期定位与提交回包丢失恢复 | [#226](https://github.com/helenananaa/CandleScope/pull/226) 已合并；#219/#221 随入口合并，#222/#225 关闭并由最终入口替代 | #222/#225 本身不是 merged；实现通过 #226 交付，避免重复排期。各层证据保留于 history-study 对应目录 |
 | 默认关闭的研究模式/游标联动、跨窗口顺序和异步恢复 | [#230](https://github.com/helenananaa/CandleScope/pull/230) 已合并，含 #228 | [双窗口四研究图、OHLCV/SMA、响应丢失与重启](history-study-mode-links-20261103/PROGRESS_zh.md)；各图保留自己的输入和周期 |
 | 正式回放视图日期定位、满缓存旧日期窗口、隐藏日期训练入口限制 | [#232](https://github.com/helenananaa/CandleScope/pull/232) 已合并 | [原生记录](replay-view-date-20261103/PROGRESS_zh.md)。实际读取已揭示历史并进入视口；时钟、源游标和完整 portfolio 保持。arm64/x64 最终 CI 733 通过 |
-| 后端回放入口及消费资源生命周期 | 当前分支，待最终 head CI/合并 | [Manager 资格](replay-manager-service-20261103/PROGRESS_zh.md)。两个独立运行/窗口、一后端、单图/窗口资源释放、正常完整退出重启；修复连续取消遗留订阅和旧服务别名绕过 |
+| 后端回放入口及消费资源生命周期 | 本批收尾，最终 head CI 是合入门槛 | [Manager 资格](replay-manager-service-20261103/PROGRESS_zh.md)。两个独立运行/窗口、一后端、单图/窗口资源释放、正常完整退出重启；修复连续取消遗留订阅和旧服务别名绕过 |
 
 Python 包只读与日志超限修复 #224/#231、Windows worker CI #229 也已在主线，属于相邻运行时交付。Windows worker 的专项资格不能代替 Windows 完整桌面验收。
 
@@ -22,7 +22,7 @@ Python 包只读与日志超限修复 #224/#231、Windows worker CI #229 也已�
 | [#166](https://github.com/helenananaa/CandleScope/issues/166) | 前端 Manager 接线 #180；正式日期定位 #232；本批后端入口、订阅和主机关闭生命周期 | 正式回放笔记/版本与交易截图关联、用户导入 BAR/市场成交完整流程、多商品财务参考、广泛重连/迟到版本验证及跨平台 |
 | [#179](https://github.com/helenananaa/CandleScope/issues/179) | 无账户逐图研究、固定输入、前缀指标、细周期形成中 K 线、原始笔记版本/补记、保存恢复 | 按原验收逐项补覆盖；任意数据规模/来源下的复用、历史修补提示、所有覆盖层及价格轴/缩放无未来数据的组合验收 |
 | [#181](https://github.com/helenananaa/CandleScope/issues/181) | 逐图外观/账户覆盖层 #201、研究模式和游标可选联动 #230、正式回放视图定位 #232 | 其余绘图/指标/账户/交易保护线/笔记配置组合联动，以及策略回放、多商品正式回放验收 |
-| [#186](https://github.com/helenananaa/CandleScope/issues/186) | 实时图、研究和时间披露 NONE 的正式回放均已有日期定位入口 | 隐藏日期训练的相对时间导航及完整需求核销独立评估；不因日期按钮存在直接关闭 |
+| [#186](https://github.com/helenananaa/CandleScope/issues/186) | 实时图、研究和时间披露 NONE 的正式回放均已有日期定位入口 | 策略回放日期定位、隐藏日期训练的相对时间导航，以及全部时区/边界组合仍须独立评估；不因日期按钮存在直接关闭 |
 | [#176](https://github.com/helenananaa/CandleScope/issues/176)、[#177](https://github.com/helenananaa/CandleScope/issues/177) | 只读账户一致快照/提交推送、模拟账户一致快照已进入 #217 | 模拟账户提交推送仍在独立 Draft #223；真实同步、多交易所/持仓模型不在本批证据内 |
 
 截至本次核对，仍开放的 PR 为 #75、#147、#200、#204、#218、#223、#227（均不属于本批 Manager 入口交付，#204 是 ready，其余 Draft）。不把这些分支并入本批或因收尾而关闭。#222/#225 等已替代来源没有遗留开放 PR。
