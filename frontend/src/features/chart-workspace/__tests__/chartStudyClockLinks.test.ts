@@ -38,6 +38,7 @@ function nativeNetwork() {
   let hold = false;
   const bus = (windowId: string) => ({ windowId, isNative: () => true,
     current: { revisions: { workspace: 0 } }, waitForWorkspaceRevision: async () => {},
+    subscribeSnapshot: () => () => {},
     subscribeLink: (listener: (event: WorkspaceBusLinkEvent) => void) => { receivers.set(windowId, listener); return () => receivers.delete(windowId); },
     publishLink: (event: Omit<WorkspaceBusLinkEvent, "sourceWindowId">) => {
       const stamped = { ...event, sourceWindowId: windowId, eventId: `link-${++order}` }; wire.push(stamped);
@@ -97,6 +98,59 @@ test("a remote mode event waits for the committed policy to reach the rendered d
     right.updateDocument(doc, "workspace"); await flush(); assert.equal(b.state.active, true); assert.equal(await action, true);
   } finally { left.updateDocument(doc, "closed"); right.updateDocument(doc, "closed"); await action; releaseA(); releaseB(); }
   }
+});
+
+test("disabling then reenabling routing cannot revive a source publication waiting for its old reply", async () => {
+  const doc = document(), network = nativeNetwork(), links = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(), b = clock(120_000); links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  const release = links.connectWorkspaceBus(network.bus("main")); network.hold();
+  const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace")); await flush();
+  const disabled = structuredClone(doc); disabled.revision = 1; disabled.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor = false;
+  links.updateDocument(disabled, "workspace"); links.updateDocument({ ...doc, revision: 2 }, "workspace");
+  network.release(); assert.equal(await old, false); await flush(); assert.deepEqual(b.calls, []); release();
+});
+
+test("a received cursor waiting on local input cannot revive after routing is disabled and reenabled", async () => {
+  const doc = document(), links = new ChartStudyClockLinks(doc, "workspace"), a = clock(), b = clock(120_000);
+  links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  const local = links.beginUserAction("cell-2", "workspace");
+  const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace")); await flush();
+  const disabled = structuredClone(doc); disabled.revision = 1; disabled.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor = false;
+  links.updateDocument(disabled, "workspace"); links.updateDocument({ ...doc, revision: 2 }, "workspace");
+  links.cancelUserAction(local); await flush(); assert.deepEqual(b.calls, []);
+  links.updateDocument(doc, "closed"); await old;
+});
+
+test("a local mode change orders its own cut even with mode sharing off, so an older linked cursor cannot overwrite its new input", async () => {
+  const doc = document(), links = new ChartStudyClockLinks(doc, "workspace"), network = nativeNetwork();
+  const a = clock(), b = clock(120_000); links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  const release = links.connectWorkspaceBus(network.bus("main"));
+  const localMode = links.beginUserAction("cell-2", "workspace", "mode");
+  const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace")); await flush();
+  b.state.studyId = "hs_new_input"; b.state.cursorMs = 180_000;
+  assert.equal(await links.publishUserMove(localMode), true); await flush();
+  assert.equal(b.state.cursorMs, 180_000); assert.deepEqual(b.calls, []); assert.equal(await old, false); release();
+});
+
+test("a delayed remote cursor is obsolete after routing was disabled and reenabled before its delivery", async () => {
+  const doc = document(), network = nativeNetwork(), left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(), b = clock(120_000); left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  network.delayFor("second");const old = left.publishUserMove(left.beginUserAction("cell-1", "workspace"));await flush();
+  const disabled = structuredClone(doc);disabled.revision = 1;disabled.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor = false;
+  right.updateDocument(disabled, "workspace");right.updateDocument({ ...doc, revision: 2 }, "workspace");
+  network.deliverDelayed();await flush();assert.deepEqual(b.calls, []);
+  left.updateDocument(doc, "closed");right.updateDocument(doc, "closed");await old;releaseA();releaseB();
+});
+
+test("a queued incoming cursor cannot adopt a new target registration after its local action settles", async () => {
+  const doc = document(), links = new ChartStudyClockLinks(doc, "workspace"), a = clock(), b = clock(120_000);
+  links.register("cell-1", a.port, "workspace");links.register("cell-2", b.port, "workspace");
+  const local = links.beginUserAction("cell-2", "workspace");
+  const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace"));await flush();
+  const restored = clock(180_000, { studyId: "hs_new_target" });links.register("cell-2", restored.port, "workspace");
+  links.cancelUserAction(local);await flush();assert.deepEqual(restored.calls, []);
+  links.updateDocument(doc, "closed");await old;
 });
 
 test("legacy documents default cursor links off; an explicit choice survives the actual workspace restore", () => {

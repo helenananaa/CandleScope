@@ -19,12 +19,14 @@ type Operation = "cursor" | "tick" | "mode";
 interface Intent {
   scope: string; epoch: number; cellId: string; generation: number;
   operation: Operation; leaderOrder: number;
+  configuration: { revision: number; key: string } | null; superseded: boolean;
   settled: Promise<void>; release(): void;
 }
 interface Payload { requestId: string; cursorMs: number; studyId: string; revision: number; configurationRevision: number; configurationKey: string; operation: Operation; leaderOrder: number; active?: boolean }
 interface Registration { scope: string; port: ChartStudyClockPort }
 interface Pending {
   scope: string; sourceCellId: string; order: number | null; operation: "mode" | "cursor";
+  intent: Intent;
   results: Map<string, { order: number; status: ChartStudyClockStatus } | null>;
   resolve(value: boolean): void; timer: ReturnType<typeof setTimeout>;
 }
@@ -76,11 +78,21 @@ export class ChartStudyClockLinks {
   private localOrder = 0;
   private scopeEpoch = 0;
   private documentWaiters = new Set<() => void>();
-  constructor(private document: ChartWorkspaceDocument, private scope: string) {}
+  private routingFloors = new Map<string, { key: string; revision: number }>();
+  constructor(private document: ChartWorkspaceDocument, private scope: string) { this.observeRouting(document); }
+
+  private observeRouting(document: ChartWorkspaceDocument) {
+    for (const cellId of this.routingFloors.keys()) if (!document.cells[cellId] && !this.document.cells[cellId]) this.routingFloors.delete(cellId);
+    for (const cellId of Object.keys(document.cells)) {
+      const key = this.configurationKey(cellId, document), previous = this.routingFloors.get(cellId);
+      if (!previous || previous.key !== key) this.routingFloors.set(cellId, { key, revision: Math.max(previous?.revision ?? 0, document.revision) });
+    }
+  }
 
   updateDocument(document: ChartWorkspaceDocument, scope: string) {
     if (scope !== this.scope) {
       this.scopeEpoch += 1;
+      this.routingFloors.clear();
       for (const intent of this.userIntents.values()) intent.release();
       this.userIntents.clear(); this.uncertainOrder.clear();
       for (const requestId of [...this.pending.keys()]) this.finish(requestId, false);
@@ -88,7 +100,15 @@ export class ChartStudyClockLinks {
       this.issues.clear(); this.emit();
     }
     this.document = document; this.scope = scope;
+    this.observeRouting(document);
+    for (const [id, pending] of this.pending) {
+      const configuration = pending.intent.configuration;
+      if (configuration && this.configurationKey(pending.sourceCellId) !== configuration.key) this.supersedePublication(id, pending);
+    }
     for (const waiter of [...this.documentWaiters]) waiter();
+  }
+  private supersedePublication(requestId: string, pending: Pending) {
+    pending.intent.superseded = true; this.cancelUserAction(pending.intent); this.finish(requestId, false);
   }
   private waitForDocumentRevision(revision: number, sourceCellId: string, key: string, epoch: number, timeoutMs = 5_000): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -122,8 +142,18 @@ export class ChartStudyClockLinks {
       if (event.kind === "studyCursor" || event.kind === "studyMode") void this.receive(event);
       else if (event.kind === "studyCursorResult") this.receiveResult(event);
     }) ?? (() => {});
+    const releaseConfiguration = bus?.subscribeSnapshot(state => {
+      const canonical = state.snapshot?.workspaces.find(record => record.id === this.scope)?.document;
+      if (canonical) this.observeRouting(canonical);
+      for (const [id, pending] of this.pending) {
+        const configuration = pending.intent.configuration;
+        const document = state.snapshot?.workspaces.find(record => record.id === pending.scope)?.document;
+        if (configuration && document && (state.revisions[pending.scope] ?? -1) >= configuration.revision
+          && this.configurationKey(pending.sourceCellId, document) !== configuration.key) this.supersedePublication(id, pending);
+      }
+    }) ?? (() => {});
     return () => {
-      release();
+      release(); releaseConfiguration();
       if (this.bus === bus) {
         this.bus = null;
         for (const id of [...this.pending.keys()]) this.finish(id, true);
@@ -164,7 +194,8 @@ export class ChartStudyClockLinks {
   }
   canStartAutomatic(cellId: string, scope: string): boolean {
     if (scope !== this.scope || this.registrations.get(cellId)?.scope !== scope || this.userIntents.has(cellId)) return false;
-    if (!this.targets(cellId).length) return true;
+    if (!this.targets(cellId).length) return !this.uncertainOrder.has(cellId)
+      && (!this.leaderSource.has(cellId) || this.leaderSource.get(cellId) === `${this.bus?.windowId ?? "local-window"}\u0000${cellId}`);
     return !this.uncertainOrder.has(cellId) && (this.leaderOrder.get(cellId) ?? 0) > 0
       && this.leaderSource.get(cellId) === `${this.bus?.windowId ?? "local-window"}\u0000${cellId}`;
   }
@@ -176,7 +207,8 @@ export class ChartStudyClockLinks {
     if (this.issues.delete(this.issueKey(cellId, operation))) this.emit();
     let release = () => {};
     const settled = new Promise<void>(resolve => { release = resolve; });
-    const intent = { scope, epoch: this.scopeEpoch, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0, settled, release };
+    const intent: Intent = { scope, epoch: this.scopeEpoch, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0,
+      configuration: null, superseded: false, settled, release };
     this.userIntents.set(cellId, intent);
     return intent;
   }
@@ -196,21 +228,24 @@ export class ChartStudyClockLinks {
     finally { this.cancelUserAction(intent); }
   }
   private async publishCommittedUserMove(intent: Intent): Promise<boolean> {
-    if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)) return false;
+    if (intent.superseded || intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)) return false;
     const registration = this.registrations.get(intent.cellId);
     if (!registration || registration.scope !== this.scope) return false;
     let state: ChartStudyClockState;
     try { state = registration.port.read(); } catch { return false; }
     if ((intent.operation !== "mode" && !state.active) || state.pending || state.committing || state.editing || !state.studyId || state.cursorMs === null) return false;
     const targets = this.targets(intent.cellId, intent.operation);
-    if (!targets.length) return true;
+    // A local mode/cursor intent still orders itself when its outbound policy
+    // is off: an older incoming action must not replace a newly chosen input.
+    if (!targets.length && intent.operation === "tick") return true;
     if (intent.operation === "tick" && (intent.leaderOrder <= 0
       || this.leaderSource.get(intent.cellId) !== `${this.bus?.windowId ?? "local-window"}\u0000${intent.cellId}`)) return false;
     const requestId = crypto.randomUUID();
+    intent.configuration = { revision: this.document.revision, key: this.configurationKey(intent.cellId) };
     this.latestRequest.set(this.issueKey(intent.cellId, intent.operation), requestId);
     const result = new Promise<boolean>(resolve => {
       const timer = setTimeout(() => this.finish(requestId, true), 5_000);
-      this.pending.set(requestId, { scope: this.scope, sourceCellId: intent.cellId, order: null, operation: intent.operation === "mode" ? "mode" : "cursor",
+      this.pending.set(requestId, { scope: this.scope, sourceCellId: intent.cellId, intent, order: null, operation: intent.operation === "mode" ? "mode" : "cursor",
         results: new Map(targets.map(cellId => [cellId, null])), resolve, timer });
     });
     const event: WorkspaceBusLinkEvent & { kind: "studyCursor" | "studyMode" } = { workspaceId: this.scope, sourceCellId: intent.cellId,
@@ -222,21 +257,21 @@ export class ChartStudyClockLinks {
         ...(intent.operation === "mode" ? { active: state.active } : {}) } satisfies Payload };
     try {
       const configuration = await this.committedConfiguration(intent);
-      if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)
+      if (intent.superseded || intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)
         || this.registrations.get(intent.cellId) !== registration || !this.pending.has(requestId)) {
         this.finish(requestId, false); return result;
       }
       const currentTargets = this.targets(intent.cellId, intent.operation);
-      if (!currentTargets.length) { this.finish(requestId, false); return result; }
       this.pending.get(requestId)!.results = new Map(currentTargets.map(cellId => [cellId, null]));
       (event.payload as Payload).configurationRevision = configuration.revision;
       (event.payload as Payload).configurationKey = configuration.key;
+      intent.configuration = configuration;
       // Browser pages have no central clock ordering authority. Only this
       // renderer is supported there; desktop windows use the main-process stamp.
       const ordered = this.bus?.isNative() ? await boundedOrderReply(this.bus.publishOrderedLink(event))
         : { ...event, eventId: `link-${++this.localOrder}` };
       const pending = this.pending.get(requestId);
-      if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || this.registrations.get(intent.cellId) !== registration) {
+      if (intent.superseded || intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || this.registrations.get(intent.cellId) !== registration) {
         this.finish(requestId, false); return result;
       }
       const order = orderOf(ordered);
@@ -267,7 +302,7 @@ export class ChartStudyClockLinks {
       // The host may have broadcast our committed operation before losing its
       // reply. Until an explicit retry confirms an order, don't apply queued
       // older clocks over the known local committed cut.
-      if (intent.epoch === this.scopeEpoch && this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.set(intent.cellId, intent.operation);
+      if (!intent.superseded && intent.epoch === this.scopeEpoch && this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.set(intent.cellId, intent.operation);
       this.finish(requestId, true);
     }
     return result;
@@ -277,82 +312,108 @@ export class ChartStudyClockLinks {
     const body = payload(event.payload), order = orderOf(event);
     if (!body || order === null || event.workspaceId !== this.scope) return;
     if ((body.operation === "mode") !== (event.kind === "studyMode")) return;
-    try { await this.waitForDocumentRevision(body.configurationRevision, event.sourceCellId, body.configurationKey, epoch); } catch { return; }
-    if (epoch !== this.scopeEpoch || event.workspaceId !== this.scope) return;
-    const leader = body.operation === "tick" ? body.leaderOrder : order;
-    if (leader > order) return;
-    const targets = this.targets(event.sourceCellId, body.operation);
-    await Promise.all(targets.map(async cellId => {
-      // A local operation orders itself only after durable commit. Await its
-      // order (not peer acknowledgements) before comparing an incoming event.
-      while (this.userIntents.has(cellId)) {
-        if (epoch !== this.scopeEpoch) return;
-        const local = this.userIntents.get(cellId)!;
-        // A new explicit leader supersedes an unfinished automatic tick. The
-        // tick keeps its old leader stamp even if its commit arrives later.
-        if (local.operation === "tick" && leader > (this.leaderOrder.get(cellId) ?? 0)) {
-          this.cancelUserAction(local); break;
+    const recipients = new Map([...this.registrations].filter(([, registration]) => registration.scope === event.workspaceId)
+      .map(([cellId, registration]) => {
+        let studyId: string | null | undefined;try { studyId = registration.port.read().studyId; } catch { /* This owner is unavailable. */ }
+        return [cellId, { registration, studyId }] as const;
+      }));
+    let configurationReady = false, configurationSuperseded = false;
+    const bus = this.bus;
+    const observeConfiguration = () => {
+      const canonical = bus?.current.snapshot?.workspaces.find(record => record.id === event.workspaceId)?.document;
+      const key = this.configurationKey(event.sourceCellId);
+      if (epoch !== this.scopeEpoch || bus !== this.bus
+        || (this.routingFloors.get(event.sourceCellId)?.revision ?? 0) > body.configurationRevision
+        || (configurationReady && key !== body.configurationKey)
+        || (canonical && (bus!.current.revisions[event.workspaceId] ?? -1) >= body.configurationRevision
+          && this.configurationKey(event.sourceCellId, canonical) !== body.configurationKey)) configurationSuperseded = true;
+      if (this.document.revision >= body.configurationRevision && key === body.configurationKey) configurationReady = true;
+    };
+    this.documentWaiters.add(observeConfiguration);
+    const releaseConfiguration = bus?.subscribeSnapshot(observeConfiguration) ?? (() => {});
+    const stopConfiguration = () => { this.documentWaiters.delete(observeConfiguration); releaseConfiguration(); };
+    const timer = setTimeout(() => { configurationSuperseded = true; stopConfiguration(); }, 5_000);
+    observeConfiguration();
+    try {
+      try { await this.waitForDocumentRevision(body.configurationRevision, event.sourceCellId, body.configurationKey, epoch); } catch { return; }
+      if (configurationSuperseded || epoch !== this.scopeEpoch || event.workspaceId !== this.scope) return;
+      const leader = body.operation === "tick" ? body.leaderOrder : order;
+      if (leader > order) return;
+      const targets = this.targets(event.sourceCellId, body.operation);
+      await Promise.all(targets.map(async cellId => {
+        // A local operation orders itself only after durable commit. Await its
+        // order (not peer acknowledgements) before comparing an incoming event.
+        while (this.userIntents.has(cellId)) {
+          if (configurationSuperseded || epoch !== this.scopeEpoch) return;
+          const local = this.userIntents.get(cellId)!;
+          // A new explicit leader supersedes an unfinished automatic tick. The
+          // tick keeps its old leader stamp even if its commit arrives later.
+          if (local.operation === "tick" && leader > (this.leaderOrder.get(cellId) ?? 0)) {
+            this.cancelUserAction(local); break;
+          }
+          await local.settled;
         }
-        await local.settled;
-      }
-      if (event.workspaceId !== this.scope || epoch !== this.scopeEpoch) return;
-      const registration = this.registrations.get(cellId);
-      if (!registration || registration.scope !== this.scope) {
-        if (!this.bus?.isNative()) this.result(event, body, cellId, order, "unavailable");
-        return; // A native peer may be owned by another renderer; await its ack.
-      }
-      let status: ChartStudyClockStatus;
-      const previousLeader = this.leaderOrder.get(cellId) ?? 0;
-      const source = `${event.sourceWindowId}\u0000${event.sourceCellId}`;
-      if ((this.uncertainOrder.has(cellId) && this.uncertainOrder.get(cellId) !== "tick")
-        || (this.uncertainOrder.has(cellId) && leader <= previousLeader)) status = "unavailable";
-      else if (leader < previousLeader || (leader === previousLeader && order <= (this.lastOrder.get(cellId) ?? 0))) status = "superseded";
-      else if (body.operation === "tick" && leader === previousLeader && this.leaderSource.get(cellId) !== source) status = "superseded";
-      else {
-        this.leaderOrder.set(cellId, leader); this.uncertainOrder.delete(cellId);
-        this.leaderSource.set(cellId, source);
-        this.lastOrder.set(cellId, order);
-        this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
-        this.latestRequest.delete(this.issueKey(cellId, body.operation));
-        if (this.issues.delete(this.issueKey(cellId, body.operation))) this.emit();
-        let state: ChartStudyClockState | null = null;
-        try { state = registration.port.read(); } catch { /* Report an unavailable owner below. */ }
-        const withCursor = body.operation !== "mode" || (body.active && this.targets(event.sourceCellId).includes(cellId));
-        if (!state || state.pending) status = "unavailable";
-        else if (body.operation === "mode") {
-          if (state.editing) status = "editing";
-          else if (state.active && !state.followReady) status = "unavailable";
-          else if (body.active && !state.studyId) status = "unprepared";
-          else if (withCursor && (state.minimumMs === null || state.maximumMs === null
-            || body.cursorMs < state.minimumMs || body.cursorMs > state.maximumMs)) status = "out-of-range";
+        if (configurationSuperseded || event.workspaceId !== this.scope || epoch !== this.scopeEpoch) return;
+        const registration = this.registrations.get(cellId);
+        if (!registration || registration.scope !== this.scope) {
+          if (!this.bus?.isNative()) this.result(event, body, cellId, order, "unavailable");
+          return; // A native peer may be owned by another renderer; await its ack.
+        }
+        if (recipients.get(cellId)?.registration !== registration) { this.result(event, body, cellId, order, "superseded");return; }
+        let status: ChartStudyClockStatus;
+        const previousLeader = this.leaderOrder.get(cellId) ?? 0;
+        const source = `${event.sourceWindowId}\u0000${event.sourceCellId}`;
+        if ((this.uncertainOrder.has(cellId) && this.uncertainOrder.get(cellId) !== "tick")
+          || (this.uncertainOrder.has(cellId) && leader <= previousLeader)) status = "unavailable";
+        else if (leader < previousLeader || (leader === previousLeader && order <= (this.lastOrder.get(cellId) ?? 0))) status = "superseded";
+        else if (body.operation === "tick" && leader === previousLeader && this.leaderSource.get(cellId) !== source) status = "superseded";
+        else {
+          this.leaderOrder.set(cellId, leader); this.uncertainOrder.delete(cellId);
+          this.leaderSource.set(cellId, source);
+          this.lastOrder.set(cellId, order);
+          this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
+          this.latestRequest.delete(this.issueKey(cellId, body.operation));
+          if (this.issues.delete(this.issueKey(cellId, body.operation))) this.emit();
+          let state: ChartStudyClockState | null = null;
+          try { state = registration.port.read(); } catch { /* Report an unavailable owner below. */ }
+          const withCursor = body.operation !== "mode" || (body.active && this.targets(event.sourceCellId).includes(cellId));
+          if (!state || state.pending) status = "unavailable";
+          else if (state.studyId !== recipients.get(cellId)?.studyId) status = "superseded";
+          else if (body.operation === "mode") {
+            if (state.editing) status = "editing";
+            else if (state.active && !state.followReady) status = "unavailable";
+            else if (body.active && !state.studyId) status = "unprepared";
+            else if (withCursor && (state.minimumMs === null || state.maximumMs === null
+              || body.cursorMs < state.minimumMs || body.cursorMs > state.maximumMs)) status = "out-of-range";
+            else {
+              try {
+                const changed = await registration.port.setMode(body.active!, withCursor ? body.cursorMs : undefined);
+                const current = registration.port.read();
+                status = configurationSuperseded || epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
+                  || this.lastOrder.get(cellId) !== order ? "superseded"
+                  : changed && !current.pending && current.active === body.active
+                    && (!body.active || (current.studyId === state.studyId && (!withCursor || current.cursorMs === body.cursorMs))) ? "moved" : "failed";
+              } catch { status = "failed"; }
+            }
+          }
+          else if (!state.active || !state.studyId) status = "inactive";
+          else if (!state.followReady) status = "unavailable";
+          else if (state.editing) status = "editing";
+          else if (state.minimumMs === null || state.maximumMs === null || body.cursorMs < state.minimumMs || body.cursorMs > state.maximumMs) status = "out-of-range";
           else {
             try {
-              const changed = await registration.port.setMode(body.active!, withCursor ? body.cursorMs : undefined);
+              const moved = await registration.port.move(body.cursorMs);
               const current = registration.port.read();
-              status = epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
+              status = configurationSuperseded || epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
                 || this.lastOrder.get(cellId) !== order ? "superseded"
-                : changed && !current.pending && current.active === body.active
-                  && (!body.active || (current.studyId === state.studyId && (!withCursor || current.cursorMs === body.cursorMs))) ? "moved" : "failed";
+                : moved && current.active && !current.pending && current.studyId === state.studyId
+                  && current.cursorMs === body.cursorMs ? "moved" : "failed";
             } catch { status = "failed"; }
           }
         }
-        else if (!state.active || !state.studyId) status = "inactive";
-        else if (!state.followReady) status = "unavailable";
-        else if (state.editing) status = "editing";
-        else if (state.minimumMs === null || state.maximumMs === null || body.cursorMs < state.minimumMs || body.cursorMs > state.maximumMs) status = "out-of-range";
-        else {
-          try {
-            const moved = await registration.port.move(body.cursorMs);
-            const current = registration.port.read();
-            status = epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
-              || this.lastOrder.get(cellId) !== order ? "superseded"
-              : moved && current.active && !current.pending && current.studyId === state.studyId
-                && current.cursorMs === body.cursorMs ? "moved" : "failed";
-          } catch { status = "failed"; }
-        }
-      }
-      this.result(event, body, cellId, order, status);
-    }));
+        this.result(event, body, cellId, order, status);
+      }));
+    } finally { clearTimeout(timer); stopConfiguration(); }
   }
   private result(event: WorkspaceBusLinkEvent, body: Payload, cellId: string, order: number, status: ChartStudyClockStatus) {
     if (event.workspaceId !== this.scope) return;
@@ -386,6 +447,7 @@ export class ChartStudyClockLinks {
       const status = pending.order === null ? "unavailable" : value?.status ?? "unavailable";
       return status === "moved" || status === "inactive" ? [] : [{ cellId, status }];
     });
+    if (pending.order === null && !failed.length) failed.push({ cellId: pending.sourceCellId, status: "unavailable" });
     const key = this.issueKey(pending.sourceCellId, pending.operation);
     if (report && pending.scope === this.scope && this.latestRequest.get(key) === requestId) {
       if (failed.length) this.issues.set(key, { sourceCellId: pending.sourceCellId, operation: pending.operation, failed });
