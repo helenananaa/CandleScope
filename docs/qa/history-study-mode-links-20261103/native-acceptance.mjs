@@ -176,6 +176,28 @@ async function lostExit(){
  try{const receipt=await operation;await live('cell-1');await live('cell-2');await live(targetId,secondId);await live(liveId,secondId);await q.record('authoritative-exit-recovery-publishes-mode-to-all-owning-windows',{receipt,committed});}
  finally{await q.s.page.unroute(pattern,intercept);}
 }
+async function resumeWithPeerCommitHeld(){
+ let committed,release;
+ const held=new Promise(resolve=>{release=resolve;});
+ const pattern='**/api/v1/history-studies/views/'+owner(workspace,'cell-2');
+ const intercept=async route=>{
+  if(route.request().method()==='PATCH'&&!committed){
+   const response=await route.fetch();assert.equal(response.status(),200);committed=await response.json();
+   await held;await route.abort('connectionfailed');return;
+  }
+  await route.continue();
+ };
+ await q.s.page.route(pattern,intercept);let operation;
+ try{
+  operation=resume('cell-1');await q.until(()=>committed);
+  await cell('cell-2').locator('.history-study-mask').waitFor();
+  const target=(await layout('main-window')).cells.find(row=>row.cellId==='cell-2');
+  assert.equal(committed.active,true);assert.equal(target.runtime.mode,'restoring-study');assert.equal(target.runtime.barCount,0);
+  assert.equal(await cell('cell-2').locator('[data-study-id]').count(),0);
+  await q.record('peer-mode-activation-masks-live-before-real-committed-response-is-released',{committed,target:target.runtime,acknowledgement:'Actual PATCH committed, response held before abort; no substituted body'});
+ }finally{release();}
+ try{await operation;await at('cell-2',fixture.beforeMs);}finally{await q.s.page.unroute(pattern,intercept);}
+}
 try{
  await launch();secondPage=await pageFor(secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:secondId,message:error.message}));
  workspace=(await q.inspect()).workspaceId;const initial=await q.until(document);groupId=initial.cells['cell-1'].linkGroupId;assert.ok(groupId);
@@ -190,7 +212,7 @@ try{
  await q.record('default-off-mode-retains-independent-other-studies',{a:await state('cell-1'),b:await state('cell-2'),c:await state(targetId,secondId)});
  await command('workspace','updateLinkPolicy',{groupId,relationship:'peers',patch:{studyMode:true}});
  await execute('cell-1','exit');await live('cell-1');await live('cell-2');await live(targetId,secondId);await live(liveId,secondId);
- await resume('cell-1');await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.beforeMs);await at(targetId,fixture.afterMs,secondId);await live(liveId,secondId);
+ await resumeWithPeerCommitHeld();await at('cell-1',fixture.earlyMs);await at('cell-2',fixture.beforeMs);await at(targetId,fixture.afterMs,secondId);await live(liveId,secondId);
  assert.equal((await view('cell-1')).study.id,a.id);assert.equal((await view('cell-2')).study.id,b.id);assert.equal((await view(targetId)).study.id,c.id);
  await modeButton().waitFor();assert.equal((await view(liveId)).study,null);
  await q.record('mode-only-resumes-own-inputs-and-own-cuts-unprepared-chart-explicit',{a:await state('cell-1'),b:await state('cell-2'),c:await state(targetId,secondId),unprepared:await view(liveId)});

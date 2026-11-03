@@ -55,7 +55,9 @@ export function useHistoryStudy(owner: string, manager: MarketDataManager | null
     const playback = state.playback ?? new HistoryStudyPlayback(state.view.study, state.view.cursorMs!);
     queue.current = { cursorMs: Math.max(playback.minimumMs, Math.min(playback.maximumMs, cursorMs)), active };
     if (writing.current) return writing.current;
-    publish({ busy: true, error: null });
+    // A live target entering its saved study must hide the live surface before
+    // the mode write can commit, including while its acknowledgement is held.
+    publish({ busy: true, readRequired: !state.view.active, error: null });
     const task = Promise.resolve().then(async () => {
       try {
         while (queue.current && token === epoch.current) {
