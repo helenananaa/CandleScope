@@ -1147,7 +1147,7 @@ function LiveChartCell({
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={moveStudy} onRetry={study.retry}
               onAutomaticMove={advanceStudyAutomatically}
               onEditingChanged={setStudyEditing} onFollowReady={setStudyFollowReady} onPlayStart={startStudyClock}
-              cursorLinkIssue={cursorLinkIssue?.operation === "cursor" ? cursorLinkIssue : null} onRetryCursorLink={retryCursorLink} />
+              cursorLinkIssue={cursorLinkIssue} onRetryCursorLink={retryCursorLink} />
           </Suspense>}
           {study.masked && !study.playback && <div className="history-study-mask" role="status">
             {t(study.error ? "study.error" : "study.loading")}
@@ -1156,7 +1156,7 @@ function LiveChartCell({
           {!study.masked && study.error && <div className="study-recovery-message" role="alert">
             {t("study.error")} <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button>
           </div>}
-          {cursorLinkIssue?.operation === "mode" && <div className="study-recovery-message" role="alert">
+          {!study.masked && cursorLinkIssue?.operation === "mode" && <div className="study-recovery-message" role="alert">
             {t("study.modeLinkFailed", { count: cursorLinkIssue.failed.length })}
             <button type="button" className="trading-button" disabled={study.pending || study.busy} onClick={retryCursorLink}>{t("study.modeLinkRetry")}</button>
           </div>}

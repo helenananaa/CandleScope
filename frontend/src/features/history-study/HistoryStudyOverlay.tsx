@@ -226,8 +226,8 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
         onChange={e => setValue(e.target.value)} /></label>
       <button type="button" className="trading-button" disabled={!!editor} onClick={() => { void jump(); }}>{t("study.seek")}</button>
       {invalid && <span role="alert">{t("study.invalidRange")}</span>}
-      {cursorLinkIssue && <p role="alert">{t("study.cursorLinkFailed", { count: cursorLinkIssue.failed.length })}
-        <button type="button" className="trading-button" disabled={busy || !!editor} onClick={onRetryCursorLink}>{t("study.cursorLinkRetry")}</button>
+      {cursorLinkIssue && <p role="alert">{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkFailed" : "study.cursorLinkFailed", { count: cursorLinkIssue.failed.length })}
+        <button type="button" className="trading-button" disabled={busy || !!editor} onClick={onRetryCursorLink}>{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkRetry" : "study.cursorLinkRetry")}</button>
       </p>}
     </footer>
     {navigation.open && <ChartTimeNavigationDialog cellId={cellId} onClose={() => navigation.setOpen(false)}
