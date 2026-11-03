@@ -17,7 +17,7 @@ export type ChartStudyClockStatus = "moved" | "inactive" | "unprepared" | "out-o
 export interface ChartStudyClockIssue { sourceCellId: string; operation: "mode" | "cursor"; failed: Array<{ cellId: string; status: ChartStudyClockStatus }> }
 type Operation = "cursor" | "tick" | "mode";
 interface Intent {
-  scope: string; cellId: string; generation: number;
+  scope: string; epoch: number; cellId: string; generation: number;
   operation: Operation; leaderOrder: number;
   settled: Promise<void>; release(): void;
 }
@@ -72,10 +72,12 @@ export class ChartStudyClockLinks {
   private listeners = new Set<() => void>();
   private bus: WorkspaceBusClient | null = null;
   private localOrder = 0;
+  private scopeEpoch = 0;
   constructor(private document: ChartWorkspaceDocument, private scope: string) {}
 
   updateDocument(document: ChartWorkspaceDocument, scope: string) {
     if (scope !== this.scope) {
+      this.scopeEpoch += 1;
       for (const intent of this.userIntents.values()) intent.release();
       this.userIntents.clear(); this.uncertainOrder.clear();
       for (const requestId of [...this.pending.keys()]) this.finish(requestId, false);
@@ -139,7 +141,7 @@ export class ChartStudyClockLinks {
     if (this.issues.delete(this.issueKey(cellId, operation))) this.emit();
     let release = () => {};
     const settled = new Promise<void>(resolve => { release = resolve; });
-    const intent = { scope, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0, settled, release };
+    const intent = { scope, epoch: this.scopeEpoch, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0, settled, release };
     this.userIntents.set(cellId, intent);
     return intent;
   }
@@ -159,7 +161,7 @@ export class ChartStudyClockLinks {
     finally { this.cancelUserAction(intent); }
   }
   private async publishCommittedUserMove(intent: Intent): Promise<boolean> {
-    if (intent.scope !== this.scope || intent.generation !== this.generations.get(intent.cellId)) return false;
+    if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || intent.generation !== this.generations.get(intent.cellId)) return false;
     const registration = this.registrations.get(intent.cellId);
     if (!registration || registration.scope !== this.scope) return false;
     let state: ChartStudyClockState;
@@ -187,7 +189,9 @@ export class ChartStudyClockLinks {
       const ordered = this.bus?.isNative() ? await boundedOrderReply(this.bus.publishOrderedLink(event))
         : { ...event, eventId: `link-${++this.localOrder}` };
       const pending = this.pending.get(requestId);
-      if (intent.scope !== this.scope) return result;
+      if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || this.registrations.get(intent.cellId) !== registration) {
+        this.finish(requestId, false); return result;
+      }
       const order = orderOf(ordered);
       const acknowledged = payload(ordered.payload);
       if (order === null || acknowledged?.requestId !== requestId || acknowledged.cursorMs !== state.cursorMs
@@ -215,12 +219,13 @@ export class ChartStudyClockLinks {
       // The host may have broadcast our committed operation before losing its
       // reply. Until an explicit retry confirms an order, don't apply queued
       // older clocks over the known local committed cut.
-      if (this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.set(intent.cellId, intent.operation);
+      if (intent.epoch === this.scopeEpoch && this.generations.get(intent.cellId) === intent.generation) this.uncertainOrder.set(intent.cellId, intent.operation);
       this.finish(requestId, true);
     }
     return result;
   }
   private async receive(event: WorkspaceBusLinkEvent) {
+    const epoch = this.scopeEpoch;
     const body = payload(event.payload), order = orderOf(event);
     if (!body || order === null || event.workspaceId !== this.scope) return;
     if ((body.operation === "mode") !== (event.kind === "studyMode")) return;
@@ -231,6 +236,7 @@ export class ChartStudyClockLinks {
       // A local operation orders itself only after durable commit. Await its
       // order (not peer acknowledgements) before comparing an incoming event.
       while (this.userIntents.has(cellId)) {
+        if (epoch !== this.scopeEpoch) return;
         const local = this.userIntents.get(cellId)!;
         // A new explicit leader supersedes an unfinished automatic tick. The
         // tick keeps its old leader stamp even if its commit arrives later.
@@ -239,7 +245,7 @@ export class ChartStudyClockLinks {
         }
         await local.settled;
       }
-      if (event.workspaceId !== this.scope) return;
+      if (event.workspaceId !== this.scope || epoch !== this.scopeEpoch) return;
       const registration = this.registrations.get(cellId);
       if (!registration || registration.scope !== this.scope) {
         if (!this.bus?.isNative()) this.result(event, body, cellId, order, "unavailable");
@@ -273,7 +279,7 @@ export class ChartStudyClockLinks {
             try {
               const changed = await registration.port.setMode(body.active!, withCursor ? body.cursorMs : undefined);
               const current = registration.port.read();
-              status = this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
+              status = epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
                 || this.lastOrder.get(cellId) !== order ? "superseded"
                 : changed && !current.pending && current.active === body.active
                   && (!body.active || (current.studyId === state.studyId && (!withCursor || current.cursorMs === body.cursorMs))) ? "moved" : "failed";
@@ -288,7 +294,7 @@ export class ChartStudyClockLinks {
           try {
             const moved = await registration.port.move(body.cursorMs);
             const current = registration.port.read();
-            status = this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
+            status = epoch !== this.scopeEpoch || this.scope !== event.workspaceId || this.registrations.get(cellId) !== registration
               || this.lastOrder.get(cellId) !== order ? "superseded"
               : moved && current.active && !current.pending && current.studyId === state.studyId
                 && current.cursorMs === body.cursorMs ? "moved" : "failed";
