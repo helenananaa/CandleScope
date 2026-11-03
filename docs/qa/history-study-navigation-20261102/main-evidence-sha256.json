@@ -1,0 +1,22 @@
+{
+  "main-evidence/acceptance.json.gz": "3e5f4d275f0290cd602ea8d58eab8754e4dec40f6fe8052ccaa39002c86bed87",
+  "main-evidence/assembly.json.gz": "1bd3625ea3f804d70e665cfe2f55d5b13acc20072f444483f31aac029dbcb7f7",
+  "main-evidence/candlescope-plugin-pine-compat.lock.json.gz": "b305e4389fdd49d5ea77f0d63b68feff44eb29cd165b542798531fba9cf9e889",
+  "main-evidence/current-python.log.gz": "a2dc65af4af19e4aab9a70bc367626ef2d9a8eea0d80604494358e9ca15dfcd5",
+  "main-evidence/fixture.json.gz": "f43851169af999d5a812c63be66b8b2a76d3e9c75858fb40d388408c54da5111",
+  "main-evidence/loopback-launcher.sh.gz": "e1effafb44f4c5afc5c77138b01c7ea02c3bd1c5aac93424bf713320d8afdd44",
+  "main-evidence/loopback-only.sb.gz": "f4dfe0ad5d7d270843e27a42b9f0ed896e2e66906d17932f3c48bfff9e50561f",
+  "main-evidence/main-assembly-fixed.log.gz": "6d958e2cab1a20ef79af88d4e54f10ac67be2b841efdfb589b04dda0710434db",
+  "main-evidence/main-assembly.log.gz": "aff0fe7a728250f451a5f47379848d61ae9e969b68b9b5960df471e1316ec046",
+  "main-evidence/main-backend.log.gz": "3e8dfcbb2e0c159dcb531797ea640c2e86bcd40a92f816bf012da2d6d0c4f4b5",
+  "main-evidence/main-native.log.gz": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23",
+  "main-evidence/main-plugins.log.gz": "29a290325cb711a8c9c45e153a2c6cf93b57babdfdf96dc01d4e18c105a774d6",
+  "main-evidence/main-strict-after-tests.log.gz": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837",
+  "main-evidence/main-strict.log.gz": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837",
+  "main-evidence/manifest.json.gz": "7edaf74466078c19afa1f4ae5733529777353d8bc5a60dd064938147cf889592",
+  "main-evidence/navigation-recovery.png": "f28cbd877a927ad5feb6e607235903451e476d333ff965ac5db87acdd42f35b2",
+  "main-evidence/plugin-source-package-manifest.json.gz": "8647c108ab844995acb556f3b4767fe1cab341ac34571e264956bac3b6418c21",
+  "main-evidence/python-indicator.lock.json.gz": "519dbc341fcc9d39b9af9fec5836910f723bcb2d21a379e3cda197d798b4b0c5",
+  "main-evidence/source-package-manifest.json.gz": "51883e16be391b12cd21332b9b145841e29adb2f14b3176fb761a4d5bc582427",
+  "main-evidence/traffic.json.gz": "274a6bc1d2ca3666eb34e670a6cc140775eca1d18bd9270e7eb0e6c1434ef716"
+}

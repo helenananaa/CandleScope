@@ -1,0 +1,61 @@
+name: Windows Python strategy worker
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/backtest/strategy/**"
+      - "backend/app/plugin_security_v2/**"
+      - "backend/tests/test_python_strategy_runtime.py"
+      - "packages/candlescope-backtest-sdk/**"
+      - "backend/requirements*.txt"
+      - ".github/scripts/verify_windows_python_worker.py"
+      - ".github/workflows/windows-python-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-python-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    name: Native Windows worker and AppContainer
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      CANDLESCOPE_RUNTIME_MODE: LOCAL_OFFLINE
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install canonical backend test dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
+      - name: Run native worker execution and ACL lifecycle checks
+        working-directory: backend
+        env:
+          CANDLE_DATA_DIR: ${{ runner.temp }}/candlescope-worker-data
+        run: >-
+          python -B -m pytest -q tests/test_python_strategy_runtime.py
+          --junitxml=../output/windows-python-worker/junit.xml
+          --basetemp="${{ runner.temp }}/python-worker-${{ github.run_id }}-${{ github.run_attempt }}"
+      - name: Require executed Windows cases and record source identity
+        if: always()
+        run: >-
+          python -B .github/scripts/verify_windows_python_worker.py
+          output/windows-python-worker/junit.xml
+          output/windows-python-worker/qualification.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-python-worker-${{ github.run_attempt }}
+          path: output/windows-python-worker/**
+          if-no-files-found: warn
+          retention-days: 14

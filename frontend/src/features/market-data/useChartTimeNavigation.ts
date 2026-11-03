@@ -8,7 +8,7 @@ export function useChartTimeNavigation({
   active, enabled, cellId, workspaceId, sessionKey, marketData, surface, links,
 }: {
   active: boolean; enabled: boolean; cellId: string; workspaceId: string; sessionKey: string;
-  marketData: MarketDataRuntimeContract; surface: ChartSurfaceActions; links: ChartLinkCoordinator;
+  marketData: { actions: Pick<MarketDataRuntimeContract["actions"], "seekToTime"> }; surface: ChartSurfaceActions; links: ChartLinkCoordinator;
 }) {
   const [open, setOpen] = useState(false);
   const sequence = useRef(0);
@@ -43,7 +43,7 @@ export function useChartTimeNavigation({
     if (!enabled || !seek) return undefined;
     return links.registerTimeNavigator(cellId, navigate, workspaceId);
   }, [cellId, enabled, links, navigate, seek, workspaceId]);
-  useEffect(() => () => { sequence.current += 1; }, [sessionKey, enabled]);
+  useEffect(() => () => { sequence.current += 1; }, [sessionKey, enabled, workspaceId, cellId, seek, surface]);
   useEffect(() => {
     if (!active || !enabled || !seek) return undefined;
     const keydown = (event: KeyboardEvent) => {

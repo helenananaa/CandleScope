@@ -1,6 +1,7 @@
 """Common data lifecycle owner; constructing it opens no live market feeds."""
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 from .strategy import StrategyDataManager
@@ -17,6 +18,8 @@ class DataManagerCore:
         self.strategy: StrategyDataManager | None = None
         self.readonly_account: ReadOnlyAccountDataManager | None = None
         self.trading: TradingAccountDataManager | None = None
+        self._history_studies = None
+        self._study_lock = threading.Lock()
 
     def bind_trading(self, service) -> TradingAccountDataManager:
         if self.trading is not None:
@@ -29,6 +32,18 @@ class DataManagerCore:
     def close_trading(self) -> None:
         if self.trading is not None:
             self.trading.close()
+
+    def history_studies(self, path):
+        # No database or public market transport opens during construction.
+        # The repository uses short transaction-owned connections, so it has
+        # no resident writer/socket requiring a shutdown ordering dependency.
+        from app.history_studies.repository import HistoryStudyRepository
+        with self._study_lock:
+            if self._history_studies is None:
+                self._history_studies = HistoryStudyRepository(path)
+            elif self._history_studies.path != path:
+                raise RuntimeError("History studies are already bound to another profile")
+            return self._history_studies
 
     def bind_strategy(self, service: BacktestService, runtime: BacktestRuntime | None = None) -> StrategyDataManager:
         if self.strategy is not None:

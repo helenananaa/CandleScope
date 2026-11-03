@@ -204,8 +204,16 @@ class Strategy:
 """,
         encoding="utf-8",
     )
-    runner = IsolatedPythonRunner(bundle, mode="SANDBOXED_LOCAL", step_timeout_s=5)
+    runner = None
     try:
+        # Prove these controlled targets are accessible outside AppContainer.
+        # Otherwise a broken listener could look like successful isolation.
+        assert marker.read_text(encoding="utf-8") == "host secret"
+        listener.settimeout(2)
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            connection, _ = listener.accept()
+            connection.close()
+        runner = IsolatedPythonRunner(bundle, mode="SANDBOXED_LOCAL", step_timeout_s=5)
         runner.start()
         runner.call(
             "prepare", {"bundleDir": str(bundle), "entrypoint": "strategy:Strategy"}
@@ -214,7 +222,8 @@ class Strategy:
         assert snapshot["payload"] == {"file": False, "network": False}
         runner.call("close")
     finally:
-        runner.close()
+        if runner is not None:
+            runner.close()
         listener.close()
 
 

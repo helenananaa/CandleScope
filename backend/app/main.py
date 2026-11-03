@@ -75,6 +75,7 @@ from app.core.version import APP_VERSION
 from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
+from app.history_studies.api import router as history_studies_router
 
 if RUNTIME_MODE == "LIVE":
     from app.api.v1.alerts import router as alerts_router
@@ -141,6 +142,7 @@ app.add_middleware(
     minimum_size=1024,
     compresslevel=5,
 )
+app.include_router(history_studies_router, prefix="/api/v1")
 if RUNTIME_MODE == "LOCAL_OFFLINE":
     app.add_middleware(LocalOfflineProfileMiddleware, enabled=True)
     app.include_router(local_data_router, prefix="/api/v1")

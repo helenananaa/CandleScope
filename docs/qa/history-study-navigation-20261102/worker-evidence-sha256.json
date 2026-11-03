@@ -1,0 +1,16 @@
+{
+  "worker-evidence/acceptance.json.gz": "b89b90b27047ec83ea23067c8bd0e0243f6724f629e6ac6742d584912f836123",
+  "worker-evidence/assembly.json.gz": "13bc27e850582eb0ad3a7f7981b15d99973944b6e38e91a5c81700f73566e388",
+  "worker-evidence/assembly.log.gz": "22dc2b363aab0d41ad94918736c97481677aafcfe5f7acfe571196674c138363",
+  "worker-evidence/backend.log.gz": "af162b0dc7c0ad0dda5c8d2999ee7c663da23bbd87ff0f79ef69afa89277e84d",
+  "worker-evidence/fixture.json.gz": "239ee89e8f7c7effffd8f6e5778d9d82ebf6a45e3d3d7bc0ad53166e7b6806c3",
+  "worker-evidence/loopback-launcher.sh.gz": "999879a74fedeede64cb724efa6823f0c0d10f90249704e65c90b17e60623a2b",
+  "worker-evidence/loopback-only.sb.gz": "f4dfe0ad5d7d270843e27a42b9f0ed896e2e66906d17932f3c48bfff9e50561f",
+  "worker-evidence/native.log.gz": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23",
+  "worker-evidence/navigation-recovery.png": "2e1c39d12cb3d502e088c9dbdbf8962291305cf28fd887bb8f9a06eb00f0aa1e",
+  "worker-evidence/plugin-source-package-manifest.json.gz": "72d715c9d39b9ac7b79676e34d1de1e3dbacdbb11ea4b640d6b98c87199d0484",
+  "worker-evidence/sdk-source-package-manifest.json.gz": "aab75bb72bb7e8ae86d617ba6ad364ea1a06956b46f02fcc4e2cf8f9244edffd",
+  "worker-evidence/source-package-manifest.json.gz": "67bfce529247e0d5eaf033d70c3ac460dd88cee86d73e6a62b77ec2343883c7f",
+  "worker-evidence/strict.log.gz": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837",
+  "worker-evidence/traffic.json.gz": "0fb8516523503aca11ab38959495a52f58862026c410ca3a8d03d3a6af8e2a32"
+}

@@ -5,15 +5,16 @@ import { formatUtcDateTimeInput, parseUtcDateTimeInput } from "../../utils/utcDa
 import type { ChartTimeSeekResult } from "./chartTimeNavigation.js";
 import "./chartTimeNavigation.css";
 
-export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit }: {
+export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit, initialTimeMs, hint }: {
   cellId: string; onClose(): void;
+  initialTimeMs?: number; hint?: string;
   onSubmit(timeMs: number): Promise<Array<{ cellId: string; result: ChartTimeSeekResult }>>;
 }) {
   useLocale();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const sequence = useRef(0);
-  const [value, setValue] = useState(() => formatUtcDateTimeInput(Date.now()));
+  const [value, setValue] = useState(() => formatUtcDateTimeInput(initialTimeMs ?? Date.now()));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function ChartTimeNavigationDialog({ cellId, onClose, onSubmit }:
       <label htmlFor={`${id}-input`}>{t("chartTime.input")}</label>
       <input id={`${id}-input`} type="datetime-local" step="1" required value={value}
         onChange={(event) => setValue(event.target.value)} autoFocus />
-      <p>{t("chartTime.hint")}</p>
+      <p>{hint ?? t("chartTime.hint")}</p>
       <p role="status" aria-live="polite" aria-busy={busy}>{message}</p>
       <footer><button type="button" className="ui-control" onClick={onClose}>{t("chartTime.close")}</button>
         <button type="submit" className="ui-control">{t("chartTime.go")}</button></footer>
