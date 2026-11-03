@@ -5367,3 +5367,59 @@ def test_scheduler_bounds_sparse_native_seconds_by_provider_page() -> None:
         windows = sorted((call['range_start_ms'], call['range_end_ms']) for call in engine.calls)
         assert windows == [(0, 199_000), (200_000, 399_000), (400_000, 500_000)]
     asyncio.run(run())
+
+
+def test_deferred_chunk_cannot_fence_metadata_needed_by_its_active_sibling() -> None:
+    """A queued chunk cannot use quota priority to lock its own series lane."""
+    from app.exchanges.public_admission import (
+        PublicDemand, TrafficClass, current_demand, get_public_admission, public_demand,
+    )
+    from app.exchanges.rate_limits import HistoricalRequest, RateLimitRule
+
+    async def run() -> None:
+        quota = RateLimitRule("same-series-metadata", "same-series-metadata", 10, 60)
+        metadata_finished = asyncio.Event()
+        calls = []
+
+        class Engine:
+            async def run(self, **kwargs):
+                start = kwargs["range_start_ms"]
+                calls.append(start)
+                if len(calls) == 1:
+                    raise _quota_deferral(0.08, bucket_key=quota.bucket_key)
+                if start == 0:
+                    metadata = PublicDemand(TrafficClass.BACKGROUND, purpose="market_metadata")
+                    metadata.inherit(current_demand())
+                    with public_demand(metadata):
+                        permit = await get_public_admission().acquire(
+                            [quota], HistoricalRequest("binance", "spot", "/markets", "BTCUSDT"),
+                        )
+                    permit.finish(status_code=200)
+                    metadata_finished.set()
+                return _RepairReport(status="completed")
+
+        dm = _DataManager()
+        coord = BackfillCoordinator(
+            storage=_Storage(), bars_backfilled=dm.on_bars_backfilled,
+            emit_event=dm.event_bus.emit, engine=Engine(),
+            loop=asyncio.get_running_loop(), chunk_bars=1,
+        )
+        request = _request(0, 60_000, request_id="two-chunk-history")
+        request.reason, request.priority = "initial_history", 10
+        task = asyncio.create_task(coord.request_and_wait(request))
+        try:
+            try:
+                await asyncio.wait_for(metadata_finished.wait(), 3)
+            except TimeoutError as error:
+                raise AssertionError({"calls": calls, "business": coord.snapshot(),
+                                      "physical": get_public_admission().snapshot()}) from error
+            outcome = await asyncio.wait_for(asyncio.shield(task), 1)
+            assert outcome.status == "completed"
+            assert calls == [60_000, 0, 60_000]
+            assert get_public_admission().snapshot()["protected"] == 0
+        finally:
+            task.cancel()
+            await coord.shutdown()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(run())

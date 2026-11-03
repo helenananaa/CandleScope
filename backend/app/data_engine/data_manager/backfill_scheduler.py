@@ -74,6 +74,25 @@ class _SeriesState:
     pending: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class _DeferredSeriesLane:
+    """A deferred chunk protects quota only while its series can dispatch.
+
+    A sibling occupying this lane may need metadata on the same endpoint.
+    Retaining quota priority over that dependency would prevent the sibling
+    from finishing and therefore prevent the protected chunk from dispatching.
+    This is an availability view, not a reservation or an extra quota ledger.
+    """
+
+    series: dict[tuple[str, ...], _SeriesState]
+    key: tuple[str, ...]
+    keys: frozenset[str] = frozenset()
+
+    def available(self) -> bool:
+        state = self.series.get(self.key)
+        return state is None or state.active is None
+
+
 @dataclass(slots=True)
 class _FetchChunk:
     chunk_id: str
@@ -1407,7 +1426,10 @@ class BackfillScheduler:
                 return
             except RateLimitDeferred as exc:
                 if chunk.public_demand is not None:
-                    get_public_admission().protect(chunk.public_demand, exc.bucket_key)
+                    get_public_admission().protect(
+                        chunk.public_demand, exc.bucket_key,
+                        resource=_DeferredSeriesLane(self._series, chunk.request.series_key),
+                    )
                 await self._defer_chunk(chunk, exc)
                 return
             except asyncio.CancelledError:
