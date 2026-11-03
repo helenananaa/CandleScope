@@ -177,6 +177,7 @@ function normalizeLinkGroupSettings(value: unknown): ChartLinkGroupSettings {
     tradingOverlays: source.tradingOverlays === true,
     noteOverlays: source.noteOverlays === true,
     studyCursor: source.studyCursor === true,
+    studyMode: source.studyMode === true,
     drawings: typeof source.drawings === "boolean" ? source.drawings : DEFAULT_CHART_LINK_GROUP_SETTINGS.drawings,
     indicators: {
       definitions: typeof indicatorSource.definitions === "boolean"

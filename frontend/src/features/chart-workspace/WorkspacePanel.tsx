@@ -81,6 +81,7 @@ const LINK_SETTING_OPTIONS: ReadonlyArray<{
   { key: "crosshair", labelKey: "workspace.link.crosshair", descriptionKey: "workspace.link.crosshairDesc" },
   { key: "timeAnchor", labelKey: "workspace.link.timeAnchor", descriptionKey: "workspace.link.timeAnchorDesc" },
   { key: "dateRange", labelKey: "workspace.link.dateRange", descriptionKey: "workspace.link.dateRangeDesc" },
+  { key: "studyMode", labelKey: "study.modeLink", descriptionKey: "study.modeLinkDesc" },
   { key: "studyCursor", labelKey: "study.cursorLink", descriptionKey: "study.cursorLinkDesc" },
   { key: "accountSource", labelKey: "trading.overlay.linkSource", descriptionKey: "trading.overlay.linkSourceDesc" },
   { key: "tradingOverlays", labelKey: "trading.overlay.linkTrades", descriptionKey: "trading.overlay.linkTradesDesc" },

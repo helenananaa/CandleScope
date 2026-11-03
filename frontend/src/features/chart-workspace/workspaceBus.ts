@@ -6,7 +6,7 @@ import type {
   ChartWorkspaceLibrarySnapshot,
 } from "./chartWorkspaceTypes.js";
 
-export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor" | "studyCursor" | "studyCursorResult";
+export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor" | "studyCursor" | "studyMode" | "studyCursorResult";
 
 export interface WorkspaceBusLinkEvent {
   eventId?: string;
@@ -57,7 +57,7 @@ function isLinkEvent(value: unknown): value is WorkspaceBusLinkEvent {
     && typeof event?.workspaceId === "string"
     && typeof event.sourceWindowId === "string"
     && typeof event.sourceCellId === "string"
-    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor", "studyCursor", "studyCursorResult"].includes(String(event.kind));
+    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor", "studyCursor", "studyMode", "studyCursorResult"].includes(String(event.kind));
 }
 
 function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceLibrarySnapshot {
@@ -186,7 +186,7 @@ export class WorkspaceBusClient {
 
   /** Durable clock actions need the main-process ordering stamp, including
    * for peers in this renderer. Ordinary viewport broadcasts stay fire-and-forget. */
-  async publishOrderedLink(event: Omit<WorkspaceBusLinkEvent, "sourceWindowId" | "kind"> & { kind: "studyCursor" }): Promise<WorkspaceBusLinkEvent> {
+  async publishOrderedLink(event: Omit<WorkspaceBusLinkEvent, "sourceWindowId" | "kind"> & { kind: "studyCursor" | "studyMode" }): Promise<WorkspaceBusLinkEvent> {
     const bridge = globalThis.window?.candlescopeDesktop;
     if (!bridge) throw new Error("Ordered cross-window clocks require the desktop host");
     this.linkPublishes += 1;

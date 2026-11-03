@@ -1,4 +1,9 @@
 export const historyStudyEnglish = {
+  "study.modeLink": "Study replay mode",
+  "study.modeLinkDesc": "Off by default. Enter or leave study mode together. Each chart resumes its own last saved input; prepare a study first on charts without one. Time stays independent unless cursor linking is also enabled.",
+  "study.modeLinkFailed": "{count} chart(s) have not confirmed study mode. Prepare their saved study, close note editors and check the window connection, then retry.",
+  "study.modeLinkRetry": "Retry mode linking",
+
   "study.cursorLink": "Study replay cursor",
   "study.cursorLinkDesc": "Off by default. Follow the same absolute time in open studies and pause their own playback. Unavailable, note-editing or out-of-range studies report a failure. Live charts stay live; closed layouts are excluded. Cross-window following requires the desktop app.",
   "study.cursorLinkFailed": "{count} chart(s) have not confirmed cursor synchronization. Check the window connection, note editor and saved time range, then retry.",
@@ -65,6 +70,11 @@ export const historyStudyEnglish = {
 } as const;
 
 export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.modeLink": "研究回放模式",
+  "study.modeLinkDesc": "默认关闭。同步进入或退出研究模式，各图恢复自己上次保存的输入；尚无研究的图须先自行创建。仅当游标联动也开启时，才同步回放时刻。",
+  "study.modeLinkFailed": "{count} 张图尚未确认研究模式。请先准备其已保存的研究、关闭笔记编辑并检查窗口连接，然后重试。",
+  "study.modeLinkRetry": "重试模式联动",
+
   "study.cursorLink": "研究回放游标",
   "study.cursorLinkDesc": "默认关闭。仅让已打开的研究图跟随同一回放时刻，并暂停目标自己的播放。研究不可用、正在编辑笔记或超出范围时会提示；实时图保持实时，已关闭的布局不参与联动。跨窗口联动需要桌面应用。",
   "study.cursorLinkFailed": "{count} 张图尚未确认游标同步。请检查窗口连接、笔记编辑状态和保存的时间范围，然后重试。",
@@ -109,6 +119,11 @@ export const historyStudyChinese: Record<keyof typeof historyStudyEnglish, strin
 };
 
 export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.modeLink": "研究回放模式",
+  "study.modeLinkDesc": "預設關閉。同步進入或離開研究模式，各圖恢復自己上次儲存的輸入；尚無研究的圖須先自行建立。只有同時開啟游標聯動，才同步回放時刻。",
+  "study.modeLinkFailed": "{count} 張圖尚未確認研究模式。請先準備其已儲存的研究、關閉筆記編輯並檢查視窗連線，然後重試。",
+  "study.modeLinkRetry": "重試模式聯動",
+
   "study.cursorLink": "研究回放游標",
   "study.cursorLinkDesc": "預設關閉。僅讓已開啟的研究圖跟隨同一回放時刻，並暫停目標自己的播放。研究無法使用、正在編輯筆記或超出範圍時會提示；即時圖保持即時，已關閉的版面不參與聯動。跨視窗聯動需要桌面應用程式。",
   "study.cursorLinkFailed": "{count} 張圖尚未確認游標同步。請檢查視窗連線、筆記編輯狀態與儲存的時間範圍，然後重試。",
@@ -153,6 +168,11 @@ export const historyStudyTraditional: Record<keyof typeof historyStudyEnglish, s
 };
 
 export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.modeLink": "研究リプレイのモード",
+  "study.modeLinkDesc": "既定ではオフです。研究モードへの切り替えを同期します。各チャートは自身の最後の保存入力を再開するため、未保存の場合は先に研究を作成してください。時刻はカーソル同期も有効な場合だけ同期します。",
+  "study.modeLinkFailed": "{count} 個のチャートで研究モードを確認できませんでした。研究を保存し、ノート編集を閉じ、ウィンドウ接続を確認して再試行してください。",
+  "study.modeLinkRetry": "モード同期を再試行",
+
   "study.cursorLink": "研究リプレイのカーソル",
   "study.cursorLinkDesc": "既定ではオフです。開いている研究だけを同じ絶対時刻に移動し、移動先の再生を一時停止します。利用不可、ノート編集中、範囲外の研究は失敗として表示します。ライブチャートは変更せず、閉じたレイアウトは対象外です。ウィンドウ間の同期にはデスクトップアプリが必要です。",
   "study.cursorLinkFailed": "{count} 個のチャートでカーソル同期を確認できませんでした。ウィンドウの接続、ノートの編集状態、保存した時間範囲を確認して再試行してください。",
@@ -197,6 +217,11 @@ export const historyStudyJapanese: Record<keyof typeof historyStudyEnglish, stri
 };
 
 export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.modeLink": "연구 재생 모드",
+  "study.modeLinkDesc": "기본적으로 꺼져 있습니다. 연구 모드 진입과 종료를 함께 전환합니다. 각 차트는 자신의 마지막 저장 입력을 사용하므로 저장된 연구가 없으면 먼저 만들어야 합니다. 커서 동기화도 켜야 재생 시각이 동기화됩니다.",
+  "study.modeLinkFailed": "차트 {count}개의 연구 모드를 확인하지 못했습니다. 저장된 연구를 준비하고 노트 편집을 닫은 뒤 창 연결을 확인하여 다시 시도하세요.",
+  "study.modeLinkRetry": "모드 동기화 재시도",
+
   "study.cursorLink": "연구 재생 커서",
   "study.cursorLinkDesc": "기본적으로 꺼져 있습니다. 열린 연구만 같은 절대 시각으로 이동하고 대상의 자체 재생을 일시 중지합니다. 연구가 사용 불가, 노트 편집 중 또는 범위 밖이면 실패를 표시합니다. 실시간 차트는 유지하고 닫힌 레이아웃은 제외합니다. 창 간 동기화에는 데스크톱 앱이 필요합니다.",
   "study.cursorLinkFailed": "차트 {count}개의 커서 동기화를 확인하지 못했습니다. 창 연결, 노트 편집 상태와 저장된 시간 범위를 확인한 후 다시 시도하세요.",
@@ -241,6 +266,11 @@ export const historyStudyKorean: Record<keyof typeof historyStudyEnglish, string
 };
 
 export const historyStudyBrazilian: Record<keyof typeof historyStudyEnglish, string> = {
+  "study.modeLink": "Modo de estudo",
+  "study.modeLinkDesc": "Desativado por padrão. Sincroniza a entrada e a saída do modo de estudo. Cada gráfico retoma sua própria entrada salva; prepare primeiro um estudo nos gráficos que ainda não têm um. O horário só é sincronizado quando a sincronização do cursor também está ativada.",
+  "study.modeLinkFailed": "Não foi possível confirmar o modo de estudo em {count} gráficos. Prepare o estudo salvo, feche a edição de anotações e verifique a conexão da janela; depois tente novamente.",
+  "study.modeLinkRetry": "Tentar sincronizar o modo novamente",
+
   "study.cursorLink": "Cursor do replay de estudo",
   "study.cursorLinkDesc": "Desativado por padrão. Apenas estudos abertos seguem o mesmo instante absoluto e pausam sua própria reprodução. Estudos indisponíveis, com anotações em edição ou fora do intervalo indicam falha. Gráficos ao vivo permanecem ao vivo; gráficos fechados ficam fora da sincronização. A sincronização entre janelas exige o aplicativo desktop.",
   "study.cursorLinkFailed": "Não foi possível confirmar a sincronização do cursor em {count} gráficos. Verifique a conexão da janela, a edição de anotações e o intervalo salvo; depois tente novamente.",

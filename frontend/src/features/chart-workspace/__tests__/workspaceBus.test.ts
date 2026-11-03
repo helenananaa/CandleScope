@@ -62,6 +62,10 @@ test("native ordered clock returns the desktop hub stamp rather than a renderer-
       payload: { requestId: "cursor-1", studyId: "hs_saved", revision: 3, cursorMs: 600_000 } });
     assert.equal(result.eventId, "link-1");
     assert.deepEqual(remote, [{ type: "link", event: result }]);
+    const mode = await bus.publishOrderedLink({ workspaceId: "workspace-default", sourceCellId: "cell-1", kind: "studyMode",
+      payload: { requestId: "mode-1", studyId: "hs_saved", revision: 4, cursorMs: 600_000, operation: "mode", active: false } });
+    assert.equal(mode.eventId, "link-2");
+    assert.deepEqual(remote.at(-1), { type: "link", event: mode });
   } finally {
     if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
     else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });

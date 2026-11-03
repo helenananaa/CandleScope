@@ -98,7 +98,7 @@ function validateLinkEvent(value) {
   if (!validId(value.workspaceId)
     || !validId(value.sourceWindowId)
     || !validId(value.sourceCellId)
-    || !["crosshair", "timeAnchor", "dateRange", "dateSeek", "drawings", "studyCursor", "studyCursorResult"].includes(value.kind)) {
+    || !["crosshair", "timeAnchor", "dateRange", "dateSeek", "drawings", "studyCursor", "studyMode", "studyCursorResult"].includes(value.kind)) {
     throw new TypeError("Workspace link event identity is invalid");
   }
   const payload = structuredClone(value.payload);
@@ -302,7 +302,7 @@ export class WorkspaceBusHub {
     if (event.sourceWindowId !== windowId) throw new TypeError("Workspace link source window mismatch");
     if (event.kind !== "crosshair") {
       const delivered = this.deliverLink(event);
-      return event.kind === "studyCursor" ? { ok: true, coalesced: false, event: delivered } : { ok: true, coalesced: false };
+      return event.kind === "studyCursor" || event.kind === "studyMode" ? { ok: true, coalesced: false, event: delivered } : { ok: true, coalesced: false };
     }
     const key = `${event.workspaceId}\u0000${event.sourceWindowId}\u0000${event.sourceCellId}`;
     const elapsed = this.now() - (this.lastCrosshairAt.get(key) ?? Number.NEGATIVE_INFINITY);

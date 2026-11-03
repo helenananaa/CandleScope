@@ -261,6 +261,8 @@ function LiveChartCell({
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
   const moveStudyCursor = study.move;
+  const captureStudyInput = study.capture;
+  const selectStudyInput = study.select;
   const readStudyClock = study.readClock;
   const studyEditing = useRef(false);
   const pauseStudy = useRef<(() => void) | null>(null);
@@ -271,20 +273,46 @@ function LiveChartCell({
     // An acknowledged durable cut can be published while its restored surface
     // remounts. Receiving a peer cut still requires the local playback owner.
     return { ...state, followReady: pauseStudy.current !== null, editing: studyEditing.current };
-  }, move: (cursorMs: number) => { pauseStudy.current?.(); return moveStudyCursor(cursorMs); } }), [moveStudyCursor, readStudyClock]);
+  }, move: (cursorMs: number) => { pauseStudy.current?.(); return moveStudyCursor(cursorMs); },
+  setMode: (active: boolean, cursorMs?: number) => {
+    pauseStudy.current?.();
+    const current = readStudyClock();
+    if (current.active === active && (cursorMs === undefined || current.cursorMs === cursorMs)) return Promise.resolve(true);
+    if (current.cursorMs === null || !current.studyId) return Promise.resolve(false);
+    return moveStudyCursor(cursorMs ?? current.cursorMs, active);
+  } }), [moveStudyCursor, readStudyClock]);
   useEffect(() => linkCoordinator.studyClocks.register(cell.id, clockPort, workspaceId), [cell.id, clockPort, linkCoordinator, workspaceId]);
   const cursorLinkIssue = useSyncExternalStore(linkCoordinator.studyClocks.subscribe,
     () => linkCoordinator.studyClocks.getIssue(cell.id, workspaceId), () => null);
   const retryCursorLink = useCallback(() => {
+    const issue = linkCoordinator.studyClocks.getIssue(cell.id, workspaceId);
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId, issue?.operation === "mode" ? "mode" : "cursor");
+    void linkCoordinator.studyClocks.publishUserMove(intent);
+  }, [cell.id, linkCoordinator, workspaceId]);
+  const startStudyClock = useCallback(() => {
     const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId);
     void linkCoordinator.studyClocks.publishUserMove(intent);
   }, [cell.id, linkCoordinator, workspaceId]);
+  const commitStudyMode = useCallback(async (commit: () => Promise<boolean>) => {
+    if (studyEditing.current) return false;
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId, "mode");
+    try {
+      const committed = await commit();
+      if (committed) void linkCoordinator.studyClocks.publishUserMove(intent);
+      else linkCoordinator.studyClocks.cancelUserAction(intent);
+      return committed;
+    } catch (error) { linkCoordinator.studyClocks.cancelUserAction(intent); throw error; }
+  }, [cell.id, linkCoordinator, workspaceId]);
+  const captureStudy = useCallback((...args: Parameters<typeof captureStudyInput>) =>
+    commitStudyMode(() => captureStudyInput(...args)), [captureStudyInput, commitStudyMode]);
+  const selectStudy = useCallback((id: string, action: "activate" | "remove") => action === "activate"
+    ? commitStudyMode(() => selectStudyInput(id, action)) : selectStudyInput(id, action), [commitStudyMode, selectStudyInput]);
   const moveStudy = useCallback(async (cursorMs: number, active = true, automatic = false) => {
     if (studyEditing.current) return false;
-    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId, automatic ? "tick" : "cursor");
+    const intent = linkCoordinator.studyClocks.beginUserAction(cell.id, workspaceId, active ? automatic ? "tick" : "cursor" : "mode");
     try {
       const committed = await moveStudyCursor(cursorMs, active);
-      if (committed && active) void linkCoordinator.studyClocks.publishUserMove(intent);
+      if (committed) void linkCoordinator.studyClocks.publishUserMove(intent);
       else linkCoordinator.studyClocks.cancelUserAction(intent);
       return committed;
     } catch (error) { linkCoordinator.studyClocks.cancelUserAction(intent); throw error; }
@@ -1118,8 +1146,8 @@ function LiveChartCell({
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}
               active={active && !obscured} busy={study.busy ?? false} error={study.error} onMove={moveStudy} onRetry={study.retry}
               onAutomaticMove={advanceStudyAutomatically}
-              onEditingChanged={setStudyEditing} onFollowReady={setStudyFollowReady} onPlayStart={retryCursorLink}
-              cursorLinkIssue={cursorLinkIssue} onRetryCursorLink={retryCursorLink} />
+              onEditingChanged={setStudyEditing} onFollowReady={setStudyFollowReady} onPlayStart={startStudyClock}
+              cursorLinkIssue={cursorLinkIssue?.operation === "cursor" ? cursorLinkIssue : null} onRetryCursorLink={retryCursorLink} />
           </Suspense>}
           {study.masked && !study.playback && <div className="history-study-mask" role="status">
             {t(study.error ? "study.error" : "study.loading")}
@@ -1127,6 +1155,10 @@ function LiveChartCell({
           </div>}
           {!study.masked && study.error && <div className="study-recovery-message" role="alert">
             {t("study.error")} <button type="button" className="trading-button" onClick={study.retry}>{t("study.retry")}</button>
+          </div>}
+          {cursorLinkIssue?.operation === "mode" && <div className="study-recovery-message" role="alert">
+            {t("study.modeLinkFailed", { count: cursorLinkIssue.failed.length })}
+            <button type="button" className="trading-button" disabled={study.pending || study.busy} onClick={retryCursorLink}>{t("study.modeLinkRetry")}</button>
           </div>}
           {active && !study.masked && model.chartWorkspace.exportPanel.isOpen && (
             <Suspense fallback={null}>
@@ -1220,9 +1252,9 @@ function LiveChartCell({
             key={chartSession.view.sessionKey} cellId={cell.id} onClose={() => timeNavigation.setOpen(false)}
             onSubmit={timeNavigation.submit} /></Suspense>}
           {studySetup && marketWorkspaceResources && <Suspense fallback={null}><HistoryStudySetupDialog key={`${workspaceId}:${cell.id}`}
-            owner={studyOwner} manager={marketWorkspaceResources.dataManager.historyStudy} onSelect={study.select}
+            owner={studyOwner} manager={marketWorkspaceResources.dataManager.historyStudy} onSelect={selectStudy}
             series={liveSourceSession} bars={sourceMarketData.view.bars} busy={study.busy ?? false} error={study.error}
-            onCapture={study.capture} onClose={() => setStudySetup(false)} /></Suspense>}
+            onCapture={captureStudy} onClose={() => setStudySetup(false)} /></Suspense>}
           <PluginUiErrorBoundary>
             <PluginLiveControl runtime={plugins} />
           </PluginUiErrorBoundary>

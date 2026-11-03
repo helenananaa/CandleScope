@@ -20,8 +20,12 @@ function clock(cursorMs = 600_000, patch: Partial<ChartStudyClockState> = {}) {
   const state: ChartStudyClockState = { active: true, pending: false, committing: false, editing: false, followReady: true,
     studyId: "hs_input", revision: 4, cursorMs, minimumMs: 0, maximumMs: 1_000_000, ...patch };
   const calls: number[] = [];
-  const port: ChartStudyClockPort = { read: () => state, move: async target => { calls.push(target); state.cursorMs = target; state.revision++; return true; } };
-  return { state, calls, port };
+  const modeCalls: Array<{ active: boolean; cursorMs: number | undefined }> = [];
+  const port: ChartStudyClockPort = { read: () => state,
+    move: async target => { calls.push(target); state.cursorMs = target; state.revision++; return true; },
+    setMode: async (active, cursorMs) => { modeCalls.push({ active, cursorMs }); state.active = active;
+      if (cursorMs !== undefined) state.cursorMs = cursorMs; state.revision++; return true; } };
+  return { state, calls, modeCalls, port };
 }
 function nativeNetwork() {
   let order = 0;
@@ -68,6 +72,42 @@ test("legacy documents default cursor links off; an explicit choice survives the
   const restored = normalizeChartWorkspace(JSON.parse(JSON.stringify(doc)));
   assert.equal(restored.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor, true);
   assert.equal(restored.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.receiveFromParent.studyCursor, false);
+  assert.equal(restored.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode, false);
+  doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  assert.equal(normalizeChartWorkspace(JSON.parse(JSON.stringify(doc))).linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode, true);
+});
+
+test("mode and cursor policies are independent; mode-only resumes each chart's saved input and cut", async () => {
+  const doc = document(false), links = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(120_000, { active: false, followReady: false, studyId: "hs_other" });
+  links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace", "mode")), true);
+  assert.deepEqual(b.modeCalls, []);
+  doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace", "mode")), true);
+  assert.equal(b.state.active, true); assert.equal(b.state.cursorMs, 120_000); assert.equal(b.state.studyId, "hs_other");
+  b.state.followReady = true; a.state.active = false;
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace", "mode")), true);
+  assert.equal(b.state.active, false); assert.equal(b.state.cursorMs, 120_000); assert.equal(b.state.studyId, "hs_other");
+  assert.deepEqual(b.calls, []);
+});
+
+test("combined mode/cursor activation uses each target's input and refuses unprepared, editing or out-of-range targets", async () => {
+  for (const [patch, status] of [
+    [{}, "moved"], [{ studyId: null }, "unprepared"], [{ editing: true }, "editing"], [{ maximumMs: 500_000 }, "out-of-range"],
+  ] as const) {
+    const doc = document(), links = new ChartStudyClockLinks(doc, "workspace");
+    doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+    const a = clock(), b = clock(120_000, { active: false, followReady: false, studyId: "hs_other", ...patch });
+    links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+    assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace", "mode")), status === "moved");
+    assert.equal(b.state.active, status === "moved"); assert.equal(b.state.cursorMs, status === "moved" ? 600_000 : 120_000);
+    if (status !== "moved") {
+      assert.deepEqual(b.modeCalls, []);
+      assert.equal(links.getIssue("cell-1", "workspace")!.operation, "mode");
+      assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, status);
+    } else assert.equal(b.state.studyId, "hs_other");
+  }
 });
 
 test("a missing local chart and a throwing owner cannot be reported as synchronized", async () => {
@@ -75,7 +115,7 @@ test("a missing local chart and a throwing owner cannot be reported as synchroni
   links.register("cell-1", a.port, "workspace");
   assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), false);
   assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "unavailable");
-  links.register("cell-2", { read: () => { throw new Error("Owner closed"); }, move: async () => { throw new Error("Must not write"); } }, "workspace");
+  links.register("cell-2", { read: () => { throw new Error("Owner closed"); }, move: async () => { throw new Error("Must not write"); }, setMode: async () => { throw new Error("Must not write"); } }, "workspace");
   assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), false);
   assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "unavailable");
 });
@@ -214,6 +254,44 @@ test("a lost source ordering reply is not success, and queued clocks wait for an
   a.state.active = true;
   const retry = left.publishUserMove(left.beginUserAction("cell-1", "workspace")); await flush(); network.release();
   assert.equal(await retry, true); assert.equal(b.state.cursorMs, 600_000); assert.equal(left.getIssue("cell-1", "workspace"), null);
+  releaseA(); releaseB();
+});
+
+test("an unknown exit order stays fenced while live, until an explicit mode retry confirms it", async () => {
+  const doc = document(), network = nativeNetwork();
+  doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000, { active: false }), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  network.hold();
+  const exit = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "mode")); await flush();
+  assert.equal(b.state.active, false);
+  b.state.active = true;
+  const enter = right.publishUserMove(right.beginUserAction("cell-2", "workspace", "mode")); await flush();
+  network.reject(); await flush(); network.release();
+  assert.equal(await exit, false); assert.equal(await enter, false); assert.equal(a.state.active, false);
+  assert.equal(left.getIssue("cell-1", "workspace")!.operation, "mode");
+  const retry = left.publishUserMove(left.beginUserAction("cell-1", "workspace", "mode")); await flush(); network.release();
+  assert.equal(await retry, true); assert.equal(b.state.active, false); assert.equal(a.state.active, false);
+  releaseA(); releaseB();
+});
+
+test("an automatic clock stamped after a newer mode exit cannot reenter or advance the exited charts", async () => {
+  const doc = document(), network = nativeNetwork();
+  doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace");
+  const a = clock(600_000), b = clock(200_000);
+  left.register("cell-1", a.port, "workspace"); right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(network.bus("main")), releaseB = right.connectWorkspaceBus(network.bus("second"));
+  assert.equal(await right.publishUserMove(right.beginUserAction("cell-2", "workspace")), true);
+  b.state.cursorMs = 260_000; network.deferNextPublication("second");
+  const tick = right.publishUserMove(right.beginUserAction("cell-2", "workspace", "tick")); await flush();
+  a.state.active = false;
+  assert.equal(await left.publishUserMove(left.beginUserAction("cell-1", "workspace", "mode")), true);
+  assert.equal(b.state.active, false);
+  network.dispatchDelayedPublication(); await tick;
+  assert.equal(a.state.active, false); assert.equal(b.state.active, false); assert.equal(a.state.cursorMs, 200_000);
   releaseA(); releaseB();
 });
 
