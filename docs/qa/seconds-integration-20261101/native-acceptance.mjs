@@ -115,6 +115,7 @@ async function values(){
 let running=false;
 function verifyPackage(){cp.execFileSync('node',['docs/qa/seconds-contracts-20261102/verify.mjs'],{stdio:'inherit',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}});}
 async function launch(){await assertPublicGate(q.s.root);try{await q.record('packaged-launch',await q.launch());running=true;
+ await q.s.page.evaluate(()=>{Error.stackTraceLimit=50;});
  q.s.page.on('console',message=>{if(!['error','warning'].includes(message.type()))return;
   Promise.all(message.args().map(arg=>arg.evaluate(value=>value instanceof Error?{name:value.name,message:value.message,stack:value.stack}:value).catch(()=>null)))
    .then(args=>fs.appendFile(q.s.root+'/renderer-console.ndjson',JSON.stringify({at:new Date().toISOString(),type:message.type(),text:message.text(),args})+'\n')).catch(()=>{});
