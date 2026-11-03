@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ChartStudyClockLinks, type ChartStudyClockPort, type ChartStudyClockState } from "../chartStudyClockLinks.js";
 import { createDefaultChartWorkspace, normalizeChartWorkspace } from "../chartWorkspaceStorage.js";
+import { createDefaultChartWorkspaceRecord } from "../chartWorkspaceLibrary.js";
 import { chartWorkspaceCell } from "../chartWorkspaceDocument.js";
 import { createChartWorkspaceLayoutTree } from "../chartWorkspaceLayout.js";
 import { DEFAULT_CHART_LINK_GROUP_ID } from "../chartWorkspaceTypes.js";
@@ -98,6 +99,21 @@ test("a remote mode event waits for the committed policy to reach the rendered d
     right.updateDocument(doc, "workspace"); await flush(); assert.equal(b.state.active, true); assert.equal(await action, true);
   } finally { left.updateDocument(doc, "closed"); right.updateDocument(doc, "closed"); await action; releaseA(); releaseB(); }
   }
+});
+
+test("an authoritative layout revision ahead of an identical rendered route does not block the clock", async () => {
+  const doc = document();doc.revision = 4;
+  const canonical = { ...structuredClone(doc), revision: 5 }, record = createDefaultChartWorkspaceRecord(1);
+  record.id = "workspace";record.document = canonical;
+  const network = nativeNetwork(), bus = network.bus("main"), remote = network.bus("second");
+  bus.current.revisions.workspace = 5;bus.current.snapshot = { activeWorkspaceId: "workspace", workspaces: [record] };
+  remote.current.revisions.workspace = 5;remote.current.snapshot = bus.current.snapshot;
+  const left = new ChartStudyClockLinks(doc, "workspace"), right = new ChartStudyClockLinks(doc, "workspace"), a = clock(), b = clock(120_000);
+  left.register("cell-1", a.port, "workspace");right.register("cell-2", b.port, "workspace");
+  const releaseA = left.connectWorkspaceBus(bus), releaseB = right.connectWorkspaceBus(remote);
+  const action = left.publishUserMove(left.beginUserAction("cell-1", "workspace"));
+  try { await flush();assert.equal(network.wire.filter(event => event.kind === "studyCursor").length, 1);assert.equal(b.state.cursorMs, 600_000);assert.equal(await action, true); }
+  finally { left.updateDocument(doc, "closed");right.updateDocument(doc, "closed");await action;releaseA();releaseB(); }
 });
 
 test("disabling then reenabling routing cannot revive a source publication waiting for its old reply", async () => {

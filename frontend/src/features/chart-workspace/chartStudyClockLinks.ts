@@ -110,10 +110,13 @@ export class ChartStudyClockLinks {
   private supersedePublication(requestId: string, pending: Pending) {
     pending.intent.superseded = true; this.cancelUserAction(pending.intent); this.finish(requestId, false);
   }
-  private waitForDocumentRevision(revision: number, sourceCellId: string, key: string, epoch: number, timeoutMs = 5_000): Promise<void> {
+  private waitForConfiguration(revision: number, sourceCellId: string, key: string, epoch: number, timeoutMs = 5_000): Promise<void> {
     return new Promise((resolve, reject) => {
       const check = () => {
-        if (epoch === this.scopeEpoch && (this.document.revision < revision || this.configurationKey(sourceCellId) !== key)) return;
+        const canonical = this.bus?.current.snapshot?.workspaces.find(record => record.id === this.scope)?.document;
+        const committed = canonical ? (this.bus!.current.revisions[this.scope] ?? -1) >= revision
+          && this.configurationKey(sourceCellId, canonical) === key : this.document.revision >= revision;
+        if (epoch === this.scopeEpoch && (!committed || this.configurationKey(sourceCellId) !== key)) return;
         this.documentWaiters.delete(check); clearTimeout(timer);
         if (epoch !== this.scopeEpoch) reject(new Error("Study workspace changed")); else resolve();
       };
@@ -130,9 +133,9 @@ export class ChartStudyClockLinks {
       const revision = this.document.revision;
       const key = this.configurationKey(intent.cellId);
       await bus.waitForWorkspaceRevision(intent.scope, revision, remaining(), document => this.configurationKey(intent.cellId, document) === key);
-      await this.waitForDocumentRevision(Math.max(revision, bus.current.revisions[intent.scope] ?? revision), intent.cellId, key, intent.epoch, remaining());
+      await this.waitForConfiguration(revision, intent.cellId, key, intent.epoch, remaining());
       if (intent.scope !== this.scope || intent.epoch !== this.scopeEpoch || bus !== this.bus) throw new Error("Study configuration owner changed");
-      if (this.document.revision <= (bus.current.revisions[intent.scope] ?? -1)) return { revision: this.document.revision, key };
+      if (this.document.revision <= (bus.current.revisions[intent.scope] ?? -1)) return { revision: bus.current.revisions[intent.scope]!, key };
     }
   }
   connectWorkspaceBus(bus: WorkspaceBusClient | null): () => void {
@@ -327,7 +330,7 @@ export class ChartStudyClockLinks {
         || (configurationReady && key !== body.configurationKey)
         || (canonical && (bus!.current.revisions[event.workspaceId] ?? -1) >= body.configurationRevision
           && this.configurationKey(event.sourceCellId, canonical) !== body.configurationKey)) configurationSuperseded = true;
-      if (this.document.revision >= body.configurationRevision && key === body.configurationKey) configurationReady = true;
+      if (key === body.configurationKey) configurationReady = true;
     };
     this.documentWaiters.add(observeConfiguration);
     const releaseConfiguration = bus?.subscribeSnapshot(observeConfiguration) ?? (() => {});
@@ -335,7 +338,7 @@ export class ChartStudyClockLinks {
     const timer = setTimeout(() => { configurationSuperseded = true; stopConfiguration(); }, 5_000);
     observeConfiguration();
     try {
-      try { await this.waitForDocumentRevision(body.configurationRevision, event.sourceCellId, body.configurationKey, epoch); } catch { return; }
+      try { await this.waitForConfiguration(body.configurationRevision, event.sourceCellId, body.configurationKey, epoch); } catch { return; }
       if (configurationSuperseded || epoch !== this.scopeEpoch || event.workspaceId !== this.scope) return;
       const leader = body.operation === "tick" ? body.leaderOrder : order;
       if (leader > order) return;
