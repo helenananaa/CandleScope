@@ -1,0 +1,413 @@
+{
+  "date": "2026-11-02",
+  "applicationSource": "39b80cc333a004f81680a88c44f80a60cf63b104",
+  "nativePassed": true,
+  "nativeSteps": 14,
+  "implemented": [
+    "Account-free per-chart fixed historical input and independent durable cursor; selected interval, closed candles only.",
+    "Compatible complete shared-cache history reuse with full series identity, bounded missing-history reads and explicit saved capture. This is not a provider old-version read contract.",
+    "Only the revealed prefix reaches the chart/provided-bars indicator runtime. Forward adds newly closed rows; rewind replaces the prefix. Cursor commits return compact metadata rather than the full input.",
+    "Reused journal draft/save queue, idempotent client IDs and revision conflicts. Review supplements keep their market anchor, actual write times and paged text versions.",
+    "Saved-study reopen/delete with monotonically increasing view revisions. Study chrome identifies its saved market, omits live selectors/strategy/alerts and active-chart practice entry; drawing scope is separate/read-only."
+  ],
+  "checks": {
+    "frontendFunctional": 4792,
+    "frontendFailed": 0,
+    "frontendSkipped": 0,
+    "isolatedPerformanceGate": 1,
+    "desktopHost": 127,
+    "targetedNativeFixes": 23,
+    "candidateRelatedBackendBundledPython": 21,
+    "candidateStudyBackendBundledPython": 10,
+    "ruffNewBackendModulesAndTests": "passed",
+    "typecheckLintArchitecturePluginI18n": "passed; 30 locales, 5329 keys. One existing global cleanup-ref warning retained.",
+    "productionAndDesktopTargetBuild": "passed; existing large chunk notices retained.",
+    "ci": "Final delivery-head CI pending. Study suite added to macOS bundled Python regression list."
+  },
+  "native": {
+    "assembly": "Qualified stability candidate runtime cloned with APFS; current backend compiled with bundled Python, current desktop frontend rebuilt/repacked, unchanged verified Pine+Python package assets reused after input-tree/hash checks, root ad-hoc signed. Not a fresh full runtime/engine build.",
+    "inputData": {
+      "kind": "Warm public-market database only; fresh study, financial and control state. No cold-history claim.",
+      "source": "/Users/ryanliang/.codex/worktrees/chart-history-study-20261102/CandleScope/output/history-study-native-20261102/profile/data/candlescope.db",
+      "sourceSha256": "8a1a79c3b4e6581ece5900720d65c6f7005ca3583465408ed7bba746c31f7b14",
+      "destinationSha256": "d0f461d6a397de6bf2ef6f17095d7a8cfe20272ffdb81206899b0f42f3e1cbe9",
+      "rows": 4174
+    },
+    "sourceFiles": 979,
+    "frontendBuildFiles": 164,
+    "mismatchesBeforeAfter": 0,
+    "strictSignatureAfterRestorationAndSafeTests": true,
+    "rendererErrors": 0,
+    "normalOwnedExitsMs": [
+      15335,
+      15233
+    ],
+    "initial": {
+      "label": "initial",
+      "cursor": 1793608140000,
+      "rows": 100,
+      "ma20Points": 81,
+      "maxError": 1.4551915228366852e-11,
+      "first": 1793602140,
+      "last": 1793608080
+    },
+    "rewind": {
+      "label": "rewind",
+      "cursor": 1793605170000,
+      "rows": 50,
+      "ma20Points": 31,
+      "maxError": 1.4551915228366852e-11,
+      "first": 1793602140,
+      "last": 1793605080
+    },
+    "restart": {
+      "label": "restart",
+      "cursor": 1793605170000,
+      "rows": 50,
+      "ma20Points": 31,
+      "maxError": 1.4551915228366852e-11,
+      "first": 1793602140,
+      "last": 1793605080
+    },
+    "secondIndependent": {
+      "label": "second-step",
+      "cursor": 1793609460000,
+      "rows": 61,
+      "ma20Points": 42,
+      "maxError": 9.094947017729282e-13,
+      "first": 1793605800,
+      "last": 1793609400
+    },
+    "reviewTextVersions": 2,
+    "financialCountsBefore": {
+      "accounts": 0,
+      "orders": 0,
+      "fills": 0,
+      "cash_flows": 0,
+      "journal_entries": 0
+    },
+    "financialCountsAfter": {
+      "accounts": 0,
+      "orders": 0,
+      "fills": 0,
+      "cash_flows": 0,
+      "journal_entries": 0
+    },
+    "screenshotsInspected": true
+  },
+  "failuresPreserved": [
+    "Initial generic editor extraction made a deferred test Promise lose contextual type; explicit JournalEntry Promise type preserves original test assertions.",
+    "Full frontend attempt had 4789 tests: 4786 passed, 3 locale failures. Translate Japanese/Korean/Brazilian Portuguese without policy relaxation; 40 locale tests then final complete 4792-test suite pass.",
+    "Native attempt1: QA sent full indicator definitions to narrow workspace.configure schema and failed to check ready. Correct to {name,period}; product control correctly rejected bad input.",
+    "Native attempt2: Chromium normalizes exact-minute datetime-local values; QA now omits :00 seconds.",
+    "Native attempt3: editing existing note mixed textarea text into an implicit label. Product now uses explicit label/id. False history-update banner compared order-flow JSON key ordering; product now compares actual facts. Initial 100-bar/81-MA prefix and sibling viewport passed before this failure.",
+    "SSR chrome harness lacked Vite feature configuration; explicit optional research capability injection preserves production defaults and permits actual component rendering.",
+    "Source4648f8e9 candidate assembled but never launched; superseded by compact source39b80cc3.",
+    "A post-native pytest invocation overwrote 28 sealed anyio pytest bytecode caches. All mtimes are after the final native exit. Quarantine modified files, restore only exact original sealed bytes from a strictly verified base, no re-signing; strict signing then passes. Safe -B/PYTHONDONTWRITEBYTECODE test reruns retain signature.",
+    "An additional source-checkout subprocess test invocation used a relative dependency PYTHONPATH; children changed cwd and could not import FastAPI (19 pass, 2 fail). Use absolute candidate path; all 21 then pass without bytecode writes and signing still verifies."
+  ],
+  "remaining": [
+    "Finer-period reconstruction of forming large candles and compatible interval semantics.",
+    "Original-note sources and historical-version projection; optional per-chart mode/cursor links.",
+    "Complete formal replay/multi-track notes and imported-data entry; this is the first vertical slice of #179/#181, not closure.",
+    "Windows, installed x64, arbitrary script causality/Python replay eligibility, complete product/157-item acceptance and order-book/live-recovery qualification are outside this evidence."
+  ],
+  "artifacts": [
+    {
+      "path": "evidence/acceptance.json.gz",
+      "sha256": "bad5351ed26025fe6ea0628751d677a26b6f17a6649775ddbc5191d6c1dbe0ac"
+    },
+    {
+      "path": "evidence/traffic.json.gz",
+      "sha256": "8a95aeedd82f5007456acff7abd091677a0c146396e6272d1c7020d7c86d80fa"
+    },
+    {
+      "path": "evidence/native.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "evidence/assembly.json.gz",
+      "sha256": "5d2da593753cc60ed5ccdbf97ad06c935804461ebe3edb4b3237ce8b95a38e23"
+    },
+    {
+      "path": "evidence/source-package-manifest.json.gz",
+      "sha256": "3948bba6e63d56b5aab432a23f29efb8619d96d09608856e8214585ddcd35dc3"
+    },
+    {
+      "path": "evidence/source-before.log.gz",
+      "sha256": "410e94276c526251de04d137459c53dc01517beb0ef0124221a02e7793c2b616"
+    },
+    {
+      "path": "evidence/source-after.log.gz",
+      "sha256": "410e94276c526251de04d137459c53dc01517beb0ef0124221a02e7793c2b616"
+    },
+    {
+      "path": "evidence/post-run-integrity.json.gz",
+      "sha256": "59565bd0bb2b0315e51d8e0814cf278d4669baf6f2663e8fc6e63f0f50143360"
+    },
+    {
+      "path": "evidence/market-seed.json.gz",
+      "sha256": "3baab0aac8cf55f442900177b98c180059d59fb8956a93b1535f4107e5466429"
+    },
+    {
+      "path": "evidence/history-study-rewind.png",
+      "sha256": "fd79f7f3dff7e3f37e79d48e8f7efa9f94463ff4cc5df12e9e0b69b2c3807453"
+    },
+    {
+      "path": "evidence/two-independent-history-studies.png",
+      "sha256": "4547b09d002d31c99e4b3f89a1fdcbb501a0e9db7703fc0564941601e9f5ceaf"
+    },
+    {
+      "path": "evidence/studies-return-to-live.png",
+      "sha256": "a104e4f0f55647dc1ecb97e74afe47c1501a1741b5037bad97826189c38a860b"
+    },
+    {
+      "path": "evidence/signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "evidence/signature-diagnosis.log.gz",
+      "sha256": "086c63c641a54484b28daa07b870a6c94840d2894db9db2ef02e02dab41d1bed"
+    },
+    {
+      "path": "evidence/resource-diagnosis.json.gz",
+      "sha256": "bc75a415a53f70ed4236835f9141e93d06a06b0ff990fd7605ae54db6703a48e"
+    },
+    {
+      "path": "evidence/qa-bytecode-restoration.json.gz",
+      "sha256": "10cb8ab6b3cdc0898dc814c11df301b29f96933a2cf7259e9bb03c28af61bdd1"
+    },
+    {
+      "path": "evidence/safe-bundled-test-integrity.json.gz",
+      "sha256": "e86f206667f09d3b2d5b49f63ed3b42a1c16eb4085a31f3668f0b7d95d0632e5"
+    },
+    {
+      "path": "evidence/safe-related-test-integrity.json.gz",
+      "sha256": "077bdb815f2b3cc42d361395c8cb43633407344ad4a286853b136e4978288835"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-1/traffic.json.gz",
+      "sha256": "3aa8b2e8785c3b3be6c8047d55b28bd20e53d6cfaac6a99259658a291ac05a59"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-1/acceptance.json.gz",
+      "sha256": "f181eca65c3cfd520da72ab6099dfcfc47fc93b98913391e19e37ba5c54fd303"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-1/native.log.gz",
+      "sha256": "18420fdfacfe32be1d731c915fdf7edfc3c14e20370fd9a82da7a83bdd2cd0a2"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-1/history-study-failure.png",
+      "sha256": "0fdfc6ced7e7df24109a8f6e7643f618c451e2b90de56c1c0d535a773df80fbe"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-3/traffic.json.gz",
+      "sha256": "6dac932b8aa32620fb24d8226fed1046dea5911eec07c51ab6fc502755c1cad3"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-3/acceptance.json.gz",
+      "sha256": "34952f267ef05d568fe1a5d1b18195dd07dbf8bfcb5ae4dafdf26ed3fe5a9e23"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-3/native.log.gz",
+      "sha256": "148efa30b79ffacaa7c852f78ffc8153c637be21eb40f34c19552f0b2de9993d"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-3/history-study-failure.png",
+      "sha256": "a1d98a46539c38a09f2e748b8d5ee92cf7ad25cf52963531ecabdc3101137f49"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-2/traffic.json.gz",
+      "sha256": "e083f3e60c05f6dd6e08c8a5873c2e20d46d4aa9633a6f4a185c400e12e08103"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-2/acceptance.json.gz",
+      "sha256": "3aa3fca1b7b88a3aa126e9a60995e1bf8f8172c79ebc909b92edc78cb2da4079"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-2/native.log.gz",
+      "sha256": "66cf37ee9c9b205d089e4bd17ac927013b3bca83e97c7899de3d381fd618245e"
+    },
+    {
+      "path": "evidence/original-candidate/attempt-2/history-study-failure.png",
+      "sha256": "194fde2ed8294ac12570daaad08243cefa3892e00124a0fdd95df1822f6aa9e0"
+    },
+    {
+      "path": "evidence/original-candidate/assembly.json.gz",
+      "sha256": "4bf8075580c781ea89b34c182f5985043366e38a7f323c8f1ecfa86c476df8ad"
+    },
+    {
+      "path": "evidence/superseded-unlaunched/assembly.json.gz",
+      "sha256": "d2ff451c56079812617c942026c8e1295295ce8029c772b69bbc434bb8ae9230"
+    },
+    {
+      "path": "evidence/checks/compact-typecheck.log.gz",
+      "sha256": "de1692a1e980671380f067da58c45d3edad596b0501713ddb1e3514710b18e43"
+    },
+    {
+      "path": "evidence/checks/fixes-targeted-after.log.gz",
+      "sha256": "5bbc53b83c50b561a340e7b4601360bf0ef777479c9cb4c509109f4f1961e915"
+    },
+    {
+      "path": "evidence/checks/i18n-check-after.log.gz",
+      "sha256": "850da6bcb7a932ae6e6835cfa3cc2bb2a540b35504b9918e3c3e4ca9ec142e06"
+    },
+    {
+      "path": "evidence/checks/backend-final.log.gz",
+      "sha256": "4c8f757fc15d83d3031c0592df6320fa1e50070835b7510f8e1e0356ee61b745"
+    },
+    {
+      "path": "evidence/checks/native-bundled-study-tests-safe.log.gz",
+      "sha256": "5893f3700dd6da5bcdcc0eb3c5d6af6340290b8530fabac43c8f22803ca6bd8b"
+    },
+    {
+      "path": "evidence/checks/backend.log.gz",
+      "sha256": "e92207bfca94f17314d54aac760d61a2402459a8303d7562ed2da86fc911a2b3"
+    },
+    {
+      "path": "evidence/checks/fixes-typecheck.log.gz",
+      "sha256": "de1692a1e980671380f067da58c45d3edad596b0501713ddb1e3514710b18e43"
+    },
+    {
+      "path": "evidence/checks/library-tests.xml.gz",
+      "sha256": "7ae76196252339bb535b4555ccd057ebe12c50879537bbecaeadc4e1252a0fa6"
+    },
+    {
+      "path": "evidence/checks/candidate-related-final.xml.gz",
+      "sha256": "fe1dc1755ae2f095e4125eb7fa4c8155c4da637096e160642dce6c4752da864e"
+    },
+    {
+      "path": "evidence/checks/typecheck-final.log.gz",
+      "sha256": "de1692a1e980671380f067da58c45d3edad596b0501713ddb1e3514710b18e43"
+    },
+    {
+      "path": "evidence/checks/targeted-final.log.gz",
+      "sha256": "3369df637eae7700cc15c7f1bf455540bfec141d991e7fdc04f25b075d1673cd"
+    },
+    {
+      "path": "evidence/checks/fixes-lint.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "evidence/checks/fixes-typecheck-after.log.gz",
+      "sha256": "de1692a1e980671380f067da58c45d3edad596b0501713ddb1e3514710b18e43"
+    },
+    {
+      "path": "evidence/checks/candidate-related-absolute.log.gz",
+      "sha256": "2ce5bba3da981f1a4574e78ece98c157d3621f2c6a946bb72fdd8c76736d2a51"
+    },
+    {
+      "path": "evidence/checks/frontend-check-after.log.gz",
+      "sha256": "f79d1c5728543bbe6e0f59dcc34322f1c24eecea102be7403bc222988ee0b78d"
+    },
+    {
+      "path": "evidence/checks/native-bundled-study-tests.log.gz",
+      "sha256": "5893f3700dd6da5bcdcc0eb3c5d6af6340290b8530fabac43c8f22803ca6bd8b"
+    },
+    {
+      "path": "evidence/checks/frontend-tests-final.log.gz",
+      "sha256": "49a2ec50e73bb9d850bc69e7a6950b38b1d522e43d8dde5b39bf830887ff1fbb"
+    },
+    {
+      "path": "evidence/checks/fixes-build.log.gz",
+      "sha256": "c929160d54854d4459c7e5ceb7bf193a514e36ca1f18cbb042bad956cc2f021b"
+    },
+    {
+      "path": "evidence/checks/compact-lint.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "evidence/checks/fixes-build-after.log.gz",
+      "sha256": "a93b0e9fdd999344851f336b878a1f2b60c405523d06b6ef90f3790ad113e0c6"
+    },
+    {
+      "path": "evidence/checks/native-final-assembly.log.gz",
+      "sha256": "74b67d174bfd20c7e2ca51f5f6f08adb4a7c3b10d968ae208a9cd285d64571d9"
+    },
+    {
+      "path": "evidence/checks/desktop-tests.log.gz",
+      "sha256": "d8399dad8691fa0ea5c79b12fb4c83c8dad7b9b0186350aabd0741a51dd75d45"
+    },
+    {
+      "path": "evidence/checks/native-fixed-assembly.log.gz",
+      "sha256": "c778602b3e4cd74fda1c4f6652e16e73444dc6e41b2927403790caf2ef5e89a2"
+    },
+    {
+      "path": "evidence/checks/fixes-targeted.log.gz",
+      "sha256": "7fdd7756929ff53b8f050721cf1d0796dddc3f84512e1c6e4e8a589a6ff23770"
+    },
+    {
+      "path": "evidence/checks/candidate-related-absolute.xml.gz",
+      "sha256": "978e65cbd23635c9150d4a09a6fbf0ceaf5418024462df546a4e2395fe9cab0f"
+    },
+    {
+      "path": "evidence/checks/native-assembly.log.gz",
+      "sha256": "e6d19b8507bf5bf439e40a1a40bee85f41d775dc9d09380d03d2c3bbb16b0d99"
+    },
+    {
+      "path": "evidence/checks/compact-build.log.gz",
+      "sha256": "e34300db1f98e4cd316e27d67a6be905a982652113ad2a11d511146c00f8828c"
+    },
+    {
+      "path": "evidence/checks/architecture-final.log.gz",
+      "sha256": "ce71147bafab75fff355b00226a57578d84e372e91381815f910f1c54d0f7244"
+    },
+    {
+      "path": "evidence/checks/lint-final.log.gz",
+      "sha256": "1e9f1f1d74bb79f6ce53caac48811558b1c005b0e3c08e71449dd2ea4cde2cfa"
+    },
+    {
+      "path": "evidence/checks/compact-backend.log.gz",
+      "sha256": "5893f3700dd6da5bcdcc0eb3c5d6af6340290b8530fabac43c8f22803ca6bd8b"
+    },
+    {
+      "path": "evidence/checks/frontend-check.log.gz",
+      "sha256": "687b8ce93683401493d57967f7ceebf305543fb381159ef5109b6d2cf6b201c7"
+    },
+    {
+      "path": "evidence/checks/backend-final.xml.gz",
+      "sha256": "7089063c3ec8c4038bbdb47d2cf53c8d2b5c183448107fe779bcfec0e4c65d1e"
+    },
+    {
+      "path": "evidence/checks/backend-format-after.log.gz",
+      "sha256": "5aca0f4aa845e7a4d9c83669fc429d8fee7202c827788ccc89a7238618633f59"
+    },
+    {
+      "path": "evidence/checks/desktop-build.log.gz",
+      "sha256": "027db0bc0ceb1f62290db3fe3e010a55a3dd96094ea7f39e9e76c3288253f753"
+    },
+    {
+      "path": "evidence/checks/backend.xml.gz",
+      "sha256": "a7e382c85d01c6f3ac2625e52130bae02325e0fceb0ae6f72fdefd67281b2f38"
+    },
+    {
+      "path": "evidence/checks/i18n-after.log.gz",
+      "sha256": "b4c41c6efd100fe83b23ae58bc7e9173c71dd8d41239515bd6736c2b6a162bd8"
+    },
+    {
+      "path": "evidence/checks/compact-frontend.log.gz",
+      "sha256": "e880d03fed0af1a69c0b93fadc9d45d48551a9faf7b7b484e896989c56da91b7"
+    },
+    {
+      "path": "evidence/checks/library-tests.log.gz",
+      "sha256": "94d412a963ab28286141491fc71d83c45672573ff9d3b32bdf9577170d261453"
+    },
+    {
+      "path": "evidence/checks/candidate-related-final.log.gz",
+      "sha256": "99fb771db4d841b47d6eafec6cdf2cb95ba6cc98c88f5fc6bfc2a7dfcecdfb89"
+    },
+    {
+      "path": "evidence/checks/i18n-final.log.gz",
+      "sha256": "290528ecb976283b0d41d90168a26e0fea153a113c26d94acc1ff2762901f7a6"
+    },
+    {
+      "path": "evidence/checks/fixes-lint-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "evidence/checks/build.log.gz",
+      "sha256": "8542e95c58ece0f5f1376ba13811a37a732fd3ec65518c76b50e00af99323e7c"
+    }
+  ]
+}

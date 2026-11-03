@@ -122,7 +122,9 @@ class IsolatedPythonRunner:
             "PYTHONIOENCODING": "utf-8",
             "PYTHONNOUSERSITE": "1",
         }
-        command = [str(self._runtime), "-I", "-u", str(WORKER), str(SDK_SRC)]
+        # -I ignores PYTHONDONTWRITEBYTECODE. The SDK can live in a signed
+        # application, and importing user input must not create adjacent files.
+        command = [str(self._runtime), "-I", "-B", "-u", str(WORKER), str(SDK_SRC)]
         working = self.bundle_dir
         try:
             if self.mode == "SANDBOXED_LOCAL":
@@ -165,7 +167,7 @@ class IsolatedPythonRunner:
                         cpu_time_seconds=3600,
                         max_wall_seconds=86_400,
                     ),
-                    (str(runtime.executable), "-I", "-u", str(WORKER), str(SDK_SRC)),
+                    (str(runtime.executable), "-I", "-B", "-u", str(WORKER), str(SDK_SRC)),
                     self.bundle_dir,
                 )
                 command, working, environment = (

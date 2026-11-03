@@ -1,0 +1,9 @@
+# Python策略worker不写入签名SDK
+
+真实LOCAL_OFFLINE应用源码19d2558c的固定数据集策略功能、保存/完整退出/重启均通过，但运行后严格签名失败：resources/packages/candlescope-backtest-sdk/src中新增6个pyc。冷SDK/用户输入bundle的真实子进程回归在main87d670bb上先失败，发现7个新增pyc（含用户strategy缓存）。原始native候选和profile保留在PR223工作树output，未重签失败包；原生功能成功不等于该包完整合格。
+
+PythonRunner使用-I隔离，PYTHON*环境选项不会控制该解释器。现在在trusted与AppContainer两条启动命令上明确传-B，不改变-I隔离、权限、协议、策略源码或财务公式。冷目录回归使用正式prepare/warmup/step/close，并比较SDK和用户输入目录全部文件的集合及内容，证明没有新增/改写缓存；并非只断言argv。
+
+29 passed，2 skipped：跳过项是当前macOS不适用的Windows AppContainer执行与ACL生命周期，不能计入Windows资格。包含runtime、colocated运行、bundle验证。将runtime测试加入macOS桌面CI。真实新安装包及严格签名前后重验尚待完成；不能用删除缓存或重签失败原包代替修复。
+
+新组合原生候选e78947b2（含#223，worker与本分支5df源码SHA一致）13步通过，600bars508fills报告重启一致，0renderererrors/外网尝试，两次正常完整退出；1037source/sdk161built与SDK加载镜像前后一致，严格签名启动前/最终退出后均通过，冷SDK缓存文件0。完整源包与截图回执在#223，当前独立分支不是另一个已全量打包的候选。当前头CI仍为合并门槛。

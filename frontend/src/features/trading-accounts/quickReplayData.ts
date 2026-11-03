@@ -3,6 +3,7 @@ import type { KlineApi } from "../market-data/klineContracts.js";
 import type { MarketDataManager } from "../market-data/manager/marketDataManager.js";
 import { toEpochSeconds } from "../market-data/marketDataTypes.js";
 import { hasFinalityEvidence } from "../market-data/quality/klineQualityPolicy.js";
+import type { KlineSeriesIdentityInput } from "../market-data/klineSeriesIdentity.js";
 import type { ReplayBar } from "./quickReplayModel.js";
 
 const MAX_PAGES = 6;
@@ -42,7 +43,7 @@ export function createManagedReplayHistoryReader(
     fetchRange: async (symbol, interval, start, end, marketType, exchange, options) => {
       options.signal?.throwIfAborted();
       if (!manager) throw new Error("Replay market data manager is unavailable");
-      const series = { symbol, interval, marketType, exchange };
+      const series = { ...options.seriesIdentity, symbol, interval, marketType, exchange };
       const cached = manager.read(series, { from: start, to: end }).complete;
       return manager.fetchKlinesRange(symbol, interval, start, end, marketType, exchange, {
         ...options,
@@ -60,7 +61,7 @@ export function createManagedReplayHistoryReader(
  * the range endpoint truncates to the newest rows first.
  */
 export async function loadReplayBars(
-  input: { exchange: string; marketType: string; symbol: string; interval: string },
+  input: { exchange: string; marketType: string; symbol: string; interval: string } & KlineSeriesIdentityInput,
   startSec: number,
   endSec: number,
   signal: AbortSignal | undefined,
@@ -84,7 +85,7 @@ export async function loadReplayBars(
         pageEnd,
         input.marketType,
         input.exchange,
-        { repair: "wait", waitMs: 4_000, strict: false, ...(signal ? { signal } : {}) },
+        { repair: "wait", waitMs: 4_000, strict: false, seriesIdentity: input, ...(signal ? { signal } : {}) },
       );
       signal?.throwIfAborted();
       const pending = response.history_state === "pending" || response.retryable === true
