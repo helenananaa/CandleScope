@@ -56,14 +56,18 @@ async function create(policy,name){
 async function navigate(time,{shortcut=false,located=true}={}){
  if(shortcut)await q.s.page.keyboard.press('Alt+g');else await q.s.page.getByRole('button',{name:'定位视图日期',exact:true}).click();
  const dialog=q.s.page.getByRole('dialog',{name:'跳转到日期',exact:true});await dialog.waitFor();
- await dialog.getByLabel('日期和时间（UTC）',{exact:true}).fill(time);await dialog.getByRole('button',{name:'跳转',exact:true}).click();
+ await dialog.getByLabel('日期和时间（UTC）',{exact:true}).fill(time.replace(/:00$/,''));await dialog.getByRole('button',{name:'跳转',exact:true}).click();
  await q.until(async()=>{const status=dialog.getByRole('status');return await status.getAttribute('aria-busy')==='false'&&Boolean(await status.innerText());});
  const message=await dialog.getByRole('status').innerText();if(located)assert.match(message,/已定位|最近/);else assert.doesNotMatch(message,/已定位/);
  await dialog.getByRole('button',{name:'关闭',exact:true}).click();return message;
 }
 async function barsEvidence(){return(await capture(q)).map(c=>({cellId:c.cellId,interval:c.interval,bars:c.bars.length,first:c.bars[0]?.time,last:c.bars.at(-1)?.time,visible:c.visible}));}
 try{
- await launch();await q.enableControl();await q.s.page.goto(new URL('/replay.html',q.s.page.url()).href);await create('NONE','Native date shown');
+ await launch();await q.enableControl();await q.s.page.goto(new URL('/replay.html',q.s.page.url()).href);
+ if(process.env.CANDLESCOPE_REPLAY_QA_RESUME==='1'){
+  await q.s.page.locator('.training-hub-card').filter({hasText:'Native date shown'}).getByRole('button',{name:'继续训练',exact:true}).click();await ready();
+  runId=new URL(q.s.page.url()).searchParams.get('run');assert.ok(runId);await q.record('resumed-own-controlled-run-after-harness-input-error',{runId,prior:'attempt1-datetime-normalization/acceptance.json'});
+ }else await create('NONE','Native date shown');
  await selectPeriod('5m');
  await q.until(async()=>(await capture(q)).some(c=>c.interval==='5m'&&c.bars.length>20));
  const initialCursor=Number(await q.s.page.locator('[data-replay-cursor-ms]').first().getAttribute('data-replay-cursor-ms'));
