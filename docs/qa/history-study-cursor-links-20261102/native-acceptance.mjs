@@ -102,7 +102,9 @@ try{
  const configured=await q.configure([{session:q.session('BTCUSDT'),indicators:[{name:'MA',period:20}]},{session:q.session('BTCUSDT','5m'),indicators:[{name:'MA',period:20}]}],'split-vertical');
  await q.record('configured-real-source-different-display-periods',configured);
  assert.ok(configured.result.state==='ready'||(configured.result.state==='applied'&&configured.result.code==='READINESS_TIMEOUT'));
- await q.until(async()=>{const snap=await q.inspect();return snap.cells.length===2&&snap.cells.every(cell=>cell.runtime?.mode==='live'&&cell.runtime.barCount>=20);},90_000);
+ // Warm bounded history is intentionally independent of today's live tail.
+ // The capture service below must prove the selected historical range itself.
+ await q.until(async()=>{const snap=await q.inspect();return snap.cells.length===2&&snap.cells.every(cell=>cell.runtime?.mode==='live');},90_000);
  const workspace=(await q.inspect()).workspaceId;
  await pin('cell-1',fixture.a);await pin('cell-2',fixture.a);
  const a=await capture('cell-1'),b=await capture('cell-2','1m');assert.ok(a&&b&&a!==b);
@@ -137,7 +139,7 @@ try{
  const topology=await q.until(async()=>{const value=await document();return value&&Object.keys(value.windows).length===2?value:false;});
  const secondId=Object.keys(topology.windows).find(id=>id!=='main-window');assert.ok(secondId);
  secondPage=await pageFor(secondId);secondPage.on('pageerror',error=>q.s.receipt.errors.push({windowId:secondId,message:error.message}));
- const otherSnap=await q.until(async()=>{try{const value=(await q.s.control.call('workspace.inspect',{windowId:secondId})).snapshot;return value.ready&&value.cells.length===2&&value.cells.every(cell=>cell.runtime?.mode==='live'&&cell.runtime.barCount>=20)?value:false;}catch{return false;}},90_000);
+ const otherSnap=await q.until(async()=>{try{const value=(await q.s.control.call('workspace.inspect',{windowId:secondId})).snapshot;return value.ready&&value.cells.length===2&&value.cells.every(cell=>cell.runtime?.mode==='live')?value:false;}catch{return false;}},90_000);
  const targetId=otherSnap.cells[0].cellId,otherId=otherSnap.cells[1].cellId;
  // A new window duplicates chart configuration, but owner ids do not copy saved studies.
  assert.equal(otherSnap.cells[0].runtime.mode,'live');
