@@ -98,6 +98,37 @@ def test_trusted_local_lifecycle_and_probe(monkeypatch) -> None:
     assert receipt["transcriptHash"].startswith("sha256:")
 
 
+def test_cold_strategy_worker_does_not_modify_sdk_or_bundle_with_bytecode(tmp_path, monkeypatch):
+    import hashlib
+    import shutil
+    from app.backtest.strategy import python_runner
+
+    sdk = tmp_path / "packaged-sdk"
+    bundle = tmp_path / "strategy"
+    shutil.copytree(python_runner.SDK_SRC, sdk, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(FIXTURE, bundle, ignore=shutil.ignore_patterns("__pycache__"))
+    def tree(directory):
+        return {str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in directory.rglob("*") if path.is_file()}
+    before = tree(tmp_path)
+    monkeypatch.setattr(python_runner, "SDK_SRC", sdk)
+    monkeypatch.setattr(python_runner, "WORKER", sdk / "candlescope_backtest_sdk/worker.py")
+    monkeypatch.setenv("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED", "1")
+    # Isolated Python ignores PYTHON* environment flags. The launch itself must
+    # keep imports out of the signed application and original user bundle.
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    runner = IsolatedPythonRunner(bundle, mode="TRUSTED_LOCAL", trusted_confirmed=True, step_timeout_s=5)
+    try:
+        runner.start()
+        runner.call("prepare", {"bundleDir": str(bundle), "entrypoint": "strategy:Strategy", "parameters": {"fast": 2, "slow": 3}})
+        runner.call("warmup", {"observation": _frame(1, "10")})
+        assert runner.call("step", {"observation": _frame(2, "20")})["kind"] == "TARGET_POSITION"
+        runner.call("close")
+    finally:
+        runner.close()
+    assert tree(tmp_path) == before, "strategy execution must not add bytecode to signed SDK or user input"
+
+
 def test_runner_source_does_not_import_service_repository_or_database() -> None:
     tree = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"))
     imported: list[str] = []
@@ -173,8 +204,16 @@ class Strategy:
 """,
         encoding="utf-8",
     )
-    runner = IsolatedPythonRunner(bundle, mode="SANDBOXED_LOCAL", step_timeout_s=5)
+    runner = None
     try:
+        # Prove these controlled targets are accessible outside AppContainer.
+        # Otherwise a broken listener could look like successful isolation.
+        assert marker.read_text(encoding="utf-8") == "host secret"
+        listener.settimeout(2)
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            connection, _ = listener.accept()
+            connection.close()
+        runner = IsolatedPythonRunner(bundle, mode="SANDBOXED_LOCAL", step_timeout_s=5)
         runner.start()
         runner.call(
             "prepare", {"bundleDir": str(bundle), "entrypoint": "strategy:Strategy"}
@@ -183,7 +222,8 @@ class Strategy:
         assert snapshot["payload"] == {"file": False, "network": False}
         runner.call("close")
     finally:
-        runner.close()
+        if runner is not None:
+            runner.close()
         listener.close()
 
 

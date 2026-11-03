@@ -40,6 +40,8 @@ export interface TopBarProps {
   identityAccessory?: ReactNode;
   intervalControl?: ReactNode;
   extensionControls?: ReactNode;
+  studyContext?: { symbol: string; interval: string };
+  researchEnabled?: boolean;
 }
 
 function TopBar({
@@ -51,6 +53,8 @@ function TopBar({
   identityAccessory,
   intervalControl,
   extensionControls,
+  studyContext,
+  researchEnabled,
 }: TopBarProps) {
   const {
     currentSymbol,
@@ -72,7 +76,7 @@ function TopBar({
     activeIndicatorCount,
   } = controls;
   const advancedSummary = useAdvancedMarketSummary(advancedMarketData);
-  const backtestEntryEnabled = isBacktestEntryEnabled();
+  const backtestEntryEnabled = researchEnabled ?? isBacktestEntryEnabled();
   useLocale();
   const basisText = advancedSummary.basis == null
     ? "--"
@@ -107,7 +111,9 @@ function TopBar({
     <MarketTopBarFrame
       source="live"
       taskNavigation={<WorkspaceNavigation active="live" onReplay={() => { void loadReplayLauncherDialog(); onOpenReplayLauncher(); }} replayDisabled={replayEntry.state !== "enabled"} replayReason={replayEntry.state === "enabled" ? undefined : replayEntry.reason} researchEnabled={backtestEntryEnabled} />}
-      identity={<>
+      identity={studyContext ? <span className="history-study-identity" data-study-context="true">
+        <strong>{studyContext.symbol}</strong><span>{t("study.title")}</span>
+      </span> : <>
         <SymbolSearch
           currentSymbol={currentSymbol}
           onSelect={onSelectSymbol}
@@ -121,7 +127,7 @@ function TopBar({
         />
         {identityAccessory}
       </>}
-      intervals={intervalControl}
+      intervals={studyContext ? <span className="history-study-interval">{studyContext.interval}</span> : intervalControl}
       controls={<>
         <button
         className="settings-btn indicator-toggle-btn"
@@ -152,7 +158,7 @@ function TopBar({
         )}
         </button>
 
-        <button
+        {!studyContext && <button
         className={`indicator-toggle-btn alert-toggle-btn ${alertPanelOpen ? "active" : ""}`}
         onClick={onToggleAlertPanel}
         title={t("shell.alerts")}
@@ -160,10 +166,10 @@ function TopBar({
         aria-expanded={alertPanelOpen}
       >
         <span aria-hidden="true" style={{ display: "flex" }}><AlertRailIcon /></span>
-        </button>
+        </button>}
         {extensionControls}
       </>}
-      marketMetrics={advancedMarketData.summaryEnabled && (
+      marketMetrics={!studyContext && advancedMarketData.summaryEnabled && (
         <>
           <div className="live-market-metrics-inline">{marketMetrics}</div>
           <details

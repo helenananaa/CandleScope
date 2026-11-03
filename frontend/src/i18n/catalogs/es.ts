@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -9,6 +10,7 @@ import type { MessageCatalog } from "../messageCatalog.js";
  * libro de órdenes, tasa de financiación, prueba retrospectiva, reproducción.
  */
 export const es = {
+  ...historyStudyEnglish,
   "chartTime.title": "Go to date",
   "chartTime.shortcut": "Go to date (Alt+G)",
   "chartTime.input": "Date and time (UTC)",

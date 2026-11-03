@@ -101,6 +101,7 @@ jobs:
             tests/test_proxy_pool_ws.py \
             tests/test_trusted_extensions.py \
             tests/test_settings_api.py \
+            tests/test_history_studies.py \
             tests/test_pyne_removal.py \
             tests/test_data_preparation.py \
             tests/test_replay_context_origin.py \
@@ -137,6 +138,7 @@ jobs:
             tests/test_account_product_integration.py \
             tests/test_trading_accounts.py \
             tests/test_trading_account_snapshot.py \
+            tests/test_python_strategy_runtime.py \
             --junitxml=../output/replay-range-regression.xml
       - name: Verify relocated ZIP and native runtime
         env:

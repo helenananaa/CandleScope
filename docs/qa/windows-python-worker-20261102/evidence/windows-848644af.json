@@ -1,0 +1,28 @@
+{
+  "schema": "candlescope.windows-python-worker/1",
+  "passed": true,
+  "scope": "Native worker/controlled strategy execution, host-file and loopback denial, disposable ACL cleanup and cold SDK byte preservation. No desktop installer, UI, public market or full Windows acceptance.",
+  "platform": "Windows-2025Server-10.0.26100-SP0",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "commit": "848644af30cf6c8bda623609ef7cc16619ef17df",
+  "cases": 10,
+  "required": [
+    "test_cold_strategy_worker_does_not_modify_sdk_or_bundle_with_bytecode",
+    "test_sandboxed_strategy_runs_sdk_but_cannot_read_host_file_or_connect_loopback",
+    "test_disposable_strategy_profiles_do_not_accumulate_shared_acl_grants"
+  ],
+  "skipped": [],
+  "failed": [],
+  "sourceSha256": {
+    "backend\\app\\backtest\\strategy\\python_runner.py": "4309c5fd210156776a3e87b2de31df695f8ba5240e347112bf2bcd30e59b439e",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\__init__.py": "341d5bf880654f0ebbd95ac1660c96da33488d91a66f698c4ae74c78da42243f",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\batch.py": "0e91aca0378ed902813aecf146afcc5ea99a6c0c5bb15c950aac74cc3d293dff",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\contract.py": "cdbd2f3fc76749620dfab78c147351a0986d0312f8cbc77e5d7da1104ffa4cf1",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\errors.py": "72588cfd6831be142988be2342b23e0987173b47be15d37fc2417f60d815f4ba",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\json_codec.py": "c2a944056714e574761520ba859dfb39ca76da4e3aca82c8f02dcf1073cf12b1",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\models.py": "36539a369cbd8aab0014f65941e862715f3e81bab192986d96bbb1cb8caac790",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\schema.py": "a1bc61e52f5ad8bdfd2229bff0ea0ed5ed1ac4108a26382c34277a7788301663",
+    "packages\\candlescope-backtest-sdk\\src\\candlescope_backtest_sdk\\worker.py": "c7122b62c6c6ab781c064683f8b0bfd2c0937138c7607ff0561ef2468463f700"
+  },
+  "errors": []
+}

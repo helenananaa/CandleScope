@@ -2,6 +2,8 @@ import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import type { ControlWorkspaceCommand } from "../chart-workspace/chartWorkspaceControl.js";
 
 export interface ControlCellObservation {
+  mode?: "live" | "history-study" | "restoring-study";
+  study?: { id: string; cursorMs: number; revision: number };
   session: { exchange: string; marketType: string; symbol: string; interval: string };
   indicatorSignature: string;
   marketReady: boolean;

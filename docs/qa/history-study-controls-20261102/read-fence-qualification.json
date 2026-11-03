@@ -1,0 +1,34 @@
+{
+  "schema": "candlescope.study-read-publication-fence-qualification/1",
+  "applicationSource": "3569850f28b0c63f1c77a1d67eb20e5ea701ccd6",
+  "frontend": 4803,
+  "performance": 1,
+  "desktop": 127,
+  "failed": 0,
+  "typeLintArchitecturePluginI18n": "passed; inherited 1 lint warning; 30 locales",
+  "builds": "production and desktop passed",
+  "change": "Read-only results are rejected without output if their context changes across executor or UI publication yield, or if the original target unmounts. Mutation receipts remain unchanged.",
+  "specificRaceEvidence": "Deterministic registry regressions, including delayed async and synchronous-read yield. Native qualification below exercises ordinary real packaged control flows, not a claim of separately forced native race.",
+  "native": {
+    "platform": "macOS arm64",
+    "passed": true,
+    "steps": 22,
+    "normalExitMs": [
+      15324,
+      15212
+    ],
+    "rendererErrors": [],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "mismatches": [],
+    "strictSignatureExit": 0,
+    "ownedProcessesAbsent": true,
+    "appAsarSha256": "e0aad92f2593796f166848aac6e9cd03fe7bcea9215bcd5232fe833aeba49fbc"
+  },
+  "limits": [
+    "Warm committed public market only; fresh study/financial/control profile. Not current latest completeness, online cold or fresh engine build.",
+    "Original 087236f3 QA preserved; this requalification covers the new read-fence source.",
+    "Not arbitrary extension service causality, finer reconstruction, original journal sources, optional links, formal replay, full157 or Windows."
+  ],
+  "ci": "Final artifact-only delivery head pending"
+}

@@ -1,3 +1,4 @@
+import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -5,6 +6,7 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...historyStudyBrazilian,
   "chartTime.title": "Ir para data",
   "chartTime.shortcut": "Ir para data (Alt+G)",
   "chartTime.input": "Data e hora (UTC)",

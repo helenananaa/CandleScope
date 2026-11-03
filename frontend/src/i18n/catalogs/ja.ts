@@ -1,3 +1,4 @@
+import { historyStudyJapanese } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
@@ -6,6 +7,7 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  ...historyStudyJapanese,
   "chartTime.title": "Go to date",
   "chartTime.shortcut": "Go to date (Alt+G)",
   "chartTime.input": "Date and time (UTC)",

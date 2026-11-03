@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
@@ -7,6 +8,7 @@ import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...historyStudyEnglish,
   "chartTime.title": "Go to date",
   "chartTime.shortcut": "Go to date (Alt+G)",
   "chartTime.input": "Date and time (UTC)",
