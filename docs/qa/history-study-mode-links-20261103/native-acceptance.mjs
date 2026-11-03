@@ -240,7 +240,9 @@ try{
  }
  await live(targetId,secondId);await live(liveId,secondId);
  const editingPeer=await state('cell-2');assert.equal(editingPeer.cursorMs,fixture.beforeMs);
- assert.equal(editingPeer.busy,true);assert.equal(editingPeer.computing,false);
+ // The control contract deliberately marks output unready while an editor
+ // owns the study, even when the indicator runtime itself is already idle.
+ assert.equal(editingPeer.busy,true);assert.equal(editingPeer.computing,true);
  await modeButton().waitFor();await q.record('editor-refuses-mode-exit-and-live-source-retains-visible-retry',{source:await view('cell-1'),editingTarget:await state('cell-2')});
  await region(b.id).getByRole('button',{name:'保存并关闭',exact:true}).click();
  await q.until(async()=>await region(b.id).getByRole('button',{name:'保存并关闭',exact:true}).count()===0);
