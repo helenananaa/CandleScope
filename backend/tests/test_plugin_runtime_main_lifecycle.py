@@ -179,7 +179,9 @@ def _patch_startup_dependencies(
         return None
 
     async def _init_data_manager() -> None:
+        from app.data_engine.data_manager.core import DataManagerCore
         main_module.app.state.data_manager = None
+        main_module.app.state.data_manager_core = DataManagerCore()
 
     monkeypatch.setattr(main_module, "_init_replay_runtime", _init_replay_runtime)
     monkeypatch.setattr(main_module, "_init_alert_delivery", _init_alert_delivery)
@@ -250,8 +252,11 @@ async def test_startup_prepared_history_uses_provider_origin_and_retention_polic
 
     async def init_replay():
         main_module.app.state.replay_service = replay
+        main_module.app.state.replay_runtime = None
 
     async def init_data():
+        from app.data_engine.data_manager.core import DataManagerCore
+        main_module.app.state.data_manager_core = DataManagerCore()
         main_module.app.state.data_manager = SimpleNamespace(history_policy=policy)
         main_module.app.state.data_engine_runtime = SimpleNamespace(
             ingestion_factory=Provider(), backfill_coordinator=None, shutdown=no_op,
@@ -261,6 +266,7 @@ async def test_startup_prepared_history_uses_provider_origin_and_retention_polic
     monkeypatch.setattr(main_module, "_init_data_manager", init_data)
     await main_module.startup_event()
     try:
+        assert main_module.app.state.data_manager_core.replay.service is replay
         resolver = replay.history_context.origin_resolver
         if rolling:
             with pytest.raises(PreparationError, match="rolling retention"):
