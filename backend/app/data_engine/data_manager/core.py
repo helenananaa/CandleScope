@@ -11,8 +11,6 @@ from .replay import ReplayDataManager
 if TYPE_CHECKING:
     from app.backtest.service import BacktestService
     from app.backtest.runtime import BacktestRuntime
-    from app.replay.service import ReplayService
-    from app.replay.runtime import ReplayRuntime
 
 
 class DataManagerCore:
@@ -23,7 +21,7 @@ class DataManagerCore:
         self._history_studies = None
         self._study_lock = threading.Lock()
 
-    def bind_replay(self, service: ReplayService, runtime: ReplayRuntime | None = None) -> ReplayDataManager:
+    def bind_replay(self, service, runtime=None) -> ReplayDataManager:
         if self.replay is not None:
             if self.replay.service is not service or self.replay.runtime is not runtime:
                 raise RuntimeError("replay service is already bound to this data manager")

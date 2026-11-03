@@ -9,17 +9,14 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import Any
 
 from app.replay.errors import ReplayDomainError, ReplayErrorCode
 
-if TYPE_CHECKING:
-    from app.replay.runtime import ReplayRuntime
-    from app.replay.service import ReplayService
-
-
 class ReplayDataManager:
-    def __init__(self, service: ReplayService, runtime: ReplayRuntime | None = None) -> None:
+    # Service/runtime are opaque handles owned by the application root. Importing
+    # their coordinators here would point shared data contracts back into replay.
+    def __init__(self, service: Any, runtime: Any = None) -> None:
         self.service = service
         self.runtime = runtime
         self._closed = False
@@ -30,7 +27,7 @@ class ReplayDataManager:
     def closed(self) -> bool:
         return self._closed or (self.runtime is not None and self.runtime.service is not self.service)
 
-    def control_plane(self) -> ReplayService:
+    def control_plane(self) -> Any:
         if self.closed:
             raise ReplayDomainError(ReplayErrorCode.REPLAY_DISABLED, "Replay data manager is closed")
         self._accesses += 1
@@ -94,7 +91,7 @@ class ReplayDataManager:
                 "scopes": len(set(active))}
 
 
-def optional_replay_service_from_state(state: object) -> ReplayService | None:
+def optional_replay_service_from_state(state: object) -> Any | None:
     core = getattr(state, "data_manager_core", None)
     if core is not None:
         manager = getattr(core, "replay", None)
