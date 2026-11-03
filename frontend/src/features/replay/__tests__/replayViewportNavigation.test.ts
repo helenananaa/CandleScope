@@ -28,8 +28,10 @@ function fixture(change: (page: Record<string, unknown>) => void = () => {}, del
         history_policy: { schema_version: "replay.data-policy.v1", indicator_warmup_bars: 20,
           visible_history_lookback: { mode: "ALL_AVAILABLE", duration_ms: null }, visible_history_rows: 60,
           effective_warmup_bars: 20, forward_cache_ms: 60000, interval_ms: 60000, policy_hash: epoch },
-        revealed_boundary_ms: 3600000, bars: Array.from({ length: before / 60000 }, (_, i) => bar(i * 60000)),
+        revealed_boundary_ms: 3600000, bars: Array.from({ length: before / 60000 }, (_, i) => bar(i * 60000))
+          .slice(-Number(request.searchParams.get("limit"))),
         excluded_ranges: [], next_before_ms: 0, has_more: false };
+      page.next_before_ms = (page.bars as ReplayDisplayBar[])[0]?.open_time_ms ?? before;
       change(page); return Response.json(page);
     } });
   const store = new SeriesWindowStore({ maxBars: 1000 });
@@ -97,4 +99,14 @@ test("wrong-run and future-closed replies fail before any display mutation", asy
     const input = fixture(change), before = input.store.snapshot();
     await assert.rejects(seekReplayViewportTime(input), expected); assert.deepEqual(input.store.snapshot(), before);
   }
+});
+
+test("a date page replaces a full historical window so overlap cannot evict the requested candle", async () => {
+  const input = fixture();
+  input.store.maxBars = 20;
+  input.store.replace(Array.from({ length: 20 }, (_, i) => replayDisplayBarToKline(bar((i + 15) * 60000))));
+  const result = await seekReplayViewportTime(input);
+  assert.deepEqual(result, { status: "located", requestedTimeMs: 600000, actualTimeMs: 600000, exact: true });
+  assert.ok(input.store.hasTime(600));
+  assert.ok(input.store.barCount <= 20); assert.equal(input.store.rightTruncated, true);
 });
