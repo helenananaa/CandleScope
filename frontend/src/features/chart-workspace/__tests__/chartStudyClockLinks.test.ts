@@ -110,6 +110,18 @@ test("combined mode/cursor activation uses each target's input and refuses unpre
   }
 });
 
+test("a successful cursor action cannot conceal an unconfirmed mode transition on an unprepared live peer", async () => {
+  const doc = document(), links = new ChartStudyClockLinks(doc, "workspace");
+  doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+  const a = clock(), b = clock(120_000, { active: false, studyId: null });
+  links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace", "mode")), false);
+  a.state.cursorMs = 300_000;
+  assert.equal(await links.publishUserMove(links.beginUserAction("cell-1", "workspace")), true);
+  assert.equal(links.getIssue("cell-1", "workspace")!.operation, "mode");
+  assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "unprepared");
+});
+
 test("a missing local chart and a throwing owner cannot be reported as synchronized", async () => {
   const links = new ChartStudyClockLinks(document(), "workspace"), a = clock();
   links.register("cell-1", a.port, "workspace");

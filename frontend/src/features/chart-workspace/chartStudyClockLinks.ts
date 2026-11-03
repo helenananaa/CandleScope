@@ -108,13 +108,17 @@ export class ChartStudyClockLinks {
       if (intent) this.cancelUserAction(intent);
       this.uncertainOrder.delete(cellId);
       this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
-      this.latestRequest.delete(cellId);
-      if (this.issues.delete(cellId)) this.emit();
+      this.latestRequest.delete(this.issueKey(cellId, "mode")); this.latestRequest.delete(this.issueKey(cellId, "cursor"));
+      const modeIssue = this.issues.delete(this.issueKey(cellId, "mode"));
+      if (this.issues.delete(this.issueKey(cellId, "cursor")) || modeIssue) this.emit();
       for (const [id, pending] of this.pending) if (pending.sourceCellId === cellId) this.finish(id, false);
     };
   }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  getIssue(cellId: string, scope: string): ChartStudyClockIssue | null { return scope === this.scope ? this.issues.get(cellId) ?? null : null; }
+  private issueKey(cellId: string, operation: Operation) { return JSON.stringify([cellId, operation === "mode" ? "mode" : "cursor"]); }
+  getIssue(cellId: string, scope: string): ChartStudyClockIssue | null {
+    return scope === this.scope ? this.issues.get(this.issueKey(cellId, "mode")) ?? this.issues.get(this.issueKey(cellId, "cursor")) ?? null : null;
+  }
   private emit() { for (const listener of this.listeners) listener(); }
   private targets(sourceCellId: string, operation: Operation = "cursor"): string[] {
     const visible = new Set(Object.values(this.document.windows).flatMap(window => visibleCellIds(window.layoutTree)));
@@ -131,8 +135,8 @@ export class ChartStudyClockLinks {
     this.userIntents.get(cellId)?.release();
     const generation = (this.generations.get(cellId) ?? 0) + 1;
     this.generations.set(cellId, generation);
-    this.latestRequest.delete(cellId);
-    if (this.issues.delete(cellId)) this.emit();
+    this.latestRequest.delete(this.issueKey(cellId, operation));
+    if (this.issues.delete(this.issueKey(cellId, operation))) this.emit();
     let release = () => {};
     const settled = new Promise<void>(resolve => { release = resolve; });
     const intent = { scope, cellId, generation, operation, leaderOrder: this.leaderOrder.get(cellId) ?? 0, settled, release };
@@ -166,7 +170,7 @@ export class ChartStudyClockLinks {
     if (intent.operation === "tick" && (intent.leaderOrder <= 0
       || this.leaderSource.get(intent.cellId) !== `${this.bus?.windowId ?? "local-window"}\u0000${intent.cellId}`)) return false;
     const requestId = crypto.randomUUID();
-    this.latestRequest.set(intent.cellId, requestId);
+    this.latestRequest.set(this.issueKey(intent.cellId, intent.operation), requestId);
     const result = new Promise<boolean>(resolve => {
       const timer = setTimeout(() => this.finish(requestId, true), 5_000);
       this.pending.set(requestId, { scope: this.scope, sourceCellId: intent.cellId, order: null, operation: intent.operation === "mode" ? "mode" : "cursor",
@@ -253,8 +257,8 @@ export class ChartStudyClockLinks {
         this.leaderSource.set(cellId, source);
         this.lastOrder.set(cellId, order);
         this.generations.set(cellId, (this.generations.get(cellId) ?? 0) + 1);
-        this.latestRequest.delete(cellId);
-        if (this.issues.delete(cellId)) this.emit();
+        this.latestRequest.delete(this.issueKey(cellId, body.operation));
+        if (this.issues.delete(this.issueKey(cellId, body.operation))) this.emit();
         let state: ChartStudyClockState | null = null;
         try { state = registration.port.read(); } catch { /* Report an unavailable owner below. */ }
         const withCursor = body.operation !== "mode" || (body.active && this.targets(event.sourceCellId).includes(cellId));
@@ -326,9 +330,10 @@ export class ChartStudyClockLinks {
       const status = pending.order === null ? "unavailable" : value?.status ?? "unavailable";
       return status === "moved" || status === "inactive" ? [] : [{ cellId, status }];
     });
-    if (report && pending.scope === this.scope && this.latestRequest.get(pending.sourceCellId) === requestId) {
-      if (failed.length) this.issues.set(pending.sourceCellId, { sourceCellId: pending.sourceCellId, operation: pending.operation, failed });
-      else this.issues.delete(pending.sourceCellId);
+    const key = this.issueKey(pending.sourceCellId, pending.operation);
+    if (report && pending.scope === this.scope && this.latestRequest.get(key) === requestId) {
+      if (failed.length) this.issues.set(key, { sourceCellId: pending.sourceCellId, operation: pending.operation, failed });
+      else this.issues.delete(key);
       this.emit();
     }
     pending.resolve(report && failed.length === 0);
