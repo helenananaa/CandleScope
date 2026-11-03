@@ -186,6 +186,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
   useEffect(() => links.register(cell.id, surface.actions), [cell.id, links, surface.actions]);
   const linkUserViewport = useChartViewportLink(links, cell.id, scope);
   const cellOptions = useMemo(() => ({
+    cellId: cell.id, workspaceId: workspace.view.activeWorkspaceId, links,
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
     active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
