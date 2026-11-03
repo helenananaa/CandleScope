@@ -33,7 +33,7 @@ async function command(groupId,name,args={}){
  const result=await q.until(async()=>{const r=await q.s.control.call('request.get',{requestId});return r.final?r:false;});assert.equal(result.state,'applied',JSON.stringify(result));return result;
 }
 async function document(){return(await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot.document;}
-async function viewport(id){const groups=(await q.s.control.call('app.commands',{windowId:'main-window'})).groups;const group=groups.find(g=>g.id.startsWith('chart:replay:')&&g.id.endsWith(':'+id));assert.ok(group);return(await q.s.control.call('app.query',{windowId:'main-window',groupId:group.id,command:'viewport',args:{}})).snapshot;}
+async function viewport(id){const groups=(await q.s.control.call('app.commands',{windowId:'main-window'})).groups;const group=groups.find(g=>g.id.startsWith('chart:replay:')&&g.id.endsWith(':'+id));assert.ok(group);const result=await q.s.control.call('app.query',{windowId:'main-window',groupId:group.id,command:'viewport',args:{}});assert.equal(result.state,'ready',JSON.stringify(result));return result.output;}
 const ready=()=>q.s.page.locator('[data-replay-session-state="PAUSED"][data-replay-viewer-state-ready="true"]').waitFor({timeout:90000});
 async function selectPeriod(interval){
  await q.s.page.getByRole('button',{name:'打开周期选择与自定义周期管理',exact:true}).click();
@@ -67,7 +67,10 @@ try{
  await launch();await q.enableControl();await q.s.page.goto(new URL('/replay.html',q.s.page.url()).href);
  if(process.env.CANDLESCOPE_REPLAY_QA_RESUME==='1'){
   await q.s.page.locator('.training-hub-card').filter({hasText:'Native date shown'}).getByRole('button',{name:'继续训练',exact:true}).click();await ready();
-  runId=new URL(q.s.page.url()).searchParams.get('run');assert.ok(runId);await q.record('resumed-own-controlled-run-after-harness-input-error',{runId,prior:'attempt1-datetime-normalization/acceptance.json'});
+  runId=new URL(q.s.page.url()).searchParams.get('run');assert.ok(runId);
+  const restored=(await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot;
+  for(const id of restored.layoutCellIds)if(id!=='cell-1')await command('workspace','closeCell',{cellId:id});
+  await q.record('resumed-own-controlled-run-after-harness-error',{runId,previousVisibleCells:restored.layoutCellIds});
  }else await create('NONE','Native date shown');
  await selectPeriod('5m');
  await q.until(async()=>(await capture(q)).some(c=>c.interval==='5m'&&c.bars.length>20));
