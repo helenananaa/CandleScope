@@ -34,6 +34,11 @@ async function command(groupId,name,args={}){
 async function document(){return(await q.s.control.call('app.query',{windowId:'main-window',groupId:'workspace',command:'inspect',args:{}})).snapshot.document;}
 async function viewport(id){const groups=(await q.s.control.call('app.commands',{windowId:'main-window'})).groups;const group=groups.find(g=>g.id.startsWith('chart:replay:')&&g.id.endsWith(':'+id));assert.ok(group);return(await q.s.control.call('app.query',{windowId:'main-window',groupId:group.id,command:'viewport',args:{}})).snapshot;}
 const ready=()=>q.s.page.locator('[data-replay-session-state="PAUSED"][data-replay-viewer-state-ready="true"]').waitFor({timeout:90000});
+async function selectPeriod(interval){
+ await q.s.page.getByRole('button',{name:'打开周期选择与自定义周期管理',exact:true}).click();
+ const picker=q.s.page.getByRole('dialog',{name:'周期选择器',exact:true});await picker.waitFor();
+ await picker.locator('[data-interval-chip="'+interval+'"]').click();await picker.waitFor({state:'hidden'});await ready();
+}
 async function create(policy,name){
  await q.s.page.getByRole('button',{name:'新建训练',exact:true}).click();
  await q.s.page.getByRole('textbox',{name:'商品',exact:true}).fill('BTCUSDT');
@@ -59,9 +64,11 @@ async function navigate(time,{shortcut=false,located=true}={}){
 async function barsEvidence(){return(await capture(q)).map(c=>({cellId:c.cellId,interval:c.interval,bars:c.bars.length,first:c.bars[0]?.time,last:c.bars.at(-1)?.time,visible:c.visible}));}
 try{
  await launch();await q.enableControl();await q.s.page.goto(new URL('/replay.html',q.s.page.url()).href);await create('NONE','Native date shown');
- await q.s.page.getByRole('button',{name:'5m',exact:true}).click();await ready();
+ await selectPeriod('5m');
  await q.until(async()=>(await capture(q)).some(c=>c.interval==='5m'&&c.bars.length>20));
- await q.s.page.locator('[data-replay-action="advance-base"]').click();await ready();
+ const initialCursor=Number(await q.s.page.locator('[data-replay-cursor-ms]').first().getAttribute('data-replay-cursor-ms'));
+ await q.s.page.locator('[data-replay-action="advance-base"]').click();
+ await q.until(async()=>Number(await q.s.page.locator('[data-replay-cursor-ms]').first().getAttribute('data-replay-cursor-ms'))>initialCursor);await ready();
  const original=await facts();
  const target=Date.parse('2023-11-17T12:30:00Z');assert.ok((await capture(q))[0].bars[0].time*1000>target,'Target must require real bounded history, not only a loaded row');
  const readsBefore=history.length,message=await navigate('2023-11-17T12:30:00',{shortcut:true});
@@ -72,7 +79,7 @@ try{
  await q.s.page.getByRole('button',{name:'图 1 布局操作',exact:true}).click();await q.s.page.getByRole('button',{name:'向右拆分',exact:true}).click();
  await q.until(async()=>(await capture(q)).length===2);
  await command('workspace','setLinkGroup',{cellIds:['cell-1','cell-2'],groupId:null});
- await command('workspace','setActiveCell',{cellId:'cell-2'});await q.s.page.getByRole('button',{name:'1m',exact:true}).click();await ready();
+ await command('workspace','setActiveCell',{cellId:'cell-2'});await selectPeriod('1m');
  await q.until(async()=>(await capture(q)).some(c=>c.cellId==='cell-2'&&c.interval==='1m'&&c.bars.length>20));
  await command('workspace','setActiveCell',{cellId:'cell-1'});const peerBefore=await viewport('cell-2');assert.ok(peerBefore?.logical,'Peer viewport must be observable');
  await navigate('2023-11-17T18:00:00');assert.deepEqual(await viewport('cell-2'),peerBefore);assert.deepEqual(await facts(),original);
