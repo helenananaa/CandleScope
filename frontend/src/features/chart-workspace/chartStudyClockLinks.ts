@@ -108,7 +108,7 @@ export class ChartStudyClockLinks {
     for (const waiter of [...this.documentWaiters]) waiter();
   }
   private supersedePublication(requestId: string, pending: Pending) {
-    pending.intent.superseded = true; this.cancelUserAction(pending.intent); this.finish(requestId, false);
+    pending.intent.superseded = true; this.cancelUserAction(pending.intent); this.finish(requestId, true);
   }
   private waitForConfiguration(revision: number, sourceCellId: string, key: string, epoch: number, timeoutMs = 5_000): Promise<void> {
     return new Promise((resolve, reject) => {

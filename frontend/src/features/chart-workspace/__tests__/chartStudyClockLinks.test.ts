@@ -123,7 +123,9 @@ test("disabling then reenabling routing cannot revive a source publication waiti
   const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace")); await flush();
   const disabled = structuredClone(doc); disabled.revision = 1; disabled.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyCursor = false;
   links.updateDocument(disabled, "workspace"); links.updateDocument({ ...doc, revision: 2 }, "workspace");
-  network.release(); assert.equal(await old, false); await flush(); assert.deepEqual(b.calls, []); release();
+  network.release(); assert.equal(await old, false); await flush(); assert.deepEqual(b.calls, []);
+  assert.equal(links.getIssue("cell-1", "workspace")!.operation, "cursor");
+  assert.equal(links.getIssue("cell-1", "workspace")!.failed[0]!.status, "unavailable"); release();
 });
 
 test("a received cursor waiting on local input cannot revive after routing is disabled and reenabled", async () => {

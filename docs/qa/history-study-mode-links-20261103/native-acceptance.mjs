@@ -228,9 +228,21 @@ try{
  await command('workspace','setLinkGroup',{cellIds:[liveId],groupId},secondId);
  await modeButton().click();await q.until(async()=>await modeButton().count()===0);
  await region(b.id).getByRole('button',{name:'添加复盘补记',exact:true}).click();
- await execute('cell-1','exit');await live('cell-1');await live(targetId,secondId);await live(liveId,secondId);await at('cell-2',fixture.beforeMs);
+ await execute('cell-1','exit');await live('cell-1');
+ const modeExit=await q.until(async()=>{
+  const cells=(await layout(secondId)).cells;const peersLive=[targetId,liveId].every(id=>cells.find(row=>row.cellId===id)?.runtime?.mode==='live');
+  return peersLive?{peersLive:true}:await modeButton().isVisible()?{peersLive:false}:false;
+ });
+ if(!modeExit.peersLive){
+  await q.record('concurrent-group-change-keeps-unconfirmed-mode-visible',{source:await view('cell-1'),peers:(await layout(secondId)).cells});
+  await q.until(async()=>{const doc=await document();return doc?.cells[liveId]?.linkGroupId===groupId&&(await q.inspect()).persistence.state==='saved';});
+  await modeButton().click();
+ }
+ await live(targetId,secondId);await live(liveId,secondId);await at('cell-2',fixture.beforeMs);
  await modeButton().waitFor();await q.record('editor-refuses-mode-exit-and-live-source-retains-visible-retry',{source:await view('cell-1'),editingTarget:await state('cell-2')});
- await region(b.id).getByRole('button',{name:'保存并关闭',exact:true}).click();await modeButton().click();await live('cell-2');await q.until(async()=>await modeButton().count()===0);
+ await region(b.id).getByRole('button',{name:'保存并关闭',exact:true}).click();
+ await q.until(async()=>await region(b.id).getByRole('button',{name:'保存并关闭',exact:true}).count()===0);
+ await modeButton().click();await live('cell-2');await q.until(async()=>await modeButton().count()===0);
  await command('workspace','updateLinkPolicy',{groupId,relationship:'peers',patch:{studyCursor:true}});
  await resume('cell-1');for(const [id,windowId] of [['cell-1','main-window'],['cell-2','main-window'],[targetId,secondId],[liveId,secondId]])await at(id,fixture.earlyMs,windowId);
  const dInput=(await view(liveId)).study;
