@@ -144,6 +144,21 @@ test("a replaced source owner cannot finish its old publication against the new 
   network.release(); assert.equal(await old, false); await flush();assert.deepEqual(b.calls, []);release();
 });
 
+test("a received mode or cursor waiting on a local action cannot cross a workspace leave/reentry", async () => {
+  for (const operation of ["mode", "cursor"] as const) {
+    const doc = document(), links = new ChartStudyClockLinks(doc, "workspace");
+    doc.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!.peerPolicy.studyMode = true;
+    const a = clock(), b = clock(120_000);
+    links.register("cell-1", a.port, "workspace"); links.register("cell-2", b.port, "workspace");
+    links.beginUserAction("cell-2", "workspace");
+    const old = links.publishUserMove(links.beginUserAction("cell-1", "workspace", operation)); await flush();
+    links.updateDocument(document(), "other-workspace"); links.updateDocument(doc, "workspace");
+    const restored = clock(180_000, { studyId: "hs_restored" }); links.register("cell-2", restored.port, "workspace");
+    assert.equal(await old, false); await flush();
+    assert.deepEqual(restored.calls, []); assert.deepEqual(restored.modeCalls, []); assert.equal(restored.state.cursorMs, 180_000);
+  }
+});
+
 test("a missing local chart and a throwing owner cannot be reported as synchronized", async () => {
   const links = new ChartStudyClockLinks(document(), "workspace"), a = clock();
   links.register("cell-1", a.port, "workspace");
