@@ -1,4 +1,4 @@
-import { replayNoteEnglish } from "./replayNoteMessages.js";
+import { replayNoteJapanese } from "./replayNoteMessages.js";
 import { historyStudyJapanese } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
@@ -8,7 +8,7 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
-  ...replayNoteEnglish,
+  ...replayNoteJapanese,
   ...historyStudyJapanese,
   "chartTime.title": "Go to date",
   "chartTime.shortcut": "Go to date (Alt+G)",

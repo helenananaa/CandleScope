@@ -20,3 +20,5 @@
 ## 复现
 
 沿用../replay-time-notes-20261104/http_server.py和frontend/scripts/frontend-script-integration.mjs --replay-notes，使用新的私有CANDLESCOPE_NOTE_QA_ROOT及loopback端口。原生使用本目录native-acceptance.mjs、../replay-imported-bar-20261104/assemble.py及verify.mjs，必须先构建当前frontend/dist，候选使用当前已提交源和独立新QA目录。LOCAL_OFFLINE、回放WS、源与插件匹配及完整正常退出保持强制检查。
+
+完整前端检查首次失败于日语翻译覆盖率：新增候选文案沿用英文fallback使既有90%门槛不足。已将本功能全部41项日语文案补齐，保留原测试门槛，完整检查重新执行。
