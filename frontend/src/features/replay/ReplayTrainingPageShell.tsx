@@ -90,6 +90,9 @@ import {
   replayReviewDrawingRecord,
 } from "./replayReviewDrawing.js";
 import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
+import { captureReplayNoteChart } from "./replayNoteChartCapture.js";
+import type { ReplayNoteContext } from "./replayNotes.js";
+import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -119,6 +122,7 @@ export interface ReplayTrainingPageShellProps {
     readonly priceScale: { readonly invertScale: boolean; readonly priceScaleMode: number };
     readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
     readonly integrity: ReplayIntegrityRuntime;
+    readonly projectionBoundaryMs?: number | null;
     readonly frame: ComponentType<ReplayChartPageFrameProps>;
     readonly controls: ReactNode;
     readonly controlViewer: ReplayViewerRuntime;
@@ -213,6 +217,10 @@ export default function ReplayTrainingPageShell({
   const ownIntegrity = useReplayIntegrityRuntime(runtime, viewer, integrityOpen, cell === undefined);
   const integrityRuntime = cell?.integrity ?? ownIntegrity;
   const review = integrityRuntime.review;
+  const [noteTimes, setNoteTimes] = useState<{ runId: string | null; epoch: string | null; values: readonly number[] } | null>(null);
+  const reportNoteTimes = useCallback((values: readonly number[]) => setNoteTimes({
+    runId: integrityRuntime.runId, epoch: runtime.store.dataEpoch, values,
+  }), [integrityRuntime.runId, runtime.store.dataEpoch]);
   const controlCellId = cell?.scope ?? "replay-chart";
   useControlCommands(() => providedChartCommands(controlCellId, { runId: integrityRuntime.runId, viewRevision: viewer.viewerState?.semantic_view_revision }, indicators, chartSurfaceActions, drawings, review === null));
   useControlCommands(() => drawingCommands(controlCellId, { actions: chartSurfaceActions }, drawings, controlCellId, review === null));
@@ -309,6 +317,9 @@ export default function ReplayTrainingPageShell({
       .filter((bar) => !isReplayContextHistoryBar(bar))
       .map((bar) => Number(bar.time) * 1_000);
     if (runtime.store.virtualTimeMs !== null) values.push(runtime.store.virtualTimeMs);
+    const noteCutoff = review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs ?? -1;
+    if (noteTimes?.runId === integrityRuntime.runId && noteTimes?.epoch === runtime.store.dataEpoch)
+      values.push(...noteTimes.values.filter(time => time <= noteCutoff));
     for (const order of runtime.store.orders) values.push(order.created_time_ms);
     for (const fill of runtime.store.fills) values.push(fill.event_time_ms);
     for (const entry of runtime.store.journal) values.push(entry.virtual_time_ms);
@@ -823,6 +834,36 @@ export default function ReplayTrainingPageShell({
   const viewerVersion = Number(displayedSeriesStore.version);
   const viewerSeriesKey = displayedSeriesStore.seriesKey;
   const isReview = review !== null;
+  const captureIndicatorRuntime = review === null ? indicators : reviewIndicators;
+  const captureIndicatorView = captureIndicatorRuntime.view;
+  const captureState = useRef<{ ready: boolean; seriesKey: string; sourceVersion: number; interval: string; chartType: string;
+    contextKey: string; presentation?: readonly unknown[]; runId: string | null; trackId: string | null; dataEpoch: string | null;
+    time: number | null; reviewId: string | null; reviewRevision: number | null }>({ ready: false, seriesKey: "", sourceVersion: 0, interval: "", chartType: "", contextKey: "",
+    runId: null as string | null, trackId: null as string | null, dataEpoch: null as string | null, time: null as number | null,
+    reviewId: null as string | null, reviewRevision: null as number | null });
+  captureState.current = {
+    ready: active && cell?.active !== false && viewerBarCount > 0 && !captureIndicatorRuntime.status.computing && !viewer.loading && !viewer.error && !viewer.viewerPending && !viewer.controlPending
+      && (review === null ? ["PAUSED", "ENDED"].includes(String(effectiveState)) && !runtime.marketData.view.loading
+        && cell?.projectionBoundaryMs === runtime.store.virtualTimeMs
+        : review.playback_state === "PAUSED" && !reviewChartLoading && reviewLoadedPrefixKey === reviewPrefixKey),
+    presentation: [captureIndicatorView.activeIndicators, captureIndicatorView.mainOverlayLines, captureIndicatorView.markers,
+      captureIndicatorView.fills, captureIndicatorView.hlines, captureIndicatorView.bgcolors, captureIndicatorView.barcolors,
+      captureIndicatorView.drawings, captureIndicatorView.signals, ...captureIndicatorView.subPanes.map(pane => pane.lines)],
+    seriesKey: viewerSeriesKey ?? "", sourceVersion: viewerVersion, interval: displayedInterval, chartType: settings.chartType,
+    contextKey: JSON.stringify([runtime.store.generation, runtime.store.revision, runtime.store.sourceSequence,
+      runtime.store.virtualTimeMs, review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence, viewerSeriesKey, viewerVersion,
+      displayedInterval, settings.chartType, cell?.active]),
+    runId: integrityRuntime.runId, trackId: reviewSelectedTrackId ?? activeSelectedTrack?.track_id ?? null,
+    dataEpoch: runtime.store.dataEpoch, time: review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs,
+    reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,
+  };
+  const captureNoteChart = useCallback((context: ReplayNoteContext) => captureReplayNoteChart(chartSurfaceActions, context, () => {
+    const current = captureState.current;
+    return { ...current, ready: current.ready && current.runId === context.runId && current.trackId === context.trackId
+      && current.dataEpoch === context.dataEpoch && current.time === context.virtualTimeMs
+      && current.reviewId === context.reviewId && current.reviewRevision === context.reviewRevision };
+  }), [chartSurfaceActions]);
+
   const viewerDataMeta = useMemo(() => isReview ? replayReviewDataMeta(displayedSeriesStore, reviewChartLoading) : ({
     ...runtime.marketData.view.meta,
     version: viewerVersion,
@@ -1076,12 +1117,20 @@ export default function ReplayTrainingPageShell({
     />
   );
 
+  const noteTrackId = reviewSelectedTrackId ?? activeSelectedTrack?.track_id;
+  const noteGeneration = runtime.store.dataEpoch ?? "pending";
+  const notes = integrityRuntime.runId && noteTrackId ? <ReplayNotesPanel key={`${integrityRuntime.runId}:${noteTrackId}:${noteGeneration}`}
+      api={api} runId={integrityRuntime.runId} trackId={noteTrackId} generationKey={noteGeneration}
+      reviewId={review?.review_id ?? null} reviewRevision={review?.cursor_revision ?? null}
+      cursorMs={review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs}
+      revisionKey={`${runtime.store.revision}:${viewer.viewerState?.semantic_view_revision ?? ""}:${review?.review_id ?? ""}:${review?.cursor_revision ?? ""}`}
+      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} captureChart={captureNoteChart} embedded={review === null} /> : null;
   const rightRail = active ? (
-    review !== null ? <ReplayReviewRightRail review={review} /> : <ReplayRightMarketRail
+    review !== null ? <ReplayReviewRightRail review={review} notes={notes} /> : <ReplayRightMarketRail
       runtime={runtime} viewer={viewer} indicators={indicators}
       preferences={workspace.preferences} actions={workspace.actions}
       upColor={settings.upColor} downColor={settings.downColor}
-      formatTime={publicTimeRuntime.formatTime}
+      formatTime={publicTimeRuntime.formatTime} notes={notes}
     />
   ) : null;
   const replayIntervalSelector = (

@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 26
+TRAINING_SCHEMA_VERSION = 29
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2622,6 +2622,87 @@ CREATE TABLE IF NOT EXISTS replay_training_isolated_wallet (
 """
 
 
+TRAINING_SCHEMA_V27_NOTES = """
+CREATE TABLE IF NOT EXISTS replay_training_note (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    note_id TEXT NOT NULL,
+    track_id TEXT NOT NULL,
+    market_time_ms INTEGER NOT NULL CHECK (market_time_ms >= 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    review_note INTEGER NOT NULL CHECK (review_note IN (0,1)),
+    timeline_sequence INTEGER NOT NULL CHECK (timeline_sequence >= 0),
+    PRIMARY KEY (run_id,note_id)
+);
+CREATE INDEX IF NOT EXISTS replay_training_note_track_time
+ON replay_training_note(run_id,track_id,market_time_ms,created_at_ms,note_id);
+CREATE TABLE IF NOT EXISTS replay_training_note_revision (
+    run_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 100),
+    virtual_time_ms INTEGER NOT NULL CHECK (virtual_time_ms >= 0),
+    saved_at_ms INTEGER NOT NULL CHECK (saved_at_ms >= 0),
+    fields_json TEXT NOT NULL,
+    context_json TEXT NOT NULL,
+    stored_bytes INTEGER NOT NULL CHECK (stored_bytes >= 0),
+    timeline_sequence INTEGER NOT NULL CHECK (timeline_sequence >= 0),
+    PRIMARY KEY (run_id,note_id,revision),
+    FOREIGN KEY (run_id,note_id) REFERENCES replay_training_note(run_id,note_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS replay_note_context_visited_time
+ON replay_review_timeline_event(run_id,virtual_time_ms DESC);
+"""
+
+
+TRAINING_SCHEMA_V28_NOTE_LINKS = """
+CREATE TABLE IF NOT EXISTS replay_training_note_links (
+    run_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    links_json TEXT NOT NULL,
+    stored_bytes INTEGER NOT NULL CHECK (stored_bytes >= 0),
+    PRIMARY KEY (run_id,note_id,revision),
+    FOREIGN KEY (run_id,note_id,revision)
+        REFERENCES replay_training_note_revision(run_id,note_id,revision) ON DELETE CASCADE
+);
+INSERT OR IGNORE INTO replay_training_note_links
+SELECT run_id,note_id,revision,'[]',2 FROM replay_training_note_revision;
+"""
+
+
+TRAINING_SCHEMA_V29_NOTE_CAPTURES = """
+CREATE TABLE IF NOT EXISTS replay_training_note_capture (
+    run_id TEXT NOT NULL REFERENCES replay_training_run(run_id) ON DELETE CASCADE,
+    capture_id TEXT NOT NULL,
+    track_id TEXT NOT NULL,
+    dataset_epoch TEXT NOT NULL,
+    virtual_time_ms INTEGER NOT NULL CHECK (virtual_time_ms >= 0),
+    timeline_sequence INTEGER NOT NULL CHECK (timeline_sequence >= 0),
+    request_context_json TEXT NOT NULL,
+    captured_context_json TEXT NOT NULL,
+    chart_json TEXT NOT NULL,
+    saved_at_ms INTEGER NOT NULL CHECK (saved_at_ms >= 0),
+    width INTEGER NOT NULL CHECK (width BETWEEN 1 AND 4096),
+    height INTEGER NOT NULL CHECK (height BETWEEN 1 AND 4096),
+    image_png BLOB NOT NULL,
+    stored_bytes INTEGER NOT NULL CHECK (stored_bytes > 0),
+    PRIMARY KEY (run_id,capture_id)
+);
+CREATE INDEX IF NOT EXISTS replay_note_capture_track_time
+ON replay_training_note_capture(run_id,track_id,virtual_time_ms,timeline_sequence);
+CREATE TABLE IF NOT EXISTS replay_training_note_capture_link (
+    run_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    capture_id TEXT NOT NULL,
+    PRIMARY KEY (run_id,note_id,revision,capture_id),
+    FOREIGN KEY (run_id,note_id,revision)
+        REFERENCES replay_training_note_revision(run_id,note_id,revision) ON DELETE CASCADE,
+    FOREIGN KEY (run_id,capture_id)
+        REFERENCES replay_training_note_capture(run_id,capture_id) ON DELETE CASCADE
+);
+"""
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2641,6 +2722,24 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     if current == TRAINING_SCHEMA_VERSION:
         _ensure_review_query_indexes(connection)
         return
+    if current == 28:
+        _execute_script(connection, TRAINING_SCHEMA_V29_NOTE_CAPTURES)
+        connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
+                           (TRAINING_SCHEMA_VERSION, now_ms))
+        return
+    if current == 27:
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
+        _execute_script(connection, TRAINING_SCHEMA_V29_NOTE_CAPTURES)
+        connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
+                           (TRAINING_SCHEMA_VERSION, now_ms))
+        return
+    if current == 26:
+        _execute_script(connection, TRAINING_SCHEMA_V27_NOTES)
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
+        _execute_script(connection, TRAINING_SCHEMA_V29_NOTE_CAPTURES)
+        connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
+                           (TRAINING_SCHEMA_VERSION, now_ms))
+        return
     if current in {19, 20, 21, 22, 23, 24, 25}:
         if current in {19, 20}:
             _execute_script(connection, TRAINING_SCHEMA_V20_INTERVAL_CURVES)
@@ -2650,6 +2749,9 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         _execute_script(connection, TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS)
         _execute_script(connection, TRAINING_SCHEMA_V25_INPUT_ADMISSIONS)
         _execute_script(connection, TRAINING_SCHEMA_V26_ISOLATED_WALLETS)
+        _execute_script(connection, TRAINING_SCHEMA_V27_NOTES)
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
+        _execute_script(connection, TRAINING_SCHEMA_V29_NOTE_CAPTURES)
         from .persistence.isolated_wallets import migrate
         migrate(connection, now_ms=now_ms)
         _ensure_hedge_admission_cursor(connection)
@@ -2695,6 +2797,9 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V24_HYBRID_EXTENSIONS,
         TRAINING_SCHEMA_V25_INPUT_ADMISSIONS,
         TRAINING_SCHEMA_V26_ISOLATED_WALLETS,
+        TRAINING_SCHEMA_V27_NOTES,
+        TRAINING_SCHEMA_V28_NOTE_LINKS,
+        TRAINING_SCHEMA_V29_NOTE_CAPTURES,
     ):
         _execute_script(connection, script)
     _ensure_interval_curve_bounds(connection)

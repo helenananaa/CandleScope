@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "scope": "Real backend process restart, explicit fixture candles; not native desktop qualification",
+  "pids": [
+    15036,
+    15038
+  ],
+  "notes": 4,
+  "blockedExternalAttempts": 0,
+  "checks": [
+    "all visible note versions equal",
+    "review/source cursors and financial snapshot equal",
+    "both owned exits closed manager without streams"
+  ]
+}

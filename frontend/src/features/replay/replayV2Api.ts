@@ -1,4 +1,7 @@
+import { parseReplayNoteCaptureReceipt, parseReplayNoteCapturesResponse, parseReplayNoteImageResponse, sameReplayNoteContext,
+  type ReplayNoteCaptureSave, type ReplayNoteCaptureReceipt, type ReplayNoteCapturesResponse, type ReplayNoteImageResponse } from "./replayNotes.js";
 import { API_BASE } from "../../services/apiConfig.js";
+import { parseReplayNoteLinkOptions, type ReplayNoteLinkOptions, parseReplayNote, parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNoteVersionsResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
 import { prepareReplay, preparationRequest, waitForPreparation, type PreparationCapabilities, type PreparationJob } from "../data-preparation/api.js";
 import { ReplayApiClient } from "./replayApi.js";
 import type { ReplayApiClientOptions, ReplayCatalogQuery } from "./replayApi.js";
@@ -1017,6 +1020,92 @@ export class ReplayV2ApiClient {
       parseReplayCurrentDrawingDocumentResponse,
       signal ? { signal } : {},
     );
+  }
+
+  notesRun(runId: string, trackId: string, atTimeMs?: number, signal?: AbortSignal): Promise<ReplayNotesResponse> {
+    const query = atTimeMs === undefined ? "" : `?at_time_ms=${atTimeMs}`;
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes${query}`,
+      value => {
+        const result = parseReplayNotesResponse(value);
+        if (result.run_id !== runId || result.track_id !== trackId
+          || (atTimeMs !== undefined && result.asOfMs !== atTimeMs)) throw new TypeError("Replay annotation context changed");
+        return result;
+      }, signal ? { signal } : {});
+  }
+
+  saveNoteCaptureRun(runId: string, trackId: string, payload: ReplayNoteCaptureSave, signal?: AbortSignal): Promise<ReplayNoteCaptureReceipt> {
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/note-captures`, value => {
+      const result = parseReplayNoteCaptureReceipt(value), capture = result.capture;
+      if (!sameReplayNoteContext(result.context, payload.context) || capture.id !== payload.id || capture.runId !== runId
+        || capture.trackId !== trackId || capture.dataEpoch !== payload.capturedContext.dataEpoch
+        || capture.marketTimeMs !== payload.capturedContext.virtualTimeMs || capture.timelineSequence !== payload.capturedContext.timelineSequence
+        || capture.interval !== payload.chart.interval || capture.chartType !== payload.chart.chartType)
+        throw new TypeError("Replay capture receipt changed its submission identity");
+      return result;
+    }, { method: "POST", body: JSON.stringify(payload), ...(signal ? { signal } : {}) });
+  }
+
+  noteCapturesRun(runId: string, trackId: string, captureId?: string, signal?: AbortSignal): Promise<ReplayNoteCapturesResponse> {
+    const query = captureId === undefined ? "" : `?capture_id=${encodeURIComponent(captureId)}`;
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/note-captures${query}`, value => {
+      const result = parseReplayNoteCapturesResponse(value);
+      if (result.context.runId !== runId || result.context.trackId !== trackId
+        || (captureId !== undefined && (result.captures.length !== 1 || result.captures[0]!.id !== captureId)))
+        throw new TypeError("Replay capture list changed its scope");
+      return result;
+    }, signal ? { signal } : {});
+  }
+
+  noteScreenshotRun(runId: string, trackId: string, noteId: string, revision: number, captureId: string, signal?: AbortSignal): Promise<ReplayNoteImageResponse> {
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes/${safeSegment(noteId, "note id")}/versions/${revision}/screenshots/${safeSegment(captureId, "capture id")}`, value => {
+      const result = parseReplayNoteImageResponse(value);
+      if (result.context.runId !== runId || result.context.trackId !== trackId || result.note_id !== noteId
+        || result.revision !== revision || result.capture.id !== captureId) throw new TypeError("Replay note image changed its scope");
+      return result;
+    }, signal ? { signal } : {});
+  }
+
+  noteLinkOptionsRun(runId: string, trackId: string,
+    query: { kind: "FILL" | "TRADE"; beforeId?: string; limit?: number }, signal?: AbortSignal): Promise<ReplayNoteLinkOptions> {
+    const params = new URLSearchParams({ kind: query.kind, limit: String(query.limit ?? 20) });
+    if (query.beforeId !== undefined) params.set("before_id", query.beforeId);
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes/link-options?${params}`,
+      value => {
+        const result = parseReplayNoteLinkOptions(value);
+        if (result.context.runId !== runId || result.context.trackId !== trackId || result.kind !== query.kind
+          || result.links.length > (query.limit ?? 20)
+          || (query.beforeId !== undefined && result.links.some(link => link.id >= query.beforeId!)))
+          throw new TypeError("Replay note reference page changed its scope");
+        return result;
+      }, signal ? { signal } : {});
+  }
+
+  noteVersionsRun(runId: string, trackId: string, noteId: string,
+    query: { atTimeMs: number; beforeRevision?: number; limit?: number }, signal?: AbortSignal): Promise<ReplayNoteVersionsResponse> {
+    const params = new URLSearchParams({ at_time_ms: String(query.atTimeMs), limit: String(query.limit ?? 20) });
+    if (query.beforeRevision !== undefined) params.set("before_revision", String(query.beforeRevision));
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes/${safeSegment(noteId, "note id")}/versions?${params}`,
+      value => {
+        const result = parseReplayNoteVersions(value);
+        if (result.run_id !== runId || result.track_id !== trackId || result.note_id !== noteId || result.asOfMs !== query.atTimeMs
+          || result.versions.length > (query.limit ?? 20)
+          || (query.beforeRevision !== undefined && result.versions.some(version => version.revisionCount >= query.beforeRevision!)))
+          throw new TypeError("Replay annotation version page changed its scope");
+        return result;
+      }, signal ? { signal } : {});
+  }
+
+  saveNoteRun(runId: string, trackId: string, payload: ReplayNoteSave, signal?: AbortSignal): Promise<ReplayNote> {
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes`,
+      value => {
+        const note = parseReplayNote(value);
+        if (note.runId !== runId || note.trackId !== trackId || note.id !== payload.id
+          || note.revisionCount !== payload.expectedRevision + 1 || note.effectiveTimeMs !== payload.context.virtualTimeMs
+          || note.timelineSequence !== payload.context.timelineSequence
+          || note.screenshots?.some(capture => capture.dataEpoch !== payload.context.dataEpoch))
+          throw new TypeError("Replay annotation response changed its submission identity");
+        return note;
+      }, { method: "POST", body: JSON.stringify(payload), ...(signal ? { signal } : {}) });
   }
 
   recordDrawingRun(

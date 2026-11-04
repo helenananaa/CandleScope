@@ -1,0 +1,19 @@
+{
+  "baseMain": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "testsPassed": 88,
+  "warnings": 6,
+  "includes": [
+    "Real loopback TCP via pinned CCXT, route/egress, catalog child IPC attribution",
+    "Header/Retry-After/429/418 and unknown/cancelled request accounting",
+    "Bounded128 history, duplicate settlement ignored, credential/query/fragment exclusion"
+  ],
+  "publicNetwork": "No exchange/public requests; real socket fixtures use loopback only",
+  "nativeLive": "Not performed; shared Binance IP418 deadline 2026-11-04T08:58:00.900Z respected",
+  "incident": "#200 application source2cefc201 captured background binance:futures:legacy429 then418 without endpoint. This change makes future attribution possible; does not establish the cause or resolve the ban.",
+  "backendArchitecture": {
+    "passed": false,
+    "violations": 10,
+    "sameAsMain": true,
+    "newViolations": 0
+  }
+}

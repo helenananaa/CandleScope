@@ -1,0 +1,51 @@
+{
+  "applicationSource": "a7455dbbaf028d231d68beda15535d4d958c4b3e",
+  "main": "84feb73f2b4ee7c162da71f59f028e6351fd684d",
+  "backendPassed": 97,
+  "backendWarnings": 4,
+  "frontendExactCheck": {
+    "command": "NODE_OPTIONS=--max-old-space-size=4096 npm run check",
+    "exitCode": 0,
+    "functional": 4863,
+    "isolatedPerformance": 1,
+    "desktop": 130,
+    "typecheck": "exact noEmit passed",
+    "lint": "0errors/1existing warning",
+    "build": "passed; existingchunk advisory"
+  },
+  "native": {
+    "passed": true,
+    "platform": "macOS arm64",
+    "scope": "Single immutable imported closed BAR source, one simulated fill, displayed5m/15m; not LIVE/tape/multi-symbol financial acceptance",
+    "rowsImportedByUI": 6000,
+    "visibleCoarseBarsBeforeAndAfterRestart": 20,
+    "pids": [
+      25225,
+      25279
+    ],
+    "normalFullOwnedExitMs": [
+      663,
+      538
+    ],
+    "rendererErrors": 0,
+    "externalAttempts": 0,
+    "sourceSDKFiles": 1041,
+    "frontendFiles": 164,
+    "pluginAssets": 9,
+    "pluginSourceFiles": 76,
+    "strictSignatureBeforeAndAfter": true
+  },
+  "priorConclusionsCorrected": [
+    "fa0: period control reverted1m; NOT period-qualified",
+    "fccc: 5m held but source projection missing; NOT chart-qualified",
+    "d5ed: rendered/restart passed but initial screenshot had not awaited older history; main234 now waits20bars"
+  ],
+  "pending": [
+    "new exact head remoteCI",
+    "LIVE import route",
+    "multi-dataset/symbol asset identity and financialreference",
+    "market trade import",
+    "broader multi-chart/indicator/backtracking native",
+    "Windows"
+  ]
+}

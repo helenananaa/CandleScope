@@ -1,0 +1,164 @@
+{
+  "applicationCommit": "4db5ac6a",
+  "main": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "platform": "macOS arm64",
+  "backendPassed": 71,
+  "frontendPassed": 30,
+  "sameTimeDraftScopeRerunPassed": 6,
+  "typecheck": "passed",
+  "lint": "passed",
+  "productionBuild": "passed with existing chunk-size advisory",
+  "frontendArchitecture": "passed",
+  "i18n": "30 locales passed",
+  "backendArchitecture": {
+    "passed": false,
+    "existingMainViolations": 10,
+    "new": 0,
+    "byteIdenticalToMainLog": true
+  },
+  "productionBrowser": {
+    "passed": true,
+    "checks": 5,
+    "pid": 14890,
+    "rendererExceptions": 0,
+    "remainingWorkers": 0,
+    "externalAttempts": 0,
+    "scope": "Real Chrome156/production React/actual loopback router + SQLite/fixture candles; not native package"
+  },
+  "backendProcessRestart": {
+    "passed": true,
+    "scope": "Real backend process restart, explicit fixture candles; not native desktop qualification",
+    "pids": [
+      15036,
+      15038
+    ],
+    "notes": 4,
+    "blockedExternalAttempts": 0,
+    "checks": [
+      "all visible note versions equal",
+      "review/source cursors and financial snapshot equal",
+      "both owned exits closed manager without streams"
+    ]
+  },
+  "pending": [
+    "trade/fill associations and version-bound screenshots",
+    "version history pagination UI",
+    "native graphical Review/backtracking note flow (HTTP production React tested separately)",
+    "broader multi-track/reconnect/Windows",
+    "new remote head CI and PR236 dependency merge"
+  ],
+  "exactFrontendCheck": {
+    "command": "NODE_OPTIONS=--max-old-space-size=4096 npm run check",
+    "exitCode": 0,
+    "functionalPassed": 4869,
+    "isolatedPerformancePassed": 1,
+    "desktopPassed": 130,
+    "types": "exact CI commands passed",
+    "lint": "0 errors;1 existing SingleChartPanes warning",
+    "architecture": "passed",
+    "pluginArchitecture": "passed",
+    "i18n": "30 locales/key shape passed; note strings translated en/zh variants/ko/pt-BR, other locales English fallback",
+    "build": "passed with existing chunk advisory",
+    "priorFailures": [
+      "CI TS2554 note draft storage getItem parameter",
+      "first local exact lint unused parameter",
+      "second exact suite en-clone ko/ptBR; fixed translations, no gate relaxed"
+    ]
+  },
+  "integratedApplicationCommit": "a355ebe4cb34d29127b8f1f978ed1f26c817dae6",
+  "dependency": {
+    "pr": 236,
+    "head": "24f4796d8079c192038a2229cb894d3e4f2bf460",
+    "main": "84feb73f2b4ee7c162da71f59f028e6351fd684d"
+  },
+  "integrationBackendRegression": {
+    "passed": 169,
+    "warnings": 4,
+    "targetedClockPassed": 2,
+    "targetedIncludesOverlap": true
+  },
+  "integrationExactFrontendCheck": {
+    "functional": 4869,
+    "performance": 1,
+    "desktop": 130,
+    "exitCode": 0,
+    "typesLintBuildArchitecture": "passed;1 existing lint warning"
+  },
+  "native": {
+    "passed": true,
+    "scope": "Actual macOS arm64 LOCAL_OFFLINE imported BAR; create original note, advance/edit/historical API version, save & full owned restart, uncommitted draft restore with explicit current-context copy. No native screenshot/fill associations or entire166 claim",
+    "source": "a355ebe4cb34d29127b8f1f978ed1f26c817dae6",
+    "pids": [
+      27771,
+      27805
+    ],
+    "normalFullOwnedExitMs": [
+      536,
+      546
+    ],
+    "rendererErrors": 0,
+    "externalAttempts": 0,
+    "originalVersionRestored": 2,
+    "copyVersion": 1,
+    "oldDraftRetained": true,
+    "financialSnapshotsUnchangedByNotes": true,
+    "sourceSDKFiles": 1042,
+    "builtFrontendFiles": 164,
+    "pluginAssets": 9,
+    "pluginSourceFiles": 76,
+    "strictSignatureBeforeAndAfter": true
+  },
+  "versionHistory": {
+    "source": "76c6d9bc3ff513d9259a0ef16ceaf260ae333eb6",
+    "backend": 171,
+    "backendWarnings": 4,
+    "frontendCheck": {
+      "exitCode": 0,
+      "functional": 4871,
+      "performance": 1,
+      "desktop": 130,
+      "exactFinalTypeRecheck": 0,
+      "lint": "0 errors/1 existing warning"
+    },
+    "browser": {
+      "checks": 7,
+      "pageCounts": [
+        20,
+        5
+      ],
+      "lateBodyAfterSameTimeRewind": "only v1 remains",
+      "externalAttempts": 0,
+      "exceptions": 0,
+      "workersAfterExit": 0
+    },
+    "native": {
+      "passed": true,
+      "pids": [
+        30455,
+        30491
+      ],
+      "normalFullOwnedExitMs": [
+        514,
+        546
+      ],
+      "versionsBeforeAndAfterRestart": [
+        2,
+        1
+      ],
+      "draftCopyAndOriginalRetained": true,
+      "financialSnapshotsUnchanged": true,
+      "rendererErrors": 0,
+      "externalAttempts": 0,
+      "sourceSDK": 1042,
+      "builtFrontend": 164,
+      "pluginAssets": 9,
+      "pluginSources": 76,
+      "strictSignatureBeforeAfter": true
+    },
+    "pending": [
+      "trade/fill associations and version-bound screenshots",
+      "native graphical Review/backtracking",
+      "broader multi-track/reconnect/Windows; entire166 remains open"
+    ]
+  }
+}

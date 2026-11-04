@@ -5382,7 +5382,14 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             height: Math.min(rootRect.height - mainPaneY, mainPaneHeight),
           }
         : null;
+      const painted = paintedSourceRef.current, source = seriesStoreRef.current;
       return {
+        sourceWindow: {
+          seriesKey: painted?.store.seriesKey ?? null,
+          version: painted?.version ?? null,
+          current: Boolean(source && painted?.store === source && painted.version === source.version
+            && painted.datasetKey === datasetKeyRef.current),
+        },
         rootElement,
         mainPane: {
           paneId: "main",

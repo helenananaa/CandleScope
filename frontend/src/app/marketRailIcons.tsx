@@ -95,6 +95,10 @@ export function ActivityRailIcon(): ReactNode {
   );
 }
 
+export function NotesRailIcon(): ReactNode {
+  return <svg {...iconProps}><path d="M14 3H5v18h14V8z" /><path d="M14 3v5h5M8 12h8M8 16h6" /></svg>;
+}
+
 export function CapabilityRailIcon(): ReactNode {
   return (
     <svg {...iconProps}>
