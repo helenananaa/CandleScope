@@ -193,7 +193,8 @@ class PrefixWatchStore:
             conn.execute("BEGIN IMMEDIATE")
             row=conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(proof.owner,)).fetchone()
             self._matching(row,proof)
-            if (row["acquisition"] != proof.acquisition
+            if (row["acquisition"] != proof.acquisition or proof.acquisition < row["committed_acquisition"]
+                    or acknowledged < row["committed_through_ms"]
                     or row["through_ms"] != proof.through_ms or current_revision(conn) < proof.storage_revision):
                 raise StaleAcquisition("source prefix changed while the new input batch was acquired")
             if row["version"] != proof.version:

@@ -257,3 +257,6 @@ def test_partial_financial_ack_cannot_advance_beyond_the_acquired_source(storage
     with pytest.raises(ValueError,match="inside the acquired"):
         with store.commit_guard(proof,committed_through_ms=END+STEP):pytest.fail("future cursor")
     assert store.inspect(proof.owner)["committed_acquisition"]==0
+    with store.commit_guard(proof):pass
+    with pytest.raises(StaleAcquisition):
+        with store.commit_guard(proof,committed_through_ms=START-1):pytest.fail("acknowledged progress cannot move backwards")
