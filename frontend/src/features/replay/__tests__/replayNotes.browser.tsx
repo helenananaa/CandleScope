@@ -28,6 +28,8 @@ export async function checkReplayNotesBrowser() {
   const lease = manager.createOperations({ runId: state.context.runId, purpose: "review" });
   const release = lease.retain();
   let loseNextNoteReply = false;
+  let holdNextHistory = false;
+  let releaseHistory: (() => void) | null = null;
   const api = managedReplayRunApi(lease, new ReplayV2ApiClient({ basePath: new URL("/api/v1/replay", backend).href,
     fetcher: async (url, options) => {
       const response = await fetch(url, options);
@@ -36,6 +38,14 @@ export async function checkReplayNotesBrowser() {
         assert(response.ok, "Uncertain submission was not committed by the real backend");
         await response.text(); // Discard an actual committed response, keeping the product editor unchanged.
         throw new TypeError("QA controlled loss after authoritative HTTP commit");
+      }
+      if (holdNextHistory && String(url).includes("/versions?")) {
+        holdNextHistory = false;
+        const text = await response.text();
+        // Let the production manager/body parser own cancellation after actual HTTP completed.
+        const delayed = new Response(null, { status: response.status });
+        delayed.text = () => new Promise(resolve => { releaseHistory = () => resolve(text); });
+        return delayed;
       }
       return response;
     } }));
@@ -69,6 +79,24 @@ export async function checkReplayNotesBrowser() {
     state = await call("/fixture/marker", "POST"); render();
     await click("编辑"); await input("同一毫秒后一个事件修改的计划"); await click("保存并关闭");
     await until(() => !host.querySelector("textarea") && host.textContent?.includes("同一毫秒后一个事件修改的计划"));
+    await click("版本历史");
+    await until(() => host.querySelectorAll("[data-note-version]").length === 2);
+    assert(host.querySelector('[data-note-version="1"]')?.textContent?.includes("事前计划，保存不改变运行"), "Original version is missing from history");
+    const paged = await api.notesRun(state.context.runId, state.context.trackId, state.context.virtualTimeMs);
+    const planId = paged.notes[0]!.id;
+    for (let revision = 2; revision < 25; revision++) await api.saveNoteRun(state.context.runId, state.context.trackId,
+      { id: planId, fields: { entryBasis: `同一事件计划版本 ${revision + 1}` }, expectedRevision: revision, context: paged.context });
+    await click("刷新");
+    await until(() => host.querySelectorAll("[data-note-version]").length === 20
+      && host.querySelector('[data-note-version="25"]'));
+    await click("加载更早版本");
+    await until(() => host.querySelectorAll("[data-note-version]").length === 25);
+    assert(new Set([...host.querySelectorAll("[data-note-version]")].map(value => value.getAttribute("data-note-version"))).size === 25,
+      "Version pagination repeated or omitted a page");
+    assert(!button("加载更早版本"), "Exhausted version history retained a continuation");
+    await capture("version-history-pages");
+    checks.push("actual history UI paginates 25 authoritative versions in 20+5 rows without duplication");
+    await click("版本历史");
     state = await call("/fixture/advance", "POST"); render();
     await click("新增笔记"); await input("未来创建的笔记"); await click("保存并关闭");
     await until(() => !host.querySelector("textarea") && host.textContent?.includes("未来创建的笔记"));
@@ -76,9 +104,14 @@ export async function checkReplayNotesBrowser() {
     await until(() => Object.keys(localStorage).some(key => key.startsWith("candlescope.replay-note-draft.v1:")));
     state = await call("/fixture/review-first", "POST"); render();
     await until(() => host.textContent?.includes("事前计划，保存不改变运行") && !host.querySelector("textarea"));
-    for (const text of ["同一毫秒后一个事件修改的计划", "未来创建的笔记", "未来未保存草稿"])
+    for (const text of ["同一毫秒后一个事件修改的计划", "同一事件计划版本 25", "未来创建的笔记", "未来未保存草稿"])
       assert(!host.textContent?.includes(text), "Backward UI leaked future text: " + text);
+    await click("版本历史");
+    await until(() => host.querySelectorAll("[data-note-version]").length === 1);
+    assert(host.querySelector('[data-note-version="1"]') && !host.querySelector('[data-note-version="2"]'),
+      "Earlier same-time event history revealed later revisions");
     await capture("earlier-event-visible-original");
+    await click("版本历史");
     checks.push("earlier event hides same-time edits, future creation and future draft text");
     const before = await call("/fixture/state");
     await click("新增复盘补记"); await input("回退后的补记，保留实际写入时间"); await click("保存并关闭");
@@ -120,6 +153,17 @@ export async function checkReplayNotesBrowser() {
       "Explicit copy did not become a new current-time review supplement");
     assert(localStorage.getItem(sourceKey!) === sourceDraft, "Explicit copy erased the original recovery data");
     checks.push("explicit current-time copy is a new review supplement and preserves the old-context draft");
+    await until(() => host.textContent?.includes("显式另存的旧视图草稿") && !host.querySelector("textarea"));
+    if (button("版本历史")?.getAttribute("aria-expanded") === "true") await click("版本历史");
+    holdNextHistory = true; await click("版本历史");
+    await until(() => releaseHistory);
+    state = await call("/fixture/review-first", "POST"); render();
+    await until(() => host.querySelectorAll("[data-note-version]").length === 1
+      && !host.textContent?.includes("同一事件计划版本 25"));
+    releaseHistory!(); await new Promise(resolve => setTimeout(resolve, 100));
+    assert(!host.textContent?.includes("同一事件计划版本 25") && !host.querySelector('[data-note-version="25"]'),
+      "Late body of an old history request leaked future revisions into the earlier view");
+    checks.push("actual delayed history body is cancelled on review rewind; the earlier same-time event keeps only version 1");
     const final = await call("/fixture/state");
     assert(JSON.stringify(final.snapshot) === JSON.stringify(before.snapshot), "Retry/copy changed live financial state");
     assert(final.network.blocked_attempts === 0, "Recovery attempted an external connection");

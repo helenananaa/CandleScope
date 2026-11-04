@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import cp from 'node:child_process';
 import * as q from '../replay-imported-bar-20261104/native-driver.mjs';
 const root=q.s.root;
-q.s.receipt.scope='Native macOS LOCAL_OFFLINE formal replay text notes: actual create/edit/historical version, retained draft/full owned exit/restart on imported BAR; not screenshots/trade associations/whole166.';
+q.s.receipt.scope='Native macOS LOCAL_OFFLINE formal replay text notes: actual create/edit/historical version API and history UI, retained draft/full owned exit/restart on imported BAR; not screenshots/trade associations/whole166.';
 q.s.env={...q.s.env,CANDLESCOPE_RUNTIME_MODE:'LOCAL_OFFLINE',REPLAY_ENABLED:'1',
  KLINES_DB_PATH:root+'/profile/data/market.db',REPLAY_DB_PATH:root+'/profile/data/replay.db',
  BACKTEST_DB_PATH:root+'/profile/data/backtest.db',BACKTEST_ENABLED:'1',BACKTEST_BAR_ENABLED:'1'};
@@ -102,6 +102,19 @@ try{
  assert.equal(historical.notes[0].revisionCount,1);
  assert.deepEqual((await json(`/api/v1/replay/runs/session/${session}`)).snapshot,financialBeforeEdit);
  await q.record('native-time-versioned-edit',{laterNote,historical,unchangedFinancialSnapshot:true});
+ async function inspectHistory(stage){
+  const article=notePanel().locator(`article[data-note-id="${originalNote.id}"]`);
+  await article.getByRole('button',{name:'版本历史',exact:true}).click();
+  await q.until(async()=>await article.locator('[data-note-version]').count()===2,30000);
+  assert.equal(await article.locator('[data-note-version="1"] .replay-note-text').innerText(),originalNote.fields.entryBasis);
+  assert.equal(await article.locator('[data-note-version="2"] .replay-note-text').innerText(),laterNote.fields.entryBasis);
+  assert.equal(await article.getByRole('button',{name:'加载更早版本',exact:true}).count(),0);
+  const versions=await json(notesPath+'/'+originalNote.id+'/versions');
+  assert.deepEqual(versions.versions,[laterNote,originalNote]);
+  await q.screenshot('note-version-history-'+stage);await q.record('native-note-history-'+stage,{versions,uiVersionRows:2});
+  await article.getByRole('button',{name:'版本历史',exact:true}).click();
+ }
+ await inspectHistory('before-exit');
  const cursor=state.cursor;
  await execute('replay','displayInterval',{interval:'5m'});
  await q.until(async()=>{const v=await json(`/api/v1/replay/runs/${runId}/viewer`);return v.viewer_state.display_interval==='5m';},30000);
@@ -148,6 +161,7 @@ try{
  assert.ok(recoveryRetained,'Explicit new note erased the original stale recovery draft');
  const finalNotes=await json(notesPath);assert.deepEqual(finalNotes.notes.find(n=>n.id===originalNote.id),laterNote);
  await q.record('stale-context-explicit-copy',{rejectedCode:'REPLAY_NOTE_CONTEXT_CHANGED',recoveryRetained,oldSavedVersionPreserved:true});
+ await inspectHistory('restored');
  assert.deepEqual((await json(`/api/v1/replay/runs/session/${session}`)).snapshot,financialBeforeRecovery);
  await q.screenshot('restored-saved-note-and-draft');
  await q.record('native-note-and-draft-restored',{restoredNotes,recoveredNote,unchangedFinancialSnapshot:true});

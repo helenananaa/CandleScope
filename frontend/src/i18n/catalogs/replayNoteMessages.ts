@@ -1,4 +1,10 @@
 export const replayNoteEnglish = {
+  "replay.notes.history": "Version history",
+  "replay.notes.version": "Version {version}",
+  "replay.notes.effectiveTime": "Effective market time",
+  "replay.notes.historyLoading": "Loading earlier versions…",
+  "replay.notes.historyFailed": "Version history could not be loaded. Refresh the notes or retry.",
+  "replay.notes.moreVersions": "Load older versions",
   "replay.notes.title": "Replay notes", "replay.notes.body": "Plan or review text",
   "replay.notes.add": "Add a note", "replay.notes.addReview": "Add a review supplement",
   "replay.notes.save": "Save", "replay.notes.saveClose": "Save and close", "replay.notes.close": "Close",
@@ -17,6 +23,12 @@ export const replayNoteEnglish = {
   "replay.notes.draftFailed": "The draft could not be read or saved. Its stored recovery data is retained.",
 };
 export const replayNoteChinese = {
+  "replay.notes.history": "版本历史",
+  "replay.notes.version": "版本 {version}",
+  "replay.notes.effectiveTime": "版本生效市场时间",
+  "replay.notes.historyLoading": "正在加载历史版本…",
+  "replay.notes.historyFailed": "版本历史暂时无法加载，请刷新笔记或重试。",
+  "replay.notes.moreVersions": "加载更早版本",
   "replay.notes.title": "回放笔记", "replay.notes.body": "计划或复盘内容",
   "replay.notes.add": "新增笔记", "replay.notes.addReview": "新增复盘补记",
   "replay.notes.save": "保存", "replay.notes.saveClose": "保存并关闭", "replay.notes.close": "关闭",
@@ -34,6 +46,12 @@ export const replayNoteChinese = {
   "replay.notes.draftFailed": "草稿无法读取或保存，原有恢复数据仍保留。",
 };
 export const replayNoteTraditional = {
+  "replay.notes.history": "版本歷史",
+  "replay.notes.version": "版本 {version}",
+  "replay.notes.effectiveTime": "版本生效市場時間",
+  "replay.notes.historyLoading": "正在載入歷史版本…",
+  "replay.notes.historyFailed": "版本歷史暫時無法載入，請重新整理筆記或重試。",
+  "replay.notes.moreVersions": "載入更早版本",
   "replay.notes.title": "回放筆記", "replay.notes.body": "計畫或覆盤內容",
   "replay.notes.add": "新增筆記", "replay.notes.addReview": "新增覆盤補記",
   "replay.notes.save": "儲存", "replay.notes.saveClose": "儲存並關閉", "replay.notes.close": "關閉",
@@ -52,6 +70,12 @@ export const replayNoteTraditional = {
 };
 
 export const replayNoteBrazilian = {
+  "replay.notes.history": "Histórico de versões",
+  "replay.notes.version": "Versão {version}",
+  "replay.notes.effectiveTime": "Horário de vigência no mercado",
+  "replay.notes.historyLoading": "Carregando versões anteriores…",
+  "replay.notes.historyFailed": "Não foi possível carregar o histórico. Atualize as notas ou tente novamente.",
+  "replay.notes.moreVersions": "Carregar versões anteriores",
   "replay.notes.title": "Notas do replay", "replay.notes.body": "Plano ou comentário de revisão",
   "replay.notes.add": "Adicionar nota", "replay.notes.addReview": "Adicionar comentário de revisão",
   "replay.notes.save": "Salvar", "replay.notes.saveClose": "Salvar e fechar", "replay.notes.close": "Fechar",
@@ -71,6 +95,12 @@ export const replayNoteBrazilian = {
 };
 
 export const replayNoteKorean = {
+  "replay.notes.history": "버전 기록",
+  "replay.notes.version": "버전 {version}",
+  "replay.notes.effectiveTime": "버전 적용 시장 시각",
+  "replay.notes.historyLoading": "이전 버전을 불러오는 중…",
+  "replay.notes.historyFailed": "버전 기록을 불러오지 못했습니다. 메모를 새로고침하거나 다시 시도하세요.",
+  "replay.notes.moreVersions": "이전 버전 더 보기",
   "replay.notes.title": "리플레이 메모", "replay.notes.body": "계획 또는 복기 내용",
   "replay.notes.add": "메모 추가", "replay.notes.addReview": "복기 메모 추가",
   "replay.notes.save": "저장", "replay.notes.saveClose": "저장 후 닫기", "replay.notes.close": "닫기",

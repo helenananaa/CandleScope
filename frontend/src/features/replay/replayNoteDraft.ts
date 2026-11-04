@@ -1,5 +1,5 @@
 import { JournalDraftError, journalClientId } from "../trading-accounts/journalEditor.js";
-import { parseReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "./replayNotes.js";
+import { parseReplayNoteContext, sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "./replayNotes.js";
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 interface Envelope {
@@ -10,9 +10,6 @@ export interface ReplayNoteDraft {
 }
 const prefix = (context: ReplayNoteContext) => "candlescope.replay-note-draft.v1:"
   + [context.runId, context.trackId, context.dataEpoch].map(encodeURIComponent).join(":") + ":";
-const same = (a: ReplayNoteContext, b: ReplayNoteContext) =>
-  Object.keys(a).length === Object.keys(b).length
-    && (Object.keys(a) as (keyof ReplayNoteContext)[]).every(key => a[key] === b[key]);
 function decode(raw: string): Envelope {
   const value = JSON.parse(raw) as Envelope;
   const context = parseReplayNoteContext(value.context);
@@ -46,7 +43,7 @@ export function replayNoteDraftBinding(storage: Store, current: ReplayNoteContex
     const value = storage.getItem(key);
     if (value === null) return null;
     const envelope = decode(value);
-    if (!owned(envelope, context) || !same(envelope.context, context)) throw new JournalDraftError("changed");
+    if (!owned(envelope, context) || !sameReplayNoteContext(envelope.context, context)) throw new JournalDraftError("changed");
     return envelope;
   };
   return { key, context, noteId, noteRevision, storage: {

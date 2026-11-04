@@ -199,6 +199,12 @@ async def test_notes_http_uses_data_manager_and_strict_context(tmp_path):
             invalid = await client.post(path, json={**payload, "context": {**context, "sourceSequence": True}})
             assert invalid.status_code == 422
             assert (await client.get(path)).json()["notes"] == [saved.json()]
+            history = await client.get(path + "/api-plan/versions", params={"before_revision": 2, "limit": 1})
+            assert history.status_code == 200
+            assert history.json()["versions"] == [saved.json()]
+            for params in [{"before_revision": 102}, {"limit": 21}, {"at_time_ms": context["virtualTimeMs"] + 1}]:
+                assert (await client.get(path + "/api-plan/versions", params=params)).status_code == 422
+            assert (await client.get(path + "/missing/versions")).status_code == 404
             assert (await client.get(path + "?at_time_ms=" + str(context["virtualTimeMs"] + 1))).status_code == 422
             assert (await service.get_session(session))["snapshot"] == before
             assert core.replay.diagnostics()["control_accesses"] >= 5
@@ -243,6 +249,12 @@ async def test_same_time_later_event_does_not_reveal_later_note_version(tmp_path
         await service.training.start_review(run, event_id=review["events"][0]["event_id"])
         historical = await repo.notes(run, track)
         assert historical["notes"] == [original]
+        versions = await service.training.note_versions(run, track, "plan")
+        assert versions["versions"] == [original]
+        assert versions["nextBeforeRevision"] is None
+        with pytest.raises(TrainingRunError) as hidden:
+            await service.training.note_versions(run, track, "later-note")
+        assert hidden.value.status_code == 404
     finally:
         await service.shutdown(step_timeout=1)
 
@@ -363,5 +375,35 @@ async def test_notes_use_the_same_committed_global_time_for_two_full_tracks(tmp_
             assert context["virtualTimeMs"]==clock
             await service.training.save_note(run,track["track_id"],note_id="same-local-id-"+track["track_id"],
                 fields={"entryBasis":track["symbol"]},expected_revision=0,context=context)
+    finally:
+        await service.shutdown(step_timeout=1)
+
+
+async def test_version_pages_are_bounded_temporal_and_note_scoped(tmp_path):
+    service=await _service(tmp_path/"note-version-pages.db")
+    try:
+        run,session,track=await create(service)
+        first=(await service.training.notes(run,track))["context"]
+        for revision in range(25):
+            await service.training.save_note(run,track,note_id="paged-plan",fields={"entryBasis":f"version {revision+1}"},
+                expected_revision=revision,context=first)
+        page=await service.training.note_versions(run,track,"paged-plan",limit=20)
+        assert [v["revisionCount"] for v in page["versions"]]==list(range(25,5,-1))
+        assert page["nextBeforeRevision"]==6
+        tail=await service.training.note_versions(run,track,"paged-plan",before_revision=page["nextBeforeRevision"])
+        assert [v["revisionCount"] for v in tail["versions"]]==[5,4,3,2,1]
+        assert tail["nextBeforeRevision"] is None
+        await advance(service,session)
+        later=(await service.training.notes(run,track))["context"]
+        await service.training.save_note(run,track,note_id="paged-plan",fields={"entryBasis":"future version"},expected_revision=25,context=later)
+        await service.training.save_note(run,track,note_id="future-created",fields={"entryBasis":"future note"},expected_revision=0,context=later)
+        history=await service.training.note_versions(run,track,"paged-plan",at_time_ms=first["virtualTimeMs"])
+        assert history["versions"]==page["versions"]
+        with pytest.raises(TrainingRunError) as hidden:
+            await service.training.note_versions(run,track,"future-created",at_time_ms=first["virtualTimeMs"])
+        assert hidden.value.status_code==404
+        for options in [{"limit":21},{"limit":True},{"before_revision":0},{"before_revision":102}]:
+            with pytest.raises(TrainingRunError):
+                await service.training.note_versions(run,track,"paged-plan",**options)
     finally:
         await service.shutdown(step_timeout=1)

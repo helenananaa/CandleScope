@@ -73,3 +73,30 @@ export function parseReplayNotesResponse(value: unknown): ReplayNotesResponse {
     || new TextEncoder().encode(JSON.stringify(notes.map(note => note.fields))).length > 8 * 1024 * 1024) fail();
   return { protocol: "replay.v3", schema_version: "replay.notes.v1", run_id, track_id, context, asOfMs, notes };
 }
+
+
+export function sameReplayNoteContext(a: ReplayNoteContext, b: ReplayNoteContext): boolean {
+  return Object.keys(a).length === Object.keys(b).length
+    && (Object.keys(a) as (keyof ReplayNoteContext)[]).every(key => a[key] === b[key]);
+}
+export interface ReplayNoteVersionsResponse {
+  protocol: "replay.v3"; schema_version: "replay.note-versions.v1";
+  run_id: string; track_id: string; note_id: string; context: ReplayNoteContext;
+  asOfMs: number; versions: ReplayNote[]; nextBeforeRevision: number | null;
+}
+export function parseReplayNoteVersions(value: unknown): ReplayNoteVersionsResponse {
+  const source = exact(value, ["protocol", "schema_version", "run_id", "track_id", "note_id", "context", "asOfMs", "versions", "nextBeforeRevision"]);
+  if (source.protocol !== "replay.v3" || source.schema_version !== "replay.note-versions.v1"
+    || !Array.isArray(source.versions) || source.versions.length > 20) fail();
+  const run_id = text(source.run_id), track_id = text(source.track_id), note_id = text(source.note_id);
+  const context = parseReplayNoteContext(source.context), asOfMs = integer(source.asOfMs);
+  const versions = (source.versions as unknown[]).map(parseReplayNote);
+  const nextBeforeRevision = source.nextBeforeRevision === null ? null : integer(source.nextBeforeRevision, 100);
+  if (context.runId !== run_id || context.trackId !== track_id || asOfMs > context.virtualTimeMs
+    || versions.some((version, index) => version.id !== note_id || version.runId !== run_id || version.trackId !== track_id
+      || version.effectiveTimeMs > asOfMs || version.timelineSequence > context.timelineSequence
+      || (index > 0 && version.revisionCount >= versions[index - 1]!.revisionCount))
+    || (nextBeforeRevision !== null && (nextBeforeRevision < 2 || nextBeforeRevision !== versions.at(-1)?.revisionCount))) fail();
+  return { protocol: "replay.v3", schema_version: "replay.note-versions.v1", run_id, track_id, note_id,
+    context, asOfMs, versions, nextBeforeRevision };
+}

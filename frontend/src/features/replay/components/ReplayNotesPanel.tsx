@@ -5,8 +5,9 @@ import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts, type ReplayNoteDraft } from "../replayNoteDraft.js";
 import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
+import ReplayNoteHistory from "./ReplayNoteHistory.js";
 
-type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun">;
+type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun" | "noteVersionsRun">;
 type Binding = ReturnType<typeof replayNoteDraftBinding>;
 interface EditorTarget { note: ReplayNote | null; binding: Binding; defaults?: Record<string, string> }
 
@@ -67,6 +68,9 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
   const [target, setTarget] = useState<EditorTarget | null>(null);
   const [drafts, setDrafts] = useState<ReplayNoteDraft[]>([]);
   const [draftError, setDraftError] = useState(false);
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [historyTimes, setHistoryTimes] = useState<{ scope: string; values: readonly number[] }>({ scope: "", values: [] });
+  const reportHistoryTimes = useCallback((scope: string, values: readonly number[]) => setHistoryTimes({ scope, values }), []);
   const sequence = useRef(0), lastStarted = useRef(0);
   const changed = useCallback(() => setRefresh(value => value + 1), []);
   const close = useCallback(() => { setTarget(null); changed(); }, [changed]);
@@ -91,7 +95,6 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     && cursorMs !== null && candidate.asOfMs <= cursorMs ? candidate : null;
   const settled = current !== null && loaded?.revisionKey === revisionKey
     && current.asOfMs === cursorMs && current.context.virtualTimeMs === cursorMs;
-  useEffect(() => { onTimes?.(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs]) ?? []); }, [current, onTimes]);
   const visibleTarget = target && current && cursorMs !== null && target.binding.context.runId === runId
     && target.binding.context.trackId === trackId && target.binding.context.dataEpoch === current.context.dataEpoch
     && target.binding.context.timelineSequence <= current.context.timelineSequence
@@ -117,6 +120,12 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
       || visibleTarget.binding.context.reviewId !== current.context.reviewId
       || visibleTarget.binding.context.reviewRevision !== current.context.reviewRevision
       || visibleTarget.binding.context.virtualTimeMs !== current.context.virtualTimeMs);
+  const historyNote = settled && current && open && !visibleTarget ? current.notes.find(note => note.id === historyId) : null;
+  const historyScope = historyNote && current ? JSON.stringify([current.context, current.asOfMs, historyNote.id, historyNote.revisionCount]) : "";
+  useEffect(() => {
+    onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs]) ?? []),
+      ...(historyScope && historyTimes.scope === historyScope ? historyTimes.values : [])]);
+  }, [current, historyScope, historyTimes, onTimes]);
   return <section className="replay-notes-panel" aria-label={t("replay.notes.title")} data-testid="replay-notes-panel">
     {!embedded && <button type="button" className="replay-notes-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>{t("replay.notes.title")}</button>}
     {open && <div className="replay-notes-body">
@@ -142,6 +151,10 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
               <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(note.updatedAtMs)}</dd></dl>
             <p className="replay-note-text">{note.fields.entryBasis ?? ""}</p>
             <button type="button" disabled={!settled || Boolean(current.context.reviewNote && !note.reviewNote)} onClick={() => edit(note)}>{t("replay.notes.edit")}</button>
+            <button type="button" disabled={!settled} aria-expanded={historyNote?.id === note.id}
+              onClick={() => setHistoryId(value => value === note.id ? null : note.id)}>{t("replay.notes.history")}</button>
+            {historyNote?.id === note.id && <ReplayNoteHistory key={historyScope} api={api} note={note} context={current.context}
+              scope={historyScope} asOfMs={current.asOfMs} formatTime={formatTime} actualTime={actualTime} onTimes={reportHistoryTimes} />}
           </article>)}
         </>}
     </div>}

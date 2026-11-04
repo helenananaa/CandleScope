@@ -2887,6 +2887,12 @@ class TrainingRunStore:
     async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
         return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms)
 
+    async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
+                            at_time_ms: int | None = None, before_revision: int | None = None,
+                            limit: int = 20) -> dict[str, object]:
+        return await self._notes.note_versions(run_id, track_id, note_id,
+            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+
     async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
                         expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
         return await self._notes.save_note(run_id, track_id, note_id=note_id, fields=fields,

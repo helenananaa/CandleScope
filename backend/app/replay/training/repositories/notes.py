@@ -126,6 +126,40 @@ class TrainingNoteRepository:
                     "run_id": run_id, "track_id": track_id, "context": context, "asOfMs": cutoff, "notes": notes}
         return await self.base_store.run_extension_read(read)
 
+    async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
+                            at_time_ms: int | None = None, before_revision: int | None = None,
+                            limit: int = 20) -> dict[str, object]:
+        if type(limit) is not int or not 1 <= limit <= 20 or (before_revision is not None
+                and (type(before_revision) is not int or not 1 <= before_revision <= MAX_VERSIONS + 1)):
+            raise _error("REPLAY_NOTE_PAGE_INVALID", "Invalid annotation version page", 422)
+
+        def read(connection: sqlite3.Connection):
+            context = _context(connection, run_id, track_id)
+            cutoff = context["virtualTimeMs"] if at_time_ms is None else at_time_ms
+            if type(cutoff) is not int or not 0 <= cutoff <= context["virtualTimeMs"]:
+                raise _error("REPLAY_NOTE_TIME_INVALID", "Annotation query exceeds the current view time", 422)
+            note = connection.execute(
+                "SELECT * FROM replay_training_note WHERE run_id=? AND track_id=? AND note_id=? "
+                "AND market_time_ms<=? AND timeline_sequence<=?",
+                (run_id, track_id, note_id, cutoff, context["timelineSequence"]),
+            ).fetchone()
+            if note is None:
+                raise _error("REPLAY_NOTE_NOT_FOUND", "Annotation is not visible in this view", 404)
+            allowed = (run_id, note_id, cutoff, context["timelineSequence"])
+            where = "run_id=? AND note_id=? AND virtual_time_ms<=? AND timeline_sequence<=?"
+            if connection.execute("SELECT 1 FROM replay_training_note_revision WHERE " + where + " LIMIT 1", allowed).fetchone() is None:
+                raise _error("REPLAY_NOTE_CORRUPT", "Annotation historical version is unavailable", 503)
+            rows = connection.execute("SELECT * FROM replay_training_note_revision WHERE " + where
+                + " AND revision<? ORDER BY revision DESC LIMIT ?",
+                (*allowed, MAX_VERSIONS + 1 if before_revision is None else before_revision, limit + 1),
+            ).fetchall()
+            versions = [_view(note, row) for row in rows[:limit]]
+            return {"protocol": REPLAY_V2_PROTOCOL, "schema_version": "replay.note-versions.v1",
+                "run_id": run_id, "track_id": track_id, "note_id": note_id, "context": context,
+                "asOfMs": cutoff, "versions": versions,
+                "nextBeforeRevision": versions[-1]["revisionCount"] if len(rows) > limit else None}
+        return await self.base_store.run_extension_read(read)
+
     async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
                         expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
         if not isinstance(note_id, str) or not 1 <= len(note_id) <= 128:

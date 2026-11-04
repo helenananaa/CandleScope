@@ -52,6 +52,7 @@ export function managedReplayRunApi(lease: ReplayOperationLease, api: ManagedRep
     rulesRun: (runId, signal) => lease.request(s => api.rulesRun(runId, s), signal),
     currentDrawingRun: (runId, signal) => lease.request(s => api.currentDrawingRun(runId, s), signal),
     notesRun: (runId, trackId, atTimeMs, signal) => lease.request(s => api.notesRun(runId, trackId, atTimeMs, s), signal),
+    noteVersionsRun: (runId, trackId, noteId, query, signal) => lease.request(s => api.noteVersionsRun(runId, trackId, noteId, query, s), signal),
     saveNoteRun: (runId, trackId, payload, signal) => lease.request(s => api.saveNoteRun(runId, trackId, payload, s), signal),
     recordDrawingRun: (runId, payload, signal) => lease.request(s => api.recordDrawingRun(runId, payload, s), signal),
     recordMarkerRun: (runId, text, commandId, signal) => lease.request(s => api.recordMarkerRun(runId, text, commandId, s), signal),

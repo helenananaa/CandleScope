@@ -15788,3 +15788,6 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .interval-anchor-controls label { display: flex; gap: 6px; align-items: center; }
 .interval-anchor-controls input[type="datetime-local"] { color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 6px; border-radius: 4px; }
 .interval-anchor-controls p { margin: 0; color: var(--text-secondary); max-width: 420px; }
+
+.replay-note-history { margin-top: 10px; padding: 8px; border-inline-start: 2px solid var(--border-strong); background: var(--surface-1); }
+.replay-note-history > div + div { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }

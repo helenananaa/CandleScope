@@ -1,5 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
-import { parseReplayNote, parseReplayNotesResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
+import { parseReplayNote, parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNoteVersionsResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
 import { prepareReplay, preparationRequest, waitForPreparation, type PreparationCapabilities, type PreparationJob } from "../data-preparation/api.js";
 import { ReplayApiClient } from "./replayApi.js";
 import type { ReplayApiClientOptions, ReplayCatalogQuery } from "./replayApi.js";
@@ -1027,6 +1027,21 @@ export class ReplayV2ApiClient {
         const result = parseReplayNotesResponse(value);
         if (result.run_id !== runId || result.track_id !== trackId
           || (atTimeMs !== undefined && result.asOfMs !== atTimeMs)) throw new TypeError("Replay annotation context changed");
+        return result;
+      }, signal ? { signal } : {});
+  }
+
+  noteVersionsRun(runId: string, trackId: string, noteId: string,
+    query: { atTimeMs: number; beforeRevision?: number; limit?: number }, signal?: AbortSignal): Promise<ReplayNoteVersionsResponse> {
+    const params = new URLSearchParams({ at_time_ms: String(query.atTimeMs), limit: String(query.limit ?? 20) });
+    if (query.beforeRevision !== undefined) params.set("before_revision", String(query.beforeRevision));
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes/${safeSegment(noteId, "note id")}/versions?${params}`,
+      value => {
+        const result = parseReplayNoteVersions(value);
+        if (result.run_id !== runId || result.track_id !== trackId || result.note_id !== noteId || result.asOfMs !== query.atTimeMs
+          || result.versions.length > (query.limit ?? 20)
+          || (query.beforeRevision !== undefined && result.versions.some(version => version.revisionCount >= query.beforeRevision!)))
+          throw new TypeError("Replay annotation version page changed its scope");
         return result;
       }, signal ? { signal } : {});
   }

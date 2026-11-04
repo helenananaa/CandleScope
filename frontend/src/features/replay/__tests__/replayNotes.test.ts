@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts } from "../replayNoteDraft.js";
-import { parseReplayNotesResponse, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
+import { parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayDataManager } from "../replayDataManager.js";
 import { managedReplayRunApi } from "../managedReplayTransport.js";
@@ -119,4 +119,40 @@ test("explicit current-time copies retain the original pending draft and cannot 
   assert.equal(storage.getItem(source.key), original);
   assert.throws(() => replayNoteCopyBinding(storage, context(50), 50, source));
   assert.throws(() => replayNoteCopyBinding(storage, { ...current, dataEpoch: "other" }, 200, source));
+});
+
+const versionsResponse = () => ({ protocol: "replay.v3", schema_version: "replay.note-versions.v1",
+  run_id: "run", track_id: "track", note_id: "note", context: context(), asOfMs: 100,
+  versions: [{ ...note(), revisionCount: 3 }, { ...note(), revisionCount: 2 }], nextBeforeRevision: 2 });
+
+test("version pages reject future text, duplicate/out-of-order versions and invalid continuation", () => {
+  assert.equal(parseReplayNoteVersions(versionsResponse()).nextBeforeRevision, 2);
+  for (const invalid of [
+    { versions: [{ ...note(), effectiveTimeMs: 101 }] },
+    { versions: [{ ...note(), timelineSequence: 2 }] },
+    { versions: [{ ...note(), runId: "other" }] },
+    { versions: [note(), note()] },
+    { versions: [note(), { ...note(), revisionCount: 2 }] },
+    { nextBeforeRevision: 3 }, { versions: [], nextBeforeRevision: 2 },
+  ]) assert.throws(() => parseReplayNoteVersions({ ...versionsResponse(), ...invalid }));
+});
+
+test("version pages honor request cursor/size and late parsed history cannot outlive the manager lease", async () => {
+  const manager = new ReplayDataManager();
+  const lease = manager.createOperations({ runId: "run", purpose: "review" });
+  const release = lease.retain();
+  let complete!: (value: string) => void;
+  const api = new ReplayV2ApiClient({ fetcher: async (url) => {
+    assert.match(String(url), /notes\/note\/versions\?at_time_ms=100&limit=20&before_revision=4$/);
+    const value = new Response(); value.text = () => new Promise(resolve => { complete = resolve; }); return value;
+  } });
+  const pending = managedReplayRunApi(lease, api).noteVersionsRun("run", "track", "note", { atTimeMs: 100, beforeRevision: 4 });
+  await Promise.resolve();
+  assert.equal(manager.diagnostics().requests, 1);
+  const rejected = assert.rejects(pending, { name: "AbortError" });
+  release(); await rejected; complete(JSON.stringify(versionsResponse())); manager.dispose();
+  assert.equal(manager.diagnostics().requests, 0);
+  const invalidApi = new ReplayV2ApiClient({ fetcher: async () => Response.json(versionsResponse()) });
+  await assert.rejects(invalidApi.noteVersionsRun("run", "track", "note", { atTimeMs: 100, beforeRevision: 3 }));
+  await assert.rejects(invalidApi.noteVersionsRun("run", "track", "note", { atTimeMs: 100, limit: 1 }));
 });
