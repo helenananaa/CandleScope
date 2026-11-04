@@ -91,6 +91,13 @@ jobs:
             tests/test_kline_prefix_watches.py \
             tests/test_kline_revision_contract.py \
             tests/test_query_cache_fencing.py \
+            tests/test_continuous_bar_source.py \
+            tests/test_continuous_bar_host.py \
+            tests/test_continuous_guarded_source.py \
+            tests/test_continuous_strategy_store.py \
+            tests/test_continuous_strategy_shutdown.py \
+            tests/test_strategy_bar_continuation.py \
+            tests/test_local_data_pinned_window.py \
             tests/test_pine_combined_host_inputs.py \
             tests/test_pine_host_completion.py \
             tests/test_proxy_pool.py \

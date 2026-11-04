@@ -25,6 +25,10 @@ MAX_BATCH_EVENTS = 1000
 logger = logging.getLogger(__name__)
 
 
+class ContinuousExecutionStopping(Exception):
+    """Owned shutdown discards only uncommitted work; it is not a run failure."""
+
+
 def error(code, message):
     return BacktestError(code, message)
 
@@ -48,6 +52,7 @@ class ContinuousBarHost:
                 or str(config.get("funding_mode") or "OFF") != "OFF"):
             raise error("FIDELITY_UNSUPPORTED", "This continuation host requires its qualified closed-BAR clock and account data")
         self.lock = threading.RLock()
+        self.stop_requested = threading.Event()
         self.store = None
         self.row = None
         self.source_receipt = None
@@ -93,7 +98,8 @@ class ContinuousBarHost:
                 **({"source":point.to_dict()} if point is not None else {})}
 
     @classmethod
-    def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory, source_receipt=None):
+    def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory,
+                   source_receipt=None, commit_checkpoint=None):
         point = cls._source_point(run_id,definition,source_receipt,event_time_ms,data_revision)
         existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision, event_time_ms=event_time_ms)
         if existing is not None:
@@ -101,8 +107,29 @@ class ContinuousBarHost:
         host = cls(run_id, definition, provider_factory)
         host.source_receipt = point
         try:
-            return store.create(run_id, definition=definition, mode=mode, data_revision=data_revision,
-                                event_time_ms=event_time_ms, checkpoint=host.checkpoint())
+            prepared = store.prepare_checkpoint(host.checkpoint(),event_time_ms=event_time_ms,data_revision=data_revision)
+            owner_thread = threading.get_ident()
+            allowed, published = True, False
+            def publish():
+                nonlocal published
+                if not allowed or published or threading.get_ident() != owner_thread:
+                    raise error("CONTINUOUS_COMMIT_CONFLICT","Creation must be synchronous and owned exactly once")
+                result = store.create(run_id, definition=definition, mode=mode, data_revision=data_revision,
+                                      event_time_ms=event_time_ms, checkpoint=prepared)
+                published = True
+                return result
+            try:
+                if commit_checkpoint is not None and inspect.iscoroutinefunction(commit_checkpoint):
+                    raise error("CONTINUOUS_INPUT_INVALID","Source creation guard must complete synchronously")
+                result = publish() if commit_checkpoint is None else commit_checkpoint(publish)
+                if inspect.isawaitable(result):
+                    if inspect.iscoroutine(result):result.close()
+                    raise error("CONTINUOUS_INPUT_INVALID","Source creation guard must complete synchronously")
+                if not published:
+                    raise error("CONTINUOUS_INPUT_INVALID","Source guard did not commit creation")
+                return result
+            finally:
+                allowed = False
         finally:
             host.close()
 
@@ -128,15 +155,26 @@ class ContinuousBarHost:
             raise
 
     def _observe(self, visible, event):
+        self._check_stopping()
         output = self.adapter.observe(sequence=event.sequence, event_time_ms=event.event_time_ms,
             watermark_ms=event.event_time_ms,
             phase="WARMUP" if event.sequence <= int(self.config.get("warmup_bars") or 0) else "EVALUATION",
             market=dict(self.definition["market"]), bar=dict(event.payload),
             features=_strategy_observation_features(self.session.provider,bar=event.payload,trade=None,_names=self.feature_names))
+        self._check_stopping()
         return self.planner.plan(output, context=None if self.planner.config is None else _planning_context(self.kernel,event))
+
+    def request_stop(self):
+        # Signal without waiting for the batch lock or touching a live provider.
+        self.stop_requested.set()
+
+    def _check_stopping(self):
+        if self.stop_requested.is_set():
+            raise ContinuousExecutionStopping()
 
     def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False, source_receipt=None, commit_checkpoint=None):
         with self.lock:
+            self._check_stopping()
             if self.closed or self.store is None or self.row is None:
                 raise error("CONTINUOUS_NOT_READY", "The execution host is not active")
             current = self.store.summary(self.row["id"])
@@ -169,7 +207,7 @@ class ContinuousBarHost:
                     raise error("CONTINUOUS_SOURCE_GAP", "Source coverage is incomplete")
                 sequence, stamp = event.sequence, event.event_time_ms
                 batch.append(event)
-            if not batch:
+            if not batch and (not caught_up or self.row["phase"] == "LIVE"):
                 return self.row
             if caught_up and stamp != revealed_through_ms:
                 raise error("CONTINUOUS_INPUT_INVALID","Caught-up publication requires the final admitted source boundary")
@@ -184,6 +222,7 @@ class ContinuousBarHost:
                 raise error("CONTINUOUS_INPUT_INVALID","The source commit guard must complete synchronously")
             try:
                 self.kernel.advance(batch, self._observe)
+                self._check_stopping()
                 prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision)
                 published = False
                 publication_allowed = True
@@ -192,9 +231,10 @@ class ContinuousBarHost:
                     nonlocal published
                     if not publication_allowed or published or self.closed or threading.get_ident() != owner_thread:
                         raise error("CONTINUOUS_COMMIT_CONFLICT","Checkpoint publication must be synchronous and owned exactly once")
+                    self._check_stopping()
                     self.row = self.store.commit(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
                         sequence=sequence, event_time_ms=stamp, data_revision=data_revision, checkpoint=prepared,
-                        phase="LIVE" if caught_up else "CATCHING_UP")
+                        phase="LIVE" if caught_up else "CATCHING_UP",confirm_caught_up=not batch)
                     published = True
                     return self.row
                 # Prepare/encode provider state before taking the source lock.
@@ -213,7 +253,9 @@ class ContinuousBarHost:
                 return self.row
             except BaseException as failure:
                 try:
-                    if isinstance(failure,PrefixAcquisitionChanged):
+                    if isinstance(failure,ContinuousExecutionStopping):
+                        pass  # Keep the last committed phase/account for restart.
+                    elif isinstance(failure,PrefixAcquisitionChanged):
                         old = self.source_receipt
                         frozen = self.definition.get("initial_snapshot") or {}
                         protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
@@ -268,6 +310,7 @@ class ContinuousBarHost:
             logger.exception("Failed to close continuing strategy resources after execution failure")
 
     def close(self):
+        self.request_stop()
         with self.lock:
             if not self.closed:
                 self.closed = True

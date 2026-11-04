@@ -250,7 +250,8 @@ class ContinuousStrategyStore:
     def prepare_checkpoint(checkpoint,*,event_time_ms,data_revision):
         return _checkpoint(checkpoint,event_time_ms,data_revision)
 
-    def commit(self, run_id, *, generation, revision, sequence, event_time_ms, data_revision, checkpoint, phase="CATCHING_UP"):
+    def commit(self, run_id, *, generation, revision, sequence, event_time_ms, data_revision, checkpoint,
+               phase="CATCHING_UP", confirm_caught_up=False):
         _counter(sequence), _counter(event_time_ms), _text(data_revision, 256)
         if phase not in {"CATCHING_UP", "LIVE"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Invalid execution commit phase")
@@ -261,7 +262,9 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_NOT_READY", "Execution is paused or awaiting repair")
             if data_revision != row["data_revision"]:
                 raise fail("CONTINUOUS_REPAIR_REQUIRED", "Processed input revision changed; preserve the committed result")
-            if sequence <= row["sequence"] or event_time_ms < row["event_time_ms"]:
+            reaffirm = (confirm_caught_up is True and phase == "LIVE" and row["phase"] == "CATCHING_UP"
+                        and sequence == row["sequence"] and event_time_ms == row["event_time_ms"])
+            if (sequence <= row["sequence"] or event_time_ms < row["event_time_ms"]) and not reaffirm:
                 raise fail("CONTINUOUS_CURSOR_INVALID", "Commit must advance the same source without going back in time")
             next_revision = revision + 1
             self._insert_checkpoint(run_id, next_revision, generation, sequence, event_time_ms, data_revision, state)
