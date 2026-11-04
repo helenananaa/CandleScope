@@ -1,0 +1,90 @@
+{
+  "protocol": "replay.v3",
+  "schema_version": "replay.notes.v1",
+  "run_id": "run-1",
+  "track_id": "track-1",
+  "context": {
+    "runId": "run-1",
+    "trackId": "track-1",
+    "dataEpoch": "sha256:e4338ffeeb9534124ea207dd1766aed6be14b809e4bb9aee8c20e7f4b0304675",
+    "runRevision": 3,
+    "sourceSequence": 2,
+    "checkpointSequence": 0,
+    "virtualTimeMs": 1710000240000,
+    "reviewId": "review-aca49bc0bb7f43d380e1362338b60c7a",
+    "reviewRevision": 4,
+    "reviewNote": true,
+    "timelineSequence": 2
+  },
+  "asOfMs": 1710000240000,
+  "notes": [
+    {
+      "id": "je_06066a57480f420fa521",
+      "runId": "run-1",
+      "trackId": "track-1",
+      "marketTimeMs": 1710000240000,
+      "createdAtMs": 1710001560000,
+      "updatedAtMs": 1710001560000,
+      "effectiveTimeMs": 1710000240000,
+      "revisionCount": 1,
+      "fields": {
+        "entryBasis": "已提交但响应丢失的笔记"
+      },
+      "body": "",
+      "timelineSequence": 1,
+      "reviewNote": true,
+      "revisions": []
+    },
+    {
+      "id": "je_33da462a0d444f9aa706",
+      "runId": "run-1",
+      "trackId": "track-1",
+      "marketTimeMs": 1710000240000,
+      "createdAtMs": 1710001560000,
+      "updatedAtMs": 1710001560000,
+      "effectiveTimeMs": 1710000240000,
+      "revisionCount": 1,
+      "fields": {
+        "entryBasis": "回退后的补记，保留实际写入时间"
+      },
+      "body": "",
+      "timelineSequence": 1,
+      "reviewNote": true,
+      "revisions": []
+    },
+    {
+      "id": "je_4273b4fef1f34bafae8d",
+      "runId": "run-1",
+      "trackId": "track-1",
+      "marketTimeMs": 1710000240000,
+      "createdAtMs": 1710001560000,
+      "updatedAtMs": 1710001560000,
+      "effectiveTimeMs": 1710000240000,
+      "revisionCount": 2,
+      "fields": {
+        "entryBasis": "同一毫秒后一个事件修改的计划"
+      },
+      "body": "",
+      "timelineSequence": 2,
+      "reviewNote": false,
+      "revisions": []
+    },
+    {
+      "id": "je_64ddc9fdf0624c4cbf9b",
+      "runId": "run-1",
+      "trackId": "track-1",
+      "marketTimeMs": 1710000240000,
+      "createdAtMs": 1710001560000,
+      "updatedAtMs": 1710001560000,
+      "effectiveTimeMs": 1710000240000,
+      "revisionCount": 1,
+      "fields": {
+        "entryBasis": "显式另存的旧视图草稿"
+      },
+      "body": "",
+      "timelineSequence": 2,
+      "reviewNote": true,
+      "revisions": []
+    }
+  ]
+}

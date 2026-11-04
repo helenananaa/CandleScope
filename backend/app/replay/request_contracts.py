@@ -304,6 +304,29 @@ class ReplayReviewMarkerPayload(_StrictModel):
     text: str = Field(min_length=1, max_length=500)
 
 
+class ReplayNoteContextPayload(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    runId: str = Field(min_length=1, max_length=128)
+    trackId: str = Field(min_length=1, max_length=128)
+    dataEpoch: str = Field(min_length=1, max_length=128)
+    runRevision: int = Field(ge=0, le=MAX_COUNTER)
+    sourceSequence: int = Field(ge=0, le=MAX_COUNTER)
+    checkpointSequence: int = Field(ge=0, le=MAX_COUNTER)
+    timelineSequence: int = Field(ge=0, le=MAX_COUNTER)
+    virtualTimeMs: int = Field(ge=0, le=MAX_TIMESTAMP_MS)
+    reviewId: str | None = Field(max_length=128)
+    reviewRevision: int | None = Field(ge=1, le=MAX_COUNTER)
+    reviewNote: bool
+
+
+class ReplayNotePayload(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=128)
+    fields: dict[str, str] = Field(max_length=80)
+    expectedRevision: int = Field(ge=0, le=99)
+    context: ReplayNoteContextPayload
+
+
 class ReplayReviewControlPayload(_StrictModel):
     action: Literal["JUMP", "NEXT", "PREVIOUS", "PLAY", "PAUSE"]
     event_id: str | None = Field(default=None, min_length=1, max_length=128)

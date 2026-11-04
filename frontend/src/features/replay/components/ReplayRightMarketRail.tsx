@@ -3,6 +3,7 @@ import MarketRightRailFrame from "../../../app/MarketRightRailFrame.js";
 import {
   AccountRailIcon,
   ActivityRailIcon,
+  NotesRailIcon,
   CapabilityRailIcon,
   PaperRailIcon,
   WatchlistRailIcon,
@@ -31,6 +32,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 
 export interface ReplayRightMarketRailProps {
+  readonly notes?: React.ReactNode;
   readonly runtime: ReplayRuntime;
   readonly viewer: ReplayViewerRuntime;
   readonly indicators: ReplaySharedIndicatorRuntime;
@@ -50,6 +52,7 @@ function ReplayRightMarketRail({
   upColor,
   downColor,
   formatTime,
+  notes,
 }: ReplayRightMarketRailProps) {
   const locale = useLocale();
   const selectedTrackId = viewer.viewerState?.selected_track_id ?? null;
@@ -63,6 +66,10 @@ function ReplayRightMarketRail({
 
   // One view at a time, ordered by how often a trader reaches for it.
   const views = useMemo<MarketRailViewDescriptor[]>(() => [
+    {
+      id: REPLAY_RAIL_VIEW_IDS.notes, title: t("replay.notes.title", {}, locale), icon: <NotesRailIcon />,
+      order: 35, sizing: "flex", collapsedSummary: t("replay.notes.title", {}, locale),
+    },
     {
       id: REPLAY_RAIL_VIEW_IDS.paper,
       title: t("replay.rail.paper", {}, locale),
@@ -116,6 +123,7 @@ function ReplayRightMarketRail({
     : preferences.railWidth;
 
   const renderView = useCallback((viewId: string) => {
+    if (viewId === REPLAY_RAIL_VIEW_IDS.notes) return notes;
     if (viewId === REPLAY_RAIL_VIEW_IDS.watchlist) {
       return (
         <ReplayWatchlistPanel
@@ -184,6 +192,7 @@ function ReplayRightMarketRail({
     indicators.status,
     runtime,
     locale,
+    notes,
     viewer,
   ]);
 
