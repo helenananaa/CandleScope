@@ -16,7 +16,10 @@ await fs.writeFile(root+'/imported-replay.csv','time,open,high,low,close,volume\
 const requests=[];
 async function json(path){const r=await fetch(q.s.backend+path);assert.ok(r.ok,await r.clone().text());return r.json();}
 async function query(id){return (await q.s.control.call('app.query',{windowId:'main-window',groupId:id,command:'inspect',args:{}})).snapshot;}
-async function group(id){return q.until(async()=>{const {groups}=await q.s.control.call('app.commands',{windowId:'main-window'});return groups.find(g=>g.id===id)||false;},30000);}
+async function group(id){return q.until(async()=>{
+ try{const {groups}=await q.s.control.call('app.commands',{windowId:'main-window'});return groups.find(g=>g.id===id)||false;}
+ catch(error){if(error.code==='WINDOW_UNAVAILABLE')return false;throw error;}
+},30000);}
 async function execute(id,command,args={}){
  const g=await group(id),requestId='imported-replay-'+crypto.randomUUID();
  await q.s.control.call('app.execute',{windowId:'main-window',groupId:id,command,args,requestId,expectedContext:g.contextToken});
@@ -45,7 +48,7 @@ try{
  await execute('training-hub','openCreate');
  await execute('training-hub','draft',{name:'Native Imported Replay',sourceKind:'BAR',startMode:'MANUAL',requestedStartMs:start+100*60000,
   indicatorWarmupBars:10,forwardCacheMs:60*60000,visibleHistoryMode:'ALL_AVAILABLE',displayInterval:'1m',baseInterval:'1m',
-  timeDisclosurePolicy:'NONE',integrityMode:'PRACTICE',positionMode:'ONE_WAY',fundingMode:'OFF',bookMode:'OFF',accountDataMode:'APPROX_PROXY'});
+  timeDisclosurePolicy:'NONE',integrityMode:'PRACTICE',allowedMutations:['deposit'],positionMode:'ONE_WAY',fundingMode:'OFF',bookMode:'OFF',accountDataMode:'APPROX_PROXY'});
  const setup=await q.until(async()=>{const s=await query('training-hub');return !s.operation&&s.evaluation?.canSubmit?s:false;},30000);
  assert.equal(setup.automaticPreparationAvailable,false);await q.record('offline-training-setup',setup);
  await execute('training-hub','createRun');await group('replay-initial-market');
@@ -54,25 +57,37 @@ try{
  await execute('replay-initial-market','select',{marketKey:`${entry.identity.exchange}:${entry.identity.market_type}:${entry.identity.symbol}`});
  await group('replay');let view=await q.until(async()=>{const v=await query('replay');return v.viewer&&!v.loading&&!v.controlPending&&!v.viewerPending?v:false;},60000);
  const runId=view.runId,tracks=await json(`/api/v1/replay/runs/${runId}/tracks`),track=tracks.tracks[0],session=track.adapter_session_id;
- assert.ok(session);let state=(await json(`/api/v1/replay/sessions/${session}`)).snapshot;
- assert.equal(state.config.exchange,entry.identity.exchange);assert.equal(state.config.source_kind,'BAR');
+ assert.ok(session);let state=(await json(`/api/v1/replay/runs/session/${session}`)).snapshot;
+ assert.equal(state.config.exchange,entry.identity.exchange);assert.equal(state.config.source_kind,'bar');
  await q.record('formal-replay-initialized',{runId,track,state});
- await execute('replay','control',{type:'acquire_controller'});
+ await execute('replay','control',{type:'acquire_controller',payload:{takeover:false}});
  await execute('replay','trade',{type:'place_order',payload:{client_order_id:'native-imported-buy',side:'BUY',order_type:'MARKET',quantity:'0.1',reduce_only:false,limit_price:null,stop_price:null}});
- await execute('replay','control',{type:'step_base'});
- state=(await json(`/api/v1/replay/sessions/${session}`)).snapshot;
+ await execute('replay','control',{type:'step_base',payload:{count:1}});
+ state=(await json(`/api/v1/replay/runs/session/${session}`)).snapshot;
  assert.ok(state.components.fills.length>0,JSON.stringify(state.components));
  const cursor=state.cursor;
  await execute('replay','displayInterval',{interval:'5m'});
- assert.deepEqual((await json(`/api/v1/replay/sessions/${session}`)).snapshot.cursor,cursor);
+ await q.until(async()=>{const v=await json(`/api/v1/replay/runs/${runId}/viewer`);return v.viewer_state.display_interval==='5m';},30000);
+ await q.delay(750);
+ assert.equal((await json(`/api/v1/replay/runs/${runId}/viewer`)).viewer_state.display_interval,'5m');
+ assert.equal(await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).inputValue(),'5m');
+ await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).selectOption('15m');
+ await q.until(async()=> (await json(`/api/v1/replay/runs/${runId}/viewer`)).viewer_state.display_interval==='15m',30000);
+ await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).selectOption('5m');
+ await q.until(async()=> (await json(`/api/v1/replay/runs/${runId}/viewer`)).viewer_state.display_interval==='5m',30000);
+ await q.delay(750);
+ assert.equal(await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).inputValue(),'5m');
+ assert.deepEqual((await json(`/api/v1/replay/runs/session/${session}`)).snapshot.cursor,cursor);
  await q.screenshot('formal-imported-bar');await q.record('trade-step-and-period-change',{state,cursor,viewer:await query('replay')});
  assert.ok(q.s.traffic.sockets.some(s=>s.url.includes('/stream/replay/')&&s.received>0),'Actual replay WS did not deliver frames');
  const h=await json('/health');assert.equal(h.local_offline.network.blocked_attempts,0);await q.record('offline-boundary',h);
- const before=(await json(`/api/v1/replay/sessions/${session}`)).snapshot;
+ const before=(await json(`/api/v1/replay/runs/session/${session}`)).snapshot;
  await q.record('first-full-exit',{owned:await q.quit(),allExited:await q.exited()});
  await launch();await q.s.page.goto(new URL(`/replay.html?run=${runId}`,q.s.page.url()).href,{waitUntil:'domcontentloaded'});await group('replay');
  await q.until(async()=>{const v=await query('replay');return v.viewer&&!v.loading?v:false;},60000);
- const after=(await json(`/api/v1/replay/sessions/${session}`)).snapshot;
+ const after=(await json(`/api/v1/replay/runs/session/${session}`)).snapshot;
+ assert.equal((await json(`/api/v1/replay/runs/${runId}/viewer`)).viewer_state.display_interval,'5m');
+ assert.equal(await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).inputValue(),'5m');
  assert.deepEqual(after.cursor,before.cursor);assert.deepEqual(after.components,before.components);assert.deepEqual(after.config,before.config);
  await q.screenshot('restored-imported-replay');await q.record('restored-source-account-and-cursor',{runId,before,after});
  assert.equal((await json('/health')).local_offline.network.blocked_attempts,0);assert.deepEqual(q.s.receipt.errors,[]);
