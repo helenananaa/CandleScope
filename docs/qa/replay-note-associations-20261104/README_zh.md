@@ -22,3 +22,12 @@
 沿用../replay-time-notes-20261104/http_server.py和frontend/scripts/frontend-script-integration.mjs --replay-notes，使用新的私有CANDLESCOPE_NOTE_QA_ROOT及loopback端口。原生使用本目录native-acceptance.mjs、../replay-imported-bar-20261104/assemble.py及verify.mjs，必须先构建当前frontend/dist，候选使用当前已提交源和独立新QA目录。LOCAL_OFFLINE、回放WS、源与插件匹配及完整正常退出保持强制检查。
 
 完整前端检查首次失败于日语翻译覆盖率：新增候选文案沿用英文fallback使既有90%门槛不足。已将本功能全部41项日语文案补齐，保留原测试门槛，完整检查重新执行。
+
+
+## 最终本地与原生限定资格
+
+应用源码5a875021。175项整合后端通过、4条既有FastAPI提示，架构与main10条逐字节一致。完整npm run check exit0：4874 functional、1独立性能、130desktop，精确typecheck/i18n/架构/生产build及lint通过（0error/1既有warning）。
+
+macOS arm64 LOCAL_OFFLINE真实包实际导入6000根BAR：v1事前计划无关联，v2通过UI选择真实模拟成交，平仓后v3通过UI增加已平仓交易；各版本摘要分别为0/1/2项。保存笔记未改变账户/游标，完整正常退出520ms/494ms后恢复原v3、v2、v1及其关联和草稿。过期草稿409保留内容，显式另存新ID保留原v3及旧恢复数据，关联一并保留。PID35390→35427，0renderer异常/外网尝试；1043源码SDK、164构建文件、9插件资产及76插件源匹配，前后严格签名通过。实际版本历史截图已查看。
+
+当前证据在evidence/qualification.json、native-links、browser-links及http-links。native候选使用此前已验证Python运行时，替换当前受版本控制后端/SDK/前端并核对全部插件源后重新签名；不能代替最终远程CI的全新原生构建。当前远程headCI仍待独立检查，截图附件、原生图形Review、多商品重连及Windows尚未验收。
