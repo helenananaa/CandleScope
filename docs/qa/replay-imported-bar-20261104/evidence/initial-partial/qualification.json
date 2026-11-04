@@ -1,0 +1,40 @@
+{
+  "applicationSource": "fa0d4d166239cfcdfc480ad5cb6df566210162ca",
+  "backendPassed": 52,
+  "backendWarnings": 4,
+  "frontendFocusedPassed": 14,
+  "types": "prior incremental check; exact CI typecheck pending",
+  "frontendBuild": "passed",
+  "backendArchitecture": "10 same as main,0new",
+  "native": {
+    "passed": false,
+    "platform": "macOS arm64",
+    "scope": "Single immutable imported closed BAR dataset, existing formal replay UI/WS and simulated market order; not imported tape/LIVE/multi-symbol account acceptance",
+    "uiImportRows": 6000,
+    "fills": 1,
+    "appPids": [
+      19902,
+      19937
+    ],
+    "normalFullOwnedExitMs": [
+      536,
+      449
+    ],
+    "rendererErrors": 0,
+    "externalAttempts": 0,
+    "packageSourceSDKFiles": 1041,
+    "builtFrontendFiles": 164,
+    "pluginAssets": 9,
+    "pluginSourceFiles": 76,
+    "strictSignatureBeforeAndAfter": true,
+    "correction": "Source fa0d4d16 imported/filled/restored correctly, but screenshots/traffic revealed display5m reverted1m. Earlier driver missed period assertion; native qualified subset only. Fix and new native source acceptance pending."
+  },
+  "pending": [
+    "full CI",
+    "more revealed prefix/multi-chart/native indicators/backtracking UI reference",
+    "LIVE local import integration",
+    "multi-symbol imported assets account contract",
+    "market-trade import",
+    "Windows"
+  ]
+}

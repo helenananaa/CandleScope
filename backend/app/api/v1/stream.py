@@ -45,6 +45,9 @@ from app.replay.training.models import REPLAY_V2_PROTOCOL
 from app.core import config
 
 router = APIRouter(prefix="/stream", tags=["stream"])
+# The offline composition exposes only these same replay handlers. Live market
+# endpoints remain on `router` and outside the offline middleware boundary.
+replay_router = APIRouter(prefix="/stream", tags=["replay-stream"])
 
 
 def _get_data_manager(websocket: WebSocket):
@@ -68,6 +71,7 @@ async def kline_batch_capabilities() -> dict:
 
 
 @router.websocket("/replay/{session_id}")
+@replay_router.websocket("/replay/{session_id}")
 async def replay_stream(
     websocket: WebSocket,
     session_id: str,
@@ -147,6 +151,7 @@ async def replay_stream(
 
 
 @router.websocket("/replay/runs/{run_id}")
+@replay_router.websocket("/replay/runs/{run_id}")
 async def replay_training_run_stream(
     websocket: WebSocket,
     run_id: str,

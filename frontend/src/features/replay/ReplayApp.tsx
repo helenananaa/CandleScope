@@ -23,7 +23,6 @@ import { createReplayChartRuntimePool, useSharedReplayChartRuntime } from "./rep
 import { useReplayViewerRuntime } from "./useReplayViewerRuntime.js";
 import { useTrainingHub } from "./useTrainingHub.js";
 import { useControlCommands, usePageControlBridge } from "../app-control/useControlCommands.js";
-import { replayCommands } from "../app-control/replayCommands.js";
 import { settingsCommands } from "../app-control/settingsCommands.js";
 import { trainingHubCommands } from "../app-control/trainingHubCommands.js";
 import { ReplayDataProvider } from "./ReplayDataProvider.js";
@@ -91,7 +90,6 @@ function ReplayInitializedRun({
   }));
   const replay = useSharedReplayChartRuntime(pool, sessionId, true);
   const viewer = useReplayViewerRuntime(replay, { onSelectedSessionChange, controllerOnly: true, runId });
-  useControlCommands(() => replayCommands(runId, viewer));
   const [initialSession, setInitialSession] = useState<ChartSession | null>(null);
   useEffect(() => {
     const config = replay.store.sessionConfig;
