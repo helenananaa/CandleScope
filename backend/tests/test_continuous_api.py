@@ -4,6 +4,8 @@ from concurrent.futures import CancelledError as FutureCancelled
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 import json
+from pathlib import Path
+import re
 from types import SimpleNamespace
 from urllib.parse import quote
 
@@ -301,3 +303,14 @@ def test_nonfinite_unpaired_unicode_and_excessive_structure_are_rejected_before_
     response=api.client.post(BASE+'/runs',content=body,headers={'Idempotency-Key':'invalid'})
     assert response.status_code==400,response.text
     assert not api.calls and api.gate.continuous.store.creations.list_pending()==[]
+
+
+def test_current_frontend_sdk_signal_template_and_equity_policy_execute_through_continuous_api(api):
+    frontend=Path(__file__).resolve().parents[2]/'frontend/src/features/backtest/chart-tester/chartStrategyTesterUiModel.ts'
+    source=json.loads(re.search(r'export const PYTHON_SMA_SOURCE = ("(?:[^"\\]|\\.)*");',frontend.read_text()).group(1))
+    body=payload(python=True);body['provider'].update(source_text=source,output_mode='SIGNAL')
+    body['execution'].update(initial_balance='10000',sizing_policy='EQUITY_PERCENT_V1',equity_percent='10',taker_fee_bps='0',maker_fee_bps='0',slippage_bps='1')
+    accepted=create(api,body,key='current-editor/signal')
+    _initial,_page,values=full_initial(api,accepted['run_id'])
+    assert_values(api.gate.continuous,accepted['run_id'],values)
+    assert len(values['fills'])>0

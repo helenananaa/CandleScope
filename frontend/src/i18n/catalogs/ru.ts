@@ -1,3 +1,4 @@
+import { continuousEnglish } from "./continuousMessages.js";
 import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -7,6 +8,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  ...continuousEnglish,
   ...replayNoteEnglish,
   ...historyStudyEnglish,
   "chartTime.title": "Go to date",
