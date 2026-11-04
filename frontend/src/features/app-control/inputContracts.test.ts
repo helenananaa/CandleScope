@@ -6,7 +6,7 @@ import { canonicalWatchlistSymbol } from "./watchlistCommands.js";
 import { chartLinkPolicySchema } from "./workspaceCommands.js";
 
 test("desktop link policy accepts independent overlay channels while rejecting unsupported fields", () => {
-  const patch = { accountSource: true, tradingOverlays: false, noteOverlays: true };
+  const patch = { accountSource: true, tradingOverlays: false, noteOverlays: true, studyMode: true, studyCursor: false };
   assert.deepEqual(chartLinkPolicySchema.parse(patch), patch);
   assert.throws(() => chartLinkPolicySchema.parse({ accountSource: "yes" }));
   assert.throws(() => chartLinkPolicySchema.parse({ accountSource: true, placeOrders: true }));

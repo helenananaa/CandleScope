@@ -1,0 +1,119 @@
+{
+  "schema": "candlescope.replay-view-date-qualification/1",
+  "applicationSourceCommit": "d36daa501130e92154a7691246c4343be9e82640",
+  "qaSourceCommit": "e79a8cd2a0feb2926855d0dabd0abd52021e3a3b",
+  "includesMain": "ae2b48878002d7dfd606048712a9219e8c69bc2e",
+  "frontendCheckedTree": "frontend tree identical to d36daa501130e92154a7691246c4343be9e82640; tested before source commit, all later commits only QA helpers/evidence",
+  "checks": {
+    "frontend": 4863,
+    "performance": 1,
+    "desktop": 130,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": true,
+    "lint": true,
+    "architecture": true,
+    "plugins": true,
+    "i18nLocales": 30,
+    "i18nKeys": 5350,
+    "actualBundledBackend": 73,
+    "backendSkipped": 2,
+    "skipReason": "Windows AppContainer-only tests on macOS, not passes",
+    "warnings": [
+      "Unchanged SingleChartPanes cleanup-ref eslint warning",
+      "Inherited Starlette/anyio BlockingPortal deprecation",
+      "Existing Vite >500KB chunk warning"
+    ]
+  },
+  "native": {
+    "passed": true,
+    "records": 12,
+    "windows": 1,
+    "charts": 2,
+    "intervals": [
+      "5m",
+      "1m"
+    ],
+    "errors": [],
+    "normalOwnedExitMs": [
+      3847,
+      2358
+    ],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "sdkFiles": 60,
+    "pluginAssets": 9,
+    "sourceMismatches": [],
+    "strictSignatureAfterTestsAndExits": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "historyReads": [
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61291/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=5m&before_ms=1700827200000&revealed_boundary_ms=1700827319999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 500
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61291/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=5m&before_ms=1700299500000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c&history_epoch=sha256%3Ac40f25c592c7ad8c931cea520b061d8af52f26b2c71647b8b21c90178333cbf7",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 257
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61291/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=1m&before_ms=1700827380000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 500
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61291/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=1m&before_ms=1700239260000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c&history_epoch=sha256%3A43f8d5838d3bf6d96a6025e260bc4d9e79c7f0fe7ea80666cccd62a78537be7e",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 281
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61377/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=1m&before_ms=1700827200000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 500
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61377/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=5m&before_ms=1700827200000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 500
+      },
+      {
+        "status": 200,
+        "url": "http://127.0.0.1:61377/api/v1/replay/runs/session/ec1e5331550d456d86a26454a87b5aff/history?track_id=track-1&display_interval=5m&before_ms=1700319300000&revealed_boundary_ms=1700827379999&limit=500&data_epoch=sha256%3A2d2fbf9f2f6c2680179ef6357f02b389aabe0d4e0ea16d407ee3d65d83e4728c&history_epoch=sha256%3Ac40f25c592c7ad8c931cea520b061d8af52f26b2c71647b8b21c90178333cbf7",
+        "runId": "prepared-b1b84c4c640c46a0a48920daecad90f7",
+        "rows": 323
+      }
+    ]
+  },
+  "proof": [
+    "Alt+G and the real date dialog load old revealed data through actual bounded history HTTP. No response substitution.",
+    "Modeled clock, track source sequences, full portfolio and ledger remain equal across date navigation and chart layout/period/link changes. No order placement is part of this qualification.",
+    "An unlinked 1m sibling retains its viewport. Linked 5m/1m charts locate one time; the 1m chart replaces a full 10000-row display window with a bounded old-date window.",
+    "The same revealed boundary and fixed input epochs travel in history requests/replies. A future date issues no history read and cannot advance the run.",
+    "Complete normal quit/restart retains the authoritative clock and portfolio; view-only date navigation continues. A separate HIDE_ALL training has no absolute date button or Alt+G dialog."
+  ],
+  "regressions": {
+    "fullWindow": "Actual fail-before/pass-after test: overlapping date history could evict its own requested candle when a full display store retained the newest rows. Date reads now own a bounded replacement window, leaving the execution store intact and the normal right-edge restore available.",
+    "runWorkspaceScope": "Earlier native package registered date navigators under a bare workspace ID while the coordinator used replay:run:workspace. It showed unavailable without issuing the target read; current production binding matches the run/workspace scope.",
+    "staticCssImport": "An initial complete check failed the real replay hub test module on a static CSS import. The date dialog is loaded lazily like existing replay dialogs; final complete check passes.",
+    "harness": "Preserved failures include a target already loaded in the initial 12h fixture, clicking a clipped pinned period instead of the visible compact picker, datetime-local :00 normalization, reading snapshot instead of command output for a viewport, and checking native paint before the next frame. Final script uses real picker/input/output and waits for observed viewport coverage; no forced click or readiness bypass.",
+    "fixtureReuse": "Final successful flow resumes the stopped owned 15000-row fixture/run after saved harness failures, closes its extra visible chart through the normal workspace action, then re-creates the test split. Original source/profile retained; each preparation advance occurs before the financial baseline is captured. No default-user profile launch."
+  },
+  "limits": [
+    "Finite synthetic BTC/ETH 1m inputs and independent complete five-row 5m aggregation, synthetic public-like metadata, warm local archive, loopback-only OS sandbox with actual child remote denial. Not online provider/cold/latest or private exchange proof.",
+    "macOS arm64 one window and two charts in one run, no native arbitrary-script/indicator math or multi-market order-execution claim. Windows desktop and broad performance are not qualified.",
+    "Current backend/frontend/desktop/pure-Python SDK repacked after source/wheel/hash checks; unchanged runtime/native engines reused. Not a fresh engine build or official CI artifact.",
+    "Absolute dates are available only under time disclosure NONE; hidden-calendar training and read-only review retain their existing controls. Relative-time navigation is separate work.",
+    "Formal replay notes, backend DataManager entry/lifecycle, imported-data user flow and full #166/#181/#186 remain unfinished goal scope."
+  ],
+  "ci": "Final QA head still requires exact-head applicable CI including macOS arm64/x64 packaging before main."
+}

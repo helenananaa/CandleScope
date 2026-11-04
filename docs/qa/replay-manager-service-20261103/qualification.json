@@ -1,0 +1,66 @@
+{
+  "schema": "candlescope.replay-manager-service-qualification/1",
+  "applicationSourceCommit": "713782e5cff5ba10745537326d2831aa12f783e2",
+  "qaSourceCommit": "713782e5cff5ba10745537326d2831aa12f783e2",
+  "productionSourceCommit": "cb385b14",
+  "includesMain": "1890a722372b3dd30cda0da77978e2dea85cea08",
+  "productionUnchangedAfterNative": true,
+  "checks": {
+    "finalBackendPassed": 110,
+    "previousLifecycleBackendPassed": 45,
+    "previousCloseoutBackendPassed": 32,
+    "countsOverlap": true,
+    "actualBundledBackendPassed": 83,
+    "actualBundledBackendSkipped": 2,
+    "skipReason": "Windows AppContainer-only tests on macOS",
+    "architecture": {
+      "passed": false,
+      "baselineViolations": 10,
+      "currentViolations": 10,
+      "added": [],
+      "sameAsMain": true
+    },
+    "warnings": [
+      "Existing FastAPI on_event/Starlette anyio deprecations",
+      "Bundled pytest anyio import rewrite warning"
+    ]
+  },
+  "native": {
+    "passed": true,
+    "records": 11,
+    "windows": 2,
+    "independentRuns": 2,
+    "maximumStreams": 4,
+    "normalOwnedExitMs": [
+      1569,
+      3331
+    ],
+    "errors": [],
+    "sourceFiles": 980,
+    "distFiles": 164,
+    "sdkFiles": 60,
+    "pluginAssets": 9,
+    "mismatches": [],
+    "strictSignatureAfterTestsAndExits": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "proof": [
+    "two-native-run-windows-share-one-backend-and-manager-own-four-streams",
+    "advancing-run-a-does-not-advance-run-b-or-change-its-account",
+    "extra-period-chart-has-private-sequence-without-duplicating-shared-adapter-stream",
+    "closing-one-chart-releases-only-its-display-sequence",
+    "closing-native-window-a-releases-its-streams-while-b-continues",
+    "returning-run-b-to-hub-releases-all-manager-streams",
+    "complete-restart-restores-two-independent-run-clocks-and-portfolios"
+  ],
+  "limits": [
+    "macOS arm64 local finite synthetic BAR archives; two BTC runs, not multi-market trade execution.",
+    "No online cold/latest provider, Windows desktop, arbitrary indicator mathematics, nonempty-position financial reference, broad reconnect or performance qualification.",
+    "Current source repacked with unchanged verified runtime/native engines reused; not an official CI artifact.",
+    "Formal notes, imported BAR/trade user flows and the rest of #166/#181 remain open."
+  ],
+  "ci": "Final-head applicable CI including arm64/x64 packaging required before main."
+}

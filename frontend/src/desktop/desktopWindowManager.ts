@@ -75,6 +75,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   onCloseRequested(listener: (event: { windowId: ChartWindowId }) => void): () => void;
   onPlacement(listener: (event: DesktopWindowPlacement & { windowId: ChartWindowId }) => void): () => void;
   workspaceBusConnect(payload: unknown): Promise<unknown>;
+  workspaceBusRegisterLinks?(): Promise<unknown>;
   workspaceBusCommit(payload: unknown): Promise<unknown>;
   workspaceBusPublishLink(payload: unknown): Promise<unknown>;
   workspaceBusReportWindow(payload: unknown): void;

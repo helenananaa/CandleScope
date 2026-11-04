@@ -93,9 +93,12 @@ import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
+import type { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
 
 
 const ExportPanel = lazy(() => import("../export/ExportPanel.js"));
+const ChartTimeNavigationDialog = lazy(() => import("../market-data/ChartTimeNavigationDialog.js"));
 
 export interface ReplayTrainingPageShellProps {
   readonly runtime: ReplayRuntime;
@@ -107,6 +110,9 @@ export interface ReplayTrainingPageShellProps {
   readonly pageExportRef?: RefObject<HTMLDivElement | null>;
   readonly preparePageDrawingExport?: import("../export/pageDrawingExport.js").PreparePageDrawingExport;
   readonly cell?: {
+    readonly cellId: string;
+    readonly workspaceId: string;
+    readonly links: ChartLinkCoordinator;
     readonly scope: string;
     readonly drawingScope: string;
     readonly active: boolean;
@@ -316,6 +322,15 @@ export default function ReplayTrainingPageShell({
   })();
   const publicTimePolicy = integrityRuntime.integrity?.effective_time_disclosure_policy
     ?? (config?.blind_mode === false ? "NONE" : "HIDE_ALL");
+  const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
+  const dateNavigation = useChartTimeNavigation({
+    active: cell?.active ?? true,
+    enabled: active && review === null && publicTimePolicy === "NONE" && !viewer.loading,
+    cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
+    sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
+      viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),
+    marketData: dateNavigationSource, surface: chartSurfaceActions, links: cell?.links ?? null,
+  });
   const publicTimeRuntime = useReplayPublicTimeRuntime({
     runId: integrityRuntime.runId,
     policy: publicTimePolicy,
@@ -1144,6 +1159,8 @@ export default function ReplayTrainingPageShell({
           intervals={replayIntervalSelector}
           controls={<>
             {cell?.controls}
+            {dateNavigation.available && <button type="button" className="ui-control"
+              onClick={() => dateNavigation.setOpen(true)}>{t("study.viewDate")}</button>}
             <button type="button" className="settings-btn indicator-toggle-btn"
               aria-label={t("shell.settings")} title={t("shell.settings")}
               onClick={() => setChartSettingsOpen(true)}><Icon name="palette" size={18} /></button>
@@ -1227,6 +1244,10 @@ export default function ReplayTrainingPageShell({
         />
       )}
       featureSurfaces={active ? <>
+        {dateNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={cell?.cellId ?? controlCellId}
+          onClose={() => dateNavigation.setOpen(false)} onSubmit={dateNavigation.submit}
+          {...(runtime.store.virtualTimeMs === null ? {} : { initialTimeMs: runtime.store.virtualTimeMs })}
+          hint={t("study.viewDateHint")} /></Suspense>}
         {chartSettingsOpen && <PageSettingsDialog runtime={chartSettingsRuntime} onClose={() => setChartSettingsOpen(false)} />}
         {review === null && exportFlow.view.isOpen && <Suspense fallback={null}><ExportPanel
           {...exportFlow.view}
