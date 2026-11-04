@@ -1,0 +1,57 @@
+{
+  "source": "PR200 application127ba4f4 real native cold startup after old cooldown",
+  "records": [
+    {
+      "attempt_id": 19,
+      "observed_at_ms": 1793782780314,
+      "exchange": "binance",
+      "market_type": "futures",
+      "endpoint": "/fapi/v1/exchangeInfo",
+      "rules": [
+        "binance_futures_exchange_info"
+      ],
+      "buckets": [
+        "binance:futures:request_weight:ip"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "background",
+      "elapsed_ms": 925.213,
+      "status_code": 418,
+      "body_code": "-1003",
+      "quota_headers": {
+        "x-mbx-used-weight-1m": "0",
+        "retry-after": "24179"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 28,
+      "observed_at_ms": 1793782780778,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/depth",
+      "rules": [
+        "binance_spot_legacy"
+      ],
+      "buckets": [
+        "binance:spot:legacy"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "normal",
+      "elapsed_ms": 500.581,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "138",
+        "x-mbx-used-weight-1m": "138"
+      },
+      "unknown": false
+    }
+  ],
+  "qualification": "public counter evidence only; no claim of ban cause or full seconds acceptance",
+  "newSharedDeadline": "2026-11-04T15:42:40.340Z"
+}
