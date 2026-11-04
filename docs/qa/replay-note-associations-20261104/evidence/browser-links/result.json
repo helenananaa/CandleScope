@@ -1,0 +1,47 @@
+{
+  "scope": "Real Chromium, production-minified browser fixture and real React lifecycle; not native application qualification",
+  "output": "/Users/ryanliang/.codex/worktrees/replay-note-associations-20261104/CandleScope/output/replay-note-associations-20261104/browser-links-1",
+  "browser": "Chrome/156.0.8078.80",
+  "screenshots": [
+    "original-editor.png",
+    "version-history-pages.png",
+    "earlier-event-visible-original.png",
+    "review-supplement.png",
+    "recovered-review-notes.png"
+  ],
+  "result": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "Production React + actual loopback router/SQLite with explicit fixture candles; not native acceptance",
+        "checks": [
+          "actual UI note save traversed parsed HTTP/manager/SQLite without changing snapshot",
+          "actual UI links a committed fill and closed trade; each version retains its own immutable selection",
+          "actual history UI paginates 25 authoritative versions in 20+5 rows without duplication",
+          "earlier event hides same-time edits, future creation and future draft text",
+          "review UI supplement remains separate from original plan and financial state",
+          "real committed HTTP response loss retains original draft and remounted editor retries the same version exactly once",
+          "explicit current-time copy is a new review supplement and preserves the old-context draft",
+          "actual delayed history body is cancelled on review rewind; the earlier same-time event keeps only version 1"
+        ],
+        "backendPid": 31484,
+        "blockedExternalAttempts": 0
+      }
+    }
+  },
+  "immediateWorkerCount": 0,
+  "remainingWorkers": [],
+  "exceptions": [],
+  "editor": {
+    "result": {
+      "type": "object",
+      "value": {
+        "status": "PASS",
+        "scope": "Actual HTTP note UI fixture; not native package acceptance"
+      }
+    }
+  },
+  "passed": true,
+  "browserExitCode": 0
+}

@@ -9,7 +9,7 @@ from tests.source_checkout_testkit import (
     source_checkout_environment,
 )
 
-def test_main_local_profile_starts_only_local_runtime(tmp_path: Path) -> None:
+def test_main_local_profile_starts_local_replay_without_online_owners(tmp_path: Path) -> None:
     script = """
 import socket
 from fastapi.testclient import TestClient
@@ -39,15 +39,24 @@ with TestClient(Peer(app, "127.0.0.1")) as client:
     assert blocked.status_code == 403, blocked.text
     stream = client.get("/api/v1/stream")
     assert stream.status_code == 403, stream.text
-    replay = client.get("/api/v1/replay/sessions")
-    assert replay.status_code == 403, replay.text
+    replay = client.get("/api/v1/replay/capabilities")
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["available"] is True
+    assert app.state.data_manager_core.replay.service is app.state.replay_service
     plugins = client.get("/api/v1/plugins")
     assert plugins.status_code == 403, plugins.text
     backtests = client.get("/api/v1/backtests/capabilities")
     assert backtests.status_code == 200, backtests.text
     assert not hasattr(app.state, "plugin_runtime_host")
     assert not hasattr(app.state, "data_engine_runtime")
-    assert not hasattr(app.state, "replay_runtime")
+    assert hasattr(app.state, "replay_runtime")
+    assert app.state.replay_runtime.catalog_refresh_task is None
+    with client.websocket_connect("/api/v1/stream/replay/runs/missing?protocol=replay.v3") as replay_ws:
+        packet = replay_ws.receive_json()
+        assert packet["protocol"] == "replay.v3", packet
+        assert packet["error"]["code"] == "TRAINING_RUN_NOT_FOUND", packet
+    assert client.get("/api/v1/data-preparations/capabilities").status_code == 403
+    assert client.post("/api/v1/data-preparations/replay", json={}).status_code == 403
     try:
         socket.getaddrinfo("example.com", 443)
     except OSError:
@@ -59,6 +68,7 @@ with TestClient(Peer(app, "127.0.0.1")) as client:
     environment["CANDLESCOPE_RUNTIME_MODE"] = "LOCAL_OFFLINE"
     environment["CANDLESCOPE_LOCAL_DATA_DIR"] = str(tmp_path / "local-data")
     environment["CANDLE_HOST"] = "0.0.0.0"
+    environment["CANDLE_DATA_DIR"] = str(tmp_path / "runtime-data")
     completed = subprocess.run(
         [sys.executable, "-c", script],
         cwd=BACKEND_ROOT,

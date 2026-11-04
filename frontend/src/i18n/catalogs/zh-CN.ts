@@ -1,7 +1,9 @@
+import { replayNoteChinese } from "./replayNoteMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { historyStudyChinese } from "./historyStudyMessages.js";
 import { tradingAccountsZhCN } from "./tradingAccountsMessages.js";
 export const zhCN = {
+  ...replayNoteChinese,
   ...historyStudyChinese,
   "chartTime.title": "跳转到日期",
   "chartTime.shortcut": "跳转到日期（Alt+G）",

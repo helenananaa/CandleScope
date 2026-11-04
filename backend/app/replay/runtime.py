@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable, Mapping, Sequence
 from typing import Callable, TypeVar
 
 from app.core.config import REPLAY_SETTINGS, ReplaySettings
@@ -15,6 +15,7 @@ from app.data_engine.storage.raw_trade_archive import (
 )
 
 from .history_archive import ReplayHistoryArchiveRuntimeLease
+from .catalog import ReplaySeriesIdentity
 from .remote_trade_archive import RemoteRawAggTradeArchive
 from .official_trade_catalog import OfficialAggTradeArchive
 from .service import ReplayService
@@ -96,6 +97,8 @@ async def start_replay_runtime(
     store_factory: Callable[[str], ReplaySQLiteStore] | None = None,
     service_factory: Callable[..., ReplayService] = ReplayService,
     raw_trade_archive: RawAggTradeArchive | None = None,
+    repository: object | None = None,
+    native_intervals: Callable[[ReplaySeriesIdentity], Sequence[str]] | None = None,
     instrument_metadata_resolver: (
         Callable[[str, str, str], Mapping[str, object] | None] | None
     ) = None,
@@ -138,6 +141,10 @@ async def start_replay_runtime(
             "settings": settings,
             "store": store,
         }
+        if repository is not None:
+            service_kwargs["repository"] = repository
+        if native_intervals is not None:
+            service_kwargs["native_intervals"] = native_intervals
         if instrument_metadata_resolver is not None:
             service_kwargs["instrument_metadata_resolver"] = (
                 instrument_metadata_resolver

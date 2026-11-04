@@ -52,6 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.core.config import (
+    REPLAY_SETTINGS,
     CORS_ORIGINS,
     EVENT_LOOP_LAG_INTERVAL_SECONDS,
     GC_FREEZE_STARTUP_HEAP,
@@ -76,6 +77,8 @@ from app.core.support_diagnostics import install_support_logging, router as supp
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
 from app.history_studies.api import router as history_studies_router
+from app.api.v1.replay import router as replay_router
+from app.api.v1.stream import replay_router as replay_stream_router
 
 if RUNTIME_MODE == "LIVE":
     from app.api.v1.alerts import router as alerts_router
@@ -86,7 +89,6 @@ if RUNTIME_MODE == "LIVE":
     from app.api.v1.liquidations import router as liquidations_router
     from app.api.v1.market import router as market_router
     from app.api.v1.order_book import router as order_book_router
-    from app.api.v1.replay import router as replay_router
     from app.api.v1.manual_history import router as manual_history_router
     from app.api.v1.data_preparation import router as data_preparation_router
     from app.api.v1.settings import router as settings_router
@@ -143,9 +145,11 @@ app.add_middleware(
     compresslevel=5,
 )
 app.include_router(history_studies_router, prefix="/api/v1")
+app.include_router(replay_router, prefix="/api/v1")
 if RUNTIME_MODE == "LOCAL_OFFLINE":
     app.add_middleware(LocalOfflineProfileMiddleware, enabled=True)
     app.include_router(local_data_router, prefix="/api/v1")
+    app.include_router(replay_stream_router, prefix="/api/v1")
 else:
     app.include_router(klines_router, prefix="/api/v1")
     app.include_router(market_router, prefix="/api/v1")
@@ -164,7 +168,6 @@ else:
     app.include_router(symbol_discovery_router, prefix="/api/v1")
     app.include_router(subscriptions_router, prefix="/api/v1")
     app.include_router(price_ws_router, prefix="/api/v1")
-    app.include_router(replay_router, prefix="/api/v1")
     app.include_router(readonly_accounts_router, prefix="/api/v1")
     app.include_router(trading_accounts_router, prefix="/api/v1")
     app.include_router(create_core_plugin_router())
@@ -561,6 +564,9 @@ async def startup_event() -> None:
     try:
         await _startup_event_impl()
     except BaseException:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            await core.shutdown_strategy()
         await stop_extensions(app)
         raise
 
@@ -577,6 +583,7 @@ async def _startup_event_impl() -> None:
     if RUNTIME_MODE == "LOCAL_OFFLINE":
         local_runtime = None
         backtest_runtime = None
+        replay_runtime = None
         from app.local_data.runtime import LocalOfflineRuntime
 
         try:
@@ -605,8 +612,27 @@ async def _startup_event_impl() -> None:
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
                 )
+            from dataclasses import replace
+            from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
+            from app.replay.local_bar_repository import LocalReplayBarRepository
+            from app.replay.runtime import start_replay_runtime
+
+            offline_replay = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
+                replay_agg_trade_enabled=False, replay_agg_trade_origin_uri=None)
+            imported_bars = LocalReplayBarRepository(local_runtime.service,
+                max_rows=offline_replay.max_bar_dataset_rows)
+            replay_runtime = await extension_factory(app, "replay", start_replay_runtime)(
+                settings=offline_replay, repository=imported_bars,
+                native_intervals=imported_bars.native_intervals,
+                raw_trade_archive=DisabledRawAggTradeArchive())
+            app.state.replay_runtime = replay_runtime
+            app.state.replay_service = replay_runtime.service
+            if replay_runtime.service is not None:
+                app.state.data_manager_core.bind_replay(replay_runtime.service, replay_runtime)
         except BaseException:
             await stop_extensions(app)
+            if replay_runtime is not None:
+                await replay_runtime.shutdown()
             if backtest_runtime is not None:
                 backtest_runtime.shutdown()
             if local_runtime is not None:
@@ -772,6 +798,7 @@ async def _startup_event_impl() -> None:
     except BaseException:
         replay_core = getattr(app.state, "data_manager_core", None)
         if replay_core is not None:
+            await replay_core.shutdown_strategy()
             replay_core.close_replay()
         alert_facade = getattr(app.state, "alert_facade", None)
         readonly_accounts = getattr(app.state, "readonly_account_service", None)
@@ -873,6 +900,7 @@ async def shutdown_event() -> None:
     """Application shutdown handler."""
     replay_core = getattr(app.state, "data_manager_core", None)
     if replay_core is not None:
+        await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
@@ -891,11 +919,11 @@ async def shutdown_event() -> None:
                 exc,
                 exc_info=True,
             )
-    manager_core = getattr(app.state, "data_manager_core", None)
-    if manager_core is not None:
-        manager_core.close_strategy()
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
+        replay_runtime = getattr(app.state, "replay_runtime", None)
+        if replay_runtime is not None:
+            await replay_runtime.shutdown(step_timeout=5)
         backtest_runtime = getattr(app.state, "backtest_runtime", None)
         if backtest_runtime is not None:
             backtest_runtime.shutdown()

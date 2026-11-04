@@ -1,0 +1,1 @@
+qualified bounded native scope: UI import6000/one simulated fill/5m &15m/no time movement/20 coarser bars/normal full owned restart; not whole166

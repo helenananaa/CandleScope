@@ -1,0 +1,65 @@
+{
+  "source": "5a87502164851e50b481624ae87037f0db3e15e0",
+  "backendPassed": 175,
+  "backendWarnings": 4,
+  "frontendCheck": {
+    "exitCode": 0,
+    "functional": 4874,
+    "performance": 1,
+    "desktop": 130,
+    "exactTypesLintBuildArchitectureI18n": "passed;1existinglintwarning"
+  },
+  "architecture": "10same main findings byteidentical",
+  "browser": {
+    "checks": 8,
+    "externalAttempts": 0,
+    "errors": 0,
+    "workersAfterExit": 0,
+    "scope": "actual UI fill+closed trade, history pages25, same-ms rewind hides future links, lost response/draft/copy; explicit fixture market"
+  },
+  "native": {
+    "passed": true,
+    "pids": [
+      35390,
+      35427
+    ],
+    "normalFullOwnedExitMs": [
+      520,
+      494
+    ],
+    "versions": [
+      {
+        "revision": 1,
+        "links": []
+      },
+      {
+        "revision": 2,
+        "links": [
+          "FILL"
+        ]
+      },
+      {
+        "revision": 3,
+        "links": [
+          "FILL",
+          "TRADE"
+        ]
+      }
+    ],
+    "restoredVersionsAndDraft": true,
+    "explicitNewNoteRetainsOriginalV3AndOldDraft": true,
+    "financeAndCursorUnchangedByNotes": true,
+    "rendererErrors": [],
+    "externalAttempts": 0,
+    "sourceSDK": 1043,
+    "frontendFiles": 164,
+    "pluginAssets": 9,
+    "pluginSources": 76,
+    "strictSignatureBeforeAfter": true
+  },
+  "pending": [
+    "current remote CI before merge",
+    "version-bound screenshot attachments",
+    "graphical native Review/backtracking, broad multi-track/reconnect, Windows and whole166"
+  ]
+}
