@@ -19,6 +19,7 @@ import { useChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRu
 import { useControlCommands } from "../app-control/useControlCommands.js";
 import { workspaceCommands } from "../app-control/workspaceCommands.js";
 import { replayIntegrityCommands } from "../app-control/replayIntegrityCommands.js";
+import { replayCommands } from "../app-control/replayCommands.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
 import WorkspaceLayoutTree from "../chart-workspace/WorkspaceLayoutTree.js";
 import WorkspacePanel from "../chart-workspace/WorkspacePanel.js";
@@ -189,7 +190,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     cellId: cell.id, workspaceId: `replay:${runId}:${workspace.view.activeWorkspaceId}`, links,
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
-    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
+    active, integrity: cellIntegrity, projectionBoundaryMs: projection.boundaryMs, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale,
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
@@ -199,7 +200,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -288,7 +289,19 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
     viewerState: viewer.viewerState ?? lastView.current,
     viewerPending: viewer.viewerPending || viewer.viewerState === null
       || adapterPending || selectionCommand !== null,
-  }), [viewer, marketTracks, adapterPending, selectionCommand]);
+    actions: { ...viewer.actions,
+      setDisplayInterval: async (interval: string) => {
+        // The active chart owns its display period. The selection coordinator
+        // commits that period to the shared controller without moving time.
+        intervalTransfers.prepare(workspace.view.document, workspace.view.activeCellId, interval);
+        workspace.actions.updateCellSession(workspace.view.activeCellId, {
+          ...workspace.view.activeCell.session, interval,
+        });
+        return null;
+      },
+    },
+  }), [viewer, marketTracks, adapterPending, selectionCommand, intervalTransfers, workspace]);
+  useControlCommands(() => replayCommands(runId, controller));
   const integrity = useReplayIntegrityRuntime(runtime, controller, true, true, () => ({
     document: workspace.view.document, windowId: workspace.view.window.id,
     workspaceId: workspace.view.activeWorkspaceId,

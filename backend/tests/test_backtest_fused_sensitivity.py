@@ -156,3 +156,23 @@ def test_fused_trade_scenarios_still_reject_malformed_prints(monkeypatch, field)
         monkeypatch.setenv("BACKTEST_FUSED_TRADE_SENSITIVITY_ENABLED", fused)
         with pytest.raises(decimal.InvalidOperation):
             build_cost_sensitivity_matrix(kernel, bad, primary)
+
+
+def test_fused_bar_mark_liquidation_matches_complete_reference_matrix():
+    from tests.test_backtest_account_v2_m4 import rules, event
+    rows = (rules(1), event("MARK_INDEX", 2, mark_price="100", index_price="100"),
+        event("BARS", 3, open="100", high="101", low="99", close="100", volume="100"),
+        event("BARS", 4, open="100", high="101", low="99", close="100", volume="100"),
+        event("MARK_INDEX", 5, mark_price="80", index_price="80"),
+        event("BARS", 6, open="80", high="81", low="79", close="80", volume="100"))
+    kernel = SimulationKernel(account_model="LINEAR_PERP_ONE_WAY_V2", funding_mode="OFF",
+        initial_balance=Decimal("1000"), leverage=Decimal("10"),
+        execution_model_revision=EXECUTION_REALISM_V2, bar_path_scenario=BAR_PATH_SCENARIO,
+        participation_rate=Decimal("1"))
+    primary = kernel.run(rows, lambda _, row: [{"side":"BUY","type":"MARKET","qty":"50"}]
+        if row.sequence == 1 else [], finalize=True)
+    assert any(fill["reason"] == "ACCOUNT_LIQUIDATION" for fill in primary.fills)
+    before = deepcopy(kernel.snapshot())
+    reference = build_cost_sensitivity_matrix(kernel, rows, primary, fast_bar=False)
+    assert build_cost_sensitivity_matrix(kernel, rows, primary) == reference
+    assert kernel.snapshot() == before

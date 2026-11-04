@@ -1,0 +1,95 @@
+{
+  "scope": "actual KlinesRepo same input/transaction; baseline only removes new prefix triggers in private QA DB; 1000 closed tail appends, no full-runtime/SLO claim",
+  "records": [
+    {
+      "trial": 0,
+      "mode": "baseline",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 11.328084001434036
+    },
+    {
+      "trial": 0,
+      "mode": "zero",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 12.63670900152647
+    },
+    {
+      "trial": 0,
+      "mode": "16",
+      "watches": 16,
+      "rows": 1000,
+      "commitMs": 10.634875001414912
+    },
+    {
+      "trial": 0,
+      "mode": "128",
+      "watches": 128,
+      "rows": 1000,
+      "commitMs": 21.42387499770848
+    },
+    {
+      "trial": 1,
+      "mode": "128",
+      "watches": 128,
+      "rows": 1000,
+      "commitMs": 10.147124998184154
+    },
+    {
+      "trial": 1,
+      "mode": "16",
+      "watches": 16,
+      "rows": 1000,
+      "commitMs": 10.224041998299072
+    },
+    {
+      "trial": 1,
+      "mode": "zero",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 10.392167001555208
+    },
+    {
+      "trial": 1,
+      "mode": "baseline",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 15.73945799827925
+    },
+    {
+      "trial": 2,
+      "mode": "baseline",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 9.612499998183921
+    },
+    {
+      "trial": 2,
+      "mode": "zero",
+      "watches": 0,
+      "rows": 1000,
+      "commitMs": 10.14529099848005
+    },
+    {
+      "trial": 2,
+      "mode": "16",
+      "watches": 16,
+      "rows": 1000,
+      "commitMs": 10.372916000051191
+    },
+    {
+      "trial": 2,
+      "mode": "128",
+      "watches": 128,
+      "rows": 1000,
+      "commitMs": 10.460500001499895
+    }
+  ],
+  "medianCommitMs": {
+    "baseline": 11.328084001434036,
+    "zero": 10.392167001555208,
+    "16": 10.372916000051191,
+    "128": 10.460500001499895
+  }
+}
