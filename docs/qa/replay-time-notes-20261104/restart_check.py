@@ -44,10 +44,21 @@ def generation(index):
                 time.sleep(.1)
         context = state["context"]
         notes = get(f'/api/v1/replay/runs/{context["runId"]}/tracks/{context["trackId"]}/notes')
+        images = {}
+        for note in notes["notes"]:
+            cursor = note["revisionCount"] + 1
+            while cursor is not None:
+                page = get(f'/api/v1/replay/runs/{context["runId"]}/tracks/{context["trackId"]}/notes/{note["id"]}/versions?before_revision={cursor}&limit=20')
+                for version in page["versions"]:
+                    for capture in version.get("screenshots", []):
+                        identity = f'{note["id"]}/{version["revisionCount"]}/{capture["id"]}'
+                        images[identity] = get(f'/api/v1/replay/runs/{context["runId"]}/tracks/{context["trackId"]}/notes/{note["id"]}/versions/{version["revisionCount"]}/screenshots/{capture["id"]}')
+                cursor = page["nextBeforeRevision"]
+        (root / f"restart-images-{index}.json").write_text(json.dumps(images, indent=2))
         assert state["network"]["blocked_attempts"] == 0
         (root / f"restart-state-{index}.json").write_text(json.dumps(state, indent=2))
         (root / f"restart-notes-{index}.json").write_text(json.dumps(notes, ensure_ascii=False, indent=2))
-        return state, notes, process.pid
+        return state, notes, images, process.pid
     finally:
         if process.poll() is None:
             process.terminate()  # uvicorn handles SIGTERM and awaits both manager/service shutdowns.
@@ -58,14 +69,15 @@ def generation(index):
         assert receipt["manager"]["closed"] and receipt["manager"]["streams"] == 0
 
 
-before, notes, first = generation(1)
-after, restored, second = generation(2)
+before, notes, images, first = generation(1)
+after, restored, restored_images, second = generation(2)
 assert first != second
 assert notes == restored
+assert images == restored_images
 assert before["snapshot"] == after["snapshot"]
 assert before["context"] == after["context"]
 result = {"passed": True, "scope": "Real backend process restart, explicit fixture candles; not native desktop qualification",
-          "pids": [first, second], "notes": len(notes["notes"]), "blockedExternalAttempts": 0,
-          "checks": ["all visible note versions equal", "review/source cursors and financial snapshot equal", "both owned exits closed manager without streams"]}
+          "pids": [first, second], "notes": len(notes["notes"]), "versionImages": len(images), "blockedExternalAttempts": 0,
+          "checks": ["all visible note versions equal", "version PNG bytes and metadata equal", "review/source cursors and financial snapshot equal", "both owned exits closed manager without streams"]}
 (root / "restart-checks-current.json").write_text(json.dumps(result, indent=2))
 print(json.dumps(result))

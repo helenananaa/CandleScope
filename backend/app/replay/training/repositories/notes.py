@@ -16,7 +16,7 @@ from app.trading_accounts.models import TradingAccountError, normalize_fields
 from ..errors import TrainingRunError
 from ..models import REPLAY_V2_PROTOCOL
 from ..review_lifecycle import event_clock
-from . import note_links
+from . import note_links, note_captures
 
 MAX_NOTES = 500
 MAX_VERSIONS = 100
@@ -101,12 +101,14 @@ def _view(connection: sqlite3.Connection, note: sqlite3.Row, revision: sqlite3.R
         "timelineSequence": int(revision["timeline_sequence"]),
         "reviewNote": bool(note["review_note"]), "revisions": [],
         "links": links,
+        "screenshots": note_captures.load_version(connection, note, revision, fields),
     }
 
 
 class TrainingNoteRepository:
     def __init__(self, base_store: ReplaySQLiteStore) -> None:
         self.base_store = base_store
+        self.captures = note_captures.TrainingNoteCaptureRepository(base_store, _context)
 
     async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
         def read(connection: sqlite3.Connection):
@@ -212,6 +214,7 @@ class TrainingNoteRepository:
             if latest is not None and (int(latest["virtual_time_ms"]) > current["virtualTimeMs"]
                                        or (current["reviewNote"] and not note["review_note"])):
                 raise _error("REPLAY_NOTE_REVIEW_REQUIRED", "Create a review supplement instead of rewriting an original plan")
+            image_ids = note_captures.freeze(connection, current, fields)
             links_json = _json(note_links.freeze(connection, current, fields))
             links_bytes = len(links_json.encode("utf-8"))
             stored_bytes = len(fields_json.encode("utf-8")) + len(context_json.encode("utf-8"))
@@ -235,6 +238,8 @@ class TrainingNoteRepository:
                                 fields_json, context_json, stored_bytes, current["timelineSequence"]))
             connection.execute("INSERT INTO replay_training_note_links VALUES(?,?,?,?,?)",
                                (run_id, note_id, expected_revision + 1, links_json, links_bytes))
+            connection.executemany("INSERT INTO replay_training_note_capture_link VALUES(?,?,?,?)",
+                                   [(run_id, note_id, expected_revision + 1, identifier) for identifier in image_ids])
             revision = connection.execute("SELECT * FROM replay_training_note_revision WHERE run_id=? AND note_id=? AND revision=?",
                                           (run_id, note_id, expected_revision + 1)).fetchone()
             return _view(connection, note, revision)

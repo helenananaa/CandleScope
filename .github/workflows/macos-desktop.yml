@@ -102,6 +102,13 @@ jobs:
             tests/test_settings_api.py \
             tests/test_history_studies.py \
             tests/test_replay_data_manager.py \
+            tests/test_replay_training_notes.py \
+            tests/test_replay_note_links.py \
+            tests/test_replay_note_captures.py \
+            tests/test_replay_v2_training_phase1.py \
+            tests/test_replay_imported_bar.py \
+            tests/test_source_bucket_projection_cache.py \
+            tests/test_local_offline_main_profile.py \
             tests/test_replay_api.py \
             tests/test_plugin_runtime_main_lifecycle.py \
             tests/test_pyne_removal.py \

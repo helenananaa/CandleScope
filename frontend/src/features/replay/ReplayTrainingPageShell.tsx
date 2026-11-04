@@ -90,6 +90,8 @@ import {
   replayReviewDrawingRecord,
 } from "./replayReviewDrawing.js";
 import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
+import { captureReplayNoteChart } from "./replayNoteChartCapture.js";
+import type { ReplayNoteContext } from "./replayNotes.js";
 import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -120,6 +122,7 @@ export interface ReplayTrainingPageShellProps {
     readonly priceScale: { readonly invertScale: boolean; readonly priceScaleMode: number };
     readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
     readonly integrity: ReplayIntegrityRuntime;
+    readonly projectionBoundaryMs?: number | null;
     readonly frame: ComponentType<ReplayChartPageFrameProps>;
     readonly controls: ReactNode;
     readonly controlViewer: ReplayViewerRuntime;
@@ -831,6 +834,36 @@ export default function ReplayTrainingPageShell({
   const viewerVersion = Number(displayedSeriesStore.version);
   const viewerSeriesKey = displayedSeriesStore.seriesKey;
   const isReview = review !== null;
+  const captureIndicatorRuntime = review === null ? indicators : reviewIndicators;
+  const captureIndicatorView = captureIndicatorRuntime.view;
+  const captureState = useRef<{ ready: boolean; seriesKey: string; sourceVersion: number; interval: string; chartType: string;
+    contextKey: string; presentation?: readonly unknown[]; runId: string | null; trackId: string | null; dataEpoch: string | null;
+    time: number | null; reviewId: string | null; reviewRevision: number | null }>({ ready: false, seriesKey: "", sourceVersion: 0, interval: "", chartType: "", contextKey: "",
+    runId: null as string | null, trackId: null as string | null, dataEpoch: null as string | null, time: null as number | null,
+    reviewId: null as string | null, reviewRevision: null as number | null });
+  captureState.current = {
+    ready: active && cell?.active !== false && viewerBarCount > 0 && !captureIndicatorRuntime.status.computing && !viewer.loading && !viewer.error && !viewer.viewerPending && !viewer.controlPending
+      && (review === null ? ["PAUSED", "ENDED"].includes(String(effectiveState)) && !runtime.marketData.view.loading
+        && cell?.projectionBoundaryMs === runtime.store.virtualTimeMs
+        : review.playback_state === "PAUSED" && !reviewChartLoading && reviewLoadedPrefixKey === reviewPrefixKey),
+    presentation: [captureIndicatorView.activeIndicators, captureIndicatorView.mainOverlayLines, captureIndicatorView.markers,
+      captureIndicatorView.fills, captureIndicatorView.hlines, captureIndicatorView.bgcolors, captureIndicatorView.barcolors,
+      captureIndicatorView.drawings, captureIndicatorView.signals, ...captureIndicatorView.subPanes.map(pane => pane.lines)],
+    seriesKey: viewerSeriesKey ?? "", sourceVersion: viewerVersion, interval: displayedInterval, chartType: settings.chartType,
+    contextKey: JSON.stringify([runtime.store.generation, runtime.store.revision, runtime.store.sourceSequence,
+      runtime.store.virtualTimeMs, review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence, viewerSeriesKey, viewerVersion,
+      displayedInterval, settings.chartType, cell?.active]),
+    runId: integrityRuntime.runId, trackId: reviewSelectedTrackId ?? activeSelectedTrack?.track_id ?? null,
+    dataEpoch: runtime.store.dataEpoch, time: review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs,
+    reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,
+  };
+  const captureNoteChart = useCallback((context: ReplayNoteContext) => captureReplayNoteChart(chartSurfaceActions, context, () => {
+    const current = captureState.current;
+    return { ...current, ready: current.ready && current.runId === context.runId && current.trackId === context.trackId
+      && current.dataEpoch === context.dataEpoch && current.time === context.virtualTimeMs
+      && current.reviewId === context.reviewId && current.reviewRevision === context.reviewRevision };
+  }), [chartSurfaceActions]);
+
   const viewerDataMeta = useMemo(() => isReview ? replayReviewDataMeta(displayedSeriesStore, reviewChartLoading) : ({
     ...runtime.marketData.view.meta,
     version: viewerVersion,
@@ -1090,8 +1123,8 @@ export default function ReplayTrainingPageShell({
       api={api} runId={integrityRuntime.runId} trackId={noteTrackId} generationKey={noteGeneration}
       reviewId={review?.review_id ?? null} reviewRevision={review?.cursor_revision ?? null}
       cursorMs={review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs}
-      revisionKey={`${runtime.store.revision}:${review?.review_id ?? ""}:${review?.cursor_revision ?? ""}`}
-      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} embedded={review === null} /> : null;
+      revisionKey={`${runtime.store.revision}:${viewer.viewerState?.semantic_view_revision ?? ""}:${review?.review_id ?? ""}:${review?.cursor_revision ?? ""}`}
+      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} captureChart={captureNoteChart} embedded={review === null} /> : null;
   const rightRail = active ? (
     review !== null ? <ReplayReviewRightRail review={review} notes={notes} /> : <ReplayRightMarketRail
       runtime={runtime} viewer={viewer} indicators={indicators}
