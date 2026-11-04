@@ -162,6 +162,26 @@ class ContinuousStrategyStore:
             except (TypeError, ValueError) as error:
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state is unavailable") from error
 
+    def find_created(self, run_id, *, definition, mode, data_revision, event_time_ms):
+        """Resolve an uncertain create before preparing/executing a provider."""
+        _text(run_id,128), _text(data_revision,256), _counter(event_time_ms)
+        if mode not in {"HISTORY_LIVE","LIVE_ONLY"}:
+            raise fail("CONTINUOUS_INPUT_INVALID","Unsupported continuing strategy mode")
+        definition_json = _wire(definition, MAX_DEFINITION_BYTES)
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            row = self.db.execute("SELECT r.*,c.data_revision AS initial_revision,c.event_time_ms AS initial_time "
+                "FROM runs r LEFT JOIN checkpoints c ON c.run_id=r.id AND c.revision=1 WHERE r.id=?", (run_id,)).fetchone()
+            if row is None:
+                return None
+            if row["initial_revision"] is None:
+                raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Initial execution receipt is unavailable")
+            if (row["definition_json"],row["mode"],row["initial_revision"],row["initial_time"]) != (
+                    definition_json,mode,data_revision,event_time_ms):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT", "Run identity already owns a different creation request")
+            return _summary(row)
+
     def create(self, run_id, *, definition, mode, data_revision, event_time_ms, checkpoint):
         _text(run_id, 128), _text(data_revision, 256), _counter(event_time_ms)
         if mode not in {"HISTORY_LIVE", "LIVE_ONLY"}:
@@ -188,10 +208,10 @@ class ContinuousStrategyStore:
         self.updates.notify(run_id)
         return self.summary(run_id)
 
-    def resume(self, run_id, *, generation, revision):
+    def resume(self, run_id, *, generation, revision, retry_failed=False):
         with self._transaction():
             row = self._expected(run_id, generation, revision)
-            if row["phase"] not in {"PAUSED", "CATCHING_UP", "LIVE"}:
+            if row["phase"] not in {"PAUSED", "CATCHING_UP", "LIVE"} and not (retry_failed is True and row["phase"] == "FAILED"):
                 raise fail("CONTINUOUS_NOT_READY", "Repair, failure or cancellation requires explicit resolution")
             # Always restore/catch up from the committed cursor; never reuse an
             # old LIVE badge or the frontend close timestamp as evidence.
@@ -219,6 +239,17 @@ class ContinuousStrategyStore:
                             (next_revision, phase, sequence, event_time_ms, next_revision, int(time.time()*1000), run_id))
             self._retain(run_id, next_revision)
             self._enforce_total_budget()
+        self.updates.notify(run_id)
+        return self.summary(run_id)
+
+    def defer(self, run_id, *, generation, revision, reason):
+        error_json = _wire(reason,4096)
+        with self._transaction():
+            row = self._expected(run_id,generation,revision)
+            if row["phase"] not in {"CATCHING_UP","LIVE"}:
+                raise fail("CONTINUOUS_NOT_READY", "Execution cannot defer a stopped or repair-required run")
+            self.db.execute("UPDATE runs SET revision=revision+1,phase='CATCHING_UP',error_json=?,updated_at_ms=? WHERE id=?",
+                            (error_json,int(time.time()*1000),run_id))
         self.updates.notify(run_id)
         return self.summary(run_id)
 

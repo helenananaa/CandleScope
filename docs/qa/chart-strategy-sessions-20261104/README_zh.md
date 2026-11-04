@@ -11,3 +11,11 @@ ContinuousStrategyStore是内部存储，尚未接Runtime/Manager/用户模式�
 最初检查点测试用普通json.dumps误编码Decimal而失败，改用现有canonical_json的十进制定点规则后通过；原失败保留。扩大回归发现的main已有融合BAR账户事件问题已拆到独立#239，不与分批基础混称。
 
 后续：共用实际Provider/HostAdapter/Planner会话、后台有序输入/补缺口、修订授权与原子修补、双Manager提交流及三模式/图表/研究挂回、原生保存完整退出重启及独立Windows资格。整个#157/#158/#165保持开放。
+
+## 共用实际执行会话
+
+ContinuousBarHost已连接真实ProviderSession、HostAdapter、Planner和同一BAR内核；固定历史服务与持续会话共用内核构造、输入/feature投影和执行反馈所有者。三个提取helper的函数体AST与原方法完全一致。实际Builtin SMA及现有隔离Python模板分批11→20→25、关闭后重建会话继续，与固定历史BacktestService的信号hash、订单、成交、费用账本及权益逐字段一致。标准观察phase仍为EVALUATION/WARMUP，不因切换实时或恢复改变策略语义。
+
+创建精确重试在准备Provider前读取原receipt；只计算新增批次，批次上限1000，发布LIVE要求完整覆盖且达到声明的最终源边界。数据缺口保存CATCHING_UP/原因及旧结果，补齐后同一运行恢复；已处理历史版本变化保存REPAIR_REQUIRED并禁止普通/失败重试绕过。存储失败丢弃未提交的内存会话，原检查点/账户/游标保留，只有显式失败重试才恢复；普通关闭不终结或取消金融挂单。
+
+22项会话/存储/内核检查通过，5条既有提示；共享helper重构后83项执行/控制/恢复组合及实际Pine进程27项通过（分别5/1条既有提示）。此时仍未连接后台Market source、DataManager接口或用户三模式；V2合约辅助源和Pine特殊时钟明确拒绝从普通BAR continuation旁路进入。
