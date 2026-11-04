@@ -1,0 +1,15 @@
+{
+  "applicationSource": "4866ecdf4ad87d4bee434d6f2dd3d8298c4c7533",
+  "integratedMain": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "stackedParent": "2cefc201",
+  "backendPassed": 140,
+  "frontendArchitecture": "passed",
+  "backendArchitecture": {
+    "passed": false,
+    "violations": 10,
+    "sameAsMainAfterLineNumberNormalization": true
+  },
+  "fixtureChange": "Use real DataManagerCore so newly required replay shutdown is exercised instead of an obsolete incomplete fake. Shutdown-failure recovery expectations preserved.",
+  "native": "Previous 24503897 evidence retained; current combined source not yet qualified. Global public IP418 cooldown respected.",
+  "ci": "Current head must pass before merging; remains stacked on draft #200."
+}

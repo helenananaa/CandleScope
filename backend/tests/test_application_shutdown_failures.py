@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import main as main_module
+from app.data_engine.data_manager.core import DataManagerCore
 from app.exchanges import symbol_catalog
 from tests.test_data_preparation import async_test
 
@@ -33,8 +34,10 @@ async def test_preparation_storage_failure_does_not_skip_remaining_shutdown(monk
     async def catalog_stop():
         stopped.append("catalog")
 
+    core = DataManagerCore()
+    monkeypatch.setattr(core, "close_strategy", lambda: stopped.append("strategy"))
     state = SimpleNamespace(
-        data_manager_core=SimpleNamespace(close_strategy=lambda: stopped.append("strategy")),
+        data_manager_core=core,
         data_preparation_service=SimpleNamespace(shutdown=preparation_stop),
         backtest_runtime=SimpleNamespace(shutdown=lambda: stopped.append("backtest")),
         event_loop_lag_monitor=SimpleNamespace(stop=lag_stop),
