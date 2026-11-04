@@ -10,6 +10,7 @@ export type ReplayEntryCapabilityView =
 
 export interface ReplayEntryCapabilityOptions {
   readonly api?: Pick<ReplayApiClient, "capabilities">;
+  readonly enabled?: boolean;
 }
 
 export function replayEntryCapabilityFromPayload(
@@ -26,6 +27,7 @@ export function replayEntryCapabilityFromPayload(
 
 export function useReplayEntryCapability({
   api: suppliedApi,
+  enabled = true,
 }: ReplayEntryCapabilityOptions = {}): ReplayEntryCapabilityView {
   const { api: managedApi, request } = useReplayOperations(undefined, "capability");
   const [view, setView] = useState<ReplayEntryCapabilityView>({
@@ -35,6 +37,7 @@ export function useReplayEntryCapability({
   });
 
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     const pending = suppliedApi
       ? request(signal => suppliedApi.capabilities(signal), controller.signal)
@@ -53,7 +56,7 @@ export function useReplayEntryCapability({
       },
     );
     return () => controller.abort();
-  }, [managedApi, request, suppliedApi]);
+  }, [enabled, managedApi, request, suppliedApi]);
 
   return view;
 }

@@ -29,6 +29,8 @@ class LocalOfflineProfileMiddleware:
             "/openapi.json",
             "/api/v2/plugins/manage/extensions",
         } or path.startswith(("/api/v1/local", "/api/v1/backtests",
+                              "/api/v1/replay/",
+                              "/api/v1/stream/replay/",
                               "/api/v2/plugins/manage/extensions/", "/api/v2/plugins/extension-assets/"))
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
