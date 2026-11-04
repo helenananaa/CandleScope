@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import inspect
 from typing import Any
 
 from app.data_engine.market_data.models import MarketStreamKey
@@ -23,6 +24,46 @@ from app.data_engine.market_data.ports import (
 from .models import QueryResult, StreamInfo
 
 
+class BarSourcePrefixFacade:
+    """Transaction-owned source prefix protection behind the DataManager."""
+
+    def __init__(self, storage: Callable[[], Any] | None) -> None:
+        self._storage = storage
+
+    def _require(self):
+        from app.data_engine.storage.prefix_watches import PrefixContinuityUnavailable
+        store = None if self._storage is None else self._storage()
+        if store is None:
+            raise PrefixContinuityUnavailable("This data source has no durable prefix protection")
+        return store
+
+    def register(self, owner: str, series, **kwargs):
+        values = (series.exchange, series.market_type, series.symbol, series.interval, *series.identity.storage_values)
+        return self._require().register(owner, values, **kwargs)
+
+    def prepare(self, receipt, **kwargs):
+        return self._require().prepare(receipt, **kwargs)
+
+    def commit(self, proof, publish: Callable[[], Any]):
+        # Computation and provider snapshots belong before this short guard.
+        # The callback only commits its already prepared financial checkpoint.
+        if inspect.iscoroutinefunction(publish):
+            raise TypeError("source prefix commit requires a synchronous durable callback")
+        with self._require().commit_guard(proof):
+            result = publish()
+            if inspect.isawaitable(result):
+                if inspect.iscoroutine(result):
+                    result.close()
+                raise TypeError("source prefix commit cannot acknowledge asynchronous work")
+            return result
+
+    def inspect(self, owner: str):
+        return self._require().inspect(owner)
+
+    def release(self, receipt):
+        return self._require().release(receipt)
+
+
 class BarDataFacade:
     """Typed access to cache/storage-backed bar operations."""
 
@@ -34,12 +75,14 @@ class BarDataFacade:
         query_before: Callable[..., QueryResult],
         get_bounds: Callable[..., dict[str, Any]],
         ensure_stream: Callable[..., Any],
+        prefix_store: Callable[[], Any] | None = None,
     ) -> None:
         self._query = query
         self._query_latest = query_latest
         self._query_before = query_before
         self._get_bounds = get_bounds
         self._ensure_stream = ensure_stream
+        self.prefixes = BarSourcePrefixFacade(prefix_store)
 
     def query(self, symbol: str, interval: str, **kwargs: Any) -> QueryResult:
         return self._query(symbol, interval, **kwargs)
