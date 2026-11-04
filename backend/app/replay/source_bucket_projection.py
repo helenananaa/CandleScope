@@ -1,4 +1,4 @@
-"""Paged, revealed-only aggregation over immutable minute repositories."""
+"""Paged, revealed-only aggregation over immutable fixed-interval BAR repositories."""
 
 from collections import OrderedDict
 from threading import RLock
@@ -36,8 +36,10 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
 
     from .display_time import SourceBucketTimeMapper
     from .models import normalize_decimal_string
-    if base_interval != "1m":
-        raise ValueError("source-bucket reducer requires immutable minute bars")
+    from app.data_engine.interval_policy import parse_interval_ms, is_monthly_interval
+    base_ms = parse_interval_ms(base_interval)
+    if base_ms is None or base_ms < 1 or is_monthly_interval(base_interval):
+        raise ValueError("source-bucket reducer requires a fixed base interval")
     mapper = SourceBucketTimeMapper.create(interval=display_interval,
         actual_replay_start_ms=actual_replay_start_ms, public_replay_start_ms=public_replay_start_ms,
         source_bucket_anchor_ms=source_bucket_anchor_ms)
@@ -47,12 +49,12 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
     if max_base_rows is not None:
         if isinstance(max_base_rows, bool) or not isinstance(max_base_rows, int) or max_base_rows < 1:
             raise ValueError("source-bucket page budget must be a positive integer")
-        # A remote minute archive must not materialize 500 days merely because
+        # An immutable base archive must not materialize 500 days merely because
         # a chart requested 500 daily candles. Return a recent, complete page
         # and let its oldest candle be the next cursor. Never split a bucket:
         # one calendar bucket may itself exceed this soft source-row budget.
-        if actual_end_ms - first > max_base_rows * 60_000:
-            cutoff = actual_end_ms - max_base_rows * 60_000
+        if actual_end_ms - first > max_base_rows * base_ms:
+            cutoff = actual_end_ms - max_base_rows * base_ms
             bounded_first = mapper.actual_containing_bucket_open(cutoff)
             if bounded_first < cutoff:
                 bounded_first = mapper.actual_bucket_end(bounded_first)
@@ -73,7 +75,7 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
             groups[current_bucket] = cached
             cursor = current_end
             continue
-        stop = min(actual_end_ms, current_end, cursor + 4096 * 60_000)
+        stop = min(actual_end_ms, current_end, cursor + 4096 * base_ms)
         rows = repository.query_bars_at_revision(revision, symbol, base_interval,
             start_ms=cursor, end_ms=stop - 1, limit=4096, order="ASC",
             exchange=exchange, market_type=market_type)
@@ -89,7 +91,7 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
                 group = {**values, "first": timestamp, "last": timestamp, "count": 1, "contiguous": True}
                 groups[bucket] = group
             else:
-                group["contiguous"] = group["contiguous"] and timestamp == group["last"] + 60_000
+                group["contiguous"] = group["contiguous"] and timestamp == group["last"] + base_ms
                 group["last"], group["count"] = timestamp, group["count"] + 1
                 group["high"] = max(group["high"], values["high"])
                 group["low"] = min(group["low"], values["low"])
@@ -102,9 +104,9 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
     public_revealed = public_replay_start_ms + actual_end_ms - actual_replay_start_ms - 1
     for bucket, group in sorted(groups.items()):
         bucket_end = mapper.actual_bucket_end(bucket)
-        expected = (bucket_end - bucket) // 60_000
-        complete = group["count"] == expected and group["last"] + 60_000 == bucket_end
-        partial = include_partial and group["count"] < expected and group["last"] + 60_000 == actual_end_ms
+        expected = (bucket_end - bucket) // base_ms
+        complete = group["count"] == expected and group["last"] + base_ms == bucket_end
+        partial = include_partial and group["count"] < expected and group["last"] + base_ms == actual_end_ms
         if not group["contiguous"] or group["first"] != bucket or not (complete or partial):
             continue
         if complete:
@@ -113,7 +115,7 @@ def query_source_bucket_projection(repository, revision, symbol, base_interval, 
                 group)
         public = mapper.public_from_actual(bucket)
         public_end = mapper.public_bucket_end(public)
-        last_base = min(public_end - 60_000, public + (group["count"] - 1) * 60_000, public_revealed)
+        last_base = min(public_end - base_ms, public + (group["count"] - 1) * base_ms, public_revealed)
         if public < 0 or last_base < public:
             continue
         result = {key: None if group[key] is None else normalize_decimal_string(format(group[key], "f"), field_name=key)

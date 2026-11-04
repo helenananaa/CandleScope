@@ -126,3 +126,8 @@ class LocalReplayBarRepository:
             gaps.append({"start_ms": expected, "end_ms": last,
                          "missing_bars": (last - expected) // step + 1, "reason": "imported_bar_gap"})
         return {"gaps": gaps, "scanned_bars": len(rows), "truncated": False, "calendar_id": "crypto.24x7.utc"}
+
+    def query_source_bucket_bars_at_revision(self, revision, symbol, base_interval, display_interval, **kwargs):
+        from .source_bucket_projection import query_source_bucket_projection
+        self._read(revision, symbol, base_interval, exchange=kwargs.get("exchange"), market_type=kwargs.get("market_type"))
+        return query_source_bucket_projection(self, revision, symbol, base_interval, display_interval, **kwargs)

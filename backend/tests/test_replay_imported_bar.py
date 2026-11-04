@@ -120,3 +120,24 @@ async def test_imported_bar_uses_existing_training_engine_and_restores_pinned_so
         assert (await restored.training.store.get_run(run))["run_id"] == run
     finally:
         await restored.shutdown(step_timeout=1)
+
+
+@pytest.mark.parametrize("base_interval,base_ms", [("1m",60_000),("5m",300_000)])
+def test_coarse_projection_aggregates_only_closed_revealed_base_prefix(tmp_path,base_interval,base_ms):
+    library=LocalDatasetService(tmp_path/"library");library.start()
+    csv=tmp_path/"coarse.csv"
+    csv.write_text("time,open,high,low,close,volume\n"+"".join(
+        f"{START_MS+i*base_ms},{100+i if i<9 else 99999},{102+i if i<9 else 99999},{99+i},{101+i if i<9 else 99999},10\n"
+        for i in range(18)))
+    manifest=library.import_csv(csv,LocalImportOptions(name="coarse",symbol="BTCUSDT",interval=base_interval,timestamp_unit="ms"))
+    repo=LocalReplayBarRepository(library,max_rows=100)
+    # A fully stored future row has an extreme price, but current projection
+    # stops before that row is revealed. Rewind must not reuse future summaries.
+    kwargs=dict(actual_start_ms=START_MS,actual_end_ms=START_MS+8*base_ms,
+        actual_replay_start_ms=START_MS,public_replay_start_ms=START_MS,limit=100,include_partial=True,**scope(manifest))
+    first=repo.query_source_bucket_bars_at_revision(manifest["data_epoch"],"BTCUSDT",base_interval,"15m",**kwargs)
+    assert first["bars"] and max(float(b["high"]) for b in first["bars"])<200
+    repo.query_source_bucket_bars_at_revision(manifest["data_epoch"],"BTCUSDT",base_interval,"15m",
+        **{**kwargs,"actual_end_ms":START_MS+18*base_ms})
+    assert repo.query_source_bucket_bars_at_revision(manifest["data_epoch"],"BTCUSDT",base_interval,"15m",**kwargs)==first
+    assert all(b["last_base_open_ms"]+base_ms-1<kwargs["actual_end_ms"] for b in first["bars"])

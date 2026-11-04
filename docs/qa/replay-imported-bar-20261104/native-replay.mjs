@@ -32,6 +32,16 @@ async function launch(){
  await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor({timeout:60000});await q.enableControl();
  await q.record('native-offline-launch',{identity:q.s.identity,health:h});
 }
+async function chartProjection(runId,track,session,state){
+ const params=new URLSearchParams({track_id:track.track_id, revealed_boundary_ms:String(state.cursor.virtual_time_ms),
+   limit:'100', data_epoch:state.data_epoch, display_interval:'5m'});
+ const p=await json(`/api/v1/replay/runs/session/${session}/display-projection?${params}`);
+ assert.ok(p.bars.length>0,JSON.stringify(p));
+ assert.ok(p.bars.every(b=>Number(b.high)<200 && b.last_base_open_ms+59999<=state.cursor.virtual_time_ms),JSON.stringify(p));
+ await q.until(async()=>await q.s.page.locator('canvas').count()>0 &&
+  !(await q.s.page.locator('body').innerText()).includes('source-aligned display projection'),30000);
+ return p;
+}
 function verify(){return JSON.parse(cp.execFileSync('node',['docs/qa/replay-imported-bar-20261104/verify.mjs'],{encoding:'utf8',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:root}}));}
 try{
  await q.record('package-source-before',verify());await launch();
@@ -78,6 +88,7 @@ try{
  await q.delay(750);
  assert.equal(await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).inputValue(),'5m');
  assert.deepEqual((await json(`/api/v1/replay/runs/session/${session}`)).snapshot.cursor,cursor);
+ await q.record('rendered-source-prefix-5m',await chartProjection(runId,track,session,state));
  await q.screenshot('formal-imported-bar');await q.record('trade-step-and-period-change',{state,cursor,viewer:await query('replay')});
  assert.ok(q.s.traffic.sockets.some(s=>s.url.includes('/stream/replay/')&&s.received>0),'Actual replay WS did not deliver frames');
  const h=await json('/health');assert.equal(h.local_offline.network.blocked_attempts,0);await q.record('offline-boundary',h);
@@ -89,6 +100,7 @@ try{
  assert.equal((await json(`/api/v1/replay/runs/${runId}/viewer`)).viewer_state.display_interval,'5m');
  assert.equal(await q.s.page.getByRole('combobox',{name:'展示 K',exact:true}).inputValue(),'5m');
  assert.deepEqual(after.cursor,before.cursor);assert.deepEqual(after.components,before.components);assert.deepEqual(after.config,before.config);
+ await q.record('restored-rendered-source-prefix-5m',await chartProjection(runId,track,session,after));
  await q.screenshot('restored-imported-replay');await q.record('restored-source-account-and-cursor',{runId,before,after});
  assert.equal((await json('/health')).local_offline.network.blocked_attempts,0);assert.deepEqual(q.s.receipt.errors,[]);
  await q.record('second-full-exit',{owned:await q.quit(),allExited:await q.exited()});await q.record('package-source-after',verify());
