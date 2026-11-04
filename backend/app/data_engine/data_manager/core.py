@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .strategy import StrategyDataManager
 from .account import ReadOnlyAccountDataManager
+from .replay import ReplayDataManager
 
 if TYPE_CHECKING:
     from app.backtest.service import BacktestService
@@ -16,8 +17,25 @@ class DataManagerCore:
     def __init__(self) -> None:
         self.strategy: StrategyDataManager | None = None
         self.readonly_account: ReadOnlyAccountDataManager | None = None
+        self.replay: ReplayDataManager | None = None
         self._history_studies = None
         self._study_lock = threading.Lock()
+
+    def bind_replay(self, service, runtime=None) -> ReplayDataManager:
+        if self.replay is not None:
+            if self.replay.service is not service or self.replay.runtime is not runtime:
+                raise RuntimeError("replay service is already bound to this data manager")
+            return self.replay
+        self.replay = ReplayDataManager(service, runtime)
+        return self.replay
+
+    def close_replay(self) -> None:
+        if self.replay is not None:
+            self.replay.close()
+
+    async def shutdown_replay(self, *, step_timeout: float = 5.0) -> None:
+        if self.replay is not None:
+            await self.replay.shutdown(step_timeout=step_timeout)
 
     def history_studies(self, path):
         # No database or public market transport opens during construction.

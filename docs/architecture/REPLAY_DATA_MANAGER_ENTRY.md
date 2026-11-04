@@ -92,13 +92,38 @@ cursor and state hash all equal its accepted authority. A reset on an establishe
 stream still requires its original atomic progression. Epoch, backward-state,
 causality and payload checks remain enforced.
 
+## Backend access and stream ownership (2026-11-03)
+
+The application composition root binds the existing ReplayService/ReplayRuntime
+to `DataManagerCore.replay` after initialization. Replay HTTP and WebSocket entry
+points resolve that bound service. An unbound or closed production root cannot
+fall through to an old `app.state.replay_service` alias. Standalone service hosts
+without a composition root retain their injectable service path.
+
+`ReplayDataManager` gates new control access and owns adapter and training-run
+transport tasks. It does not cache market rows, commands, accounts or clocks;
+ReplayRuntime remains the service/storage owner. Each stream has one owned task.
+Disconnect releases that consumer, while host shutdown closes admission and
+cancels transports before the existing runtime shutdown. Cancellation is sent
+once and cleanup retains ownership even when an ASGI waiter is cancelled again
+or exceeds the bounded wait. Training streams unregister their subscription
+before awaiting sender/receiver cleanup. No financial command is cancelled by
+closing a chart consumer. `/debug/snapshot` exposes replay manager closed state,
+control-access count, active stream counts/kinds and distinct scopes.
+
+The [backend/native qualification](../qa/replay-manager-service-20261103/PROGRESS_zh.md)
+records a real packaged macOS arm64 flow: two independent runs/windows on one
+backend, per-chart display release, per-window adapter/run-stream release,
+normal full exit and recovery of both clocks/portfolios. It also retains
+fail-before/pass-after cancellation and stale-root regressions. This is finite
+local BAR evidence; it does not certify the complete #166 acceptance matrix.
+
 ## Scope still open
 
-This is not full dual-Manager acceptance. The backend DataManager facade remains
-follow-up work. Native
-saved-cursor/full-exit/restart, disconnect recovery and financial reference
-acceptance also remain open. No #166 checklist is
-declared fully passed by this patch.
+Formal replay notes and imported BAR/trade user flows, comprehensive multi-market
+trading/financial references, stream reconnect/version scenarios and platform
+coverage remain separate acceptance work. No #166 checklist is declared fully
+passed by the selected backend/native qualification.
 
 The integration base includes #175, #173, #174 B130 and #183 H127, plus the #178
 shared-input changes. The #147 seconds-history draft remains separate. This phase
