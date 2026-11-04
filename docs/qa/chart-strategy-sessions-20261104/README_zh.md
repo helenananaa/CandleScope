@@ -19,3 +19,11 @@ ContinuousBarHost已连接真实ProviderSession、HostAdapter、Planner和同一
 创建精确重试在准备Provider前读取原receipt；只计算新增批次，批次上限1000，发布LIVE要求完整覆盖且达到声明的最终源边界。数据缺口保存CATCHING_UP/原因及旧结果，补齐后同一运行恢复；已处理历史版本变化保存REPAIR_REQUIRED并禁止普通/失败重试绕过。存储失败丢弃未提交的内存会话，原检查点/账户/游标保留，只有显式失败重试才恢复；普通关闭不终结或取消金融挂单。
 
 22项会话/存储/内核检查通过，5条既有提示；共享helper重构后83项执行/控制/恢复组合及实际Pine进程27项通过（分别5/1条既有提示）。此时仍未连接后台Market source、DataManager接口或用户三模式；V2合约辅助源和Pine特殊时钟明确拒绝从普通BAR continuation旁路进入。
+
+## 实际源保护与固定输入分页
+
+真实DataManager/行情SQLite/财务SQLite组合已连接source receipt与账户、Provider、planner、游标同一检查点；源锁外只编码一次完整状态，锁内仅短验证和已编码财务提交。旧前缀或冻结初始化后缀在计算期间被改写则停发REPAIR_REQUIRED；只有未提交新批次变化进入CATCHING_UP并重取，保留原账户。财务失败不确认源、不重复已提交成交；异步或返回后才执行的提交回调明确拒绝。Pyne及未合格Pine/未知语言在准备Provider之前拒绝。
+
+LocalDatasetService新增拥有显式关闭生命周期的只读固定版本窗口：一次验证既有revision hash后持有该不可变本地副本的读取事务，按最多1000行正序读取原十进制文本；不跟随current.json，不在每批重新哈希/载入全表，不锁行情库。固定截止点后不读未来BAR，缺口/未收盘/缺成交量/损坏或丢失的旧版本拒绝且无新版回退。真实重导入和新Service实例重开验证仍沿用旧输入。
+
+组合124通过，5条既有提示。最初缺量fixture错误地提供了空volume列（导入器本来就拒绝），保留失败日志后改为真正不含volume列的数据，再验证reader拒绝。此范围仍是内部源/执行基础，初始快照发布、后台actors、HTTP/WS/前端模式、修补及桌面/Windows验收尚未完成。

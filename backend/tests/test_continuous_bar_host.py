@@ -79,6 +79,17 @@ def test_exact_create_retry_does_not_prepare_provider_again(tmp_path,monkeypatch
     finally:store.close();service.shutdown()
 
 
+@pytest.mark.parametrize("language", ["pyne", "pine", "unknown"])
+def test_unqualified_language_rejected_before_starting_provider(tmp_path,monkeypatch,language):
+    service,_,definition,_,store=prepare(tmp_path,monkeypatch)
+    def forbidden(_):
+        raise AssertionError("Unqualified language must not start a provider")
+    try:
+        with pytest.raises(BacktestError,match="retired|qualified execution clock"):
+            ContinuousBarHost("cs_language",{**definition,"language":language},forbidden)
+    finally:store.close();service.shutdown()
+
+
 def test_unrevealed_or_unclosed_bar_never_reaches_provider(tmp_path,monkeypatch):
     service,row,definition,factory,store=prepare(tmp_path,monkeypatch)
     ContinuousBarHost.create_run(store,"cs_future",definition=definition,mode="LIVE_ONLY",data_revision="r1",event_time_ms=0,provider_factory=factory)

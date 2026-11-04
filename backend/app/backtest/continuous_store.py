@@ -7,6 +7,7 @@ published generation commit together. A view subscription never owns execution.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import sqlite3
@@ -42,25 +43,50 @@ def _counter(value):
     return value
 
 
-def _wire(value, maximum):
+def _json(value):
     if not isinstance(value, Mapping):
         raise fail("CONTINUOUS_INPUT_INVALID", "Expected an owned checkpoint or definition object")
     try:
-        # Match existing checkpoint decimal encoding; no new content hash or
-        # duplicated report is constructed at this durable boundary.
-        raw = json.dumps(dict(value), sort_keys=True, separators=(",", ":"), default=str, allow_nan=False)
-    except (TypeError, ValueError, RecursionError) as error:
-        raise fail("CONTINUOUS_INPUT_INVALID", "Checkpoint is not finite JSON") from error
+        return json.dumps(dict(value),sort_keys=True,separators=(",",":"),default=str,allow_nan=False)
+    except (TypeError,ValueError,RecursionError) as error:
+        raise fail("CONTINUOUS_INPUT_INVALID","Checkpoint is not finite JSON") from error
+
+
+def _wire(value, maximum):
+    raw=_json(value)
     if len(raw.encode("utf-8")) > maximum:
         raise fail("BUDGET_EXCEEDED", "Continuous strategy storage budget exceeded")
     return raw
 
 
-def _checkpoint(value):
-    if not isinstance(value, Mapping) or set(value) != {"engine", "provider", "planner"} or any(
+@dataclass(frozen=True)
+class PreparedCheckpoint:
+    """Owned encoded state, prepared before the source's commit fence."""
+    raw: bytes
+    event_time_ms: int
+    data_revision: str
+
+
+def _checkpoint(value, event_time_ms, data_revision):
+    if isinstance(value,PreparedCheckpoint):
+        if not isinstance(value.raw,bytes) or len(value.raw)>MAX_CHECKPOINT_BYTES:
+            raise fail("BUDGET_EXCEEDED","Continuous strategy storage budget exceeded")
+        if value.event_time_ms != event_time_ms or value.data_revision != data_revision:
+            raise fail("CONTINUOUS_INPUT_INVALID","Prepared checkpoint identity changed")
+        return value
+    required = {"engine", "provider", "planner"}
+    if not isinstance(value, Mapping) or not required <= set(value) <= required | {"source"} or any(
             not isinstance(value[key], Mapping) for key in value):
         raise fail("CONTINUOUS_INPUT_INVALID", "Checkpoint must contain the account engine, provider and planner")
-    return _wire(value, MAX_CHECKPOINT_BYTES)
+    if "source" in value:
+        from app.data_engine.storage.prefix_watches import PrefixReceipt
+        point = PrefixReceipt.from_dict(dict(value["source"]))
+        if point.through_ms != event_time_ms or point.incarnation != data_revision:
+            raise fail("CONTINUOUS_INPUT_INVALID","Source receipt, financial cursor and data identity must commit together")
+    raw=_json(value).encode("utf-8")
+    if len(raw)>MAX_CHECKPOINT_BYTES:
+        raise fail("BUDGET_EXCEEDED","Continuous strategy storage budget exceeded")
+    return PreparedCheckpoint(raw,event_time_ms,data_revision)
 
 
 def _summary(row):
@@ -186,7 +212,7 @@ class ContinuousStrategyStore:
         _text(run_id, 128), _text(data_revision, 256), _counter(event_time_ms)
         if mode not in {"HISTORY_LIVE", "LIVE_ONLY"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Unsupported continuing strategy mode")
-        definition_json, state = _wire(definition, MAX_DEFINITION_BYTES), _checkpoint(checkpoint)
+        definition_json, state = _wire(definition, MAX_DEFINITION_BYTES), _checkpoint(checkpoint,event_time_ms,data_revision)
         with self._transaction():
             previous = self.db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if previous is not None:
@@ -194,7 +220,7 @@ class ContinuousStrategyStore:
                 if initial is None:
                     raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Initial execution receipt is unavailable")
                 if (previous["definition_json"] != definition_json or previous["mode"] != mode
-                        or (initial["wire"], initial["event_time_ms"], initial["data_revision"]) != (state,event_time_ms,data_revision)):
+                        or ((initial["wire"].encode("utf-8") if isinstance(initial["wire"],str) else initial["wire"]), initial["event_time_ms"], initial["data_revision"]) != (state.raw,event_time_ms,data_revision)):
                     raise fail("CONTINUOUS_COMMIT_CONFLICT", "Run identity already owns different code or execution conditions")
                 # An uncertain create retry observes its original run, never
                 # resets the account/cursor to the newly supplied initial state.
@@ -220,11 +246,15 @@ class ContinuousStrategyStore:
         self.updates.notify(run_id)
         return self.summary(run_id)
 
+    @staticmethod
+    def prepare_checkpoint(checkpoint,*,event_time_ms,data_revision):
+        return _checkpoint(checkpoint,event_time_ms,data_revision)
+
     def commit(self, run_id, *, generation, revision, sequence, event_time_ms, data_revision, checkpoint, phase="CATCHING_UP"):
         _counter(sequence), _counter(event_time_ms), _text(data_revision, 256)
         if phase not in {"CATCHING_UP", "LIVE"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Invalid execution commit phase")
-        state = _checkpoint(checkpoint)
+        state = _checkpoint(checkpoint,event_time_ms,data_revision)
         with self._transaction():
             row = self._expected(run_id, generation, revision)
             if row["phase"] not in {"CATCHING_UP", "LIVE"}:
@@ -270,7 +300,7 @@ class ContinuousStrategyStore:
 
     def _insert_checkpoint(self, run_id, revision, generation, sequence, event_time_ms, data_revision, state):
         self.db.execute("INSERT INTO checkpoints VALUES(?,?,?,?,?,?,?,?)",
-                        (run_id, revision, generation, sequence, event_time_ms, data_revision, state, len(state.encode("utf-8"))))
+                        (run_id, revision, generation, sequence, event_time_ms, data_revision, state.raw, len(state.raw)))
 
     def _retain(self, run_id, current):
         rows = self.db.execute("SELECT revision,stored_bytes FROM checkpoints WHERE run_id=? ORDER BY revision DESC", (run_id,)).fetchall()

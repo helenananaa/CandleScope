@@ -8,8 +8,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 import threading
 import logging
+import inspect
 
 from app.market_dataset.snapshot import MarketEvent
+from app.data_engine.storage.prefix_watches import PrefixReceipt, PrefixAcquisitionChanged
+from app.data_engine.storage.revisions import StaleAcquisition
 from .continuous_store import ContinuousStrategyStore
 from .errors import BacktestError
 from .models import ENGINE_VERSION
@@ -31,6 +34,14 @@ class ContinuousBarHost:
         if (not isinstance(definition, Mapping) or definition.get("engine_version") != ENGINE_VERSION
                 or any(not isinstance(definition.get(key), Mapping) for key in ("configuration", "input_plan", "market"))):
             raise error("CONTINUOUS_INPUT_INVALID", "A fixed engine, configuration, input plan and market are required")
+        language = str(definition.get("language") or "builtin").lower()
+        if language == "pyne":
+            raise error("FIDELITY_UNSUPPORTED","Pyne is retired and cannot run as a continuous strategy")
+        if language not in {"builtin","python","external"}:
+            raise error("FIDELITY_UNSUPPORTED","This strategy language requires its own qualified execution clock")
+        initial_snapshot = definition.get("initial_snapshot")
+        if initial_snapshot is not None and (not isinstance(initial_snapshot,Mapping) or type(initial_snapshot.get("through_ms")) is not int):
+            raise error("CONTINUOUS_INPUT_INVALID","Initial snapshot requires a fixed source boundary")
         config = definition["configuration"]
         if (any(config.get(key) for key in ("pine_runtime_identity", "pine_bar_path_contract", "pine_process_on_close"))
                 or config.get("account_model") == "LINEAR_PERP_ONE_WAY_V2"
@@ -39,6 +50,7 @@ class ContinuousBarHost:
         self.lock = threading.RLock()
         self.store = None
         self.row = None
+        self.source_receipt = None
         self.closed = False
         self.definition = definition
         self.config = config
@@ -63,15 +75,31 @@ class ContinuousBarHost:
             self._close_after_failure()
             raise
 
-    def checkpoint(self):
-        return {"engine":self.kernel.snapshot(), "provider":self.session.snapshot(), "planner":self.planner.snapshot()}
+    @staticmethod
+    def _source_point(run_id,definition,receipt,event_time_ms,data_revision):
+        if receipt is None:
+            if definition.get("source_kind") == "MARKET_BAR":
+                raise error("CONTINUOUS_SOURCE_UNAVAILABLE","Market input requires a durable DataManager prefix receipt")
+            return None
+        point = PrefixReceipt.from_dict(receipt.to_dict() if isinstance(receipt,PrefixReceipt) else dict(receipt))
+        if (point.owner != "strategy:"+run_id or tuple(definition.get("source_series",())) != point.series
+                or point.through_ms != event_time_ms or point.incarnation != data_revision):
+            raise error("CONTINUOUS_INPUT_INVALID","The source prefix does not belong to this run, market and committed cursor")
+        return point
+
+    def checkpoint(self,source_receipt=None):
+        point = self.source_receipt if source_receipt is None else source_receipt
+        return {"engine":self.kernel.snapshot(), "provider":self.session.snapshot(), "planner":self.planner.snapshot(),
+                **({"source":point.to_dict()} if point is not None else {})}
 
     @classmethod
-    def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory):
+    def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory, source_receipt=None):
+        point = cls._source_point(run_id,definition,source_receipt,event_time_ms,data_revision)
         existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision, event_time_ms=event_time_ms)
         if existing is not None:
             return existing
         host = cls(run_id, definition, provider_factory)
+        host.source_receipt = point
         try:
             return store.create(run_id, definition=definition, mode=mode, data_revision=data_revision,
                                 event_time_ms=event_time_ms, checkpoint=host.checkpoint())
@@ -90,6 +118,7 @@ class ContinuousBarHost:
             host.session.restore(state["provider"])
             host.planner.restore(state["planner"])
             row = saved["run"]
+            host.source_receipt = cls._source_point(run_id,saved["definition"],state.get("source"),row["event_time_ms"],row["data_revision"])
             host.row = store.resume(run_id, generation=row["generation"], revision=row["revision"],retry_failed=retry_failed)
             host.session.generation = host.row["generation"]
             host.store = store
@@ -106,7 +135,7 @@ class ContinuousBarHost:
             features=_strategy_observation_features(self.session.provider,bar=event.payload,trade=None,_names=self.feature_names))
         return self.planner.plan(output, context=None if self.planner.config is None else _planning_context(self.kernel,event))
 
-    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False):
+    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False, source_receipt=None, commit_checkpoint=None):
         with self.lock:
             if self.closed or self.store is None or self.row is None:
                 raise error("CONTINUOUS_NOT_READY", "The execution host is not active")
@@ -144,28 +173,68 @@ class ContinuousBarHost:
                 return self.row
             if caught_up and stamp != revealed_through_ms:
                 raise error("CONTINUOUS_INPUT_INVALID","Caught-up publication requires the final admitted source boundary")
+            point = self._source_point(self.row["id"],self.definition,source_receipt,stamp,data_revision)
+            if self.source_receipt is not None:
+                if (point is None or commit_checkpoint is None or point.incarnation != self.source_receipt.incarnation
+                        or point.from_ms != self.source_receipt.from_ms or point.acquisition <= self.source_receipt.acquisition):
+                    raise error("CONTINUOUS_SOURCE_UNAVAILABLE","A new source acquisition and guarded checkpoint commit are required")
+            elif point is not None or commit_checkpoint is not None:
+                raise error("CONTINUOUS_INPUT_INVALID","An unprotected run cannot acquire a different source implicitly")
+            if commit_checkpoint is not None and inspect.iscoroutinefunction(commit_checkpoint):
+                raise error("CONTINUOUS_INPUT_INVALID","The source commit guard must complete synchronously")
             try:
                 self.kernel.advance(batch, self._observe)
-                self.row = self.store.commit(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
-                    sequence=sequence, event_time_ms=stamp, data_revision=data_revision, checkpoint=self.checkpoint(),
-                    phase="LIVE" if caught_up else "CATCHING_UP")
+                prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision)
+                published = False
+                publication_allowed = True
+                owner_thread = threading.get_ident()
+                def publish():
+                    nonlocal published
+                    if not publication_allowed or published or self.closed or threading.get_ident() != owner_thread:
+                        raise error("CONTINUOUS_COMMIT_CONFLICT","Checkpoint publication must be synchronous and owned exactly once")
+                    self.row = self.store.commit(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
+                        sequence=sequence, event_time_ms=stamp, data_revision=data_revision, checkpoint=prepared,
+                        phase="LIVE" if caught_up else "CATCHING_UP")
+                    published = True
+                    return self.row
+                # Prepare/encode provider state before taking the source lock.
+                # The DataManager callback holds only the final source fence and
+                # financial SQLite commit, never provider execution or I/O fetch.
+                try:
+                    result = publish() if commit_checkpoint is None else commit_checkpoint(publish)
+                    if inspect.isawaitable(result):
+                        if inspect.iscoroutine(result):result.close()
+                        raise error("CONTINUOUS_INPUT_INVALID","Source commit cannot acknowledge asynchronous work")
+                    if not published:
+                        raise error("CONTINUOUS_INPUT_INVALID","Source guard did not commit its financial checkpoint")
+                finally:
+                    publication_allowed = False
+                self.source_receipt = point
                 return self.row
             except BaseException as failure:
-                # Account/provider mutations after the last committed cursor
-                # cannot survive a failed commit. Close this in-memory instance;
-                # a new host must load the entire committed triple before retry.
-                if not isinstance(failure, BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
-                    try:
-                        self._stop("FAILED", getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"), str(failure)[:1000])
-                    except BaseException:
-                        pass  # Preserve the original I/O/provider failure.
+                try:
+                    if isinstance(failure,PrefixAcquisitionChanged):
+                        old = self.source_receipt
+                        frozen = self.definition.get("initial_snapshot") or {}
+                        protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
+                        if (old is not None and protected >= old.from_ms and failure.start_ms is not None and failure.end_ms is not None
+                                and failure.start_ms <= protected and failure.end_ms >= old.from_ms):
+                            self._stop("REPAIR_REQUIRED","CONTINUOUS_HISTORY_REVISED","Processed input changed; committed result retained")
+                        else:
+                            self._defer("CONTINUOUS_SOURCE_RECHECK","New input changed during acquisition; retry from committed state")
+                    elif isinstance(failure,StaleAcquisition):
+                        self._defer("CONTINUOUS_SOURCE_RECHECK",str(failure)[:1000])
+                    elif not isinstance(failure,BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
+                        self._stop("FAILED",getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"),str(failure)[:1000])
+                except BaseException:
+                    pass  # Preserve the original source/I/O/provider failure.
                 self._close_after_failure()
                 raise
 
     def _defer(self, code, message):
         try:
             self.row = self.store.defer(self.row["id"],generation=self.row["generation"],revision=self.row["revision"],
-                                        reason={"code":code,"message":message})
+                                        reason={"code":str(code)[:64],"message":str(message)[:256]})
         except BaseException:
             self._close_after_failure()
             raise
@@ -174,7 +243,7 @@ class ContinuousBarHost:
     def _stop(self, phase, code, message):
         try:
             self.row = self.store.stop(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
-                                       phase=phase, error={"code":code,"message":message})
+                                       phase=phase, error={"code":str(code)[:64],"message":str(message)[:256]})
         except BaseException:
             self._close_after_failure()
             raise
