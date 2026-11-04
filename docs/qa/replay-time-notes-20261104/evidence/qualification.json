@@ -107,5 +107,58 @@
     "pluginAssets": 9,
     "pluginSourceFiles": 76,
     "strictSignatureBeforeAndAfter": true
+  },
+  "versionHistory": {
+    "source": "76c6d9bc3ff513d9259a0ef16ceaf260ae333eb6",
+    "backend": 171,
+    "backendWarnings": 4,
+    "frontendCheck": {
+      "exitCode": 0,
+      "functional": 4871,
+      "performance": 1,
+      "desktop": 130,
+      "exactFinalTypeRecheck": 0,
+      "lint": "0 errors/1 existing warning"
+    },
+    "browser": {
+      "checks": 7,
+      "pageCounts": [
+        20,
+        5
+      ],
+      "lateBodyAfterSameTimeRewind": "only v1 remains",
+      "externalAttempts": 0,
+      "exceptions": 0,
+      "workersAfterExit": 0
+    },
+    "native": {
+      "passed": true,
+      "pids": [
+        30455,
+        30491
+      ],
+      "normalFullOwnedExitMs": [
+        514,
+        546
+      ],
+      "versionsBeforeAndAfterRestart": [
+        2,
+        1
+      ],
+      "draftCopyAndOriginalRetained": true,
+      "financialSnapshotsUnchanged": true,
+      "rendererErrors": 0,
+      "externalAttempts": 0,
+      "sourceSDK": 1042,
+      "builtFrontend": 164,
+      "pluginAssets": 9,
+      "pluginSources": 76,
+      "strictSignatureBeforeAfter": true
+    },
+    "pending": [
+      "trade/fill associations and version-bound screenshots",
+      "native graphical Review/backtracking",
+      "broader multi-track/reconnect/Windows; entire166 remains open"
+    ]
   }
 }

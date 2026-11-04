@@ -43,7 +43,7 @@ CANDLESCOPE_QA_BACKEND_URL=http://127.0.0.1:<port> node scripts/frontend-script-
 
 ## 剩余
 
-交易/成交关联、截图绑定版本及揭示边界、版本历史分页 UI、用户导入 BAR/市场成交、更多多商品与重连场景，以及真实已安装包保存/完整退出/重启和 Windows 均待后续。源码、HTTP/组件及后端新进程证据不替代这些验收。
+交易/成交关联、截图绑定版本及揭示边界、导入市场成交、更多多商品/重连/图形Review和 Windows 仍待后续。导入BAR限定范围独立见#236；文本笔记及版本历史已完成本文限定的macOS原生保存/完整退出/重启，均不代表整个#166验收。
 
 ## 完整 CI 同命令复查
 
@@ -66,4 +66,4 @@ macOS arm64真实包中，创建事前计划、推进后修改同一笔记为v2�
 
 当前新增回归：15项笔记后端测试（含真实router路径、20+5分页、同毫秒旧事件只读v1及不可见笔记404）通过；171项整合后端测试通过，4条既有FastAPI提示。后端架构输出与main基线10条逐字节一致。前端8项笔记测试通过；完整npm run check通过4871 functional +1独立性能 +130 desktop，精确类型、lint（0error/1既有warning）、30locale、架构和build通过。
 
-新增实际浏览器运行 browser-version-pages-1：真实HTTP/SQLite创建25版，UI分页20+5且无重复；回退同毫秒更早事件只返回v1；刻意延迟已完成HTTP的历史正文，在回退后释放仍不泄露v25。7项实际React/HTTP场景通过，0异常/残留worker/外网尝试；服务正常退出后Manager关闭，streams/scopes为0。此处的新增分页原生包退出/重启证据待补，既有a355ebe4原生文本证据保留其原范围。
+新增实际浏览器运行 browser-version-pages-1：真实HTTP/SQLite创建25版，UI分页20+5且无重复；回退同毫秒更早事件只返回v1；刻意延迟已完成HTTP的历史正文，在回退后释放仍不泄露v25。7项实际React/HTTP场景通过，0异常/残留worker/外网尝试；服务正常退出后Manager关闭，streams/scopes为0。当前76c6d9bc原生包也通过：完整退出前/后实际展开v2/v1，旧文本、有效市场时间和实际保存时间正确；草稿恢复、409后明确另存、账户/游标不变同样通过。两次完整正常退出514ms/546ms，0renderer异常/外网尝试，1042源码/SDK、164构建文件、9插件资产及76插件源匹配，前后严格签名通过。截图已经人工查看；证据在native-version-history，旧a355ebe4证据保留原范围。
