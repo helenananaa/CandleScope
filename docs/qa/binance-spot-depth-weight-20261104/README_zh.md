@@ -13,3 +13,5 @@ main45022e4e实际原生诊断（PR200源码127ba4f4）记录/api/v3/depth落入
 ## 最新主线组合
 
 已合入main fc7a32522e7630f59e1f8a8ff89fdf045bc278f1（含#241恢复基础与#242生命周期）。公共传输、深度权重、持续策略Runtime/Manager、应用退出与LOCAL_OFFLINE共121通过、12条提示；只访问本机回环。未更改共享冷却截止，未进行LIVE复测。组合日志见main242-combination.log.gz。
+
+再次合入main b75fb1ac（#243共享校验提取），公共传输/Manager/关闭及财务控制平面组合132通过、12条提示；未发起LIVE请求。日志见main243-combination.log.gz。
