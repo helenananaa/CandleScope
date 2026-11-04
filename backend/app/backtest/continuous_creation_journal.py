@@ -59,6 +59,20 @@ class ContinuousCreationJournal:
     def describe(self,key):
         with self.store.lock:return self._describe(self._row(key))
 
+    def summary_for_run(self,run_id):
+        """Creation progress without decoding its owned source/initial input."""
+        _text(run_id,128)
+        with self.store.lock:
+            if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            row=self.store.db.execute("SELECT "+SUMMARY+" FROM creation_requests WHERE run_id=?",(run_id,)).fetchone()
+            return None if row is None else _summary(row)
+
+    def summary(self,key):
+        _text(key,128)
+        with self.store.lock:
+            if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            return _summary(self.store.db.execute("SELECT "+SUMMARY+" FROM creation_requests WHERE request_key=?",(key,)).fetchone())
+
     def list_pending(self):
         with self.store.lock:
             if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")

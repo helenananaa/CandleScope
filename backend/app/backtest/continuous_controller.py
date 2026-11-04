@@ -214,6 +214,8 @@ class ContinuousStrategyController:
     def __init__(self,store,manager,inputs,lease,*,clock_ms,max_active_runs=2,provider_factory=None):
         self.store,self.manager,self.inputs,self.lease=store,manager,inputs,lease
         self.clock_ms=clock_ms
+        self.runtime_mode=config.RUNTIME_MODE
+        self.execution_enabled=self.runtime_mode=="LIVE" and manager is not None
         self.loop=asyncio.get_running_loop()
         self.runtime=ContinuousStrategyRuntime(store,manager,inputs.datasets,
             provider_factory or ContinuousProviderFactory(),clock_ms=clock_ms,max_active_runs=max_active_runs)
@@ -261,7 +263,8 @@ class ContinuousStrategyController:
 
     def _live(self):
         self._ready()
-        if config.RUNTIME_MODE!="LIVE":raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile")
+        if config.RUNTIME_MODE!="LIVE" or not self.execution_enabled:
+            raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile and its DataManager")
         if self.restore_task is not None and not self.restore_task.done():
             raise BacktestError("CONTINUOUS_NOT_READY","Profile restoration is in progress")
 
@@ -464,11 +467,15 @@ class ContinuousStrategyController:
 
     async def close(self):
         if self.resources_closed:return
+        self.request_shutdown()
+        if self.close_task is None or self.close_task.done():self.close_task=asyncio.create_task(self._close())
+        await finish_cleanup(asyncio.shield(self.close_task))
+
+    def request_shutdown(self):
+        """Stop producers before their Manager drains outstanding view reads."""
         self.closed=True
         self.runtime._request_shutdown()
         for job in tuple(self.jobs.values()):job.request_stop()
-        if self.close_task is None or self.close_task.done():self.close_task=asyncio.create_task(self._close())
-        await finish_cleanup(asyncio.shield(self.close_task))
 
     async def _close(self):
         # This owned task exists before the first await in close, including

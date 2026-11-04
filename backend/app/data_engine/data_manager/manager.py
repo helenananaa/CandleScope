@@ -933,7 +933,7 @@ class DataManager(DataManagerCore):
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
-        self.close_strategy()
+        await self.shutdown_strategy()
         self.close_readonly_account()
         if self.history_prefix_runtime is not None:
             await self.history_prefix_runtime.close()
