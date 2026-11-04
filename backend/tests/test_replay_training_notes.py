@@ -199,6 +199,9 @@ async def test_notes_http_uses_data_manager_and_strict_context(tmp_path):
             invalid = await client.post(path, json={**payload, "context": {**context, "sourceSequence": True}})
             assert invalid.status_code == 422
             assert (await client.get(path)).json()["notes"] == [saved.json()]
+            candidates = await client.get(path + "/link-options", params={"kind": "FILL"})
+            assert candidates.status_code == 200 and candidates.json()["links"] == []
+            assert (await client.get(path + "/link-options", params={"kind": "ORDERS"})).status_code == 422
             history = await client.get(path + "/api-plan/versions", params={"before_revision": 2, "limit": 1})
             assert history.status_code == 200
             assert history.json()["versions"] == [saved.json()]
@@ -270,6 +273,7 @@ async def test_schema_26_adds_notes_without_rewriting_existing_run_or_financial_
     before = await service.get_session(session)
     await service.shutdown(step_timeout=1)
     with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE replay_training_note_links")
         db.execute("DROP TABLE replay_training_note_revision")
         db.execute("DROP TABLE replay_training_note")
         db.execute("DROP INDEX replay_note_context_visited_time")

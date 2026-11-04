@@ -5,9 +5,10 @@ import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts, type ReplayNoteDraft } from "../replayNoteDraft.js";
 import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
+import { ReplayNoteLinkPicker, ReplayNoteLinks } from "./ReplayNoteLinks.js";
 import ReplayNoteHistory from "./ReplayNoteHistory.js";
 
-type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun" | "noteVersionsRun">;
+type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun" | "noteVersionsRun" | "noteLinkOptionsRun">;
 type Binding = ReturnType<typeof replayNoteDraftBinding>;
 interface EditorTarget { note: ReplayNote | null; binding: Binding; defaults?: Record<string, string> }
 
@@ -38,6 +39,8 @@ function NoteEditor({ api, target, onChanged, onClose, onCopy }: {
     <label htmlFor={id}>{t("replay.notes.body")}</label>
     <textarea id={id} value={state.fields.entryBasis ?? ""} disabled={!state.ready} maxLength={16_000}
       onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
+    <ReplayNoteLinkPicker api={api} context={binding.context} fields={state.fields}
+      disabled={!state.ready || state.status === "saving"} onChange={fields => editor.edit(fields)} />
     <p>{t(binding.context.reviewNote ? "replay.notes.reviewHint" : "replay.notes.planHint")}</p>
     {state.recovered && <p role="status">{t("replay.notes.recovered")}</p>}
     {state.error != null && <p role="alert">{t("replay.notes.saveFailed")}</p>}
@@ -123,7 +126,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
   const historyNote = settled && current && open && !visibleTarget ? current.notes.find(note => note.id === historyId) : null;
   const historyScope = historyNote && current ? JSON.stringify([current.context, current.asOfMs, historyNote.id, historyNote.revisionCount]) : "";
   useEffect(() => {
-    onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs]) ?? []),
+    onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs, ...(note.links?.map(link => link.eventTimeMs) ?? [])]) ?? []),
       ...(historyScope && historyTimes.scope === historyScope ? historyTimes.values : [])]);
   }, [current, historyScope, historyTimes, onTimes]);
   return <section className="replay-notes-panel" aria-label={t("replay.notes.title")} data-testid="replay-notes-panel">
@@ -150,6 +153,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
             <dl><dt>{t("replay.notes.virtualTime")}</dt><dd>{formatTime(note.marketTimeMs)}</dd>
               <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(note.updatedAtMs)}</dd></dl>
             <p className="replay-note-text">{note.fields.entryBasis ?? ""}</p>
+            <ReplayNoteLinks links={note.links ?? []} formatTime={formatTime} />
             <button type="button" disabled={!settled || Boolean(current.context.reviewNote && !note.reviewNote)} onClick={() => edit(note)}>{t("replay.notes.edit")}</button>
             <button type="button" disabled={!settled} aria-expanded={historyNote?.id === note.id}
               onClick={() => setHistoryId(value => value === note.id ? null : note.id)}>{t("replay.notes.history")}</button>

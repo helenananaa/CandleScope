@@ -7,7 +7,7 @@ import sqlite3
 from app.replay.canonical import canonical_sha256
 
 
-TRAINING_SCHEMA_VERSION = 27
+TRAINING_SCHEMA_VERSION = 28
 TRAINING_SCHEMA_ID = "replay.training.v2"
 TIME_COMMITMENT_SCHEMA_VERSION = "replay.time-commitment.v1"
 START_SELECTION_SCHEMA_VERSION = "replay.start-selection.v1"
@@ -2653,6 +2653,22 @@ ON replay_review_timeline_event(run_id,virtual_time_ms DESC);
 """
 
 
+TRAINING_SCHEMA_V28_NOTE_LINKS = """
+CREATE TABLE IF NOT EXISTS replay_training_note_links (
+    run_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    links_json TEXT NOT NULL,
+    stored_bytes INTEGER NOT NULL CHECK (stored_bytes >= 0),
+    PRIMARY KEY (run_id,note_id,revision),
+    FOREIGN KEY (run_id,note_id,revision)
+        REFERENCES replay_training_note_revision(run_id,note_id,revision) ON DELETE CASCADE
+);
+INSERT OR IGNORE INTO replay_training_note_links
+SELECT run_id,note_id,revision,'[]',2 FROM replay_training_note_revision;
+"""
+
+
 def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> None:
     """Create v2-owned tables without changing the adapter schema row."""
 
@@ -2672,8 +2688,14 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
     if current == TRAINING_SCHEMA_VERSION:
         _ensure_review_query_indexes(connection)
         return
+    if current == 27:
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
+        connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
+                           (TRAINING_SCHEMA_VERSION, now_ms))
+        return
     if current == 26:
         _execute_script(connection, TRAINING_SCHEMA_V27_NOTES)
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
         connection.execute("UPDATE replay_training_schema_version SET version=?,applied_at_ms=? WHERE singleton=1",
                            (TRAINING_SCHEMA_VERSION, now_ms))
         return
@@ -2687,6 +2709,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         _execute_script(connection, TRAINING_SCHEMA_V25_INPUT_ADMISSIONS)
         _execute_script(connection, TRAINING_SCHEMA_V26_ISOLATED_WALLETS)
         _execute_script(connection, TRAINING_SCHEMA_V27_NOTES)
+        _execute_script(connection, TRAINING_SCHEMA_V28_NOTE_LINKS)
         from .persistence.isolated_wallets import migrate
         migrate(connection, now_ms=now_ms)
         _ensure_hedge_admission_cursor(connection)
@@ -2733,6 +2756,7 @@ def migrate_training_schema(connection: sqlite3.Connection, *, now_ms: int) -> N
         TRAINING_SCHEMA_V25_INPUT_ADMISSIONS,
         TRAINING_SCHEMA_V26_ISOLATED_WALLETS,
         TRAINING_SCHEMA_V27_NOTES,
+        TRAINING_SCHEMA_V28_NOTE_LINKS,
     ):
         _execute_script(connection, script)
     _ensure_interval_curve_bounds(connection)

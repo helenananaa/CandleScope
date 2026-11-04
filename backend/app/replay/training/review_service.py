@@ -50,6 +50,13 @@ class TrainingReviewService:
             service_validation_ops.identifier(run_id, field_name="run_id"),
             service_validation_ops.identifier(track_id, field_name="track_id"), at_time_ms=at_time_ms)
 
+    async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
+                                before_id: str | None = None, limit: int = 20) -> dict[str, object]:
+        return await self.store.note_link_options(
+            service_validation_ops.identifier(run_id, field_name="run_id"),
+            service_validation_ops.identifier(track_id, field_name="track_id"),
+            kind=kind, before_id=before_id, limit=limit)
+
     async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
                             at_time_ms: int | None = None, before_revision: int | None = None,
                             limit: int = 20) -> dict[str, object]:

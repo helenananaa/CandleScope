@@ -16,6 +16,7 @@ from app.trading_accounts.models import TradingAccountError, normalize_fields
 from ..errors import TrainingRunError
 from ..models import REPLAY_V2_PROTOCOL
 from ..review_lifecycle import event_clock
+from . import note_links
 
 MAX_NOTES = 500
 MAX_VERSIONS = 100
@@ -84,11 +85,14 @@ def _context(connection: sqlite3.Connection, run_id: str, track_id: str) -> dict
     return context
 
 
-def _view(note: sqlite3.Row, revision: sqlite3.Row) -> dict[str, object]:
+def _view(connection: sqlite3.Connection, note: sqlite3.Row, revision: sqlite3.Row) -> dict[str, object]:
     try:
         fields = normalize_fields(json.loads(revision["fields_json"]))
     except (ValueError, TypeError, TradingAccountError):
         raise _error("REPLAY_NOTE_CORRUPT", "Annotation text version is unavailable", 503) from None
+    links = note_links.load(connection, str(note["run_id"]), str(note["note_id"]), int(revision["revision"]))
+    if any(link["eventTimeMs"] > int(revision["virtual_time_ms"]) for link in links):
+        raise _error("REPLAY_NOTE_LINK_CORRUPT", "Annotation reference crosses its version time", 503)
     return {
         "id": str(note["note_id"]), "runId": str(note["run_id"]), "trackId": str(note["track_id"]),
         "marketTimeMs": int(note["market_time_ms"]), "createdAtMs": int(note["created_at_ms"]),
@@ -96,6 +100,7 @@ def _view(note: sqlite3.Row, revision: sqlite3.Row) -> dict[str, object]:
         "revisionCount": int(revision["revision"]), "fields": fields, "body": "",
         "timelineSequence": int(revision["timeline_sequence"]),
         "reviewNote": bool(note["review_note"]), "revisions": [],
+        "links": links,
     }
 
 
@@ -121,9 +126,16 @@ class TrainingNoteRepository:
                 ).fetchone()
                 if revision is None:
                     raise _error("REPLAY_NOTE_CORRUPT", "Annotation historical version is unavailable", 503)
-                notes.append(_view(note, revision))
+                notes.append(_view(connection, note, revision))
             return {"protocol": REPLAY_V2_PROTOCOL, "schema_version": "replay.notes.v1",
                     "run_id": run_id, "track_id": track_id, "context": context, "asOfMs": cutoff, "notes": notes}
+        return await self.base_store.run_extension_read(read)
+
+    async def link_options(self, run_id: str, track_id: str, *, kind: str,
+                           before_id: str | None = None, limit: int = 20) -> dict[str, object]:
+        def read(connection: sqlite3.Connection):
+            context = _context(connection, run_id, track_id)
+            return note_links.options(connection, context, kind=kind, before_id=before_id, limit=limit)
         return await self.base_store.run_extension_read(read)
 
     async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
@@ -153,7 +165,7 @@ class TrainingNoteRepository:
                 + " AND revision<? ORDER BY revision DESC LIMIT ?",
                 (*allowed, MAX_VERSIONS + 1 if before_revision is None else before_revision, limit + 1),
             ).fetchall()
-            versions = [_view(note, row) for row in rows[:limit]]
+            versions = [_view(connection, note, row) for row in rows[:limit]]
             return {"protocol": REPLAY_V2_PROTOCOL, "schema_version": "replay.note-versions.v1",
                 "run_id": run_id, "track_id": track_id, "note_id": note_id, "context": context,
                 "asOfMs": cutoff, "versions": versions,
@@ -187,7 +199,7 @@ class TrainingNoteRepository:
                 if saved["fields_json"] != fields_json or saved["context_json"] != context_json:
                     raise _error("REPLAY_NOTE_CONFLICT", "Annotation changed in another editor")
                 # Return this exact version, never a newer text or save time.
-                return _view(note, saved)
+                return _view(connection, note, saved)
             current = _context(connection, run_id, track_id)
             if context_json != _json(current):
                 raise _error("REPLAY_NOTE_CONTEXT_CHANGED", "Replay view changed; retain the draft and reload its context")
@@ -200,11 +212,14 @@ class TrainingNoteRepository:
             if latest is not None and (int(latest["virtual_time_ms"]) > current["virtualTimeMs"]
                                        or (current["reviewNote"] and not note["review_note"])):
                 raise _error("REPLAY_NOTE_REVIEW_REQUIRED", "Create a review supplement instead of rewriting an original plan")
+            links_json = _json(note_links.freeze(connection, current, fields))
+            links_bytes = len(links_json.encode("utf-8"))
             stored_bytes = len(fields_json.encode("utf-8")) + len(context_json.encode("utf-8"))
             used = connection.execute(
-                "SELECT COALESCE(SUM(stored_bytes),0) FROM replay_training_note_revision WHERE run_id=?", (run_id,),
+                "SELECT (SELECT COALESCE(SUM(stored_bytes),0) FROM replay_training_note_revision WHERE run_id=?) "
+                "+ (SELECT COALESCE(SUM(stored_bytes),0) FROM replay_training_note_links WHERE run_id=?)", (run_id, run_id),
             ).fetchone()[0]
-            if used + stored_bytes > MAX_RUN_BYTES:
+            if used + stored_bytes + links_bytes > MAX_RUN_BYTES:
                 raise _error("REPLAY_NOTE_BUDGET_EXCEEDED", "This run has reached its annotation storage budget")
             now = self.base_store._validated_now_ms()
             if note is None:
@@ -218,7 +233,9 @@ class TrainingNoteRepository:
             connection.execute("INSERT INTO replay_training_note_revision VALUES(?,?,?,?,?,?,?,?,?)",
                                (run_id, note_id, expected_revision + 1, current["virtualTimeMs"], now,
                                 fields_json, context_json, stored_bytes, current["timelineSequence"]))
+            connection.execute("INSERT INTO replay_training_note_links VALUES(?,?,?,?,?)",
+                               (run_id, note_id, expected_revision + 1, links_json, links_bytes))
             revision = connection.execute("SELECT * FROM replay_training_note_revision WHERE run_id=? AND note_id=? AND revision=?",
                                           (run_id, note_id, expected_revision + 1)).fetchone()
-            return _view(note, revision)
+            return _view(connection, note, revision)
         return await self.base_store.run_extension_write(write)

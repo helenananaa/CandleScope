@@ -76,16 +76,30 @@ export async function checkReplayNotesBrowser() {
     const saved = await call("/fixture/state");
     assert(JSON.stringify(saved.snapshot) === JSON.stringify(state.snapshot), "Note save changed the replay/financial snapshot");
     checks.push("actual UI note save traversed parsed HTTP/manager/SQLite without changing snapshot");
-    state = await call("/fixture/marker", "POST"); render();
-    await click("编辑"); await input("同一毫秒后一个事件修改的计划"); await click("保存并关闭");
+    state = await call("/fixture/marker", "POST");
+    state = await call("/fixture/buy", "POST"); render();
+    await click("编辑"); await input("同一毫秒后一个事件修改的计划");
+    await click("选择成交");
+    await until(() => host.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    await click("保存并关闭");
     await until(() => !host.querySelector("textarea") && host.textContent?.includes("同一毫秒后一个事件修改的计划"));
     await click("版本历史");
     await until(() => host.querySelectorAll("[data-note-version]").length === 2);
     assert(host.querySelector('[data-note-version="1"]')?.textContent?.includes("事前计划，保存不改变运行"), "Original version is missing from history");
+    state = await call("/fixture/close", "POST"); render();
+    await click("编辑"); await click("选择交易");
+    await until(() => host.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+    await click("保存并关闭");
+    await until(() => !host.querySelector("textarea"));
     const paged = await api.notesRun(state.context.runId, state.context.trackId, state.context.virtualTimeMs);
+    assert(paged.notes[0]!.links?.length === 2, "UI fill and closed-trade choices were not frozen together");
+    assert(paged.notes[0]!.links?.every(link => link.eventTimeMs <= paged.asOfMs), "Linked detail exceeds the view clock");
+    checks.push("actual UI links a committed fill and closed trade; each version retains its own immutable selection");
     const planId = paged.notes[0]!.id;
-    for (let revision = 2; revision < 25; revision++) await api.saveNoteRun(state.context.runId, state.context.trackId,
-      { id: planId, fields: { entryBasis: `同一事件计划版本 ${revision + 1}` }, expectedRevision: revision, context: paged.context });
+    for (let revision = paged.notes[0]!.revisionCount; revision < 25; revision++) await api.saveNoteRun(state.context.runId, state.context.trackId,
+      { id: planId, fields: { ...paged.notes[0]!.fields, entryBasis: `同一事件计划版本 ${revision + 1}` }, expectedRevision: revision, context: paged.context });
     await click("刷新");
     await until(() => host.querySelectorAll("[data-note-version]").length === 20
       && host.querySelector('[data-note-version="25"]'));
@@ -110,6 +124,7 @@ export async function checkReplayNotesBrowser() {
     await until(() => host.querySelectorAll("[data-note-version]").length === 1);
     assert(host.querySelector('[data-note-version="1"]') && !host.querySelector('[data-note-version="2"]'),
       "Earlier same-time event history revealed later revisions");
+    assert(!host.querySelector('[data-testid="replay-note-links"]'), "Earlier note history leaked future linked financial records");
     await capture("earlier-event-visible-original");
     await click("版本历史");
     checks.push("earlier event hides same-time edits, future creation and future draft text");

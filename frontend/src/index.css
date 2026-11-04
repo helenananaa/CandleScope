@@ -15791,3 +15791,9 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 
 .replay-note-history { margin-top: 10px; padding: 8px; border-inline-start: 2px solid var(--border-strong); background: var(--surface-1); }
 .replay-note-history > div + div { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+
+.replay-note-links { padding-inline-start: 18px; margin: 8px 0; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.replay-note-link-options { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.replay-note-link-options label { display: flex; align-items: flex-start; gap: 6px; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.replay-note-link-options input { flex: none; }
+.replay-note-link-picker { display: grid; gap: 8px; }
