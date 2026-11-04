@@ -286,3 +286,64 @@ def test_disposable_strategy_profiles_do_not_accumulate_shared_acl_grants(tmp_pa
             grants(SDK_SRC / "candlescope_backtest_sdk" / "worker.py")
             == worker_baseline
         )
+
+
+@pytest.mark.parametrize("writer,size,overflow", [
+    ("print('x' * 100_000, end='', flush=True)", 100_000, True),
+    ("__import__('sys').stderr.buffer.write(b'x' * 100_000)", 100_000, True),
+    ("print('中' * 22_000, end='', flush=True)", 66_000, True),
+    ("print('x' * 65_536, end='', flush=True)", 65_536, False),
+    ("print('x' * 20_000, end='', flush=True)", 20_000, False),
+    ("__import__('sys').stdout.writelines(['x' * 40_000] * 2)", 80_000, True),
+    ("__import__('sys').stderr.buffer.writelines([b'x' * 40_000] * 2)", 80_000, True),
+])
+def test_worker_rejects_log_overflow_before_publishing_success(tmp_path, writer, size, overflow):
+    """Pipe scheduling cannot decide whether a successful reply exceeds budget."""
+    import json
+    import subprocess
+    from app.backtest.strategy.python_runner import WORKER, SDK_SRC, _real_python
+
+    (tmp_path / "strategy.py").write_text(
+        "class Strategy:\n def prepare(self, ctx):\n  " + writer + "\n", encoding="utf-8",
+    )
+    request = {"id": 1, "method": "prepare", "params": {
+        "bundleDir": str(tmp_path), "entrypoint": "strategy:Strategy",
+    }}
+    result = subprocess.run(
+        [str(_real_python()), "-I", "-B", "-u", str(WORKER), str(SDK_SRC)],
+        input=(json.dumps(request) + "\n").encode("utf-8"), capture_output=True, timeout=5,
+    )
+    assert result.returncode == 0, result.stderr[-500:]
+    reply = json.loads(result.stdout)
+    assert reply["ok"] is not overflow
+    if overflow:
+        assert reply["errorCode"] == "STDERR_TOO_LARGE"
+    assert len(result.stderr) == min(size, 65_537)
+
+
+def test_batch_stops_before_next_step_after_log_budget_failure(tmp_path, monkeypatch):
+    from candlescope_backtest_sdk import Bar, Observation
+
+    monkeypatch.setenv("BACKTEST_PYTHON_TRUSTED_LOCAL_ENABLED", "1")
+    marker = tmp_path / "second-step-ran"
+    (tmp_path / "strategy.py").write_text(
+        "from pathlib import Path\nclass Strategy:\n"
+        " def prepare(self, ctx): self.calls = 0\n"
+        " def warmup(self, obs):\n"
+        "  self.calls += 1\n"
+        "  if self.calls == 1: print('x' * 100_000, end='', flush=True)\n"
+        f"  else: Path({str(marker)!r}).write_text('unexpected')\n",
+        encoding="utf-8",
+    )
+    observation = Observation("run", "revision", 0, 1, 1000, 1000, "WARMUP", {},
+                              Bar(0, 999, "1", "1", "1", "1", "1")).to_wire()
+    runner = IsolatedPythonRunner(tmp_path, mode="TRUSTED_LOCAL", trusted_confirmed=True)
+    runner.start()
+    try:
+        runner.call("prepare", {"bundleDir": str(tmp_path), "entrypoint": "strategy:Strategy"})
+        results, error = runner.step_batch([("warmup", {"observation": observation})] * 2)
+        assert results == []
+        assert error is not None and error.code == "STDERR_TOO_LARGE"
+        assert not marker.exists()
+    finally:
+        runner.close()

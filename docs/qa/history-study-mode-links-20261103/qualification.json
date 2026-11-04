@@ -1,0 +1,158 @@
+{
+  "schema": "candlescope.history-study-mode-links-qualification/1",
+  "applicationSourceCommit": "28156af3d6cbc757097468f4835618a6e6b24a50",
+  "productionSourceCommit": "212b48d0ea0453f5c2c42f0c45bae618737e7331",
+  "includesMain": "35425d010360a2921c480ba9b48a7f498e8599dc",
+  "frontendCheckCommit": "04ebe98843de830cdc298b7956a412dfffd3c320",
+  "checks": {
+    "frontend": 4856,
+    "performance": 1,
+    "desktop": 130,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": true,
+    "lint": true,
+    "architecture": true,
+    "plugins": true,
+    "i18nLocales": 30,
+    "i18nKeys": 5350,
+    "actualBundledBackend": 73,
+    "bundledBackendSkipped": 2,
+    "skipReason": "Windows AppContainer-only tests on macOS, not passes",
+    "warnings": [
+      "Inherited Starlette/anyio BlockingPortal deprecation",
+      "Existing Vite >500KB chunk warning"
+    ]
+  },
+  "native": {
+    "passed": true,
+    "steps": 16,
+    "windows": 2,
+    "studies": 4,
+    "errors": [],
+    "normalOwnedExitMs": [
+      2359,
+      2379
+    ],
+    "strictSignatureAfterTestsAndExits": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "sdkFiles": 60,
+    "pluginAssets": 9,
+    "sourceMismatches": [],
+    "buildFlags": {
+      "VITE_DESKTOP_BUILD": "1",
+      "VITE_MULTI_WINDOW_ENABLED": "1",
+      "VITE_MULTI_CHART_16_ENABLED": false,
+      "VITE_MULTI_CHART_64_ENABLED": false
+    },
+    "math": [
+      {
+        "a": {
+          "cellId": "cell-1",
+          "windowId": "main-window",
+          "studyId": "hs_27dac0c20d414eeaa48b12569ce7f9b2",
+          "cursor": 1793608680000,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        },
+        "b": {
+          "cellId": "cell-2",
+          "windowId": "main-window",
+          "studyId": "hs_5d3383ddb72d4693b57fcad8486e36ec",
+          "cursor": 1793608680000,
+          "displayBars": 5,
+          "ma20Points": 0,
+          "maxError": 0
+        },
+        "c": {
+          "cellId": "cell-482c8e7e-b64b-4179-951f-389f25cb4245",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_f4f1493d519e4865bd488d6e27534b42",
+          "cursor": 1793608680000,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        },
+        "d": {
+          "cellId": "cell-e617e471-afc1-4f82-9bd1-2a1c5de57a11",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_aa11ed15e0264597bda856ba3eebdc10",
+          "cursor": 1793608680000,
+          "displayBars": 5,
+          "ma20Points": 0,
+          "maxError": 0
+        }
+      },
+      {
+        "a": {
+          "cellId": "cell-1",
+          "windowId": "main-window",
+          "studyId": "hs_27dac0c20d414eeaa48b12569ce7f9b2",
+          "cursor": 1793608680000,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        },
+        "b": {
+          "cellId": "cell-2",
+          "windowId": "main-window",
+          "studyId": "hs_5d3383ddb72d4693b57fcad8486e36ec",
+          "cursor": 1793608680000,
+          "displayBars": 5,
+          "ma20Points": 0,
+          "maxError": 0
+        },
+        "c": {
+          "cellId": "cell-482c8e7e-b64b-4179-951f-389f25cb4245",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_f4f1493d519e4865bd488d6e27534b42",
+          "cursor": 1793608680000,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        },
+        "d": {
+          "cellId": "cell-e617e471-afc1-4f82-9bd1-2a1c5de57a11",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_aa11ed15e0264597bda856ba3eebdc10",
+          "cursor": 1793608680000,
+          "displayBars": 5,
+          "ma20Points": 0,
+          "maxError": 0
+        }
+      }
+    ]
+  },
+  "proof": [
+    "Default-off preserves independent studies. Mode-only restores each target own input/cut; unprepared targets fail visibly, never auto-copy source input.",
+    "Mode and cursor together enter four separately captured 1m/5m studies at one absolute UTC cut. Actual controlled OHLCV/SMA20 agree with independent per-input reference before and after complete restart.",
+    "Real peer PATCH commits while its response is held: target shows restoring-study and zero bars before acknowledgement. No substituted response bodies.",
+    "A successful cursor operation cannot hide unconfirmed mode. Concurrent group routing changes preserve a visible source retry; actual retry works above the live loading overlay.",
+    "Open note editor refuses mode exit and keeps its own cursor. Closing editor and clicking the live-source retry recovers all targets.",
+    "Real source exit PATCH commits and its response aborts; real authoritative GET is held. Source stays masked, peers keep prior modes; releasing GET recovers committed exit across both windows.",
+    "Original account-note versions and future hiding remain correct. Final fixture counts remain accounts=2, orders=0, fills=0, cash_flows=0, journal_entries=5, journal_revisions=6.",
+    "Complete owned quit/restart keeps inactive saved inputs, group options and cursors; explicit resume follows the saved cut rather than wall time. Exactly one saved input per owner; no renderer errors."
+  ],
+  "regressions": {
+    "sourceAndTargetLifetimes": "Deterministic fail-before/pass-after scope reentry, replaced source ports, target input replacement, routing off/on, private mode ordering and authoritative-layout checks are archived.",
+    "configurationRace": "Initial 426673ca native attempt could silently lose cross-window mode while configuration propagated. Current waits for committed routing and cancels stale intents visibly.",
+    "pointerLayers": "a78201af active retry was covered by the study aside; 497d957b moved it into the existing study footer. bfaeabfa live retry was covered by chart loading; 04ebe988 uses the overlay layer. Actual clicks qualify both.",
+    "harness": "212b48d0 and 330ee503 native runs incorrectly expected an open editor to report idle/ready. The control contract deliberately reports busy and output-unready. The final script verifies this expected state; no production readiness bypass.",
+    "copiedCache": "Wholesale copied preparation owner correctly refused startup. Fresh derived owners are created by normal production code; no marker rewrite. Original stopped source profile retained.",
+    "unexpectedLaunch": "During initial startup-failure cleanup, CUA getApp additionally launched the candidate under the default user profile. It was normally quit; no account/order commands. Excluded from qualification. Subsequent runs use only explicit owned profiles and loopback sandbox.",
+    "harnessImports": "A bundled-test harness first used wrong app.history/app.trading module paths. The import error is archived and corrected before the 73 passing actual bundled tests."
+  },
+  "limits": [
+    "macOS arm64, two actual windows, warm public-market history and synthetic note timestamps; loopback-only OS sandbox with actual child EPERM probe. No private exchange, fresh-profile/cold/latest or broad network recovery qualification.",
+    "Current backend, desktop JS, frontend and pure-Python backtest SDK repacked; unchanged runtime/native engines reused after input and wheel/source hash checks. Not a fresh engine build or official CI artifact.",
+    "Multi-window enabled; 16/64-chart flags false. This does not establish 16/64-chart performance.",
+    "Formal replay, strategy clocks, imported-data UI and arbitrary-script causality remain unfinished #166/#165 scope. Does not close all #179/#181/#186 requirements."
+  ],
+  "ci": "Final QA head must pass exact-head workflow checks including macOS arm64/x64 packaging before main. Previous head green is not sufficient."
+}

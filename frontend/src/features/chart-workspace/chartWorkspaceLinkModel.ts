@@ -25,6 +25,8 @@ export type ChartLinkChannel =
   | "accountSource"
   | "tradingOverlays"
   | "noteOverlays"
+  | "studyCursor"
+  | "studyMode"
   | "indicators";
 
 export type ChartLinkGroupSettingsPatch = Omit<Partial<ChartLinkGroupSettings>, "indicators"> & {
@@ -65,6 +67,8 @@ export function combineChartLinkSettings(
     accountSource: left.accountSource === true && right.accountSource === true,
     tradingOverlays: left.tradingOverlays === true && right.tradingOverlays === true,
     noteOverlays: left.noteOverlays === true && right.noteOverlays === true,
+    studyCursor: left.studyCursor === true && right.studyCursor === true,
+    studyMode: left.studyMode === true && right.studyMode === true,
     indicators: {
       definitions: left.indicators.definitions && right.indicators.definitions,
       parameters: left.indicators.parameters && right.indicators.parameters,

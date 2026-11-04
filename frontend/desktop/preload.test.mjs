@@ -43,3 +43,10 @@ test("portfolio export exposes only a run-id native download command", async () 
   assert.deepEqual(await bridge.downloadReplayPortfolio("run-a"), { started: true });
   assert.deepEqual(calls, [["candlescope:desktop:replay-portfolio-download", "run-a"]]);
 });
+
+test("workspace link registration uses its own native channel without a layout snapshot", async () => {
+  const calls = [];
+  const bridge = load([], { port: 29123 }, { invoke: async (...args) => { calls.push(args); return { ok: true, windowId: "window-2" }; } });
+  assert.deepEqual(await bridge.workspaceBusRegisterLinks(), { ok: true, windowId: "window-2" });
+  assert.deepEqual(calls, [["candlescope:workspace-bus:register-links"]]);
+});
