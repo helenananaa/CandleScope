@@ -27,10 +27,11 @@ import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js
 import ChartTimeNavigationDialog from "../market-data/ChartTimeNavigationDialog.js";
 import { locateStudyViewportTime } from "./historyStudyNavigation.js";
 import { createStudyLinkSurface } from "./historyStudyLinkSurface.js";
+import type { ChartStudyClockIssue } from "../chart-workspace/chartStudyClockLinks.js";
 import "../trading-accounts/tradingAccounts.css";
 import "./historyStudy.css";
 
-export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onRetry }: {
+export default function HistoryStudyOverlay({ cellId, revision, workspaceId, linkCoordinator, accountOverlay, onControlObservation, playback, manager, style, indicators: definitions, active, busy, error, onMove, onAutomaticMove, onRetry, onEditingChanged, onFollowReady, onPlayStart, cursorLinkIssue, onRetryCursorLink }: {
   cellId: string; revision: number;
   onControlObservation?: ((cellId: string, observation: ControlCellObservation | null) => void) | undefined;
   accountOverlay?: ChartAccountOverlaySettings | undefined;
@@ -38,6 +39,9 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   playback: HistoryStudyPlayback; manager: MarketDataManager; style: QuickReplayChartStyle;
   indicators: readonly IndicatorDefinition[]; active: boolean; busy: boolean; error: unknown;
   onMove(cursorMs: number, active?: boolean): Promise<boolean>; onRetry(): void;
+  onAutomaticMove(cursorMs: number): Promise<boolean>;
+  onEditingChanged(editing: boolean): void; cursorLinkIssue: ChartStudyClockIssue | null; onRetryCursorLink(): void;
+  onFollowReady(pause: (() => void) | null): void; onPlayStart(): void;
 }) {
   useLocale();
   const { input, store, cursorMs } = playback;
@@ -57,6 +61,17 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
   const [loaded, setLoaded] = useState<{ cursor: number; notes: StudyNote[] } | null>(null);
   const [notesError, setNotesError] = useState(false);
   const [editor, setEditor] = useState<{ marketMs: number; note: StudyNote | null } | null>(null);
+  const pause = useCallback(() => setPlaying(false), []);
+  useLayoutEffect(() => { onFollowReady(pause); return () => onFollowReady(null); }, [onFollowReady, pause]);
+  const changePlaying = useCallback((next: boolean) => {
+    if (next && busy) return;
+    if (next) onPlayStart();
+    setPlaying(next);
+  }, [busy, onPlayStart]);
+  useLayoutEffect(() => {
+    onEditingChanged(editor !== null);
+    return () => onEditingChanged(false);
+  }, [editor, onEditingChanged]);
   const [changed, setChanged] = useState(false);
   useEffect(() => { setValue(formatUtcDateTimeInput(cursorMs)); }, [cursorMs]);
   useEffect(() => {
@@ -78,10 +93,10 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cursorMs >= playback.maximumMs) { setPlaying(false); return; }
-      void onMove(playback.stepTarget(1)).then(ok => { if (!cancelled && !ok) setPlaying(false); });
+      void onAutomaticMove(playback.stepTarget(1)).then(ok => { if (!cancelled && !ok) setPlaying(false); });
     }, 700);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [cursorMs, editor, onMove, playback, playing]);
+  }, [cursorMs, editor, onAutomaticMove, playback, playing]);
   useEffect(() => {
     if (!active || editor) return;
     const handler = (event: KeyboardEvent) => {
@@ -90,11 +105,11 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
       if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
         event.preventDefault(); event.stopPropagation(); setPlaying(false);
         void onMove(playback.stepTarget(event.key === "ArrowRight" ? 1 : -1));
-      } else if (event.key === " ") { event.preventDefault(); event.stopPropagation(); setPlaying(value => !value); }
+      } else if (event.key === " ") { event.preventDefault(); event.stopPropagation(); changePlaying(!playing); }
     };
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
-  }, [active, editor, onMove, playback]);
+  }, [active, changePlaying, editor, onMove, playback, playing]);
   const version = Number(store.version);
   const rows = store.snapshot();
   const renderedVersion = useRef(version);
@@ -118,7 +133,7 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     persistence, seriesReady: version, sourceOrdinal: cursorMs, sourceScopeKey: input.id,
     visibleThroughSeconds: rows.at(-1)?.time ?? null, candleUpColor: style.upColor, candleDownColor: style.downColor });
   useControlCommands(() => historyStudyCommands({ cellId, playback, revision, busy: busy || editor !== null, playing,
-    renderedVersion: version, indicators, surface, data: manager.historyStudy, move: onMove, play: setPlaying, journal,
+    renderedVersion: version, indicators, surface, data: manager.historyStudy, move: onMove, play: changePlaying, journal,
     signal: () => controlAbort.current?.signal ?? null }));
   useLayoutEffect(() => {
     onControlObservation?.(cellId, { mode: "history-study", study: { id: input.id, cursorMs, revision }, session: series,
@@ -202,8 +217,8 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
     </aside></div>
     <footer className="history-study-controls"><button type="button" className="trading-button" disabled={busy || !!editor || cursorMs <= playback.minimumMs}
       onClick={() => { setPlaying(false); void onMove(playback.stepTarget(-1)); }}>{t("study.previous")}</button>
-      <button type="button" className="trading-button" disabled={!!editor || cursorMs >= playback.maximumMs}
-        onClick={() => setPlaying(v => !v)}>{t(playing ? "study.pause" : "study.play")}</button>
+      <button type="button" className="trading-button" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
+        onClick={() => changePlaying(!playing)}>{t(playing ? "study.pause" : "study.play")}</button>
       <button type="button" className="trading-button" disabled={busy || !!editor || cursorMs >= playback.maximumMs}
         onClick={() => { setPlaying(false); void onMove(playback.stepTarget(1)); }}>{t("study.next")}</button>
       <button type="button" className="trading-button" onClick={() => navigation.setOpen(true)}>{t("study.viewDate")}</button>
@@ -211,6 +226,9 @@ export default function HistoryStudyOverlay({ cellId, revision, workspaceId, lin
         onChange={e => setValue(e.target.value)} /></label>
       <button type="button" className="trading-button" disabled={!!editor} onClick={() => { void jump(); }}>{t("study.seek")}</button>
       {invalid && <span role="alert">{t("study.invalidRange")}</span>}
+      {cursorLinkIssue && <p role="alert">{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkFailed" : "study.cursorLinkFailed", { count: cursorLinkIssue.failed.length })}
+        <button type="button" className="trading-button" disabled={busy || !!editor} onClick={onRetryCursorLink}>{t(cursorLinkIssue.operation === "mode" ? "study.modeLinkRetry" : "study.cursorLinkRetry")}</button>
+      </p>}
     </footer>
     {navigation.open && <ChartTimeNavigationDialog cellId={cellId} onClose={() => navigation.setOpen(false)}
       onSubmit={navigation.submit} initialTimeMs={(rows.at(-1)?.time ?? cursorMs / 1000) * 1000}

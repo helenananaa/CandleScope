@@ -1,4 +1,5 @@
 import { resolveChartLinkTargetsForChannel } from "./chartWorkspaceLinkModel.js";
+import { ChartStudyClockLinks } from "./chartStudyClockLinks.js";
 import type { ChartTimeSeekResult } from "../market-data/chartTimeNavigation.js";
 import type {
   ChartCellId,
@@ -119,6 +120,7 @@ function viewportEventKey(event: Pick<RetainedViewportEvent, "sourceCellId" | "k
 }
 
 export class ChartLinkCoordinator {
+  readonly studyClocks: ChartStudyClockLinks;
   private readonly surfaces = new Map<ChartCellId, LinkedSurfaceRegistration>();
   private readonly timeNavigators = new Map<ChartCellId, {
     scopeKey: ChartWorkspaceId;
@@ -150,6 +152,7 @@ export class ChartLinkCoordinator {
   constructor(document: ChartWorkspaceDocument, scopeKey: ChartWorkspaceId = "default") {
     this.document = document;
     this.scopeKey = scopeKey;
+    this.studyClocks = new ChartStudyClockLinks(document, scopeKey);
   }
 
   updateDocument(
@@ -158,6 +161,7 @@ export class ChartLinkCoordinator {
   ): void {
     this.document = document;
     this.scopeKey = scopeKey;
+    this.studyClocks.updateDocument(document, scopeKey);
     this.reconcileRetainedViewportEvents();
     this.setViewportIssue(null);
   }
@@ -165,7 +169,9 @@ export class ChartLinkCoordinator {
   connectWorkspaceBus(bus: WorkspaceBusClient | null): () => void {
     this.unsubscribeWorkspaceBus?.();
     this.workspaceBus = bus;
-    this.unsubscribeWorkspaceBus = bus?.subscribeLink((event) => this.applyWorkspaceBusEvent(event)) ?? null;
+    const releaseClocks = this.studyClocks.connectWorkspaceBus(bus);
+    const releaseViewport = bus?.subscribeLink((event) => this.applyWorkspaceBusEvent(event));
+    this.unsubscribeWorkspaceBus = () => { releaseViewport?.(); releaseClocks(); };
     return () => {
       this.unsubscribeWorkspaceBus?.();
       this.unsubscribeWorkspaceBus = null;

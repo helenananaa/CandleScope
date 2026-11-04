@@ -11,8 +11,66 @@ const { WorkspaceBusHub } = createRequire(import.meta.url)("../../../../desktop/
     register(windowId: string, send: (message: unknown) => void): void;
     connect(windowId: string, snapshot: unknown): WorkspaceBusState;
     commit(windowId: string, payload: unknown): WorkspaceBusState;
+    publishLink(windowId: string, payload: unknown): unknown;
+    diagnostics(): { hasSnapshot: boolean };
   };
 };
+
+test("ordinary native windows attach link messages without bootstrapping layout authority", async () => {
+  const originalWindow = globalThis.window;
+  const hub = new WorkspaceBusHub(), listeners = new Set<(event: unknown) => void>(), received: unknown[] = [];
+  let registrations = 0;
+  hub.register("other-window", () => {});
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    onWorkspaceBusEvent: (listener: (event: unknown) => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+    workspaceBusRegisterLinks: async () => {
+      registrations++; hub.register("main-window", event => listeners.forEach(listener => listener(event)));
+      return { ok: true, windowId: "main-window" };
+    },
+    workspaceBusConnect: async () => { throw new Error("Link-only registration must not own the layout snapshot"); },
+  } } });
+  const bus = new WorkspaceBusClient("main-window");
+  try {
+    const first = bus.attachLinks(), second = bus.attachLinks(); await Promise.all([first.ready, second.ready]);
+    bus.subscribeLink(event => received.push(event));
+    hub.publishLink("other-window", { workspaceId: "workspace-default", sourceWindowId: "other-window", sourceCellId: "cell-2",
+      kind: "dateSeek", payload: { requestedTimeMs: 600_000 } });
+    assert.equal(received.length, 1); assert.equal(registrations, 1);
+    assert.equal(bus.current.ready, false); assert.equal(hub.diagnostics().hasSnapshot, false);
+    first.release(); assert.equal(listeners.size, 1);
+    second.release(); assert.equal(listeners.size, 0);
+    const stale = bus.attachLinks(); await stale.ready; bus.dispose();
+    const replacement = bus.attachLinks(); await replacement.ready; stale.release();
+    assert.equal(listeners.size, 1); replacement.release(); assert.equal(listeners.size, 0);
+  } finally {
+    bus.dispose();
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
+
+test("native ordered clock returns the desktop hub stamp rather than a renderer-local sequence", async () => {
+  const originalWindow = globalThis.window;
+  const hub = new WorkspaceBusHub(), remote: unknown[] = [];
+  hub.register("main-window", () => {}); hub.register("other-window", event => remote.push(event));
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    workspaceBusPublishLink: async (event: unknown) => hub.publishLink("main-window", event),
+  } } });
+  try {
+    const bus = new WorkspaceBusClient("main-window");
+    const result = await bus.publishOrderedLink({ workspaceId: "workspace-default", sourceCellId: "cell-1", kind: "studyCursor",
+      payload: { requestId: "cursor-1", studyId: "hs_saved", revision: 3, cursorMs: 600_000 } });
+    assert.equal(result.eventId, "link-1");
+    assert.deepEqual(remote, [{ type: "link", event: result }]);
+    const mode = await bus.publishOrderedLink({ workspaceId: "workspace-default", sourceCellId: "cell-1", kind: "studyMode",
+      payload: { requestId: "mode-1", studyId: "hs_saved", revision: 4, cursorMs: 600_000, operation: "mode", active: false } });
+    assert.equal(mode.eventId, "link-2");
+    assert.deepEqual(remote.at(-1), { type: "link", event: mode });
+  } finally {
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
 
 test("current frontend workspace restores and commits through the real desktop hub", async () => {
   const originalWindow = globalThis.window;
@@ -43,6 +101,37 @@ test("current frontend workspace restores and commits through the real desktop h
     const committed = await bus.commit(edited);
     assert.equal(committed.ok, true);
     assert.deepEqual(committed.snapshot, edited);
+  } finally {
+    bus.dispose();
+    if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+  }
+});
+
+test("configuration barriers observe an own commit without a snapshot echo and reject when the client closes", async () => {
+  const originalWindow = globalThis.window, hub = new WorkspaceBusHub();
+  hub.register("main-window", () => {});
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { candlescopeDesktop: {
+    onWorkspaceBusEvent: () => () => {},
+    workspaceBusConnect: async ({ snapshot }: { snapshot: unknown }) => hub.connect("main-window", snapshot),
+    workspaceBusCommit: async (value: unknown) => hub.commit("main-window", value),
+  } } });
+  const bus = new WorkspaceBusClient("main-window");
+  try {
+    const record = createDefaultChartWorkspaceRecord(1), snapshot = { activeWorkspaceId: record.id, workspaces: [record] };
+    await bus.connect(snapshot);
+    let confirmed = false;
+    const wait = bus.waitForWorkspaceRevision(record.id, record.document.revision + 1).then(() => { confirmed = true; });
+    let policyConfirmed = false;
+    const policy = bus.waitForWorkspaceRevision(record.id, record.document.revision, 5_000,
+      document => document.linkGroups["group-primary"]?.peerPolicy.studyMode === true).then(() => { policyConfirmed = true; });
+    await Promise.resolve(); assert.equal(confirmed, false);
+    assert.equal(policyConfirmed, false);
+    const edited = structuredClone(snapshot); edited.workspaces[0]!.document.revision++;
+    edited.workspaces[0]!.document.linkGroups["group-primary"]!.peerPolicy.studyMode = true;
+    await bus.commit(edited); await Promise.all([wait, policy]); assert.equal(confirmed, true); assert.equal(policyConfirmed, true);
+    const closed = bus.waitForWorkspaceRevision(record.id, edited.workspaces[0]!.document.revision + 1);
+    bus.dispose(); await assert.rejects(closed, /closed/);
   } finally {
     bus.dispose();
     if (originalWindow === undefined) Reflect.deleteProperty(globalThis, "window");

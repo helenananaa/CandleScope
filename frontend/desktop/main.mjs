@@ -312,6 +312,9 @@ async function boot() {
       };
     }
   });
+  trustedIpc.handle(DESKTOP_IPC.workspaceBusRegisterLinks, (event) => ({
+    ok: true, windowId: registerWorkspaceSender(event.sender),
+  }));
   trustedIpc.handle(DESKTOP_IPC.workspaceBusConnect, (event, raw) => {
     try {
       const windowId = registerWorkspaceSender(event.sender);

@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.routing import APIRoute
 
 from app.core.config import REPLAY_SETTINGS
+from app.data_engine.data_manager.replay import optional_replay_service_from_state
 from app.replay.constants import (
     REPLAY_PROTOCOL,
     QualityMode,
@@ -260,7 +261,7 @@ def _request_too_large(*, limit_bytes: int) -> ReplayDomainError:
 
 
 def replay_service_from_state(state: object) -> ReplayService:
-    service = getattr(state, "replay_service", None)
+    service = optional_replay_service_from_state(state)
     if service is None:
         raise ReplayDomainError(
             ReplayErrorCode.REPLAY_DISABLED,
@@ -291,7 +292,7 @@ async def _owned_adapter_session_id(request: Request, value: str) -> str:
 
 @router.get("/capabilities")
 async def replay_capabilities(request: Request) -> dict[str, object]:
-    service = getattr(request.app.state, "replay_service", None)
+    service = optional_replay_service_from_state(request.app.state)
     if service is not None:
         return service.capabilities()
     return {
@@ -322,7 +323,7 @@ async def replay_capabilities(request: Request) -> dict[str, object]:
 
 
 def _training_service(request: Request) -> TrainingRunService:
-    replay_service = getattr(request.app.state, "replay_service", None)
+    replay_service = optional_replay_service_from_state(request.app.state)
     training = getattr(replay_service, "training", None)
     if training is not None:
         return training

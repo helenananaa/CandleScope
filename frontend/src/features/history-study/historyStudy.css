@@ -10,6 +10,6 @@
 .history-study-identity { display: inline-flex; align-items: center; gap: 8px; color: var(--text-primary); }
 .history-study-identity span, .history-study-interval { color: var(--text-secondary); }
 .history-study-mask { position: absolute; inset: 0; z-index: var(--z-overlay); background: var(--surface-1); display: grid; place-content: center; gap: 8px; }
-.study-recovery-message { position: absolute; top: 8px; left: 8px; z-index: 15; max-width: 460px; padding: 8px; background: var(--surface-1); color: var(--text-warning); }
+.study-recovery-message { position: absolute; top: 8px; left: 8px; z-index: var(--z-overlay); max-width: 460px; padding: 8px; background: var(--surface-1); color: var(--text-warning); }
 @media (max-width: 800px) { .history-study .quick-replay-side { width: 220px; } }
 @container (max-width: 600px) { .history-study .quick-replay-side { width: 180px; min-width: 160px; } }

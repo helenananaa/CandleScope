@@ -695,6 +695,8 @@ async def _startup_event_impl() -> None:
         await _init_alert_delivery()
         await _init_replay_runtime()
         await _init_data_manager()
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.data_manager_core.bind_replay(app.state.replay_service, app.state.replay_runtime)
         if getattr(app.state, "backtest_service", None) is not None:
             app.state.data_manager_core.bind_strategy(app.state.backtest_service, app.state.backtest_runtime)
         from app.core.config import DATA_DIR, getenv
@@ -768,6 +770,9 @@ async def _startup_event_impl() -> None:
             app.state.plugin_platform_v2 = plugin_platform_v2
             print("[startup] Plugin Platform v2 degraded; core market runtime continues")
     except BaseException:
+        replay_core = getattr(app.state, "data_manager_core", None)
+        if replay_core is not None:
+            replay_core.close_replay()
         alert_facade = getattr(app.state, "alert_facade", None)
         readonly_accounts = getattr(app.state, "readonly_account_service", None)
         if readonly_accounts is not None:
@@ -866,6 +871,9 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    replay_core = getattr(app.state, "data_manager_core", None)
+    if replay_core is not None:
+        await replay_core.shutdown_replay(step_timeout=5)
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
@@ -1166,6 +1174,9 @@ async def debug_snapshot() -> dict:
                 "reason": "REPLAY_DISABLED",
                 "sessions": {},
             }
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None and core.replay is not None:
+            snapshot["replay"]["data_manager"] = core.replay.diagnostics()
         return snapshot
     except Exception as exc:
         return {"error": str(exc)}
