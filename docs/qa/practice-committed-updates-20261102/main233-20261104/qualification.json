@@ -1,0 +1,18 @@
+{
+  "applicationSource": "4485481b184925d1eeb3d5df6602bf18e999e4a5",
+  "main": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "mergeResolution": "Retained independent TradingAccountDataManager and ReplayDataManager lifecycle methods.",
+  "backendPassed": 89,
+  "frontendPassed": 55,
+  "typecheckPassed": true,
+  "httpModel": {
+    "passed": true,
+    "freshDatabase": true,
+    "flowAndRestart": true,
+    "zeroSubscriptionsAfterExit": true,
+    "zeroReadJobsAfterExit": true,
+    "blockedNetworkAttempts": 0,
+    "marketInput": "explicit controlled candles; actual router/TCP/SQLite/frontend transport, not native LIVE UI"
+  },
+  "native": "Pending virtual practice account UI and save/full exit/restart after global Binance IP418 deadline 2026-11-04T01:10:58.578Z. No LIVE candidate launched here."
+}
