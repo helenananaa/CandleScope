@@ -178,6 +178,26 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             return _summary(self._row(run_id))
 
+    def resume_cursor(self,run_id,identity):
+        """Validate an observed HTTP/WS point using metadata, never state wire."""
+        from .continuous_contracts import CommittedIdentity
+        from pydantic import ValidationError
+        try:identity=CommittedIdentity.model_validate(identity).model_dump()
+        except ValidationError:raise fail("CONTINUOUS_INPUT_INVALID","Invalid committed resume identity") from None
+        with self.lock:
+            current=self.summary(run_id)
+            if identity["id"]!=run_id:raise fail("CONTINUOUS_INPUT_INVALID","Cursor belongs to another account")
+            if any(identity[name]>current[name] for name in ("generation","revision","checkpoint_revision","sequence","event_time_ms")):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Resume cursor is ahead of the committed account")
+            if (identity["generation"],identity["data_revision"])!=(current["generation"],current["data_revision"]):
+                return {"after":0,"reason":"RUN_GENERATION_CHANGED"}
+            point=self.db.execute("SELECT sequence,event_time_ms,data_revision FROM checkpoints WHERE run_id=? AND revision=?",
+                (run_id,identity["checkpoint_revision"])).fetchone()
+            if point is None:return {"after":0,"reason":"RESUME_CURSOR_EXPIRED"}
+            if tuple(point)!=(identity["sequence"],identity["event_time_ms"],identity["data_revision"]):
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Resume point does not match its committed checkpoint")
+            return {"after":identity["checkpoint_revision"],"reason":None}
+
     def load(self, run_id):
         with self.lock:
             if self.closed:

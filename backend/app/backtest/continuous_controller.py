@@ -226,6 +226,7 @@ class ContinuousStrategyController:
         self.resources_closed=False
         self.close_task=None
         self.restore_task=None
+        self.initial_waiters=set()
 
     @classmethod
     async def open(cls,path,manager,*,clock_ms,max_active_runs=2,input_options=None,store_options=None,provider_factory=None):
@@ -331,7 +332,9 @@ class ContinuousStrategyController:
 
     async def wait_initial(self,key):
         """Committed metadata only; result projections are a separate bounded read."""
+        if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
         subscription=self.store.updates.subscribe("creation:"+key)
+        self.initial_waiters.add(subscription)
         try:
             while True:
                 subscription.clear_before_read()
@@ -340,8 +343,9 @@ class ContinuousStrategyController:
                 if creation["phase"] in {"FAILED","PAUSED","CANCELLED"}:return {"creation":creation,"run":None}
                 if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
                 await subscription.wait()
-        finally:subscription.close()
+        finally:subscription.close();self.initial_waiters.discard(subscription)
         subscription=self.store.updates.subscribe(creation["run_id"])
+        self.initial_waiters.add(subscription)
         try:
             while True:
                 subscription.clear_before_read()
@@ -352,7 +356,7 @@ class ContinuousStrategyController:
                     return {"creation":creation,"run":row}
                 if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
                 await subscription.wait()
-        finally:subscription.close()
+        finally:subscription.close();self.initial_waiters.discard(subscription)
 
     async def _drain_job(self,key):
         job=self.jobs.get(key)
@@ -476,6 +480,7 @@ class ContinuousStrategyController:
         self.closed=True
         self.runtime._request_shutdown()
         for job in tuple(self.jobs.values()):job.request_stop()
+        for subscription in tuple(self.initial_waiters):subscription.close()
 
     async def _close(self):
         # This owned task exists before the first await in close, including

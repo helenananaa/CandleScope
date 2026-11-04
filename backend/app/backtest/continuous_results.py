@@ -281,5 +281,6 @@ class ContinuousResults:
                     last=items[-1]
                     next_cursor=[last["changed_revision"],last["kind"],last["index"]] if since_revision is not None else last["index"]
                 return {"run":row,"identity":identity,"summary":json.loads(head["head_json"]),
-                    "counts":json.loads(head["counts_json"]),"items":items,"more":more,"next_cursor":next_cursor}
+                    "counts":json.loads(head["counts_json"]),"items":items,"more":more,"next_cursor":next_cursor,
+                    "stale":row["phase"]=="REPAIR_REQUIRED"}
             finally:self.store.db.execute("ROLLBACK")
