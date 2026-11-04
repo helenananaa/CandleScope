@@ -85,6 +85,9 @@ jobs:
             tests/test_ccxt_shared_markets.py \
             tests/test_desktop_sidecar.py \
             tests/test_shared_market_inputs.py \
+            tests/test_kline_prefix_watches.py \
+            tests/test_kline_revision_contract.py \
+            tests/test_query_cache_fencing.py \
             tests/test_backtest_direct_objects.py \
             tests/test_backtest_fused_sensitivity.py \
             tests/test_account_liquidation_execution.py \
