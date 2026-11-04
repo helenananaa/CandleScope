@@ -41,11 +41,11 @@
     ]
   },
   "pending": [
-    "native installed package save/full exit/restart",
-    "version-history pagination UI",
-    "trade/fill and screenshot version associations",
-    "imported BAR/market-trades flow",
-    "broader multiple tracks/reconnect and Windows"
+    "trade/fill associations and version-bound screenshots",
+    "version history pagination UI",
+    "native graphical Review/backtracking note flow (HTTP production React tested separately)",
+    "broader multi-track/reconnect/Windows",
+    "new remote head CI and PR236 dependency merge"
   ],
   "exactFrontendCheck": {
     "command": "NODE_OPTIONS=--max-old-space-size=4096 npm run check",
@@ -64,5 +64,48 @@
       "first local exact lint unused parameter",
       "second exact suite en-clone ko/ptBR; fixed translations, no gate relaxed"
     ]
+  },
+  "integratedApplicationCommit": "a355ebe4cb34d29127b8f1f978ed1f26c817dae6",
+  "dependency": {
+    "pr": 236,
+    "head": "24f4796d8079c192038a2229cb894d3e4f2bf460",
+    "main": "84feb73f2b4ee7c162da71f59f028e6351fd684d"
+  },
+  "integrationBackendRegression": {
+    "passed": 169,
+    "warnings": 4,
+    "targetedClockPassed": 2,
+    "targetedIncludesOverlap": true
+  },
+  "integrationExactFrontendCheck": {
+    "functional": 4869,
+    "performance": 1,
+    "desktop": 130,
+    "exitCode": 0,
+    "typesLintBuildArchitecture": "passed;1 existing lint warning"
+  },
+  "native": {
+    "passed": true,
+    "scope": "Actual macOS arm64 LOCAL_OFFLINE imported BAR; create original note, advance/edit/historical API version, save & full owned restart, uncommitted draft restore with explicit current-context copy. No native screenshot/fill associations or entire166 claim",
+    "source": "a355ebe4cb34d29127b8f1f978ed1f26c817dae6",
+    "pids": [
+      27771,
+      27805
+    ],
+    "normalFullOwnedExitMs": [
+      536,
+      546
+    ],
+    "rendererErrors": 0,
+    "externalAttempts": 0,
+    "originalVersionRestored": 2,
+    "copyVersion": 1,
+    "oldDraftRetained": true,
+    "financialSnapshotsUnchangedByNotes": true,
+    "sourceSDKFiles": 1042,
+    "builtFrontendFiles": 164,
+    "pluginAssets": 9,
+    "pluginSourceFiles": 76,
+    "strictSignatureBeforeAndAfter": true
   }
 }

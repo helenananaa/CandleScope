@@ -48,3 +48,13 @@ CANDLESCOPE_QA_BACKEND_URL=http://127.0.0.1:<port> node scripts/frontend-script-
 ## 完整 CI 同命令复查
 
 PR 首次 macOS CI 在新测试调用 `getItem(key)` 处发现 TS2554。原增量 `tsc -b` 不能代替项目的 `tsc --noEmit` gate，之前类型检查口径已修正。存储适配器补齐标准 key 参数，并拒绝错 key；未放宽测试。完整本地 `npm run check` 最终 exit 0：4869 个 functional、1 个独立性能 gate、130 个 desktop 测试均通过，显式 TypeScript、lint（0 errors / 1 条既有 SingleChartPanes warning）、架构、插件架构、30 locale key 检查及生产 build 通过。初次完整本地检查也发现韩语/巴西葡语不可使用英文占位，现已补齐对应 25 项笔记文案；其余非中英 locale 仍采用英文 fallback，未声称全面翻译完成。失败及修复后的完整日志均在 evidence。远程新 head CI 仍须独立核对。
+
+## 与导入 BAR 整合的原生文本笔记验证
+
+整合应用源码 a355ebe4，依赖 #236 的24f4796d，含 main84feb73f。当前完整前端 npm run check exit0：4869 functional +1独立性能 +130 desktop、显式类型/lint/build/架构等通过；169项整合后端回归通过（4条既有提示），追加2项目标clock测试通过（1项与169重叠）。
+
+原生发现并修复一个实际时钟问题：已有下单检查点后，单轨道可继续提交adapter进度；原笔记错误地一直读取旧global checkpoint时间，导致画面推进后GET422。笔记当前时钟现读取同事务run虚拟时间，checkpoint序号仍绑定CAS；全局cohort写入本来就在同事务同步run时间。回归先失败再通过，双FULL轨道也校验相同已提交global时间。
+
+macOS arm64真实包中，创建事前计划、推进后修改同一笔记为v2、旧时刻API返回v1，均未改变金融快照。保留未保存草稿后完整退出，PID27771→27805恢复原v2和草稿。正常退出会产生新的SHUTDOWN运行事件，旧草稿按原上下文保存返回409，正文保留；通过明确的“另存为当前时刻的新笔记”生成新ID/v1，旧笔记v2和旧恢复数据保留，没有静默重绑定。两次正常完整退出536ms/546ms，renderer异常和外网尝试0。1042源码/SDK、164构建文件、9插件资产、76插件源匹配，前后严格签名通过。
+
+最新原生证据为 evidence/native-imported-bar；restored-imported-replay.png在保存结果刷新及20根5m历史真正加载后截图。更早的restored-saved-note-and-draft.png只记录保存后刷新中的中间画面。此前原生失败、旧检查点时钟回归失败及最终通过日志保留。当前native是文本笔记/版本/草稿限定范围；实际图形Review回退、截图和交易关联尚未验收，整个#166继续开放。

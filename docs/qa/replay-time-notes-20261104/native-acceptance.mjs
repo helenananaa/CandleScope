@@ -136,8 +136,18 @@ try{
  await notePanel().getByRole('button',{name:/^恢复草稿/}).click();
  assert.equal(await notePanel().locator('textarea').inputValue(),'原生完整退出后保留的未保存草稿');
  const financialBeforeRecovery=(await json(`/api/v1/replay/runs/session/${session}`)).snapshot;
- const recoveredNote=await saveNote();assert.equal(recoveredNote.id,originalNote.id);assert.equal(recoveredNote.revisionCount,3);
+ const rejected=q.s.page.waitForResponse(r=>new URL(r.url()).pathname===notesPath&&r.request().method()==='POST',{timeout:30000});
+ await notePanel().getByRole('button',{name:'保存',exact:true}).click();
+ const stale=await rejected;assert.equal(stale.status(),409);assert.equal((await stale.json()).error.code,'REPLAY_NOTE_CONTEXT_CHANGED');
+ assert.equal(await notePanel().locator('textarea').inputValue(),'原生完整退出后保留的未保存草稿');
+ await notePanel().getByRole('button',{name:'另存为当前时刻的新笔记',exact:true}).click();
+ const recoveredNote=await saveNote();assert.notEqual(recoveredNote.id,originalNote.id);assert.equal(recoveredNote.revisionCount,1);
  assert.equal(recoveredNote.fields.entryBasis,'原生完整退出后保留的未保存草稿');
+ const recoveryRetained=await q.s.page.evaluate(()=>Object.keys(localStorage).some(key=>key.startsWith('candlescope.replay-note-draft.v1:')
+  &&localStorage.getItem(key)?.includes('原生完整退出后保留的未保存草稿')));
+ assert.ok(recoveryRetained,'Explicit new note erased the original stale recovery draft');
+ const finalNotes=await json(notesPath);assert.deepEqual(finalNotes.notes.find(n=>n.id===originalNote.id),laterNote);
+ await q.record('stale-context-explicit-copy',{rejectedCode:'REPLAY_NOTE_CONTEXT_CHANGED',recoveryRetained,oldSavedVersionPreserved:true});
  assert.deepEqual((await json(`/api/v1/replay/runs/session/${session}`)).snapshot,financialBeforeRecovery);
  await q.screenshot('restored-saved-note-and-draft');
  await q.record('native-note-and-draft-restored',{restoredNotes,recoveredNote,unchangedFinancialSnapshot:true});
