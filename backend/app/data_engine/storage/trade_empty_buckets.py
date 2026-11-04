@@ -12,7 +12,8 @@ def invalidate():
 
 
 def init_schema(conn):
-    from .empty_coverage import default_identity_sql, init_revision_triggers
+    from .empty_coverage import default_identity_sql
+    from .revisions import init_empty_coverage_revision_triggers as init_revision_triggers
     predicate = default_identity_sql('NEW', 'NEW.exchange')
     conn.executescript(f'''
         CREATE TABLE IF NOT EXISTS trade_empty_buckets (

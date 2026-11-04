@@ -14,5 +14,20 @@
   "frontendUnitPassed": 37,
   "typecheck": true,
   "eslintErrors": 0,
-  "nativeRequalification": "pending current source package and latest main"
+  "nativeRequalification": {
+    "source": "1a341ff1",
+    "qualified": false,
+    "blockedBy": "Binance shared IP418 before chart/source configuration",
+    "retryNotBeforeUTC": "2026-11-04T01:10:58.578Z",
+    "normalFullOwnedExitMs": 15241,
+    "strictPackageBeforeAndAfter": true,
+    "next": "Reassemble current source after revision-owner extraction and run all four sources plus Gate hover"
+  },
+  "storageTriggerOwner": {
+    "movedTo": "storage/revisions.py",
+    "functionBodyAstIdentical": true,
+    "regressionPassed": 104,
+    "architectureRemaining": 10,
+    "remainingReason": "Existing indicator.history_worker depends on HTTP; no new owner allowlist added"
+  }
 }
