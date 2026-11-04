@@ -264,6 +264,7 @@ class ContinuousStrategyStore:
             self._enforce_total_budget()
             if creation_key is not None:self.creations._commit_creation(creation_key)
         self.updates.notify(run_id)
+        if creation_key is not None:self.updates.notify("creation:"+creation_key)
         return self.summary(run_id)
 
     def resume(self, run_id, *, generation, revision, retry_failed=False):
@@ -326,7 +327,8 @@ class ContinuousStrategyStore:
             raise fail("CONTINUOUS_INPUT_INVALID", "A stopped execution requires its visible reason")
         with self._transaction():
             row = self._expected(run_id, generation, revision)
-            if row["phase"] in {"REPAIR_REQUIRED", "FAILED", "CANCELLED"} and phase != row["phase"]:
+            if (row["phase"] in {"REPAIR_REQUIRED", "FAILED", "CANCELLED"} and phase != row["phase"]
+                    and not (phase=="CANCELLED" and row["phase"]!="CANCELLED")):
                 raise fail("CONTINUOUS_NOT_READY", "Stopped or repair-required state needs explicit resolution")
             self.db.execute("UPDATE runs SET revision=revision+1,phase=?,error_json=?,updated_at_ms=? WHERE id=?",
                             (phase, error_json, int(time.time()*1000), run_id))
