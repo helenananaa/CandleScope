@@ -459,17 +459,43 @@ class SimulationKernel:
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
         close_callback=None,
     ) -> SimulationResult:
+        self._execute_bar_batch(events, strategy, warmup_events=warmup_events, finalize=finalize,
+                                checkpoint_callback=checkpoint_callback, close_callback=close_callback)
+        return self.result()
+
+    def advance(
+        self,
+        events: Iterable[MarketEvent],
+        strategy: StrategyFn,
+        *,
+        warmup_events: int = 0,
+        checkpoint_callback: Callable[[MarketEvent], None] | None = None,
+        close_callback=None,
+    ) -> None:
+        """Process a continuation without ending orders or building a full report.
+
+        The host owns input identity, continuity, persistence and publication. This
+        primitive only preserves the existing BAR event order across batches. A
+        final run((), ..., finalize=True) keeps the historical finishing contract.
+        Other execution clocks must opt in through their own qualified path.
+        """
+        if type(self) is not SimulationKernel:
+            raise MarketDatasetError("This execution clock has no qualified BAR continuation", code="FIDELITY_UNSUPPORTED")
+        self._execute_bar_batch(events, strategy, warmup_events=warmup_events, finalize=False,
+                                checkpoint_callback=checkpoint_callback, close_callback=close_callback, finish_batch=False)
+
+    def _execute_bar_batch(self, events, strategy, *, warmup_events, finalize, checkpoint_callback,
+                           close_callback, finish_batch=True):
         if self.process_orders_on_close and close_callback is None:
             raise MarketDatasetError("closing-tick handler is required", code="FIDELITY_UNSUPPORTED")
         loop = (self._run_plain_bars if self._specialized_bar and not self.process_orders_on_close
                 and type(self) is SimulationKernel and type(self.account) is ContractAccount
                 and self.funding_rate == 0 and warmup_events == 0 and self.market_observer is None else self._run_events)
         loop(events, strategy, warmup_events=warmup_events,
-                         finalize=finalize, checkpoint_callback=checkpoint_callback,
+                         finalize=finalize, checkpoint_callback=checkpoint_callback, finish_batch=finish_batch,
                          **({"close_callback": close_callback} if close_callback is not None else {}))
-        return self.result()
 
-    def _run_plain_bars(self, events, strategy, *, warmup_events, finalize, checkpoint_callback):
+    def _run_plain_bars(self, events, strategy, *, warmup_events, finalize, checkpoint_callback, finish_batch=True):
         # Host-owned BAR runs select this lane once. Matching, accounting,
         # decisions and control/checkpoint callbacks retain their original order.
         from itertools import chain
@@ -482,7 +508,7 @@ class SimulationKernel:
                 break
             if event.role != "BARS" or self.account is not account or self.funding_rate != 0 or self.market_observer is not None:
                 self._run_events(chain((event,), iterator), strategy, warmup_events=0,
-                                 finalize=finalize, checkpoint_callback=checkpoint_callback)
+                                 finalize=finalize, checkpoint_callback=checkpoint_callback, finish_batch=finish_batch)
                 return
             if not accept(event):
                 continue
@@ -495,9 +521,10 @@ class SimulationKernel:
             equity(event)
             if checkpoint_callback is not None:
                 checkpoint_callback(event)
-        self._append_terminal_curve_point()
-        if finalize:
-            self.finalize_orders()
+        if finish_batch:
+            self._append_terminal_curve_point()
+            if finalize:
+                self.finalize_orders()
 
     def _run_events(
         self,
@@ -508,6 +535,7 @@ class SimulationKernel:
         finalize: bool = False,
         checkpoint_callback: Callable[[MarketEvent], None] | None = None,
         close_callback=None,
+        finish_batch: bool = True,
     ) -> None:
         for event in events:
             if self.paused:
@@ -559,9 +587,10 @@ class SimulationKernel:
             self._record_equity(market_event)
             if checkpoint_callback is not None:
                 checkpoint_callback(event)
-        self._append_terminal_curve_point()
-        if finalize:
-            self.finalize_orders()
+        if finish_batch:
+            self._append_terminal_curve_point()
+            if finalize:
+                self.finalize_orders()
 
     def _record_decision(self, intents, market_event):
         if ((self.execution_model_revision == EXECUTION_REALISM_V2 or self.scale_stream_decisions)

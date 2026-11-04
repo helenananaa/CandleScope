@@ -564,6 +564,9 @@ async def startup_event() -> None:
     try:
         await _startup_event_impl()
     except BaseException:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            await core.shutdown_strategy()
         await stop_extensions(app)
         raise
 
@@ -795,6 +798,7 @@ async def _startup_event_impl() -> None:
     except BaseException:
         replay_core = getattr(app.state, "data_manager_core", None)
         if replay_core is not None:
+            await replay_core.shutdown_strategy()
             replay_core.close_replay()
         alert_facade = getattr(app.state, "alert_facade", None)
         readonly_accounts = getattr(app.state, "readonly_account_service", None)
@@ -896,6 +900,7 @@ async def shutdown_event() -> None:
     """Application shutdown handler."""
     replay_core = getattr(app.state, "data_manager_core", None)
     if replay_core is not None:
+        await replay_core.shutdown_strategy()
         await replay_core.shutdown_replay(step_timeout=5)
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
@@ -914,9 +919,6 @@ async def shutdown_event() -> None:
                 exc,
                 exc_info=True,
             )
-    manager_core = getattr(app.state, "data_manager_core", None)
-    if manager_core is not None:
-        manager_core.close_strategy()
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         replay_runtime = getattr(app.state, "replay_runtime", None)
