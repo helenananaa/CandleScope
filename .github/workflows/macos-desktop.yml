@@ -81,6 +81,7 @@ jobs:
             tests/test_backfill_coordinator.py \
             tests/test_backfill_interest_priority.py \
             tests/test_public_admission.py \
+            tests/test_binance_spot_depth_weight.py \
             tests/test_backfill_rate_limit.py \
             tests/test_ccxt_shared_markets.py \
             tests/test_desktop_sidecar.py \
