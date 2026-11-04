@@ -151,8 +151,10 @@ class PrefixWatchStore:
             row=conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(owner,)).fetchone()
             return self._receipt(row,current_revision(conn))
 
-    def prepare(self,receipt: PrefixReceipt,*,committed_through_ms,through_ms):
+    def prepare(self,receipt: PrefixReceipt,*,committed_through_ms,through_ms,frozen_version=None):
         _time(committed_through_ms);_time(through_ms)
+        if frozen_version is not None and (type(frozen_version) is not int or not 0 <= frozen_version <= MAX_TIME):
+            raise ValueError("frozen source version must be a safe counter")
         if receipt.through_ms != committed_through_ms or through_ms < committed_through_ms:
             raise PrefixContinuityUnavailable("financial cursor and source receipt do not agree")
         with closing(self.connect()) as conn,conn:
@@ -165,6 +167,9 @@ class PrefixWatchStore:
                 raise PrefixContinuityUnavailable("source database no longer covers the committed receipt")
             if receipt.acquisition < row["committed_acquisition"] or committed_through_ms < row["committed_through_ms"]:
                 raise PrefixContinuityUnavailable("financial receipt is older than acknowledged source progress")
+            if frozen_version is not None and row["version"] != frozen_version:
+                raise ProcessedPrefixChanged(max(receipt.from_ms,row["dirty_from_ms"] or receipt.from_ms),
+                                             row["dirty_through_ms"] if row["dirty_through_ms"] is not None else row["through_ms"])
             observed=receipt.version
             if row["verified_through_ms"] >= committed_through_ms:
                 observed=max(observed,row["verified_version"])
@@ -179,8 +184,11 @@ class PrefixWatchStore:
             return self._receipt(conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(receipt.owner,)).fetchone(),head)
 
     @contextmanager
-    def commit_guard(self,proof: PrefixReceipt):
+    def commit_guard(self,proof: PrefixReceipt,*,committed_through_ms=None):
         """Hold only the final source fence/financial commit, never computation."""
+        acknowledged = proof.through_ms if committed_through_ms is None else _time(committed_through_ms)
+        if not proof.from_ms-1 <= acknowledged <= proof.through_ms:
+            raise ValueError("financial commit must stay inside the acquired source prefix")
         with closing(self.connect()) as conn,conn:
             conn.execute("BEGIN IMMEDIATE")
             row=conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(proof.owner,)).fetchone()
@@ -193,7 +201,7 @@ class PrefixWatchStore:
             yield
             conn.execute("UPDATE kline_prefix_watches SET verified_through_ms=?,verified_version=version,"
                          "committed_acquisition=?,committed_through_ms=?,dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
-                         (proof.through_ms,proof.acquisition,proof.through_ms,proof.owner))
+                         (acknowledged,proof.acquisition,acknowledged,proof.owner))
 
     def inspect(self,owner):
         with closing(self.connect()) as conn,conn:

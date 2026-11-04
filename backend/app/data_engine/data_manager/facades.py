@@ -44,12 +44,12 @@ class BarSourcePrefixFacade:
     def prepare(self, receipt, **kwargs):
         return self._require().prepare(receipt, **kwargs)
 
-    def commit(self, proof, publish: Callable[[], Any]):
+    def commit(self, proof, publish: Callable[[], Any], *, committed_through_ms=None):
         # Computation and provider snapshots belong before this short guard.
         # The callback only commits its already prepared financial checkpoint.
         if inspect.iscoroutinefunction(publish):
             raise TypeError("source prefix commit requires a synchronous durable callback")
-        with self._require().commit_guard(proof):
+        with self._require().commit_guard(proof,committed_through_ms=committed_through_ms):
             result = publish()
             if inspect.isawaitable(result):
                 if inspect.iscoroutine(result):
