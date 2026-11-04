@@ -1,0 +1,50 @@
+{
+  "applicationCommit": "4db5ac6a",
+  "main": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "platform": "macOS arm64",
+  "backendPassed": 71,
+  "frontendPassed": 30,
+  "sameTimeDraftScopeRerunPassed": 6,
+  "typecheck": "passed",
+  "lint": "passed",
+  "productionBuild": "passed with existing chunk-size advisory",
+  "frontendArchitecture": "passed",
+  "i18n": "30 locales passed",
+  "backendArchitecture": {
+    "passed": false,
+    "existingMainViolations": 10,
+    "new": 0,
+    "byteIdenticalToMainLog": true
+  },
+  "productionBrowser": {
+    "passed": true,
+    "checks": 5,
+    "pid": 14890,
+    "rendererExceptions": 0,
+    "remainingWorkers": 0,
+    "externalAttempts": 0,
+    "scope": "Real Chrome156/production React/actual loopback router + SQLite/fixture candles; not native package"
+  },
+  "backendProcessRestart": {
+    "passed": true,
+    "scope": "Real backend process restart, explicit fixture candles; not native desktop qualification",
+    "pids": [
+      15036,
+      15038
+    ],
+    "notes": 4,
+    "blockedExternalAttempts": 0,
+    "checks": [
+      "all visible note versions equal",
+      "review/source cursors and financial snapshot equal",
+      "both owned exits closed manager without streams"
+    ]
+  },
+  "pending": [
+    "native installed package save/full exit/restart",
+    "version-history pagination UI",
+    "trade/fill and screenshot version associations",
+    "imported BAR/market-trades flow",
+    "broader multiple tracks/reconnect and Windows"
+  ]
+}
