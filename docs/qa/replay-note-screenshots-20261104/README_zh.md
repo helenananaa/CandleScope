@@ -25,3 +25,6 @@ PNG先作为不可变、运行/轨道/epoch所属素材保存，再与文字版�
 新增backend/tests/test_replay_note_captures.py；浏览器沿用../replay-time-notes-20261104/http_server.py及frontend/scripts/frontend-script-integration.mjs --replay-notes；独立后端恢复用同目录restart_check.py。都必须用新的私有QA目录及loopback端口，守卫在导入后端前安装。
 
 本目录native-acceptance.mjs针对实际导入BAR图表，沿用../replay-imported-bar-20261104/assemble.py、verify.mjs和已验证Python运行时。先构建当前frontend/dist并提交源码，再用新私有目录生成候选；校验源码/SDK/插件、严格签名及完整正常退出。Windows、广泛多商品/重连/指标及原生图形Review仍独立待验。
+
+
+首轮8a670f08原生候选已成功提交真实图表PNG，但QA把Playwright HTTPResponse误当Fetch Response调用clone，脚本退出；未作为通过记录。已按既有Playwright接口修正，同时补充截图期间指标计算/呈现引用变化的拒绝条件；源/行情时间未变也不能混入异步更新中的指标画面。后续候选必须重新构建当前源。

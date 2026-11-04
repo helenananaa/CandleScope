@@ -5,9 +5,11 @@ import { t } from "../../i18n/index.js";
 
 export interface ReplayNoteChartState {
   ready: boolean; seriesKey: string; sourceVersion: number; interval: string; chartType: string;
-  contextKey: string;
+  contextKey: string; presentation?: readonly unknown[];
 }
 const same = (a: ReplayNoteChartState, b: ReplayNoteChartState) => a.ready && b.ready && a.seriesKey === b.seriesKey
+  && (a.presentation?.length ?? 0) === (b.presentation?.length ?? 0)
+  && (a.presentation ?? []).every((value, index) => value === b.presentation?.[index])
   && a.sourceVersion === b.sourceVersion && a.interval === b.interval && a.chartType === b.chartType && a.contextKey === b.contextKey;
 const frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 export async function captureReplayNoteChart(surface: Pick<ChartSurfaceActions, "prepareExport" | "getExportSnapshot">,

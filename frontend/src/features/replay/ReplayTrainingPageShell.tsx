@@ -833,13 +833,20 @@ export default function ReplayTrainingPageShell({
   const viewerVersion = Number(displayedSeriesStore.version);
   const viewerSeriesKey = displayedSeriesStore.seriesKey;
   const isReview = review !== null;
-  const captureState = useRef({ ready: false, seriesKey: "", sourceVersion: 0, interval: "", chartType: "", contextKey: "",
+  const captureIndicatorRuntime = review === null ? indicators : reviewIndicators;
+  const captureIndicatorView = captureIndicatorRuntime.view;
+  const captureState = useRef<{ ready: boolean; seriesKey: string; sourceVersion: number; interval: string; chartType: string;
+    contextKey: string; presentation?: readonly unknown[]; runId: string | null; trackId: string | null; dataEpoch: string | null;
+    time: number | null; reviewId: string | null; reviewRevision: number | null }>({ ready: false, seriesKey: "", sourceVersion: 0, interval: "", chartType: "", contextKey: "",
     runId: null as string | null, trackId: null as string | null, dataEpoch: null as string | null, time: null as number | null,
     reviewId: null as string | null, reviewRevision: null as number | null });
   captureState.current = {
-    ready: active && cell?.active !== false && viewerBarCount > 0 && !viewer.loading && !viewer.viewerPending && !viewer.controlPending
+    ready: active && cell?.active !== false && viewerBarCount > 0 && !captureIndicatorRuntime.status.computing && !viewer.loading && !viewer.viewerPending && !viewer.controlPending
       && (review === null ? ["PAUSED", "ENDED"].includes(String(effectiveState)) && !runtime.marketData.view.loading
         : review.playback_state === "PAUSED" && !reviewChartLoading && reviewLoadedPrefixKey === reviewPrefixKey),
+    presentation: [captureIndicatorView.activeIndicators, captureIndicatorView.mainOverlayLines, captureIndicatorView.markers,
+      captureIndicatorView.fills, captureIndicatorView.hlines, captureIndicatorView.bgcolors, captureIndicatorView.barcolors,
+      captureIndicatorView.drawings, captureIndicatorView.signals, ...captureIndicatorView.subPanes.map(pane => pane.lines)],
     seriesKey: viewerSeriesKey ?? "", sourceVersion: viewerVersion, interval: displayedInterval, chartType: settings.chartType,
     contextKey: JSON.stringify([runtime.store.generation, runtime.store.revision, runtime.store.sourceSequence,
       runtime.store.virtualTimeMs, review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence, viewerSeriesKey, viewerVersion,

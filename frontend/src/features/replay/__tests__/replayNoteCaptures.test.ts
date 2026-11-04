@@ -93,3 +93,16 @@ test("chart capture refuses a changed source before preparing drawings and resto
     assert.equal(prepared, 1); assert.equal(restored, 1);
   } finally { if (previous === undefined) Reflect.deleteProperty(globalThis, "requestAnimationFrame"); else globalThis.requestAnimationFrame = previous; }
 });
+
+
+test("capture rejects changed indicator output references even when the market series and virtual time are unchanged", async () => {
+  const previous = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = callback => { queueMicrotask(() => callback(0)); return 1; };
+  try {
+    const source = { ready: true, seriesKey: "series", sourceVersion: 1, interval: "1m", chartType: "candles", contextKey: "same clock" };
+    let prepared = 0;
+    const surface = { prepareExport: async () => { prepared++; return null; }, getExportSnapshot: () => null };
+    await assert.rejects(captureReplayNoteChart(surface, context(), () => ({ ...source, presentation: [[]] })));
+    assert.equal(prepared, 0);
+  } finally { if (previous === undefined) Reflect.deleteProperty(globalThis, "requestAnimationFrame"); else globalThis.requestAnimationFrame = previous; }
+});

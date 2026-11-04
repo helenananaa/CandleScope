@@ -84,7 +84,7 @@ try{
  async function captureImage(label){
   const response=q.s.page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/note-captures')&&r.request().method()==='POST',{timeout:30000});
   await notePanel().getByRole('button',{name:'截取当前图表',exact:true}).click();
-  const uploaded=await response;assert.equal(uploaded.status(),200,await uploaded.clone().text());
+  const uploaded=await response;assert.equal(uploaded.status(),200,await uploaded.text());
   const receipt=await uploaded.json(),request=uploaded.request().postDataJSON();
   await q.until(async()=>await notePanel().getByRole('button',{name:'保存并关闭',exact:true}).isEnabled(),30000);
   await q.record('native-png-upload-'+label,{receipt,encodedBytes:request.image.length});
