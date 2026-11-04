@@ -1,0 +1,18 @@
+{
+  "sourceBefore": "885f00d191aa4db0abc7841594839178098dce33",
+  "originalNativeFailure": "../overlay-index-20261103/main231-native/qualification.json",
+  "cause": "Frontend initial hosted hydration refused non-equidistant chart rows before requesting authoritative range; no Upbit hosted WebSocket subscription was sent.",
+  "browserBefore": "Sparse initial hydration and subscription timeout",
+  "browserAfter": {
+    "passed": true,
+    "checks": 15,
+    "remainingWorkers": 0,
+    "rendererExceptions": 0,
+    "includes": "Sparse real hook MA output plus backend pending-gap subscription deferral"
+  },
+  "backendPassed": 56,
+  "frontendUnitPassed": 37,
+  "typecheck": true,
+  "eslintErrors": 0,
+  "nativeRequalification": "pending current source package and latest main"
+}
