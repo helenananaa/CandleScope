@@ -16,6 +16,7 @@ from app.replay.request_contracts import (
     ReplayDrawingDocumentPayload,
     ReplayReviewMarkerPayload,
     ReplayNotePayload,
+    ReplayNoteCapturePayload,
     ReplayReviewControlPayload,
     ReplayPublicTimeBatchPayload,
     ReplayForkPayload,
@@ -62,6 +63,7 @@ from app.replay.training.service import TrainingRunService
 
 
 MAX_REPLAY_REQUEST_BYTES = 64 * 1024
+MAX_REPLAY_NOTE_CAPTURE_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_REPLAY_DRAWING_REQUEST_BYTES = 2_100_000
 MAX_REPLAY_INDICATOR_REQUEST_BYTES = 8_000_000
 _MAX_HORIZON_MS = REPLAY_SETTINGS.max_horizon_days * 86_400_000
@@ -231,6 +233,8 @@ def _replay_request_limit(request: Request) -> int:
         and "/replay/runs/" in request.url.path
     ):
         return MAX_REPLAY_DRAWING_REQUEST_BYTES
+    if request.method == "POST" and "/replay/runs/" in request.url.path and request.url.path.endswith("/note-captures"):
+        return MAX_REPLAY_NOTE_CAPTURE_REQUEST_BYTES
     return MAX_REPLAY_REQUEST_BYTES
 
 
@@ -1069,6 +1073,30 @@ async def replay_v2_training_journal(
 async def replay_v2_training_notes(request: Request, run_id: str, track_id: str,
                                    at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS)) -> dict[str, object]:
     return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms)
+
+
+@router.post("/runs/{run_id}/tracks/{track_id}/note-captures",
+             dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)])
+async def replay_v2_note_capture_save(request: Request, run_id: str, track_id: str,
+        payload: ReplayNoteCapturePayload) -> Response:
+    value = await _training_service(request).save_note_capture(run_id, track_id,
+        capture_id=payload.id, image=payload.image, context=payload.context.model_dump(),
+        captured_context=payload.capturedContext.model_dump(), chart=payload.chart.model_dump())
+    return JSONResponse(value, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/runs/{run_id}/tracks/{track_id}/note-captures")
+async def replay_v2_note_capture_list(request: Request, run_id: str, track_id: str,
+        capture_id: str | None = Query(default=None, min_length=1, max_length=128)) -> Response:
+    value = await _training_service(request).note_captures(run_id, track_id, capture_id=capture_id)
+    return JSONResponse(value, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/runs/{run_id}/tracks/{track_id}/notes/{note_id}/versions/{revision}/screenshots/{capture_id}")
+async def replay_v2_note_capture_image(request: Request, run_id: str, track_id: str, note_id: str,
+        revision: int, capture_id: str) -> Response:
+    value = await _training_service(request).note_capture_image(run_id, track_id, note_id, revision, capture_id)
+    return JSONResponse(value, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/runs/{run_id}/tracks/{track_id}/notes/link-options")

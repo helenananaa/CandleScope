@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
+import { ReplayNoteScreenshots, type ReplayNoteScreenshotSelection } from "./ReplayNoteScreenshots.js";
 import { ReplayNoteLinks } from "./ReplayNoteLinks.js";
 
-export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, formatTime, actualTime, onTimes }: {
+export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, formatTime, actualTime, onTimes, onImage }: {
   api: Pick<ReplayV2ApiClient, "noteVersionsRun">; note: ReplayNote; context: ReplayNoteContext;
   scope: string; asOfMs: number; formatTime(ms: number): string; actualTime(ms: number): string;
+  onImage(selection: ReplayNoteScreenshotSelection): void;
   onTimes(scope: string, values: readonly number[]): void;
 }) {
   const [before, setBefore] = useState(note.revisionCount + 1);
@@ -27,7 +29,7 @@ export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, f
     });
     return () => controller.abort();
   }, [api, context, note.id, asOfMs, before, attempt]);
-  useEffect(() => { onTimes(scope, page.versions.flatMap(version => [version.effectiveTimeMs, ...(version.links?.map(link => link.eventTimeMs) ?? [])])); }, [scope, page.versions, onTimes]);
+  useEffect(() => { onTimes(scope, page.versions.flatMap(version => [version.effectiveTimeMs, ...(version.links?.map(link => link.eventTimeMs) ?? []), ...(version.screenshots?.map(capture => capture.marketTimeMs) ?? [])])); }, [scope, page.versions, onTimes]);
   return <div className="replay-note-history" data-testid="replay-note-history">
     {page.versions.map(version => <div key={version.revisionCount} data-note-version={version.revisionCount}>
       <strong>{t("replay.notes.version", { version: version.revisionCount })}</strong>
@@ -35,6 +37,7 @@ export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, f
         <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(version.updatedAtMs)}</dd></dl>
       <p className="replay-note-text">{version.fields.entryBasis ?? ""}</p>
       <ReplayNoteLinks links={version.links ?? []} formatTime={formatTime} />
+      <ReplayNoteScreenshots note={version} context={context} formatTime={formatTime} onOpen={onImage} />
     </div>)}
     {loading && <p role="status">{t("replay.notes.historyLoading")}</p>}
     {page.error && !loading && <p role="alert">{t("replay.notes.historyFailed")}</p>}

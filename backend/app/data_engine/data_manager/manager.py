@@ -423,6 +423,7 @@ class DataManager(DataManagerCore):
             query_before=self.query_before,
             get_bounds=self.get_bounds,
             ensure_stream=self.ensure_stream,
+            prefix_store=lambda: getattr(getattr(self.query_engine.storage,"revision_store",None),"prefix_watches",None),
         )
         self.market_state = MarketStateFacade(self._require_market_data_service)
         self.trades = TradeDataFacade(self._require_trade_flow_service)
