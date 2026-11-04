@@ -1,0 +1,15 @@
+# 有限持续策略创建意图与原子首检查点
+
+依赖#245/#246。在既有ContinuousStrategyStore增加schema2创建记录；schema1在同一事务升级，保留既有运行/代码/检查点。初始请求先保留唯一run_id、初始化dataset_id、首次闭合UTC截止点、用户历史起点与预检定义。相同key/相同代码条件返回首次意图，重试时系统时间前进不移动截止；不同条件冲突。纯实时不能带图表历史，历史必须非空且不超过200000根。尚非公开创建控制器、默认应用启动绑定或三模式UI，#157/#158/#165继续开放。
+
+REQUESTED→WATCHED/READY→COMMITTED；持久化真实Manager的完整源前缀receipt与固定初始化descriptor/proof，失败显式留在FAILED，按新revision明确重试。新的generation/代次隔离仍归财务Store；创建revision隔离旧准备任务。源修改会阻止原子创建，明确刷新尚未创建账户的输入后仍保留首次截止；已COMMITTED不能经此接口重置/修补。
+
+首财务账户/Provider/规划器检查点、游标及COMMITTED标记同SQLite事务提交或回滚。事务检查仍在READY的当前创建revision、代码条件、模式、源身份和起点；Host在启动provider前也检查，正式创建要求同步源提交fence。提交后清空请求内重复的整份定义，由运行单独拥有源代码/参数；保留的小型来源receipt/初始化metadata用于不确定结果重试。无新增防篡改哈希或逐事件历史复制。
+
+请求占用与已建运行共享默认64个名额（max_runs可配置），失败意图继续占位，不偷删源或恢复数据；每份定义1MiB、来源metadata32KiB，财务检查点既有512MiB总预算保持。Controller仍须拥有有限准备worker、独立provisional输入目录/磁盘预算、失败/取消后安全回收，以及进程崩溃遗留处理。本层只写SQLite与源metadata，不私自删除文件或断开/启动市场传输。
+
+恢复查询使用一次SQLite读取已运行的LIVE/CATCHING_UP以及“首账户已提交、执行器尚未启动”的初始PAUSED/gen1/rev1意图。自动恢复携带读取时的代次/修订，开始前身份变化则拒绝且不申请源lease；用户首次暂停即使尚未启动actor也提交新revision，从而不会在重启时被自动开启。其他已明确暂停、失败、待修补运行仍不自动恢复。
+
+最终214项本地组合通过、5条既有FastAPI提示。覆盖真实Manager/canonical/frozen/account SQLite、事务末尾故障同时回滚账户/检查点/创建意图/源确认、Store关闭重建、两连接并发相同请求收敛、容量保留、修改源后旧任务阻止与明确重试、schema1账务保留、实际provider和Runtime源lease清理、自动恢复与稍后暂停竞争。公共传输lease使用受控测试替换；数据查询、源围栏、财务事务、Provider和线程为真实实现，未发公网请求。不是安装包完全退出/重启、LIVE或Windows验收。架构与main原有10条逐字节一致。
+
+第一轮辅助函数误名setup触发pytest的旧式module setup，6个新测试未运行；改名后23通过。中间一个async测试缺pytest-asyncio导致跳过，改用项目现有asyncio.run模式，最终新用例全部执行且无跳过，相关失败/跳过日志保留。CI添加创建记录回归；开发不等待CI，合main前检查最终head。
