@@ -188,6 +188,20 @@ class ContinuousStrategyStore:
             except (TypeError, ValueError) as error:
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state is unavailable") from error
 
+    def describe(self, run_id):
+        """Bounded immutable execution definition, without decoding its account."""
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            row = self.db.execute("SELECT "+SUMMARY_COLUMNS+",definition_json FROM runs WHERE id=?",(run_id,)).fetchone()
+            return {"run":_summary(row),"definition":json.loads(row["definition_json"])}
+
+    def list_summaries(self):
+        with self.lock:
+            if self.closed:
+                raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            return [_summary(row) for row in self.db.execute("SELECT "+SUMMARY_COLUMNS+" FROM runs ORDER BY id")]
+
     def find_created(self, run_id, *, definition, mode, data_revision, event_time_ms):
         """Resolve an uncertain create before preparing/executing a provider."""
         _text(run_id,128), _text(data_revision,256), _counter(event_time_ms)

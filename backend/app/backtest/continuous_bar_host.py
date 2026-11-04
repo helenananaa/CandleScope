@@ -53,10 +53,12 @@ class ContinuousBarHost:
             raise error("FIDELITY_UNSUPPORTED", "This continuation host requires its qualified closed-BAR clock and account data")
         self.lock = threading.RLock()
         self.stop_requested = threading.Event()
+        self.input_control = None
         self.store = None
         self.row = None
         self.source_receipt = None
         self.closed = False
+        self.resources_closed = False
         self.definition = definition
         self.config = config
         provider = provider_factory(definition)
@@ -171,6 +173,8 @@ class ContinuousBarHost:
     def _check_stopping(self):
         if self.stop_requested.is_set():
             raise ContinuousExecutionStopping()
+        if self.input_control is not None:
+            self.input_control()
 
     def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False, source_receipt=None, commit_checkpoint=None):
         with self.lock:
@@ -252,26 +256,35 @@ class ContinuousBarHost:
                 self.source_receipt = point
                 return self.row
             except BaseException as failure:
-                try:
-                    if isinstance(failure,ContinuousExecutionStopping):
-                        pass  # Keep the last committed phase/account for restart.
-                    elif isinstance(failure,PrefixAcquisitionChanged):
-                        old = self.source_receipt
-                        frozen = self.definition.get("initial_snapshot") or {}
-                        protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
-                        if (old is not None and protected >= old.from_ms and failure.start_ms is not None and failure.end_ms is not None
-                                and failure.start_ms <= protected and failure.end_ms >= old.from_ms):
-                            self._stop("REPAIR_REQUIRED","CONTINUOUS_HISTORY_REVISED","Processed input changed; committed result retained")
-                        else:
-                            self._defer("CONTINUOUS_SOURCE_RECHECK","New input changed during acquisition; retry from committed state")
-                    elif isinstance(failure,StaleAcquisition):
-                        self._defer("CONTINUOUS_SOURCE_RECHECK",str(failure)[:1000])
-                    elif not isinstance(failure,BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
-                        self._stop("FAILED",getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"),str(failure)[:1000])
-                except BaseException:
-                    pass  # Preserve the original source/I/O/provider failure.
-                self._close_after_failure()
+                self.fail_input(failure)
                 raise
+
+    def fail_input(self, failure):
+        """Record a source acquisition failure before execution as well as in it."""
+        with self.lock:
+            if self.closed:
+                return
+            try:
+                if isinstance(failure,ContinuousExecutionStopping):
+                    pass  # Keep the last committed phase/account for restart.
+                elif isinstance(failure,PrefixAcquisitionChanged):
+                    old = self.source_receipt
+                    frozen = self.definition.get("initial_snapshot") or {}
+                    protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
+                    if (old is not None and protected >= old.from_ms and failure.start_ms is not None and failure.end_ms is not None
+                            and failure.start_ms <= protected and failure.end_ms >= old.from_ms):
+                        self._stop("REPAIR_REQUIRED","CONTINUOUS_HISTORY_REVISED","Processed input changed; committed result retained")
+                    else:
+                        self._defer("CONTINUOUS_SOURCE_RECHECK","New input changed during acquisition; retry from committed state")
+                elif isinstance(failure,StaleAcquisition):
+                    self._defer("CONTINUOUS_SOURCE_RECHECK",str(failure)[:1000])
+                elif getattr(failure,"code",None) in {"CONTINUOUS_SOURCE_GAP","dataset_source_gap"}:
+                    self._defer("CONTINUOUS_SOURCE_GAP",str(failure))
+                elif not isinstance(failure,BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
+                    self._stop("FAILED",getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"),str(failure)[:1000])
+            except BaseException:
+                logger.exception("Could not record continuing strategy failure; committed recovery point retained")
+            self._close_after_failure()
 
     def _defer(self, code, message):
         try:
@@ -312,7 +325,7 @@ class ContinuousBarHost:
     def close(self):
         self.request_stop()
         with self.lock:
-            if not self.closed:
+            if not self.resources_closed:
                 self.closed = True
                 try:
                     self.adapter.close()
@@ -324,3 +337,4 @@ class ContinuousBarHost:
                         if callable(abort):
                             abort()
                         raise
+                self.resources_closed = True

@@ -39,3 +39,17 @@ Host和source有线程安全停止信号，每次Provider观察前后、完整�
 起始/恢复时尚无新BAR，可以一次guarded确认LIVE并绑定新source receipt，金融sequence/时间/账户不动；已LIVE后重复唤醒不反复写完整检查点。恢复仍显式增加Provider代次。133项组合及最终新增后的7项源交接检查通过，5条既有提示；后端架构与主线原有10条逐字节一致。合作停止最初覆盖了晚到回调的所有权错误，调整检查顺序后保留原明确拒绝；空批次测试最初误要求恢复代次不变，改为显式验证代次+1及其他状态完全相同，原失败保留。7组新检查加入macOS包内Python门禁。
 
 尚未接应用后台Runtime、初始HTTP结果/WS交接、三个模式前端或授权修补，不把内部组合测试当成桌面完整退出重启或整个#165交付。初始快照默认20万根预算，超限明确拒绝，不静默截断；日历/稀疏时钟、Pine及V2合约辅助源须分别取得资格。
+
+## 有界后台所有者（尚待应用接线）
+
+ContinuousStrategyRuntime为已有持久运行拥有每运行1个串行线程（沿用BoundedExecutor，无待处理任务队列，默认最多2个运行），以及DataManager完整语义身份的事件订阅和后台行情consumer lease。先订阅、再读状态；BAR完成/修订/补数/源控制仅合并唤醒，不传金融快照或直接执行策略。局部缺口要求Manager恢复，计算不另建网络连接。源gap registry只在拥有它的事件循环读取，Provider和SQLite执行在运行自己的串行线程，固定本地reader也在同一线程关闭。
+
+实际关闭结果订阅后仍推进20→25；Runtime完整drain不终结账户，重新构造并restore_active只补算25→30。显式pause才持久PAUSED，启动恢复不复活PAUSED/FAILED/REPAIR_REQUIRED，容量超限明确拒绝；授权启动请求被取消也不取消后台执行。保持代码/账户，不按前端断开时间重新初始化。
+
+停止信号先阻止新观察/发布，再物理drain，随后解除事件订阅和owned行情lease，最后关线程；反复取消shutdown也完成这个顺序。清理失败保留actor/lease/容量并向调用者报CONTINUOUS_SHUTDOWN_FAILED，原库不允许当作已安全关闭；下一次明确shutdown可重试。同一symbol的split_adjusted/default订阅分离，原有默认调用不变。
+
+STREAM_ERROR/STOP及保留SOURCE_GAP进入CATCHING_UP并保留原账户；完成恢复并验证源后可空批次确认LIVE。源失效在Provider观察间检查，避免等长批次全部算完。失败的Provider恢复记录持久失败，不用新账户静默替代。
+
+79项实际Manager事件总线/SQLite/Provider/线程、源保护、原订阅连续性与Manager域门面组合通过，5条既有提示；架构仍与main原有10条逐字节一致。传输只替换acquire/release lease以禁止远程连接，其余输入和金融对象真实。起初describe错误地从仅摘要查询取definition，已修正为不取checkpoint的有界定义SQL；保留失败。源gap末端是包含边界，单BAR gap在from处先复现超时后改成包含比较，未放宽用例。
+
+Runtime尚未绑定应用启动/关闭、HTTP/WS或前端；因此不把上述线程/库恢复当成打包桌面、真实在线行情、用户模式或整个issue验收。后续先接应用生命周期，再接初始结果/增量交接和前端、修补。

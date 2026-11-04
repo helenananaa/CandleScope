@@ -51,10 +51,11 @@ class MarketBarBatch:
 
 
 class ContinuousMarketBarSource:
-    def __init__(self, manager, local_datasets: LocalDatasetService, key: SeriesKey, *, clock_ms: Callable[[], int]):
+    def __init__(self, manager, local_datasets: LocalDatasetService, key: SeriesKey, *, clock_ms: Callable[[], int], auto_backfill=False):
         if key.interval != "1m":
             raise BacktestError("FIDELITY_UNSUPPORTED","Continuous market input requires its qualified UTC 1m base clock")
         self.manager, self.local_datasets, self.key, self.clock_ms = manager, local_datasets, key, clock_ms
+        self.auto_backfill = bool(auto_backfill)
         self._reader = None
         self._reader_identity = None
         self.closed = False
@@ -89,7 +90,7 @@ class ContinuousMarketBarSource:
             result = self.manager.bars.query(self.key.symbol,self.key.interval,
                 exchange=self.key.exchange,market_type=self.key.market_type,series_identity=self.key.identity,
                 start_ms=cursor,end_ms=last-STEP+1,limit=count,
-                min_revision=revision,auto_backfill=False,backfill_requester="continuous-strategy")
+                min_revision=revision,auto_backfill=self.auto_backfill,backfill_requester="continuous-strategy")
             if (not result.complete or result.retryable or result.missing_ranges or result.excluded_ranges
                     or len(result.bars) != count):
                 raise failure("Wait for DataManager to complete the exact closed input window")
