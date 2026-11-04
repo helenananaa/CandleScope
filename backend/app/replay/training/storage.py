@@ -9,6 +9,7 @@ from .repositories.markets import TrainingMarketRepository
 from .repositories.liquidations import TrainingLiquidationRepository
 from .repositories.advances import TrainingAdvanceRepository
 from .repositories.curves import TrainingCurveRepository
+from .repositories.notes import TrainingNoteRepository
 
 from .persistence import account_audit as account_audit_ops
 from .persistence import account_marks as account_marks_ops
@@ -103,6 +104,7 @@ class TrainingRunStore:
         self._liquidations = TrainingLiquidationRepository(base_store, self._review)
         self._advances = TrainingAdvanceRepository(base_store)
         self._curves = TrainingCurveRepository(base_store)
+        self._notes = TrainingNoteRepository(base_store)
         self._hedge_risk_fingerprints: dict[str, str] = {}
 
     async def start(self) -> None:
@@ -2881,6 +2883,36 @@ class TrainingRunStore:
 
     async def current_drawing_document(self, run_id: str) -> dict[str, object]:
         return await self._review_repository.current_drawing_document(run_id)
+
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
+        return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms)
+
+    async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
+                                context: Mapping[str, object], captured_context: Mapping[str, object],
+                                chart: Mapping[str, object]) -> dict[str, object]:
+        return await self._notes.captures.save(run_id, track_id, capture_id=capture_id, image=image,
+                                              context=context, captured_context=captured_context, chart=chart)
+
+    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None) -> dict[str, object]:
+        return await self._notes.captures.list(run_id, track_id, capture_id)
+
+    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str) -> dict[str, object]:
+        return await self._notes.captures.image(run_id, track_id, note_id, revision, capture_id)
+
+    async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
+                                before_id: str | None = None, limit: int = 20) -> dict[str, object]:
+        return await self._notes.link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+
+    async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
+                            at_time_ms: int | None = None, before_revision: int | None = None,
+                            limit: int = 20) -> dict[str, object]:
+        return await self._notes.note_versions(run_id, track_id, note_id,
+            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+
+    async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
+                        expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
+        return await self._notes.save_note(run_id, track_id, note_id=note_id, fields=fields,
+                                           expected_revision=expected_revision, context=context)
 
     async def record_drawing_document(
         self,

@@ -1,0 +1,1 @@
+partial: display5m held but chart reported missing source projection; NOT qualified

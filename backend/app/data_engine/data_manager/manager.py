@@ -424,6 +424,7 @@ class DataManager(DataManagerCore):
             query_before=self.query_before,
             get_bounds=self.get_bounds,
             ensure_stream=self.ensure_stream,
+            prefix_store=lambda: getattr(getattr(self.query_engine.storage,"revision_store",None),"prefix_watches",None),
         )
         self.market_state = MarketStateFacade(self._require_market_data_service)
         self.trades = TradeDataFacade(self._require_trade_flow_service)
@@ -1930,6 +1931,7 @@ class DataManager(DataManagerCore):
         market_type: str = "spot",
         event_types: set[DataEventType] | None = None,
         *,
+        series_identity: KlineSeriesIdentity | None = None,
         on_recovery: RecoveryCallback | None = None,
         continuity: ContinuityPolicy | str = "strict",
     ) -> SubscriptionHandle:
@@ -1964,7 +1966,7 @@ class DataManager(DataManagerCore):
         key = None
         if symbol and interval:
             market_type = self._normalize_market_type(market_type)
-            key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
+            key = SeriesKey.create(symbol, interval, exchange=exchange, market_type=market_type, identity=series_identity)
         elif symbol or interval:
             raise ValueError(
                 "Both 'symbol' and 'interval' must be provided together, "

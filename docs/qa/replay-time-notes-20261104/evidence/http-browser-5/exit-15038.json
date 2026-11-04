@@ -1,0 +1,1 @@
+{"pid": 15038, "network": {"installed": true, "policy": "loopback_only", "blocked_attempts": 0}, "manager": {"closed": true, "control_accesses": 3, "streams": 0, "consumers": {}, "scopes": 0}}

@@ -1,0 +1,41 @@
+[
+  {
+    "attempt": "native-notes-imported-bar",
+    "source": "6c1a260ff4ca554602595c244513e2395f090422",
+    "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('replay-notes-panel').getByRole('button', { name: '编辑', exact: true })\u001b[22m\n\n    at /Users/ryanliang/.codex/worktrees/replay-time-notes-20261104/CandleScope/docs/qa/replay-time-notes-20261104/native-acceptance.mjs:96:63",
+    "completedSteps": [
+      "package-source-before",
+      "native-offline-launch",
+      "imported-through-library-ui",
+      "offline-training-setup",
+      "formal-replay-initialized",
+      "native-original-plan",
+      "quit-requested",
+      "quit-completed"
+    ]
+  },
+  {
+    "attempt": "native-notes-committed-clock",
+    "source": "a355ebe4cb34d29127b8f1f978ed1f26c817dae6",
+    "failure": "AssertionError [ERR_ASSERTION]: {\"protocol\":\"replay.v3\",\"error\":{\"code\":\"REPLAY_NOTE_CONTEXT_CHANGED\",\"message\":\"Replay view changed; retain the draft and reload its context\",\"details\":{}}}\n\n409 !== 200\n\n    at saveNote (file:///Users/ryanliang/.codex/worktrees/replay-time-notes-20261104/CandleScope/docs/qa/replay-time-notes-20261104/native-acceptance.mjs:81:37)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-time-notes-20261104/CandleScope/docs/qa/replay-time-notes-20261104/native-acceptance.mjs:139:22",
+    "completedSteps": [
+      "package-source-before",
+      "native-offline-launch",
+      "imported-through-library-ui",
+      "offline-training-setup",
+      "formal-replay-initialized",
+      "native-original-plan",
+      "native-time-versioned-edit",
+      "rendered-source-prefix-5m",
+      "trade-step-and-period-change",
+      "offline-boundary",
+      "native-unsaved-draft",
+      "quit-requested",
+      "quit-completed",
+      "first-full-exit",
+      "native-offline-launch",
+      "quit-requested",
+      "quit-completed"
+    ]
+  }
+]

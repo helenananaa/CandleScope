@@ -29,5 +29,17 @@
     "regressionPassed": 104,
     "architectureRemaining": 10,
     "remainingReason": "Existing indicator.history_worker depends on HTTP; no new owner allowlist added"
+  },
+  "latestNative": {
+    "source": "2cefc2017686151536c84c3baf8bc9090904886e",
+    "passed": false,
+    "fourSourceMarketReady": true,
+    "canonicalComparison": "incomplete; Gate count mismatch observations retained; new Binance futures IP418 stopped before all comparisons/MA",
+    "indicators": "not reached",
+    "rendererErrors": [],
+    "fullOwnedExitMs": 15216,
+    "strictSignatureAfterExit": true,
+    "sourceAndPluginMismatches": [],
+    "retryNotBeforeUTC": "2026-11-04T08:58:00.900Z"
   }
 }

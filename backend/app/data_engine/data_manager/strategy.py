@@ -110,16 +110,37 @@ class StrategyRunSubscription:
 
 
 class StrategyDataManager:
-    def __init__(self, service: BacktestService, *, runtime: BacktestRuntime | None = None, max_subscriptions: int = 32, heartbeat_seconds: float = 15) -> None:
+    def __init__(self, service: BacktestService, *, runtime: BacktestRuntime | None = None, market_manager=None,
+                 max_subscriptions: int = 32, heartbeat_seconds: float = 15) -> None:
         if max_subscriptions < 1 or heartbeat_seconds <= 0:
             raise ValueError("strategy subscription limits must be positive")
         self.service = service
         self.runtime = runtime
+        self.market_manager = market_manager
+        self.continuous = None
         self._control_requests = 0
         self.max_subscriptions = max_subscriptions
         self.heartbeat_seconds = heartbeat_seconds
         self._subscriptions: set[StrategyRunSubscription] = set()
         self._closed = False
+
+    def bind_continuous(self, runtime):
+        """Adopt one backend owner; observing/unmounting a view never adopts it."""
+        if self._closed:
+            raise BacktestError("STRATEGY_MANAGER_CLOSED","strategy manager is closed")
+        if self.market_manager is None or runtime.manager is not self.market_manager:
+            raise BacktestError("CONTINUOUS_SOURCE_UNAVAILABLE","Continuous execution requires this profile's live DataManager")
+        if runtime.store.path.parent.resolve() != self.service.settings.db_path.parent.resolve():
+            raise BacktestError("CONTINUOUS_INPUT_INVALID","Continuous execution store belongs to another profile")
+        if self.continuous is not None and self.continuous is not runtime:
+            raise RuntimeError("continuous strategy owner is already bound")
+        self.continuous = runtime
+        return runtime
+
+    async def shutdown(self):
+        self.close()
+        if self.continuous is not None:
+            await self.continuous.close()
 
     def control_plane(self) -> BacktestService:
         if self._closed:

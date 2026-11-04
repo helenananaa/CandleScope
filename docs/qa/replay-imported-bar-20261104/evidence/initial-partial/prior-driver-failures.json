@@ -1,0 +1,42 @@
+[
+  {
+    "attempt": "native-current",
+    "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-driver.mjs:27:9)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:49:14",
+    "quitElapsedMs": [
+      565
+    ],
+    "source": "fa0d4d166239cfcdfc480ad5cb6df566210162ca"
+  },
+  {
+    "attempt": "native-attempt2",
+    "failure": "Error: WINDOW_UNAVAILABLE: WINDOW_UNAVAILABLE\n    at ControlClient.call (file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/packages/candlescope-control/client.mjs:57:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:19:66\n    at async Module.until (file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-driver.mjs:26:32)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:44:92",
+    "quitElapsedMs": [
+      440
+    ],
+    "source": "fa0d4d166239cfcdfc480ad5cb6df566210162ca"
+  },
+  {
+    "attempt": "native-attempt3",
+    "failure": "AssertionError [ERR_ASSERTION]: {\"detail\":\"Not Found\"}\n    at json (file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:17:72)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:60:32",
+    "quitElapsedMs": [
+      564
+    ],
+    "source": "fa0d4d166239cfcdfc480ad5cb6df566210162ca"
+  },
+  {
+    "attempt": "native-attempt4",
+    "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'bar' !== 'BAR'\n\n    at file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:61:69\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)",
+    "quitElapsedMs": [
+      545
+    ],
+    "source": "fa0d4d166239cfcdfc480ad5cb6df566210162ca"
+  },
+  {
+    "attempt": "native-attempt5",
+    "failure": "AssertionError [ERR_ASSERTION]: {\"requestId\":\"imported-replay-341052e7-410e-4f48-a635-b54eea9416b5\",\"instanceId\":\"1a9b2a18f6152e8b9c13c0a81860a023\",\"state\":\"failed\",\"code\":\"OUTCOME_UNKNOWN\",\"message\":\"command payload fields do not match the control contract\",\"readiness\":\"unverified\",\"final\":true}\n+ actual - expected\n\n+ 'failed'\n- 'applied'\n\n    at execute (file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:27:9)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async file:///Users/ryanliang/.codex/worktrees/replay-imported-bar-20261104/CandleScope/docs/qa/replay-imported-bar-20261104/native-replay.mjs:63:2",
+    "quitElapsedMs": [
+      588
+    ],
+    "source": "fa0d4d166239cfcdfc480ad5cb6df566210162ca"
+  }
+]

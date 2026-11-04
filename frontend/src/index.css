@@ -12193,6 +12193,23 @@ div.right-drawer-overlay {
 .replay-review-timeline button.active { border-color: var(--accent-cyan); background: color-mix(in srgb, var(--accent-cyan) 20%, transparent); }
 .replay-review-right-rail { box-sizing: border-box; height: 100%; padding: 12px; color: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary)); background: var(--surface-0); }
 .replay-review-right-rail h3 { margin: 5px 0 10px; color: var(--text-primary); }
+.replay-review-right-rail { overflow-y: auto; }
+.replay-notes-panel { box-sizing: border-box; padding: 12px; min-width: 0; overflow-y: auto; color: var(--text-primary); }
+.replay-notes-toggle { width: 100%; text-align: left; font-weight: 600; }
+.replay-notes-body { display: grid; gap: 10px; }
+.replay-notes-body article { padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.replay-notes-body dl { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 10px; font-size: var(--font-size-xs); }
+.replay-notes-body dd { margin: 0; overflow-wrap: anywhere; }
+.replay-note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.replay-note-editor { display: grid; gap: 8px; }
+.replay-note-editor textarea { box-sizing: border-box; width: 100%; min-height: 140px; resize: vertical; padding: 8px; color: var(--text-primary); background: var(--surface-0); border: 1px solid var(--border-strong); border-radius: var(--radius-control); }
+.replay-note-editor p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); }
+.replay-note-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.replay-notes-panel button { min-height: 30px; padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: var(--radius-control); color: var(--text-primary); background: var(--surface-1); font: 500 var(--font-size-xs)/1.4 var(--font-sans); cursor: pointer; }
+.replay-notes-panel button:hover:enabled { background: var(--surface-2); }
+.replay-notes-panel button:disabled { opacity: .5; cursor: default; }
+.replay-notes-panel button:focus-visible, .replay-note-editor textarea:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.replay-note-text { margin: 8px 0; font-size: var(--font-size-sm); line-height: 1.6; }
 .replay-review-right-rail dl { display: grid; gap: 6px; margin: 0; }
 .replay-review-right-rail dl > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px; border-bottom: 1px solid var(--border-subtle); }
 .replay-review-right-rail dt { color: var(--text-secondary); }
@@ -15771,3 +15788,20 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .interval-anchor-controls label { display: flex; gap: 6px; align-items: center; }
 .interval-anchor-controls input[type="datetime-local"] { color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 6px; border-radius: 4px; }
 .interval-anchor-controls p { margin: 0; color: var(--text-secondary); max-width: 420px; }
+
+.replay-note-history { margin-top: 10px; padding: 8px; border-inline-start: 2px solid var(--border-strong); background: var(--surface-1); }
+.replay-note-history > div + div { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+
+.replay-note-links { padding-inline-start: 18px; margin: 8px 0; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.replay-note-link-options { display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
+.replay-note-link-options label { display: flex; align-items: flex-start; gap: 6px; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.replay-note-link-options input { flex: none; }
+.replay-note-link-picker { display: grid; gap: 8px; }
+
+.replay-note-capture-controls, .replay-note-capture-options, .replay-note-screenshots { display: grid; gap: 8px; }
+.replay-note-capture-options { max-height: 200px; overflow-y: auto; font-size: var(--font-size-xs); }
+.replay-note-capture-options label { display: flex; gap: 6px; align-items: flex-start; }
+.replay-note-screenshot-viewer { box-sizing: border-box; width: min(960px, 94vw); max-height: 92vh; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-control); padding: 16px; color: var(--text-primary); background: var(--surface-1); }
+.replay-note-screenshot-viewer::backdrop { background: #000a; }
+.replay-note-screenshot-viewer img { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
+.replay-note-screenshot-viewer p { font-size: var(--font-size-xs); }

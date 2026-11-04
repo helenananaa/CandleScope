@@ -14,6 +14,7 @@ export const REPLAY_RAIL_VIEW_IDS = {
   paper: "replay-paper",
   account: "replay-account",
   activity: "replay-activity",
+  notes: "replay-notes",
   capabilities: "replay-capabilities",
 } as const;
 
@@ -59,6 +60,7 @@ const REPLAY_VIEW_HEIGHT_LIMITS: Readonly<Record<ReplayRailViewId, readonly [num
   [REPLAY_RAIL_VIEW_IDS.paper]: [MARKET_DOCK_MIN_HEIGHT, MARKET_DOCK_MAX_HEIGHT],
   [REPLAY_RAIL_VIEW_IDS.account]: [180, MARKET_DOCK_MAX_HEIGHT],
   [REPLAY_RAIL_VIEW_IDS.activity]: [MARKET_DOCK_MIN_HEIGHT, MARKET_DOCK_MAX_HEIGHT],
+  [REPLAY_RAIL_VIEW_IDS.notes]: [180, MARKET_DOCK_MAX_HEIGHT],
   [REPLAY_RAIL_VIEW_IDS.capabilities]: [160, MARKET_DOCK_MAX_HEIGHT],
 };
 
@@ -86,6 +88,7 @@ function defaultViewHeights(dockHeight: number): Record<ReplayRailViewId, number
     [REPLAY_RAIL_VIEW_IDS.paper]: dockHeight,
     [REPLAY_RAIL_VIEW_IDS.account]: Math.max(dockHeight, 360),
     [REPLAY_RAIL_VIEW_IDS.activity]: dockHeight,
+    [REPLAY_RAIL_VIEW_IDS.notes]: 360,
     [REPLAY_RAIL_VIEW_IDS.capabilities]: 280,
   };
 }

@@ -20,7 +20,8 @@ const trainingInput = process.argv.includes("--replay-training-input");
 const historyStages = process.argv.includes("--history-stages");
 const quickReplayStep = process.argv.includes("--quick-replay-step");
 const chartTimeNavigation = process.argv.includes("--chart-time-navigation");
-const fixture = replayResize ? "replay-resize-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const replayNotes = process.argv.includes("--replay-notes");
+const fixture = replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -73,7 +74,8 @@ try {
   const destination = path.join(output, "dist");
   await build({ root, ...((replay || accountOverlays || rangeMeasure) ? { define: { "process.env.NODE_ENV": JSON.stringify("development") } } : {}), build: { outDir: destination, rollupOptions: { input: path.join(root, "scripts", fixture) } } });
   server = await preview({ root, build: { outDir: destination }, preview: { host: "127.0.0.1", port: 0, strictPort: false } });
-  const url = server.resolvedUrls.local[0] + "scripts/" + fixture;
+  const url = server.resolvedUrls.local[0] + "scripts/" + fixture
+    + (replayNotes ? "?backend=" + encodeURIComponent(process.env.CANDLESCOPE_QA_BACKEND_URL ?? "") : "");
   const log = fs.openSync(path.join(output, "chrome.log"), "a");
   let args = ["--headless=new", "--remote-debugging-port=0", "--no-first-run", "--no-default-browser-check", `--user-data-dir=${profile}`, url];
   if (native) {
@@ -127,11 +129,30 @@ app.on("window-all-closed",()=>app.quit());
     await sleep(100);
   }
   if (!fixtureReady) throw new Error("Fixture did not load");
-  const result = await page.send("Runtime.evaluate", {
+  const pendingResult = page.send("Runtime.evaluate", {
     expression: `window.${checkName}()`,
 
     awaitPromise: true, returnByValue: true,
   });
+  if (replayNotes) {
+    let completed = false;
+    void pendingResult.then(() => { completed = true; }, () => { completed = true; });
+    receipt.screenshots = [];
+    while (!completed) {
+      const requestedCapture = await page.send("Runtime.evaluate", { expression: "window.__replayNoteCapture ?? null", returnByValue: true });
+      const name = requestedCapture.result?.value;
+      if (typeof name === "string") {
+        if (!/^[a-z-]{1,80}$/.test(name)) throw new Error("Invalid note capture name");
+        const capture = await page.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
+        const filename = name + ".png";
+        fs.writeFileSync(path.join(output, filename), Buffer.from(capture.data, "base64"));
+        receipt.screenshots.push(filename);
+        await page.send("Runtime.evaluate", { expression: "window.__replayNoteCapture = null" });
+      }
+      await sleep(50);
+    }
+  }
+  const result = await pendingResult;
   receipt.result = result;
   let targets = await browser.send("Target.getTargets");
   receipt.immediateWorkerCount = targets.targetInfos.filter(item => item.type === "worker").length;

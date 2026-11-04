@@ -31,6 +31,11 @@ for package, module_name in [('candlescope-plugin-sdk','candlescope_plugin_sdk')
         shutil.rmtree(target, ignore_errors=True)
         shutil.copytree(source_module, target, ignore=shutil.ignore_patterns('__pycache__'))
 subprocess.run([str(resources / 'python-runtime/python/bin/python3.12'), '-m', 'compileall', '-q', str(resources / 'backend/app')], check=True)
-subprocess.run([str(Path('/Users/ryanliang/CandleScope/backend/.venv/bin/python')),
-                str(ROOT / 'docs/qa/seconds-contracts-20261102/build_current_plugins.py')], cwd=ROOT, check=True)
+if os.environ.get('CANDLESCOPE_QA_REUSE_VERIFIED_PLUGINS') == '1':
+    receipt = subprocess.check_output([str(resources / 'python-runtime/python/bin/python3.12'), '-B',
+        str(ROOT / 'docs/qa/seconds-contracts-20261102/verify_current_plugins.py')], cwd=ROOT, text=True)
+    (OUT / 'reused-plugin-source-verification.json').write_text(receipt)
+else:
+    subprocess.run([str(Path('/Users/ryanliang/CandleScope/backend/.venv/bin/python')),
+                    str(ROOT / 'docs/qa/seconds-contracts-20261102/build_current_plugins.py')], cwd=ROOT, check=True)
 subprocess.run(['node', str(ROOT / 'docs/qa/seconds-contracts-20261102/repack.mjs')], cwd=ROOT, check=True)
