@@ -221,3 +221,16 @@ def test_manager_does_not_acknowledge_an_unawaited_financial_callback(storage):
     with pytest.raises(TypeError,match="cannot acknowledge asynchronous work"):
         api.commit(proof,lambda:asynchronous_financial_commit())
     assert not calls and api.inspect(first.owner)["committed_acquisition"]==0
+
+
+def test_uncommitted_initial_partial_bar_is_not_mistaken_for_processed_history(storage):
+    write();store=storage.revision_store.prefix_watches;start=START+STEP//2
+    initial=store.register("initial-partial-window",SERIES,from_ms=start,committed_through_ms=start-1)
+    pending=store.prepare(initial,committed_through_ms=start-1,through_ms=END)
+    write(200)
+    from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged
+    with pytest.raises(PrefixAcquisitionChanged) as changed:
+        with store.commit_guard(pending):pytest.fail("mutated acquisition must not commit")
+    assert changed.value.start_ms==START and changed.value.end_ms==END
+    retry=store.prepare(initial,committed_through_ms=start-1,through_ms=END)
+    with store.commit_guard(retry):pass

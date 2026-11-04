@@ -21,9 +21,15 @@ class PrefixContinuityUnavailable(StaleAcquisition):
     """The old source identity or continuity can no longer be proved."""
 
 
-class ProcessedPrefixChanged(StaleAcquisition):
+class PrefixAcquisitionChanged(StaleAcquisition):
+    def __init__(self,start_ms,end_ms):
+        super().__init__("source prefix changed while the new batch was being acquired")
+        self.start_ms,self.end_ms=start_ms,end_ms
+
+
+class ProcessedPrefixChanged(PrefixAcquisitionChanged):
     def __init__(self, start_ms, end_ms):
-        super().__init__("processed source prefix changed; explicit repair is required")
+        StaleAcquisition.__init__(self,"processed source prefix changed; explicit repair is required")
         self.start_ms, self.end_ms = start_ms, end_ms
 
 
@@ -165,7 +171,7 @@ class PrefixWatchStore:
             if row["version"] > observed:
                 if row["dirty_from_ms"] is None:
                     raise PrefixContinuityUnavailable("source prefix changes cannot be located")
-                if row["dirty_from_ms"] <= committed_through_ms:
+                if committed_through_ms >= receipt.from_ms and row["dirty_from_ms"] <= committed_through_ms:
                     raise ProcessedPrefixChanged(max(receipt.from_ms,row["dirty_from_ms"]),min(committed_through_ms,row["dirty_through_ms"]))
             conn.execute("UPDATE kline_prefix_watches SET through_ms=?,acquisition=acquisition+1,"
                 "verified_through_ms=?,verified_version=version,dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
@@ -179,9 +185,11 @@ class PrefixWatchStore:
             conn.execute("BEGIN IMMEDIATE")
             row=conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(proof.owner,)).fetchone()
             self._matching(row,proof)
-            if (row["acquisition"] != proof.acquisition or row["version"] != proof.version
+            if (row["acquisition"] != proof.acquisition
                     or row["through_ms"] != proof.through_ms or current_revision(conn) < proof.storage_revision):
                 raise StaleAcquisition("source prefix changed while the new input batch was acquired")
+            if row["version"] != proof.version:
+                raise PrefixAcquisitionChanged(row["dirty_from_ms"],row["dirty_through_ms"])
             yield
             conn.execute("UPDATE kline_prefix_watches SET verified_through_ms=?,verified_version=version,"
                          "committed_acquisition=?,committed_through_ms=?,dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
