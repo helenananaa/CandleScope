@@ -47,7 +47,7 @@ def _context(connection: sqlite3.Connection, run_id: str, track_id: str) -> dict
     if track["dataset_epoch"] is None or track["adapter_session_id"] is None or run["virtual_time_ms"] is None:
         raise _error("MARKET_TRACK_NOT_PREPARED", "Prepare the track before writing annotations")
     checkpoint = connection.execute(
-        "SELECT checkpoint_sequence,global_virtual_time_ms FROM replay_training_global_checkpoint "
+        "SELECT checkpoint_sequence FROM replay_training_global_checkpoint "
         "WHERE run_id=? ORDER BY checkpoint_sequence DESC LIMIT 1", (run_id,),
     ).fetchone()
     timeline_sequence = connection.execute(
@@ -57,7 +57,9 @@ def _context(connection: sqlite3.Connection, run_id: str, track_id: str) -> dict
         "runId": run_id, "trackId": track_id, "dataEpoch": str(track["dataset_epoch"]),
         "runRevision": int(run["revision"]), "sourceSequence": int(run["source_sequence"]),
         "checkpointSequence": 0 if checkpoint is None else int(checkpoint["checkpoint_sequence"]),
-        "virtualTimeMs": int(run["virtual_time_ms"] if checkpoint is None else checkpoint["global_virtual_time_ms"]),
+        # Ordered checkpoints update this run clock in their own transaction;
+        # later direct adapter advances may legitimately outlive that checkpoint.
+        "virtualTimeMs": int(run["virtual_time_ms"]),
         "reviewId": None, "reviewRevision": None, "reviewNote": False,
         "timelineSequence": int(timeline_sequence),
     }

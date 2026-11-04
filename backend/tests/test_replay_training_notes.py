@@ -305,3 +305,63 @@ async def test_simultaneous_editors_have_one_authoritative_winner(tmp_path):
         assert (await service.get_session(session))["snapshot"] == before
     finally:
         await service.shutdown(step_timeout=1)
+
+
+async def test_notes_follow_committed_run_time_after_an_older_account_checkpoint(tmp_path):
+    from app.replay.training.models import ReplayV2CommandType
+    from tests.test_replay_v2_training_phase5 import _acquire, _command as training_command
+
+    service = await _service(tmp_path / "account-checkpoint.db")
+    try:
+        run, session, track = await create(service)
+        await _acquire(service, run_id=run, selected_session_id=session, command_id="note-account-owner")
+        original = await service.training.notes(run, track)
+        await service.training.save_note(run, track, note_id="plan", fields={"entryBasis":"before the order"},
+            expected_revision=0, context=original["context"])
+        snapshot = await service.get_session(session)
+        await service.training.command(run, training_command(run,"note-market-buy",ReplayV2CommandType.PLACE_ORDER,
+            snapshot,{"client_order_id":"note-market-order","side":"BUY","order_type":"MARKET","quantity":"0.1",
+                      "reduce_only":False,"limit_price":None,"stop_price":None}))
+        snapshot = await service.get_session(session)
+        await service.training.command(run, training_command(run,"note-step",ReplayV2CommandType.STEP_BASE,
+            snapshot,{"count":1}))
+        current = (await service.get_session(session))["snapshot"]
+        clock = current["cursor"]["virtual_time_ms"]
+        assert clock > original["asOfMs"]
+        visible = await service.training.notes(run, track, at_time_ms=clock)
+        assert visible["context"]["virtualTimeMs"] == visible["asOfMs"] == clock
+        await service.training.save_note(run, track, note_id="plan", fields={"entryBasis":"after the fill"},
+            expected_revision=1, context=visible["context"])
+        assert (await service.get_session(session))["snapshot"] == current
+        historical = await service.training.notes(run, track, at_time_ms=original["asOfMs"])
+        assert historical["notes"][0]["fields"]["entryBasis"] == "before the order"
+    finally:
+        await service.shutdown(step_timeout=1)
+
+
+async def test_notes_use_the_same_committed_global_time_for_two_full_tracks(tmp_path):
+    from app.replay.training.models import ReplayV2CommandType
+    from tests.test_replay_v2_training_phase5 import _service as multi_service, _request as multi_request, _acquire, _add_track, _command as training_command
+
+    service=await multi_service(tmp_path/"global-note-clock.db")
+    try:
+        result=await service.training.create_run(await multi_request(service))
+        run,session=result["run"]["run_id"],result["run"]["adapter_session_id"]
+        await _acquire(service,run_id=run,selected_session_id=session,command_id="global-note-owner")
+        await _add_track(service,run_id=run,selected_session_id=session,symbol="ETHUSDT",tier="FULL",command_id="global-note-eth")
+        snapshot=await service.get_session(session)
+        await service.training.command(run,training_command(run,"global-note-step",ReplayV2CommandType.STEP_BASE,snapshot,{"count":1}))
+        tracks=(await service.training.store.get_market_tracks(run))["tracks"]
+        assert len(tracks)==2
+        clock=await service.store.run_extension_read(lambda db:db.execute(
+            "SELECT virtual_time_ms FROM replay_training_run WHERE run_id=?",(run,)).fetchone()[0])
+        checkpoint=await service.store.run_extension_read(lambda db:db.execute(
+            "SELECT global_virtual_time_ms FROM replay_training_global_checkpoint WHERE run_id=? ORDER BY checkpoint_sequence DESC LIMIT 1",(run,)).fetchone()[0])
+        assert clock==checkpoint
+        for track in tracks:
+            context=(await service.training.notes(run,track["track_id"]))["context"]
+            assert context["virtualTimeMs"]==clock
+            await service.training.save_note(run,track["track_id"],note_id="same-local-id-"+track["track_id"],
+                fields={"entryBasis":track["symbol"]},expected_revision=0,context=context)
+    finally:
+        await service.shutdown(step_timeout=1)
