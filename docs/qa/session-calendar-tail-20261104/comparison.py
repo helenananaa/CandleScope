@@ -1,10 +1,12 @@
-import time,statistics,json,types,sys
+import time,statistics,json,types,sys,subprocess
 from unittest.mock import patch
 from app.api.v1.klines import _bounded_latest_tail_range
 from app.data_engine.history.calendar import SessionCalendar
 from pathlib import Path
 old=types.ModuleType('calendar_before_qa');sys.modules[old.__name__]=old
-exec(compile(Path('/tmp/candlescope-goal-20261104/calendar-before-a5.py').read_text(),old.__name__,'exec'),old.__dict__)
+root=Path(__file__).resolve().parents[3]
+before_source=subprocess.check_output(['git','show','a5c289a522d608f354188463e80338f100f38f6e:backend/app/data_engine/history/calendar.py'],cwd=root,text=True)
+exec(compile(before_source,old.__name__,'exec'),old.__dict__)
 results={};ranges=[]
 for label,klass in [('before',old.SessionCalendar),('after',SessionCalendar)]:
  samples=[];counts=[];original=klass.expected_opens
