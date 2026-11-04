@@ -1,0 +1,16 @@
+{
+  "applicationSource": "38331ac9031258ace09b084f50849fdc434a851f",
+  "main": "395007ac7588d1725bf0266cfb8626a2055bb934",
+  "productChange": "Existing feature owners unchanged by clean merge; current replay/domain/lifecycle integration rechecked.",
+  "checks": {
+    "pinnedEngineBridgePassed": 240,
+    "pinnedEngineBridgeSkipped": 1,
+    "hostIntegrationPassed": 42,
+    "hostIntegrationSkipped": 1,
+    "frontendPassed": 25,
+    "typecheckPassed": true
+  },
+  "evidenceScope": "Offline/source checks, not native LIVE UI acceptance. Prior qualification remains at its original revision.",
+  "native": "Not launched; global Binance public IP418 retry deadline 2026-11-04T01:10:58.578Z.",
+  "ci": "Current final head required before main merge."
+}
