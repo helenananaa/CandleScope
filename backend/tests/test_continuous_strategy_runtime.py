@@ -109,7 +109,8 @@ def test_history_amendment_stops_actor_and_keeps_financial_recovery_point(storag
     finally:source.close();store.close();service.shutdown()
 
 
-def test_repeated_shutdown_cancellation_drains_provider_before_releasing_lease_or_database(storage,tmp_path,monkeypatch):
+@pytest.mark.parametrize("close_store",[False,True])
+def test_repeated_shutdown_cancellation_drains_provider_before_releasing_lease_or_database(storage,tmp_path,monkeypatch,close_store):
     service,_,definition,factory,store,manager,source,receipt=source_setup(storage,tmp_path,monkeypatch)
     create_frozen(source,receipt,definition,factory,store)
     old=store.load("cs_source")["checkpoint"]
@@ -129,7 +130,7 @@ def test_repeated_shutdown_cancellation_drains_provider_before_releasing_lease_o
             await runtime.start_existing("cs_source")
             assert await asyncio.to_thread(entered.wait,10)
             actor=runtime.actors["cs_source"]
-            shutdown=asyncio.create_task(runtime.shutdown())
+            shutdown=asyncio.create_task(runtime.close() if close_store else runtime.shutdown())
             await asyncio.sleep(0)
             assert runtime.closed and actor.stopping
             shutdown.cancel();await asyncio.sleep(0);shutdown.cancel();await asyncio.sleep(0)
@@ -137,8 +138,17 @@ def test_repeated_shutdown_cancellation_drains_provider_before_releasing_lease_o
             release.set()
             with pytest.raises(asyncio.CancelledError):await shutdown
             assert not active and not runtime.actors and actor.executor.snapshot()["active"]==0
-            assert store.load("cs_source")["checkpoint"]==old
-            assert store.summary("cs_source")["phase"]=="CATCHING_UP"
+            if close_store:
+                from app.backtest.continuous_store import ContinuousStrategyStore
+                assert store.closed
+                recovered=ContinuousStrategyStore(store.path)
+                try:
+                    assert recovered.load("cs_source")["checkpoint"]==old
+                    assert recovered.summary("cs_source")["phase"]=="CATCHING_UP"
+                finally:recovered.close()
+            else:
+                assert store.load("cs_source")["checkpoint"]==old
+                assert store.summary("cs_source")["phase"]=="CATCHING_UP"
             store.close()  # No detached strategy write may survive this close.
         finally:
             release.set();await runtime.shutdown();await manager.event_bus.close()

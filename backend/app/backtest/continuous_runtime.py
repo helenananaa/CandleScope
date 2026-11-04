@@ -221,7 +221,11 @@ class ContinuousStrategyRuntime:
             raise BacktestError("BUDGET_EXCEEDED","Continuous strategy execution capacity reached")
         task=asyncio.create_task(self._start(run_id,retry_failed=retry_failed))
         self.starts[run_id]=task
-        task.add_done_callback(lambda done:None if done.cancelled() else done.exception())
+        def finished(done):
+            # A setup cancelled before its first coroutine step has no finally.
+            if self.starts.get(run_id) is done:self.starts.pop(run_id)
+            if not done.cancelled():done.exception()
+        task.add_done_callback(finished)
         # Request/view cancellation does not own an already authorized backend run.
         return await asyncio.shield(task)
 
@@ -275,10 +279,13 @@ class ContinuousStrategyRuntime:
                 result["not_admitted"][row["id"]]={"code":failure.code,"message":str(failure)[:256]}
         return result
 
-    async def shutdown(self):
+    def _request_shutdown(self):
         self.closed=True
         for actor in tuple(self.actors.values()):actor.request_stop()
         for task in tuple(self.starts.values()):task.cancel()
+
+    async def shutdown(self):
+        self._request_shutdown()
         async def drain():
             await asyncio.gather(*tuple(self.starts.values()),return_exceptions=True)
             errors=[]
@@ -296,6 +303,14 @@ class ContinuousStrategyRuntime:
             if errors:
                 raise BacktestError("CONTINUOUS_SHUTDOWN_FAILED","Owned cleanup is incomplete for "+",".join(errors))
         await finish_cleanup(drain())
+
+    async def close(self):
+        """Close an owned store only after the complete physical shutdown."""
+        self._request_shutdown()
+        async def close_owned():
+            await self.shutdown()
+            await run_storage(self.store.close)
+        await finish_cleanup(close_owned())
 
     def diagnostics(self):
         with self._failure_lock:
