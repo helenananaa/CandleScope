@@ -1394,6 +1394,17 @@ class TrainingRunService:
     async def current_drawing_document(self, run_id: str) -> dict[str, object]:
         return await self._review_service.current_drawing_document(run_id)
 
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
+        return await self._review_service.notes(run_id, track_id, at_time_ms=at_time_ms)
+
+    async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
+                        expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
+        normalized = self._identifier(run_id, field_name="run_id")
+        actor = self._run_actors.setdefault(normalized, TrainingRunActor(normalized))
+        async with actor.serialized():
+            return await self._review_service.save_note(normalized, track_id, note_id=note_id, fields=fields,
+                                                        expected_revision=expected_revision, context=context)
+
     async def record_drawing_document(
         self,
         run_id: str,

@@ -1,3 +1,4 @@
+import { replayNoteEnglish } from "./replayNoteMessages.js";
 import { historyStudyKorean } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
@@ -6,6 +7,7 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...replayNoteEnglish,
   ...historyStudyKorean,
   "chartTime.title": "날짜로 이동",
   "chartTime.shortcut": "날짜로 이동 (Alt+G)",

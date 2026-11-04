@@ -90,6 +90,7 @@ import {
   replayReviewDrawingRecord,
 } from "./replayReviewDrawing.js";
 import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
+import ReplayNotesPanel from "./components/ReplayNotesPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
@@ -213,6 +214,10 @@ export default function ReplayTrainingPageShell({
   const ownIntegrity = useReplayIntegrityRuntime(runtime, viewer, integrityOpen, cell === undefined);
   const integrityRuntime = cell?.integrity ?? ownIntegrity;
   const review = integrityRuntime.review;
+  const [noteTimes, setNoteTimes] = useState<{ runId: string | null; epoch: string | null; values: readonly number[] } | null>(null);
+  const reportNoteTimes = useCallback((values: readonly number[]) => setNoteTimes({
+    runId: integrityRuntime.runId, epoch: runtime.store.dataEpoch, values,
+  }), [integrityRuntime.runId, runtime.store.dataEpoch]);
   const controlCellId = cell?.scope ?? "replay-chart";
   useControlCommands(() => providedChartCommands(controlCellId, { runId: integrityRuntime.runId, viewRevision: viewer.viewerState?.semantic_view_revision }, indicators, chartSurfaceActions, drawings, review === null));
   useControlCommands(() => drawingCommands(controlCellId, { actions: chartSurfaceActions }, drawings, controlCellId, review === null));
@@ -309,6 +314,9 @@ export default function ReplayTrainingPageShell({
       .filter((bar) => !isReplayContextHistoryBar(bar))
       .map((bar) => Number(bar.time) * 1_000);
     if (runtime.store.virtualTimeMs !== null) values.push(runtime.store.virtualTimeMs);
+    const noteCutoff = review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs ?? -1;
+    if (noteTimes?.runId === integrityRuntime.runId && noteTimes?.epoch === runtime.store.dataEpoch)
+      values.push(...noteTimes.values.filter(time => time <= noteCutoff));
     for (const order of runtime.store.orders) values.push(order.created_time_ms);
     for (const fill of runtime.store.fills) values.push(fill.event_time_ms);
     for (const entry of runtime.store.journal) values.push(entry.virtual_time_ms);
@@ -1076,12 +1084,20 @@ export default function ReplayTrainingPageShell({
     />
   );
 
+  const noteTrackId = reviewSelectedTrackId ?? activeSelectedTrack?.track_id;
+  const noteGeneration = runtime.store.dataEpoch ?? "pending";
+  const notes = integrityRuntime.runId && noteTrackId ? <ReplayNotesPanel key={`${integrityRuntime.runId}:${noteTrackId}:${noteGeneration}`}
+      api={api} runId={integrityRuntime.runId} trackId={noteTrackId} generationKey={noteGeneration}
+      reviewId={review?.review_id ?? null} reviewRevision={review?.cursor_revision ?? null}
+      cursorMs={review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs}
+      revisionKey={`${runtime.store.revision}:${review?.review_id ?? ""}:${review?.cursor_revision ?? ""}`}
+      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} embedded={review === null} /> : null;
   const rightRail = active ? (
-    review !== null ? <ReplayReviewRightRail review={review} /> : <ReplayRightMarketRail
+    review !== null ? <ReplayReviewRightRail review={review} notes={notes} /> : <ReplayRightMarketRail
       runtime={runtime} viewer={viewer} indicators={indicators}
       preferences={workspace.preferences} actions={workspace.actions}
       upColor={settings.upColor} downColor={settings.downColor}
-      formatTime={publicTimeRuntime.formatTime}
+      formatTime={publicTimeRuntime.formatTime} notes={notes}
     />
   ) : null;
   const replayIntervalSelector = (

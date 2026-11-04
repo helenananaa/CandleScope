@@ -1,3 +1,4 @@
+import { replayNoteTraditional } from "./replayNoteMessages.js";
 import { historyStudyTraditional } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
@@ -6,6 +7,7 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhTW = {
+  ...replayNoteTraditional,
   ...historyStudyTraditional,
   "chartTime.title": "跳轉到日期",
   "chartTime.shortcut": "跳轉到日期（Alt+G）",
