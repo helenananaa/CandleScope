@@ -21,6 +21,10 @@ IDENTITY_COLUMNS = ("exchange", "market_type", "symbol", "interval",
                     "price_adjustment", "session_variant", "volume_semantics")
 
 
+REVISION_CHANGED_FIELDS = (*IDENTITY_COLUMNS, "open_time", "close_time", "open", "high", "low", "close", "volume",
+                           "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source")
+
+
 class StaleAcquisition(RuntimeError):
     """The input was acquired before a newer canonical mutation; reacquire it."""
 
@@ -110,8 +114,7 @@ def init_revision_storage(conn):
         values = ", ".join(f"{alias}.{name}" for name in IDENTITY_COLUMNS)
         revision = "(SELECT revision FROM kline_revision_clock WHERE singleton=1)"
         deletion = revision if operation == "delete" else "0"
-        changed_fields = (*IDENTITY_COLUMNS, "open_time", "close_time", "open", "high", "low", "close", "volume",
-                          "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "source")
+        changed_fields = REVISION_CHANGED_FIELDS
         condition = "WHEN " + " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in changed_fields) if operation == "update" else ""
         source_derived_predicate = " AND ".join(f"s.{name}={alias}.{name}" for name in IDENTITY_COLUMNS)
         derived_predicate = " AND ".join(f"d.{name}=klines.{name}" for name in IDENTITY_COLUMNS)
@@ -208,6 +211,9 @@ def init_empty_coverage_revision_triggers(conn, table: str, *, native: bool = Fa
             {migration_end}
         """)
 
+    from .prefix_watches import init_prefix_watch_storage
+    init_prefix_watch_storage(conn)
+
 
 def current_revision(conn):
     return int(conn.execute("SELECT revision FROM kline_revision_clock WHERE singleton=1").fetchone()[0])
@@ -225,6 +231,8 @@ def series_change(conn, values):
 
 def mark_deleted(conn, values, start_ms=None, end_ms=None):
     """Fence deletion of even an empty range, in the deleting transaction."""
+    from .prefix_watches import invalidate_deleted_prefix
+    invalidate_deleted_prefix(conn, values, start_ms, end_ms)
     conn.execute("UPDATE kline_revision_clock SET revision=revision+1 WHERE singleton=1")
     revision = current_revision(conn)
     keys = ",".join(IDENTITY_COLUMNS)
@@ -242,6 +250,8 @@ class RevisionStore:
     def __init__(self, connect):
         self.connect = connect
         self.observed_revision = 0
+        from .prefix_watches import PrefixWatchStore
+        self.prefix_watches = PrefixWatchStore(connect)
 
     def changes_since(self, revision, *, limit=4096):
         # Head and changes belong to the same read transaction. A bounded

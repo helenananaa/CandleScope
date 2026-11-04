@@ -7,7 +7,7 @@ import pytest
 
 from app.replay.training.errors import TrainingRunError
 from app.replay.training.models import ReplayV2CommandType
-from app.replay.training.schema import migrate_training_schema
+from app.replay.training.schema import migrate_training_schema, TRAINING_SCHEMA_VERSION
 from tests.test_replay_training_notes import create
 from tests.test_replay_v2_training_phase5 import _service, _acquire, _command
 
@@ -113,6 +113,8 @@ async def test_schema_27_backfills_empty_links_without_changing_text_or_financia
     await service.training.save_note(run, track, note_id="old-plan", fields={"entryBasis": "old text"}, expected_revision=0, context=context)
     await service.shutdown(step_timeout=1)
     with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE replay_training_note_capture_link")
+        db.execute("DROP TABLE replay_training_note_capture")
         db.execute("DROP TABLE replay_training_note_links")
         db.execute("UPDATE replay_training_schema_version SET version=27")
         names = [row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'replay_training_schema_version'")]
@@ -120,7 +122,7 @@ async def test_schema_27_backfills_empty_links_without_changing_text_or_financia
         migrate_training_schema(db, now_ms=12345)
         assert {name: db.execute('SELECT * FROM "' + name + '"').fetchall() for name in names} == before
         assert db.execute("SELECT links_json,stored_bytes FROM replay_training_note_links").fetchall() == [("[]", 2)]
-        assert db.execute("SELECT version FROM replay_training_schema_version").fetchone() == (28,)
+        assert db.execute("SELECT version FROM replay_training_schema_version").fetchone() == (TRAINING_SCHEMA_VERSION,)
     recovered = await _service(path)
     try:
         note = (await recovered.training.notes(run, track))["notes"][0]

@@ -2887,6 +2887,18 @@ class TrainingRunStore:
     async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
         return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms)
 
+    async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
+                                context: Mapping[str, object], captured_context: Mapping[str, object],
+                                chart: Mapping[str, object]) -> dict[str, object]:
+        return await self._notes.captures.save(run_id, track_id, capture_id=capture_id, image=image,
+                                              context=context, captured_context=captured_context, chart=chart)
+
+    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None) -> dict[str, object]:
+        return await self._notes.captures.list(run_id, track_id, capture_id)
+
+    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str) -> dict[str, object]:
+        return await self._notes.captures.image(run_id, track_id, note_id, revision, capture_id)
+
     async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
                                 before_id: str | None = None, limit: int = 20) -> dict[str, object]:
         return await self._notes.link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)

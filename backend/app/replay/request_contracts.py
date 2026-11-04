@@ -319,6 +319,23 @@ class ReplayNoteContextPayload(_StrictModel):
     reviewNote: bool
 
 
+class ReplayNoteCaptureChartPayload(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    interval: str = Field(min_length=1, max_length=32)
+    chartType: str = Field(min_length=1, max_length=32)
+    seriesKey: str = Field(min_length=1, max_length=1024)
+    sourceVersion: int = Field(ge=0, le=MAX_COUNTER)
+
+
+class ReplayNoteCapturePayload(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    id: str = Field(min_length=1, max_length=128)
+    image: str = Field(min_length=26, max_length=2_796_226)
+    context: ReplayNoteContextPayload
+    capturedContext: ReplayNoteContextPayload
+    chart: ReplayNoteCaptureChartPayload
+
+
 class ReplayNotePayload(_StrictModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(min_length=1, max_length=128)
