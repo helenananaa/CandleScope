@@ -50,7 +50,10 @@ export function replayNoteDraftBinding(storage: Store, current: ReplayNoteContex
     return envelope;
   };
   return { key, context, noteId, noteRevision, storage: {
-    getItem: () => check()?.draft ?? null,
+    getItem: (requestedKey: string) => {
+      if (requestedKey !== key) throw new JournalDraftError("changed");
+      return check()?.draft ?? null;
+    },
     setItem: (_key: string, draft: string) => {
       check();
       storage.setItem(key, JSON.stringify({ version: 1, context, noteId, noteRevision, draft } satisfies Envelope));

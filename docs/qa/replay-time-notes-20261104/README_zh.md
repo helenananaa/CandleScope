@@ -44,3 +44,7 @@ CANDLESCOPE_QA_BACKEND_URL=http://127.0.0.1:<port> node scripts/frontend-script-
 ## 剩余
 
 交易/成交关联、截图绑定版本及揭示边界、版本历史分页 UI、用户导入 BAR/市场成交、更多多商品与重连场景，以及真实已安装包保存/完整退出/重启和 Windows 均待后续。源码、HTTP/组件及后端新进程证据不替代这些验收。
+
+## 完整 CI 同命令复查
+
+PR 首次 macOS CI 在新测试调用 `getItem(key)` 处发现 TS2554。原增量 `tsc -b` 不能代替项目的 `tsc --noEmit` gate，之前类型检查口径已修正。存储适配器补齐标准 key 参数，并拒绝错 key；未放宽测试。完整本地 `npm run check` 最终 exit 0：4869 个 functional、1 个独立性能 gate、130 个 desktop 测试均通过，显式 TypeScript、lint（0 errors / 1 条既有 SingleChartPanes warning）、架构、插件架构、30 locale key 检查及生产 build 通过。初次完整本地检查也发现韩语/巴西葡语不可使用英文占位，现已补齐对应 25 项笔记文案；其余非中英 locale 仍采用英文 fallback，未声称全面翻译完成。失败及修复后的完整日志均在 evidence。远程新 head CI 仍须独立核对。

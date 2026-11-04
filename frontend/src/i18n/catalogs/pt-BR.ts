@@ -1,4 +1,4 @@
-import { replayNoteEnglish } from "./replayNoteMessages.js";
+import { replayNoteBrazilian } from "./replayNoteMessages.js";
 import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
@@ -7,7 +7,7 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
-  ...replayNoteEnglish,
+  ...replayNoteBrazilian,
   ...historyStudyBrazilian,
   "chartTime.title": "Ir para data",
   "chartTime.shortcut": "Ir para data (Alt+G)",

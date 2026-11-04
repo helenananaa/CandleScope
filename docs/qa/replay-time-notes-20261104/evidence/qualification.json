@@ -46,5 +46,23 @@
     "trade/fill and screenshot version associations",
     "imported BAR/market-trades flow",
     "broader multiple tracks/reconnect and Windows"
-  ]
+  ],
+  "exactFrontendCheck": {
+    "command": "NODE_OPTIONS=--max-old-space-size=4096 npm run check",
+    "exitCode": 0,
+    "functionalPassed": 4869,
+    "isolatedPerformancePassed": 1,
+    "desktopPassed": 130,
+    "types": "exact CI commands passed",
+    "lint": "0 errors;1 existing SingleChartPanes warning",
+    "architecture": "passed",
+    "pluginArchitecture": "passed",
+    "i18n": "30 locales/key shape passed; note strings translated en/zh variants/ko/pt-BR, other locales English fallback",
+    "build": "passed with existing chunk advisory",
+    "priorFailures": [
+      "CI TS2554 note draft storage getItem parameter",
+      "first local exact lint unused parameter",
+      "second exact suite en-clone ko/ptBR; fixed translations, no gate relaxed"
+    ]
+  }
 }

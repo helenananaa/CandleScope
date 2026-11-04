@@ -50,3 +50,41 @@ export const replayNoteTraditional = {
   "replay.notes.saveFailed": "儲存失敗或回放上下文已改變，草稿仍保留。可重試以恢復結果不確定的原提交。",
   "replay.notes.draftFailed": "草稿無法讀取或儲存，原有恢復資料仍保留。",
 };
+
+export const replayNoteBrazilian = {
+  "replay.notes.title": "Notas do replay", "replay.notes.body": "Plano ou comentário de revisão",
+  "replay.notes.add": "Adicionar nota", "replay.notes.addReview": "Adicionar comentário de revisão",
+  "replay.notes.save": "Salvar", "replay.notes.saveClose": "Salvar e fechar", "replay.notes.close": "Fechar",
+  "replay.notes.saving": "Salvando…", "replay.notes.edit": "Editar", "replay.notes.refresh": "Atualizar",
+  "replay.notes.copyCurrent": "Salvar como nova nota no instante atual",
+  "replay.notes.copyHint": "O contexto do replay mudou. Tente novamente o envio original ou copie explicitamente o texto para uma nova nota no instante atual. O rascunho original será mantido.",
+  "replay.notes.original": "Registro original", "replay.notes.review": "Comentário de revisão",
+  "replay.notes.virtualTime": "Horário do mercado", "replay.notes.savedTime": "Horário real de salvamento",
+  "replay.notes.planHint": "As versões entram em vigor no instante confirmado do replay. Escrever uma nota não avança o replay nem altera ordens.",
+  "replay.notes.reviewHint": "Este comentário foi adicionado durante uma revisão posterior. Ele mantém o horário real de salvamento sem reescrever o plano original.",
+  "replay.notes.recovered": "Rascunho recuperado com o contexto original de salvamento.",
+  "replay.notes.recover": "Recuperar rascunho", "replay.notes.empty": "Nenhuma nota está visível neste instante.",
+  "replay.notes.loading": "Aguardando a sincronização entre o instante exibido e o estado salvo do replay…",
+  "replay.notes.loadFailed": "Não foi possível carregar as notas. Atualize para tentar novamente.",
+  "replay.notes.saveFailed": "O salvamento falhou ou o contexto do replay mudou. Seu rascunho foi mantido. Tente novamente para recuperar o resultado do envio original.",
+  "replay.notes.draftFailed": "Não foi possível ler ou salvar o rascunho. Os dados de recuperação existentes foram mantidos.",
+};
+
+export const replayNoteKorean = {
+  "replay.notes.title": "리플레이 메모", "replay.notes.body": "계획 또는 복기 내용",
+  "replay.notes.add": "메모 추가", "replay.notes.addReview": "복기 메모 추가",
+  "replay.notes.save": "저장", "replay.notes.saveClose": "저장 후 닫기", "replay.notes.close": "닫기",
+  "replay.notes.saving": "저장 중…", "replay.notes.edit": "수정", "replay.notes.refresh": "새로고침",
+  "replay.notes.copyCurrent": "현재 시점의 새 메모로 저장",
+  "replay.notes.copyHint": "리플레이 상태가 바뀌었습니다. 원래 저장 요청을 다시 시도하거나 내용을 현재 시점의 새 메모로 복사할 수 있습니다. 원래 초안은 유지됩니다.",
+  "replay.notes.original": "원본 기록", "replay.notes.review": "복기 메모",
+  "replay.notes.virtualTime": "시장 시각", "replay.notes.savedTime": "실제 저장 시각",
+  "replay.notes.planHint": "각 버전은 확정된 리플레이 시점부터 적용됩니다. 메모를 작성해도 리플레이가 진행되거나 주문이 바뀌지 않습니다.",
+  "replay.notes.reviewHint": "나중에 추가한 복기 내용입니다. 실제 저장 시각을 유지하며 원래 계획을 덮어쓰지 않습니다.",
+  "replay.notes.recovered": "초안과 원래 저장 시점의 상태를 복구했습니다.",
+  "replay.notes.recover": "초안 복구", "replay.notes.empty": "이 시점에 표시할 메모가 없습니다.",
+  "replay.notes.loading": "화면에 표시된 시점과 저장된 리플레이 상태가 일치할 때까지 기다리는 중…",
+  "replay.notes.loadFailed": "메모를 불러오지 못했습니다. 새로고침하여 다시 시도하세요.",
+  "replay.notes.saveFailed": "저장에 실패했거나 리플레이 상태가 바뀌었습니다. 초안은 유지됩니다. 다시 시도하여 원래 저장 요청의 결과를 복구할 수 있습니다.",
+  "replay.notes.draftFailed": "초안을 읽거나 저장하지 못했습니다. 기존 복구 데이터는 유지됩니다.",
+};
