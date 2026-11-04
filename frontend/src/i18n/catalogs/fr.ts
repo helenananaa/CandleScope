@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const fr = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["fr"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Le début et la fenêtre suivante incluent des bougies futures. Choisissez un début plus ancien ou raccourcissez la fenêtre ; seules les bougies historiques clôturées sont disponibles.",
@@ -758,6 +773,9 @@ export const fr = {
   "workspace.link.timeAnchorDesc": "Aligner le bord droit visible, conserver le zoom de chaque graphique",
   "workspace.link.dateRange": "Plage",
   "workspace.link.dateRangeDesc": "Synchroniser toute la plage de dates et le zoom",
+  "workspace.link.chartStyle": "Style du graphique",
+  "workspace.link.chartStyleDesc": "Synchroniser le type, le thème et les couleurs des bougies.",
+  "settings.appearance.cellThemeDescription": "Définissez le thème de ce graphique. Les autres ne changent que si la liaison des styles est activée.",
   "workspace.link.drawings": "Dessins",
   "workspace.link.drawingsDesc": "Partager le document de dessin pour le même marché et le même jeu de calques",
   "workspace.link.definitions": "Liste d’indicateurs",

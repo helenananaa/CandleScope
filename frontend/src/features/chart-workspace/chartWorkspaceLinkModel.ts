@@ -1,7 +1,11 @@
+import { CELL_CHART_APPEARANCE_KEYS } from "./chartWorkspaceTypes.js";
+import { normalizeChartAccountOverlay, sameChartAccountOverlay, type ChartAccountOverlaySettings } from "./chartAccountOverlaySettings.js";
+import { ALL_CELL_CHART_SETTING_KEYS, sameCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import type {
   ChartCellId,
+  ChartCellChartSettings,
   ChartLinkGroupId,
   ChartLinkGroupSettings,
   ChartLinkIndicatorSettings,
@@ -17,6 +21,12 @@ export type ChartLinkChannel =
   | "timeAnchor"
   | "dateRange"
   | "drawings"
+  | "chartStyle"
+  | "accountSource"
+  | "tradingOverlays"
+  | "noteOverlays"
+  | "studyCursor"
+  | "studyMode"
   | "indicators";
 
 export type ChartLinkGroupSettingsPatch = Omit<Partial<ChartLinkGroupSettings>, "indicators"> & {
@@ -53,6 +63,12 @@ export function combineChartLinkSettings(
     timeAnchor: left.timeAnchor && right.timeAnchor,
     dateRange: left.dateRange && right.dateRange,
     drawings: left.drawings && right.drawings,
+    chartStyle: left.chartStyle === true && right.chartStyle === true,
+    accountSource: left.accountSource === true && right.accountSource === true,
+    tradingOverlays: left.tradingOverlays === true && right.tradingOverlays === true,
+    noteOverlays: left.noteOverlays === true && right.noteOverlays === true,
+    studyCursor: left.studyCursor === true && right.studyCursor === true,
+    studyMode: left.studyMode === true && right.studyMode === true,
     indicators: {
       definitions: left.indicators.definitions && right.indicators.definitions,
       parameters: left.indicators.parameters && right.indicators.parameters,
@@ -66,7 +82,7 @@ export function chartLinkPolicyEnables(
   policy: ChartLinkGroupSettings,
   channel: ChartLinkChannel,
 ): boolean {
-  if (channel !== "indicators") return policy[channel];
+  if (channel !== "indicators") return policy[channel] === true;
   return Object.values(policy.indicators).some(Boolean);
 }
 
@@ -244,6 +260,50 @@ export function applyLinkedSessionUpdate(
   }
 
   return changed ? { ...document, cells } : document;
+}
+
+/** Apply one user edit along the resolved directed graph; targets do not re-emit. */
+export function applyLinkedChartSettingsUpdate(
+  document: ChartWorkspaceDocument, sourceCellId: ChartCellId, settings: ChartCellChartSettings,
+): ChartWorkspaceDocument {
+  const source = chartWorkspaceCell(document, sourceCellId);
+  if (sameCellChartSettings(source.chartSettings, settings)) return document;
+  const patch = Object.fromEntries(ALL_CELL_CHART_SETTING_KEYS
+    .filter(key => source.chartSettings[key] !== settings[key]).map(key => [key, settings[key]]));
+  const cells = { ...document.cells, [sourceCellId]: { ...source, chartSettings: settings } };
+  for (const target of resolveChartLinkTargetsForChannel(document, sourceCellId, "chartStyle")) {
+    const cell = cells[target.cellId]!;
+    const chartSettings = { ...cell.chartSettings, ...patch };
+    for (const key of CELL_CHART_APPEARANCE_KEYS) if (chartSettings[key] === undefined) delete chartSettings[key];
+    cells[target.cellId] = { ...cell, chartSettings };
+  }
+  return { ...document, cells };
+}
+
+/** Only changed preferences travel along explicitly enabled channels. */
+export function applyLinkedAccountOverlayUpdate(
+  document: ChartWorkspaceDocument, sourceCellId: ChartCellId, value: ChartAccountOverlaySettings,
+): ChartWorkspaceDocument {
+  const source = chartWorkspaceCell(document, sourceCellId);
+  const previous = normalizeChartAccountOverlay(source.accountOverlay);
+  const next = normalizeChartAccountOverlay(value);
+  if (sameChartAccountOverlay(previous, next)) return document;
+  const cells = { ...document.cells, [sourceCellId]: { ...source, accountOverlay: next } };
+  const channels = {
+    accountSource: ["accountId"], tradingOverlays: ["trades", "positions"], noteOverlays: ["notes"],
+  } as const;
+  for (const channel of Object.keys(channels) as (keyof typeof channels)[]) {
+    const keys = channels[channel].filter(key => previous[key] !== next[key]);
+    if (keys.length === 0) continue;
+    const patch = Object.fromEntries(keys.map(key => [key, next[key]]));
+    for (const target of resolveChartLinkTargetsForChannel(document, sourceCellId, channel)) {
+      const cell = cells[target.cellId]!;
+      cells[target.cellId] = { ...cell, accountOverlay: {
+        ...normalizeChartAccountOverlay(cell.accountOverlay), ...patch,
+      } };
+    }
+  }
+  return { ...document, cells };
 }
 
 function bindingId(indicator: IndicatorDefinition): string {

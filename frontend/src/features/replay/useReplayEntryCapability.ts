@@ -1,6 +1,6 @@
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useState } from "react";
-import { defaultReplayApi } from "./replayApi.js";
+import { useReplayOperations } from "./useReplayOperations.js";
 import type { ReplayApiClient } from "./replayApi.js";
 
 export type ReplayEntryCapabilityView =
@@ -25,8 +25,9 @@ export function replayEntryCapabilityFromPayload(
 }
 
 export function useReplayEntryCapability({
-  api = defaultReplayApi,
+  api: suppliedApi,
 }: ReplayEntryCapabilityOptions = {}): ReplayEntryCapabilityView {
+  const { api: managedApi, request } = useReplayOperations(undefined, "capability");
   const [view, setView] = useState<ReplayEntryCapabilityView>({
     state: "checking",
     href: "/replay.html",
@@ -35,7 +36,10 @@ export function useReplayEntryCapability({
 
   useEffect(() => {
     const controller = new AbortController();
-    void api.capabilities(controller.signal).then(
+    const pending = suppliedApi
+      ? request(signal => suppliedApi.capabilities(signal), controller.signal)
+      : managedApi.capabilities(controller.signal);
+    void pending.then(
       (capability) => {
         if (!controller.signal.aborted) setView(replayEntryCapabilityFromPayload(capability));
       },
@@ -49,7 +53,7 @@ export function useReplayEntryCapability({
       },
     );
     return () => controller.abort();
-  }, [api]);
+  }, [managedApi, request, suppliedApi]);
 
   return view;
 }

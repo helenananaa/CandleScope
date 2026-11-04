@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const sv = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["sv"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Starttiden och framåtfönstret innehåller framtida staplar. Välj en tidigare start eller korta fönstret; endast avslutade historiska staplar är tillgängliga.",
@@ -759,6 +774,9 @@ export const sv = {
   "workspace.link.timeAnchorDesc": "Justera synlig högerkant, behåll zoom per diagram",
   "workspace.link.dateRange": "Intervall",
   "workspace.link.dateRangeDesc": "Synka hela datumintervallet och zoomen",
+  "workspace.link.chartStyle": "Diagramstil",
+  "workspace.link.chartStyleDesc": "Synkronisera diagramtyp, tema och ljusfärger.",
+  "settings.appearance.cellThemeDescription": "Ställ in temat för detta diagram. Andra diagram ändras bara när stilkoppling är aktiverad.",
   "workspace.link.drawings": "Ritningar",
   "workspace.link.drawingsDesc": "Dela ritdokumentet för samma marknad och lagerset",
   "workspace.link.definitions": "Indikatorlista",

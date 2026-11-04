@@ -1,3 +1,4 @@
+import { historyStudyJapanese } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
@@ -6,6 +7,20 @@ import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsJa } from "./tradingAccountsMessages.js";
 
 export const ja = {
+  ...historyStudyJapanese,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...workbenchEnglish,
   "research.book.help": "現在のチャートの市場と期間に一致する、順序付きの集約約定と板観測をアップロードしてください。ホストは OHLCV、連続性、利用可能な板の厚さを検証し、ファイルをスナップショットとともに固定します。板モードでは独自の約定容量規則を使用します。",
   "research.book.invalid": "板ファイルが無効です。symbol、exchange、market_type、provenance、順序付き events、集約約定の元データ番号と板観測を含む、32 MiB 以下の JSON を指定してください。",
@@ -1086,6 +1101,9 @@ export const ja = {
   "workspace.link.timeAnchorDesc": "表示ウィンドウの右端を揃え、各チャートのズームは保持",
   "workspace.link.dateRange": "範囲",
   "workspace.link.dateRangeDesc": "日付範囲全体とズームを同期",
+  "workspace.link.chartStyle": "チャートのスタイル",
+  "workspace.link.chartStyleDesc": "チャート種類、テーマ、ローソク足の色を同期します。",
+  "settings.appearance.cellThemeDescription": "このチャートのテーマを設定します。スタイル連動を有効にした場合のみ、他のチャートにも反映されます。",
   "workspace.link.drawings": "描画",
   "workspace.link.drawingsDesc": "同一市場・同一レイヤーセットで描画ドキュメントを共有",
   "workspace.link.definitions": "インジケーター一覧",
@@ -4293,6 +4311,9 @@ export const ja = {
   "drawing.variant.line-horizontal": "水平線",
   "drawing.variant.line-vertical": "垂直線",
   "drawing.variant.line-cross": "十字線",
+  "drawing.variant.measure-price": "価格範囲",
+  "drawing.variant.measure-time": "時間範囲",
+  "drawing.variant.measure-price-time": "価格と時間の範囲",
   "drawing.variant.angle-measure": "角度",
   "drawing.variant.angle-measure.description": "現在のスケールでの視覚角度",
   "drawing.variant.shape-rectangle": "矩形",

@@ -2448,6 +2448,42 @@ def test_cap_range_request_canonicalises_arbitrary_custom_edge() -> None:
     assert capped["needed_limit"] == 2
 
 
+def test_cap_range_request_counts_earlier_sparse_rows_when_end_is_confirmed_empty() -> None:
+    from app.data_engine.history.native_seconds import NativeSparseSecondsCalendar
+
+    start = 1_793_664_000_000
+    calendar = NativeSparseSecondsCalendar(
+        "BTC/KRW", lambda *_: [(start + 400_000, start + 499_000)],
+    )
+    capped = klines_api._cap_range_request(
+        start_ms=start, end_ms=start + 499_000, interval="1s", calendar=calendar,
+    )
+
+    assert calendar.count_expected(start, start + 499_000, "1s") == 400
+    assert capped["needed_limit"] >= 400
+    assert capped["query_start_ms"] == start
+    assert capped["query_end_ms"] == start + 499_000
+    assert capped["truncated"] is False
+
+
+def test_cap_range_request_pages_earlier_sessions_when_end_is_after_close() -> None:
+    calendar = SessionCalendar(
+        calendar_id="test.cap.closed-tail", timezone_name="UTC",
+        weekly_sessions={weekday: (("09:30", "17:00"),) for weekday in range(5)},
+    )
+    day = 1_773_964_800_000  # Friday 2026-03-20 UTC.
+    capped = klines_api._cap_range_request(
+        start_ms=day + 9 * 3_600_000 + 30 * 60_000,
+        end_ms=day + 18 * 3_600_000, interval="1h", max_bars=2, calendar=calendar,
+    )
+
+    assert capped["truncated"] is True
+    assert capped["needed_limit"] == 2
+    assert capped["query_start_ms"] == day + 15 * 3_600_000 + 30 * 60_000
+    assert capped["next_end_ms"] == day + 14 * 3_600_000 + 30 * 60_000
+    assert capped["query_end_ms"] == day + 18 * 3_600_000
+
+
 def test_query_endpoints_map_interval_capability_errors_to_client_error() -> None:
     client = _client(DataManager())
     common = {

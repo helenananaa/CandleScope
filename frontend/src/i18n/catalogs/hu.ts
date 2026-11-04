@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hu = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["hu"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "A kezdés és az előretekintő ablak jövőbeli gyertyákat tartalmaz. Válasszon korábbi kezdést vagy rövidebb ablakot; csak lezárt múltbeli gyertyák érhetők el.",
@@ -759,6 +774,9 @@ export const hu = {
   "workspace.link.timeAnchorDesc": "A látható jobb szél igazítása, grafikononkénti nagyítás megtartása",
   "workspace.link.dateRange": "Tartomány",
   "workspace.link.dateRangeDesc": "A teljes dátumtartomány és a nagyítás szinkronizálása",
+  "workspace.link.chartStyle": "Diagramstílus",
+  "workspace.link.chartStyleDesc": "Diagramtípus, téma és gyertyaszínek szinkronizálása.",
+  "settings.appearance.cellThemeDescription": "A diagram témájának beállítása. Más diagramok csak bekapcsolt stíluskapcsolat esetén változnak.",
   "workspace.link.drawings": "Rajzok",
   "workspace.link.drawingsDesc": "Rajzdokumentum megosztása azonos piachoz és rétegkészlethez",
   "workspace.link.definitions": "Indikátorlista",

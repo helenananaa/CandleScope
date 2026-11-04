@@ -1,0 +1,7 @@
+{
+  "reviewed_head": "6bddedf6233acf5fd1483d349e6397b2364b84fa",
+  "result": "Confirmed legacy unscoped narrow foreground request promotes entire persistent background envelope; running_chunks remains1 instead of2 and another cold interval cannot use maintenance reserve.",
+  "source": "backfill_scheduler._remember_persistent_interest merges priority winner with min/max envelope. Scoped demand leases preserve ranges correctly.",
+  "qualification": "No evidence this caused the observed Binance418; no production fix or full PR209 acceptance claimed.",
+  "scope": "Local controlled real scheduler/coordinator, mocked engine completion. Does not make network calls."
+}

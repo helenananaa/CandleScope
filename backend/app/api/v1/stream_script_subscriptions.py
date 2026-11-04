@@ -155,6 +155,8 @@ async def handle_script_indicator_subscribe(
         return
     await script_runtime_service.start()
     script_runtime_service.route_for(language)
+    closed_policy = getattr(script_runtime_service, "closed_bars_only", None)
+    closed_bars_only = bool(closed_policy(language)) if callable(closed_policy) else False
 
     await unsubscribe_client(client_id)
     digest = script_hash(script)
@@ -747,6 +749,8 @@ async def handle_script_indicator_subscribe(
         nonlocal correction_task, pending_frontier_closed, pending_realtime_event
         nonlocal closed_frontier_generation
         if meta.get("_disposed"):
+            return
+        if closed_bars_only and event.event_type == DataEventType.BAR_UPDATED:
             return
         if event.event_type in {
             DataEventType.BACKFILL_COMPLETED,

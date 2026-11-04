@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const th = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["th"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "เวลาเริ่มและช่วงล่วงหน้ารวมแท่งเทียนในอนาคต โปรดเลือกเวลาเริ่มที่เก่ากว่าหรือลดช่วงล่วงหน้า ใช้ได้เฉพาะแท่งเทียนย้อนหลังที่ปิดแล้ว",
@@ -759,6 +774,9 @@ export const th = {
   "workspace.link.timeAnchorDesc": "จัดขอบขวาที่มองเห็น คงซูมของแต่ละกราฟ",
   "workspace.link.dateRange": "ช่วง",
   "workspace.link.dateRangeDesc": "ซิงก์ช่วงวันที่ทั้งหมดและซูม",
+  "workspace.link.chartStyle": "รูปแบบกราฟ",
+  "workspace.link.chartStyleDesc": "ซิงค์ประเภทกราฟ ธีม และสีแท่งเทียน",
+  "settings.appearance.cellThemeDescription": "ตั้งค่าธีมของกราฟนี้ กราฟอื่นจะเปลี่ยนเฉพาะเมื่อเปิดการเชื่อมโยงรูปแบบ",
   "workspace.link.drawings": "ภาพวาด",
   "workspace.link.drawingsDesc": "แชร์เอกสารภาพวาดสำหรับตลาดและชุดเลเยอร์เดียวกัน",
   "workspace.link.definitions": "รายการอินดิเคเตอร์",

@@ -531,3 +531,134 @@ def test_project_package_api_round_trip_remaps_collision(
     assert restored.json()["identity_changed"] is True
     assert restored.json()["dataset_id"] != imported["dataset_id"]
     assert restored.json()["client_state"]["schema_version"] == 1
+
+
+def test_local_indicator_cache_rebinds_view_ids_without_recomputing(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post('/api/v1/local/imports/csv', params={
+        'name': 'Fixed sample', 'symbol': 'BTCUSDT', 'interval': '1m', 'timestamp_unit': 's',
+    }, content='time,open,high,low,close\n1704067200,1,3,1,2\n1704067260,2,4,2,3\n', headers={'content-type': 'text/csv'}).json()
+    path = f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch"
+    def body(client_id):
+        return {'data_epoch': imported['data_epoch'], 'requests': [
+            {'jobKey': client_id + '-job', 'clientId': client_id, 'name': 'MA', 'params': {'period': 2}},
+        ]}
+    first = client.post(path, json=body('first')).json()
+    assert first['ok'] and first['cache'] == 'miss'
+    def no_compute(**kwargs):
+        raise AssertionError('The same fixed computation must survive a new view and service instance')
+    monkeypatch.setattr(local_data, 'compute_local_indicator_batch', no_compute)
+    restarted = _client(tmp_path, monkeypatch)
+    second = restarted.post(path, json=body('restarted'))
+    assert second.status_code == 200, second.text
+    value = second.json()
+    assert value['cache'] == 'hit'
+    assert value['results'][0]['clientId'] == 'restarted'
+    assert value['results'][0]['jobKey'] == 'restarted-job'
+    assert value['results'][0]['payload'] == first['results'][0]['payload']
+
+
+def test_fixed_result_cache_fences_code_params_interval_dataset_and_corruption(tmp_path, monkeypatch):
+    import json
+    from app.local_data import analysis_cache
+    client = _client(tmp_path, monkeypatch)
+    def upload(dataset_id=None, changed=False):
+        response = client.post('/api/v1/local/imports/csv', params={
+            'name': 'Fixed', 'symbol': 'BTCUSDT', 'interval': '1m', 'timestamp_unit': 's',
+            **({'dataset_id': dataset_id} if dataset_id else {}),
+        }, content='time,open,high,low,close\n1704067200,1,3,1,2\n1704067260,2,4,2,' + ('4' if changed else '3') + '\n', headers={'content-type': 'text/csv'})
+        assert response.status_code == 201, response.text
+        return response.json()
+    a = upload()
+    original = local_data.compute_local_indicator_batch
+    calls = []
+    def compute(**kwargs):
+        calls.append((kwargs['dataset_id'], kwargs['data_epoch'], kwargs['interval']))
+        return original(**kwargs)
+    monkeypatch.setattr(local_data, 'compute_local_indicator_batch', compute)
+    def query(dataset, period=2, interval='1m'):
+        return client.post(f"/api/v1/local/datasets/{dataset['dataset_id']}/indicators/compute/batch", json={
+            'data_epoch': dataset['data_epoch'], 'interval': interval,
+            'requests': [{'jobKey': 'job', 'clientId': 'view', 'name': 'MA', 'params': {'period': period}}],
+        })
+    first = query(a).json()
+    assert first['cache'] == 'miss' and len(calls) == 1
+    assert query(a).json()['cache'] == 'hit' and len(calls) == 1
+    with monkeypatch.context() as patch:
+        patch.setattr(analysis_cache, 'implementation_revision', lambda: 'changed-installation')
+        assert query(a).json()['cache'] == 'miss' and len(calls) == 2
+        assert query(a).json()['cache'] == 'hit' and len(calls) == 2
+    assert query(a, period=1).json()['cache'] == 'miss' and len(calls) == 3
+    assert query(a, interval='2m').json()['cache'] == 'miss' and len(calls) == 4
+    b = upload()
+    assert b['dataset_id'] != a['dataset_id']
+    assert query(b).json()['cache'] == 'miss' and len(calls) == 5
+    # A readable JSON edit must not pass as an authentic cached calculation.
+    for path in (tmp_path / 'local-data' / '.cache' / a['dataset_id']).rglob('*.json'):
+        value = json.loads(path.read_text())
+        value['payload']['ok'] = False
+        path.write_text(json.dumps(value))
+    assert query(a).json()['cache'] == 'miss' and len(calls) == 6
+    revised = upload(a['dataset_id'], changed=True)
+    assert revised['data_epoch'] != a['data_epoch']
+    assert query(a).status_code == 409
+    new = query(revised).json()
+    assert new['cache'] == 'miss' and len(calls) == 7
+    assert new['results'][0]['payload']['lines'] != first['results'][0]['payload']['lines']
+
+
+def test_failed_local_indicator_results_are_not_persisted(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post('/api/v1/local/imports/csv', params={
+        'name': 'Failure', 'symbol': 'BTCUSDT', 'interval': '1m', 'timestamp_unit': 's',
+    }, content='time,open,high,low,close\n1704067200,1,3,1,2\n', headers={'content-type': 'text/csv'}).json()
+    path = f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch"
+    body = {'data_epoch': imported['data_epoch'], 'requests': [
+        {'jobKey': 'job', 'clientId': 'view', 'name': 'MA', 'params': {'period': 2}},
+    ]}
+    with monkeypatch.context() as patch:
+        patch.setattr(local_data, 'compute_local_indicator_batch', lambda **kwargs: {
+            'schemaVersion': 1, 'ok': False, 'results': [{'jobKey': 'job', 'clientId': 'view',
+                'payload': {'ok': False, 'code': 'LOCAL_INDICATOR_COMPUTE_FAILED'}}],
+        })
+        assert client.post(path, json=body).json()['ok'] is False
+    assert list((tmp_path / 'local-data' / '.cache').rglob('*.json')) == []
+    result = client.post(path, json=body).json()
+    assert result['ok'] is True and result['cache'] == 'miss'
+
+
+def test_persisted_results_revalidate_installed_calendar_dependencies(tmp_path, monkeypatch):
+    """A restart after a boundary implementation/rules update cannot reuse old math."""
+    from app.local_data import analysis_cache
+
+    client = _client(tmp_path, monkeypatch)
+    imported = client.post('/api/v1/local/imports/csv', params={
+        'name': 'Calendar cache', 'symbol': 'BTCUSDT', 'interval': '1m', 'timestamp_unit': 's',
+    }, content='time,open,high,low,close\n1704067200,1,3,1,2\n1704067260,2,4,2,3\n',
+        headers={'content-type': 'text/csv'}).json()
+    path = f"/api/v1/local/datasets/{imported['dataset_id']}/indicators/compute/batch"
+    body = {'data_epoch': imported['data_epoch'], 'requests': [
+        {'jobKey': 'job', 'clientId': 'view', 'name': 'MA', 'params': {'period': 2}},
+    ]}
+    analysis_cache.implementation_revision.cache_clear()
+    try:
+        assert client.post(path, json=body).json()['cache'] == 'miss'
+        assert client.post(path, json=body).json()['cache'] == 'hit'
+        original_read = Path.read_bytes
+        for dependency in ('calendar_basis.py', 'calendar-v1.json'):
+            # Simulate the bytes installed by an application update without
+            # editing the checkout or changing imported modules in this process.
+            with monkeypatch.context() as patch:
+                def updated_read(file, dependency=dependency):
+                    value = original_read(file)
+                    return value + b'\n' if file.name == dependency else value
+                patch.setattr(Path, 'read_bytes', updated_read)
+                analysis_cache.implementation_revision.cache_clear()
+                changed = client.post(path, json=body)
+                assert changed.status_code == 200, changed.text
+                assert changed.json()['cache'] == 'miss', dependency
+                assert client.post(path, json=body).json()['cache'] == 'hit'
+            analysis_cache.implementation_revision.cache_clear()
+            assert client.post(path, json=body).json()['cache'] == 'hit'
+    finally:
+        analysis_cache.implementation_revision.cache_clear()

@@ -1,0 +1,3205 @@
+{
+  "schema": "candlescope.chart-style-native/1",
+  "sourceCommit": "e03cc42cb5bed5de7b5f9ca769511510d40e4998",
+  "transport": "packaged bundled backend, finite synthetic archive and matching instrument metadata, real application HTTP and WebSocket; no response substitution",
+  "steps": [
+    {
+      "name": "live-canvas-before-assertion",
+      "at": "2026-11-01T06:09:04.997Z",
+      "evidence": {
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#0f172a",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "dark",
+            "inheritApplicationTheme": true,
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#e2e8f0",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#0a0e17"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "live-independent",
+      "at": "2026-11-01T06:09:05.145Z",
+      "evidence": {
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#0f172a",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "dark",
+            "inheritApplicationTheme": true,
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#e2e8f0",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#0a0e17"
+            }
+          }
+        ],
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 4,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "split-vertical-root",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-1",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "light",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "4h",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1d",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "split-vertical-root",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-1",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513284864,
+              "updatedAt": 1793513344860,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-1",
+          "activeCell": {
+            "id": "cell-1",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "light",
+              "upColor": "#ef4444",
+              "downColor": "#22c55e"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": true,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saving",
+            "persistenceMode": "indexeddb",
+            "lastSavedAt": 1793513344564,
+            "error": null,
+            "controlReceipt": {
+              "requestId": "native178-1793513337419",
+              "ok": true,
+              "revision": 1,
+              "cellIds": [
+                "cell-1",
+                "cell-2"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "live-linked",
+      "at": "2026-11-01T06:09:06.685Z",
+      "evidence": {
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 7,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "split-vertical-root",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-1",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": true,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "4h",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1d",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "split-vertical-root",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-1",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513284864,
+              "updatedAt": 1793513346597,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-1",
+          "activeCell": {
+            "id": "cell-1",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "custom",
+              "customBg": "#223344",
+              "upColor": "#ef4444",
+              "downColor": "#22c55e"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": true,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saving",
+            "persistenceMode": "indexeddb",
+            "lastSavedAt": 1793513346409,
+            "error": null,
+            "controlReceipt": {
+              "requestId": "native178-1793513337419",
+              "ok": true,
+              "revision": 1,
+              "cellIds": [
+                "cell-1",
+                "cell-2"
+              ]
+            }
+          }
+        },
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#223344"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 0,
+                "to": 506
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 502,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#223344"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T06:09:07.785Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28487,
+            "ppid": 28154,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28488,
+            "ppid": 28487,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28489,
+            "ppid": 28487,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28490,
+            "ppid": 28487,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28496,
+            "ppid": 28490,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28512,
+            "ppid": 28487,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687848549 --launch-time-ticks=14647891425 --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=64548 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28514,
+            "ppid": 28490,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 28515,
+            "ppid": 28490,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=73, pipe_handle=64) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T06:09:22.998Z",
+      "evidence": {
+        "elapsedMs": 15213
+      }
+    },
+    {
+      "name": "live-exit",
+      "at": "2026-11-01T06:09:23.033Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28487,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28488,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28489,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28490,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28496,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28512,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687848549 --launch-time-ticks=14647891425 --shared-files --field-trial-handle=1718379636,r,3231353982689221196,9009173358262490780,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18211938455396256835,7527219025559144039,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=64548 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28514,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 28515,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=73, pipe_handle=64) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    },
+    {
+      "name": "live-restarted",
+      "at": "2026-11-01T06:09:39.659Z",
+      "evidence": {
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 10,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "split-vertical-root",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-2",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "light",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "4h",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1d",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "split-vertical-root",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-2",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513284864,
+              "updatedAt": 1793513347484,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-2",
+          "activeCell": {
+            "id": "cell-2",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "light",
+              "customBg": "#223344"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": false,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saved",
+            "persistenceMode": "indexeddb",
+            "lastSavedAt": 1793513373530,
+            "error": null,
+            "controlReceipt": null
+          }
+        },
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": -3,
+                "to": 503
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 500,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#223344"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": -2,
+                "to": 504
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 500,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "formal-canvas-before-assertion",
+      "at": "2026-11-01T06:09:41.659Z",
+      "evidence": {
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 110.375,
+                "to": 149.625
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#0f172a",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 86.375,
+                "to": 125.625
+              }
+            },
+            "theme": "dark",
+            "inheritApplicationTheme": true,
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#e2e8f0",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#0a0e17"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "formal-independent",
+      "at": "2026-11-01T06:09:41.777Z",
+      "evidence": {
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 110.375,
+                "to": 149.625
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#0f172a",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#ffffff"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#0a0e17"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 86.375,
+                "to": 125.625
+              }
+            },
+            "theme": "dark",
+            "inheritApplicationTheme": true,
+            "customBg": "#0f172a",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#e2e8f0",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#0a0e17"
+            }
+          }
+        ],
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 5,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "custom-columns-cell-1-cell-2",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-1",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "light",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "custom-columns-cell-1-cell-2",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-1",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513286889,
+              "updatedAt": 1793513381595,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-1",
+          "activeCell": {
+            "id": "cell-1",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "light",
+              "upColor": "#ef4444",
+              "downColor": "#22c55e"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": true,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saving",
+            "persistenceMode": "local-storage",
+            "lastSavedAt": 1793513381324,
+            "error": null,
+            "controlReceipt": null
+          }
+        }
+      }
+    },
+    {
+      "name": "formal-linked",
+      "at": "2026-11-01T06:09:43.047Z",
+      "evidence": {
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 8,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "custom-columns-cell-1-cell-2",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-1",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": true,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "custom-columns-cell-1-cell-2",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-1",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513286889,
+              "updatedAt": 1793513382981,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-1",
+          "activeCell": {
+            "id": "cell-1",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "custom",
+              "customBg": "#223344",
+              "upColor": "#ef4444",
+              "downColor": "#22c55e"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": true,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saving",
+            "persistenceMode": "local-storage",
+            "lastSavedAt": 1793513382849,
+            "error": null,
+            "controlReceipt": null
+          }
+        },
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 110.375,
+                "to": 149.625
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#223344"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 86.375,
+                "to": 125.625
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#223344"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "formal-financial-invariance",
+      "at": "2026-11-01T06:09:44.008Z",
+      "evidence": {
+        "clock": {
+          "contract": "replay.playback.v1",
+          "mode": "ORDERED",
+          "state": "PAUSED",
+          "basis": "BASE_BAR",
+          "rate": 1,
+          "speed": 1,
+          "display_interval": null,
+          "viewer_revision": null,
+          "profile_revision": 0,
+          "reason": null,
+          "generation": 0,
+          "tick": 0,
+          "supported_bases": [
+            "DISPLAY_BAR",
+            "BASE_BAR",
+            "SOURCE_EVENT",
+            "VIRTUAL_TIME"
+          ],
+          "playback_bases": [
+            "DISPLAY_BAR",
+            "BASE_BAR",
+            "SOURCE_EVENT"
+          ],
+          "max_count": 100000,
+          "virtual_time_quantum_ms": 60000
+        },
+        "portfolio": {
+          "schema_version": "replay.training.portfolio.v2",
+          "account_model": "TOUCH_OR_TAPE_V2",
+          "execution_model": "TOUCH_OR_TAPE_V2",
+          "execution_fidelity": "NO_BOOK_TOUCH_OR_TAPE_APPROX",
+          "settlement_account_shared": true,
+          "position_mode": "ONE_WAY",
+          "margin_mode": "CROSS",
+          "funding_mode": "OFF",
+          "status": "ACTIVE",
+          "initial_equity": "10000",
+          "cash_balance": "9999.759274",
+          "equity": "9999.759274",
+          "available_equity": "9999.759274",
+          "reserved_margin": "0",
+          "margin_used": "0",
+          "maintenance_margin": "0",
+          "realized_pnl": "0.059879",
+          "unrealized_pnl": "0",
+          "fees_paid": "0.300605",
+          "funding_cashflow": "0",
+          "liquidation_fees_paid": "0",
+          "risk_ratio": null,
+          "positions": [],
+          "orders": [],
+          "fills": [],
+          "history": {
+            "orders_total": 2,
+            "active_orders": 0,
+            "historical_orders": 2,
+            "fills_total": 2,
+            "ledger_entries_total": 4,
+            "page_limit_max": 200
+          },
+          "active_fee_policy": {
+            "revision": 1,
+            "effective_virtual_time_ms": 1700049600000,
+            "maker_fee_bps": "2",
+            "taker_fee_bps": "5",
+            "liquidation_fee_bps": null,
+            "policy_version": null,
+            "account_tier": null,
+            "source_kind": null,
+            "source_id": null,
+            "source_event_sequence": null,
+            "extension_hash": null,
+            "policy_hash": "sha256:decf582c320a8bb130f64337c0d70eb890b75305b206d8df1af51811bde4769b",
+            "fidelity": "CONFIGURED_POLICY_EXACT"
+          },
+          "instrument_rules": [
+            {
+              "track_id": "track-1",
+              "revision": 1,
+              "rule_hash": "sha256:3e0436188e0eaec37054435076b41abb22f9e9c34efbd9c40291d31b4c542fa2",
+              "fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+              "rule": {
+                "contract_size": "1",
+                "effective_virtual_time_ms": 1700049600000,
+                "liquidation_fee_bps": "50",
+                "maintenance_tiers": [
+                  {
+                    "maintenance_deduction": "0",
+                    "maintenance_rate": "0.005",
+                    "notional_cap": "30000"
+                  }
+                ],
+                "mark_fidelity": "REVEALED_BAR_CLOSE_PROXY",
+                "max_leverage": "3",
+                "max_notional": "30000",
+                "max_quantity": "1000000000",
+                "min_notional": "0.01",
+                "min_quantity": "0.00000001",
+                "price_tick": "0.00000001",
+                "quantity_step": "0.00000001",
+                "quote_step": "0.00000001",
+                "rule_fidelity": "AVAILABLE_APPROX_SIMULATION_RULES",
+                "rule_version": "CANDLESCOPE_LINEAR_CONTRACT_V1",
+                "source_kind": "BAR",
+                "track_id": "track-1"
+              }
+            }
+          ],
+          "isolated_allocations": {},
+          "next_funding_time_ms": null,
+          "liquidations": [],
+          "liquidation_recoveries": [],
+          "hedge_state": {
+            "schema_version": "replay.hedge-relational-state.v1",
+            "position_legs": [
+              {
+                "run_id": "prepared-76d6f788a8154cee9d7d7875d74c8038",
+                "track_id": "track-1",
+                "position_side": "LONG",
+                "signed_quantity": "0.01",
+                "absolute_quantity": "0.01",
+                "entry_price": "30057.50545",
+                "mark_price": "30066.5",
+                "notional": "300.665",
+                "realized_pnl": "0",
+                "unrealized_pnl": "0.0899455",
+                "initial_margin": "100.22166667",
+                "maintenance_margin": "1.503325",
+                "leverage": "3",
+                "margin_mode": "CROSS",
+                "isolated_wallet": "0",
+                "liquidation_price": "0",
+                "bankruptcy_price": "0",
+                "accumulated_funding": "0",
+                "trading_fees": "0",
+                "liquidation_fees": "0",
+                "risk_tier": 1,
+                "rule_revision": 1,
+                "protection_json": "{\"orders\":[]}",
+                "component_revision": 6,
+                "component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934",
+                "created_at_ms": 1793513287628,
+                "updated_at_ms": 1793513288732
+              }
+            ],
+            "leg_accounting": [
+              {
+                "schema_version": "replay.hedge-leg-accounting.v1",
+                "track_id": "track-1",
+                "position_side": "LONG",
+                "accumulated_funding": "0",
+                "trading_fees": "0",
+                "liquidation_fees": "0",
+                "funding_settlement_count": 0,
+                "fee_entry_count": 0,
+                "mutation_entry_count": 0,
+                "ledger_entry_count": 0,
+                "last_ledger_sequence": null,
+                "last_ledger_hash": null,
+                "position_component_hash": "sha256:b30b81913f719602825aba047dee221424987c84dd23a099d09a75aa52e3a934"
+              }
+            ],
+            "margin_buckets": [
+              {
+                "run_id": "prepared-76d6f788a8154cee9d7d7875d74c8038",
+                "bucket_id": "cross:USDT",
+                "bucket_kind": "CROSS",
+                "track_id": null,
+                "position_side": null,
+                "asset": "USDT",
+                "wallet_balance": "9999.84971247",
+                "initial_margin": "100.22166667",
+                "maintenance_margin": "1.503325",
+                "reserved_margin": "0",
+                "available_balance": "9899.7179913",
+                "component_revision": 6,
+                "component_hash": "sha256:018690a39d3777e2dda9620c59f20c5658aea3892e55b0a9fe4a80ce9f5c7da5",
+                "updated_at_ms": 1793513288732
+              },
+              {
+                "run_id": "prepared-76d6f788a8154cee9d7d7875d74c8038",
+                "bucket_id": "position:track-1:LONG",
+                "bucket_kind": "POSITION",
+                "track_id": "track-1",
+                "position_side": "LONG",
+                "asset": "USDT",
+                "wallet_balance": "0",
+                "initial_margin": "100.22166667",
+                "maintenance_margin": "1.503325",
+                "reserved_margin": "0",
+                "available_balance": "0",
+                "component_revision": 6,
+                "component_hash": "sha256:1ef894b050fe77e443f8dc229fcf4f82f1c7edb1895cfc455880a53a5bc5d98c",
+                "updated_at_ms": 1793513288732
+              }
+            ],
+            "risk_snapshots": [],
+            "liquidation_leg_price_proofs": [],
+            "liquidation_book_executions": [],
+            "liquidation_book_snapshots": [],
+            "insurance_funds": [],
+            "insurance_postings": [],
+            "adl_snapshots": [],
+            "adl_candidates": [],
+            "adl_events": [],
+            "adl_selections": [],
+            "adl_counterparty_ledger": [],
+            "liquidation_case_hashes": [],
+            "state_hash": "sha256:d13cc12e12743844c8be1aaab149549e0a46fce9f8ec916270a3c645a52aabe9"
+          },
+          "hedge_inputs": null,
+          "account_history": {
+            "mode": "APPROX_PROXY",
+            "status": "ACTIVE",
+            "fidelity": "REVEALED_PRICE_PROXY_MODELLED_ACCOUNT",
+            "archive_proof_hash": null,
+            "bindings": [],
+            "auditor": {
+              "status": "NOT_RUN",
+              "proof_hash": null,
+              "differences": []
+            }
+          },
+          "liquidation_channels": {
+            "simulated_account": {
+              "label": "模拟账户强平",
+              "source": "MODELLED_ACCOUNT",
+              "fidelity": "AVAILABLE_APPROX_SIMULATED_ACCOUNT"
+            },
+            "historical_market": {
+              "label": "历史市场爆仓",
+              "source": "INDEPENDENT_MARKET_LIQUIDATION_FEED",
+              "fidelity": "UNSUPPORTED_NO_HISTORY"
+            }
+          },
+          "ledger": {
+            "chain_version": "replay.training.contract-ledger.v1",
+            "entry_count": 4,
+            "tail_hash": "sha256:54cf7da6d6b2f76e6fc00b53ccf723b82959ded676bf0aa751e547761b0045bb",
+            "cash_total": "9999.759274",
+            "reconciliation_delta": "0",
+            "entries": []
+          },
+          "fidelity": {
+            "hedge_public_history_ref": null,
+            "simulation_manifest_ref": null,
+            "simulation_contract_hash": null,
+            "simulation_model_version": null,
+            "account": null,
+            "insurance_adl": null,
+            "instrument_rules": "AVAILABLE_APPROX_SIMULATION_RULES",
+            "maintenance_margin": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+            "liquidation_projection": "VERSIONED_MAINTENANCE_TIER_APPLIED",
+            "maintenance_tier_extrapolation": {
+              "applied": false,
+              "position_count": 0,
+              "liquidation_projection_count": 0,
+              "reason": null,
+              "admission_policy": "STRICT_VERSIONED_ORDER_LIMITS_UNCHANGED"
+            },
+            "fees": "CONFIGURED_POLICY_EXACT",
+            "funding": "OFF",
+            "mark": "REVEALED_PRICE_PROXY_NOT_HISTORICAL_MARK",
+            "liquidation": "AVAILABLE_APPROX_SIMULATED_ACCOUNT",
+            "liquidation_execution": "TOUCH_OR_TAPE_MARK_SLIPPAGE_V1"
+          }
+        }
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T06:09:44.424Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28643,
+            "ppid": 28154,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28644,
+            "ppid": 28643,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28645,
+            "ppid": 28643,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28646,
+            "ppid": 28643,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28716,
+            "ppid": 28646,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28742,
+            "ppid": 28643,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687847842 --launch-time-ticks=14684649763 --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=49325 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28744,
+            "ppid": 28646,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 28745,
+            "ppid": 28646,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=63, pipe_handle=69) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T06:09:59.593Z",
+      "evidence": {
+        "elapsedMs": 15169
+      }
+    },
+    {
+      "name": "formal-exit",
+      "at": "2026-11-01T06:09:59.629Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28643,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28644,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28645,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28646,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28716,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28742,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687847842 --launch-time-ticks=14684649763 --shared-files --field-trial-handle=1718379636,r,12975661075391429780,13468224361606645930,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,8021125496595428012,6952455229085371493,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=49325 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28744,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(62)"
+          },
+          {
+            "pid": 28745,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=63, pipe_handle=69) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    },
+    {
+      "name": "formal-restarted",
+      "at": "2026-11-01T06:10:08.403Z",
+      "evidence": {
+        "workspace": {
+          "document": {
+            "schemaVersion": 8,
+            "revision": 11,
+            "activeWindowId": "main-window",
+            "windows": {
+              "main-window": {
+                "id": "main-window",
+                "layoutTree": {
+                  "kind": "split",
+                  "id": "custom-columns-cell-1-cell-2",
+                  "direction": "columns",
+                  "ratio": 0.5,
+                  "first": {
+                    "kind": "cell",
+                    "cellId": "cell-1"
+                  },
+                  "second": {
+                    "kind": "cell",
+                    "cellId": "cell-2"
+                  }
+                },
+                "layoutLocked": false,
+                "activeCellId": "cell-2",
+                "maximizedCellId": null,
+                "boundsDip": null,
+                "monitorFingerprint": null,
+                "dpiScale": null,
+                "windowState": "normal"
+              }
+            },
+            "linkGroups": {
+              "group-primary": {
+                "id": "group-primary",
+                "name": "主控组",
+                "color": "#4f7cff",
+                "parentId": null,
+                "peerPolicy": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                },
+                "receiveFromParent": {
+                  "market": true,
+                  "interval": false,
+                  "crosshair": true,
+                  "timeAnchor": false,
+                  "dateRange": true,
+                  "chartStyle": false,
+                  "drawings": false,
+                  "indicators": {
+                    "definitions": true,
+                    "parameters": true,
+                    "visual": false,
+                    "paneLayout": false
+                  }
+                }
+              }
+            },
+            "cells": {
+              "cell-1": {
+                "id": "cell-1",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "custom",
+                  "customBg": "#223344",
+                  "upColor": "#ef4444",
+                  "downColor": "#22c55e"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-2": {
+                "id": "cell-2",
+                "linkGroupId": "group-primary",
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3,
+                  "theme": "light",
+                  "customBg": "#223344"
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-3": {
+                "id": "cell-3",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              },
+              "cell-4": {
+                "id": "cell-4",
+                "linkGroupId": null,
+                "drawingLayerSet": "1",
+                "session": {
+                  "exchange": "binance",
+                  "marketType": "spot",
+                  "symbol": "BTCUSDT",
+                  "interval": "1m",
+                  "providerId": "binance",
+                  "venue": "binance",
+                  "assetClass": "crypto",
+                  "seriesVariant": "native",
+                  "priceAdjustment": "raw",
+                  "sessionVariant": "continuous",
+                  "volumeSemantics": "base_asset"
+                },
+                "chartSettings": {
+                  "chartType": "candlestick",
+                  "renkoBoxSizeMode": "atr",
+                  "renkoAtrLength": 14,
+                  "renkoBoxSize": 1,
+                  "pointFigureBoxSizeMode": "atr",
+                  "pointFigureAtrLength": 14,
+                  "pointFigureBoxSize": 1,
+                  "pointFigureReversalAmount": 3,
+                  "kagiReversalMode": "atr",
+                  "kagiAtrLength": 14,
+                  "kagiReversalAmount": 1,
+                  "lineBreakNumberOfLines": 3
+                },
+                "priceScale": {
+                  "invertScale": false,
+                  "priceScaleMode": 0
+                },
+                "indicators": [],
+                "strategyAttachment": null
+              }
+            }
+          },
+          "window": {
+            "id": "main-window",
+            "layoutTree": {
+              "kind": "split",
+              "id": "custom-columns-cell-1-cell-2",
+              "direction": "columns",
+              "ratio": 0.5,
+              "first": {
+                "kind": "cell",
+                "cellId": "cell-1"
+              },
+              "second": {
+                "kind": "cell",
+                "cellId": "cell-2"
+              }
+            },
+            "layoutLocked": false,
+            "activeCellId": "cell-2",
+            "maximizedCellId": null,
+            "boundsDip": null,
+            "monitorFingerprint": null,
+            "dpiScale": null,
+            "windowState": "normal"
+          },
+          "activeWorkspaceId": "workspace-default",
+          "activeWorkspaceName": "默认工作区",
+          "runtimeKey": "workspace-default",
+          "workspaces": [
+            {
+              "id": "workspace-default",
+              "name": "默认工作区",
+              "createdAt": 1793513286889,
+              "updatedAt": 1793513383839,
+              "layout": "split-vertical"
+            }
+          ],
+          "layout": "split-vertical",
+          "activeCellId": "cell-2",
+          "activeCell": {
+            "id": "cell-2",
+            "linkGroupId": "group-primary",
+            "drawingLayerSet": "1",
+            "session": {
+              "exchange": "binance",
+              "marketType": "spot",
+              "symbol": "BTCUSDT",
+              "interval": "1m",
+              "providerId": "binance",
+              "venue": "binance",
+              "assetClass": "crypto",
+              "seriesVariant": "native",
+              "priceAdjustment": "raw",
+              "sessionVariant": "continuous",
+              "volumeSemantics": "base_asset"
+            },
+            "chartSettings": {
+              "chartType": "candlestick",
+              "renkoBoxSizeMode": "atr",
+              "renkoAtrLength": 14,
+              "renkoBoxSize": 1,
+              "pointFigureBoxSizeMode": "atr",
+              "pointFigureAtrLength": 14,
+              "pointFigureBoxSize": 1,
+              "pointFigureReversalAmount": 3,
+              "kagiReversalMode": "atr",
+              "kagiAtrLength": 14,
+              "kagiReversalAmount": 1,
+              "lineBreakNumberOfLines": 3,
+              "theme": "light",
+              "customBg": "#223344"
+            },
+            "priceScale": {
+              "invertScale": false,
+              "priceScaleMode": 0
+            },
+            "indicators": [],
+            "strategyAttachment": null
+          },
+          "layoutCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "visibleCellIds": [
+            "cell-1",
+            "cell-2"
+          ],
+          "maxCellsPerWindow": 4,
+          "multiChart16Enabled": false,
+          "layoutLocked": false,
+          "canUndoLayout": false,
+          "canRedoLayout": false,
+          "ready": true,
+          "status": {
+            "saveState": "saving",
+            "persistenceMode": "local-storage",
+            "lastSavedAt": 1793513408193,
+            "error": null,
+            "controlReceipt": null
+          }
+        },
+        "charts": [
+          {
+            "cellId": "cell-1",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#223344"
+                },
+                "textColor": "#94a3b8",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 110.375,
+                "to": 149.625
+              }
+            },
+            "theme": "custom",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#ef4444",
+            "downColor": "#22c55e",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#94a3b8",
+              "--text-up": "#ef4444",
+              "--text-down": "#22c55e",
+              "--bg-primary": "#223344"
+            }
+          },
+          {
+            "cellId": "cell-2",
+            "canvas": {
+              "layout": {
+                "background": {
+                  "type": "solid",
+                  "color": "#ffffff"
+                },
+                "textColor": "#1e293b",
+                "fontSize": 12,
+                "fontFamily": "'Inter', sans-serif",
+                "panes": {
+                  "enableResize": true,
+                  "separatorColor": "rgba(148, 163, 184, 0.28)",
+                  "separatorHoverColor": "rgba(59, 130, 246, 0.6)"
+                },
+                "attributionLogo": false,
+                "colorSpace": "srgb",
+                "colorParsers": []
+              },
+              "range": {
+                "from": 86.375,
+                "to": 125.625
+              }
+            },
+            "theme": "light",
+            "inheritApplicationTheme": false,
+            "customBg": "#223344",
+            "upColor": "#22c55e",
+            "downColor": "#ef4444",
+            "bars": 107,
+            "css": {
+              "--text-primary": "#1e293b",
+              "--text-up": "#22c55e",
+              "--text-down": "#ef4444",
+              "--bg-primary": "#ffffff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-requested",
+      "at": "2026-11-01T06:10:08.474Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28841,
+            "ppid": 28154,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28842,
+            "ppid": 28841,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28843,
+            "ppid": 28841,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28844,
+            "ppid": 28841,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28851,
+            "ppid": 28844,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28852,
+            "ppid": 28841,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687847178 --launch-time-ticks=14717828990 --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=50309 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28855,
+            "ppid": 28844,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(76)"
+          },
+          {
+            "pid": 28856,
+            "ppid": 28844,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=79, pipe_handle=75) --multiprocessing-fork"
+          }
+        ]
+      }
+    },
+    {
+      "name": "quit-completed",
+      "at": "2026-11-01T06:10:23.673Z",
+      "evidence": {
+        "elapsedMs": 15199
+      }
+    },
+    {
+      "name": "final-exit",
+      "at": "2026-11-01T06:10:23.722Z",
+      "evidence": {
+        "owned": [
+          {
+            "pid": 28841,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/MacOS/CandleScope --inspect=0 --remote-debugging-port=0 --no-sandbox"
+          },
+          {
+            "pid": 28842,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=gpu-process --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --gpu-preferences=UAAAAAAAAAAgAQAEAAAAAAAAAAAAAGAAOAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAABgAAAAAAAAAGAAAAAAAAAAIAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708988185955192"
+          },
+          {
+            "pid": 28843,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper.app/Contents/MacOS/CandleScope Helper --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-GB --service-sandbox-type=network --no-sandbox --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708989122997041"
+          },
+          {
+            "pid": 28844,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -m app.desktop_sidecar --host 127.0.0.1 --port 0"
+          },
+          {
+            "pid": 28851,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/bin/python -I -u -m candlescope_plugin_pine_compat"
+          },
+          {
+            "pid": 28852,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Frameworks/CandleScope Helper (Renderer).app/Contents/MacOS/CandleScope Helper (Renderer) --type=renderer --user-data-dir=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/profile-verified --app-path=/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/app.asar --enable-sandbox --no-sandbox --remote-debugging-port=0 --lang=en-GB --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1793498687847178 --launch-time-ticks=14717828990 --shared-files --field-trial-handle=1718379636,r,10116553012595388618,17483023461198746149,262144 --enable-features=PdfUseShowSaveFilePicker,ScreenCaptureKitPickerScreen,ScreenCaptureKitStreamPickerSonoma --disable-features=DropInputEventsWhilePaintHolding,LocalNetworkAccessChecks,ScreenAIOCREnabled,SpareRendererForSitePerProcess,TimeoutHangingVideoCaptureStarts,TraceSiteInstanceGetProcessCreation --variations-seed-version --pseudonymization-salt-handle=1935764596,r,3564010270811478731,5027849755371026641,4 --trace-process-track-uuid=3190708990060038890 --candlescope-backend-port=50309 --candlescope-window-id=main-window --candlescope-control-enabled --candlescope-control-scopes=observe,workspace.edit,app.edit"
+          },
+          {
+            "pid": 28855,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.resource_tracker import main;main(76)"
+          },
+          {
+            "pid": 28856,
+            "args": "/Users/ryanliang/.codex/worktrees/chart-appearance-per-cell-20261101/CandleScope/output/issue181-chart-style-final-20261101/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3 -B -s -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=79, pipe_handle=75) --multiprocessing-fork"
+          }
+        ],
+        "allExited": true
+      }
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

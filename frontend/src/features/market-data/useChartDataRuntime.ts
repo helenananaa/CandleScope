@@ -118,6 +118,7 @@ interface ReplaceChartDataOptions {
   quality?: KlineQualityEvidence;
   cache?: boolean;
   source?: string;
+  rightEdgeCurrent?: boolean;
 }
 
 interface ActivateCachedChartDataOptions {
@@ -1139,12 +1140,12 @@ export function useChartDataRuntime({
     sym: SymbolCode,
     intv: IntervalString,
     data: KlineBar[],
-    { cache = false, source = "replace", quality }: ReplaceChartDataOptions = {},
+    { cache = false, source = "replace", quality, rightEdgeCurrent = true }: ReplaceChartDataOptions = {},
   ) => {
     const key = cacheKey(sym, intv);
     indicatorWindowCommitBufferRef.current.discard(key);
     const store = getStore(sym, intv, { meta: { source } });
-    const delta = windowRegistry.apply(key, { type: "replace", rows: data, source, ...(quality ? { quality } : {}) });
+    const delta = windowRegistry.apply(key, { type: "replace", rows: data, source, rightEdgeCurrent, ...(quality ? { quality } : {}) });
     const next = store.snapshot({ force: true });
     if (cache && next.length > 0) {
       recordCacheAccess({
@@ -1172,6 +1173,7 @@ export function useChartDataRuntime({
     if (!ownsActiveChart(key)) return;
     chartDataRef.current = next;
     recordChartDataCommit(sym, intv, next, source, {
+      rightEdgeCurrent,
       ...(cache ? { status: "ready" } : {}),
       ...(delta.originalBars === undefined ? {} : { originalBars: delta.originalBars }),
       ...(delta.trimmedLeft === undefined ? {} : { trimmedLeft: delta.trimmedLeft }),

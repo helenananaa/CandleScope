@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const hi = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["hi"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "शुरुआत के समय और आगे की अवधि में भविष्य की कैंडल शामिल हैं। पहले का समय चुनें या अवधि कम करें; केवल बंद ऐतिहासिक कैंडल उपलब्ध हैं.",
@@ -759,6 +774,9 @@ export const hi = {
   "workspace.link.timeAnchorDesc": "दिखाई देने वाला दायाँ किनारा संरेखित करें, प्रति-चार्ट ज़ूम रखें",
   "workspace.link.dateRange": "सीमा",
   "workspace.link.dateRangeDesc": "पूरी तारीख सीमा और ज़ूम सिंक करें",
+  "workspace.link.chartStyle": "चार्ट शैली",
+  "workspace.link.chartStyleDesc": "चार्ट प्रकार, थीम और कैंडल रंग सिंक करें।",
+  "settings.appearance.cellThemeDescription": "इस चार्ट की थीम चुनें। अन्य चार्ट केवल शैली लिंक चालू होने पर बदलते हैं।",
   "workspace.link.drawings": "ड्रॉइंग",
   "workspace.link.drawingsDesc": "एक ही बाज़ार और परत सेट के लिए ड्रॉइंग दस्तावेज़ साझा करें",
   "workspace.link.definitions": "इंडिकेटर सूची",

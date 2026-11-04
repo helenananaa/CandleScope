@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "releaseStatus": "desktop-source-build-unpublished",
+  "plugins": [
+    {
+      "runtimeId": "candlescope.pine-compat",
+      "package": "candlescope-plugin-pine-compat",
+      "version": "0.4.0",
+      "filename": "candlescope-plugin-pine-compat-0.4.0-Darwin-arm64.cspkg",
+      "sha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+      "size": 5029262,
+      "platform": {
+        "system": "Darwin",
+        "machine": "arm64",
+        "implementation": "CPython",
+        "pythonVersion": "3.12"
+      }
+    }
+  ]
+}

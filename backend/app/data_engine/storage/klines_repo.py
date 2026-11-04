@@ -416,7 +416,8 @@ def upsert_klines(
     )
     with write_guard:
         with (nullcontext(_connection) if _connection is not None else _connect()) as conn:
-            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity), commit=_connection is None):
+            with guarded_write(conn, series_values(symbol, interval, exchange, market_type, identity),
+                               commit=_connection is None, native_rows=rows, source=source):
                 if source in {"backfill_aggregated", "data_manager_composite_closed", "settings_manual_repair", "repair_derived_verified", "manual_history_derived"}:
                     register_derived(conn, series_values(symbol, interval, exchange, market_type, identity))
                 from .kline_sources import filter_projection_rows

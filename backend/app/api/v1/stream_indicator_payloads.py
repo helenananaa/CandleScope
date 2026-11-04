@@ -501,15 +501,10 @@ def _query_indicator_compute_bars(
     return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
 
 
-def _query_indicator_compute_result(
-    dm,
-    meta: dict[str, Any],
-    start_s: int,
-    end_s: int,
-    *,
-    warmup_bars: int,
-    auto_backfill: bool,
-) -> tuple[Any, int, int]:
+def _indicator_compute_query_bounds(
+    dm, meta: dict[str, Any], start_s: int, end_s: int, *, warmup_bars: int,
+) -> tuple[int, int, int, int]:
+    """Resolve the same calendar bounds for shared and standalone inputs."""
     interval_ms = parse_interval_ms(meta["interval"])
     if interval_ms is None or interval_ms <= 0:
         raise ValueError(f"Unsupported interval: {meta['interval']}")
@@ -561,6 +556,21 @@ def _query_indicator_compute_result(
         )
     else:
         needed = int((end_ms - compute_start_ms) // interval_ms) + 1
+    return start_ms, end_ms, compute_start_ms, needed
+
+
+def _query_indicator_compute_result(
+    dm,
+    meta: dict[str, Any],
+    start_s: int,
+    end_s: int,
+    *,
+    warmup_bars: int,
+    auto_backfill: bool,
+) -> tuple[Any, int, int]:
+    start_ms, end_ms, compute_start_ms, needed = _indicator_compute_query_bounds(
+        dm, meta, start_s, end_s, warmup_bars=warmup_bars,
+    )
     query_kwargs: dict[str, Any] = {
         "start_ms": compute_start_ms,
         "end_ms": end_ms,

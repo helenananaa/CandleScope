@@ -16,6 +16,7 @@ import { ReplayTapeHistoryProvider } from "./replayTapeHistoryProvider.js";
 import type { ReplayTapeProjection } from "./replayTapeProjection.js";
 import { TAPE_VIEWER_COMMIT } from "./replayTapeViewer.js";
 import { replayHistoryRetryDelay } from "./replayHistoryRetry.js";
+import { directReplayRequest, type ReplayRequest } from "./replayDataManager.js";
 
 export const CANONICAL_HISTORY_REFRESH = "replay-canonical-history-refresh";
 const BUILTINS = new Set(["MA", "EMA", "RSI", "ATR", "MACD", "BOLL", "VOL"]);
@@ -104,7 +105,8 @@ export class ReplayCanonicalIndicators {
     private readonly progress: (value: ReplayIndicatorPreparation) => void,
     private readonly fetcher: typeof fetch = fetch,
     private readonly projection = defaultReplayV2Api.displayProjectionBySession.bind(defaultReplayV2Api),
-    private readonly fallback: IndicatorComputeBatchExecutor = computeIndicatorBatch) {}
+    private readonly fallback: IndicatorComputeBatchExecutor = computeIndicatorBatch,
+    private readonly request: ReplayRequest = directReplayRequest) {}
 
   connect(): () => void {
     return this.store.subscribe(delta => {
@@ -320,7 +322,9 @@ export class ReplayCanonicalIndicators {
     }
   }
 
-  compute: IndicatorComputeBatchExecutor = async ({ jobs, signal, onResults }) => {
+  compute: IndicatorComputeBatchExecutor = input => this.request(signal => this.performCompute({ ...input, signal }), input.signal);
+
+  private performCompute: IndicatorComputeBatchExecutor = async ({ jobs, signal, onResults }) => {
     signal?.throwIfAborted();
     const batch = new AbortController();
     const cancel = () => batch.abort();

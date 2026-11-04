@@ -17,9 +17,10 @@ export const sessionSchema = schema<ChartSession>(sessionInput.jsonSchema, (v) =
   if (canonicalizeIntervalValue(parsed.interval) !== parsed.interval) throw new Error("INVALID_INTERVAL");
   return parsed;
 });
-const policyInput = object({ market: optional(bool), interval: optional(bool), crosshair: optional(bool), timeAnchor: optional(bool), dateRange: optional(bool), drawings: optional(bool),
+const policyInput = object({ market: optional(bool), interval: optional(bool), crosshair: optional(bool), timeAnchor: optional(bool), dateRange: optional(bool), drawings: optional(bool), chartStyle: optional(bool),
+    accountSource: optional(bool), tradingOverlays: optional(bool), noteOverlays: optional(bool), studyCursor: optional(bool), studyMode: optional(bool),
     indicators: optional(object({ definitions: optional(bool), parameters: optional(bool), visual: optional(bool), paneLayout: optional(bool) })) });
-const policy = schema<ChartLinkGroupSettingsPatch>(policyInput.jsonSchema, (v) => policyInput.parse(v) as ChartLinkGroupSettingsPatch);
+export const chartLinkPolicySchema = schema<ChartLinkGroupSettingsPatch>(policyInput.jsonSchema, (v) => policyInput.parse(v) as ChartLinkGroupSettingsPatch);
 
 export function workspaceCommands(runtime: ChartWorkspaceRuntime): ControlCommandGroup {
   const { view, actions: a } = runtime;
@@ -60,7 +61,7 @@ export function workspaceCommands(runtime: ChartWorkspaceRuntime): ControlComman
       command("updateLinkGroup", "Edit a link group's label, color and parent.", object({ groupId: id, patch: object({ name: optional(text(128)), color: optional(text(64)), parentId: optional(nullable(id)) }) }),
         ({ groupId, patch }) => a.updateLinkGroup(groupId, patch)),
       command("deleteLinkGroup", "Delete a link group.", object({ groupId: id }), ({ groupId }) => a.deleteLinkGroup(groupId)),
-      command("updateLinkPolicy", "Update peer or parent link behavior.", object({ groupId: id, relationship: choice(["peers", "parent"]), patch: policy }), ({ groupId, relationship, patch }) => a.updateLinkGroupPolicy(groupId, relationship, patch)),
+      command("updateLinkPolicy", "Update peer or parent link behavior.", object({ groupId: id, relationship: choice(["peers", "parent"]), patch: chartLinkPolicySchema }), ({ groupId, relationship, patch }) => a.updateLinkGroupPolicy(groupId, relationship, patch)),
       command("setDrawingLayer", "Select a chart drawing layer set.", object({ cellId: id, layerSet: choice(["1", "2", "3", "4"]) }), ({ cellId, layerSet }) => { cell(cellId); a.setCellDrawingLayerSet(cellId, layerSet); }),
       command("setStrategyTesterMode", "Select native or CandleScope strategy tester.", object({ cellId: id, mode: choice(["NATIVE", "CANDLESCOPE"]) }), ({ cellId, mode }) => { cell(cellId); a.updateCellStrategyTesterMode(cellId, mode); }),
       command("createWindow", "Create a chart window when multi-window is enabled.", empty, () => a.createWindow(), { available: () => CHART_WORKSPACE_FEATURE_FLAGS.multiWindowEnabled }),

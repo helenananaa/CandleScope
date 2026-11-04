@@ -1,0 +1,22 @@
+{
+  "scope": "Finite account synchronization correctness stage before larger facade/push/multivenue work (#176)",
+  "problem": "Six concurrent independent SQLite readers can return old account state with a new committed fill count/coverage. Existing atomic sync writes do not make separate read transactions atomic.",
+  "change": "One short SQLite read transaction supplies account, scans, coverage, gaps, nonbulk snapshots and counts; service uses one background worker read. Credential reference remains excluded, Decimal wire strings and current OKX synchronization/account scope unchanged. Runtime stream health remains a separately observed process state.",
+  "tests": "Deterministic real WAL concurrent-commit probe fails before,120account/service/repository/sync/reconciliation/review/read-only boundary/auth tests pass afterward. 2 existing aiohttp deprecation warnings.",
+  "native": "See native-checks.json: synthetic disabled account packaged display/precise strings/full owned exit and restart passed; not live synchronization acceptance.",
+  "limitations": [
+    "Does not unify all account routes into DataManager",
+    "Does not provide client push, multi-account or second-exchange support",
+    "Does not mark #176 complete"
+  ],
+  "artifacts": [
+    {
+      "path": "before.log.gz",
+      "sha256": "24132e2141ba76e81149fccbcd7c1543878782726c1e1cb8d75b063db8901289"
+    },
+    {
+      "path": "after.log.gz",
+      "sha256": "dfaabbaf158d04c5df14c932217505e3716c6a8921f9e692d4dc700c2525797b"
+    }
+  ]
+}

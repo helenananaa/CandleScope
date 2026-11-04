@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -34,11 +35,72 @@ def _load_strategy(bundle_dir: Path, entrypoint: str) -> Any:
 
 
 _PROTOCOL = sys.stdout
+_STDERR_LIMIT = 64 * 1024
+_LOG = None
 
 
-def _write(message: dict[str, Any]) -> None:
+class _BoundedLogBuffer:
+    """Bound SDK log writes before a reply can overtake the host's drainer."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.sent = 0
+        self.overflow = False
+        self.lock = threading.Lock()
+
+    def write(self, value):
+        data = bytes(value)
+        with self.lock:
+            remaining = max(0, _STDERR_LIMIT + 1 - self.sent)
+            if len(data) > _STDERR_LIMIT - self.sent:
+                self.overflow = True
+            # One excess byte also activates the independent host pipe guard.
+            chunk = data[:remaining]
+            if chunk:
+                self.stream.write(chunk)
+                self.sent += len(chunk)
+        return len(data)
+
+    def flush(self):
+        self.stream.flush()
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+class _BoundedLog:
+    def __init__(self, stream):
+        self.stream = stream
+        self.buffer = _BoundedLogBuffer(stream.buffer)
+
+    def write(self, value):
+        self.buffer.write(value.encode("utf-8"))
+        return len(value)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def flush(self):
+        self.buffer.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def _write(message: dict[str, Any]) -> bool:
+    if _LOG is not None:
+        _LOG.flush()
+        if _LOG.buffer.overflow:
+            message = {"id": message.get("id"), "ok": False,
+                       "errorCode": "STDERR_TOO_LARGE", "error": "worker stderr exceeded budget"}
     _PROTOCOL.write(json.dumps(message, separators=(",", ":"), ensure_ascii=False) + "\n")
     _PROTOCOL.flush()
+    return _LOG is None or not _LOG.buffer.overflow
 
 
 def _observe(strategy: Any, method: str, params: dict[str, Any]) -> Any:
@@ -75,15 +137,18 @@ def _step_batch(strategy: Any, params: dict[str, Any]) -> None:
         if error is not None:
             _write({"id": item.get("id"), "ok": False, "error": error})
             return
-        _write({"id": item.get("id"), "ok": True, "result": result})
+        if not _write({"id": item.get("id"), "ok": True, "result": result}):
+            return
         if result is not None:
             return
 
 
 def main() -> int:
+    global _LOG
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    sys.stdout = sys.stderr
+    _LOG = _BoundedLog(sys.stderr)
+    sys.stdout = sys.stderr = _LOG
     strategy = None
     for raw in sys.stdin:
         try:
@@ -95,6 +160,8 @@ def main() -> int:
             params = request.get("params") or {}
             if method == "step_batch":
                 _step_batch(strategy, params)
+                if _LOG.buffer.overflow:
+                    return 0
                 continue
             if method == "ping":
                 result = {"ready": True}
@@ -128,12 +195,13 @@ def main() -> int:
                 result = {"closed": True}
             else:
                 raise ValueError(f"unknown method {method}")
-            _write({"id": request_id, "ok": True, "result": result})
-            if method == "close":
+            accepted = _write({"id": request_id, "ok": True, "result": result})
+            if method == "close" or not accepted:
                 return 0
         except Exception as exc:
             traceback.print_exc(file=sys.stderr)
-            _write({"id": request.get("id") if isinstance(request, dict) else None, "ok": False, "error": str(exc)})
+            if not _write({"id": request.get("id") if isinstance(request, dict) else None, "ok": False, "error": str(exc)}):
+                return 0
     return 0
 
 

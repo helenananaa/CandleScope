@@ -1,0 +1,20 @@
+{
+  "reviewed_pr": 209,
+  "reviewed_head": "6bddedf6233acf5fd1483d349e6397b2364b84fa",
+  "baseline_main": "006f4e79399ac8c4c1c66442586be3889d5eebbe",
+  "before": "Unscoped narrow foreground request promotes entire persistent background envelope; sibling cold request cannot use reserve.",
+  "after": "Scheduling contract stays with each actual range; compatible overlapping interests compact. Limit64 per parent; excess independently queues without dropping work or widening foreground identity.",
+  "tests": 181,
+  "new_cases": [
+    "Unscoped visible demand outside running chunk",
+    "Unscoped API-latest demand outside running chunk",
+    "Exact repeat compaction",
+    "Capacity overflow remains separately queued and both complete"
+  ],
+  "native": "Not qualified; public Binance cooldown remains until2026-11-01T14:49:54.731Z. No public requests in these tests.",
+  "limitations": [
+    "No evidence this was the cause of observed Binance418",
+    "Does not change provider quotas or chunk execution/financial behavior",
+    "Does not claim full cold-load or Windows acceptance"
+  ]
+}

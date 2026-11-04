@@ -1,0 +1,150 @@
+{
+  "schema": "candlescope.history-study-cursor-links-qualification/1",
+  "applicationSourceCommit": "a4c8f93bacb8feaf2286068d62764b2b56902be5",
+  "qaSourceCommit": "d8d6bb58550a7945a9209c13c25ba3dfa2dd98e1",
+  "includesMain": "2aaec6fc675fe91cce32b77c2004b829f24373ce",
+  "checks": {
+    "frontend": 4839,
+    "performance": 1,
+    "desktop": 130,
+    "failed": 0,
+    "skipped": 0,
+    "typecheck": true,
+    "lint": true,
+    "architecture": true,
+    "plugins": true,
+    "i18nLocales": 30,
+    "i18nKeys": 5346,
+    "productionAndDesktopBuild": true,
+    "actualBundledBackend": 65,
+    "bundledBackendSkipped": 2,
+    "skipReason": "Windows AppContainer-only tests on macOS; not counted as passes.",
+    "backendWarning": "One inherited Starlette/anyio BlockingPortal deprecation.",
+    "buildWarning": "Existing Vite >500KB chunk warning."
+  },
+  "native": {
+    "basicSteps": 14,
+    "faultAndMathSteps": 8,
+    "rendererErrors": [],
+    "normalOwnedExitMs": [
+      2017,
+      2274,
+      1585
+    ],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "sdkFiles": 60,
+    "pluginAssets": 9,
+    "sourceMismatches": [],
+    "strictSignatureAfterTestsAndAllExits": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "math": [
+      {
+        "a": {
+          "cellId": "cell-1",
+          "windowId": "main-window",
+          "studyId": "hs_27dac0c20d414eeaa48b12569ce7f9b2",
+          "cursor": 1793614380000,
+          "displayInterval": "1m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 120,
+          "displayBars": 120,
+          "ma20Points": 101,
+          "maxError": 2.9103830456733704e-11
+        },
+        "b": {
+          "cellId": "cell-2",
+          "windowId": "main-window",
+          "studyId": "hs_5d3383ddb72d4693b57fcad8486e36ec",
+          "cursor": 1793614380000,
+          "displayInterval": "5m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 120,
+          "displayBars": 24,
+          "ma20Points": 5,
+          "maxError": 1.4551915228366852e-11
+        },
+        "c": {
+          "cellId": "cell-482c8e7e-b64b-4179-951f-389f25cb4245",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_f4f1493d519e4865bd488d6e27534b42",
+          "cursor": 1793614380000,
+          "displayInterval": "1m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 120,
+          "displayBars": 120,
+          "ma20Points": 101,
+          "maxError": 2.9103830456733704e-11
+        }
+      },
+      {
+        "a": {
+          "cellId": "cell-1",
+          "windowId": "main-window",
+          "studyId": "hs_27dac0c20d414eeaa48b12569ce7f9b2",
+          "cursor": 1793608680000,
+          "displayInterval": "1m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 25,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        },
+        "b": {
+          "cellId": "cell-2",
+          "windowId": "main-window",
+          "studyId": "hs_5d3383ddb72d4693b57fcad8486e36ec",
+          "cursor": 1793608680000,
+          "displayInterval": "5m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 25,
+          "displayBars": 5,
+          "ma20Points": 0,
+          "maxError": 0
+        },
+        "c": {
+          "cellId": "cell-482c8e7e-b64b-4179-951f-389f25cb4245",
+          "windowId": "window-e9f5eab3-ad49-40f1-a6d1-ea177155545b",
+          "studyId": "hs_f4f1493d519e4865bd488d6e27534b42",
+          "cursor": 1793608680000,
+          "displayInterval": "1m",
+          "indicatorId": "control-native178-1793665164675-0-0",
+          "revealedSourceRows": 25,
+          "displayBars": 25,
+          "ma20Points": 6,
+          "maxError": 1.4551915228366852e-11
+        }
+      }
+    ],
+    "buildFlags": {
+      "VITE_DESKTOP_BUILD": "1",
+      "VITE_MULTI_WINDOW_ENABLED": "1",
+      "VITE_MULTI_CHART_16_ENABLED": false,
+      "VITE_MULTI_CHART_64_ENABLED": false
+    }
+  },
+  "regressions": {
+    "ordinaryMultiwindow": "First d7f6bbc2 package only followed within one window. Link-only IPC registration fixes actual cross-window delivery without adopting 64-chart workspace ownership. Prior 286cf9f6 basic and math receipts pass and remain archived.",
+    "lostAcknowledgement": "The same real PATCH/GET fault on 286cf9f6 confirms durable source recovery but times out waiting for a peer. a4c8f93b separates committed model certainty from surface follow readiness and passes the same fault in two actual windows.",
+    "liveTailHarness": "Initial current-profile run incorrectly required >=20 current live bars despite a bounded offline historical test. Current 1m tail had 2 bars, 5m had 276. Corrected only the QA prerequisite; actual capture still must load the real selected historical input. No latest/live readiness claim.",
+    "harnessApi": "A separate read-only diagnostic incorrectly called nonexistent ControlClient.close after reading state; the CLI process exited, with no app mutation. Not counted as an application failure."
+  },
+  "proof": [
+    "Default-off preserves per-chart cursors; enabled policy follows absolute UTC cuts across distinct fixed inputs and 1m/5m displays.",
+    "An open note editor refuses following, exposes retry, and follows after the editor closes; original financial/journal fixture counts remain unchanged.",
+    "New explicit playback takes leadership; automatic updates retain their leadership epoch. Reordered publication/reply races, unknown source order and stale owner acknowledgements have deterministic domain tests.",
+    "A linked live sibling remains live. Complete quit/restart restores each saved input, cursor and group policy.",
+    "route.fetch executes the real PATCH and only its response is aborted. While real GET is held, source shows restoring-study with zero bars and peers stay at their previous cut. Releasing GET recovers the committed source and follows in both native windows.",
+    "Actual controlled bars and indicator outputs match independent per-input OHLCV/SMA20 forward and backward. No substituted response bodies."
+  ],
+  "limits": [
+    "macOS arm64 controlled warm public-market history and synthetic note-save times; loopback-only OS sandbox; no private exchange or online cold/latest proof.",
+    "Multi-window enabled explicitly; 16/64-chart flags remain false. Fresh link group is qualified; arbitrary existing-group merge behavior is not broadly qualified.",
+    "Current backend/frontend/desktop repacked after input-tree/package hashes, unchanged runtime/native engines reused; not a fresh engine build or official CI artifact.",
+    "Windows desktop, arbitrary scripts/Python replay causality, study mode links, full formal replay/strategy clocks, full #157 and broad performance remain separate unfinished goal scope."
+  ],
+  "ci": "Final QA head must pass its applicable workflow checks and macOS arm64/x64 packaging before merging; earlier head checks do not qualify a changed head."
+}

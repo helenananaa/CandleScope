@@ -1,0 +1,36 @@
+{
+  "schema": "candlescope.range-measure-main-native-evidence/1",
+  "sourceCommit": "d05bdc8601195db82114bbe1a20b258c20e2302d",
+  "mainCommit": "5ba61863c89a8ee8406c3368d78ef5afb4720c9d",
+  "zipSha256": "6d154528656ac77fcc1384e56ed7c6092bcd1136c053f4d10c722a1dc34aa0ae",
+  "asarSha256": "8286746d6f30ebadda4e59d100b98c8ddc92395169df1d06eeff19ef5a9884df",
+  "sourceFiles": 3108,
+  "distFiles": 162,
+  "mismatches": [],
+  "passed": true,
+  "rendererErrors": [],
+  "signatureBefore": true,
+  "signatureAfter": true,
+  "fullOwnedProcessExits": 2,
+  "checks": [
+    "created-measure-price",
+    "created-measure-time",
+    "created-measure-price-time",
+    "objects-control-outside-plot",
+    "history-style-lock",
+    "interval-preserved",
+    "quit-requested",
+    "quit-completed",
+    "full-exit",
+    "restart-persistence",
+    "delete-undo",
+    "quit-requested",
+    "quit-completed",
+    "final-exit"
+  ],
+  "scope": "three source-time measurement tools; per-chart isolation; header control outside plot; undo/redo/style/lock/interval switch; save/full exit/restart/delete/undo",
+  "limitations": [
+    "macOS arm64 only; not all issue184 tools, Windows or full157 acceptance"
+  ],
+  "artifacts": "output/issue184-main180-native-20261101"
+}

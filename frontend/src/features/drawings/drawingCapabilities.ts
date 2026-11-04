@@ -42,6 +42,7 @@ const HIT_TYPE_TOOL_IDS: Readonly<Record<DrawingHitType, DrawingToolId>> = Objec
   line: "line-segment",
   "axis-line": "line-horizontal",
   angle: "angle-measure",
+  "range-measure": "measure-price-time",
   fibonacci: "fibonacci",
   shape: "shape-rectangle",
   text: "text",

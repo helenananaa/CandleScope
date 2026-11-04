@@ -1,3 +1,4 @@
+import { historyStudyKorean } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -5,6 +6,20 @@ import { tradingAccountsKo } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ko = {
+  ...historyStudyKorean,
+  "chartTime.title": "날짜로 이동",
+  "chartTime.shortcut": "날짜로 이동 (Alt+G)",
+  "chartTime.input": "날짜 및 시간(UTC)",
+  "chartTime.hint": "현재 주기와 확대 수준을 유지합니다. 시간으로 연결된 차트는 각자의 데이터에서 같은 시점을 찾습니다.",
+  "chartTime.invalid": "미래가 아닌 유효한 UTC 날짜와 시간을 입력하세요.",
+  "chartTime.loading": "해당 구간을 불러오는 중… 다른 날짜를 입력할 수 있습니다.",
+  "chartTime.located": "이동한 시점: {time} UTC.",
+  "chartTime.nearest": "해당 시점에 캔들이 없습니다. 가장 가까운 캔들: {time} UTC.",
+  "chartTime.empty": "이 시점 근처에 캔들이 없습니다. 다른 날짜를 선택하세요.",
+  "chartTime.unavailable": "해당 시점을 찾을 수 없습니다. 불러오기에 실패한 경우 이전 화면이 유지됩니다. 다시 시도하세요.",
+  "chartTime.linkFailed": "일부 연결된 차트에서 해당 시점을 찾지 못했습니다.",
+  "chartTime.close": "닫기",
+  "chartTime.go": "이동",
   ...workbenchEnglish,
   "research.book.help": "현재 차트의 시장과 기간에 맞는 순서대로 정렬된 집계 체결 및 호가 관측을 업로드하세요. 호스트가 OHLCV, 연속성과 가용 잔량을 검사한 뒤 파일을 스냅샷과 함께 고정합니다. 호가 모드는 자체 체결 용량 규칙을 사용합니다.",
   "research.book.invalid": "호가 파일이 유효하지 않습니다. symbol, exchange, market_type, provenance, 정렬된 events와 집계 체결 출처 번호 및 호가 관측이 포함된 32 MiB 이하의 JSON을 업로드하세요.",
@@ -1287,6 +1302,9 @@ export const ko = {
   "workspace.link.timeAnchorDesc": "보이는 우측을 정렬하고 차트별 확대는 유지",
   "workspace.link.dateRange": "범위",
   "workspace.link.dateRangeDesc": "전체 날짜 범위와 확대 동기화",
+  "workspace.link.chartStyle": "차트 스타일",
+  "workspace.link.chartStyleDesc": "차트 유형, 테마, 캔들 색상을 동기화합니다.",
+  "settings.appearance.cellThemeDescription": "이 차트의 테마를 설정합니다. 스타일 연동을 켠 경우에만 다른 차트도 변경됩니다.",
   "workspace.link.drawings": "그리기",
   "workspace.link.drawingsDesc": "같은 시장·레이어 세트의 그리기 문서 공유",
   "workspace.link.definitions": "지표 목록",
@@ -4494,6 +4512,9 @@ export const ko = {
   "drawing.variant.line-horizontal": "수평선",
   "drawing.variant.line-vertical": "수직선",
   "drawing.variant.line-cross": "십자선",
+  "drawing.variant.measure-price": "가격 범위",
+  "drawing.variant.measure-time": "시간 범위",
+  "drawing.variant.measure-price-time": "가격 및 시간 범위",
   "drawing.variant.angle-measure": "각도",
   "drawing.variant.angle-measure.description": "현재 눈금의 시각 각도",
   "drawing.variant.shape-rectangle": "사각형",

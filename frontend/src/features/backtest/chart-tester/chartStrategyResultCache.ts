@@ -135,6 +135,7 @@ export class ChartStrategyResultCache {
       api.getChart(runId, signal),
     ]);
     const bundle = await buildBundle(run, report, chart);
+    signal?.throwIfAborted();
     this.entries.set(runId, bundle);
     return bundle;
   }

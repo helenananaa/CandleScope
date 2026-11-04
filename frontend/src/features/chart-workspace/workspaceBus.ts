@@ -3,10 +3,11 @@ import type {
   ChartCellId,
   ChartWindowId,
   ChartWorkspaceId,
+  ChartWorkspaceDocument,
   ChartWorkspaceLibrarySnapshot,
 } from "./chartWorkspaceTypes.js";
 
-export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "drawings" | "timeAnchor";
+export type WorkspaceBusLinkKind = "crosshair" | "dateRange" | "dateSeek" | "drawings" | "timeAnchor" | "studyCursor" | "studyMode" | "studyCursorResult";
 
 export interface WorkspaceBusLinkEvent {
   eventId?: string;
@@ -57,7 +58,7 @@ function isLinkEvent(value: unknown): value is WorkspaceBusLinkEvent {
     && typeof event?.workspaceId === "string"
     && typeof event.sourceWindowId === "string"
     && typeof event.sourceCellId === "string"
-    && ["crosshair", "dateRange", "drawings", "timeAnchor"].includes(String(event.kind));
+    && ["crosshair", "dateRange", "dateSeek", "drawings", "timeAnchor", "studyCursor", "studyMode", "studyCursorResult"].includes(String(event.kind));
 }
 
 function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceLibrarySnapshot {
@@ -65,6 +66,7 @@ function cloneSnapshot(snapshot: ChartWorkspaceLibrarySnapshot): ChartWorkspaceL
 }
 
 export class WorkspaceBusClient {
+  private revisionWaiters = new Set<(error?: Error) => void>();
   private state: WorkspaceBusState = {
     ok: true,
     ready: false,
@@ -78,6 +80,9 @@ export class WorkspaceBusClient {
   private bridgeUnsubscribe: (() => void) | null = null;
   private channel: BroadcastChannel | null = null;
   private connected = false;
+  private linkAttachments = 0;
+  private linkAttachmentEpoch = 0;
+  private linkRegistration: Promise<void> | null = null;
   private linkPublishes = 0;
   private conflicts = 0;
 
@@ -93,6 +98,45 @@ export class WorkspaceBusClient {
 
   get current(): WorkspaceBusState {
     return this.state;
+  }
+
+  waitForWorkspaceRevision(workspaceId: string, minimumRevision: number, timeoutMs = 5_000,
+    accepts?: (document: ChartWorkspaceDocument) => boolean): Promise<void> {
+    if (!Number.isSafeInteger(minimumRevision) || minimumRevision < 0 || timeoutMs <= 0) return Promise.reject(new Error("Invalid workspace configuration revision"));
+    return new Promise((resolve, reject) => {
+      const check = (error?: Error) => {
+        const document = this.state.snapshot?.workspaces.find(record => record.id === workspaceId)?.document;
+        if (!error && !(this.state.ready && this.state.ok && (this.state.revisions[workspaceId] ?? -1) >= minimumRevision
+          && (!accepts || (document && accepts(document))))) return;
+        this.revisionWaiters.delete(check); clearTimeout(timer);
+        if (error) reject(error); else resolve();
+      };
+      const timer = setTimeout(() => check(new Error("Workspace configuration was not committed in time")), timeoutMs);
+      this.revisionWaiters.add(check); check();
+    });
+  }
+
+  /** Register message delivery without adopting the 64-chart snapshot/CAS
+   * authority. Ordinary multi-window workspaces retain their storage owner. */
+  attachLinks(): { ready: Promise<void>; release(): void } {
+    const bridge = globalThis.window?.candlescopeDesktop;
+    if (!bridge) return { ready: Promise.resolve(), release: () => {} };
+    this.linkAttachments += 1;
+    const epoch = this.linkAttachmentEpoch;
+    this.bridgeUnsubscribe ??= bridge.onWorkspaceBusEvent(message => this.handleMessage(message));
+    const ready = this.connected ? Promise.resolve() : this.linkRegistration ??= Promise.resolve().then(async () => {
+      if (!bridge.workspaceBusRegisterLinks) throw new Error("Native workspace links are unavailable");
+      const result = await bridge.workspaceBusRegisterLinks() as { ok?: boolean; windowId?: string } | null;
+      if (!result?.ok || result.windowId !== this.windowId) throw new Error("Native workspace link registration failed");
+    });
+    let released = false;
+    return { ready, release: () => {
+      if (released || epoch !== this.linkAttachmentEpoch) return;
+      released = true; this.linkAttachments -= 1;
+      if (this.linkAttachments === 0 && !this.connected) {
+        this.bridgeUnsubscribe?.(); this.bridgeUnsubscribe = null; this.linkRegistration = null;
+      }
+    } };
   }
 
   async connect(snapshot: ChartWorkspaceLibrarySnapshot): Promise<WorkspaceBusState> {
@@ -150,10 +194,27 @@ export class WorkspaceBusClient {
     this.linkPublishes += 1;
     const bridge = globalThis.window?.candlescopeDesktop;
     if (bridge) {
-      void bridge.workspaceBusPublishLink(linkEvent);
+      // A closing peer can reject IPC. Clock acknowledgements have an explicit
+      // origin timeout; viewport broadcasts have no durable success promise.
+      void bridge.workspaceBusPublishLink(linkEvent).catch(() => {});
       return;
     }
     this.channel?.postMessage({ type: "link", event: linkEvent });
+  }
+
+  /** Durable clock actions need the main-process ordering stamp, including
+   * for peers in this renderer. Ordinary viewport broadcasts stay fire-and-forget. */
+  async publishOrderedLink(event: Omit<WorkspaceBusLinkEvent, "sourceWindowId" | "kind"> & { kind: "studyCursor" | "studyMode" }): Promise<WorkspaceBusLinkEvent> {
+    const bridge = globalThis.window?.candlescopeDesktop;
+    if (!bridge) throw new Error("Ordered cross-window clocks require the desktop host");
+    this.linkPublishes += 1;
+    const result = await bridge.workspaceBusPublishLink({ ...event, sourceWindowId: this.windowId }) as { event?: unknown } | null;
+    if (!isLinkEvent(result?.event) || result.event.kind !== event.kind
+      || result.event.workspaceId !== event.workspaceId || result.event.sourceCellId !== event.sourceCellId
+      || result.event.sourceWindowId !== this.windowId || !/^link-[1-9][0-9]*$/.test(result.event.eventId ?? "")) {
+      throw new Error("Invalid ordered workspace clock acknowledgement");
+    }
+    return result.event;
   }
 
   reportWindow(state: { focused: boolean; visible: boolean }): void {
@@ -207,6 +268,8 @@ export class WorkspaceBusClient {
   }
 
   dispose(): void {
+    for (const waiter of [...this.revisionWaiters]) waiter(new Error("Workspace connection closed"));
+    this.linkAttachmentEpoch += 1; this.linkAttachments = 0; this.linkRegistration = null;
     this.bridgeUnsubscribe?.();
     this.bridgeUnsubscribe = null;
     this.channel?.close();
@@ -220,6 +283,9 @@ export class WorkspaceBusClient {
       revisions: { ...state.revisions },
       snapshot: state.snapshot ? cloneSnapshot(state.snapshot) : null,
     };
+    // Own commit replies update authority without notifying React's snapshot
+    // merge lane. Configuration barriers must also observe those replies.
+    for (const waiter of [...this.revisionWaiters]) waiter();
     if (notify) for (const listener of [...this.snapshotListeners]) listener(this.state);
   }
 

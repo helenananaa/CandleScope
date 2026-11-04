@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import { downloadReplayPortfolio } from "./replay-portfolio-download.mjs";
 import { resolvePythonCommand } from "./python-runtime.mjs";
 import { desktopBackendEnvironment } from "./runtime-config.mjs";
 import { isTrustedAppUrl } from "./app-origin.mjs";
@@ -142,6 +143,7 @@ function createSupervisor() {
       ...(app.isPackaged ? {
         PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1",
         CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST: path.join(runtimeRoot, "python-runtime", "plugins", "manifest.json"),
+        CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),
       } : {}),
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
@@ -277,6 +279,7 @@ async function boot() {
     event.returnValue = strategyStorage.getItem(key);
   });
   trustedIpc.handle(DESKTOP_IPC.strategyStorageWrite, (_event, key, value) => strategyStorage.setItem(key, value));
+  trustedIpc.handle(DESKTOP_IPC.replayPortfolioDownload, (event, runId) => downloadReplayPortfolio(event.sender, backendPort, runId));
   trustedIpc.handle(DESKTOP_IPC.openAppPage, (_event, url) => manager.openAppPage(url));
 
   trustedIpc.handle(DESKTOP_IPC.bootstrap, (event) => {
@@ -309,6 +312,9 @@ async function boot() {
       };
     }
   });
+  trustedIpc.handle(DESKTOP_IPC.workspaceBusRegisterLinks, (event) => ({
+    ok: true, windowId: registerWorkspaceSender(event.sender),
+  }));
   trustedIpc.handle(DESKTOP_IPC.workspaceBusConnect, (event, raw) => {
     try {
       const windowId = registerWorkspaceSender(event.sender);

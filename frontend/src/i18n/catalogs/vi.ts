@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const vi = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["vi"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Thời điểm bắt đầu và cửa sổ phía trước chứa nến tương lai. Chọn thời điểm sớm hơn hoặc rút ngắn cửa sổ; chỉ có thể dùng nến lịch sử đã đóng.",
@@ -758,6 +773,9 @@ export const vi = {
   "workspace.link.timeAnchorDesc": "Căn mép phải hiển thị, giữ zoom từng biểu đồ",
   "workspace.link.dateRange": "Khoảng",
   "workspace.link.dateRangeDesc": "Đồng bộ toàn bộ khoảng ngày và zoom",
+  "workspace.link.chartStyle": "Kiểu biểu đồ",
+  "workspace.link.chartStyleDesc": "Đồng bộ loại biểu đồ, giao diện và màu nến.",
+  "settings.appearance.cellThemeDescription": "Đặt giao diện cho biểu đồ này. Các biểu đồ khác chỉ thay đổi khi bật liên kết kiểu.",
   "workspace.link.drawings": "Công cụ vẽ",
   "workspace.link.drawingsDesc": "Chia sẻ tài liệu vẽ cho cùng thị trường và bộ lớp",
   "workspace.link.definitions": "Danh sách chỉ báo",

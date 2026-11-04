@@ -1,0 +1,24 @@
+{
+  "failedJob": "https://github.com/helenananaa/CandleScope/actions/runs/41289896094/job/124798839550",
+  "sourceCommit": "b8f01a2782c3de9d7a12fa2e13ac65be3f4b3d5a",
+  "functional": {
+    "total": 4723,
+    "passed": 4722,
+    "failed": 1
+  },
+  "failure": "replaceable Canvas fan-out expected two tasks in a frame but wall-clock budget expired after first task on busy CI runner",
+  "fix": "inject constant clock in count-bound fixtures using existing scheduler now option; expensive-frame test continues to advance its clock explicitly",
+  "productionCodeChanged": false,
+  "validation": {
+    "owningTestFile": "frontend/src/features/market-data/__tests__/chartWorkScheduler.test.ts",
+    "passed": 11,
+    "failed": 0,
+    "localLog": "/tmp/candlescope201-frame-clock-tests.log"
+  },
+  "performanceGate": {
+    "passed": true,
+    "medianMs": 0.122,
+    "p95Ms": 0.272,
+    "unchangedBudgetMs": 1
+  }
+}

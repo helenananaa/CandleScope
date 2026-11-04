@@ -73,7 +73,7 @@ test("edits during a save are serialized and close waits for the latest content"
 test("late completion after unmount does not erase a reopened draft", async () => {
   const f = fixture();
   let release!: (value: JournalEntry) => void;
-  const old = new JournalEditor({ ...f.options, save: () => new Promise((resolve) => { release = resolve; }) });
+  const old = new JournalEditor({ ...f.options, save: () => new Promise<JournalEntry>((resolve) => { release = resolve; }) });
   old.initialize(entry({ entryBasis: "old" }));
   old.edit({ entryBasis: "sent" });
   const saving = old.flush();

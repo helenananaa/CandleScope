@@ -45,7 +45,7 @@ export class ReplayChartResourcePool<T extends ReplayLifecycleLease> {
 }
 
 export function createReplayChartRuntimePool(clientInstanceId: string,
-  dependencies: Pick<ReplayRuntimeLifecycleOptions, "api" | "streamFactory"> = {}) {
+  dependencies: Pick<ReplayRuntimeLifecycleOptions, "api" | "streamFactory" | "dataManager" | "runId"> = {}) {
   return new ReplayChartResourcePool((sessionId) => new ReplayRuntimeLifecycle({
     ...dependencies,
     entry: { kind: "adapter", sessionId },

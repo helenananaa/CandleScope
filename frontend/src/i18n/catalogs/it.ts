@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const it = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["it"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "L’inizio e la finestra successiva includono candele future. Scegli un inizio precedente o riduci la finestra; sono disponibili solo candele storiche chiuse.",
@@ -758,6 +773,9 @@ export const it = {
   "workspace.link.timeAnchorDesc": "Allinea il bordo destro visibile, conserva lo zoom di ciascun grafico",
   "workspace.link.dateRange": "Intervallo",
   "workspace.link.dateRangeDesc": "Sincronizza l’intero intervallo di date e lo zoom",
+  "workspace.link.chartStyle": "Stile del grafico",
+  "workspace.link.chartStyleDesc": "Sincronizza tipo di grafico, tema e colori delle candele.",
+  "settings.appearance.cellThemeDescription": "Imposta il tema di questo grafico. Gli altri cambiano solo con il collegamento degli stili attivo.",
   "workspace.link.drawings": "Disegni",
   "workspace.link.drawingsDesc": "Condivide il documento di disegno per lo stesso mercato e set di livelli",
   "workspace.link.definitions": "Elenco indicatori",

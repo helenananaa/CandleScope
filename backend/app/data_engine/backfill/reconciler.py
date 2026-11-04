@@ -41,6 +41,8 @@ from app.data_engine.interval_policy import (
     parse_interval_ms,
 )
 from app.data_engine.kline_quality import source_rank
+from app.data_engine.storage.revisions import StaleAcquisition, prepare_derived_inputs
+from app.data_engine.storage.derived_history_fence import computation_scope
 from app.data_engine.series_identity import KlineSeriesIdentity
 from app.data_engine.custom_materialization import (
     MaterializationLease,
@@ -288,9 +290,11 @@ class Reconciler:
             ):
                 custom_started = time.monotonic()
                 for decomp in plan.decompositions:
-                    gen, wrt, failures, written_ranges = await self._generate_custom_bars(
-                        decomp, grouped,
-                    )
+                    views = await prepare_derived_inputs(self._storage, decomp, grouped)
+                    with computation_scope(views):
+                        gen, wrt, failures, written_ranges = await self._generate_custom_bars(
+                            decomp, grouped,
+                        )
                     result.custom_bars_generated += gen
                     result.custom_bars_written += wrt
                     result.written_ranges.extend(written_ranges)
@@ -597,6 +601,8 @@ class Reconciler:
                         exc_info=True,
                     )
                     self._metrics.inc("write_errors")
+                    if isinstance(exc, StaleAcquisition):
+                        self._metrics.inc("write_revision_conflicts")
                     failures.append(self._write_failure_detail(
                         exchange=exchange,
                         market_type=market_type,
@@ -839,6 +845,8 @@ class Reconciler:
                         exc_info=True,
                     )
                     self._metrics.inc("write_errors")
+                    if isinstance(exc, StaleAcquisition):
+                        self._metrics.inc("write_revision_conflicts")
                     failures.append(self._write_failure_detail(
                         exchange=exchange,
                         market_type=market_type,

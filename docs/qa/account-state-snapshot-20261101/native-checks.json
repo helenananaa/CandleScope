@@ -1,0 +1,80 @@
+{
+  "source": "e16636eb58590a9a6b809e36639266b7cedc532c",
+  "passed": true,
+  "steps": 6,
+  "native": "macOS arm64 packaged app. Prior accepted runtime cloned, current 967 backend/desktop and 162 built frontend files byte verified before/after; root ad-hoc signing retains unchanged nested signatures, deep strict verification passed. Not a newly built runtime.",
+  "fixture": "Disabled explicitly synthetic OKX account without credentials; no exchange account requests. UID, one fill, coverage/retention gap, balance and contract decimal strings match before and after complete owned-process exit/restart.",
+  "exits_ms": [
+    15314,
+    15370
+  ],
+  "renderer_errors": 0,
+  "visual": "Both cropped account panels inspected; UID, paused status and full decimal balance text visible, long fractional strings wrap. First attempt passed functional assertions but screenshot was outside viewport; preserved and repeated with scroll/crop.",
+  "limitations": [
+    "Concurrent WAL atomicity proven by component regression, not native concurrent exchange writes",
+    "No real-account, second venue, account push or full DataManager facade acceptance",
+    "No Windows or full 157 acceptance"
+  ],
+  "artifacts": [
+    {
+      "path": "native/acceptance.json.gz",
+      "sha256": "55e689417cb78b647b584c933ba1706dc3e5a800129ba6062bfb80d77de582c0"
+    },
+    {
+      "path": "native/traffic.json.gz",
+      "sha256": "778f62d9d28366d43c31e2622dc433f60b1fd7e790278ad8b54f1ab1f74466ec"
+    },
+    {
+      "path": "native/assembly.json.gz",
+      "sha256": "723833ce24213258d7c792bad4666be0f600eab4fc4c974553be2fe12788b0c4"
+    },
+    {
+      "path": "native/source-package-manifest.json.gz",
+      "sha256": "2208ef6d507cc1c920abcddbbdd66174ae418b03943fdc7f646fd48be1b61044"
+    },
+    {
+      "path": "native/native-run.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "native/source-match-after.log.gz",
+      "sha256": "2803a25d0fe413de818a103089e12df7af8a06b179cdc4ae6cadf41754fc3a08"
+    },
+    {
+      "path": "native/signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "native/account-snapshot.png",
+      "sha256": "928eae1e76411cbc9e79f26ae5a49428f7bbe483b9c5c2169c6f6a97e6e5dcd2"
+    },
+    {
+      "path": "native/restored-account-snapshot.png",
+      "sha256": "928eae1e76411cbc9e79f26ae5a49428f7bbe483b9c5c2169c6f6a97e6e5dcd2"
+    },
+    {
+      "path": "native/attempt1/acceptance.json.gz",
+      "sha256": "9158e66733a76d645b916eafd102dd278e19e01fb506776a3513f5a9534c9f62"
+    },
+    {
+      "path": "native/attempt1/traffic.json.gz",
+      "sha256": "955894f2c62efdb735de01801c46fe154b826dd7762e1807e591e8bfb9891efa"
+    },
+    {
+      "path": "native/attempt1/native-run.log.gz",
+      "sha256": "aea47a42ff64560027bd8fd3716254360336f09e0443ef8d27d6c1c8cc4baa23"
+    },
+    {
+      "path": "native/attempt1/account-snapshot.png",
+      "sha256": "eb9fb0588690ba4e90b034cd3509a4f43c9c6d53b17aa0572a88d68ce8ffb362"
+    },
+    {
+      "path": "native/attempt1/restored-account-snapshot.png",
+      "sha256": "f6d2a5f8cef092290f6e164bec2e70f56c05e68b13533168e86e72da5fb15363"
+    },
+    {
+      "path": "native/backend-sidecar.log.gz",
+      "sha256": "d9f7bc568ec3bba3cb521b7fb39f286d710998c784928c278ff48b2868a145f5"
+    }
+  ]
+}

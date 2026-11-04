@@ -67,6 +67,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   readonly apiBase: string;
   getPluginManagementSession?(): { apiBase: string; sessionToken: string; csrfToken: string } | null;
   getExtensionDiagnostics?(): Promise<import("../features/extensions/contracts.js").ExtensionDiagnostics>;
+  downloadReplayPortfolio?(runId: string): Promise<{ started: true }>;
   openAppPage?(url: string): Promise<{ windowId: string }>;
   getBootstrap(): Promise<DesktopBootstrap>;
   reconcileWorkspace(payload: DesktopTopologyPayload): Promise<DesktopTopologyResult>;
@@ -74,6 +75,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   onCloseRequested(listener: (event: { windowId: ChartWindowId }) => void): () => void;
   onPlacement(listener: (event: DesktopWindowPlacement & { windowId: ChartWindowId }) => void): () => void;
   workspaceBusConnect(payload: unknown): Promise<unknown>;
+  workspaceBusRegisterLinks?(): Promise<unknown>;
   workspaceBusCommit(payload: unknown): Promise<unknown>;
   workspaceBusPublishLink(payload: unknown): Promise<unknown>;
   workspaceBusReportWindow(payload: unknown): void;

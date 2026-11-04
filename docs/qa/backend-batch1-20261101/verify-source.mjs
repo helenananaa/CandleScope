@@ -8,7 +8,7 @@ const asar=createRequire(path.join(root,'frontend/package.json'))('@electron/asa
 const resources=path.join(out,'Installed App/CandleScope.app/Contents/Resources');
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const result={sourceCommit:cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
- assembly:'Vite desktop build + electron-builder; effective-ceiling follow-up copied and byte-compiled before final root ad-hoc signing and strict verification',
+ assembly:fs.existsSync(path.join(out,'assembly.json'))?JSON.parse(fs.readFileSync(path.join(out,'assembly.json'),'utf8')).assembly:'Vite desktop build + electron-builder; effective-ceiling follow-up copied and byte-compiled before final root ad-hoc signing and strict verification',
  runtime:'Reused standalone runtime from PR189 candidate; requirements, CCXT lock, SDK and runtime/control preparation inputs verified unchanged',
  files:{},dist:{},mismatches:[]};
 for(const file of cp.execFileSync('git',['ls-files','-z','backend/app','frontend/desktop'],{encoding:'utf8'}).split('\0').filter(Boolean)){

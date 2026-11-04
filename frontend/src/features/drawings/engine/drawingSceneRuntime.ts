@@ -533,6 +533,7 @@ function queryCandidates(
     || (freehandDataCullUnsafe
       && (node.entity.kind === "freehand" || node.entity.kind === "highlighter"))
     || node.entity.kind === "angle-measure"
+    || node.entity.kind === "range-measure"
     || node.entity.kind === "fibonacci"
     || node.entity.kind === "text"
     || node.entity.kind === "position"));

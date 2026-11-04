@@ -3,6 +3,14 @@ import test from "node:test";
 import { alertExpressionDraftSchema, alertDraftPatchSchema } from "./alertCommandSchema.js";
 import { indicatorDefinitionSchema } from "./chartCommands.js";
 import { canonicalWatchlistSymbol } from "./watchlistCommands.js";
+import { chartLinkPolicySchema } from "./workspaceCommands.js";
+
+test("desktop link policy accepts independent overlay channels while rejecting unsupported fields", () => {
+  const patch = { accountSource: true, tradingOverlays: false, noteOverlays: true, studyMode: true, studyCursor: false };
+  assert.deepEqual(chartLinkPolicySchema.parse(patch), patch);
+  assert.throws(() => chartLinkPolicySchema.parse({ accountSource: "yes" }));
+  assert.throws(() => chartLinkPolicySchema.parse({ accountSource: true, placeOrders: true }));
+});
 
 const condition = { id: "condition", type: "condition", not: false, left: "close", comparator: ">", rightType: "number", rightValue: "100", rangeMin: "", rangeMax: "", percentValue: "" };
 test("alert drafts reject unknown fields and enforce expression node and nesting budgets", () => {

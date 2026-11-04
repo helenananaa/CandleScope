@@ -1,0 +1,19 @@
+{
+  "failing_head": "e3f7a8003c29e3dde5068983a9c906307d52f190",
+  "workflow_run": 41307927150,
+  "jobs": [
+    124852073847,
+    124852074096
+  ],
+  "failure": "Both native package steps rejected the actual two-plugin manifest because the prepack hook still required exactly one Pine bundle.",
+  "change": "Require exactly the distinct Pine+Python first-party set, retaining control hash, target platform/architecture and each complete plugin size/hash checks. Reject absent, duplicate, retired or unknown selections.",
+  "local_tests": 8,
+  "actual_artifact_probe": "Before rejected prepared native7 artifacts; after validates both real bundle hashes/control/architecture. No full runtime rebuild or new native feature qualification claimed for this packaging-only change.",
+  "native7": "Existing finite Python author qualification remains the runtime evidence; source application2ad72d25 with strict970source162dist match,11steps,481exactSMAvalues and save/fullownedexit/restart.",
+  "current_main_201_compatibility": {
+    "backend_python_author_execution_and_script_input_scope_tests": 65,
+    "full_frontend_typecheck": "passed",
+    "packaging_guard_tests": 8,
+    "native_feature_evidence": "Previously qualified native7 application2ad72d25; current main201+prepack hook change not a fresh combined native acceptance."
+  }
+}

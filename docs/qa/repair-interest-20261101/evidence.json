@@ -1,0 +1,99 @@
+{
+  "sourceBase": "5ba61863c89a8ee8406c3368d78ef5afb4720c9d",
+  "nativeFailureSource": "854e77e926acb177a68406966ac5161658cb8a2e",
+  "nativeFailure": "cold 5m stays empty/pending for 60s while merged 1555-chunk history retains foreground identity",
+  "nativeSnapshotCount": 47,
+  "reproduction": {
+    "initial": {
+      "failed": 3
+    },
+    "mixedMaintenance": {
+      "failed": 12,
+      "passed": 12
+    }
+  },
+  "fix": "retain scheduling identity per scoped and persistent interest; recompute surviving priority/reasons/owner on release, supersession and revocation; rekey pending work; internal latest maintenance permits existing reserve while API latest remains interactive",
+  "validation": {
+    "tests": 165,
+    "passed": 165,
+    "seconds": 15.12,
+    "suites": [
+      "backfill_interest_priority",
+      "backfill_coordinator",
+      "public_admission",
+      "interval_admission_contract",
+      "history_archive_admission"
+    ],
+    "persistentCompletionFollowup": {
+      "passed": 24,
+      "seconds": 6.37,
+      "checks": "persistent task completes all three original chunks after foreground departure; every release path, merge order and surviving-consumer combination"
+    },
+    "previousCombinedCount": 163
+  },
+  "nativeFixedCandidatePending": false,
+  "CI": "pending",
+  "preserved": "persistent repair, stronger finality and derived repair targets; existing quota/backoff deadlines and bounded foreground reserve; original planned chunks complete after observer release and narrow-range sponsorship",
+  "apiLatestIdentity": "A remaining API latest observer retains foreground identity after unrelated observers leave, including merged requester labels; independent regression reproduced failure before this correction.",
+  "rangeFollowup": {
+    "nativeSource": "6233c8cf04dfc085ef4e33bcfde680d06a8554df",
+    "initialCold5m": "501 rows within 6 health samples",
+    "linkedHistorical5m": "failed after 20 explicit user-command retries; not qualified",
+    "cause": "narrow foreground interest promoted unrelated chunks of a coalesced 1555-chunk parent",
+    "fix": "retain individual interest bounds; only overlapping chunks receive foreground sponsorship; update running public demand traffic class without cancelling shared work",
+    "beforeFix": {
+      "rangeReproFailed": 1,
+      "quotaIdentityFailed": 12,
+      "quotaIdentityPassed": 12
+    },
+    "nativeReplacementPending": false
+  },
+  "nativeFixedCandidate": {
+    "sourceCommit": "7ebe9e3428abd9be0d0e9e2227c2c298485b5793",
+    "zipSha256": "66e7237f580f4433fa933fd60534f5f337e989fc4580716f67de89ee3a7aaeb7",
+    "asarSha256": "ba57f41c068c20223fa32bef0d605d6fb28172a474db455add8dc8917c9d86ee",
+    "sourceFiles": 3115,
+    "distFiles": 165,
+    "mismatches": [],
+    "signature": {
+      "before": "strict deep PASS",
+      "after": "strict deep PASS"
+    },
+    "native": {
+      "basic": true,
+      "restart": true,
+      "rendererErrors": 0,
+      "normalFullExits": 2,
+      "initialData": "finite synthetic 1m only; no seeded 5m",
+      "initialCold5m": {
+        "rows": 500,
+        "healthSamples": 11,
+        "withinOriginal60s": true
+      },
+      "linkedHistory": {
+        "firstAttempt": "explicit partial unavailable; peer keeps live window",
+        "secondExplicitAttempt": "1m and 5m both centered; 501 rows each",
+        "comparison": "5m time/OHLCV equal complete bundled backend range, all 501 rows"
+      },
+      "independent": "UTC Alt+G centers selected 1m without changing zoom or sibling absolute time; live traffic does not pull historical view",
+      "restartBehavior": "1m/5m and link policy restore; historical re-seek and return-to-live PASS; historical viewport itself is not persisted"
+    },
+    "backendRepair": {
+      "source": "72149f59f5c16129de8bd54fdd4d0d10935fd1bb",
+      "exactBackendAppFiles": 912,
+      "tests": 165,
+      "seconds": 15.12
+    },
+    "limits": [
+      "macOS arm64 candidate only; Windows independent",
+      "live online chart first increment of #186; not full issue closure",
+      "1m synthetic oracle and provider 5m do not claim common aggregation source",
+      "not full 157-item release acceptance"
+    ],
+    "previousFailuresPreserved": [
+      "854e77e9 cold 5m pending at 60s",
+      "6233c8cf cold initial load recovered but historical linked 5m failed after 20 retries"
+    ],
+    "CI": "pending current PR head"
+  }
+}

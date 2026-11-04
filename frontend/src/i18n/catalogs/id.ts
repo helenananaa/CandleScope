@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const id = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["id"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Waktu mulai dan jendela ke depan mencakup candle masa depan. Pilih awal lebih lama atau pendekkan jendela; hanya candle historis tertutup yang tersedia.",
@@ -758,6 +773,9 @@ export const id = {
   "workspace.link.timeAnchorDesc": "Sejajarkan tepi kanan terlihat, pertahankan zoom per grafik",
   "workspace.link.dateRange": "Rentang",
   "workspace.link.dateRangeDesc": "Sinkronkan seluruh rentang tanggal dan zoom",
+  "workspace.link.chartStyle": "Gaya grafik",
+  "workspace.link.chartStyleDesc": "Sinkronkan jenis grafik, tema, dan warna candle.",
+  "settings.appearance.cellThemeDescription": "Atur tema grafik ini. Grafik lain hanya berubah saat tautan gaya diaktifkan.",
   "workspace.link.drawings": "Gambar",
   "workspace.link.drawingsDesc": "Bagikan dokumen gambar untuk pasar dan set lapisan yang sama",
   "workspace.link.definitions": "Daftar indikator",

@@ -1,3 +1,4 @@
+import { buildChartSessionKey } from "../chart-session/chartSessionTransition.js";
 import type { ChartWorkspaceRuntime } from "../chart-workspace/useChartWorkspaceRuntime.js";
 import { indicatorSignature, parseControlConfiguration, type ControlCellObservation, type ControlRequest, type ControlResult } from "./controlModel.js";
 
@@ -24,9 +25,11 @@ export class AppControlController {
       persistence: { state: status.saveState, mode: status.persistenceMode, error: status.error },
       cells: view.layoutCellIds.map((cellId) => {
         const cell = view.document.cells[cellId]!;
-        return { cellId, session: cell.session, linkGroupId: cell.linkGroupId,
+        const runtime = this.cells.get(cellId) ?? null;
+        return { cellId, session: runtime?.mode === "history-study" ? runtime.session : cell.session,
+          ...(runtime?.mode === "history-study" ? { configuredLiveSession: cell.session } : {}), linkGroupId: cell.linkGroupId,
           indicators: cell.indicators.map(({ id, engineName, params, executionTarget }) => ({ id, engineName, params, executionTarget })),
-          runtime: this.cells.get(cellId) ?? null };
+          runtime };
       }) };
   }
 
@@ -41,6 +44,12 @@ export class AppControlController {
     } catch (error) {
       return { state: "failed", code: "INVALID_PARAMS", message: error instanceof Error ? error.message : String(error) };
     }
+    const affected = command.layout ? this.port.read().view.layoutCellIds : command.charts.map(chart => chart.cellId!);
+    if (affected.some(id => {
+      const mode = this.cells.get(id)?.mode;
+      return mode === "history-study" || mode === "restoring-study";
+    })) return { state: "failed", code: "HISTORICAL_STUDY_ACTIVE",
+      message: "Discover the study:<cellId> commands. Save and exit the study before replacing its live chart configuration." };
     this.port.apply(command);
     const deadline = Date.now() + this.waitMs;
     let applied = false;
@@ -54,7 +63,7 @@ export class AppControlController {
         appliedRevision ??= receipt.revision;
         if (!applied) {
           applied = true;
-          targets = receipt.cellIds.map((cellId, index) => ({ cellId, session: JSON.stringify(command.charts[index]!.session),
+          targets = receipt.cellIds.map((cellId, index) => ({ cellId, session: buildChartSessionKey(command.charts[index]!.session),
             indicators: indicatorSignature(command.charts[index]!.indicators) }));
           progress({ state: "applied", revision: appliedRevision, cellIds: receipt.cellIds });
         }
@@ -62,15 +71,20 @@ export class AppControlController {
       if (applied) {
         if (view.activeWorkspaceId !== command.workspaceId || (command.layout && view.layout !== command.layout)
           || targets.some((target) => !view.layoutCellIds.includes(target.cellId)
-            || JSON.stringify(view.document.cells[target.cellId]?.session) !== target.session
+            || !view.document.cells[target.cellId] || buildChartSessionKey(view.document.cells[target.cellId]!.session) !== target.session
             || indicatorSignature(view.document.cells[target.cellId]?.indicators ?? []) !== target.indicators)) {
           return { state: "applied", code: "TARGET_CHANGED", readiness: "superseded", revision: appliedRevision };
         }
         if (status.saveState === "error") return { state: "applied", code: "PERSISTENCE_FAILED", readiness: "failed", message: status.error ?? "Workspace could not be saved" };
+        if (targets.some(({ cellId }) => this.cells.get(cellId)?.mode === "history-study")) {
+          return { state: "applied", code: "HISTORICAL_STUDY_ACTIVE", readiness: "unverified", revision: appliedRevision,
+            message: "The visible chart entered historical study; its live configuration is not the displayed study input.", snapshot: this.inspect() };
+        }
         const allReady = targets.every(({ cellId }) => {
           const cell = view.document.cells[cellId];
           const runtime = this.cells.get(cellId);
-          return cell && runtime && Object.entries(runtime.session).every(([key, value]) => cell.session[key as keyof typeof runtime.session] === value)
+          return cell && runtime && buildChartSessionKey(runtime.session) === buildChartSessionKey(cell.session)
+            && runtime.mode !== "restoring-study"
             && runtime.indicatorSignature === indicatorSignature(cell.indicators) && runtime.marketReady && runtime.indicatorsReady && !runtime.error;
         });
         if (status.saveState === "saved" && allReady) return { state: "ready", revision: appliedRevision, cellIds: targets.map(({ cellId }) => cellId), snapshot: this.inspect() };

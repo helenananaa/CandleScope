@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 import time
+import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -36,6 +37,8 @@ class AccountRepository:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = self.root / "account-facts.sqlite3"
+        from app.core.committed_updates import committed_updates_for
+        self.updates = committed_updates_for(self.path, "readonly-account")
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version not in {0, SCHEMA_VERSION}:
@@ -75,6 +78,14 @@ class AccountRepository:
                   PRIMARY KEY(note_id,version));
                 PRAGMA user_version=1;
             """)
+        # Epoch and sequence live in the account database and roll back with facts.
+        # Raw observations/credential cleanup never invalidate public account state.
+        with self.transaction() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS account_state_revision (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, sequence INTEGER NOT NULL)")
+            db.execute("INSERT OR IGNORE INTO account_state_revision VALUES(1,?,0)", (uuid.uuid4().hex,))
+            for table in ("account", "fact", "sync_scan", "coverage", "snapshot", "gap"):
+                for operation in ("INSERT", "UPDATE", "DELETE"):
+                    db.execute(f"CREATE TRIGGER IF NOT EXISTS account_state_{table}_{operation.lower()} AFTER {operation} ON {table} BEGIN UPDATE account_state_revision SET sequence=sequence+1 WHERE id=1; END")
         self.path.chmod(0o600)
 
     @contextmanager
@@ -93,11 +104,17 @@ class AccountRepository:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             try:
+                exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_state_revision'").fetchone()
+                before = db.execute("SELECT sequence FROM account_state_revision WHERE id=1").fetchone() if exists else None
                 yield db
+                after = db.execute("SELECT sequence FROM account_state_revision WHERE id=1").fetchone()
+                changed = before is not None and after is not None and before[0] != after[0]
                 db.commit()
             except BaseException:
                 db.rollback()
                 raise
+        if changed:
+            self.updates.notify("state")
 
     def account(self, *, credential_reference: bool = False) -> dict | None:
         with self.connection() as db:
@@ -270,6 +287,30 @@ class AccountRepository:
         with self.connection() as db:
             return {row["kind"]:{"receivedMs":row["received_ms"],"data":json.loads(row["payload"])}
                     for row in db.execute("SELECT * FROM snapshot" + (" WHERE kind NOT IN ('contracts','position_history')" if overview else ""))}
+
+    def overview(self) -> dict:
+        """One committed account/fact/coverage view; never expose credentials.
+
+        A sync page commits facts, its cursor and coverage together. Reading
+        each field on a separate connection can undo that guarantee at the API
+        boundary, even when every individual repository call is correct.
+        """
+        with self.connection() as db:
+            db.execute("BEGIN")
+            row = db.execute("SELECT * FROM account WHERE id='okx'").fetchone()
+            account = dict(row) if row is not None else None
+            if account is not None:
+                account.pop("credential_id")
+            return {
+                "cursor": dict(db.execute("SELECT epoch,sequence FROM account_state_revision WHERE id=1").fetchone()),
+                "account": account,
+                "scans": [dict(row) for row in db.execute("SELECT * FROM sync_scan ORDER BY kind")],
+                "coverage": [dict(row) for row in db.execute("SELECT * FROM coverage ORDER BY kind,start_ms,end_ms")],
+                "gaps": [dict(row) for row in db.execute("SELECT * FROM gap ORDER BY kind,start_ms")],
+                "snapshots": {row["kind"]: {"receivedMs": row["received_ms"], "data": json.loads(row["payload"])}
+                              for row in db.execute("SELECT * FROM snapshot WHERE kind NOT IN ('contracts','position_history')")},
+                "counts": {row[0]: row[1] for row in db.execute("SELECT kind,COUNT(*) FROM fact GROUP BY kind")},
+            }
 
     def reconciliation_inputs(self, maximum: int = 20_000) -> dict:
         # One bounded, consistent view. This is requested on demand, not by the

@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
@@ -7,6 +8,20 @@ import { tradingAccountsEn } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const en = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...workbenchEnglish,
   "native.inputs.priceTick": "Minimum price increment",
   "native.inputs.currency": "Quote currency (requires the actual price tick)",
@@ -1065,6 +1080,9 @@ export const en = {
   "workspace.link.timeAnchorDesc": "Align the visible right edge, keep per-chart zoom",
   "workspace.link.dateRange": "Range",
   "workspace.link.dateRangeDesc": "Sync the full date range and zoom",
+  "workspace.link.chartStyle": "Chart style",
+  "workspace.link.chartStyleDesc": "Sync chart type, theme and candle colors.",
+  "settings.appearance.cellThemeDescription": "Set this chart’s theme. Other charts change only when chart style linking is enabled.",
   "workspace.link.drawings": "Drawings",
   "workspace.link.drawingsDesc": "Share the drawing document for the same market and layer set",
   "workspace.link.definitions": "Indicator list",
@@ -4322,6 +4340,9 @@ export const en = {
   "drawing.variant.line-horizontal": "Horizontal line",
   "drawing.variant.line-vertical": "Vertical line",
   "drawing.variant.line-cross": "Cross line",
+  "drawing.variant.measure-price": "Price range",
+  "drawing.variant.measure-time": "Time range",
+  "drawing.variant.measure-price-time": "Price and time range",
   "drawing.variant.angle-measure": "Angle",
   "drawing.variant.angle-measure.description": "Visual angle on the current scale",
   "drawing.variant.shape-rectangle": "Rectangle",

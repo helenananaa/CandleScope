@@ -1,0 +1,267 @@
+{
+  "schema": "candlescope.history-study-fine-qualification/1",
+  "applicationSource": "8376e4b6782392a1b12892abafb9badc0a952cbd",
+  "checks": {
+    "finalFrontend": 4808,
+    "performance": 1,
+    "desktop": 127,
+    "backendStudyCandidateInterpreterAndModule": 14,
+    "backendFailures": 0,
+    "ruff": "0.14.7 passed",
+    "fullTypeLintArchitecturePluginI18n": "passed at accessible-selector source d9462e02; inherited single lint warning; new read-fence also type/lint checked in #221",
+    "locales": 30,
+    "keys": 5333,
+    "productionAndDesktopBuild": true
+  },
+  "native": {
+    "platform": "macOS arm64",
+    "passed": true,
+    "steps": 12,
+    "rendererErrors": [],
+    "normalExitMs": [
+      15363,
+      15262
+    ],
+    "sourceFiles": 979,
+    "distFiles": 164,
+    "mismatches": [],
+    "strictSignatureExit": 0,
+    "ownedProcessesAbsent": true,
+    "appAsarSha256": "0e6900c61cdda7dab848fce3ceb293b5db88a8f4518b7cd6e5de73172c541d0d",
+    "referenceChecks": [
+      {
+        "step": "captured-fine-input-and-partial-display",
+        "label": "initial",
+        "cursor": 1793600850000,
+        "sourceRowsRevealed": 302,
+        "displayRows": 61,
+        "forming": {
+          "time": 1793600700,
+          "open": 78221.31,
+          "high": 78221.31,
+          "low": 78200.28,
+          "close": 78203.06,
+          "volume": 16.66541,
+          "is_closed": false
+        },
+        "ma20Points": 42,
+        "maxError": 2.9103830456733704e-11,
+        "sourceSeries": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "1m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        },
+        "series": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "5m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        }
+      },
+      {
+        "step": "one-source-close-updates-only-forming-tail",
+        "label": "step",
+        "cursor": 1793600880000,
+        "sourceRowsRevealed": 303,
+        "displayRows": 61,
+        "forming": {
+          "time": 1793600700,
+          "open": 78221.31,
+          "high": 78221.31,
+          "low": 78200.28,
+          "close": 78214,
+          "volume": 26.207610000000003,
+          "is_closed": false
+        },
+        "ma20Points": 42,
+        "maxError": 2.9103830456733704e-11,
+        "sourceSeries": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "1m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        },
+        "series": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "5m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        }
+      },
+      {
+        "step": "rewind-recomputes-smaller-forming-input-and-ma",
+        "label": "rewind",
+        "cursor": 1793595150000,
+        "sourceRowsRevealed": 207,
+        "displayRows": 42,
+        "forming": {
+          "time": 1793595000,
+          "open": 78517.71,
+          "high": 78517.72,
+          "low": 78420.18,
+          "close": 78446.59,
+          "volume": 16.40758,
+          "is_closed": false
+        },
+        "ma20Points": 23,
+        "maxError": 1.4551915228366852e-11,
+        "sourceSeries": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "1m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        },
+        "series": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "5m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        }
+      },
+      {
+        "step": "restart-restores-fine-input-and-cursor",
+        "label": "restart",
+        "cursor": 1793595150000,
+        "sourceRowsRevealed": 207,
+        "displayRows": 42,
+        "forming": {
+          "time": 1793595000,
+          "open": 78517.71,
+          "high": 78517.72,
+          "low": 78420.18,
+          "close": 78446.59,
+          "volume": 16.40758,
+          "is_closed": false
+        },
+        "ma20Points": 23,
+        "maxError": 1.4551915228366852e-11,
+        "sourceSeries": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "1m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        },
+        "series": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "5m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        }
+      },
+      {
+        "step": "forward-after-restart-reproduces-forming-reference",
+        "label": "forward",
+        "cursor": 1793600850000,
+        "sourceRowsRevealed": 302,
+        "displayRows": 61,
+        "forming": {
+          "time": 1793600700,
+          "open": 78221.31,
+          "high": 78221.31,
+          "low": 78200.28,
+          "close": 78203.06,
+          "volume": 16.66541,
+          "is_closed": false
+        },
+        "ma20Points": 42,
+        "maxError": 2.9103830456733704e-11,
+        "sourceSeries": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "1m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        },
+        "series": {
+          "assetClass": "crypto",
+          "exchange": "binance",
+          "interval": "5m",
+          "marketType": "spot",
+          "priceAdjustment": "raw",
+          "providerId": "binance",
+          "seriesVariant": "native",
+          "sessionVariant": "continuous",
+          "symbol": "BTCUSDT",
+          "venue": "binance",
+          "volumeSemantics": "base_asset"
+        }
+      }
+    ]
+  },
+  "preservedFailures": [
+    "First full frontend: 4804 passed, 1 pt-BR prose failure; corrected wording, locale and complete reruns passed.",
+    "First native source546ca0b8: source select options polluted its implicit label. Explicit separate label/id fixed in d9462e02; real exact-name selection now passes.",
+    "First bundled Python invocation omitted runtime/site-packages; no pytest module. Absolute paths and -B/PYTHONDONTWRITEBYTECODE=1 produced 14 passes, source and candidate.",
+    "An initial seed process guard matched the shell command literal containing the source-app path. Rechecked actual executable prefixes, source/target processes absent and fresh SQLite backup completed; no data was written by the rejected preparation."
+  ],
+  "limits": [
+    "Warm committed public market DB, fixed continuous range ending at least one hour before wall time; no latest completeness or online cold claim",
+    "Current source captures only closed finer candles; intrabar fine prices and tick-level paths are not reconstructed",
+    "Original note sources, optional mode/cursor linking, formal replay, arbitrary scripts and Python replay, full 157 items and Windows are not qualified here",
+    "Same checked runtime/plugin assets reused; current backend compiled and desktop frontend rebuilt/repacked/signed; not fresh engine build or official CI package"
+  ],
+  "ci": "Final QA delivery-head pending; never treat local/native qualification as CI completion"
+}

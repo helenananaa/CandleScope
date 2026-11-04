@@ -1,6 +1,6 @@
 import type { ExternalPriceLine } from "../../chart-adapter/externalPriceLineSource.js";
 import { floorTo } from "./quickReplayModel.js";
-import type { AccountSummary, PracticeOrder, Trade, TradeLeg } from "./tradingTypes.js";
+import type { AccountSummary, JournalEntry, PracticeOrder, Trade, TradeLeg } from "./tradingTypes.js";
 
 /** Live chart overlay for the selected account: fills on this symbol, open position lines. */
 
@@ -47,14 +47,15 @@ export function liveFillLegs(
   loaded: { firstSec: number; lastSec: number } | null,
   intervalSec: number,
   limit = MAX_LIVE_FILL_MARKERS,
+  bucketTime: (time: number) => number | null = time => floorTo(time, intervalSec),
 ): TradeLeg[] {
   if (loaded === null || !(intervalSec > 0)) return [];
   const byFill = new Map<string, TradeLeg>();
   for (const trade of trades) {
     if (!sameInstrument(trade, instrument)) continue;
     for (const leg of trade.legs) {
-      const barSec = floorTo(Math.floor(leg.tsMs / 1000), intervalSec);
-      if (barSec < loaded.firstSec || barSec > loaded.lastSec) continue;
+      const barSec = bucketTime(Math.floor(leg.tsMs / 1000));
+      if (barSec === null || barSec < loaded.firstSec || barSec > loaded.lastSec) continue;
       const seen = byFill.get(leg.fillId);
       byFill.set(leg.fillId, seen ? { ...seen, qty: addDecimalStrings(seen.qty, leg.qty) } : leg);
     }
@@ -65,6 +66,16 @@ export function liveFillLegs(
 }
 
 export type PositionLineKind = "long" | "short" | "stopLoss" | "takeProfit";
+
+export function liveJournalEntries(
+  entries: readonly JournalEntry[], instrument: ChartInstrument,
+  bucketTime: (time: number) => number | null, limit = 2000,
+): JournalEntry[] {
+  return entries.filter(entry => sameInstrument(entry, instrument)
+    && bucketTime(Math.floor((entry.marketTimeMs ?? entry.createdAtMs) / 1000)) !== null)
+    .sort((left, right) => (left.marketTimeMs ?? left.createdAtMs) - (right.marketTimeMs ?? right.createdAtMs))
+    .slice(-limit);
+}
 
 export interface PositionLineColors {
   entry: string;

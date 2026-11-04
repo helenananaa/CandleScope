@@ -1,3 +1,4 @@
+import { historyStudyBrazilian } from "./historyStudyMessages.js";
 import { workbenchEnglish } from "./workbenchEnglish.js";
 import { pineEnglish } from "./pineEnglish.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
@@ -5,6 +6,20 @@ import { tradingAccountsPtBR } from "./tradingAccountsMessages.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ptBR = {
+  ...historyStudyBrazilian,
+  "chartTime.title": "Ir para data",
+  "chartTime.shortcut": "Ir para data (Alt+G)",
+  "chartTime.input": "Data e hora (UTC)",
+  "chartTime.hint": "Mantém o período e o zoom atuais. Os gráficos vinculados pelo tempo localizam o mesmo instante em suas próprias séries.",
+  "chartTime.invalid": "Insira uma data e hora UTC válidas que não estejam no futuro.",
+  "chartTime.loading": "Carregando o trecho solicitado… Você pode enviar outra data.",
+  "chartTime.located": "Localizado: {time} UTC.",
+  "chartTime.nearest": "Não há candle nesse instante. Candle disponível mais próximo: {time} UTC.",
+  "chartTime.empty": "Nenhum candle encontrado perto desse instante. Escolha outra data.",
+  "chartTime.unavailable": "Não foi possível localizar esse instante. Se o carregamento falhou, a visualização anterior foi mantida. Tente novamente.",
+  "chartTime.linkFailed": "Alguns gráficos vinculados não conseguiram localizar o instante solicitado.",
+  "chartTime.close": "Fechar",
+  "chartTime.go": "Ir",
   ...workbenchEnglish,
   "research.book.help": "Envie negócios agregados e observações do livro em ordem, para o mercado e período exatos do gráfico. O aplicativo valida OHLCV, continuidade e profundidade disponível e congela o arquivo com o snapshot. Os modos de livro mantêm suas próprias regras de capacidade de execução.",
   "research.book.invalid": "Arquivo de livro inválido. Envie um JSON de até 32 MiB com os campos exigidos de mercado, procedência e eventos ordenados, incluindo identificadores de origem dos negócios agregados e observações do livro.",
@@ -1303,6 +1318,9 @@ export const ptBR = {
   "workspace.link.timeAnchorDesc": "Alinhar a borda direita visível e manter o zoom de cada gráfico",
   "workspace.link.dateRange": "Intervalo",
   "workspace.link.dateRangeDesc": "Sincronizar o intervalo de datas completo e o zoom",
+  "workspace.link.chartStyle": "Estilo do gráfico",
+  "workspace.link.chartStyleDesc": "Sincronizar tipo de gráfico, tema e cores das velas.",
+  "settings.appearance.cellThemeDescription": "Defina o tema deste gráfico. Os demais só mudam quando a vinculação de estilos está ativada.",
   "workspace.link.drawings": "Desenhos",
   "workspace.link.drawingsDesc": "Compartilhar o documento de desenho do mesmo mercado e conjunto de camadas",
   "workspace.link.definitions": "Lista de indicadores",
@@ -4563,6 +4581,9 @@ export const ptBR = {
   "drawing.variant.line-horizontal": "Linha no eixo do preço",
   "drawing.variant.line-vertical": "Linha no eixo do tempo",
   "drawing.variant.line-cross": "Linha em cruz",
+  "drawing.variant.measure-price": "Faixa de preço",
+  "drawing.variant.measure-time": "Intervalo de tempo",
+  "drawing.variant.measure-price-time": "Faixa de preço e tempo",
   "drawing.variant.angle-measure": "Ângulo",
   "drawing.variant.angle-measure.description": "Ângulo visual na escala atual",
   "drawing.variant.shape-rectangle": "Retângulo",

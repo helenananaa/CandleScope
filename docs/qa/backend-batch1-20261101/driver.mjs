@@ -28,13 +28,14 @@ export async function until(check, timeout=25000) {
   while(Date.now()<end) { last=await check(); if(last) return last; await delay(200); }
   throw new Error('Timed out waiting for acceptance state');
 }
-export async function launch() {
+export async function launch({executablePath = s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope', profileRoot = s.root+'/profile'} = {}) {
+  s.profileRoot=profileRoot;
   s.startedAt=Date.now();
-  s.app=await _electron.launch({executablePath:s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope',
+  s.app=await _electron.launch({executablePath,
     args:['--no-sandbox'], env:{...s.env,
-      CANDLESCOPE_DESKTOP_USER_DATA:s.root+'/profile',CANDLE_DATA_DIR:s.root+'/profile/data',
+      CANDLESCOPE_DESKTOP_USER_DATA:profileRoot,CANDLE_DATA_DIR:profileRoot+'/data',
       CANDLESCOPE_DESKTOP_UI_PORT:'0',CANDLESCOPE_DESKTOP_BACKEND_PORT:'0',
-      CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT:s.root+'/profile/plugins',CANDLESCOPE_LOCAL_DATA_DIR:s.root+'/profile/local-data'},timeout:90000});
+      CANDLESCOPE_PLUGIN_PLATFORM_V2_ROOT:profileRoot+'/plugins',CANDLESCOPE_LOCAL_DATA_DIR:profileRoot+'/local-data'},timeout:90000});
   s.page=await s.app.firstWindow({timeout:90000}); attach();
   await s.page.waitForFunction(()=>Boolean(window.candlescopeDesktop),null,{timeout:60000});
   s.identity=await s.app.evaluate(({app})=>({packaged:app.isPackaged,pid:process.pid,userData:app.getPath('userData'),resources:process.resourcesPath}));
@@ -62,7 +63,7 @@ export async function enableControl() {
   await s.page.getByRole('checkbox',{name:'允许本机客户端在本次应用会话中修改图表并推进模拟回放。',exact:true}).check();
   await s.page.getByRole('button',{name:'启用控制',exact:true}).click();
   await s.page.getByRole('button',{name:'保存并关闭',exact:true}).click();
-  s.control=new ControlClient(s.root+'/profile/control/connection.json');await s.control.connect();
+  s.control=new ControlClient((s.profileRoot??s.root+'/profile')+'/control/connection.json');await s.control.connect();
 }
 export const inspect=async()=> (await s.control.call('workspace.inspect',{windowId:'main-window'})).snapshot;
 export const broker=()=>s.page.evaluate(()=>window.__CANDLESCOPE_WINDOW_BROKER__?.snapshot({compact:true}));

@@ -1,3 +1,4 @@
+import { useReplayOperations } from "./useReplayOperations.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../i18n/index.js";
@@ -20,7 +21,6 @@ import type {
   ReplayHistoryPolicy,
 } from "./replayHistoryProvider.js";
 import type { ReplayRuntime } from "./useReplayRuntime.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
   rebuildReplayViewerSeries,
   replayUsesAuthoritativeSourceBucketProjection,
@@ -32,6 +32,8 @@ import { ReplayHistoryLoadGate } from "./replayHistoryTransport.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import { CANONICAL_HISTORY_REFRESH } from "./replayCanonicalIndicators.js";
 import { TAPE_VIEWER_COMMIT } from "./replayTapeViewer.js";
+import { seekReplayViewportTime } from "./replayViewportNavigation.js";
+import type { ChartTimeSeekResult } from "../market-data/chartTimeNavigation.js";
 
 
 export interface ReplayHistoryRuntime {
@@ -46,6 +48,7 @@ export interface ReplayHistoryRuntime {
   readonly viewportTransferUnavailable: boolean;
   readonly loadMoreLeft: LoadMoreLeft;
   readonly restoreLatestWindow: () => Promise<boolean>;
+  readonly seekToTime: (requestedTimeMs: number) => Promise<ChartTimeSeekResult>;
   readonly retryHistory: () => Promise<void>;
   readonly dismissNotice: () => void;
 }
@@ -82,7 +85,9 @@ export function useReplayHistoryRuntime(
   viewportTransfer: SurfaceViewportSnapshot | null = null,
   warmupTargetBars = 0,
 ): ReplayHistoryRuntime {
+  const { api, request: managedRequest } = useReplayOperations(viewer.viewerState?.run_id, "history");
   const retryRequestedRef = useRef(false);
+  const navigationSequence = useRef(0);
   const [loadGate] = useState(() => new ReplayHistoryLoadGate());
   const tapeObservation = viewer.tapeObservation;
   const observedStore = tapeObservation === undefined ? runtime.store : { ...runtime.store,
@@ -130,8 +135,8 @@ export function useReplayHistoryRuntime(
   const provider = useMemo(() => (
     !displayReady || sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
-      : createReplayHistoryProvider({ sessionId, trackId, identity, sourceSequence: () => storeRef.current.sourceSequence })
-  ), [dataEpoch, displayReady, identity, sessionId, trackId]);
+      : createReplayHistoryProvider({ request: managedRequest, sessionId, trackId, identity, sourceSequence: () => storeRef.current.sourceSequence })
+  ), [dataEpoch, displayReady, identity, managedRequest, sessionId, trackId]);
   const historyKey = useMemo(() => (
     sessionId === null || identity === null || dataEpoch === null || trackId === null
       ? null
@@ -181,7 +186,7 @@ export function useReplayHistoryRuntime(
     viewportAttemptsRef.current.clear();
     olderCursorRef.current = null;
     setHistoryState(initialReplayHistoryState(historyKey));
-    return () => provider?.cancel();
+    return () => { navigationSequence.current += 1; provider?.cancel(); };
   }, [historyKey, provider]);
 
   useEffect(() => {
@@ -514,7 +519,7 @@ export function useReplayHistoryRuntime(
       && runtime.store.virtualTimeMs !== null
       && viewer.viewerState?.selected_track_id !== null
       && viewer.viewerState?.selected_track_id !== undefined) {
-      const response = await defaultReplayV2Api.displayProjectionBySession(
+      const response = await api.displayProjectionBySession(
         runtime.store.sessionId,
         {
           trackId: viewer.viewerState.selected_track_id,
@@ -541,26 +546,44 @@ export function useReplayHistoryRuntime(
     loadingRef.current = { key: historyKey, loading: false };
     setHistoryState(initialReplayHistoryState(historyKey));
     return true;
-  }, [
-    config,
-    displayInterval,
-    historyKey,
-    provider,
-    runtime.replayStore.seriesStore,
-    runtime.store.dataEpoch,
-    runtime.store.sessionId,
-    runtime.store.virtualTimeMs,
-    usesSourceBucketProjection,
-    sourceKind,
-    viewer.actions,
-    viewer.seriesStore,
-    viewer.viewerState,
-  ]);
+  }, [historyKey, config, displayInterval, viewer.seriesStore, viewer.actions, viewer.viewerState?.selected_track_id, provider, sourceKind, usesSourceBucketProjection, runtime.store.sessionId, runtime.store.dataEpoch, runtime.store.virtualTimeMs, runtime.replayStore.seriesStore, api]);
 
   useEffect(() => {
     if (!viewportNeedsLatestRestore) return;
     void restoreLatestWindow();
   }, [restoreLatestWindow, viewportNeedsLatestRestore]);
+
+  const seekToTime = useCallback(async (requestedTimeMs: number): Promise<ChartTimeSeekResult> => {
+    const ticket = ++navigationSequence.current;
+    const runId = viewer.viewerState?.run_id;
+    const captured = storeRef.current;
+    const boundary = captured.virtualTimeMs;
+    const capturedEpoch = captured.dataEpoch;
+    if (!provider || !runId || boundary === null || capturedEpoch === null)
+      return { status: "unavailable", requestedTimeMs };
+    const current = () => ticket === navigationSequence.current
+      && currentHistoryRef.current.key === historyKey
+      && storeRef.current.sessionId === captured.sessionId
+      && storeRef.current.generation === captured.generation
+      && storeRef.current.dataEpoch === captured.dataEpoch
+      && storeRef.current.virtualTimeMs === boundary
+      && storeRef.current.sourceSequence === captured.sourceSequence;
+    let result: ChartTimeSeekResult | null = null;
+    await loadGate.runAfterCurrent(historyKey, () => result === null && current(), async release => {
+      try {
+        result = await seekReplayViewportTime({ requestedTimeMs, runId, provider, store: viewer.seriesStore,
+          dataEpoch: capturedEpoch, revealedBoundaryMs: boundary, current,
+          onApplied: page => {
+            setViewerSeriesRevision(value => value + 1);
+            setHistoryState(value => value.key === historyKey ? { ...value, error: null,
+              historyEpoch: page.history_epoch, boundaryMs: page.history_boundary_ms, policy: page.history_policy,
+              ...(viewer.seriesStore.first()?.time === page.next_before_ms / 1000 ? { hasMore: page.has_more } : {}),
+            } : value);
+          } });
+      } finally { release(); }
+    });
+    return result ?? { status: "superseded", requestedTimeMs };
+  }, [historyKey, loadGate, provider, viewer.seriesStore, viewer.viewerState?.run_id]);
 
   return {
     loading,
@@ -577,6 +600,7 @@ export function useReplayHistoryRuntime(
     viewportTransferUnavailable: currentState.viewportTransferUnavailable,
     loadMoreLeft,
     restoreLatestWindow,
+    seekToTime,
     retryHistory: async () => {
       retryRequestedRef.current = true;
       await loadMoreLeft();

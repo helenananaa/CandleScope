@@ -122,7 +122,9 @@ class IsolatedPythonRunner:
             "PYTHONIOENCODING": "utf-8",
             "PYTHONNOUSERSITE": "1",
         }
-        command = [str(self._runtime), "-I", "-u", str(WORKER), str(SDK_SRC)]
+        # -I ignores PYTHONDONTWRITEBYTECODE. The SDK can live in a signed
+        # application, and importing user input must not create adjacent files.
+        command = [str(self._runtime), "-I", "-B", "-u", str(WORKER), str(SDK_SRC)]
         working = self.bundle_dir
         try:
             if self.mode == "SANDBOXED_LOCAL":
@@ -165,7 +167,7 @@ class IsolatedPythonRunner:
                         cpu_time_seconds=3600,
                         max_wall_seconds=86_400,
                     ),
-                    (str(runtime.executable), "-I", "-u", str(WORKER), str(SDK_SRC)),
+                    (str(runtime.executable), "-I", "-B", "-u", str(WORKER), str(SDK_SRC)),
                     self.bundle_dir,
                 )
                 command, working, environment = (
@@ -278,6 +280,9 @@ class IsolatedPythonRunner:
                 "INVALID_JSON", "worker emitted invalid JSONL"
             ) from exc
         self._record(request, payload)
+        if payload.get("errorCode") == "STDERR_TOO_LARGE":
+            self.close()
+            raise PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
         if not payload.get("ok"):
             raise PythonRunnerError(
                 "PROVIDER_PROTOCOL_VIOLATION", str(payload.get("error"))
@@ -380,6 +385,9 @@ class IsolatedPythonRunner:
             if not isinstance(payload, dict) or payload.get("id") != request["id"]:
                 self.close()
                 return results, PythonRunnerError("INVALID_JSON", "worker batch reply is out of order")
+            if payload.get("errorCode") == "STDERR_TOO_LARGE":
+                self.close()
+                return results, PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
             if payload.get("late") is True:
                 # The worker saw this call overrun its budget; a single call
                 # would have timed out and killed the worker here.

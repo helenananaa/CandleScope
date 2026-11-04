@@ -9,6 +9,7 @@ from typing import Mapping, Sequence
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.api.v1.stream_utils import send_json_with_timeout
+from app.replay.errors import ReplayDomainError
 from app.replay.training.errors import TrainingRunError
 
 
@@ -121,6 +122,34 @@ async def stream_replay_training_run(
     run_id: str,
     delta_enabled: bool = False,
 ) -> None:
+    state = getattr(getattr(websocket, "app", None), "state", None)
+    core = getattr(state, "data_manager_core", None)
+    if core is None:
+        await _stream_replay_training_run(websocket, training=training, run_id=run_id, delta_enabled=delta_enabled)
+        return
+    manager = getattr(core, "replay", None)
+    try:
+        if manager is None or manager.control_plane().training is not training:
+            raise TrainingRunError("REPLAY_TRAINING_UNAVAILABLE", "Replay manager is unavailable", status_code=503)
+    except (ReplayDomainError, TrainingRunError):
+        await websocket.accept()
+        await send_json_with_timeout(websocket, TrainingRunError(
+            "REPLAY_TRAINING_UNAVAILABLE", "Replay manager is unavailable", status_code=503).to_payload())
+        await websocket.close(code=1013, reason="replay training unavailable")
+        return
+    try:
+        await manager.serve_stream("run", run_id, lambda: _stream_replay_training_run(
+            websocket, training=training, run_id=run_id, delta_enabled=delta_enabled))
+    finally:
+        if manager is not None and manager.closed:
+            with suppress(Exception):
+                async with asyncio.timeout(1.0):
+                    await websocket.close(code=1001, reason="replay host stopping")
+
+
+async def _stream_replay_training_run(
+    websocket: WebSocket, *, training, run_id: str, delta_enabled: bool = False,
+) -> None:
     """Send a gap-free initial projection followed by coalesced updates."""
 
     queue: asyncio.Queue[Mapping[str, object] | None] | None = None
@@ -176,6 +205,9 @@ async def stream_replay_training_run(
     except (WebSocketDisconnect, RuntimeError, asyncio.TimeoutError):
         return
     finally:
+        # Transfer ownership before awaiting child transport teardown. Repeated
+        # disconnect/shutdown cancellation must not strand a run subscriber.
+        training.unsubscribe_market_tracks(run_id, queue)
         for task in (sender, receiver):
             if task is not None and not task.done():
                 task.cancel()
@@ -183,7 +215,6 @@ async def stream_replay_training_run(
         if tasks:
             with suppress(Exception):
                 await asyncio.gather(*tasks, return_exceptions=True)
-        training.unsubscribe_market_tracks(run_id, queue)
 
 
 async def _send_market_tracks(

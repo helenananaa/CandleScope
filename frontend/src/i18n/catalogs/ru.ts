@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ru = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["ru"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Начало и окно вперёд включают будущие свечи. Выберите более раннее начало или сократите окно; доступны только закрытые исторические свечи.",
@@ -758,6 +773,9 @@ export const ru = {
   "workspace.link.timeAnchorDesc": "Выровнять видимый правый край, сохранить масштаб каждого графика",
   "workspace.link.dateRange": "Диапазон",
   "workspace.link.dateRangeDesc": "Синхронизировать полный диапазон дат и масштаб",
+  "workspace.link.chartStyle": "Стиль графика",
+  "workspace.link.chartStyleDesc": "Синхронизировать тип графика, тему и цвета свечей.",
+  "settings.appearance.cellThemeDescription": "Настройте тему этого графика. Другие графики меняются только при включённой связи стилей.",
   "workspace.link.drawings": "Рисунки",
   "workspace.link.drawingsDesc": "Общий документ рисунков для одного рынка и набора слоёв",
   "workspace.link.definitions": "Список индикаторов",

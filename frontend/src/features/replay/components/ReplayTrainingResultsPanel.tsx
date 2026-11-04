@@ -1,3 +1,4 @@
+import { useReplayOperations } from "../useReplayOperations.js";
 import { describeError } from "../../../i18n/serverErrors.js";
 import { useEffect, useId, useState } from "react";
 import { useControlCommands } from "../../app-control/useControlCommands.js";
@@ -7,7 +8,6 @@ import { empty, object, text } from "../../app-control/commandSchema.js";
 import { getNumberLocale, t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { LocaleId } from "../../../i18n/locale.js";
-import { defaultReplayV2Api } from "../replayV2Api.js";
 import type {
   ReplayTrainingResultItem,
   ReplayTrainingResultsResponse,
@@ -96,6 +96,7 @@ export default function ReplayTrainingResultsPanel({
   trainingState,
   onClose,
 }: ReplayTrainingResultsPanelProps) {
+  const { api } = useReplayOperations(runId, "rail");
   const locale = useLocale();
   const [results, setResults] = useState<ReplayTrainingResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +109,7 @@ export default function ReplayTrainingResultsPanel({
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    void defaultReplayV2Api.trainingResultsRun(runId, controller.signal).then((response) => {
+    void api.trainingResultsRun(runId, controller.signal).then((response) => {
       setResults(response);
     }).catch((cause: unknown) => {
       if (controller.signal.aborted) return;

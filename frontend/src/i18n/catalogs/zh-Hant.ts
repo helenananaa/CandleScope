@@ -1,3 +1,4 @@
+import { historyStudyTraditional } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsZhHant } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const zhHant = {
+  ...historyStudyTraditional,
+  "chartTime.title": "跳轉到日期",
+  "chartTime.shortcut": "跳轉到日期（Alt+G）",
+  "chartTime.input": "日期和時間（UTC）",
+  "chartTime.hint": "保留目前週期和縮放。開啟時間聯動的圖表會按各自週期定位同一目標。",
+  "chartTime.invalid": "請輸入有效的 UTC 日期和時間，不能晚於現在。",
+  "chartTime.loading": "正在載入目標區間…可以提交新的日期。",
+  "chartTime.located": "已定位：{time} UTC。",
+  "chartTime.nearest": "該時刻沒有 K 線，已定位最近可用 K 線：{time} UTC。",
+  "chartTime.empty": "目標附近未找到 K 線，請選擇其他日期。",
+  "chartTime.unavailable": "未能定位該時刻。載入失敗時保留原視圖，請重試。",
+  "chartTime.linkFailed": "部分聯動圖表未能定位目標。",
+  "chartTime.close": "關閉",
+  "chartTime.go": "跳轉",
   ...intervalBasisMessages["zh-Hant"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "開始時間加上前向視窗包含未來行情。請選擇更早的起點或縮短前向視窗；只能使用已收盤的歷史 K 線。",
@@ -759,6 +774,9 @@ export const zhHant = {
   "workspace.link.timeAnchorDesc": "對齊可視視窗右端，保留各圖縮放",
   "workspace.link.dateRange": "範圍",
   "workspace.link.dateRangeDesc": "同步完整日期範圍與縮放",
+  "workspace.link.chartStyle": "圖表樣式",
+  "workspace.link.chartStyleDesc": "同步圖表類型、主題和漲跌顏色。",
+  "settings.appearance.cellThemeDescription": "設定目前圖表的主題；僅在啟用圖表樣式連動時同步其他圖表。",
   "workspace.link.drawings": "繪圖",
   "workspace.link.drawingsDesc": "同市場、同圖層集共用繪圖文件",
   "workspace.link.definitions": "指標列表",
@@ -3964,6 +3982,9 @@ export const zhHant = {
   "drawing.variant.line-horizontal": "水平線",
   "drawing.variant.line-vertical": "垂直線",
   "drawing.variant.line-cross": "十字線",
+  "drawing.variant.measure-price": "價格範圍",
+  "drawing.variant.measure-time": "時間範圍",
+  "drawing.variant.measure-price-time": "價格與時間範圍",
   "drawing.variant.angle-measure": "角度",
   "drawing.variant.angle-measure.description": "當前比例尺下的視覺角度",
   "drawing.variant.shape-rectangle": "矩形",

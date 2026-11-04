@@ -10,6 +10,7 @@ import {
 import { validExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 import { pollBacktestRunToTerminal, type waitForBacktestPoll } from "../backtestRunClient.js";
 import type { BacktestRunRecord } from "../backtestTypes.js";
+import { StrategyRunStreamError } from "../backtestRunStream.js";
 import {
   FROZEN_RESEARCH_CONTEXT_SCHEMA,
   type FrozenResearchContextV1,
@@ -585,6 +586,7 @@ export async function runResearchBacktest(options: {
   onResolution?(resolution: ChartContextResolution): void;
   onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void;
   onRunUpdate?(run: BacktestRunRecord): void;
+  waitForTerminal?: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
   const request = options.source.kind === "IMPORTED_DATASET"
     ? {
@@ -765,17 +767,20 @@ export async function runResearchBacktest(options: {
   if (created.state === "COMPLETED") {
     return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: created, identity, frozenContext };
   }
-  const terminal = await pollBacktestRunToTerminal({
-    api: options.api,
-    runId: created.run_id,
-    ...(options.signal ? { signal: options.signal } : {}),
-    ...(options.pollIntervalMs === undefined ? {} : { intervalMs: options.pollIntervalMs }),
-    ...(options.wait ? { wait: options.wait } : {}),
-    onUpdate(run) {
-      options.onStage?.(run.state === "QUEUED" ? "QUEUED" : "RUNNING");
-      options.onRunUpdate?.(run);
-    },
-  });
+  const onUpdate = (run: BacktestRunRecord) => {
+    options.onStage?.(run.state === "QUEUED" ? "QUEUED" : "RUNNING");
+    options.onRunUpdate?.(run);
+  };
+  const terminal = options.waitForTerminal
+    ? await options.waitForTerminal(created.run_id, options.signal, onUpdate)
+    : await pollBacktestRunToTerminal({
+      api: options.api,
+      runId: created.run_id,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.pollIntervalMs === undefined ? {} : { intervalMs: options.pollIntervalMs }),
+      ...(options.wait ? { wait: options.wait } : {}),
+      onUpdate,
+    });
   return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: terminal, identity, frozenContext };
 }
 
@@ -826,7 +831,7 @@ function sourceDiagnostics(message: string): Array<Record<string, unknown>> {
 }
 
 export function chartStrategyRunDiagnostics(error: unknown): ChartStrategyRunDiagnostics {
-  const code = error instanceof BacktestApiError || error instanceof ChartStrategyRunError
+  const code = error instanceof BacktestApiError || error instanceof ChartStrategyRunError || error instanceof StrategyRunStreamError
     ? error.code
     : "BACKTEST_API_UNAVAILABLE";
   const message = error instanceof BacktestApiError

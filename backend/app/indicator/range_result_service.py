@@ -176,6 +176,10 @@ class IndicatorRangeResultService:
         }
         if meta.get("kind") == "script":
             identity["language"] = str(meta.get("language") or "pine").lower().strip()
+            # A WS seed has a fixed history limit, whereas an HTTP range has
+            # a target plus calendar warmup. Equal target endpoints alone do
+            # not prove these opaque script inputs are equivalent.
+            identity["historyLimit"] = meta.get("historyLimit")
         raw = json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str)
         return f"range:{hashlib.sha256(raw.encode()).hexdigest()}"
 
@@ -372,6 +376,10 @@ class IndicatorRangeResultService:
                 and entry.revision_token == token
                 and entry.start <= start
                 and entry.end >= end
+                # Opaque scripts may depend on their input origin, finite
+                # window or future rows. Only an identical request domain
+                # can reuse an execution result; bars remain shareable.
+                and (meta.get('kind') != 'script' or (entry.start == start and entry.end == end))
             ]
             if not candidates:
                 if count_stats:
@@ -497,6 +505,7 @@ class IndicatorRangeResultService:
                     and item.request_owner_id == request_owner_id
                     and item.start <= start
                     and item.end >= end
+                    and (meta.get('kind') != 'script' or (item.start == start and item.end == end))
                     and item.task not in ignored_flights
                     and not item.task.done()
                     and not item.task.cancelling()

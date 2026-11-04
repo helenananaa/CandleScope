@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const he = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["he"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "זמן ההתחלה והחלון קדימה כוללים נרות עתידיים. בחרו התחלה מוקדמת יותר או קצרו את החלון; זמינים רק נרות היסטוריים סגורים.",
@@ -759,6 +774,9 @@ export const he = {
   "workspace.link.timeAnchorDesc": "יישור הקצה הימני הגלוי, שמירת זום לכל גרף",
   "workspace.link.dateRange": "טווח",
   "workspace.link.dateRangeDesc": "סנכרון טווח התאריכים המלא והזום",
+  "workspace.link.chartStyle": "סגנון הגרף",
+  "workspace.link.chartStyleDesc": "סנכרון סוג הגרף, ערכת הנושא וצבעי הנרות.",
+  "settings.appearance.cellThemeDescription": "הגדרת ערכת הנושא לגרף זה. גרפים אחרים משתנים רק כאשר קישור הסגנון פעיל.",
   "workspace.link.drawings": "ציורים",
   "workspace.link.drawingsDesc": "שיתוף מסמך הציור לאותו שוק ואותה ערכת שכבות",
   "workspace.link.definitions": "רשימת אינדיקטורים",

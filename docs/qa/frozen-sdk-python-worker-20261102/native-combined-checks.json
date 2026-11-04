@@ -1,0 +1,45 @@
+{
+  "source": "e78947b2cd9d9c202bb57c7d9f65c0b006c76cb5",
+  "workerFixSource": "5dfb225e",
+  "scope": "LOCAL_OFFLINE fixed-dataset host Python strategy/report/committed updates/save/normal full owned exit and restart; not practice stream UI/live market/full product acceptance.",
+  "passed": true,
+  "steps": 13,
+  "bars": 600,
+  "metrics": {
+    "ambiguity_count": 0,
+    "fill_count": 508,
+    "realized_net_pnl": "-803.7515412168049013875687940",
+    "rejected_order_count": 0,
+    "risk_rejection_count": 0,
+    "trade_count": 478,
+    "win_rate": "0.8786610878661087866108786611",
+    "winning_trade_count": 420
+  },
+  "reportHashes": {
+    "decision": "sha256:bbc407e1019bfa33a106cfc7373c75f99663d6c624e3ad6e7abf5eef4331b816",
+    "fill": "9dc82358d2a73476f8ceee8a23621d92f49a070317b44dbca5af4b21e7dda2e7",
+    "ledger": "4e79c06efaa2721b9e0a7c4fc74d53cf362cbebcade047c4ef93bbd702354d53",
+    "report": "sha256:6813a9458267c800d3ff6f922b07f76d0bd6ab656f588d9d83461e801b6f499a"
+  },
+  "normalExitsMs": [
+    496,
+    581
+  ],
+  "rendererErrors": [],
+  "networkBlockedAttempts": 0,
+  "dataManager": "not_initialized",
+  "sourceFiles": 1037,
+  "builtFiles": 161,
+  "strictSignatureBeforeAfter": true,
+  "sdkCacheFilesAfter": 0,
+  "screenshotsReviewed": true,
+  "assembly": "Local APFS clone of qualified runtime; current tracked backend, freshly built frontend/desktop, current pure Python SDK source mirrored into both lookup locations; source and mirrors checked before/after. Not a fresh standalone runtime build or official CI artifact.",
+  "remaining": [
+    "Current-head CI",
+    "Native practice UI for223",
+    "Windows",
+    "Fullproduct157 acceptance"
+  ],
+  "runnerSha256": "c265589dcdd75ecd386f5b2a4f6be37d3b84551eb730e26be26a1936fd38bf22",
+  "relationship": "This independentfix5dfb225e has identicalworkerbytes to qualified nativecombinedapp e78947b2 (also includes223 account state code). It does not claim a separate fullnative app built from5dfalone. Full artifacts are inPR223 docs/qa/practice-committed-updates-20261102/offline-strategy-worker-fix."
+}

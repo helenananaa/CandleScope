@@ -20,6 +20,8 @@ import type {
   PositionInfoPanelOffset,
   PositionTimeRange,
   PositionToolId,
+  RangeMeasureToolId,
+  SavedRangeMeasureDrawing,
   SavedAngleDrawing,
   SavedAxisLineDrawing,
   SavedDrawing,
@@ -39,12 +41,14 @@ export type CreatedSavedDrawing<TDrawing extends SavedDrawing = SavedDrawing> =
   TDrawing & { id: string };
 
 export type TwoPointCreationTool =
+  | RangeMeasureToolId
   | BasicLineToolId
   | AngleToolId
   | FibonacciToolId
   | ShapeToolId;
 
 export type SavedTwoPointDrawing =
+  | SavedRangeMeasureDrawing
   | SavedLineDrawing
   | SavedAngleDrawing
   | SavedFibonacciDrawing
@@ -143,6 +147,14 @@ export function createTwoPointSavedDrawing({
   if (!Array.isArray(dataPoints) || dataPoints.length !== 2) return null;
   const points = (dataPoints as readonly DrawingDataPoint[])
     .map((point) => ({ ...point }));
+
+  if (tool === "measure-price" || tool === "measure-time" || tool === "measure-price-time") {
+    return finalizedCreatedDrawing("measure", {
+      type: "range-measure",
+      measureType: tool === "measure-price" ? "price" : tool === "measure-time" ? "time" : "price-time",
+      dataPoints: points, color, lineWidth,
+    });
+  }
 
   if (tool === "angle-measure") {
     return finalizedCreatedDrawing("ang", {

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "candlescope-plugin-python-indicator"
+version = "0.1.0"
+description = "Ordinary Python functions as isolated CandleScope batch indicators."
+requires-python = ">=3.11,<3.14"
+license = "GPL-3.0-only"
+dependencies = ["candlescope-plugin-sdk==0.2.1"]
+
+[project.scripts]
+candlescope-python-indicator = "candlescope_plugin_python_indicator.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/candlescope_plugin_python_indicator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../candlescope-plugin-sdk/src"]

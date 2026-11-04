@@ -75,6 +75,7 @@ from app.core.version import APP_VERSION
 from app.core.support_diagnostics import install_support_logging, router as support_router
 from app.core.runtime_metrics import EventLoopLagMonitor, ws_runtime_metrics
 from app.local_data.runtime import LocalOfflineProfileMiddleware
+from app.history_studies.api import router as history_studies_router
 
 if RUNTIME_MODE == "LIVE":
     from app.api.v1.alerts import router as alerts_router
@@ -141,6 +142,7 @@ app.add_middleware(
     minimum_size=1024,
     compresslevel=5,
 )
+app.include_router(history_studies_router, prefix="/api/v1")
 if RUNTIME_MODE == "LOCAL_OFFLINE":
     app.add_middleware(LocalOfflineProfileMiddleware, enabled=True)
     app.include_router(local_data_router, prefix="/api/v1")
@@ -589,6 +591,8 @@ async def _startup_event_impl() -> None:
             app.state.local_data_service = local_runtime.service
             app.state.local_import_jobs = local_runtime.jobs
             app.state.data_manager = None
+            from app.data_engine.data_manager.core import DataManagerCore
+            app.state.data_manager_core = DataManagerCore()
             app.state.local_data_runtime = local_runtime.data
             await prepare_extensions(app)
             if BACKTEST_SETTINGS.enabled:
@@ -601,6 +605,7 @@ async def _startup_event_impl() -> None:
                 )
                 app.state.backtest_runtime = backtest_runtime
                 app.state.backtest_service = backtest_runtime.service
+                app.state.data_manager_core.bind_strategy(backtest_runtime.service, backtest_runtime)
                 logger.info(
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
@@ -695,6 +700,10 @@ async def _startup_event_impl() -> None:
         await _init_alert_delivery()
         await _init_replay_runtime()
         await _init_data_manager()
+        if getattr(app.state, "replay_service", None) is not None:
+            app.state.data_manager_core.bind_replay(app.state.replay_service, app.state.replay_runtime)
+        if getattr(app.state, "backtest_service", None) is not None:
+            app.state.data_manager_core.bind_strategy(app.state.backtest_service, app.state.backtest_runtime)
         from app.core.config import DATA_DIR, getenv
         from app.data_preparation.bar_adapter import BarPreparationAdapter
         from app.data_preparation.repository import PreparationRepository
@@ -766,9 +775,15 @@ async def _startup_event_impl() -> None:
             app.state.plugin_platform_v2 = plugin_platform_v2
             print("[startup] Plugin Platform v2 degraded; core market runtime continues")
     except BaseException:
+        replay_core = getattr(app.state, "data_manager_core", None)
+        if replay_core is not None:
+            replay_core.close_replay()
         alert_facade = getattr(app.state, "alert_facade", None)
         readonly_accounts = getattr(app.state, "readonly_account_service", None)
         if readonly_accounts is not None:
+            core = getattr(app.state, "data_manager_core", None)
+            if core is not None:
+                core.close_readonly_account()
             await readonly_accounts.close()
         preparation = getattr(app.state, "data_preparation_service", None)
         if preparation is not None:
@@ -861,9 +876,15 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    replay_core = getattr(app.state, "data_manager_core", None)
+    if replay_core is not None:
+        await replay_core.shutdown_replay(step_timeout=5)
     await stop_extensions(app)
     readonly_accounts = getattr(app.state, "readonly_account_service", None)
     if readonly_accounts is not None:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            core.close_readonly_account()
         await readonly_accounts.close()
     preparation = getattr(app.state, "data_preparation_service", None)
     if preparation is not None:
@@ -875,6 +896,9 @@ async def shutdown_event() -> None:
                 exc,
                 exc_info=True,
             )
+    manager_core = getattr(app.state, "data_manager_core", None)
+    if manager_core is not None:
+        manager_core.close_strategy()
     local_runtime = getattr(app.state, "local_offline_runtime", None)
     if local_runtime is not None:
         backtest_runtime = getattr(app.state, "backtest_runtime", None)
@@ -1157,6 +1181,9 @@ async def debug_snapshot() -> dict:
                 "reason": "REPLAY_DISABLED",
                 "sessions": {},
             }
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None and core.replay is not None:
+            snapshot["replay"]["data_manager"] = core.replay.diagnostics()
         return snapshot
     except Exception as exc:
         return {"error": str(exc)}

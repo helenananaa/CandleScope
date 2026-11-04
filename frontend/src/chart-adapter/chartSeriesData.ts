@@ -384,11 +384,17 @@ export function applyLineSeriesData(
   {
     preferSetData = false,
     trustedTrailingUpdate = false,
-  }: { preferSetData?: boolean; trustedTrailingUpdate?: boolean } = {},
+    beforeTimeScaleChange,
+  }: {
+    preferSetData?: boolean;
+    trustedTrailingUpdate?: boolean;
+    beforeTimeScaleChange?: () => void;
+  } = {},
 ): "clear" | "empty" | "unchanged" | "update" | "setData" {
   if (nextData === previousData) return "unchanged";
   if (!nextData?.length) {
     if (previousData?.length) {
+      beforeTimeScaleChange?.();
       series.setData([]);
       recordPerfEvent?.("chart.indicatorSeries.setData", {
         ...detail,
@@ -431,6 +437,10 @@ export function applyLineSeriesData(
       totalPoints: nextData.length,
     });
     return "update";
+  }
+  if (nextData.length !== previousData.length
+    || nextData.some((point, index) => !chartTimesEqual(point.time, previousData[index]?.time))) {
+    beforeTimeScaleChange?.();
   }
   series.setData(nextData);
   recordPerfEvent?.("chart.indicatorSeries.setData", {

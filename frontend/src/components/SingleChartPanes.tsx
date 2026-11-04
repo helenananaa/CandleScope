@@ -45,6 +45,7 @@ import {
   applyChartPaneAppearance,
   buildChartPaneOptions,
   getPaneThemeColors,
+  chartPaneCssVariables,
   buildCrosshairOptions,
 } from "../chart-adapter/chartPaneLifecycle";
 import {
@@ -61,6 +62,7 @@ import {
   replaceMainSeries,
   replaceFutureTimeAxisData,
   resyncSeriesTimeScaleIndexes,
+  resyncSharedTimeScaleIndexes,
   selectIndicatorPaneAnnotationTarget,
   shouldPreferIndicatorSetData,
 } from "../chart-adapter/seriesLifecycle";
@@ -284,6 +286,8 @@ import type { MainChartType } from "../shared/mainChartTypes.js";
 import type { IntervalString } from "../utils/intervals.js";
 
 export interface SingleChartPanesProps {
+  /** A cell header can own drawing controls outside the plot. Standalone charts retain the overlay. */
+  drawingControlsHost?: HTMLElement | null;
   suspended?: boolean;
   displayScheduler?: ChartDisplayScheduler;
   seriesStore?: SeriesWindowView | null;
@@ -319,6 +323,7 @@ export interface SingleChartPanesProps {
   kagiReversalAmount?: number;
   lineBreakNumberOfLines?: number;
   theme: string;
+  inheritApplicationTheme?: boolean;
   customBg: string;
   timezone?: string;
   timeFormatter?: ((timeSeconds: number) => string) | undefined;
@@ -813,6 +818,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   symbol,
   drawingKeyBase = "",
   drawingReadOnly = false,
+  drawingControlsHost = null,
   drawingDocumentGeneration = 0,
   paneLayoutScope = null,
   interval,
@@ -842,6 +848,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   kagiReversalAmount = 1,
   lineBreakNumberOfLines = 3,
   theme,
+  inheritApplicationTheme = true,
   customBg,
   timezone = "Local",
   timeFormatter,
@@ -1815,6 +1822,20 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     let settleFrame: number | null = null;
     let followLatestResizeFrame: number | null = null;
     let observedWidth = wrapper.getBoundingClientRect().width;
+    let stableResizeView = {
+      logical: chart.timeScale().getVisibleLogicalRange(),
+      store: seriesStoreRef.current,
+      version: seriesStoreRef.current?.version,
+      datasetKey: datasetKeyRef.current,
+    };
+    const rememberResizeView = (logical: VisibleLogicalRange) => {
+      // LWC emits the resized range before our observer runs. Keep the last
+      // view at the old width so a split cannot retain only future padding.
+      if (Math.abs(wrapper.getBoundingClientRect().width - observedWidth) >= 0.5) return;
+      stableResizeView = { logical, store: seriesStoreRef.current,
+        version: seriesStoreRef.current?.version, datasetKey: datasetKeyRef.current };
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(rememberResizeView);
     const syncSize = () => {
       if (frameLifecycle.isDisposed()) return;
       syncOverlays();
@@ -1822,6 +1843,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       if (!Number.isFinite(nextWidth)
         || nextWidth <= 0
         || Math.abs(nextWidth - observedWidth) < 0.5) return;
+      const previousView = stableResizeView;
       observedWidth = nextWidth;
       if (pendingSurfaceViewportRef.current === null) {
         // A layout resize exposes a new elapsed range at the existing zoom.
@@ -1835,9 +1857,22 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         followLatestResizeFrame = null;
         const displayRows = displayRowsRef.current;
         if (!followLatestRef.current
-          || followLatestDisabledRef.current
           || pendingSurfaceViewportRef.current !== null
           || displayRows.length === 0) return;
+        if (followLatestDisabledRef.current) {
+          // A restored or panned replay remains fixed in time. Resize around
+          // its previous center at the same zoom, without resuming following.
+          if (!previousView.logical || previousView.store !== seriesStoreRef.current
+            || previousView.version !== seriesStoreRef.current?.version
+            || previousView.datasetKey !== datasetKeyRef.current) return;
+          const range = logicalRangeForLatestBarPosition({
+            barSpacing: chart.timeScale().options().barSpacing,
+            contentLastLogical: (previousView.logical.from + previousView.logical.to) / 2,
+            width: chart.timeScale().width(), position: 0.5,
+          });
+          if (range) viewportControllerRef.current?.restoreProjectionRange(range);
+          return;
+        }
         const rawPosition = Number(latestBarPositionRef.current);
         const position = Number.isFinite(rawPosition)
           ? Math.min(1, Math.max(0, rawPosition))
@@ -1899,6 +1934,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       trackingFrame = null;
       settleFrame = null;
       followLatestResizeFrame = null;
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(rememberResizeView);
       resizeObserver?.disconnect();
       scrollViewport?.removeEventListener("scroll", syncOverlays);
       wrapper.removeEventListener("pointerdown", startPaneResizeTracking, true);
@@ -2486,21 +2522,32 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
   }, [paneCrosshairStore, publishMainLegendCrosshair]);
 
-  const setLinkedVisibleTimeAnchor = useCallback((time: number): boolean => {
+  const positionVisibleTime = useCallback((time: number, center: boolean, savedViewport?: ChartSurfaceVisibleRange): boolean => {
     if (!Number.isFinite(time)) return false;
-    const currentRange = captureVisibleRange();
+    const painted = paintedSourceRef.current;
+    if (center && (!seriesStore || painted?.store !== seriesStore
+      || painted.version !== seriesStore.version || painted.datasetKey !== datasetKeyRef.current
+      || !seriesStore.hasTime(time))) return false;
+    const currentRange = savedViewport ?? captureVisibleRange();
     const logical = currentRange?.logical;
     if (!logical) return false;
     const span = logical.to - logical.from;
     const targetIndex = findDisplayIndexForAxisAnchor(displayRowsRef.current, time);
     if (!Number.isFinite(span) || span <= 0 || targetIndex < 0) return false;
+    const targetLogical = {
+      from: targetIndex - (center ? span / 2 : span),
+      to: targetIndex + (center ? span / 2 : 0),
+    };
+    // LWC applies a logical-range write on its next draw. Reading it back
+    // synchronously would retain the previous viewport on the new rows, then
+    // restore that stale position after a history page or live amendment.
+    const targetSourceRange = sourceRangeFromLogicalRows(displayRowsRef.current, targetLogical,
+      intervalRef.current, futureTimeAxisDataRef.current);
+    if (!targetSourceRange) return false;
     const previousSyncing = isSyncingRef.current;
     isSyncingRef.current = true;
     try {
-      if (!viewportControllerRef.current?.restoreProjectionRange({
-        from: targetIndex - span,
-        to: targetIndex,
-      }, {
+      if (!viewportControllerRef.current?.restoreProjectionRange(targetLogical, {
         ...(currentRange?.barSpacing === undefined
           ? {}
           : { barSpacing: currentRange.barSpacing }),
@@ -2513,13 +2560,22 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     }
     markLinkedViewportApplied();
     hasRestoredRangeRef.current = true;
-    lastViewportRestoreSourceRef.current = "linked-time-anchor";
-    const visibleRange = captureVisibleRange();
+    lastViewportRestoreSourceRef.current = center ? "date-seek" : "linked-time-anchor";
+    const visibleRange = buildVisibleRangeSnapshot({
+      ...(currentRange?.barSpacing === undefined ? {} : { barSpacing: currentRange.barSpacing }),
+      logicalRange: targetLogical,
+      timeRange: targetSourceRange,
+    });
     if (visibleRange?.time) ensureLinkedHistoryFill(visibleRange.time);
     publishViewportRangeChange(visibleRange);
     scheduleVisibleRangeSave(visibleRange);
     return true;
-  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave]);
+  }, [captureVisibleRange, ensureLinkedHistoryFill, markLinkedViewportApplied, publishViewportRangeChange, scheduleVisibleRangeSave, seriesStore]);
+
+  const setLinkedVisibleTimeAnchor = useCallback((time: number) => positionVisibleTime(time, false), [positionVisibleTime]);
+  const centerVisibleTime = useCallback((time: number, viewport?: ChartSurfaceVisibleRange) => (
+    positionVisibleTime(time, true, viewport)
+  ), [positionVisibleTime]);
 
   const setLinkedVisibleTimeRange = useCallback((
     range: ChartSurfaceLinkedTimeRange,
@@ -2599,9 +2655,9 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     mainSeriesReferenceRef.current = { series, signature };
   }, []);
 
-  const readSurfaceAppearance = useEffectEvent(() => ({ theme, customBg, timezone, upColor, downColor }));
+  const readSurfaceAppearance = useEffectEvent(() => ({ theme, inheritApplicationTheme, customBg, timezone, upColor, downColor }));
   useEffect(() => {
-    const { theme, customBg, timezone, upColor, downColor } = readSurfaceAppearance();
+    const { theme, inheritApplicationTheme, customBg, timezone, upColor, downColor } = readSurfaceAppearance();
     const container = containerRef.current;
     if (!container) return undefined;
     linkedViewportReadyStateRef.current = false;
@@ -2616,6 +2672,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const options = buildChartPaneOptions({
       container,
       theme,
+      inheritApplicationTheme,
       customBg,
       timezone,
       interval: intervalRef.current,
@@ -2993,7 +3050,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         console.warn("[drawing-engine] surface disposal continued after drawing teardown failed closed");
       }
     };
-  }, [captureVisibleRange, customBg, downColor, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey, theme, timezone, upColor]);
+  // Appearance has its own in-place update effects below. Replacing the surface
+  // for a color edit also resets viewport/series ownership and can supersede an
+  // appearance update made immediately before that edit.
+  }, [captureVisibleRange, evaluateHistoryEdgeGesture, markViewportRangeInteracted, paneCrosshairStore, publishDrawingProjectionStore, publishMainLegendCrosshair, publishViewportRangeChange, refreshScrolledAwayFromLatest, saveCurrentPaneHeights, scheduleFutureTimeAxisCoverage, scheduleVisibleRangeSave, surfaceConfigKey]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -3246,6 +3306,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     const applyAppearance = () => {
       applyChartPaneAppearance(chart, {
         theme,
+        inheritApplicationTheme,
         customBg,
         timezone,
         interval,
@@ -3349,7 +3410,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       }
     });
     return () => cancelAnimationFrame(frameId);
-  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, extensionTheme, interval, locale, notifyDrawingFrameInvalidation, theme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
+  }, [chartAdapter, customBg, dataMeta?.optimistic, dataMeta?.targetSeriesKey, extensionTheme, interval, locale, notifyDrawingFrameInvalidation, theme, inheritApplicationTheme, tickMarkFormatter, tickMarkMaxCharacterLength, timeFormatter, timezone]);
 
   // When the loaded window stops short of the newest bars, its last bar is not the
   // current price, so the axis price tag and price line would show a stale value.
@@ -4413,6 +4474,18 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const nextEntries: IndicatorSeriesEntry[] = [];
     const retainedEntries = new Set<IndicatorSeriesEntry>();
+    const prepareTimeScaleChange = () => {
+      // LWC 5.1 reindexes shared time points before it invalidates the other
+      // series' pane views. Its synchronous offset compensation can hit-test
+      // those old views while the pointer is over a historical viewport.
+      // Invalidate them using their exact committed render snapshots first;
+      // do not clear the crosshair or rewrite source/indicator facts.
+      resyncSharedTimeScaleIndexes([
+        { series: mainSeriesRef.current, data: renderedMainSeriesDataRef.current },
+        ...indicatorSeriesRef.current,
+        ...nextEntries,
+      ]);
+    };
     let createdSeriesCount = 0;
     for (const pane of paneDescriptors) {
       for (const line of pane.lines || []) {
@@ -4464,6 +4537,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
                 usesDerivedAxis,
               }),
               trustedTrailingUpdate,
+              beforeTimeScaleChange: prepareTimeScaleChange,
             });
           }
           // Data replacement can reindex the chart while LWC synchronously
@@ -4489,6 +4563,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             paneIndex: pane.paneIndex,
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           });
+          prepareTimeScaleChange();
           series.setData(validData);
           const nativePrimitive = line.nativeScene ? new PineScenePrimitive(line.nativeScene) : undefined;
           if (nativePrimitive) series.attachPrimitive(nativePrimitive);
@@ -4760,7 +4835,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || !indicatorDatasetOwned) return;
-    const bgColor = getPaneThemeColors({ theme, customBg }).bgColor;
+    const bgColor = getPaneThemeColors({ theme, customBg, inheritApplicationTheme }).bgColor;
     const activePaneIds = new Set(paneDescriptors.map((pane) => pane.id));
 
     for (const pane of paneDescriptors) {
@@ -4821,7 +4896,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
       clearPaneAuxiliaryRenderState(chart, paneId, state);
       paneRenderStateRef.current.delete(paneId);
     }
-  }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme]);
+  }, [customBg, extensionTheme, indicatorDatasetOwned, paneDescriptors, seriesReady, theme, inheritApplicationTheme]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -5277,6 +5352,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     getVisibleRange: captureVisibleRange,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,
@@ -5349,6 +5425,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
     seriesReady,
     setLinkedCrosshairTime,
     setLinkedVisibleTimeAnchor,
+    centerVisibleTime,
     setLinkedVisibleTimeRange,
     subscribeLinkedViewportReady,
     subscribeDrawingRevision,
@@ -5372,7 +5449,10 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         </details>
       )}
     <div
-      style={{ minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length }}
+      style={{
+        ...chartPaneCssVariables({ theme, customBg, inheritApplicationTheme, upColor, downColor }),
+        minHeight: readableMinimums.reduce((sum, height) => sum + height, 0) + 32 + activePaneIds.length,
+      }}
       className="chart-area multi-pane-chart"
       data-rendering-suspended={suspended ? "true" : "false"}
       ref={wrapperRef}
@@ -5479,7 +5559,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
         onAddAlertAtPrice={onAddAlertAtPrice}
       />
 
-      {shouldMountDrawingEngine && <DrawingObjectList readOnly={drawingReadOnly} apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
+      {shouldMountDrawingEngine && <DrawingObjectList host={drawingControlsHost} readOnly={drawingReadOnly} apis={drawingObjectApis} currentInterval={interval} panes={activeSubPanes} onSelectPane={publishHoveredPaneId} />}
 
       {DrawingEngineHost && shouldMountDrawingEngine && drawingPaneSurfaces
         .filter((surface) => drawingPaneMountKeys.has(surface.drawingKey))

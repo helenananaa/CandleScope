@@ -31,6 +31,7 @@ from app.api.v1.stream_utils import (
 from app.core import config
 from app.core.async_cleanup import finish_cleanup
 from app.data_engine.data_manager import StreamCapacityError
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.data_engine.data_manager.models import DataEventType
 from app.data_engine.interval_policy import parse_interval_spec
 from app.exchanges import bootstrap_default_adapters, get_exchange_registry
@@ -199,6 +200,9 @@ class KlineBatchConnection:
         self.subscriptions: dict[str, _BatchSubscription] = {}
         self.outbox = _KlineWsOutbox(maxsize=limits.outbox_size)
         self.closed = False
+        self._recovering = False
+        self._recovery_keys: set = set()
+        self._stopping = asyncio.Event()
         self.commands = 0
         self.item_acks = 0
         self.item_failures = 0
@@ -240,6 +244,7 @@ class KlineBatchConnection:
             await self.close()
 
     async def close(self) -> None:
+        self._stopping.set()
         if not self.subscriptions:
             return
         await finish_cleanup(self._close_owned())
@@ -253,6 +258,8 @@ class KlineBatchConnection:
     async def _forward(self) -> None:
         while not self.closed:
             message = await self.outbox.get()
+            if self._recovering:
+                continue
             if not await self._safe_send_json(message):
                 return
 
@@ -614,12 +621,78 @@ class KlineBatchConnection:
     async def _require_resync(self, error=None) -> None:
         if self.closed:
             return
+        source_timeout = getattr(error, 'reason', None) == 'source_gap_timeout'
+        key = next((getattr(handle, 'key', None)
+                    for subscription in self.subscriptions.values()
+                    for handle in subscription.handles.values()
+                    if getattr(handle, 'id', None) == getattr(error, 'subscription_id', None)), None)
+        wait_source = getattr(self.dm, 'wait_for_source_continuity', None)
+        if source_timeout and key is not None and callable(wait_source):
+            self._recovery_keys.add(key)
+            if self._recovering:
+                return
+            # The strict consumer has already failed. Keep its existing source
+            # leases alive while repair proceeds, but deliver no further bars.
+            # Closing now would stop a final lease and create another source gap
+            # before the fresh-snapshot client can reconnect.
+            self._recovering = True
+            for subscription in self.subscriptions.values():
+                for interval in subscription.intervals:
+                    if not await self._safe_send_json({
+                        'type': 'stream_status', 'protocol': KLINE_BATCH_PROTOCOL,
+                        'client_id': subscription.client_id, 'exchange': subscription.exchange,
+                        'market_type': subscription.market_type, 'symbol': subscription.symbol,
+                        'interval': interval, 'status': 'reconnecting',
+                        'reason': 'source_gap_repair_pending',
+                    }):
+                        return
+            async def wait_sources():
+                # More registered handles can time out while this connection
+                # waits. Join their bounded source set before releasing any
+                # of the connection's existing ingestion claims.
+                while True:
+                    keys = frozenset(self._recovery_keys)
+                    await wait_source(keys, fail_on_error=True)
+                    if keys == self._recovery_keys:
+                        return
+            source = asyncio.create_task(wait_sources())
+            stopped = asyncio.create_task(self._stopping.wait())
+            try:
+                await asyncio.wait({source, stopped}, return_when=asyncio.FIRST_COMPLETED)
+                if self._stopping.is_set():
+                    return
+                try:
+                    await source
+                except ConsumerRecoveryRequired:
+                    # Failed/retired source requires a new transport as well.
+                    pass
+                except Exception as exc:
+                    self._record_interval_failures('recovery', '', [{
+                        'interval': key.interval, 'code': 'source_continuity_wait_failed',
+                        'message': type(exc).__name__,
+                    }])
+            except asyncio.CancelledError:
+                # Removing the failed handle can cancel its notification task
+                # while other logical subscriptions remain on this socket.
+                # They must not be left on a permanently suspended connection.
+                if not self._stopping.is_set() and not self.closed:
+                    self.closed = True
+                    self._stopping.set()
+                    await finish_cleanup(close_for_resync(self.websocket))
+                raise
+            finally:
+                for task in (source, stopped):
+                    task.cancel()
+                await asyncio.gather(source, stopped, return_exceptions=True)
+        if self.closed or self._stopping.is_set():
+            return
         self.closed = True
+        self._stopping.set()
         await close_for_resync(self.websocket)
 
     def _event_callback(self, client_id: str) -> Callable[[Any], Any]:
         async def callback(event: Any) -> None:
-            if self.closed or not should_forward_browser_event(event):
+            if self.closed or self._recovering or not should_forward_browser_event(event):
                 return
             key = (
                 client_id,
@@ -808,6 +881,7 @@ class KlineBatchConnection:
             "item_failures": self.item_failures,
             "interval_failures": self.interval_failures,
             "recent_failures": list(self.recent_failures),
+            "source_recovery_wait": self._recovering and not self.closed,
             "sent_by_type": dict(sorted(self.sent_by_type.items())),
             "closed": self.closed,
             "outbox": self.outbox.snapshot(),

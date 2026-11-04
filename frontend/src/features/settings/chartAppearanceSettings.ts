@@ -189,6 +189,23 @@ function getSystemTheme(): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+function subscribeSystemTheme(notify: () => void): () => void {
+  if (typeof window === "undefined" || !window.matchMedia) return () => undefined;
+  const query = window.matchMedia("(prefers-color-scheme: light)");
+  if (query.addEventListener) {
+    query.addEventListener("change", notify);
+    return () => query.removeEventListener("change", notify);
+  }
+  query.addListener(notify);
+  return () => query.removeListener(notify);
+}
+
+/** Resolve a cell override without changing application/document theme tokens. */
+export function useCellChartTheme(theme: ChartTheme | undefined, inheritedTheme: string): string {
+  const systemTheme = useSyncExternalStore(subscribeSystemTheme, getSystemTheme, () => "dark");
+  return theme === undefined ? inheritedTheme : theme === "system" ? systemTheme : theme;
+}
+
 export function parseStoredSettings(saved: string | null | undefined): ChartSettings {
   if (!saved) return normalizeSettings();
   try {
@@ -223,6 +240,8 @@ export function readPersistedLocale(): LocaleId {
 }
 
 export interface ChartSettingsRuntime {
+  appearanceScope?: "chart" | "application";
+  inheritApplicationTheme?: boolean;
   settings: ChartSettings;
   setSettings: Dispatch<SetStateAction<ChartSettings>>;
   resolvedTheme: string;

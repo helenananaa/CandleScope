@@ -26,13 +26,40 @@ async def stream_replay_session(
     after_sequence: int | None,
     data_epoch: str | None,
 ) -> None:
+    state = websocket.app.state
+    manager = getattr(getattr(state, "data_manager_core", None), "replay", None)
+    if manager is None:
+        await _stream_replay_session(websocket, session_id=session_id,
+                                     after_sequence=after_sequence, data_epoch=data_epoch)
+        return
+    try:
+        service = manager.control_plane()
+    except ReplayDomainError as error:
+        await _reject(websocket, error, close_code=1013)
+        return
+    try:
+        await manager.serve_stream("adapter", session_id, lambda: _stream_replay_session(
+            websocket, session_id=session_id, after_sequence=after_sequence, data_epoch=data_epoch,
+            service=service))
+    finally:
+        if manager.closed:
+            with suppress(Exception):
+                async with asyncio.timeout(1.0):
+                    await websocket.close(code=1001, reason="replay host stopping")
+
+
+async def _stream_replay_session(
+    websocket: WebSocket, *, session_id: str, after_sequence: int | None,
+    data_epoch: str | None, service=None,
+) -> None:
     """Register inside the actor boundary, then deliver its atomic handoff."""
 
     actor: ReplaySessionActor | None = None
     subscription: ActorStreamSubscription | None = None
     try:
         normalized_session = validate_identifier(session_id, field_name="session_id")
-        service = replay_service_from_state(websocket.app.state)
+        if service is None:
+            service = replay_service_from_state(websocket.app.state)
         actor, subscription = await service.subscribe(
             normalized_session,
             after_sequence=after_sequence,

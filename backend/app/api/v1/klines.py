@@ -1167,10 +1167,11 @@ def _cap_range_request(
         }
 
     if calendar is not None:
-        # Canonicalise an arbitrary inclusive edge to its containing expected
-        # bucket.  Strict stepping with ``end_ms + 1`` leaks that +1 offset on
-        # always-open calendars for non-standard widths such as 47m.
-        last_open = containing_expected_open_ms(calendar, int(end_ms), interval)
+        # The inclusive edge may be an absent sparse bucket or a session
+        # closure. Earlier expected bars still belong to this range. Let the
+        # calendar find its last canonical open instead of requiring a bucket
+        # that contains the edge (or strictly stepping an arbitrary end + 1).
+        last_open = calendar.last_expected_open(int(start_ms), int(end_ms), interval)
         if last_open is None or last_open < start_ms:
             requested_bars = 0
             query_start_ms = start_ms

@@ -1,3 +1,5 @@
+import PageSettingsDialog from "../../app/PageSettingsDialog.js";
+import { useReplayOperations } from "./useReplayOperations.js";
 import { useExportRuntime } from "../export/useExportRuntime.js";
 import { REVIEW_PREFIX_MAX_BARS, replayReviewDataMeta } from "./replayReviewPrefix.js";
 import { ReplayReviewHistory } from "./replayReviewHistory.js";
@@ -56,8 +58,6 @@ import {
   canProjectReplayDisplayInterval,
   replayIntervalUnavailableMessage,
 } from "./replayIntervalPolicy.js";
-import { defaultReplayApi } from "./replayApi.js";
-import { defaultReplayV2Api } from "./replayV2Api.js";
 import {
   type ReplayHistorySource,
 } from "./replayHistoryProvider.js";
@@ -93,9 +93,12 @@ import ReplayReviewRightRail from "./components/ReplayReviewRightRail.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { Icon } from "../../components/icons/Icon.js";
+import { useChartTimeNavigation } from "../market-data/useChartTimeNavigation.js";
+import type { ChartLinkCoordinator } from "../chart-workspace/chartLinkCoordinator.js";
 
 
 const ExportPanel = lazy(() => import("../export/ExportPanel.js"));
+const ChartTimeNavigationDialog = lazy(() => import("../market-data/ChartTimeNavigationDialog.js"));
 
 export interface ReplayTrainingPageShellProps {
   readonly runtime: ReplayRuntime;
@@ -107,6 +110,9 @@ export interface ReplayTrainingPageShellProps {
   readonly pageExportRef?: RefObject<HTMLDivElement | null>;
   readonly preparePageDrawingExport?: import("../export/pageDrawingExport.js").PreparePageDrawingExport;
   readonly cell?: {
+    readonly cellId: string;
+    readonly workspaceId: string;
+    readonly links: ChartLinkCoordinator;
     readonly scope: string;
     readonly drawingScope: string;
     readonly active: boolean;
@@ -147,6 +153,7 @@ export default function ReplayTrainingPageShell({
   preparePageDrawingExport,
   cell,
 }: ReplayTrainingPageShellProps) {
+  const { api, adapterApi, request: managedRequest } = useReplayOperations(viewer.viewerState?.run_id, "review");
   const PageFrame = cell?.frame ?? MarketPageFrame;
   const locale = useLocale();
   const [returningToHub, setReturningToHub] = useState(false);
@@ -183,6 +190,7 @@ export default function ReplayTrainingPageShell({
     };
   });
   const { settings, setSettings, resolvedTheme } = chartSettingsRuntime;
+  const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const drawings = useDrawingRuntime({ chartSurfaceActions, session: null });
   const activeIntervalViewportTransfer = intervalViewportTransfer !== null
     && intervalsSemanticallyEquivalent(
@@ -314,6 +322,15 @@ export default function ReplayTrainingPageShell({
   })();
   const publicTimePolicy = integrityRuntime.integrity?.effective_time_disclosure_policy
     ?? (config?.blind_mode === false ? "NONE" : "HIDE_ALL");
+  const dateNavigationSource = useMemo(() => ({ actions: { seekToTime: history.seekToTime } }), [history.seekToTime]);
+  const dateNavigation = useChartTimeNavigation({
+    active: cell?.active ?? true,
+    enabled: active && review === null && publicTimePolicy === "NONE" && !viewer.loading,
+    cellId: cell?.cellId ?? controlCellId, workspaceId: cell?.workspaceId ?? `replay:${integrityRuntime.runId}`,
+    sessionKey: JSON.stringify([runtime.store.sessionId, runtime.store.generation, runtime.store.dataEpoch,
+      viewer.viewerState?.selected_track_id, viewer.viewerState?.display_interval, runtime.store.virtualTimeMs]),
+    marketData: dateNavigationSource, surface: chartSurfaceActions, links: cell?.links ?? null,
+  });
   const publicTimeRuntime = useReplayPublicTimeRuntime({
     runId: integrityRuntime.runId,
     policy: publicTimePolicy,
@@ -344,12 +361,12 @@ export default function ReplayTrainingPageShell({
     setReturningToHub(true);
     setReturnToHubError(null);
     try {
-      await returnToTrainingHub(runId, defaultReplayV2Api);
+      await returnToTrainingHub(runId, api);
     } catch (cause) {
       setReturnToHubError(cause instanceof Error ? describeError(cause, cause.message) : t("replay.shell.returnFailed", {}, locale));
       setReturningToHub(false);
     }
-  }, [locale, returningToHub, viewer.viewerState?.run_id]);
+  }, [api, locale, returningToHub, viewer.viewerState?.run_id]);
 
   useEffect(() => {
     setLiveDrawingError(null);
@@ -503,7 +520,7 @@ export default function ReplayTrainingPageShell({
     setReviewChartError(null);
     setReviewChartBounded(false);
     void (async () => {
-      const session = await defaultReplayApi.getSession(
+      const session = await adapterApi.getSession(
         adapterSessionId,
         abort.signal,
       );
@@ -515,6 +532,7 @@ export default function ReplayTrainingPageShell({
         throw new Error(t("replay.shell.reviewIdentityMismatch", {}, locale));
       }
       provider = createReplayHistoryProvider({
+        request: managedRequest,
         sessionId: adapterSessionId,
         trackId: reviewSelectedTrackId,
         sourceSequence: reviewSourceSequence,
@@ -535,7 +553,7 @@ export default function ReplayTrainingPageShell({
         setReviewHasMore(state.hasMore);
         setReviewOlderLoading(state.loading);
         setReviewOlderError(state.error);
-      });
+      }, api.displayProjectionBySession);
       reviewHistoryRef.current = reviewHistory;
       await reviewHistory.initialize(reviewPrefixKey!);
       if (abort.signal.aborted) return;
@@ -564,20 +582,7 @@ export default function ReplayTrainingPageShell({
       if (reviewHistoryRef.current === reviewHistory) reviewHistoryRef.current = null;
       provider?.cancel();
     };
-  }, [
-    reviewCursorVirtualTimeMs,
-    reviewPrefixKey,
-    reviewProjectedInterval,
-    reviewProjectedExchange,
-    reviewProjectedMarketType,
-    reviewProjectedSourceKind,
-    reviewProjectedSymbol,
-    locale,
-    reviewSelectedTrackId,
-    reviewSeriesStore,
-    reviewAdapterSessionId,
-    reviewSourceSequence,
-  ]);
+  }, [reviewCursorVirtualTimeMs, reviewPrefixKey, reviewProjectedInterval, reviewProjectedExchange, reviewProjectedMarketType, reviewProjectedSourceKind, reviewProjectedSymbol, locale, reviewSelectedTrackId, reviewSeriesStore, reviewAdapterSessionId, reviewSourceSequence, adapterApi, managedRequest, api.displayProjectionBySession]);
 
   const displayedSeriesStore = review === null ? viewer.seriesStore : reviewSeriesStore;
   const ensureIndicatorViewport = review === null
@@ -971,6 +976,7 @@ export default function ReplayTrainingPageShell({
       kagiReversalAmount={settings.kagiReversalAmount}
       lineBreakNumberOfLines={settings.lineBreakNumberOfLines}
       theme={resolvedTheme}
+      inheritApplicationTheme={chartSettingsRuntime.inheritApplicationTheme ?? true}
       customBg={settings.customBg}
       timezone={settings.timezone ?? "UTC"}
       timeFormatter={formatChartTime}
@@ -1153,6 +1159,11 @@ export default function ReplayTrainingPageShell({
           intervals={replayIntervalSelector}
           controls={<>
             {cell?.controls}
+            {dateNavigation.available && <button type="button" className="ui-control"
+              onClick={() => dateNavigation.setOpen(true)}>{t("study.viewDate")}</button>}
+            <button type="button" className="settings-btn indicator-toggle-btn"
+              aria-label={t("shell.settings")} title={t("shell.settings")}
+              onClick={() => setChartSettingsOpen(true)}><Icon name="palette" size={18} /></button>
             <button
               className={`indicator-toggle-btn ${indicatorPanelOpen ? "active" : ""}`}
               type="button"
@@ -1233,6 +1244,11 @@ export default function ReplayTrainingPageShell({
         />
       )}
       featureSurfaces={active ? <>
+        {dateNavigation.open && <Suspense fallback={null}><ChartTimeNavigationDialog cellId={cell?.cellId ?? controlCellId}
+          onClose={() => dateNavigation.setOpen(false)} onSubmit={dateNavigation.submit}
+          {...(runtime.store.virtualTimeMs === null ? {} : { initialTimeMs: runtime.store.virtualTimeMs })}
+          hint={t("study.viewDateHint")} /></Suspense>}
+        {chartSettingsOpen && <PageSettingsDialog runtime={chartSettingsRuntime} onClose={() => setChartSettingsOpen(false)} />}
         {review === null && exportFlow.view.isOpen && <Suspense fallback={null}><ExportPanel
           {...exportFlow.view}
           onOptionsChange={exportFlow.actions.updateOptions}

@@ -103,6 +103,33 @@ def assert_same(patched, full, hosts):
     assert seen[0] == seen[1]
 
 
+def test_retained_sdk_prefix_avoids_full_comparison_but_history_correction_reseeds(tmp_path):
+    host = Host(tmp_path / "prefix.sqlite3", patches=True)
+    reference = Host(tmp_path / "reference.sqlite3", patches=False)
+    history = tuple(make_bar(i, 100 + i / 10) for i in range(100))
+    forming = make_bar(100, 110, closed=False)
+    def request(rows, tail):
+        return ExecuteBatchRequest(source=SCRIPTS["plots-varip-offsets"], context=CONTEXT,
+                                   bars=(*rows, tail), options={"pineSessionId": "live"})
+    seed = request(history, forming)
+    assert_same(host.execute(seed), reference.execute(seed), (host, reference))
+    calls = []
+    class Compared(dict):
+        def __eq__(self, other):
+            calls.append(True)
+            return super().__eq__(other)
+    entry = host.plugin._sessions.entries["live"]
+    entry.confirmed = [Compared(row) for row in entry.confirmed]
+    tick = request(history, make_bar(100, 110.5, closed=False))
+    assert_same(host.execute(tick), reference.execute(tick), (host, reference))
+    assert not calls, "unchanged SDK-retained history should not be compared again"
+    changed = (*history[:3], make_bar(3, 105), *history[4:])
+    corrected = request(changed, make_bar(100, 111, closed=False))
+    answer = host.execute(corrected)
+    assert_same(answer, reference.execute(corrected), (host, reference))
+    assert calls and answer.meta["sessionReset"] is True
+
+
 @pytest.mark.parametrize("name", sorted(SCRIPTS))
 def test_patched_requests_match_full_requests(tmp_path, name):
     source = SCRIPTS[name]

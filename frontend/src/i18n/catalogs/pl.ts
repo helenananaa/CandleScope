@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const pl = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["pl"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Początek i okno do przodu obejmują przyszłe świece. Wybierz wcześniejszy początek lub skróć okno; dostępne są tylko zamknięte świece historyczne.",
@@ -758,6 +773,9 @@ export const pl = {
   "workspace.link.timeAnchorDesc": "Wyrównaj widoczną prawą krawędź, zachowaj zoom każdego wykresu",
   "workspace.link.dateRange": "Zakres",
   "workspace.link.dateRangeDesc": "Synchronizuj pełny zakres dat i zoom",
+  "workspace.link.chartStyle": "Styl wykresu",
+  "workspace.link.chartStyleDesc": "Synchronizuj typ wykresu, motyw i kolory świec.",
+  "settings.appearance.cellThemeDescription": "Ustaw motyw tego wykresu. Pozostałe zmienią się tylko po włączeniu powiązania stylów.",
   "workspace.link.drawings": "Rysunki",
   "workspace.link.drawingsDesc": "Współdziel dokument rysunków dla tego samego rynku i zestawu warstw",
   "workspace.link.definitions": "Lista wskaźników",

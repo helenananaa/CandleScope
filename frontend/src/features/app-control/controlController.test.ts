@@ -85,3 +85,58 @@ test("persistence failure, indicator failure and disposal cannot report ready", 
   const disposed = fixture(); disposed.controller.dispose();
   assert.equal((await disposed.controller.execute(disposed.request, () => {})).code, "WINDOW_UNAVAILABLE");
 });
+
+
+test("restored default series metadata does not supersede an identical no-op configuration", async () => {
+  const f = fixture();
+  f.request.params.charts[0]!.indicators = [];
+  const cell = f.state.view.document.cells[f.state.view.activeCellId]!;
+  cell.session = { ...f.request.params.charts[0]!.session, providerId: "binance", venue: "binance",
+    assetClass: "crypto", seriesVariant: "native", priceAdjustment: "raw",
+    sessionVariant: "continuous", volumeSemantics: "base_asset" };
+  cell.indicators = [];
+  f.observe({ session: f.request.params.charts[0]!.session });
+  assert.equal((await f.controller.execute(f.request, () => {})).state, "ready");
+});
+
+test("real session and series changes still supersede the pending target", async () => {
+  for (const patch of [{ symbol: "ETHUSDT" }, { interval: "15m" }, { providerId: "alternate" },
+    { venue: "alternate" }, { assetClass: "equity" }, { seriesVariant: "adjusted" },
+    { priceAdjustment: "split" }, { sessionVariant: "regular" }, { volumeSemantics: "quote_asset" }]) {
+    const f = fixture();
+    const result = await f.controller.execute(f.request, () => {
+      const cell = f.state.view.document.cells[f.state.view.activeCellId]!;
+      cell.session = { ...cell.session, ...patch };
+      f.observe();
+    });
+    assert.equal(result.code, "TARGET_CHANGED", JSON.stringify(patch));
+  }
+});
+
+test("study and restoring observations reject live configuration before changing the workspace", async () => {
+  for (const mode of ["history-study", "restoring-study"] as const) {
+    const f = fixture(); f.observe({ mode });
+    const before = JSON.stringify(f.state.view.document);
+    assert.equal((await f.controller.execute(f.request, () => {})).code, "HISTORICAL_STUDY_ACTIVE");
+    assert.equal(JSON.stringify(f.state.view.document), before);
+    assert.equal(f.state.status.controlReceipt, null);
+  }
+});
+
+test("entering study while a configuration awaits readiness cannot report the hidden live chart as ready", async () => {
+  const f = fixture();
+  const result = await f.controller.execute(f.request, () => f.observe({ mode: "history-study", barCount: 2 }));
+  assert.equal(result.state, "applied");
+  assert.equal(result.code, "HISTORICAL_STUDY_ACTIVE");
+});
+
+test("workspace diagnostics identify the visible study series independently of configured live input", () => {
+  const f = fixture();
+  const studySession = { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "5m" };
+  f.observe({ mode: "history-study", session: studySession, study: { id: "saved", cursorMs: 900_000, revision: 2 }, barCount: 2 });
+  const snapshot = f.controller.inspect() as { cells: { session: unknown; configuredLiveSession: unknown; runtime: ControlCellObservation }[] };
+  assert.deepEqual(snapshot.cells[0]!.session, studySession);
+  assert.deepEqual(snapshot.cells[0]!.configuredLiveSession, f.state.view.activeCell.session);
+  assert.equal(snapshot.cells[0]!.runtime.barCount, 2);
+  assert.equal(snapshot.cells[0]!.runtime.study?.cursorMs, 900_000);
+});

@@ -6,6 +6,7 @@ import type { ReplayTapeProjection } from "./replayTapeProjection.js";
 import { replayDisplayBarToKline } from "./replaySeriesProjection.js";
 import { buildReplayViewerSeriesKey } from "./replayViewerProjection.js";
 import type { ReplayDigest } from "./replayTypes.js";
+import type { ReplayRequest } from "./replayDataManager.js";
 
 export const TAPE_VIEWER_COMMIT = "replay-viewer-tape-projection";
 export interface ReplayTapeViewerAuthority {
@@ -31,6 +32,7 @@ interface Options {
   loading: (value: boolean) => void;
   error: (value: Error | null) => void;
   fetcher?: typeof fetch;
+  request?: ReplayRequest;
   apiBase?: string;
 }
 const same = (a: ReplayTapeViewerAuthority | null, b: ReplayTapeViewerAuthority) => a !== null
@@ -101,7 +103,8 @@ export class ReplayTapeViewer {
     const { options } = this, token = this.version;
     const provider = new ReplayTapeHistoryProvider({ sessionId: options.sessionId, trackId: options.trackId,
       identity: options.identity, sourceSequence: selected.sourceSequence,
-      ...(options.fetcher ? { fetcher: options.fetcher } : {}), ...(options.apiBase === undefined ? {} : { apiBase: options.apiBase }) });
+      ...(options.fetcher ? { fetcher: options.fetcher } : {}), ...(options.request ? { request: options.request } : {}),
+      ...(options.apiBase === undefined ? {} : { apiBase: options.apiBase }) });
     this.provider = provider; this.startedAt = performance.now();
     options.loading(true); options.error(null);
     try {

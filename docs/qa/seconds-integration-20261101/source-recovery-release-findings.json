@@ -1,0 +1,11 @@
+{
+  "status": "Controlled lifecycle reproduction only; fix not yet implemented",
+  "evidence": "Real KlineBatchConnection sends1013 and releases its registered stream claim while SourceGapRegistry repair future is still pending.",
+  "owner": "DataManager._release_stream_owned stops coordinator when the final claim is released. Actual native16 hasrepeatedsource_gap_timeout andsourceWSreconnects; notproofallnativefailurescausedbythispath.",
+  "constraints": [
+    "Preserve terminal consumer continuity and fresh snapshot requirements",
+    "Do not extend consumer deadline or silently forward incompletehistory",
+    "Keep repair ingestion ownership alive without unbounded old connection/task retention",
+    "Explicit disconnect/navigation/shutdown must drain allownedclaims promptly"
+  ]
+}

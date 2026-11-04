@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const cs = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["cs"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Začátek a dopředné okno zahrnují budoucí svíčky. Zvolte dřívější začátek nebo zkraťte okno; dostupné jsou jen uzavřené historické svíčky.",
@@ -759,6 +774,9 @@ export const cs = {
   "workspace.link.timeAnchorDesc": "Zarovnat viditelný pravý okraj, zachovat přiblížení každého grafu",
   "workspace.link.dateRange": "Rozsah",
   "workspace.link.dateRangeDesc": "Synchronizovat celý rozsah dat a přiblížení",
+  "workspace.link.chartStyle": "Styl grafu",
+  "workspace.link.chartStyleDesc": "Synchronizovat typ grafu, motiv a barvy svíček.",
+  "settings.appearance.cellThemeDescription": "Nastavte motiv tohoto grafu. Ostatní grafy se změní pouze při zapnutém propojení stylu.",
   "workspace.link.drawings": "Kreslení",
   "workspace.link.drawingsDesc": "Sdílet dokument kreslení pro stejný trh a sadu vrstev",
   "workspace.link.definitions": "Seznam indikátorů",

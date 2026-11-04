@@ -1,4 +1,7 @@
 export const workbenchEnglish = {
+  "drawing.variant.measure-price": "Price range",
+  "drawing.variant.measure-time": "Time range",
+  "drawing.variant.measure-price-time": "Price and time range",
   "research.book.help": "Upload ordered aggregate prints and book observations for this exact chart market and range. The Host checks OHLCV, continuity and available depth, then freezes the file with the snapshot. Book modes retain their physical capacity policy.",
   "research.book.invalid": "Invalid book file. Supply symbol, exchange, market_type, provenance and ordered events in JSON (up to 32 MiB), with aggregate print source IDs and book observations.",
   "research.book.loading": "Reading frozen market data…",

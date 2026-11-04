@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-02",
+  "baseline": "df66fe7b3de2ddcfe750df5793147bd3410cedd2",
+  "failed_ci": "https://github.com/helenananaa/CandleScope/actions/runs/41314628054",
+  "failed_job": 124871955496,
+  "failure": "The stale reconcile candidate test expected 5 chunks but observed 6 on arm64; x64 passed.",
+  "diagnosis": "The case fixes two entities per chunk while retaining the real monotonic clock. A host preemption exceeding the independent 8 ms budget legitimately adds a chunk. The stale candidate and winner assertions were not the failing assertions.",
+  "fix": "Use the existing monotonicNow injection with a stationary clock for this entity-count case. Preserve the exact five-chunk assertion, stale rejection, winner document and physical attachment checks. The neighboring injected-clock test independently verifies the 8 ms elapsed budget.",
+  "validation": {
+    "command": "node scripts/run-frontend-tests.mjs src/features/drawings/legacy/__tests__/legacyPrimitiveRenderer.test.ts",
+    "passed": 25,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scope": "Test-only fix; application, Python/Pine packages and production elapsed budget are unchanged. Current-head CI is required; earlier native Python author evidence remains limited to its recorded application revision."
+}

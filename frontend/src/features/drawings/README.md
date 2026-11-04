@@ -59,7 +59,7 @@ on legacy flat fields.
   anchors native top-layer dialogs/popovers within the viewport. Toolbar positions
   are container-local UI state; detailed settings stay in a draft until saved
   through the existing drawing style command path.
-- `core/drawingDocument.ts` owns the immutable nine-kind business model and
+- `core/drawingDocument.ts` owns the immutable drawing business model and
   independent document, geometry, and style revisions.
 - `core/drawingCommands.ts` and `core/drawingDocumentStore.ts` are the only
   committed mutation/publication path. Completed controller actions carry the
@@ -178,3 +178,9 @@ Whole-stroke movement resolves every canonical sample (including lineage spans a
 The object list provides local keyword search over translated names, annotation text and IDs, combined with hidden/locked/interval-excluded filters. Filtering uses the same subscribed canonical document and interval predicate as the rows. Counts and membership update after edits; closing the dialog clears only its search/filter UI state.
 
 Object-list front/back actions reorder the complete current pane document through the existing canonical reorder command and persistence/history barrier. Canonical z-order is back-to-front while the list displays front-to-back. Filtered rows use full-document boundaries; layering does not mutate geometry or styles and remains available for hidden/geometry-locked objects.
+
+## Source range measurements
+
+The price, time and combined range tools create `range-measure` entities through the two-anchor scene interaction path. They retain source time and price; the displayed delta, percentage and elapsed duration do not depend on chart pixels or the current interval. Elapsed duration includes market closures and is not a count of bars. The percentage uses the absolute initial price and is unavailable for a zero initial price. The existing angle tool retains its screen-angle meaning.
+
+Measurements use the canonical document, scene/display-list painter, hit index, properties, lock, visibility, undo/redo and persistence/export barriers. No per-object legacy primitive is introduced. The new tools are offered on ordinary time-axis charts with the default overlay interaction owner; legacy renderer controls do not offer them. A source anchor that cannot be projected does not produce a fabricated endpoint or measurement. Existing unsupported representations retain saved objects without reinterpreting their anchors.

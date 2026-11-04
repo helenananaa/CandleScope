@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const nl = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["nl"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "De starttijd en het vooruitvenster bevatten toekomstige candles. Kies een eerdere start of verkort het venster; alleen gesloten historische candles zijn beschikbaar.",
@@ -759,6 +774,9 @@ export const nl = {
   "workspace.link.timeAnchorDesc": "De zichtbare rechterrand uitlijnen, zoom per grafiek behouden",
   "workspace.link.dateRange": "Bereik",
   "workspace.link.dateRangeDesc": "Het volledige datumbereik en de zoom synchroniseren",
+  "workspace.link.chartStyle": "Grafiekstijl",
+  "workspace.link.chartStyleDesc": "Grafiektype, thema en kaarskleuren synchroniseren.",
+  "settings.appearance.cellThemeDescription": "Stel het thema van deze grafiek in. Andere grafieken wijzigen alleen als stijlkoppeling is ingeschakeld.",
   "workspace.link.drawings": "Tekeningen",
   "workspace.link.drawingsDesc": "Het tekendocument delen voor dezelfde markt en lagenset",
   "workspace.link.definitions": "Indicatorlijst",

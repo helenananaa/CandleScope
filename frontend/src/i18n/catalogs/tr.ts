@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const tr = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["tr"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Başlangıç ve ileri pencere gelecekteki mumları içeriyor. Daha erken bir başlangıç seçin veya pencereyi kısaltın; yalnızca kapanmış geçmiş mumlar kullanılabilir.",
@@ -758,6 +773,9 @@ export const tr = {
   "workspace.link.timeAnchorDesc": "Görünen sağ kenarı hizala, grafik başına yakınlaştırmayı koru",
   "workspace.link.dateRange": "Aralık",
   "workspace.link.dateRangeDesc": "Tam tarih aralığını ve yakınlaştırmayı senkronize et",
+  "workspace.link.chartStyle": "Grafik stili",
+  "workspace.link.chartStyleDesc": "Grafik türünü, temayı ve mum renklerini eşitle.",
+  "settings.appearance.cellThemeDescription": "Bu grafiğin temasını ayarlayın. Diğer grafikler yalnızca stil bağlantısı açıkken değişir.",
   "workspace.link.drawings": "Çizimler",
   "workspace.link.drawingsDesc": "Aynı piyasa ve katman kümesi için çizim belgesini paylaş",
   "workspace.link.definitions": "Gösterge listesi",

@@ -1,3 +1,4 @@
+import { historyStudyEnglish } from "./historyStudyMessages.js";
 import { intervalBasisMessages } from "./intervalAnchorMessages.js";
 import { readonlyAccountEnglish } from "./readonlyAccountEnglish.js";
 import { tradingAccountsEn } from "./tradingAccountsMessages.js";
@@ -5,6 +6,20 @@ import { nativeEnglish } from "./nativeEnglish.js";
 import type { MessageCatalog } from "../messageCatalog.js";
 
 export const ms = {
+  ...historyStudyEnglish,
+  "chartTime.title": "Go to date",
+  "chartTime.shortcut": "Go to date (Alt+G)",
+  "chartTime.input": "Date and time (UTC)",
+  "chartTime.hint": "Keep the current interval and zoom. Time-linked charts locate the same target in their own series.",
+  "chartTime.invalid": "Enter a valid UTC date and time that is not in the future.",
+  "chartTime.loading": "Loading the target window… You can submit another date.",
+  "chartTime.located": "Located: {time} UTC.",
+  "chartTime.nearest": "No bar at that time. Nearest available bar: {time} UTC.",
+  "chartTime.empty": "No bars were found near this time. Choose another date.",
+  "chartTime.unavailable": "Could not locate this time. The previous view is retained if loading failed; please retry.",
+  "chartTime.linkFailed": "Some linked charts could not locate the target.",
+  "chartTime.close": "Close",
+  "chartTime.go": "Go",
   ...intervalBasisMessages["ms"],
   ...readonlyAccountEnglish,
   "replay.err.futureInput": "Masa mula dan tetingkap ke hadapan merangkumi lilin masa hadapan. Pilih permulaan lebih awal atau pendekkan tetingkap; hanya lilin sejarah yang ditutup tersedia.",
@@ -759,6 +774,9 @@ export const ms = {
   "workspace.link.timeAnchorDesc": "Jajar tepi kanan yang kelihatan, kekalkan zum setiap carta",
   "workspace.link.dateRange": "Julat",
   "workspace.link.dateRangeDesc": "Segerakkan julat tarikh penuh dan zum",
+  "workspace.link.chartStyle": "Gaya carta",
+  "workspace.link.chartStyleDesc": "Segerakkan jenis carta, tema dan warna lilin.",
+  "settings.appearance.cellThemeDescription": "Tetapkan tema carta ini. Carta lain hanya berubah apabila pautan gaya diaktifkan.",
   "workspace.link.drawings": "Lukisan",
   "workspace.link.drawingsDesc": "Kongsi dokumen lukisan untuk pasaran dan set lapisan yang sama",
   "workspace.link.definitions": "Senarai penunjuk",
