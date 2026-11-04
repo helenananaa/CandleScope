@@ -35,12 +35,14 @@ async function launch(){
 async function chartProjection(runId,track,session,state){
  const params=new URLSearchParams({track_id:track.track_id, revealed_boundary_ms:String(state.cursor.virtual_time_ms),
    limit:'100', data_epoch:state.data_epoch, display_interval:'5m'});
+ await q.until(async()=>{
+  const body=await q.s.page.locator('body').innerText(),count=Number(body.match(/显示\s*(\d+)\s*根\s*K\s*线/)?.[1]??0);
+  return await q.s.page.locator('canvas').count()>0 && count>=10 && !body.includes('source-aligned display projection');
+ },30000);
  const p=await json(`/api/v1/replay/runs/session/${session}/display-projection?${params}`);
  assert.ok(p.bars.length>0,JSON.stringify(p));
  assert.ok(p.bars.every(b=>Number(b.high)<200 && b.last_base_open_ms+59999<=state.cursor.virtual_time_ms),JSON.stringify(p));
- await q.until(async()=>await q.s.page.locator('canvas').count()>0 &&
-  !(await q.s.page.locator('body').innerText()).includes('source-aligned display projection'),30000);
- return p;
+ return {...p,visibleFooter:await q.s.page.locator('#status-bar').innerText()};
 }
 function verify(){return JSON.parse(cp.execFileSync('node',['docs/qa/replay-imported-bar-20261104/verify.mjs'],{encoding:'utf8',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:root}}));}
 try{
