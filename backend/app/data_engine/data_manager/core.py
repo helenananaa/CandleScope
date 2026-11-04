@@ -68,12 +68,17 @@ class DataManagerCore:
             if self.strategy.service is not service or self.strategy.runtime is not runtime:
                 raise RuntimeError("strategy service is already bound to this data manager")
             return self.strategy
-        self.strategy = StrategyDataManager(service, runtime=runtime)
+        self.strategy = StrategyDataManager(service, runtime=runtime,
+            market_manager=self if hasattr(self,"bars") else None)
         return self.strategy
 
     def close_strategy(self) -> None:
         if self.strategy is not None:
             self.strategy.close()
+
+    async def shutdown_strategy(self) -> None:
+        if self.strategy is not None:
+            await self.strategy.shutdown()
 
     def bind_readonly_account(self, service) -> ReadOnlyAccountDataManager:
         if self.readonly_account is not None:

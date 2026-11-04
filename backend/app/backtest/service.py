@@ -2757,35 +2757,7 @@ class BacktestService:
             observed = 0
             resume_sequence = 0
 
-            bar_kernel_type = SimulationKernel
-            if config.get("pine_bar_path_contract"):
-                from app.simulation.pine_chart_kernel import PineChartBarKernel
-                bar_kernel_type = PineChartBarKernel
-                if config.get("pine_v2_bar_contract"):
-                    from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
-                    bar_kernel_type = PineV2BarKernel
-            kernel = bar_kernel_type(
-                process_orders_on_close=bool(config.get("pine_process_on_close")),
-                account_model=str(
-                    config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
-                ),
-                funding_mode=str(config.get("funding_mode") or "OFF"),
-                leverage=_config_decimal(config, "leverage", "1"),
-                host_policy_revision=config.get("host_policy_revision"),
-                slippage_bps=_config_decimal(config, "slippage_bps", "1"),
-                taker_fee_bps=_config_decimal(config, "taker_fee_bps", "0"),
-                maker_fee_bps=_config_decimal(config, "maker_fee_bps", "0"),
-                funding_rate=_config_decimal(config, "funding_rate", "0"),
-                funding_interval_ms=int(config.get("funding_interval_hours") or 8)
-                * 3_600_000,
-                initial_balance=_config_decimal(config, "initial_balance", "10000"),
-                price_tick=_config_optional_decimal(config, "price_tick"),
-                qty_step=_config_optional_decimal(config, "qty_step"),
-                min_notional=_config_optional_decimal(config, "min_notional"),
-                gap_policy=str(config.get("gap_policy") or "REJECT"),
-                **_execution_kernel_kwargs(config),
-                execution_reporter=self._execution_reporter(session),
-            )
+            kernel = _build_bar_kernel(config, self._execution_reporter(session))
             host_hotpath = app_getenv("BACKTEST_HOST_HOTPATH_ENABLED", "1").strip() == "1"
             # Kept opt-in until full-run evidence establishes a stable benefit.
             kernel._specialized_bar = app_getenv("BACKTEST_SPECIALIZED_BAR_ENABLED", "0").strip() == "1"
@@ -4345,6 +4317,27 @@ class BacktestService:
         ]
         if missing:
             raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"missing {missing}")
+        account_model, execution_config, signal_identity = self._execution_from_payload(
+            payload, fidelity=fidelity, parameters_json=parameters_json, warmup_bars=warmup_bars,
+            book_data_hash=book_data_hash)
+        return RunIdentity(
+            strategy_revision_id=str(payload["strategy_revision_id"]),
+            dataset_id=str(payload["dataset_id"]),
+            data_epoch=str(payload["data_epoch"]),
+            snapshot_hash=str(payload["snapshot_hash"]),
+            fidelity_mode=fidelity,
+            source_event_kind=source_kind,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            warmup_bars=warmup_bars,
+            parameters_json=parameters_json,
+            account_model=account_model,
+            execution_json=canonical_json(execution_config),
+            **signal_identity,
+        )
+
+    def _execution_from_payload(self, payload, *, fidelity, parameters_json, warmup_bars, book_data_hash=None):
+        """Normalize the existing financial and provider execution contract."""
         account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
         if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
             raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
@@ -4806,21 +4799,7 @@ class BacktestService:
             execution_config["contract_data_mode"] = contract_data_mode
         execution_config.update(execution_realism.identity(fidelity_mode=fidelity))
         execution_config.update(metrics_identity)
-        return RunIdentity(
-            strategy_revision_id=str(payload["strategy_revision_id"]),
-            dataset_id=str(payload["dataset_id"]),
-            data_epoch=str(payload["data_epoch"]),
-            snapshot_hash=str(payload["snapshot_hash"]),
-            fidelity_mode=fidelity,
-            source_event_kind=source_kind,
-            start_time_ms=start_time_ms,
-            end_time_ms=end_time_ms,
-            warmup_bars=warmup_bars,
-            parameters_json=parameters_json,
-            account_model=account_model,
-            execution_json=canonical_json(execution_config),
-            **signal_identity,
-        )
+        return account_model, execution_config, signal_identity
 
     def _audit(self, run_id: str, action: str, details: Mapping[str, object]) -> None:
         ordinal = self.repository.next_audit_ordinal(run_id)
@@ -4853,13 +4832,7 @@ class BacktestService:
         self,
         session: StrategyProviderSession,
     ) -> Any:
-        def report(event: dict) -> None:
-            payload = dict(event)
-            payload.setdefault("accepted", True)
-            payload["generation"] = session.generation
-            session.on_execution_report(payload)
-
-        return report
+        return _strategy_execution_reporter(session)
 
     def _build_cost_sensitivity(self, config, kernel, events, result, **pine_context):
         if config.get("cost_sensitivity_mode", "FULL") == "SKIP":
@@ -5456,25 +5429,7 @@ class BacktestService:
         trade: Mapping[str, object] | None,
         _modes: tuple[str, ...] | None = None,
     ) -> None:
-        modes = _modes
-        if modes is None:
-            describe = getattr(provider, "describe", None)
-            if not callable(describe):
-                return
-            modes = tuple(getattr(describe(), "input_modes", ()) or ())
-        if "BAR_CLOSE" in modes and bar is None:
-            raise StrategyProviderError(
-                "PROVIDER_PROTOCOL_VIOLATION", "BAR_CLOSE requires a bar"
-            )
-        if "TRADE_EVENT" in modes and trade is None:
-            raise StrategyProviderError(
-                "PROVIDER_PROTOCOL_VIOLATION", "TRADE_EVENT requires a trade"
-            )
-        if "BOOK_EVENT" in modes:
-            raise StrategyProviderError(
-                "FIDELITY_UNSUPPORTED",
-                "BOOK_EVENT is not available on this execute path",
-            )
+        return _assert_strategy_frame_inputs(provider, bar=bar, trade=trade, _modes=_modes)
 
     def _observation_features(
         self,
@@ -5484,29 +5439,67 @@ class BacktestService:
         trade: Mapping[str, object] | None,
         _names: tuple[str, ...] | None = None,
     ) -> dict[str, str]:
-        source: dict[str, object] = {}
-        if bar is not None:
-            for name in ("open", "high", "low", "close", "volume"):
-                if bar.get(name) is not None:
-                    source[name] = bar[name]
-        if trade is not None:
-            if trade.get("price") is not None:
-                source.setdefault("close", trade["price"])
-                source.setdefault("price", trade["price"])
-            if trade.get("qty") is not None:
-                source.setdefault("volume", trade["qty"])
-        names = _declared_feature_names(provider) if _names is None else _names
-        if names:
-            missing = [name for name in names if name not in source]
-            if missing:
-                raise StrategyProviderError(
-                    "PROVIDER_PROTOCOL_VIOLATION",
-                    f"missing features {missing}",
-                )
-            return {name: str(source[name]) for name in names}
-        if "close" in source:
-            return {"close": str(source["close"])}
-        return {key: str(value) for key, value in source.items()}
+        return _strategy_observation_features(provider, bar=bar, trade=trade, _names=_names)
+
+
+def _strategy_observation_features(
+    provider: object,
+    *,
+    bar: Mapping[str, object] | None,
+    trade: Mapping[str, object] | None,
+    _names: tuple[str, ...] | None = None,
+) -> dict[str, str]:
+    source: dict[str, object] = {}
+    if bar is not None:
+        for name in ("open", "high", "low", "close", "volume"):
+            if bar.get(name) is not None:
+                source[name] = bar[name]
+    if trade is not None:
+        if trade.get("price") is not None:
+            source.setdefault("close", trade["price"])
+            source.setdefault("price", trade["price"])
+        if trade.get("qty") is not None:
+            source.setdefault("volume", trade["qty"])
+    names = _declared_feature_names(provider) if _names is None else _names
+    if names:
+        missing = [name for name in names if name not in source]
+        if missing:
+            raise StrategyProviderError(
+                "PROVIDER_PROTOCOL_VIOLATION",
+                f"missing features {missing}",
+            )
+        return {name: str(source[name]) for name in names}
+    if "close" in source:
+        return {"close": str(source["close"])}
+    return {key: str(value) for key, value in source.items()}
+
+
+def _assert_strategy_frame_inputs(
+    provider: object,
+    *,
+    bar: Mapping[str, object] | None,
+    trade: Mapping[str, object] | None,
+    _modes: tuple[str, ...] | None = None,
+) -> None:
+    modes = _modes
+    if modes is None:
+        describe = getattr(provider, "describe", None)
+        if not callable(describe):
+            return
+        modes = tuple(getattr(describe(), "input_modes", ()) or ())
+    if "BAR_CLOSE" in modes and bar is None:
+        raise StrategyProviderError(
+            "PROVIDER_PROTOCOL_VIOLATION", "BAR_CLOSE requires a bar"
+        )
+    if "TRADE_EVENT" in modes and trade is None:
+        raise StrategyProviderError(
+            "PROVIDER_PROTOCOL_VIOLATION", "TRADE_EVENT requires a trade"
+        )
+    if "BOOK_EVENT" in modes:
+        raise StrategyProviderError(
+            "FIDELITY_UNSUPPORTED",
+            "BOOK_EVENT is not available on this execute path",
+        )
 
 
 def _declared_feature_names(provider: object) -> tuple[str, ...] | None:
@@ -5739,6 +5732,50 @@ def _pine_account_view(kernel):
             "equity": float(account.equity()), "initial_capital": float(kernel.initial_balance),
             "netprofit": float(account_feedback_profit(account, kernel.initial_balance)),
             "openprofit": float(account.unrealized())}
+
+
+def _strategy_execution_reporter(session):
+    def report(event: dict) -> None:
+        payload = dict(event)
+        payload.setdefault("accepted", True)
+        payload["generation"] = session.generation
+        session.on_execution_report(payload)
+
+    return report
+
+
+def _build_bar_kernel(config, execution_reporter):
+    """One BAR kernel configuration for fixed and continuing strategy execution."""
+    bar_kernel_type = SimulationKernel
+    if config.get("pine_bar_path_contract"):
+        from app.simulation.pine_chart_kernel import PineChartBarKernel
+        bar_kernel_type = PineChartBarKernel
+        if config.get("pine_v2_bar_contract"):
+            from app.simulation.pine_v2_bar_kernel import PineV2BarKernel
+            bar_kernel_type = PineV2BarKernel
+    kernel = bar_kernel_type(
+        process_orders_on_close=bool(config.get("pine_process_on_close")),
+        account_model=str(
+            config.get("account_model") or "LINEAR_PERP_ONE_WAY_V1"
+        ),
+        funding_mode=str(config.get("funding_mode") or "OFF"),
+        leverage=_config_decimal(config, "leverage", "1"),
+        host_policy_revision=config.get("host_policy_revision"),
+        slippage_bps=_config_decimal(config, "slippage_bps", "1"),
+        taker_fee_bps=_config_decimal(config, "taker_fee_bps", "0"),
+        maker_fee_bps=_config_decimal(config, "maker_fee_bps", "0"),
+        funding_rate=_config_decimal(config, "funding_rate", "0"),
+        funding_interval_ms=int(config.get("funding_interval_hours") or 8)
+        * 3_600_000,
+        initial_balance=_config_decimal(config, "initial_balance", "10000"),
+        price_tick=_config_optional_decimal(config, "price_tick"),
+        qty_step=_config_optional_decimal(config, "qty_step"),
+        min_notional=_config_optional_decimal(config, "min_notional"),
+        gap_policy=str(config.get("gap_policy") or "REJECT"),
+        **_execution_kernel_kwargs(config),
+        execution_reporter=execution_reporter,
+    )
+    return kernel
 
 
 def _new_host_planner(config, **kwargs):

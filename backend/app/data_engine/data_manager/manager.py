@@ -1858,6 +1858,7 @@ class DataManager(DataManagerCore):
         market_type: str = "spot",
         event_types: set[DataEventType] | None = None,
         *,
+        series_identity: KlineSeriesIdentity | None = None,
         on_recovery: RecoveryCallback | None = None,
         continuity: ContinuityPolicy | str = "strict",
     ) -> SubscriptionHandle:
@@ -1892,7 +1893,7 @@ class DataManager(DataManagerCore):
         key = None
         if symbol and interval:
             market_type = self._normalize_market_type(market_type)
-            key = SeriesKey(symbol, interval, exchange=exchange, market_type=market_type)
+            key = SeriesKey.create(symbol, interval, exchange=exchange, market_type=market_type, identity=series_identity)
         elif symbol or interval:
             raise ValueError(
                 "Both 'symbol' and 'interval' must be provided together, "

@@ -1,0 +1,55 @@
+# 常驻策略执行基础（尚未接用户模式）
+
+第一步复用SimulationKernel已有事件循环，新增advance只推进逐事件撮合/策略/账户/检查点回调，不在任意输入批次末尾补终点曲线、取消挂单或物化完整报告。原run的默认语义不改；显式最终run空批次保持固定历史收尾。只为普通SimulationKernel开放，Pine BAR路径/其他时钟须分别实现自己的执行时钟，不能经继承绕过其语义。分批、JSON检查点恢复、快慢循环切换、暂停/预热/报错与完整参考逐字段一致；有真实成交、费用和权益，非空输入也不跳过无挂单时的必要策略调用。
+
+ContinuousStrategyStore是内部存储，尚未接Runtime/Manager/用户模式。代码/参数/执行与数据身份归属固定运行；Provider、账户内核、planner和提交游标同一SQLite事务，保存失败回滚。显式恢复增加代次、回到CATCHING_UP，旧代次/旧revision不能覆盖；已处理源修订拒绝并可保留旧结果进入REPAIR_REQUIRED，普通resume不能跳过修补。完整修补授权/执行尚未实现。摘要不解码状态，沿用CommittedUpdates唤醒，不新增内容哈希。
+
+每检查点64MiB、每运行128MiB/8点、全部默认512MiB；初始精确重试receipt和最新恢复点保留，不清除其他运行以腾空间。达到预算拒绝事务并保留原账户与游标。服务必须按批次/恢复边界调用，不能逐tick全量保存；IO失败后按最后提交点重载再恢复。未知数据库或版本拒绝覆盖。
+
+最终组合221通过/28跳过，5条既有提示；另以新隔离copies-venv及.pth指定当前仓库SDK/桥接和已合格真实Pine核心，实际原生策略进程回归27通过，1条既有提示，补验原先需安装插件的范围。这是源码+真实核心/子进程证据，不是原生桌面或用户实时模式验收；组合中的另1个跳过仍不计通过。完整后端架构与main原有10条逐字节一致。
+
+最初检查点测试用普通json.dumps误编码Decimal而失败，改用现有canonical_json的十进制定点规则后通过；原失败保留。扩大回归发现的main已有融合BAR账户事件问题已拆到独立#239，不与分批基础混称。
+
+后续：共用实际Provider/HostAdapter/Planner会话、后台有序输入/补缺口、修订授权与原子修补、双Manager提交流及三模式/图表/研究挂回、原生保存完整退出重启及独立Windows资格。整个#157/#158/#165保持开放。
+
+## 共用实际执行会话
+
+ContinuousBarHost已连接真实ProviderSession、HostAdapter、Planner和同一BAR内核；固定历史服务与持续会话共用内核构造、输入/feature投影和执行反馈所有者。三个提取helper的函数体AST与原方法完全一致。实际Builtin SMA及现有隔离Python模板分批11→20→25、关闭后重建会话继续，与固定历史BacktestService的信号hash、订单、成交、费用账本及权益逐字段一致。标准观察phase仍为EVALUATION/WARMUP，不因切换实时或恢复改变策略语义。
+
+创建精确重试在准备Provider前读取原receipt；只计算新增批次，批次上限1000，发布LIVE要求完整覆盖且达到声明的最终源边界。数据缺口保存CATCHING_UP/原因及旧结果，补齐后同一运行恢复；已处理历史版本变化保存REPAIR_REQUIRED并禁止普通/失败重试绕过。存储失败丢弃未提交的内存会话，原检查点/账户/游标保留，只有显式失败重试才恢复；普通关闭不终结或取消金融挂单。
+
+22项会话/存储/内核检查通过，5条既有提示；共享helper重构后83项执行/控制/恢复组合及实际Pine进程27项通过（分别5/1条既有提示）。此时仍未连接后台Market source、DataManager接口或用户三模式；V2合约辅助源和Pine特殊时钟明确拒绝从普通BAR continuation旁路进入。
+
+## 实际源保护与固定输入分页
+
+真实DataManager/行情SQLite/财务SQLite组合已连接source receipt与账户、Provider、planner、游标同一检查点；源锁外只编码一次完整状态，锁内仅短验证和已编码财务提交。旧前缀或冻结初始化后缀在计算期间被改写则停发REPAIR_REQUIRED；只有未提交新批次变化进入CATCHING_UP并重取，保留原账户。财务失败不确认源、不重复已提交成交；异步或返回后才执行的提交回调明确拒绝。Pyne及未合格Pine/未知语言在准备Provider之前拒绝。
+
+LocalDatasetService新增拥有显式关闭生命周期的只读固定版本窗口：一次验证既有revision hash后持有该不可变本地副本的读取事务，按最多1000行正序读取原十进制文本；不跟随current.json，不在每批重新哈希/载入全表，不锁行情库。固定截止点后不读未来BAR，缺口/未收盘/缺成交量/损坏或丢失的旧版本拒绝且无新版回退。真实重导入和新Service实例重开验证仍沿用旧输入。
+
+组合124通过，5条既有提示。最初缺量fixture错误地提供了空volume列（导入器本来就拒绝），保留失败日志后改为真正不含volume列的数据，再验证reader拒绝。此范围仍是内部源/执行基础，初始快照发布、后台actors、HTTP/WS/前端模式、修补及桌面/Windows验收尚未完成。
+
+## 初始化快照交接与合作退出
+
+新增ContinuousMarketBarSource，只开放首个合格UTC 1m闭合BAR时钟：固定初始化截止点前先扩展源保护，再经DataManager按最多1000根查询，把输入一次发布到既有LocalDatasetService不可变版本；实际Provider准备/完整状态编码后，短源guard才允许初始财务创建。价格从Manager属性转换，额外序列化不再调用前端8位wire投影；不承诺恢复Manager已有规范化之前的原始交易所精度。
+
+初始化期间每批读取锁定本地revision，跨退出继续同一快照；计算到快照截止点后，才从已提交游标接canonical新闭合BAR。纯实时固定首次游标，不补算图表旧历史。实际初始化7根→关闭重建→剩余13根→新增5根，信号/订单/成交/账本/权益与固定历史参考逐字段一致。1005根复制的两个有界Manager窗口及截止点后极端未来BAR隔离也通过。
+
+Host和source有线程安全停止信号，每次Provider观察前后、完整状态准备后及财务发布前检查；停止不会把账户标记FAILED，也不终结订单，丢弃未提交内存批次后保留原检查点和活跃phase供重启。真实线程屏障验证停止信号无需等待批次锁、完整drain后同一账户恢复；初始化查询途中停止不发布快照/账户。已经进入SQLite提交的写入仍由拥有者完成，不在数据库关闭后留下后台写入。后台Runtime actor/drain接线仍待实现。
+
+起始/恢复时尚无新BAR，可以一次guarded确认LIVE并绑定新source receipt，金融sequence/时间/账户不动；已LIVE后重复唤醒不反复写完整检查点。恢复仍显式增加Provider代次。133项组合及最终新增后的7项源交接检查通过，5条既有提示；后端架构与主线原有10条逐字节一致。合作停止最初覆盖了晚到回调的所有权错误，调整检查顺序后保留原明确拒绝；空批次测试最初误要求恢复代次不变，改为显式验证代次+1及其他状态完全相同，原失败保留。7组新检查加入macOS包内Python门禁。
+
+尚未接应用后台Runtime、初始HTTP结果/WS交接、三个模式前端或授权修补，不把内部组合测试当成桌面完整退出重启或整个#165交付。初始快照默认20万根预算，超限明确拒绝，不静默截断；日历/稀疏时钟、Pine及V2合约辅助源须分别取得资格。
+
+## 有界后台所有者（尚待应用接线）
+
+ContinuousStrategyRuntime为已有持久运行拥有每运行1个串行线程（沿用BoundedExecutor，无待处理任务队列，默认最多2个运行），以及DataManager完整语义身份的事件订阅和后台行情consumer lease。先订阅、再读状态；BAR完成/修订/补数/源控制仅合并唤醒，不传金融快照或直接执行策略。局部缺口要求Manager恢复，计算不另建网络连接。源gap registry只在拥有它的事件循环读取，Provider和SQLite执行在运行自己的串行线程，固定本地reader也在同一线程关闭。
+
+实际关闭结果订阅后仍推进20→25；Runtime完整drain不终结账户，重新构造并restore_active只补算25→30。显式pause才持久PAUSED，启动恢复不复活PAUSED/FAILED/REPAIR_REQUIRED，容量超限明确拒绝；授权启动请求被取消也不取消后台执行。保持代码/账户，不按前端断开时间重新初始化。
+
+停止信号先阻止新观察/发布，再物理drain，随后解除事件订阅和owned行情lease，最后关线程；反复取消shutdown也完成这个顺序。清理失败保留actor/lease/容量并向调用者报CONTINUOUS_SHUTDOWN_FAILED，原库不允许当作已安全关闭；下一次明确shutdown可重试。同一symbol的split_adjusted/default订阅分离，原有默认调用不变。
+
+STREAM_ERROR/STOP及保留SOURCE_GAP进入CATCHING_UP并保留原账户；完成恢复并验证源后可空批次确认LIVE。源失效在Provider观察间检查，避免等长批次全部算完。失败的Provider恢复记录持久失败，不用新账户静默替代。
+
+79项实际Manager事件总线/SQLite/Provider/线程、源保护、原订阅连续性与Manager域门面组合通过，5条既有提示；架构仍与main原有10条逐字节一致。传输只替换acquire/release lease以禁止远程连接，其余输入和金融对象真实。起初describe错误地从仅摘要查询取definition，已修正为不取checkpoint的有界定义SQL；保留失败。源gap末端是包含边界，单BAR gap在from处先复现超时后改成包含比较，未放宽用例。
+
+Runtime尚未绑定应用启动/关闭、HTTP/WS或前端；因此不把上述线程/库恢复当成打包桌面、真实在线行情、用户模式或整个issue验收。后续先接应用生命周期，再接初始结果/增量交接和前端、修补。
