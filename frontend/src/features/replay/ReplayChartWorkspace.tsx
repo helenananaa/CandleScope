@@ -190,7 +190,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     cellId: cell.id, workspaceId: `replay:${runId}:${workspace.view.activeWorkspaceId}`, links,
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
-    active, integrity: cellIntegrity, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
+    active, integrity: cellIntegrity, projectionBoundaryMs: projection.boundaryMs, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale,
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
@@ -200,7 +200,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}

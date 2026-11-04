@@ -122,6 +122,7 @@ export interface ReplayTrainingPageShellProps {
     readonly priceScale: { readonly invertScale: boolean; readonly priceScaleMode: number };
     readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
     readonly integrity: ReplayIntegrityRuntime;
+    readonly projectionBoundaryMs?: number | null;
     readonly frame: ComponentType<ReplayChartPageFrameProps>;
     readonly controls: ReactNode;
     readonly controlViewer: ReplayViewerRuntime;
@@ -841,8 +842,9 @@ export default function ReplayTrainingPageShell({
     runId: null as string | null, trackId: null as string | null, dataEpoch: null as string | null, time: null as number | null,
     reviewId: null as string | null, reviewRevision: null as number | null });
   captureState.current = {
-    ready: active && cell?.active !== false && viewerBarCount > 0 && !captureIndicatorRuntime.status.computing && !viewer.loading && !viewer.viewerPending && !viewer.controlPending
+    ready: active && cell?.active !== false && viewerBarCount > 0 && !captureIndicatorRuntime.status.computing && !viewer.loading && !viewer.error && !viewer.viewerPending && !viewer.controlPending
       && (review === null ? ["PAUSED", "ENDED"].includes(String(effectiveState)) && !runtime.marketData.view.loading
+        && cell?.projectionBoundaryMs === runtime.store.virtualTimeMs
         : review.playback_state === "PAUSED" && !reviewChartLoading && reviewLoadedPrefixKey === reviewPrefixKey),
     presentation: [captureIndicatorView.activeIndicators, captureIndicatorView.mainOverlayLines, captureIndicatorView.markers,
       captureIndicatorView.fills, captureIndicatorView.hlines, captureIndicatorView.bgcolors, captureIndicatorView.barcolors,
