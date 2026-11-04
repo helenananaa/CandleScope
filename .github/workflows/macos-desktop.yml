@@ -97,6 +97,8 @@ jobs:
             tests/test_continuous_strategy_store.py \
             tests/test_continuous_strategy_shutdown.py \
             tests/test_continuous_strategy_runtime.py \
+            tests/test_continuous_manager_lifecycle.py \
+            tests/test_application_shutdown_failures.py \
             tests/test_strategy_bar_continuation.py \
             tests/test_local_data_pinned_window.py \
             tests/test_pine_combined_host_inputs.py \
