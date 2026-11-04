@@ -34,7 +34,11 @@ export interface ExportRect {
   height: number;
 }
 
+export interface ExportSourceWindow {
+  seriesKey: string | null; version: number | null; current: boolean;
+}
 export interface ExportSnapshot {
+  sourceWindow?: ExportSourceWindow;
   rootElement?: HTMLElement | null;
   mainPane?: {
     rootElement?: HTMLElement | null;

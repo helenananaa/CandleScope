@@ -273,6 +273,8 @@ async def test_schema_26_adds_notes_without_rewriting_existing_run_or_financial_
     before = await service.get_session(session)
     await service.shutdown(step_timeout=1)
     with sqlite3.connect(path) as db:
+        db.execute("DROP TABLE replay_training_note_capture_link")
+        db.execute("DROP TABLE replay_training_note_capture")
         db.execute("DROP TABLE replay_training_note_links")
         db.execute("DROP TABLE replay_training_note_revision")
         db.execute("DROP TABLE replay_training_note")
