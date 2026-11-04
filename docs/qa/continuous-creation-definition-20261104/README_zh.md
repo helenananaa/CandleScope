@@ -11,3 +11,5 @@
 另外使用当前SDK/bridge与已资格Pine0.3.3+cs.1实际核心进程，BAR/V2工作台27通过、1条提示；元数据记录来源和二进制sha。不能当成Pine持续执行或安装包保存/完全退出重启、Windows验收。后端架构与main原有10条逐字节一致。CI新增创建定义回归，开发期间继续后续任务，合main前再核对最终head。
 
 初次测试误用SeriesKey构造参数identity导致收集失败；改用create后，集成用例暴露项目Manager市场名是futures而非内部profile名usdm。对照实际Binance USD-M profile修正支持合同与测试源，不增加别名绕过或放宽capability，保留两份失败日志；144项通过后再扩展Spot/退出组合到最终192项。
+
+已无冲突合入#245当前542c3c76及其#248/#244依赖，组合源码016d4b1f：创建定义/实际provider/固定历史财务与smoke、持续执行/退出、日历/Klines/Spot公共预算共369通过、6条提示。原1秒门槛不变，新的最终head CI后台运行，不把旧x64失败算通过。
