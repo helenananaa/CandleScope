@@ -4317,6 +4317,27 @@ class BacktestService:
         ]
         if missing:
             raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"missing {missing}")
+        account_model, execution_config, signal_identity = self._execution_from_payload(
+            payload, fidelity=fidelity, parameters_json=parameters_json, warmup_bars=warmup_bars,
+            book_data_hash=book_data_hash)
+        return RunIdentity(
+            strategy_revision_id=str(payload["strategy_revision_id"]),
+            dataset_id=str(payload["dataset_id"]),
+            data_epoch=str(payload["data_epoch"]),
+            snapshot_hash=str(payload["snapshot_hash"]),
+            fidelity_mode=fidelity,
+            source_event_kind=source_kind,
+            start_time_ms=start_time_ms,
+            end_time_ms=end_time_ms,
+            warmup_bars=warmup_bars,
+            parameters_json=parameters_json,
+            account_model=account_model,
+            execution_json=canonical_json(execution_config),
+            **signal_identity,
+        )
+
+    def _execution_from_payload(self, payload, *, fidelity, parameters_json, warmup_bars, book_data_hash=None):
+        """Normalize the existing financial and provider execution contract."""
         account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
         if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
             raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
@@ -4778,21 +4799,7 @@ class BacktestService:
             execution_config["contract_data_mode"] = contract_data_mode
         execution_config.update(execution_realism.identity(fidelity_mode=fidelity))
         execution_config.update(metrics_identity)
-        return RunIdentity(
-            strategy_revision_id=str(payload["strategy_revision_id"]),
-            dataset_id=str(payload["dataset_id"]),
-            data_epoch=str(payload["data_epoch"]),
-            snapshot_hash=str(payload["snapshot_hash"]),
-            fidelity_mode=fidelity,
-            source_event_kind=source_kind,
-            start_time_ms=start_time_ms,
-            end_time_ms=end_time_ms,
-            warmup_bars=warmup_bars,
-            parameters_json=parameters_json,
-            account_model=account_model,
-            execution_json=canonical_json(execution_config),
-            **signal_identity,
-        )
+        return account_model, execution_config, signal_identity
 
     def _audit(self, run_id: str, action: str, details: Mapping[str, object]) -> None:
         ordinal = self.repository.next_audit_ordinal(run_id)
