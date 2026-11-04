@@ -93,6 +93,7 @@ jobs:
             tests/test_query_cache_fencing.py \
             tests/test_continuous_bar_source.py \
             tests/test_continuous_bar_host.py \
+            tests/test_continuous_provider.py \
             tests/test_continuous_guarded_source.py \
             tests/test_continuous_strategy_store.py \
             tests/test_continuous_strategy_shutdown.py \

@@ -31,6 +31,7 @@ from app.backtest.trade_explanation import (
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_bundle import (
     freeze_bundle,
+    editor_bundle_files,
     inspect_directory,
     inspect_zip,
 )
@@ -313,23 +314,11 @@ class BacktestService:
         import io
         import zipfile
 
-        manifest = {
-            "schemaVersion": "candlescope.python-strategy-bundle/1",
-            "name": str(payload["name"]),
-            "entrypoint": "strategy:Strategy",
-            "signalClock": "BAR_CLOSE",
-            "outputModes": ["TARGET_POSITION", "SIGNAL", "ORDER_INTENT"],
-            "requiredFeatures": ["open", "high", "low", "close", "volume"],
-            "warmup": {"kind": "FIXED_BARS", "bars": 0},
-            "parameters": payload.get("parameter_schema") or [],
-            "reproducibility": "BEST_EFFORT_LOCAL",
-        }
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("strategy.json", json.dumps(manifest, sort_keys=True))
-            archive.writestr("strategy.py", str(payload.get("source_text") or ""))
-            archive.writestr("candlescope-editor.json", json.dumps({"schemaVersion": "candlescope.python-editor/1"}))
-            archive.writestr("requirements.lock", "# CandleScope bundled SDK; no additional dependencies\n")
+            for name, data in editor_bundle_files(str(payload["name"]),
+                    str(payload.get("source_text") or ""), payload.get("parameter_schema")).items():
+                archive.writestr(name, data)
         bundle = self.create_python_strategy_bundle(zip_bytes=buffer.getvalue(), now_ms=now_ms)
         return self.create_python_strategy_revision(str(bundle["bundle_id"]), now_ms=now_ms)
 
