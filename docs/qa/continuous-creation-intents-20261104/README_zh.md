@@ -13,3 +13,5 @@ REQUESTED→WATCHED/READY→COMMITTED；持久化真实Manager的完整源前缀
 最终214项本地组合通过、5条既有FastAPI提示。覆盖真实Manager/canonical/frozen/account SQLite、事务末尾故障同时回滚账户/检查点/创建意图/源确认、Store关闭重建、两连接并发相同请求收敛、容量保留、修改源后旧任务阻止与明确重试、schema1账务保留、实际provider和Runtime源lease清理、自动恢复与稍后暂停竞争。公共传输lease使用受控测试替换；数据查询、源围栏、财务事务、Provider和线程为真实实现，未发公网请求。不是安装包完全退出/重启、LIVE或Windows验收。架构与main原有10条逐字节一致。
 
 第一轮辅助函数误名setup触发pytest的旧式module setup，6个新测试未运行；改名后23通过。中间一个async测试缺pytest-asyncio导致跳过，改用项目现有asyncio.run模式，最终新用例全部执行且无跳过，相关失败/跳过日志保留。CI添加创建记录回归；开发不等待CI，合main前检查最终head。
+
+已无冲突整合#246当前de953542及#245/#248/#244依赖，组合源码0965291e：创建意图/首财务事务/实际provider/固定历史财务与smoke、持续执行/退出、日历/Klines/Spot公共预算共391通过、6条提示。原1秒门槛不变，旧8952的x64失败不能当作通过，新最终head CI在后台运行；准备worker与provisional磁盘预算、公开HTTP/WS/UI仍待后续。
