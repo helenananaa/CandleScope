@@ -105,6 +105,65 @@ class _NormalizedBar:
     source_row: int
 
 
+class PinnedBarWindow:
+    """Owned read transaction over one validated immutable base revision.
+
+    The local store owns revision validation. This reader neither follows
+    current.json nor hashes/materializes the complete input for each batch.
+    Decimal strings stay intact until the financial input adapter consumes them.
+    """
+
+    def __init__(self, connection: sqlite3.Connection, *, from_ms: int,
+                 through_ms: int, step_ms: int) -> None:
+        self._connection = connection
+        self.from_ms = from_ms
+        self.through_ms = through_ms
+        self.step_ms = step_ms
+        self.closed = False
+
+    def read_window(self, *, start_ms: int, limit: int = 1000) -> list[dict[str, Any]]:
+        if self.closed:
+            raise LocalDatasetError("Pinned input reader is closed", code="dataset_reader_closed")
+        if (type(start_ms) is not int or start_ms < self.from_ms
+                or (start_ms - self.from_ms) % self.step_ms
+                or type(limit) is not int or not 1 <= limit <= 1000):
+            raise LocalDatasetError("Invalid bounded input window", code="invalid_dataset_window")
+        if start_ms > self.through_ms:
+            return []
+        last_close = min(self.through_ms, start_ms + limit * self.step_ms - 1)
+        try:
+            rows = self._connection.execute(
+                "SELECT * FROM bars WHERE open_time_ms >= ? AND open_time_ms <= ? "
+                "ORDER BY open_time_ms ASC LIMIT ?", (start_ms, last_close, limit),
+            ).fetchall()
+            excluded = self._connection.execute(
+                "SELECT 1 FROM excluded_ranges WHERE start_ms <= ? AND end_ms > ? LIMIT 1",
+                (last_close, start_ms),
+            ).fetchone()
+        except sqlite3.DatabaseError as exc:
+            raise LocalDatasetError("Pinned input is unreadable", code="dataset_corrupt") from exc
+        expected_count = (last_close + 1 - start_ms) // self.step_ms
+        if excluded is not None or len(rows) != expected_count:
+            raise LocalDatasetError("Pinned input has a source gap", code="dataset_source_gap")
+        for index, row in enumerate(rows):
+            opened = start_ms + index * self.step_ms
+            if (row["open_time_ms"] != opened or row["close_time_ms"] != opened + self.step_ms - 1
+                    or not row["is_closed"] or row["volume"] is None):
+                raise LocalDatasetError("Pinned input is not complete closed OHLCV", code="dataset_source_gap")
+        return [dict(row) for row in rows]
+
+    def close(self) -> None:
+        if not self.closed:
+            self.closed = True
+            self._connection.close()
+
+    def __enter__(self) -> PinnedBarWindow:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
 class LocalDatasetService:
     def __init__(self, root: Path) -> None:
         self.root = Path(root).resolve()
@@ -1533,6 +1592,43 @@ class LocalDatasetService:
                 code="DATA_SNAPSHOT_MISMATCH",
             )
         return manifest, revision_dir
+
+    def open_pinned_bar_window(
+        self, dataset_id: str, *, data_epoch: str, interval: str,
+        from_ms: int, through_ms: int,
+    ) -> PinnedBarWindow:
+        """Validate once and hold a bounded, closed, fixed-grid input revision.
+
+        Caller owns close and supplies the committed initialization boundary.
+        Resampling and calendar clocks require their own qualified input path.
+        The long read transaction belongs only to the immutable local copy,
+        never the mutable canonical market database or its writer fence.
+        """
+        manifest, revision_dir = self._validated_pinned_revision_dir(dataset_id, data_epoch)
+        spec = parse_interval_spec(interval)
+        if (spec is None or spec.canonical != manifest["interval"]
+                or spec.alignment is not IntervalAlignment.FIXED_EPOCH):
+            raise LocalDatasetError("Pinned reader requires its fixed base interval", code="interval_not_available")
+        step = spec.nominal_ms
+        if (type(from_ms) is not int or type(through_ms) is not int or through_ms < from_ms
+                or (from_ms - manifest["first_open_ms"]) % step
+                or (through_ms + 1 - from_ms) % step
+                or from_ms < manifest["first_open_ms"]
+                or through_ms >= manifest["last_open_ms"] + step):
+            raise LocalDatasetError("Invalid pinned initialization boundary", code="invalid_dataset_window")
+        if not manifest["all_rows_final"] or not manifest["volume_available"]:
+            raise LocalDatasetError("Pinned initialization requires closed OHLCV", code="dataset_source_gap")
+        connection = sqlite3.connect((revision_dir / "bars.sqlite").as_uri() + "?mode=ro", uri=True)
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("BEGIN")
+            # Establish the immutable read snapshot before returning its owner.
+            connection.execute("SELECT open_time_ms FROM bars LIMIT 1").fetchone()
+            return PinnedBarWindow(connection, from_ms=from_ms, through_ms=through_ms, step_ms=step)
+        except sqlite3.DatabaseError as exc:
+            connection.close()
+            raise LocalDatasetError("Pinned input is unreadable", code="dataset_corrupt") from exc
 
     def load_revision_bars(
         self,
