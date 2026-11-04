@@ -13,6 +13,7 @@ from .dual_clock_kernel import DualClockSimulationKernel
 from .execution_realism import EXECUTION_REALISM_V2
 from .kernel import SimulationKernel, SimulationResult, _bar_decimal
 from .linear_perp_account_v2 import LinearPerpetualAccountV2
+from .account_execution import publish_account_liquidation
 from .trade_kernel import TradeSimulationKernel
 
 
@@ -317,6 +318,7 @@ def _run_bar_scenarios(replays, events, by_sequence):
         if event.role in {"INSTRUMENT_RULES", "MARK_INDEX", "FUNDING"}:
             for replay in replays:
                 replay.account.apply(event)
+                publish_account_liquidation(replay)
             continue
         if event.role != "BARS":
             raise MarketDatasetError("BAR kernel received unsupported role", code="FIDELITY_MISLABEL")
