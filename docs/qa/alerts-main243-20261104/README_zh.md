@@ -7,3 +7,9 @@
 新候选output/alert-builtin-service-20261101/main243-current200-native-20261104，显式复用已资格replay-manager运行时和当前插件；当前源码/SDK1063、前端164、插件资产9/源码76一致，strict signature通过，真实Pine核心不变。不是全新独立runtime构建。候选没有profile、未启动LIVE；原先候选/历史原生证据保留。
 
 共享门禁2026-11-04T15:42:40.340Z（上海23:42:40）及任何更晚deadline有效，先完成#200资格及完整拥有进程退出再进行告警Native。当前组合仍须真实闭合BAR的RSI14/MACD12-26-9柱/MA20数值oracle、规则停用与后台续跑、定义/历史保存、完全退出/恢复与未丢/重复事件；Windows、任意参数/Pine/Python告警及全157未完成。保持Draft，开发不等CI，合main前检查最终head和依赖/适用原生证据。
+
+## 共享日历修复与发布分支
+
+原codex/alert-builtin-service-20261101多次Git push返回GitHub Internal Server Error；同目标的GraphQL ref更新也发生服务端错误。已把同一24e62ef7保存至新分支codex/alerts-current-seconds-20261104，原PR204保持其原远端head，不强推或删除。新分支再无冲突整合#248日历尾部修复，当前应用源码30a520ae，300项告警/生命周期/日历/Klines/权重组合通过、6条提示，原1秒门槛不放宽。前端树与已查e2组合相同，复用同树4888+1+130完整检查。
+
+新独立候选output/alert-builtin-service-20261101/main248-current200-native-20261104，源码/SDK1063、前端164、插件9/76、strict signature通过。没有profile或LIVE启动；旧main243候选仅是其原revision的预检，不用于本轮新head验收。后续以新候选/新分支资格为准，原修改中的脚本逐字节保留。
