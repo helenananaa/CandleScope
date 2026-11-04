@@ -6,17 +6,21 @@ import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts,
 import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayNoteLinkPicker, ReplayNoteLinks } from "./ReplayNoteLinks.js";
+import ReplayNoteCaptureControls, { type ReplayNoteChartCapture } from "./ReplayNoteCaptureControls.js";
+import { ReplayNoteScreenshots, ReplayNoteScreenshotViewer, type ReplayNoteScreenshotSelection } from "./ReplayNoteScreenshots.js";
+import { copyReplayNoteCaptureDraft, replayNotePendingCapture } from "../replayNoteCaptureDraft.js";
 import ReplayNoteHistory from "./ReplayNoteHistory.js";
 
-type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun" | "noteVersionsRun" | "noteLinkOptionsRun">;
+type Api = Pick<ReplayV2ApiClient, "notesRun" | "saveNoteRun" | "noteVersionsRun" | "noteLinkOptionsRun" | "saveNoteCaptureRun" | "noteCapturesRun" | "noteScreenshotRun">;
 type Binding = ReturnType<typeof replayNoteDraftBinding>;
 interface EditorTarget { note: ReplayNote | null; binding: Binding; defaults?: Record<string, string> }
 
-function NoteEditor({ api, target, onChanged, onClose, onCopy }: {
-  api: Api; target: EditorTarget; onChanged(): void; onClose(): void;
+function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, onClose, onCopy }: {
+  api: Api; target: EditorTarget; view: ReplayNotesResponse["context"]; captureChart?: ReplayNoteChartCapture | undefined; actualTime(ms: number): string; onChanged(): void; onClose(): void;
   onCopy?: (fields: Record<string, string>) => void;
 }) {
   const id = useId();
+  const [captureBusy, setCaptureBusy] = useState(false);
   const { binding, note } = target;
   const [editor] = useState(() => new JournalEditor<ReplayNote>({
     key: binding.key, storage: () => binding.storage,
@@ -33,6 +37,7 @@ function NoteEditor({ api, target, onChanged, onClose, onCopy }: {
     return () => editor.dispose();
   }, [editor, note, target.defaults]);
   const save = async (close: boolean) => {
+    try { if (captureBusy || replayNotePendingCapture(editor.getSnapshot().fields)) return; } catch { return; }
     if (await editor.flush()) { onChanged(); if (close) onClose(); }
   };
   return <div className="replay-note-editor" data-testid="replay-note-editor">
@@ -41,14 +46,17 @@ function NoteEditor({ api, target, onChanged, onClose, onCopy }: {
       onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
     <ReplayNoteLinkPicker api={api} context={binding.context} fields={state.fields}
       disabled={!state.ready || state.status === "saving"} onChange={fields => editor.edit(fields)} />
+    <ReplayNoteCaptureControls api={api} context={binding.context} view={view} fields={state.fields}
+      captureChart={captureChart} disabled={!state.ready || state.status === "saving"} onBusy={setCaptureBusy} actualTime={actualTime}
+      edit={update => { try { editor.edit(update(editor.getSnapshot().fields)); return editor.getSnapshot().status !== "failed"; } catch { return false; } }} />
     <p>{t(binding.context.reviewNote ? "replay.notes.reviewHint" : "replay.notes.planHint")}</p>
     {state.recovered && <p role="status">{t("replay.notes.recovered")}</p>}
     {state.error != null && <p role="alert">{t("replay.notes.saveFailed")}</p>}
     {onCopy && <p>{t("replay.notes.copyHint")}</p>}
     <div className="replay-note-actions">
-      <button type="button" disabled={!state.ready || state.status === "saving"} onClick={() => { void save(false); }}>
+      <button type="button" disabled={!state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(false); }}>
         {t(state.status === "saving" ? "replay.notes.saving" : "replay.notes.save")}</button>
-      <button type="button" disabled={!state.ready || state.status === "saving"} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</button>
+      <button type="button" disabled={!state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</button>
       <button type="button" disabled={state.status === "saving"} onClick={onClose}>{t("replay.notes.close")}</button>
       {onCopy && <button type="button" disabled={!state.ready || state.status === "saving"}
         onClick={() => onCopy(state.fields)}>{t("replay.notes.copyCurrent")}</button>}
@@ -56,11 +64,12 @@ function NoteEditor({ api, target, onChanged, onClose, onCopy }: {
   </div>;
 }
 
-export default function ReplayNotesPanel({ api, runId, trackId, generationKey, reviewId, reviewRevision, cursorMs, revisionKey, formatTime, onTimes, embedded = false }: {
+export default function ReplayNotesPanel({ api, runId, trackId, generationKey, reviewId, reviewRevision, cursorMs, revisionKey, formatTime, onTimes, captureChart, embedded = false }: {
   api: Api; runId: string; trackId: string; generationKey: string; cursorMs: number | null;
   reviewId: string | null; reviewRevision: number | null;
   revisionKey: string; formatTime(ms: number): string;
   embedded?: boolean;
+  captureChart?: ReplayNoteChartCapture | undefined;
   onTimes?(values: readonly number[]): void;
 }) {
   const locale = useLocale();
@@ -71,6 +80,8 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
   const [target, setTarget] = useState<EditorTarget | null>(null);
   const [drafts, setDrafts] = useState<ReplayNoteDraft[]>([]);
   const [draftError, setDraftError] = useState(false);
+  const [preview, setPreview] = useState<ReplayNoteScreenshotSelection | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [historyTimes, setHistoryTimes] = useState<{ scope: string; values: readonly number[] }>({ scope: "", values: [] });
   const reportHistoryTimes = useCallback((scope: string, values: readonly number[]) => setHistoryTimes({ scope, values }), []);
@@ -114,7 +125,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     if (!settled || !current || cursorMs === null || !visibleTarget) return;
     try {
       const binding = replayNoteCopyBinding(localStorage, current.context, cursorMs, visibleTarget.binding);
-      setTarget({ note: null, binding, defaults: { ...fields } }); setDraftError(false);
+      setTarget({ note: null, binding, defaults: copyReplayNoteCaptureDraft(localStorage, fields, visibleTarget.binding.context, current.context) }); setDraftError(false);
     } catch { setDraftError(true); }
   };
   const canCopy = settled && visibleTarget !== null && current !== null
@@ -126,7 +137,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
   const historyNote = settled && current && open && !visibleTarget ? current.notes.find(note => note.id === historyId) : null;
   const historyScope = historyNote && current ? JSON.stringify([current.context, current.asOfMs, historyNote.id, historyNote.revisionCount]) : "";
   useEffect(() => {
-    onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs, ...(note.links?.map(link => link.eventTimeMs) ?? [])]) ?? []),
+    onTimes?.([...(current?.notes.flatMap(note => [note.marketTimeMs, note.effectiveTimeMs, ...(note.links?.map(link => link.eventTimeMs) ?? []), ...(note.screenshots?.map(capture => capture.marketTimeMs) ?? [])]) ?? []),
       ...(historyScope && historyTimes.scope === historyScope ? historyTimes.values : [])]);
   }, [current, historyScope, historyTimes, onTimes]);
   return <section className="replay-notes-panel" aria-label={t("replay.notes.title")} data-testid="replay-notes-panel">
@@ -140,7 +151,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
           {t(current?.context.reviewNote ? "replay.notes.addReview" : "replay.notes.add")}</button>
         <button type="button" onClick={changed}>{t("replay.notes.refresh")}</button>
       </div>
-      {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} onChanged={changed} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
+      {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} view={current!.context} captureChart={captureChart} actualTime={actualTime} onChanged={changed} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
         : <>
           {drafts.filter(draft => current && cursorMs !== null && draft.context.virtualTimeMs <= cursorMs
             && draft.context.timelineSequence <= current.context.timelineSequence
@@ -154,13 +165,17 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
               <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(note.updatedAtMs)}</dd></dl>
             <p className="replay-note-text">{note.fields.entryBasis ?? ""}</p>
             <ReplayNoteLinks links={note.links ?? []} formatTime={formatTime} />
+            <ReplayNoteScreenshots note={note} context={current.context} formatTime={formatTime} onOpen={setPreview} disabled={!settled} />
             <button type="button" disabled={!settled || Boolean(current.context.reviewNote && !note.reviewNote)} onClick={() => edit(note)}>{t("replay.notes.edit")}</button>
             <button type="button" disabled={!settled} aria-expanded={historyNote?.id === note.id}
               onClick={() => setHistoryId(value => value === note.id ? null : note.id)}>{t("replay.notes.history")}</button>
             {historyNote?.id === note.id && <ReplayNoteHistory key={historyScope} api={api} note={note} context={current.context}
-              scope={historyScope} asOfMs={current.asOfMs} formatTime={formatTime} actualTime={actualTime} onTimes={reportHistoryTimes} />}
+              scope={historyScope} asOfMs={current.asOfMs} formatTime={formatTime} actualTime={actualTime} onTimes={reportHistoryTimes} onImage={setPreview} />}
           </article>)}
         </>}
     </div>}
+    {preview && open && !visibleTarget && settled && current && preview.contextKey === JSON.stringify(current.context) && <ReplayNoteScreenshotViewer
+      key={JSON.stringify([preview.contextKey, preview.noteId, preview.revision, preview.capture.id])} api={api} selection={preview}
+      context={current.context} formatTime={formatTime} actualTime={actualTime} onClose={closePreview} />}
   </section>;
 }
