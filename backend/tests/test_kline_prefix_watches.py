@@ -234,3 +234,26 @@ def test_uncommitted_initial_partial_bar_is_not_mistaken_for_processed_history(s
     assert changed.value.start_ms==START and changed.value.end_ms==END
     retry=store.prepare(initial,committed_through_ms=start-1,through_ms=END)
     with store.commit_guard(retry):pass
+
+
+def test_frozen_initial_snapshot_can_protect_more_than_the_financial_cursor(storage,tmp_path):
+    from dataclasses import replace
+    write();klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+STEP)],source=SOURCE)
+    store,initial=begin(storage);full=prepare(store,initial,through=END+STEP)
+    partial=replace(full,through_ms=END)
+    with store.commit_guard(full,committed_through_ms=END):persist_financial(tmp_path/'partial.db',partial)
+    row=store.inspect(full.owner)
+    assert row["through_ms"]==END+STEP and row["committed_through_ms"]==END
+    next_proof=store.prepare(load_financial(tmp_path/'partial.db'),committed_through_ms=END,
+                             through_ms=END+STEP,frozen_version=full.version)
+    assert next_proof.version==full.version
+    klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+STEP,200)],source=SOURCE)
+    with pytest.raises(ProcessedPrefixChanged):
+        store.prepare(partial,committed_through_ms=END,through_ms=END+STEP,frozen_version=full.version)
+
+
+def test_partial_financial_ack_cannot_advance_beyond_the_acquired_source(storage):
+    write();store,initial=begin(storage);proof=prepare(store,initial)
+    with pytest.raises(ValueError,match="inside the acquired"):
+        with store.commit_guard(proof,committed_through_ms=END+STEP):pytest.fail("future cursor")
+    assert store.inspect(proof.owner)["committed_acquisition"]==0
