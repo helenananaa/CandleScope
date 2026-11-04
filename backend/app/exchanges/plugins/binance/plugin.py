@@ -152,6 +152,18 @@ class BinancePlugin(BuiltinExchangePlugin):
                     max_concurrency=spot_concurrency,
                     cooldown_seconds=backoff,
                 ),
+                RateLimitRule(
+                    name="binance_spot_depth_snapshot",
+                    bucket_key="binance:spot:request_weight:ip",
+                    endpoint="/api/v3/depth",
+                    market_types=("spot",),
+                    algorithm="header_weight",
+                    capacity=spot_capacity,
+                    refill_interval_seconds=60.0,
+                    cost=_spot_depth_cost,
+                    max_concurrency=spot_concurrency,
+                    cooldown_seconds=backoff,
+                ),
                 # Server time is a physical dependency of source-finality
                 # checks. It consumes the same documented IP weight as klines.
                 RateLimitRule(
@@ -302,6 +314,19 @@ def _futures_kline_cost(request: HistoricalRequest) -> int:
     if limit <= 1000:
         return 5
     return 10
+
+
+def _spot_depth_cost(request: HistoricalRequest) -> int:
+    # Binance Spot REST order-book weights; omitted limit defaults to 100.
+    # Limits above 5000 are clamped by the endpoint, retaining the top tier.
+    limit = int(request.limit or 100)
+    if limit <= 100:
+        return 5
+    if limit <= 500:
+        return 25
+    if limit <= 1000:
+        return 50
+    return 250
 
 
 def _futures_depth_cost(request: HistoricalRequest) -> int:
