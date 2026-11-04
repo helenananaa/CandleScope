@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 
 import pytest
@@ -15,6 +16,52 @@ def request() -> HistoricalRequest:
 
 def rule(key: str, capacity: int = 10, **kwargs) -> RateLimitRule:
     return RateLimitRule(key, key, capacity, 3600, **kwargs)
+
+
+def test_quota_failure_keeps_request_path_and_numeric_feedback_without_secrets() -> None:
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager())
+        quota = rule("binance:futures:legacy")
+        target = HistoricalRequest("binance", "futures",
+            "https://username:password@fapi.binance.com/fapi/v1/fundingInfo?apiKey=hidden#secret", "")
+        permit = await scheduler.acquire([quota], target, demand=PublicDemand(TrafficClass.BACKGROUND))
+        permit.finish(status_code=429, body_code="-1003", headers={
+            "Retry-After": "2", "X-MBX-USED-WEIGHT-1M": "2400",
+            "Authorization": "Bearer hidden", "X-MBX-USED-WEIGHT": "not-a-number",
+        })
+        snapshot = scheduler.snapshot()
+        entry = snapshot["recent"][-1]
+        assert entry["endpoint"] == "/fapi/v1/fundingInfo"
+        assert entry["exchange"] == "binance" and entry["market_type"] == "futures"
+        assert entry["rules"] == [quota.name]
+        assert entry["traffic_class"] == "background"
+        assert entry["status_code"] == 429 and entry["body_code"] == "-1003"
+        assert entry["quota_headers"] == {"retry-after": "2", "x-mbx-used-weight-1m": "2400"}
+        assert entry["observed_at_ms"] > 0
+        encoded = json.dumps(snapshot)
+        for secret in ["username", "password", "apiKey", "hidden", "Authorization", "secret"]:
+            assert secret not in encoded
+        assert snapshot["in_flight"] == 0 and snapshot["counts"]["completed"] == 1
+        assert scheduler.manager.snapshot()[quota.bucket_key]["cooldown_remaining_seconds"] > 0
+    asyncio.run(run())
+
+
+def test_diagnostic_history_remains_bounded_and_duplicate_completion_is_ignored() -> None:
+    async def run():
+        scheduler = PublicAdmission(RateLimitManager())
+        quota = rule("independent:ip", capacity=200)
+        for index in range(140):
+            permit = await scheduler.acquire([quota], request())
+            permit.finish(status_code=200)
+            permit.finish(status_code=418, headers={"Retry-After": "999"})
+        snapshot = scheduler.snapshot()
+        assert len(snapshot["recent"]) == 128
+        assert snapshot["counts"]["completed"] == 140
+        assert all(row["status_code"] == 200 for row in snapshot["recent"])
+        assert snapshot["recent"][0]["attempt_id"] < snapshot["recent"][-1]["attempt_id"]
+        assert snapshot["in_flight"] == 0
+        assert scheduler.manager.snapshot()[quota.bucket_key]["cooldown_remaining_seconds"] == 0
+    asyncio.run(run())
 
 
 def test_atomic_constraints_and_concurrent_reservation() -> None:

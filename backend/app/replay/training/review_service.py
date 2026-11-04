@@ -45,6 +45,35 @@ class TrainingReviewService:
             service_validation_ops.identifier(run_id, field_name="run_id")
         )
 
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
+        return await self.store.notes(
+            service_validation_ops.identifier(run_id, field_name="run_id"),
+            service_validation_ops.identifier(track_id, field_name="track_id"), at_time_ms=at_time_ms)
+
+    async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
+                                before_id: str | None = None, limit: int = 20) -> dict[str, object]:
+        return await self.store.note_link_options(
+            service_validation_ops.identifier(run_id, field_name="run_id"),
+            service_validation_ops.identifier(track_id, field_name="track_id"),
+            kind=kind, before_id=before_id, limit=limit)
+
+    async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
+                            at_time_ms: int | None = None, before_revision: int | None = None,
+                            limit: int = 20) -> dict[str, object]:
+        return await self.store.note_versions(
+            service_validation_ops.identifier(run_id, field_name="run_id"),
+            service_validation_ops.identifier(track_id, field_name="track_id"),
+            service_validation_ops.identifier(note_id, field_name="note_id"),
+            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+
+    async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
+                        expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
+        return await self.store.save_note(
+            service_validation_ops.identifier(run_id, field_name="run_id"),
+            service_validation_ops.identifier(track_id, field_name="track_id"),
+            note_id=service_validation_ops.identifier(note_id, field_name="note_id"), fields=fields,
+            expected_revision=expected_revision, context=context)
+
     async def record_drawing_document(
         self,
         run_id: str,

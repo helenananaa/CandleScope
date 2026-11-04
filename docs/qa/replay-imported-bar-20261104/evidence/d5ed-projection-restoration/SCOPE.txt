@@ -1,0 +1,1 @@
+source-prefix and restart passed; screenshot taken before history paging completed

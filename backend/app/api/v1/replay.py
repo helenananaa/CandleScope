@@ -15,6 +15,7 @@ from app.replay.request_contracts import (
     ReplayReviewPayload,
     ReplayDrawingDocumentPayload,
     ReplayReviewMarkerPayload,
+    ReplayNotePayload,
     ReplayReviewControlPayload,
     ReplayPublicTimeBatchPayload,
     ReplayForkPayload,
@@ -1062,6 +1063,38 @@ async def replay_v2_training_journal(
     run_id: str,
 ) -> dict[str, object]:
     return await _training_service(request).journal(run_id)
+
+
+@router.get("/runs/{run_id}/tracks/{track_id}/notes")
+async def replay_v2_training_notes(request: Request, run_id: str, track_id: str,
+                                   at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS)) -> dict[str, object]:
+    return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms)
+
+
+@router.get("/runs/{run_id}/tracks/{track_id}/notes/link-options")
+async def replay_v2_training_note_link_options(request: Request, run_id: str, track_id: str,
+        kind: Literal["FILL", "TRADE"] = Query(),
+        before_id: str | None = Query(default=None, min_length=1, max_length=128),
+        limit: int = Query(default=20, ge=1, le=20)) -> dict[str, object]:
+    return await _training_service(request).note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+
+
+@router.get("/runs/{run_id}/tracks/{track_id}/notes/{note_id}/versions")
+async def replay_v2_training_note_versions(request: Request, run_id: str, track_id: str, note_id: str,
+        at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),
+        before_revision: int | None = Query(default=None, ge=1, le=101),
+        limit: int = Query(default=20, ge=1, le=20)) -> dict[str, object]:
+    return await _training_service(request).note_versions(run_id, track_id, note_id,
+        at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+
+
+@router.post("/runs/{run_id}/tracks/{track_id}/notes",
+             dependencies=[Depends(_training_service), Depends(enforce_replay_request_limit)])
+async def replay_v2_training_note_save(request: Request, run_id: str, track_id: str,
+                                       payload: ReplayNotePayload) -> dict[str, object]:
+    return await _training_service(request).save_note(
+        run_id, track_id, note_id=payload.id, fields=payload.fields,
+        expected_revision=payload.expectedRevision, context=payload.context.model_dump())
 
 
 @router.get("/runs/{run_id}/report")

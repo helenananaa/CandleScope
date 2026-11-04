@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { t } from "../i18n/index.js";
+import { useReplayEntryCapability } from "../features/replay/useReplayEntryCapability.js";
 
 /**
  * Each workspace is its own HTML entry, so switching is a page load. Chromium
@@ -30,6 +31,8 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
   replayReason?: string | undefined;
   researchEnabled?: boolean;
 }) {
+  const localReplay = useReplayEntryCapability({ enabled: offline });
+  const trainingDisabled = replayDisabled || (offline && localReplay.state !== "enabled");
   const prerenderable: string[] = [];
   if (researchEnabled && active !== "research") prerenderable.push("/strategy.html");
   if (!offline && !replayDisabled && !onReplay && active !== "replay") prerenderable.push("/replay.html");
@@ -37,7 +40,7 @@ export default function WorkspaceNavigation({ active, offline = false, onReplay,
   return <nav className="workspace-navigation" aria-label={t("ux.navigation")}>
     {offline ? <span aria-disabled="true">{t("ux.market")}</span> : <a href="/" aria-current={active === "live" ? "page" : undefined}>{t("ux.market")}</a>}
     {researchEnabled && <a href="/strategy.html" data-strategy-entry="enabled" data-backtest-entry="enabled" aria-current={active === "research" ? "page" : undefined}>{t("ux.research")}</a>}
-    {offline || replayDisabled ? <button type="button" disabled title={replayReason}>{t("ux.training")}</button> : onReplay
+    {trainingDisabled ? <button type="button" disabled title={replayReason ?? localReplay.reason ?? undefined}>{t("ux.training")}</button> : onReplay
       ? <button type="button" onClick={onReplay} data-replay-entry="enabled">{t("ux.training")}</button>
       : <a href="/replay.html" aria-current={active === "replay" ? "page" : undefined}>{t("ux.training")}</a>}
   </nav>;

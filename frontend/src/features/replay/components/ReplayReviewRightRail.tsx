@@ -1,8 +1,9 @@
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import type { ReplayReviewResponse } from "../replayIntegrityModel.js";
+import type { ReactNode } from "react";
 
-export default function ReplayReviewRightRail({ review }: { readonly review: ReplayReviewResponse }) {
+export default function ReplayReviewRightRail({ review, notes }: { readonly review: ReplayReviewResponse; readonly notes?: ReactNode }) {
   useLocale();
   const selectedTrackId = String(review.projection.viewer_state.selected_track_id ?? "");
   const selected = review.projection.tracks.find((track) => track.track_id === selectedTrackId)
@@ -27,6 +28,7 @@ export default function ReplayReviewRightRail({ review }: { readonly review: Rep
     >
       <span className="training-hub-kicker">{t("replay.kicker.reviewReadOnly")}</span>
       <h3>{String(selected?.symbol ?? "--")}</h3>
+      {notes}
       <dl>
         <div><dt>{t("replay.shell.publicTime")}</dt><dd>{review.events.find((event) => event.event_id === review.selected_event_id)?.public_time.label ?? "--"}</dd></div>
         <div><dt>{t("replay.shell.equity")}</dt><dd>{String(accountRecord?.equity ?? "--")}</dd></div>
