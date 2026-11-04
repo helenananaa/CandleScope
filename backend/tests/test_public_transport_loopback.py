@@ -73,6 +73,9 @@ def test_default_provider_counts_metadata_and_pages_once_with_exact_route(monkey
             snapshot = get_public_admission().snapshot()
             assert snapshot["counts"]["attempts"] == len(paths)
             assert snapshot["in_flight"] == 0
+            assert [item["endpoint"] for item in snapshot["recent"]] == paths
+            assert all(item["exchange"] == "binance" and item["market_type"] == "spot"
+                       for item in snapshot["recent"])
             assert all(":egress=loopback-a" in bucket for item in snapshot["recent"] for bucket in item["buckets"])
         finally:
             await transport.stop()
@@ -103,6 +106,7 @@ def test_catalog_child_uses_parent_quota_and_settles_probe():
             assert await asyncio.wait_for(run_catalog_loader(_catalog_http_loader, origin), 90) == [{"symbols": []}]
             snapshot = get_public_admission().snapshot()
             assert received == ["/api/v3/exchangeInfo"]
+            assert snapshot["recent"][-1]["endpoint"] == "/api/v3/exchangeInfo"
             assert snapshot["counts"]["attempts"] == snapshot["counts"]["class_background"] == 1
             assert snapshot["in_flight"] == 0
             bucket = get_shared_rate_limit_manager().snapshot()["binance:spot:request_weight:ip:egress=catalog-loopback"]

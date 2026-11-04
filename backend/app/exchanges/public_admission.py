@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import itertools
+import math
 import time
 from collections import Counter, deque
 from collections.abc import Callable, Iterator
@@ -15,6 +16,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
+from urllib.parse import urlsplit
 
 from .rate_limits import (
     HistoricalRequest, RateLimitAdmission, RateLimitDeferred, RateLimitManager,
@@ -22,6 +24,32 @@ from .rate_limits import (
 )
 
 _fairness_tickets = itertools.count()
+
+
+def _diagnostic_endpoint(endpoint: str) -> str:
+    # A public adapter may supply a full URL. Keep only its bounded path:
+    # credentials, host, query parameters and fragments are not diagnostics.
+    try:
+        return urlsplit(endpoint).path[:256]
+    except ValueError:
+        return "<invalid-endpoint>"
+
+
+def _diagnostic_quota_headers(headers: Any) -> dict[str, str]:
+    if not headers:
+        return {}
+    result = {}
+    for key, value in headers.items():
+        key, value = str(key).lower(), str(value)
+        if key not in {"retry-after", "x-mbx-used-weight", "x-mbx-used-weight-1m"} or len(value) > 64:
+            continue
+        try:
+            number = float(value)
+        except ValueError:
+            continue
+        if math.isfinite(number) and number >= 0:
+            result[key] = value
+    return result
 
 
 class TrafficClass(IntEnum):
@@ -353,11 +381,18 @@ class PublicAdmission:
         self._counts["unknown" if feedback.get("response_unknown") else "completed"] += 1
         self._recent.append({
             "attempt_id": permit.attempt_id,
+            "observed_at_ms": int(time.time() * 1000),
+            "exchange": permit.request.exchange,
+            "market_type": permit.request.market_type,
+            "endpoint": _diagnostic_endpoint(permit.request.endpoint),
+            "rules": [r.rule.name for r in permit.reservations],
             "buckets": [r.rule.bucket_key for r in permit.reservations],
             "costs": [r.rule.request_cost(r.request) for r in permit.reservations],
             "traffic_class": permit.traffic_class.name.lower(),
             "elapsed_ms": round((time.monotonic() - permit.started) * 1000, 3),
             "status_code": feedback.get("status_code"),
+            "body_code": feedback.get("body_code"),
+            "quota_headers": _diagnostic_quota_headers(feedback.get("headers")),
             "unknown": bool(feedback.get("response_unknown")),
         })
         self.manager.notify_change()
