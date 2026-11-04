@@ -228,6 +228,8 @@ class ContinuousStrategyController:
     @classmethod
     async def open(cls,path,manager,*,clock_ms,max_active_runs=2,input_options=None,store_options=None,provider_factory=None):
         path=Path(path)
+        if not path.is_absolute() or path.is_symlink():
+            raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Use the absolute owned database path, without a database symlink")
         def acquire():
             lease=ProfileLease(path.parent/"continuous-execution.lock")
             store=None

@@ -463,3 +463,22 @@ def test_fresh_backend_process_reconstructs_python_and_continues_same_financial_
     fills=before["checkpoint"]["engine"]["fills"]
     assert fills and after["checkpoint"]["engine"]["fills"][:len(fills)]==fills
     assert not list(tmp_path.glob("candlescope-continuous-*"))
+
+
+def test_database_alias_cannot_bypass_profile_exclusive_ownership(tmp_path):
+    manager=DataManager()
+    real=tmp_path/'real'/'run.db'
+    ContinuousStrategyStore(real).close()
+    alias=tmp_path/'alias';alias.mkdir()
+    (alias/'run.db').symlink_to(real)
+    async def scenario():
+        try:
+            with pytest.raises(BacktestError,match="database symlink"):
+                await ContinuousStrategyController.open(alias/'run.db',manager,clock_ms=lambda:START)
+            with pytest.raises(BacktestError,match="absolute"):
+                await ContinuousStrategyController.open('relative.db',manager,clock_ms=lambda:START)
+            assert not (alias/'continuous-execution.lock').exists()
+            assert not (alias/'continuous-strategy-inputs').exists()
+            assert real.is_file()
+        finally:await manager.event_bus.close()
+    asyncio.run(scenario())
