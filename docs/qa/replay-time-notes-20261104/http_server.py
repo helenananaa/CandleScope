@@ -92,6 +92,28 @@ async def advance():
     return await state()
 
 
+@app.post("/fixture/buy")
+async def buy():
+    service = app.state.service
+    snapshot = await service.get_session(app.state.session_id)
+    await training().command(app.state.run_id, _command(app.state.run_id, f"notes-buy-{os.getpid()}",
+        ReplayV2CommandType.PLACE_ORDER, snapshot, {"client_order_id": f"note-buy-{os.getpid()}",
+        "side": "BUY", "order_type": "MARKET", "quantity": "0.1", "reduce_only": False,
+        "limit_price": None, "stop_price": None}))
+    return await state()
+
+
+@app.post("/fixture/close")
+async def close():
+    service = app.state.service
+    snapshot = await service.get_session(app.state.session_id)
+    await training().command(app.state.run_id, _command(app.state.run_id, f"notes-close-{os.getpid()}",
+        ReplayV2CommandType.PLACE_ORDER, snapshot, {"client_order_id": f"note-close-{os.getpid()}",
+        "side": "SELL", "order_type": "MARKET", "quantity": "0.1", "reduce_only": True,
+        "limit_price": None, "stop_price": None}))
+    return await state()
+
+
 @app.post("/fixture/marker")
 async def marker():
     await training().record_review_marker(app.state.run_id, command_id=f"notes-marker-{os.getpid()}", text="same-time note event boundary")

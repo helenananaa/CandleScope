@@ -1,5 +1,5 @@
 import { API_BASE } from "../../services/apiConfig.js";
-import { parseReplayNote, parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNoteVersionsResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
+import { parseReplayNoteLinkOptions, type ReplayNoteLinkOptions, parseReplayNote, parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNoteVersionsResponse, type ReplayNote, type ReplayNotesResponse, type ReplayNoteSave } from "./replayNotes.js";
 import { prepareReplay, preparationRequest, waitForPreparation, type PreparationCapabilities, type PreparationJob } from "../data-preparation/api.js";
 import { ReplayApiClient } from "./replayApi.js";
 import type { ReplayApiClientOptions, ReplayCatalogQuery } from "./replayApi.js";
@@ -1027,6 +1027,21 @@ export class ReplayV2ApiClient {
         const result = parseReplayNotesResponse(value);
         if (result.run_id !== runId || result.track_id !== trackId
           || (atTimeMs !== undefined && result.asOfMs !== atTimeMs)) throw new TypeError("Replay annotation context changed");
+        return result;
+      }, signal ? { signal } : {});
+  }
+
+  noteLinkOptionsRun(runId: string, trackId: string,
+    query: { kind: "FILL" | "TRADE"; beforeId?: string; limit?: number }, signal?: AbortSignal): Promise<ReplayNoteLinkOptions> {
+    const params = new URLSearchParams({ kind: query.kind, limit: String(query.limit ?? 20) });
+    if (query.beforeId !== undefined) params.set("before_id", query.beforeId);
+    return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes/link-options?${params}`,
+      value => {
+        const result = parseReplayNoteLinkOptions(value);
+        if (result.context.runId !== runId || result.context.trackId !== trackId || result.kind !== query.kind
+          || result.links.length > (query.limit ?? 20)
+          || (query.beforeId !== undefined && result.links.some(link => link.id >= query.beforeId!)))
+          throw new TypeError("Replay note reference page changed its scope");
         return result;
       }, signal ? { signal } : {});
   }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../../../i18n/index.js";
 import { sameReplayNoteContext, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
+import { ReplayNoteLinks } from "./ReplayNoteLinks.js";
 
 export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, formatTime, actualTime, onTimes }: {
   api: Pick<ReplayV2ApiClient, "noteVersionsRun">; note: ReplayNote; context: ReplayNoteContext;
@@ -26,13 +27,14 @@ export default function ReplayNoteHistory({ api, note, context, scope, asOfMs, f
     });
     return () => controller.abort();
   }, [api, context, note.id, asOfMs, before, attempt]);
-  useEffect(() => { onTimes(scope, page.versions.map(version => version.effectiveTimeMs)); }, [scope, page.versions, onTimes]);
+  useEffect(() => { onTimes(scope, page.versions.flatMap(version => [version.effectiveTimeMs, ...(version.links?.map(link => link.eventTimeMs) ?? [])])); }, [scope, page.versions, onTimes]);
   return <div className="replay-note-history" data-testid="replay-note-history">
     {page.versions.map(version => <div key={version.revisionCount} data-note-version={version.revisionCount}>
       <strong>{t("replay.notes.version", { version: version.revisionCount })}</strong>
       <dl><dt>{t("replay.notes.effectiveTime")}</dt><dd>{formatTime(version.effectiveTimeMs)}</dd>
         <dt>{t("replay.notes.savedTime")}</dt><dd>{actualTime(version.updatedAtMs)}</dd></dl>
       <p className="replay-note-text">{version.fields.entryBasis ?? ""}</p>
+      <ReplayNoteLinks links={version.links ?? []} formatTime={formatTime} />
     </div>)}
     {loading && <p role="status">{t("replay.notes.historyLoading")}</p>}
     {page.error && !loading && <p role="alert">{t("replay.notes.historyFailed")}</p>}

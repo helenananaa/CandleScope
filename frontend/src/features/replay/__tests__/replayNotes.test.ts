@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts } from "../replayNoteDraft.js";
-import { parseReplayNotesResponse, parseReplayNoteVersions, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
+import { parseReplayNotesResponse, parseReplayNoteVersions, parseReplayNoteLinkOptions, replayNoteSelectedLinks, type ReplayNote, type ReplayNoteContext } from "../replayNotes.js";
 import { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayDataManager } from "../replayDataManager.js";
 import { managedReplayRunApi } from "../managedReplayTransport.js";
@@ -155,4 +155,49 @@ test("version pages honor request cursor/size and late parsed history cannot out
   const invalidApi = new ReplayV2ApiClient({ fetcher: async () => Response.json(versionsResponse()) });
   await assert.rejects(invalidApi.noteVersionsRun("run", "track", "note", { atTimeMs: 100, beforeRevision: 3 }));
   await assert.rejects(invalidApi.noteVersionsRun("run", "track", "note", { atTimeMs: 100, limit: 1 }));
+});
+
+const fillLink = () => ({ kind: "FILL" as const, id: "fill-0000000001", fillId: "fill-0000000001", eventTimeMs: 100,
+  sourceSequence: 1, side: "BUY" as const, quantity: "0.1", price: "100.000000000000000001" });
+const linkOptions = () => ({ protocol: "replay.v3", schema_version: "replay.note-links.v1", context: context(),
+  kind: "FILL", links: [fillLink()], nextBeforeId: null });
+
+test("linked record parser keeps exact decimal strings and rejects future or malformed records", () => {
+  assert.equal(parseReplayNoteLinkOptions(linkOptions()).links[0]!.price, fillLink().price);
+  for (const links of [[{ ...fillLink(), eventTimeMs: 101 }], [{ ...fillLink(), price: "NaN" }],
+    [{ ...fillLink(), kind: "TRADE" }], [fillLink(), fillLink()]])
+    assert.throws(() => parseReplayNoteLinkOptions({ ...linkOptions(), links }));
+  assert.throws(() => parseReplayNoteLinkOptions({ ...linkOptions(), nextBeforeId: "other" }));
+  const linked = { ...response(), notes: [{ ...note(), links: [fillLink()] }] };
+  assert.equal(parseReplayNotesResponse(linked).notes[0]!.links?.[0]!.quantity, "0.1");
+  assert.throws(() => parseReplayNotesResponse({ ...linked, notes: [{ ...note(), links: [{ ...fillLink(), eventTimeMs: 101 }] }] }));
+  assert.deepEqual(replayNoteSelectedLinks({ replayFillIds: '["fill-1"]' }, "FILL"), ["fill-1"]);
+  assert.throws(() => replayNoteSelectedLinks({ replayFillIds: '["fill-1","fill-1"]' }, "FILL"));
+});
+
+test("linked selections survive an uncertain editor submission with the exact original draft and context", async () => {
+  const storage = new Storage(), binding = replayNoteDraftBinding(storage, context(), 100, null);
+  const fields = { entryBasis: "linked plan", replayFillIds: JSON.stringify([fillLink().id]) };
+  const first = new JournalEditor<ReplayNote>({ key: binding.key, storage: () => binding.storage,
+    create: async () => { throw new Error("lost linked reply"); }, save: async () => { throw new Error("unexpected edit"); }, quick: async () => undefined });
+  first.initialize(null); first.edit(fields); assert.equal(await first.flush(), false); first.dispose();
+  const draft = visibleReplayNoteDrafts(storage, context(), 100)[0]!;
+  const restored = replayNoteDraftBinding(storage, context(), 100, null, draft);
+  const second = new JournalEditor<ReplayNote>({ key: restored.key, storage: () => restored.storage,
+    create: async (savedFields, id) => { assert.deepEqual(savedFields, fields); return { ...note(), id, fields: savedFields, links: [fillLink()] }; },
+    save: async () => { throw new Error("unexpected edit"); }, quick: async () => undefined });
+  second.initialize(null); assert.deepEqual(second.getSnapshot().fields, fields);
+  assert.equal(await second.flush(), true); assert.equal(storage.length, 0); second.dispose();
+});
+
+test("reference candidates remain under the manager parsed-body lease and reject a changed owner", async () => {
+  const manager = new ReplayDataManager(), lease = manager.createOperations({ runId: "run", purpose: "review" }), release = lease.retain();
+  let complete!: (value: string) => void;
+  const api = new ReplayV2ApiClient({ fetcher: async () => { const result = new Response();
+    result.text = () => new Promise(resolve => { complete = resolve; }); return result; } });
+  const pending = managedReplayRunApi(lease, api).noteLinkOptionsRun("run", "track", { kind: "FILL" });
+  await Promise.resolve(); const rejected = assert.rejects(pending, { name: "AbortError" });
+  release(); await rejected; complete(JSON.stringify(linkOptions())); manager.dispose();
+  const scoped = new ReplayV2ApiClient({ fetcher: async () => Response.json({ ...linkOptions(), context: { ...context(), trackId: "other" } }) });
+  await assert.rejects(scoped.noteLinkOptionsRun("run", "track", { kind: "FILL" }));
 });

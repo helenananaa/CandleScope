@@ -1071,6 +1071,14 @@ async def replay_v2_training_notes(request: Request, run_id: str, track_id: str,
     return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms)
 
 
+@router.get("/runs/{run_id}/tracks/{track_id}/notes/link-options")
+async def replay_v2_training_note_link_options(request: Request, run_id: str, track_id: str,
+        kind: Literal["FILL", "TRADE"] = Query(),
+        before_id: str | None = Query(default=None, min_length=1, max_length=128),
+        limit: int = Query(default=20, ge=1, le=20)) -> dict[str, object]:
+    return await _training_service(request).note_link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+
+
 @router.get("/runs/{run_id}/tracks/{track_id}/notes/{note_id}/versions")
 async def replay_v2_training_note_versions(request: Request, run_id: str, track_id: str, note_id: str,
         at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),

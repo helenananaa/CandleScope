@@ -3,10 +3,15 @@ export interface ReplayNoteContext {
   runRevision: number; sourceSequence: number; checkpointSequence: number; timelineSequence: number; virtualTimeMs: number;
   reviewId: string | null; reviewRevision: number | null; reviewNote: boolean;
 }
+export interface ReplayNoteLink {
+  kind: "FILL" | "TRADE"; id: string; fillId: string; eventTimeMs: number; sourceSequence: number;
+  side: "BUY" | "SELL"; quantity: string; price: string;
+}
 export interface ReplayNote {
   id: string; runId: string; trackId: string; marketTimeMs: number; effectiveTimeMs: number;
   createdAtMs: number; updatedAtMs: number; revisionCount: number;
   timelineSequence: number;
+  links?: ReplayNoteLink[];
   fields: Record<string, string>; body: string; reviewNote: boolean; revisions: readonly never[];
 }
 export interface ReplayNotesResponse {
@@ -46,7 +51,8 @@ export function parseReplayNoteContext(value: unknown): ReplayNoteContext {
 }
 export function parseReplayNote(value: unknown): ReplayNote {
   const source = exact(value, ["id", "runId", "trackId", "marketTimeMs", "effectiveTimeMs", "createdAtMs",
-    "updatedAtMs", "revisionCount", "fields", "body", "reviewNote", "revisions", "timelineSequence"]);
+    "updatedAtMs", "revisionCount", "fields", "body", "reviewNote", "revisions", "timelineSequence",
+    ...("links" in record(value) ? ["links"] : [])]);
   const fields = record(source.fields);
   if (Object.keys(fields).length > 80 || Object.entries(fields).some(([key, value]) =>
     !key || key.length > 128 || typeof value !== "string")
@@ -59,7 +65,9 @@ export function parseReplayNote(value: unknown): ReplayNote {
     body: "", reviewNote: boolean(source.reviewNote), revisions: [] };
   const timelineSequence = integer(source.timelineSequence);
   if (note.revisionCount < 1 || note.marketTimeMs > note.effectiveTimeMs) fail();
-  return { ...note, timelineSequence };
+  const links = source.links === undefined ? [] : parseReplayNoteLinks(source.links, 8);
+  if (links.some(link => link.eventTimeMs > note.effectiveTimeMs)) fail();
+  return { ...note, timelineSequence, ...(source.links === undefined ? {} : { links }) };
 }
 export function parseReplayNotesResponse(value: unknown): ReplayNotesResponse {
   const source = exact(value, ["protocol", "schema_version", "run_id", "track_id", "context", "asOfMs", "notes"]);
@@ -99,4 +107,40 @@ export function parseReplayNoteVersions(value: unknown): ReplayNoteVersionsRespo
     || (nextBeforeRevision !== null && (nextBeforeRevision < 2 || nextBeforeRevision !== versions.at(-1)?.revisionCount))) fail();
   return { protocol: "replay.v3", schema_version: "replay.note-versions.v1", run_id, track_id, note_id,
     context, asOfMs, versions, nextBeforeRevision };
+}
+
+export function parseReplayNoteLinks(value: unknown, maximum: number): ReplayNoteLink[] {
+  if (!Array.isArray(value) || value.length > maximum) return fail();
+  const links = value.map((item): ReplayNoteLink => {
+    const source = exact(item, ["kind", "id", "fillId", "eventTimeMs", "sourceSequence", "side", "quantity", "price"]);
+    if ((source.kind !== "FILL" && source.kind !== "TRADE") || (source.side !== "BUY" && source.side !== "SELL")) return fail();
+    const quantity = text(source.quantity, 256), price = text(source.price, 256);
+    if ([quantity, price].some(amount => !/^\d+(?:\.\d+)?$/.test(amount) || !/[1-9]/.test(amount))) return fail();
+    return { kind: source.kind, id: text(source.id), fillId: text(source.fillId), eventTimeMs: integer(source.eventTimeMs),
+      sourceSequence: integer(source.sourceSequence), side: source.side, quantity, price };
+  });
+  if (new Set(links.map(link => link.kind + ":" + link.id)).size !== links.length) return fail();
+  return links;
+}
+export interface ReplayNoteLinkOptions {
+  protocol: "replay.v3"; schema_version: "replay.note-links.v1"; context: ReplayNoteContext;
+  kind: "FILL" | "TRADE"; links: ReplayNoteLink[]; nextBeforeId: string | null;
+}
+export function parseReplayNoteLinkOptions(value: unknown): ReplayNoteLinkOptions {
+  const source = exact(value, ["protocol", "schema_version", "context", "kind", "links", "nextBeforeId"]);
+  if (source.protocol !== "replay.v3" || source.schema_version !== "replay.note-links.v1"
+    || (source.kind !== "FILL" && source.kind !== "TRADE")) return fail();
+  const context = parseReplayNoteContext(source.context), links = parseReplayNoteLinks(source.links, 20);
+  const nextBeforeId = source.nextBeforeId === null ? null : text(source.nextBeforeId);
+  if (links.some((link, index) => link.kind !== source.kind || link.eventTimeMs > context.virtualTimeMs
+    || (index > 0 && link.id >= links[index - 1]!.id))
+    || (nextBeforeId !== null && nextBeforeId !== links.at(-1)?.id)) return fail();
+  return { protocol: "replay.v3", schema_version: "replay.note-links.v1", context, kind: source.kind, links, nextBeforeId };
+}
+export const replayNoteLinkField = (kind: ReplayNoteLink["kind"]) => kind === "FILL" ? "replayFillIds" : "replayTradeIds";
+export function replayNoteSelectedLinks(fields: Record<string, string>, kind: ReplayNoteLink["kind"]): string[] {
+  const value: unknown = JSON.parse(fields[replayNoteLinkField(kind)] ?? "[]");
+  if (!Array.isArray(value) || value.length > 8 || value.some(id => typeof id !== "string" || id.length < 1 || id.length > 128)
+    || new Set(value).size !== value.length) return fail();
+  return value as string[];
 }
