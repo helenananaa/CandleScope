@@ -260,3 +260,79 @@ def test_partial_financial_ack_cannot_advance_beyond_the_acquired_source(storage
     with store.commit_guard(proof):pass
     with pytest.raises(StaleAcquisition):
         with store.commit_guard(proof,committed_through_ms=START-1):pytest.fail("acknowledged progress cannot move backwards")
+
+
+def revised_prefix(storage):
+    klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+i*STEP) for i in range(5)],source=SOURCE)
+    store,initial=begin(storage);proof=prepare(store,initial,through=END+4*STEP)
+    with store.commit_guard(proof):pass
+    klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+3*STEP,200)],source=SOURCE)
+    return store,proof,store.inspect(proof.owner)
+
+
+def test_repair_forks_only_unchanged_prefix_and_preserves_original_watch(storage,tmp_path):
+    store,original,observed=revised_prefix(storage);financial=tmp_path/'financial.db';persist_financial(financial,original)
+    fork=store.fork_unchanged(original,"strategy:test:repair",through_ms=END+2*STEP,expected_version=observed['version'])
+    assert fork.incarnation!=original.incarnation and fork.from_ms==original.from_ms
+    assert fork.through_ms==END+2*STEP and fork.version==fork.acquisition==0
+    assert store.inspect(original.owner)==observed
+    assert load_financial(financial)==original
+    # New source lease is independently durable before any financial swap.
+    fresh=PrefixWatchStore(store.connect)
+    retry=prepare(fresh,fork,through=END+4*STEP)
+    with fresh.commit_guard(retry):pass
+    assert store.inspect(original.owner)==observed
+    with pytest.raises(ProcessedPrefixChanged):prepare(store,original,through=END+5*STEP)
+
+
+@pytest.mark.parametrize('anchor',[START+3*STEP,END+4*STEP])
+def test_repair_anchor_cannot_include_revised_input(storage,anchor):
+    store,original,observed=revised_prefix(storage)
+    with pytest.raises(PrefixContinuityUnavailable):
+        store.fork_unchanged(original,"strategy:test:repair",through_ms=anchor,expected_version=observed['version'])
+    assert store.inspect("strategy:test:repair") is None and store.inspect(original.owner)==observed
+
+
+def test_repair_preview_change_and_earlier_revision_invalidate_the_anchor(storage):
+    store,original,observed=revised_prefix(storage)
+    klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+STEP,250)],source=SOURCE)
+    for version in (observed['version'],store.inspect(original.owner)['version']):
+        with pytest.raises(PrefixContinuityUnavailable):
+            store.fork_unchanged(original,"strategy:test:repair",through_ms=END+2*STEP,expected_version=version)
+    assert store.inspect("strategy:test:repair") is None
+
+
+def test_new_revision_of_a_repair_anchor_is_fenced_before_publication(storage):
+    store,original,observed=revised_prefix(storage)
+    fork=store.fork_unchanged(original,"strategy:test:repair",through_ms=END+2*STEP,expected_version=observed['version'])
+    pending=prepare(store,fork,through=END+4*STEP)
+    klines_repo.upsert_klines("BTCUSDT","1m",[_row(START+STEP,300)],source=SOURCE)
+    with pytest.raises(StaleAcquisition):
+        with store.commit_guard(pending):pytest.fail("changed repair source cannot publish")
+    with pytest.raises(ProcessedPrefixChanged):prepare(store,fork,through=END+4*STEP)
+
+
+def test_repair_watch_budget_and_existing_owners_never_adopt_or_overwrite(storage):
+    store,original,observed=revised_prefix(storage)
+    limited=PrefixWatchStore(store.connect,max_watches=1)
+    with pytest.raises(PrefixContinuityUnavailable,match='capacity'):
+        limited.fork_unchanged(original,"strategy:test:repair",through_ms=END+2*STEP,expected_version=observed['version'])
+    existing=store.register("strategy:test:repair",SERIES,from_ms=START,committed_through_ms=START-1)
+    with pytest.raises(PrefixContinuityUnavailable,match='already exists'):
+        store.fork_unchanged(original,existing.owner,through_ms=END+2*STEP,expected_version=observed['version'])
+    assert store.inspect(existing.owner)['incarnation']==existing.incarnation
+
+
+def test_repair_financial_commit_survives_source_ack_failure_without_renaming(storage,tmp_path):
+    store,original,observed=revised_prefix(storage)
+    fork=store.fork_unchanged(original,"strategy:test:repair",through_ms=END+2*STEP,expected_version=observed['version'])
+    pending=prepare(store,fork,through=END+4*STEP);financial=tmp_path/'repaired.db'
+    with pytest.raises(RuntimeError):
+        with store.commit_guard(pending):
+            persist_financial(financial,pending)
+            raise RuntimeError('crash after financial swap, before source acknowledgement')
+    saved=load_financial(financial);fresh=PrefixWatchStore(store.connect)
+    assert fresh.inspect(saved.owner)['incarnation']==saved.incarnation
+    next_point=prepare(fresh,saved,through=END+5*STEP)
+    with fresh.commit_guard(next_point):pass
+    assert fresh.inspect(original.owner)==observed
