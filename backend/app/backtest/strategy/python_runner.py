@@ -280,6 +280,9 @@ class IsolatedPythonRunner:
                 "INVALID_JSON", "worker emitted invalid JSONL"
             ) from exc
         self._record(request, payload)
+        if payload.get("errorCode") == "STDERR_TOO_LARGE":
+            self.close()
+            raise PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
         if not payload.get("ok"):
             raise PythonRunnerError(
                 "PROVIDER_PROTOCOL_VIOLATION", str(payload.get("error"))
@@ -382,6 +385,9 @@ class IsolatedPythonRunner:
             if not isinstance(payload, dict) or payload.get("id") != request["id"]:
                 self.close()
                 return results, PythonRunnerError("INVALID_JSON", "worker batch reply is out of order")
+            if payload.get("errorCode") == "STDERR_TOO_LARGE":
+                self.close()
+                return results, PythonRunnerError("STDERR_TOO_LARGE", "worker stderr exceeded budget")
             if payload.get("late") is True:
                 # The worker saw this call overrun its budget; a single call
                 # would have timed out and killed the worker here.

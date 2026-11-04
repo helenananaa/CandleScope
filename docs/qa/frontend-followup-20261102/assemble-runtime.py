@@ -25,6 +25,15 @@ subprocess.run(["git", "diff", "--exit-code", "codex/python-indicator-author-202
                 # inputs retain the equality check. Source verifier covers ASAR.
                 ":(exclude)frontend/desktop/workspace-bus-hub.mjs",
                 ":(exclude)frontend/desktop/workspace-bus-hub.test.mjs",
+                # Link-only IPC registration is repacked ASAR JavaScript; the
+                # source verifier hashes these files in the assembled package.
+                ":(exclude)frontend/desktop/main.mjs",
+                ":(exclude)frontend/desktop/preload.cjs",
+                ":(exclude)frontend/desktop/preload.test.mjs",
+                ":(exclude)frontend/desktop/ipc-contract.mjs",
+                # main #231 changes this pure-Python SDK worker. Replace its
+                # tracked source tree below; native engines remain unchanged.
+                ":(exclude)packages/candlescope-backtest-sdk/src/candlescope_backtest_sdk/worker.py",
                 # main #220 bridge changes: validated against the supplied
                 # bundle's source digests and actual wheel bytes below.
                 ":(exclude)packages/candlescope-plugin-pine-compat/src/candlescope_plugin_pine_compat/runtime.py",
@@ -61,6 +70,13 @@ subprocess.run(["codesign", "--verify", "--deep", "--strict", str(args.source_ap
 app.parent.mkdir(parents=True, exist_ok=True)
 subprocess.run(["/bin/cp", "-cR", str(args.source_app), str(app)], check=True)
 resources = app / "Contents/Resources"
+sdk_source = "packages/candlescope-backtest-sdk/src"
+shutil.rmtree(resources / sdk_source)
+for name in subprocess.check_output(["git", "ls-files", "-z", sdk_source], cwd=ROOT, text=True).split("\0"):
+    if name:
+        destination = resources / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, destination)
 shutil.rmtree(resources / "backend/app")
 for name in subprocess.check_output(["git", "ls-files", "-z", "backend/app"], cwd=ROOT, text=True).split("\0"):
     if not name:

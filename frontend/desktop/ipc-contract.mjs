@@ -22,6 +22,7 @@ export const DESKTOP_IPC = Object.freeze({
   placement: "candlescope:desktop:placement",
   workspaceBusEvent: "candlescope:workspace-bus:event",
   workspaceBusConnect: "candlescope:workspace-bus:connect",
+  workspaceBusRegisterLinks: "candlescope:workspace-bus:register-links",
   workspaceBusCommit: "candlescope:workspace-bus:commit",
   workspaceBusLink: "candlescope:workspace-bus:link",
   workspaceBusWindow: "candlescope:workspace-bus:window",

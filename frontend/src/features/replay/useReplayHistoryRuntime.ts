@@ -32,6 +32,8 @@ import { ReplayHistoryLoadGate } from "./replayHistoryTransport.js";
 import { recordPerfEvent } from "../../runtime/performance/perfMarks.js";
 import { CANONICAL_HISTORY_REFRESH } from "./replayCanonicalIndicators.js";
 import { TAPE_VIEWER_COMMIT } from "./replayTapeViewer.js";
+import { seekReplayViewportTime } from "./replayViewportNavigation.js";
+import type { ChartTimeSeekResult } from "../market-data/chartTimeNavigation.js";
 
 
 export interface ReplayHistoryRuntime {
@@ -46,6 +48,7 @@ export interface ReplayHistoryRuntime {
   readonly viewportTransferUnavailable: boolean;
   readonly loadMoreLeft: LoadMoreLeft;
   readonly restoreLatestWindow: () => Promise<boolean>;
+  readonly seekToTime: (requestedTimeMs: number) => Promise<ChartTimeSeekResult>;
   readonly retryHistory: () => Promise<void>;
   readonly dismissNotice: () => void;
 }
@@ -84,6 +87,7 @@ export function useReplayHistoryRuntime(
 ): ReplayHistoryRuntime {
   const { api, request: managedRequest } = useReplayOperations(viewer.viewerState?.run_id, "history");
   const retryRequestedRef = useRef(false);
+  const navigationSequence = useRef(0);
   const [loadGate] = useState(() => new ReplayHistoryLoadGate());
   const tapeObservation = viewer.tapeObservation;
   const observedStore = tapeObservation === undefined ? runtime.store : { ...runtime.store,
@@ -182,7 +186,7 @@ export function useReplayHistoryRuntime(
     viewportAttemptsRef.current.clear();
     olderCursorRef.current = null;
     setHistoryState(initialReplayHistoryState(historyKey));
-    return () => provider?.cancel();
+    return () => { navigationSequence.current += 1; provider?.cancel(); };
   }, [historyKey, provider]);
 
   useEffect(() => {
@@ -549,6 +553,38 @@ export function useReplayHistoryRuntime(
     void restoreLatestWindow();
   }, [restoreLatestWindow, viewportNeedsLatestRestore]);
 
+  const seekToTime = useCallback(async (requestedTimeMs: number): Promise<ChartTimeSeekResult> => {
+    const ticket = ++navigationSequence.current;
+    const runId = viewer.viewerState?.run_id;
+    const captured = storeRef.current;
+    const boundary = captured.virtualTimeMs;
+    const capturedEpoch = captured.dataEpoch;
+    if (!provider || !runId || boundary === null || capturedEpoch === null)
+      return { status: "unavailable", requestedTimeMs };
+    const current = () => ticket === navigationSequence.current
+      && currentHistoryRef.current.key === historyKey
+      && storeRef.current.sessionId === captured.sessionId
+      && storeRef.current.generation === captured.generation
+      && storeRef.current.dataEpoch === captured.dataEpoch
+      && storeRef.current.virtualTimeMs === boundary
+      && storeRef.current.sourceSequence === captured.sourceSequence;
+    let result: ChartTimeSeekResult | null = null;
+    await loadGate.runAfterCurrent(historyKey, () => result === null && current(), async release => {
+      try {
+        result = await seekReplayViewportTime({ requestedTimeMs, runId, provider, store: viewer.seriesStore,
+          dataEpoch: capturedEpoch, revealedBoundaryMs: boundary, current,
+          onApplied: page => {
+            setViewerSeriesRevision(value => value + 1);
+            setHistoryState(value => value.key === historyKey ? { ...value, error: null,
+              historyEpoch: page.history_epoch, boundaryMs: page.history_boundary_ms, policy: page.history_policy,
+              ...(viewer.seriesStore.first()?.time === page.next_before_ms / 1000 ? { hasMore: page.has_more } : {}),
+            } : value);
+          } });
+      } finally { release(); }
+    });
+    return result ?? { status: "superseded", requestedTimeMs };
+  }, [historyKey, loadGate, provider, viewer.seriesStore, viewer.viewerState?.run_id]);
+
   return {
     loading,
     hasMore,
@@ -564,6 +600,7 @@ export function useReplayHistoryRuntime(
     viewportTransferUnavailable: currentState.viewportTransferUnavailable,
     loadMoreLeft,
     restoreLatestWindow,
+    seekToTime,
     retryHistory: async () => {
       retryRequestedRef.current = true;
       await loadMoreLeft();

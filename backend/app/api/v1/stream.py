@@ -25,6 +25,7 @@ from app.api.v1.stream_market import stream_market
 from app.api.v1.stream_full_order_book import stream_full_order_book
 from app.api.v1.stream_order_book import stream_order_book
 from app.api.v1.replay import replay_training_unavailable_payload
+from app.data_engine.data_manager.replay import optional_replay_service_from_state
 from app.api.v1.stream_replay import stream_replay_session
 from app.api.v1.stream_replay_training import (
     MARKET_TRACK_STREAM_DELTA_MODE,
@@ -104,7 +105,7 @@ async def replay_stream(
             await websocket.close(code=1008, reason="unsupported replay protocol")
         return
 
-    service = getattr(websocket.app.state, "replay_service", None)
+    service = optional_replay_service_from_state(websocket.app.state)
     training = getattr(service, "training", None)
     if service is None or training is None:
         await websocket.accept()
@@ -180,7 +181,7 @@ async def replay_training_run_stream(
         )
         await websocket.close(code=1008, reason="unsupported replay projection")
         return
-    service = getattr(websocket.app.state, "replay_service", None)
+    service = optional_replay_service_from_state(websocket.app.state)
     training = getattr(service, "training", None)
     if training is None:
         await websocket.accept()

@@ -126,6 +126,8 @@ export interface ChartLinkGroupSettings {
   accountSource?: boolean;
   tradingOverlays?: boolean;
   noteOverlays?: boolean;
+  studyCursor?: boolean;
+  studyMode?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -223,6 +225,8 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   accountSource: false,
   tradingOverlays: false,
   noteOverlays: false,
+  studyCursor: false,
+  studyMode: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,

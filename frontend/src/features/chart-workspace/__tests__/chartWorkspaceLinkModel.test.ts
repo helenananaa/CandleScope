@@ -92,6 +92,13 @@ test("descendant policies compose across every parent-child edge", () => {
   assert.equal(grandchild?.relationship, "descendant");
   assert.equal(grandchild?.policy.market, false);
   assert.equal(grandchild?.policy.crosshair, true);
+  for (const channel of ["studyMode", "studyCursor"] as const) {
+    document.linkGroups["group-grandchild"]!.receiveFromParent[channel] = true;
+    document.linkGroups["group-child"]!.receiveFromParent[channel] = false;
+    assert.equal(resolveChartLinkTargets(document, "cell-1").find(target => target.cellId === "cell-4")?.policy[channel], false);
+    document.linkGroups["group-child"]!.receiveFromParent[channel] = true;
+    assert.equal(resolveChartLinkTargets(document, "cell-1").find(target => target.cellId === "cell-4")?.policy[channel], true);
+  }
 });
 
 test("drawing documents stay peer-only so child edits cannot mutate a parent scope", () => {
