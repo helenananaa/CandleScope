@@ -1,0 +1,9 @@
+{
+  "executable": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+  "prefix": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env",
+  "core_module": "/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/attempts/attempt9/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/lib/python3.12/site-packages/pine_compat/__init__.py",
+  "distributions": {
+    "candlescope-plugin-pine-compat": "0.4.0",
+    "pine-compat-runtime": "0.3.3+cs.1"
+  }
+}
