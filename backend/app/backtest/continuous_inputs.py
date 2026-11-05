@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 
 from app.local_data.service import LocalDatasetService
@@ -18,10 +19,18 @@ from .errors import BacktestError
 DATASET = re.compile(r"local-[0-9a-f]{32}\Z")
 
 
+def reject_path_links(path):
+    """A Windows junction is a reparse point but need not be a symlink."""
+    try:metadata=Path(path).lstat()
+    except FileNotFoundError:return
+    if stat.S_ISLNK(metadata.st_mode) or getattr(metadata,"st_file_attributes",0)&0x400:
+        raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Owned path cannot be a symlink or reparse point")
+
+
 class ProfileLease:
     def __init__(self,path):
         path=Path(path)
-        if path.is_symlink():raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Owner lock cannot be a symlink")
+        reject_path_links(path)
         path.parent.mkdir(parents=True,exist_ok=True)
         self.handle=path.open("a+b")
         try:
@@ -57,11 +66,12 @@ class ContinuousInputs:
         self.datasets=LocalDatasetService(self.root/"datasets")
 
     def _own_directory(self):
-        if self.root.is_symlink():raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Initialization directory cannot be a symlink")
+        reject_path_links(self.root)
         marker=self.root/"owner.json"
+        reject_path_links(marker)
         expected={"schema":"candlescope.continuous-private-inputs/1","database":str(self.store.path.resolve())}
         if self.root.exists():
-            if marker.is_symlink() or not marker.is_file():
+            if not marker.is_file():
                 if any(self.root.iterdir()):raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Refuse to adopt unmarked existing input data")
             else:
                 try:actual=json.loads(marker.read_text())
@@ -80,7 +90,7 @@ class ContinuousInputs:
         finally:temporary.unlink(missing_ok=True)
 
     def _size(self,path):
-        if path.is_symlink():raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Private inputs contain a foreign symlink")
+        reject_path_links(path)
         if not path.exists():return 0
         if path.is_file():return path.stat().st_size
         return sum(self._size(child) for child in path.iterdir())
