@@ -200,6 +200,27 @@ def _diagnose_source(source: str, manifest: Mapping[str, Any]) -> list[dict[str,
     return diagnostics
 
 
+def editor_bundle_files(name, source_text, parameter_schema=None) -> dict[str, bytes]:
+    """One SDK author contract for fixed-history and continuing editor code."""
+    manifest = {
+        "schemaVersion": "candlescope.python-strategy-bundle/1",
+        "name": str(name),
+        "entrypoint": "strategy:Strategy",
+        "signalClock": "BAR_CLOSE",
+        "outputModes": ["TARGET_POSITION", "SIGNAL", "ORDER_INTENT"],
+        "requiredFeatures": ["open", "high", "low", "close", "volume"],
+        "warmup": {"kind": "FIXED_BARS", "bars": 0},
+        "parameters": parameter_schema or [],
+        "reproducibility": "BEST_EFFORT_LOCAL",
+    }
+    return {
+        "strategy.json": json.dumps(manifest, sort_keys=True).encode("utf-8"),
+        "strategy.py": str(source_text).encode("utf-8"),
+        "candlescope-editor.json": json.dumps({"schemaVersion": "candlescope.python-editor/1"}).encode("utf-8"),
+        "requirements.lock": b"# CandleScope bundled SDK; no additional dependencies\n",
+    }
+
+
 def inspect_files(files: Mapping[str, bytes]) -> dict[str, Any]:
     if len(files) > MAX_FILES:
         _reject("BUNDLE_TOO_LARGE", "bundle has too many files")

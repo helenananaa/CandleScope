@@ -65,10 +65,15 @@ class ContinuousBarHost:
         self.session = StrategyProviderSession(provider, run_id=run_id)
         self.adapter = StrategyHostAdapter(self.session, step_timeout_s=step_timeout_s)
         try:
+            input_plan = definition["input_plan"]
+            if "provider" in definition:
+                from .continuous_provider import execution_inputs
+                self.config, input_plan = execution_inputs(definition)
+                config = self.config
             capabilities = provider.describe()
             if "BAR_CLOSE" not in capabilities.input_modes or not capabilities.snapshot_restore:
                 raise error("FIDELITY_UNSUPPORTED", "A resumable BAR_CLOSE provider is required")
-            self.adapter.start(dict(definition["input_plan"]))
+            self.adapter.start(dict(input_plan))
             self.feature_names = _declared_feature_names(provider) or ()
             self.input_modes = tuple(provider.describe().input_modes)
             _assert_strategy_frame_inputs(provider,bar={},trade=None,_modes=self.input_modes)
