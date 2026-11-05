@@ -8,7 +8,7 @@ actually deliver through the generic provider.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
@@ -31,6 +31,7 @@ from app.exchanges.models import (
 )
 
 from .binance_usdm import SUPPORTED_CCXT_VERSION
+from app.exchanges.trade_candles import supports_trade_candles, trade_candle_profile
 
 
 _PUBLIC_METHODS = (
@@ -217,7 +218,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
     # do not infer ordinary WS support from the continuous-contract channel.
     kline_intervals = tuple(
         interval for interval in entry.timeframes
-        if not (entry.exchange_id == "binanceusdm" and interval == "1s")
+        if not (entry.exchange_id in {"binanceusdm", "binancecoinm"} and interval == "1s")
     )
 
     fetch_ohlcv = entry.supports("fetchOHLCV")
@@ -269,7 +270,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 ),
                 history_policy=(
                     HistoryAvailabilityPolicy(
-                        cadence=HistoryCadence.REGULAR,
+                        cadence=HistoryCadence.EVENT_DRIVEN if entry.exchange_id == "upbit" else HistoryCadence.REGULAR,
                         empty_page_semantics=(
                             HistoryEmptyPageSemantics.AUTHORITATIVE_RANGE_EMPTY
                         ),
@@ -282,6 +283,19 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
                 ),
             )
         )
+
+        if entry.exchange_id == "gate" and "spot" in market_types:
+            # Gate supports native 1s REST candles, but its WS candlesticks
+            # channel rejects 1s. Keep the override scoped to spot.
+            kline = channels.pop()
+            channels.append(replace(
+                kline, market_types=("spot",),
+                params={"interval": ["1s", *entry.timeframes]},
+                known_limitations=(*kline.known_limitations, "1s updates use REST polling"),
+            ))
+            other_markets = tuple(value for value in market_types if value != "spot")
+            if other_markets:
+                channels.append(replace(kline, market_types=other_markets))
 
     fetch_trades = entry.supports("fetchTrades")
     watch_trades = entry.supports("watchTrades") and entry.pro
@@ -550,7 +564,7 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
         capability_schema_version=3 if markets else 1,
         markets=markets,
         channels=channels,
-        native_intervals=list(kline_intervals),
+        native_intervals=["1s", *kline_intervals] if entry.exchange_id == "gate" else list(kline_intervals),
         supports_multi_symbol_ticker=False,
         supports_symbol_search=True,
         ws_connection_model=(
@@ -564,6 +578,11 @@ def build_ccxt_capabilities(entry: CcxtCatalogEntry) -> ExchangeCapabilities:
             "derivatives.ccxt_unified",
         ],
         limits={
+            "trade_candles.markets": [market for market in entry.market_types if supports_trade_candles(entry.exchange_id, market)],
+            "trade_candles.retention_ms": {
+                market: trade_candle_profile(entry.exchange_id, market).retention_ms
+                for market in entry.market_types if supports_trade_candles(entry.exchange_id, market)
+            },
             "ccxt.version": SUPPORTED_CCXT_VERSION,
             "ccxt.pro": entry.pro,
             "ccxt.rate_limit_ms": entry.rate_limit_ms,

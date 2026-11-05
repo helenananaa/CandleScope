@@ -1,0 +1,17 @@
+{
+  "passed": false,
+  "application": "958fb18d70015d71e51c9aee92d16e9cd05fea52",
+  "source_files": 979,
+  "dist_files": 162,
+  "strict_signature_before_after": true,
+  "mismatches": 0,
+  "failure": "Six-minute readiness: custom Binance 7s remained pending while Binance returned HTTP 418/-1003. No MA/save/restart qualification.",
+  "cooldown": {
+    "status_code": 418,
+    "body_code": "-1003",
+    "opened_at_ms": 1793538971731,
+    "retry_after_seconds": 5623,
+    "retry_not_before_ms": 1793544594731,
+    "retry_not_before_utc": "2026-11-01T14:49:54.731000+00:00"
+  }
+}

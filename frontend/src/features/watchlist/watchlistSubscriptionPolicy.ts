@@ -17,13 +17,14 @@ function intervalValue(item: IntervalCandidate): unknown {
 export function getFullSubscriptionIntervals({
   nativeIntervals = [],
   customIntervalRecords = [],
+  tradeCandlesAvailable = false,
 }: FullSubscriptionOptions = {}): IntervalString[] {
   const nativeValues = normalizedUniqueValues(nativeIntervals);
   const nativeSet = new Set(nativeValues);
   const customValues = normalizedUniqueValues(customIntervalRecords)
     .filter((value) => (
       !nativeSet.has(value)
-      && canResolveIntervalFromNativeValues(value, nativeValues)
+      && canResolveIntervalFromNativeValues(value, nativeValues, tradeCandlesAvailable)
     ));
   return [...nativeValues, ...customValues];
 }
@@ -65,6 +66,7 @@ export function shouldResyncFullSubscriptionIntervals({
 export function getFullSubscriptionResourceSummary({
   nativeIntervals = [],
   customIntervalRecords = [],
+  tradeCandlesAvailable = false,
 }: FullSubscriptionOptions = {}): {
   nativeCount: number;
   customCount: number;
@@ -77,7 +79,7 @@ export function getFullSubscriptionResourceSummary({
   const customValues = normalizedUniqueValues(customIntervalRecords)
     .filter((value) => (
       !nativeSet.has(value)
-      && canResolveIntervalFromNativeValues(value, nativeValues)
+      && canResolveIntervalFromNativeValues(value, nativeValues, tradeCandlesAvailable)
     ));
   const totalIntervals = nativeValues.length + customValues.length;
 
@@ -99,6 +101,7 @@ export function getSubscriptionTierRequestOptions({
   tier,
   nativeIntervals = [],
   customIntervalRecords = [],
+  tradeCandlesAvailable = false,
 }: SubscriptionTierRequestOptions = {}): {
   consumerId: string;
   intervals?: IntervalString[];
@@ -111,6 +114,7 @@ export function getSubscriptionTierRequestOptions({
     options.intervals = getFullSubscriptionIntervals({
       nativeIntervals,
       customIntervalRecords,
+      tradeCandlesAvailable,
     });
   }
 
