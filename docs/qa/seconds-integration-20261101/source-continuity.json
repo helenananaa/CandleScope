@@ -1,0 +1,33 @@
+{
+  "at": "2026-11-01T09:54:59.233710+00:00",
+  "reason": "Native8 direct failure was source_gap_timeout. Source review and deterministic probes confirm empty-only repair never reaches bar adoption and delayed live final does not clear source gap. This patch does not claim all native issues fixed.",
+  "changes": "On repair completion or relevant delayed trusted final, re-read bounded canonical rows and exact-default sparse absence under existing D126 CacheRevisionConsumer.adopt. Full actual proof resolves waiter, emits no synthetic close for empty seconds. Foreign identity, partial/unknown/deleted/racing proof remain pending. No timeout increase or write fence weakening.",
+  "tests": "49 sparse/continuity/empty-fence +72 durable delivery/recovery regressions passed. New10case module oldsource8fail2pass:6functional failures plus2race hook absence; initial fixture missing quote_volume corrected with both logs retained. Initial broad command had missing filenames and ran0, corrected run72passes.",
+  "native": "pending next candidate",
+  "artifacts": [
+    {
+      "path": "sparse-before.log.gz",
+      "sha256": "71dcfc26e0b5f6c78d09c4e0ecd9b39ac39fede97a5c9042b9b730a1cca8244e"
+    },
+    {
+      "path": "sparse-after.log.gz",
+      "sha256": "e940bb8c0dcf313f27ed6ba9a416a42342d5f76b5076357c4df80a0838de2541"
+    },
+    {
+      "path": "sparse-clean-before.log.gz",
+      "sha256": "4639c4a51d7bfd52c0f1681be728003ade70c6faf92a6c78e72a041fdc9801a5"
+    },
+    {
+      "path": "sparse-final.log.gz",
+      "sha256": "e2184fd1b4b2941bde51cc032d7811d4a5b808b3e3997e4603b9c6d440b85498"
+    },
+    {
+      "path": "sparse-broad.log.gz",
+      "sha256": "64a1d7b8c7ecdc03d9fd5fe5f9aa320f5572c012f923d8ba0abe6743007b17cb"
+    },
+    {
+      "path": "sparse-broad-final.log.gz",
+      "sha256": "3c354eeea89fb7217528c2d60410206825daf164790edc312fe67b5ef16bb618"
+    }
+  ]
+}

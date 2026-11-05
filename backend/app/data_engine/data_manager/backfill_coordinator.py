@@ -8,6 +8,7 @@ import time
 from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any, Protocol
+from itertools import islice
 
 from app.core.bounded_executor import ExecutorBusyError
 from app.core.executors import run_storage
@@ -164,10 +165,12 @@ class BackfillCoordinator:
         chunk_bars: int = 1000,
         history_service: HistoryAvailabilityService | None = None,
         history_policy_resolver: HistoryPolicyResolver | None = None,
+        source_available: Callable[[SeriesKey], Awaitable[None]] | None = None,
     ) -> None:
         self._storage = storage
         self._bars_backfilled = bars_backfilled
         self._emit_event = emit_event
+        self._source_available = source_available
         self._engine = engine
         self._loop = loop
         self._max_retries = max(1, max_retries)
@@ -2241,6 +2244,10 @@ class BackfillCoordinator:
             self._complete(request, outcome)
             return request.request_id, future
         prepared = self._history_planner.prepare(request)
+        if self._history_planner.source_second_close_delay(request, prepared.plan) is not None:
+            # Preserve the exact source gap, including a temporarily forming
+            # tail. _run_with_retries defers it without occupying a worker.
+            prepared.request = request
         if prepared.request is None:
             self._ledger_mark_history_deferred(request, prepared.plan)
             future = self._future_for(request)
@@ -2351,6 +2358,11 @@ class BackfillCoordinator:
     async def _run_with_retries(self, request: RepairRequest) -> RepairOutcome:
         next_attempt = request._retry_attempt
         prepared = self._history_planner.prepare(request)
+        close_delay = self._history_planner.source_second_close_delay(request, prepared.plan)
+        if close_delay is not None:
+            # No physical attempt occurred. Preserve the retry budget while
+            # yielding this slot until the host can fetch the closed second.
+            raise RepairRetryDeferred(close_delay, max(0, next_attempt - 1))
         if prepared.request is None:
             return self._history_planner.no_fetch_outcome(request, prepared.plan)
         request = prepared.request
@@ -2384,6 +2396,7 @@ class BackfillCoordinator:
                         "request_id": request.request_id,
                     },
                 )
+                await self._notify_source_storage(request, report)
                 if self._is_failed(report.status) and attempt < self._max_retries:
                     delay = self._backoff(attempt)
                     await self._ledger_mark_retry_wait(
@@ -2537,6 +2550,38 @@ class BackfillCoordinator:
             attempts=self._max_retries,
             error=last_error,
         )
+
+    async def _notify_source_storage(self, request: RepairRequest, report: Any) -> None:
+        """Wake exact source proofs before whole-request verification/retry.
+
+        This private notification does not publish a completion or admit rows.
+        Native absence can commit without any candle/write count, and an
+        otherwise partial run can have durable inputs for another interval.
+        DataManager must independently re-read canonical data and D126 tokens.
+        """
+        if self._source_available is None:
+            return
+        identity = identity_from_metadata(request.exchange, request.metadata)
+        identity_kwargs = identity.to_dict() if identity is not None else {}
+        intervals = {request.interval}
+        ranges = getattr(getattr(report, 'reconcile_result', None), 'written_ranges', ()) or ()
+        for item in islice(ranges, 4096):
+            read = item.get if isinstance(item, dict) else lambda name: getattr(item, name, None)
+            if (read('exchange'), read('market_type'), read('symbol')) != (
+                    request.exchange, request.market_type, request.symbol):
+                continue
+            interval = read('interval')
+            if isinstance(interval, str) and interval:
+                intervals.add(interval)
+            if len(intervals) >= 32:
+                break
+        for interval in sorted(intervals):
+            key = SeriesKey(request.symbol, interval, exchange=request.exchange,
+                            market_type=request.market_type, **identity_kwargs)
+            try:
+                await self._source_available(key)
+            except Exception:
+                logger.exception('Canonical source availability refresh failed for %s', key)
 
     async def _load_backfilled_to_cache(
         self,

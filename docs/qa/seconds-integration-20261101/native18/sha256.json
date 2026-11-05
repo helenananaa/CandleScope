@@ -1,0 +1,17 @@
+{
+  "acceptance.json.gz": "d894d352b0b8cfaa84f8712445b8876229a5f6b31e1dc3141d885ac886860141",
+  "assembly.json.gz": "01b06148ec6bb3d77d32e2173f27aba469029e5894270d5f4e60c0d89c96d86b",
+  "backend-sidecar.log.gz": "b81875d86ea942e87979cf2741062b95f06ef60e783b7bb89a5c1cd88591ba9e",
+  "checks.json": "282625e8fe01b08781f7bd230fe4261a5db1ccee85c8d2754a1c92c419f3c0e0",
+  "failure.png": "6b03aad9e3191872f98e098291b369c22e0bb7d9ce078a8b17ff6354fc222183",
+  "latest-workspace.json.gz": "f96d6ffb281897b4044ae6b74d585c4cd150f6638af124282981d4a94fed1ace",
+  "native-run18.log.gz": "90f3c22e9e29b9657e0b4c86e5e018599b7438dcae9cca8e089161f698a0fc9d",
+  "provider-cooldown.json.gz": "902459488177e490a65ef65f3297c1ce725ad69bb8d7d73329b0568567452c45",
+  "signature-after.log.gz": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837",
+  "signature-before.log.gz": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837",
+  "signing.log.gz": "0bc68eae9731c81fdaa817da06467bffac70b960b2daf8dbf80878f2a01ca91b",
+  "source-match-after.log.gz": "6aa6f230d6006e4636aa77d9408f0cf063ab81e621e961094d01826eae0582e4",
+  "source-match.log.gz": "6aa6f230d6006e4636aa77d9408f0cf063ab81e621e961094d01826eae0582e4",
+  "source-package-manifest.json.gz": "96b1427a59964f9c827f50bcb3d5c07ad645306610afd462308be14709ab245c",
+  "traffic.json.gz": "2ad32f2c8f6771d248105e448eee97688b6c76b03ccb2298933fee84a5d36243"
+}

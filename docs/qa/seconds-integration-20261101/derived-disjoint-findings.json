@@ -1,0 +1,40 @@
+{
+  "probe": "RealBackfillEngine,actualSQLite,syntheticHTTPfixedinput,noexchangecalls. SyntheticHTTPadmissiondisabledafterfirsttwoattemptsdeferredonrealhostquota.",
+  "result": [
+    {
+      "inject": false,
+      "status": "completed",
+      "customRows": 2,
+      "errors": []
+    },
+    {
+      "inject": true,
+      "status": "partial",
+      "customRows": 0,
+      "errors": [
+        "Write batch failed for binance:spot:BTCUSDT@7s (custom): canonical series family changed after acquisition began"
+      ]
+    }
+  ],
+  "conclusion": "An independent native append beyond complete old7soutputinputrange after sourcepage commit causes whole-family derived acquisition rejection. This proves a false-conflict interleaving, not that all23native15conflicts have this cause.",
+  "next_invariants": [
+    "Capture actual bounded canonical input dependencies before derived reduction; verify again atomically with targetwrite",
+    "Retain explicit/manual deletion permission, including empty-range deletion and pre-migration requests",
+    "Reject inside-input correction/deletion, foreign identity and unproven/native/trade/calendar sources",
+    "Do not broaden permission based only on source label or future append revision"
+  ],
+  "artifacts": [
+    {
+      "path": "derived-disjoint-before.log.gz",
+      "sha256": "19e2e66f6585e928f2430a7ab91250fc9ca5f50d451b6803a083a46710c79dad"
+    },
+    {
+      "path": "derived-disjoint-before2.log.gz",
+      "sha256": "889d844f2ef02ad0f02c055a2f23f3ffe7f3cfe03abeaa8b6346b0d86310945c"
+    },
+    {
+      "path": "derived-disjoint-before3.log.gz",
+      "sha256": "4154ab461bfc519cf94d57ed74181a1b1eb61c266208248cb9d8ac6f09a05742"
+    }
+  ]
+}

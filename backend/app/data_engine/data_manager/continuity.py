@@ -48,7 +48,7 @@ class SourceGap:
                 "gap_id": self.id, "range_start_ms": self.start_ms,
                 "range_end_ms": self.end_ms,
                 "state": "resolved" if resolved else "failed" if self.error else "recovering",
-                "missing_bars": len(self.expected - self.repaired.keys()),
+                "missing_bars": 0 if self.completed_at is not None else len(self.expected - self.repaired.keys()),
                 "error": self.error,
             },
         )
@@ -67,7 +67,7 @@ class SourceGapRegistry:
         self._changed = asyncio.Event()
         self._closed = False
 
-    async def wait_cleared(self) -> None:
+    async def wait_cleared(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait for repair or stream retirement before taking a fresh snapshot.
 
         A failed gap remains unsafe until its stream restarts. There is no
@@ -79,10 +79,22 @@ class SourceGapRegistry:
                 raise ConsumerRecoveryRequired('source_stream_closed')
             if self.overflowed:
                 raise ConsumerRecoveryRequired('source_gap_tracking_exhausted')
-            if not self.pending():
+            keys = key if isinstance(key, frozenset) else frozenset({key}) if key is not None else None
+            pending = [gap for gap in self.pending() if keys is None or gap.key in keys]
+            if not pending:
                 return
+            if fail_on_error and any(gap.error for gap in pending):
+                raise ConsumerRecoveryRequired(next(gap.error for gap in pending if gap.error))
             self._changed.clear()
-            await self._changed.wait()
+            changed = asyncio.create_task(self._changed.wait())
+            try:
+                # fail() completes a gap's future even when no registry change
+                # notification follows. Never cancel these owner-held futures.
+                await asyncio.wait({changed, *(gap.future for gap in pending if not gap.future.done())},
+                                   return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                changed.cancel()
+                await asyncio.gather(changed, return_exceptions=True)
 
     def pending(self, key: SeriesKey | None = None) -> list[SourceGap]:
         return [gap for gap in self.gaps.values()
@@ -184,6 +196,26 @@ class SourceGapRegistry:
             gap.fail("source_stream_closed")
         self.gaps.clear()
         self._changed.set()
+
+    def resolve_verified(self, gap: SourceGap, bars: list[BarData], absent: set[int]) -> bool:
+        """Adopt a complete, revision-checked snapshot including proven absence.
+
+        The owner must read canonical rows and empty evidence together under its
+        cache adoption fence. Unknown or partial absence never completes a gap.
+        Empty positions generate no fabricated candle or close event.
+        """
+        if self.gaps.get(gap.id) is not gap or gap.error or gap.completed_at is not None:
+            return False
+        repaired = {bar.time_ms: deepcopy(bar) for bar in bars
+                    if bar.is_closed and bar.trusted_final and bar.time_ms in gap.expected}
+        if not gap.expected <= repaired.keys() | absent:
+            return False
+        gap.repaired = repaired
+        gap.completed_at = time.monotonic()
+        if not gap.future.done():
+            gap.future.set_result(None)
+        self._changed.set()
+        return True
 
 
 class ContinuityConsumer:

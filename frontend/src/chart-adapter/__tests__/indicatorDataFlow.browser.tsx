@@ -69,7 +69,7 @@ export async function checkIndicatorDataFlow() {
       "bar.created", wire(symbol), Number(rows.at(-1)!.time) * 1000);
     assert(market.cache.planHistory(identity(symbol), 500).action === "reuse", "fixture health missing");
   }
-  let browserExecutions = 0, hostedExecutions = 0;
+  let browserExecutions = 0, hostedExecutions = 0, missingRangeExecutions = 0;
   let backendAvailable = false, backendFailures = 0;
   let cancelNextBrowser = false;
   const sockets: ControlledSocket[] = [];
@@ -93,7 +93,7 @@ export async function checkIndicatorDataFlow() {
         if (!this.subscriptions.has(message.clientId)) return;
         this.onmessage?.({ data: JSON.stringify({ type: "indicator.subscribed", clientId: message.clientId, ok: true,
           resumeStatus: "history_required", dataRevision: { serverEpoch: "shared-browser", correctionRevision: "0", closedThrough: start + 499 * 60 } }) } as MessageEvent);
-        this.preview(message.clientId, Number(message.params.period));
+        if (message.symbol !== "SPARSEUSDT") this.preview(message.clientId, Number(message.params.period));
       });
     }
     preview(clientId: string, value: number) {
@@ -115,8 +115,22 @@ export async function checkIndicatorDataFlow() {
     }),
     range: async ({ requests }) => {
       hostedExecutions += 1;
-      return { ok: true, results: requests.map(request => ({ clientId: request.clientId, payload: parseIndicatorPayloadEnvelope({ ok: true,
-        lines: [{ id: "ema", data: corpus.get(request.symbol)!.map(row => ({ time: row.time, value: row.close })) }] }) })) };
+      return { ok: true, results: requests.map(request => {
+        if (request.symbol === "GAPPEDUSDT") {
+          missingRangeExecutions += 1;
+          return { clientId: request.clientId, payload: parseIndicatorPayloadEnvelope({ ok: false,
+            code: "INDICATOR_RANGE_NOT_READY", message: "controlled unresolved source gap", __httpStatus: 202,
+            detail: { range: { start: request.start, end: request.end },
+              backfillRequestIds: ["unresolved-gap"], waitedMs: 0, retryMode: "event" } }) };
+        }
+        const rows = corpus.get(request.symbol)!;
+        const data = request.symbol === "SPARSEUSDT"
+          ? rows.slice(4).map((row, index) => ({ time: row.time,
+              value: rows.slice(index, index + 5).reduce((sum, bar) => sum + bar.close!, 0) / 5 }))
+          : rows.map(row => ({ time: row.time, value: row.close }));
+        return { clientId: request.clientId, payload: parseIndicatorPayloadEnvelope({ ok: true,
+          lines: [{ id: request.symbol === "SPARSEUSDT" ? "ma" : "ema", data }] }) };
+      }) };
     },
   });
   const dataFlow = new ChartDataFlowManager(market, indicators);
@@ -285,6 +299,53 @@ export async function checkIndicatorDataFlow() {
     flushSync(() => latest.get("right")!.actions.removeIndicator("shared-right"));
     await until(() => streams.diagnostics().subscriptions === 0 && socket.readyState === 3, "final release leaked a transport");
     checks.push("parameter divergence splits only the affected demand; rejoin shares again and final release closes the transport");
+    // A source can authoritatively omit empty buckets. The real hook must let
+    // the backend evaluate coverage instead of waiting for an equidistant grid
+    // which this valid input will never contain (the Upbit seconds failure).
+    flushSync(() => {
+      for (const indicator of latest.get("left")!.view.activeIndicators) {
+        latest.get("left")!.actions.removeIndicator(indicator.id);
+      }
+    });
+    const sparseStart = start - 500 * 60;
+    const sparse = Array.from({ length: 500 }, (_, index): KlineBar => ({
+      time: (sparseStart + index * 120) as EpochSeconds,
+      open: index + 1, high: index + 2, low: index, close: index + 1, volume: 1, is_closed: true,
+    }));
+    corpus.set("SPARSEUSDT", sparse);
+    const sparseRead = market.cache.beginRead(identity("SPARSEUSDT"));
+    market.cache.admitResponse(sparseRead, { ...result("SPARSEUSDT"),
+      excluded_ranges: sparse.slice(0, -1).map(row => ({ start_ms: (Number(row.time) + 60) * 1000,
+        end_ms: (Number(row.time) + 60) * 1000, reason: "no_trades" })) });
+    sparseRead.release();
+    render("SPARSEUSDT", 6);
+    flushSync(() => latest.get("left")!.actions.addIndicator({ id: "sparse-ma", name: "Sparse MA",
+      engineName: "MA", executionTarget: "hosted", params: { period: 5 }, visible: true }));
+    await until(() => [...sockets].some(item => [...item.subscriptions.values()].some(message => message.symbol === "SPARSEUSDT")),
+      "source-proven sparse history never settled initial hydration or opened its hosted subscription");
+    const sparseOutput = latest.get("left")!.view.activeIndicators.find(item => item.id === "sparse-ma")!;
+    const sparsePoints = new Map(sparseOutput.lines?.[0]?.data.map(point => [Number(point.time), Number(point.value)]));
+    let sparseChecked = 0;
+    for (let index = 4; index < sparse.length; index += 1) {
+      const actual = sparsePoints.get(Number(sparse[index]!.time));
+      if (actual === undefined) continue;
+      assert(actual === index - 1, "sparse MA did not use the five actual source bars");
+      sparseChecked += 1;
+    }
+    assert(sparseChecked >= 3, "sparse initial hydration did not publish visible numerical output");
+    checks.push("authoritative sparse history hydrates real visible MA values and starts its hosted stream without fabricated empty bars");
+    flushSync(() => latest.get("left")!.actions.removeIndicator("sparse-ma"));
+    corpus.set("GAPPEDUSDT", sparse.filter((_, index) => index !== 250));
+    const missingRead = market.cache.beginRead(identity("GAPPEDUSDT"));
+    market.cache.admitResponse(missingRead, result("GAPPEDUSDT")); missingRead.release();
+    render("GAPPEDUSDT", 7);
+    flushSync(() => latest.get("left")!.actions.addIndicator({ id: "missing-ma", name: "Missing MA",
+      engineName: "MA", executionTarget: "hosted", params: { period: 5 }, visible: true }));
+    await until(() => missingRangeExecutions > 0, "irregular input never reached authoritative gap evaluation");
+    await delay(250);
+    assert(!sockets.some(item => [...item.subscriptions.values()].some(message => message.symbol === "GAPPEDUSDT")),
+      "unresolved backend range opened a live indicator subscription");
+    checks.push("an actual backend missing-range response still defers the hosted stream after sparse input admission");
     return { checks, browserExecutions, hostedExecutions, diagnostics: dataFlow.diagnostics(), streams: streams.diagnostics() };
   } finally {
     controller.releaseAll(); flushSync(() => root.unmount()); rootHost.remove();

@@ -271,15 +271,11 @@ def _resolve_interval(
         interval=interval,
         purpose=purpose,
     )
-    base_interval = (
-        route.native_interval
-        if route.kind is IntervalRouteKind.NATIVE
-        else route.base_interval
-    )
+    base_interval = route.source_interval
     base_ms = parse_interval_ms(base_interval or "") or route.spec.nominal_ms
     factor = max(1, route.spec.nominal_ms // base_ms)
     return {
-        "is_custom": route.kind is IntervalRouteKind.DERIVED,
+        "is_custom": route.kind is not IntervalRouteKind.NATIVE,
         "custom_seconds": route.spec.nominal_ms // 1000,
         "base_interval": base_interval,
         "factor": factor,
@@ -1171,10 +1167,11 @@ def _cap_range_request(
         }
 
     if calendar is not None:
-        # Canonicalise an arbitrary inclusive edge to its containing expected
-        # bucket.  Strict stepping with ``end_ms + 1`` leaks that +1 offset on
-        # always-open calendars for non-standard widths such as 47m.
-        last_open = containing_expected_open_ms(calendar, int(end_ms), interval)
+        # The inclusive edge may be an absent sparse bucket or a session
+        # closure. Earlier expected bars still belong to this range. Let the
+        # calendar find its last canonical open instead of requiring a bucket
+        # that contains the edge (or strictly stepping an arbitrary end + 1).
+        last_open = calendar.last_expected_open(int(start_ms), int(end_ms), interval)
         if last_open is None or last_open < start_ms:
             requested_bars = 0
             query_start_ms = start_ms
