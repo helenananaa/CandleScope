@@ -15,7 +15,7 @@ const manager = new StrategyDataManager();
 let latest: ContinuousObservation | null = null;
 Object.assign(window, { continuousRepairQA: { inspect: () => latest, diagnostics: () => manager.continuous.diagnostics() } });
 
-function Fixture() {
+export function Fixture() {
   const [state, setState] = useState<ContinuousObservation | null>(null), [caps, setCaps] = useState<ContinuousCapabilities | null>(null);
   const [shown, setShown] = useState(true);
   useEffect(() => {
