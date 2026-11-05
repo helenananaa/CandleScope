@@ -8,7 +8,9 @@ assert.equal(await fs.stat(q.s.root+'/profile').then(()=>true,error=>{if(error.c
 const manifest=JSON.parse(await fs.readFile(q.s.root+'/source-package-manifest.json','utf8'));
 function verifyPackage(){cp.execFileSync('node',['docs/qa/alerts-main243-20261104/verify.mjs'],{stdio:'inherit',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}});}
 q.s.receipt.schema='candlescope.alert-numeric-native/1';
+q.s.receipt.driverCommit=q.s.receipt.sourceCommit;
 q.s.receipt.sourceCommit=manifest.sourceCommit;
+q.s.receipt.transport='Packaged macOS arm64 numeric alerts with real public HTTP/WS; isolated local alert rules/history, no substituted responses or external notification channels.';
 q.s.receipt.scope={aliases:['RSI14','MACD12/26/9 histogram','MA20'],source:'real public Binance BTCUSDT spot 1m',notCovered:['arbitrary indicator parameters','Pine/Python alerts','Windows','whole-application performance SLA','exactly-once external delivery','full157 acceptance']};
 const api=async path=>q.s.page.evaluate(async url=>{const r=await fetch(url);return {status:r.status,body:await r.json()};},q.s.backend+path);
 let lastCircuitCheck=0;
@@ -21,7 +23,13 @@ async function checkCircuit(){
  const circuit=visit(health.body);if(!circuit)return;
  const deadline=Math.max(Date.now()+Math.ceil(circuit.cooldown_remaining_seconds*1000),circuit.opened_at_ms+Number(circuit.last_headers?.['retry-after']||0)*1000)+1000;
  const evidence={circuit,retry_not_before_ms:deadline,retry_not_before_utc:new Date(deadline).toISOString()};
- await fs.writeFile(q.s.root+'/new-cooldown.json',JSON.stringify(evidence,null,2));await q.record('public-ip-circuit-stop',evidence);throw new Error('PUBLIC_COOLDOWN_STOP '+evidence.retry_not_before_utc);
+ await fs.writeFile(q.s.root+'/new-cooldown.json',JSON.stringify(evidence,null,2));
+ for(const filename of ['/Users/ryanliang/CandleScope/output/backend-goal-20261102/STATE.json','/Users/ryanliang/CandleScope/output/development-goal-20261104/state.json']){
+  const state=JSON.parse(await fs.readFile(filename,'utf8'));
+  const prior=Date.parse(state.public_cooldown?.retry_not_before_utc??'');
+  if(!Number.isFinite(prior)||prior<deadline){state.public_cooldown=evidence;await fs.writeFile(filename,JSON.stringify(state,null,2)+'\n');}
+ }
+await q.record('public-ip-circuit-stop',evidence);throw new Error('PUBLIC_COOLDOWN_STOP '+evidence.retry_not_before_utc);
 }
 const read=async path=>{await checkCircuit();const r=await api(path);assert.equal(r.status,200,path);return r.body;};
 async function ready(){return q.until(async()=>{await checkCircuit();const snapshot=await q.inspect();return snapshot.cells.length===1&&snapshot.cells.every(c=>c.runtime.marketReady&&!c.runtime.loading&&c.runtime.barCount>=500)&&snapshot.persistence.state==='saved'?snapshot:false;},240000);}
