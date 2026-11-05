@@ -22,7 +22,7 @@ from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged, Pre
 from .continuous_bar_host import ContinuousBarHost, ContinuousExecutionStopping
 from .continuous_bar_source import ContinuousMarketBarSource, STEP
 from .continuous_definition import prepare_definition
-from .continuous_inputs import ContinuousInputs, ProfileLease
+from .continuous_inputs import ContinuousInputs, ProfileLease, reject_path_links
 from .continuous_provider import ContinuousProviderFactory
 from .continuous_runtime import ContinuousStrategyRuntime, WAKE_EVENTS
 from .continuous_store import ContinuousStrategyStore, _wire, MAX_DEFINITION_BYTES
@@ -233,8 +233,9 @@ class ContinuousStrategyController:
     @classmethod
     async def open(cls,path,manager,*,clock_ms,max_active_runs=2,input_options=None,store_options=None,provider_factory=None,repair_options=None):
         path=Path(path)
-        if not path.is_absolute() or path.is_symlink():
+        if not path.is_absolute():
             raise BacktestError("CONTINUOUS_INPUT_OWNERSHIP","Use the absolute owned database path, without a database symlink")
+        reject_path_links(path)
         def acquire():
             lease=ProfileLease(path.parent/"continuous-execution.lock")
             store=None
