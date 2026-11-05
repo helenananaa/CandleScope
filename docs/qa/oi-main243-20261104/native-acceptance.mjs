@@ -27,6 +27,12 @@ function receipts(){
   'import sqlite3,json,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); c.row_factory=sqlite3.Row; print(json.dumps([dict(r) for r in c.execute("SELECT * FROM open_interest_query_receipts WHERE exchange=? AND market_type=? AND symbol=? AND period=? AND start_ms<=? AND end_ms>=? ORDER BY start_ms,end_ms",("binance","futures","BTCUSDT","5m",int(sys.argv[3]),int(sys.argv[2])))])); c.close()',
   q.s.root+'/profile/data/market.db',String(start),String(end)],{encoding:'utf8'}));
 }
+function coldWitness(){
+ const python=process.env.CANDLESCOPE_QA_PYTHON??'/Users/ryanliang/CandleScope/backend/.venv/bin/python';
+ return JSON.parse(cp.execFileSync(python,['-B','-c',
+  'import sqlite3,json,sys; c=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); c.row_factory=sqlite3.Row; c.execute("BEGIN"); print(json.dumps({"rows":[dict(r) for r in c.execute("SELECT * FROM open_interest_history WHERE exchange=? AND market_type=? AND symbol=? AND period=? AND event_time_ms BETWEEN ? AND ? ORDER BY event_time_ms",("binance","futures","BTCUSDT","5m",int(sys.argv[2]),int(sys.argv[3])))],"receipts":[dict(r) for r in c.execute("SELECT * FROM open_interest_query_receipts WHERE exchange=? AND market_type=? AND symbol=? AND period=? AND start_ms<=? AND end_ms>=? ORDER BY start_ms,end_ms,policy_revision",("binance","futures","BTCUSDT","5m",int(sys.argv[3]),int(sys.argv[2])))]})); c.close()',
+  q.s.root+'/profile/data/market.db',String(start),String(end)],{encoding:'utf8'}));
+}
 async function launched(){
  await q.record('launch',await q.launch());
  await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor({timeout:60000});
@@ -61,13 +67,29 @@ try{
  const pane=q.s.page.locator('[data-market-pane="open-interest"]');await pane.waitFor({timeout:90000});assert.ok((await pane.innerText()).includes('Open Interest'));await ready();await q.screenshot('saved-oi-pane');
  await q.record('saved-oi-pane',{text:await pane.innerText(),receipts:savedReceipts,range:{start,end}});
  await closed();running=false;
+ // The pane may legitimately acquire overlapping history after the explicit
+ // refresh reference was read. Freeze the actual saved disk only after its
+ // complete owned exit; retain every audit field in the restart comparison.
+ const coldSaved=coldWitness();await q.record('cold-storage-before-restart',coldSaved);
+ const expectedData=coldSaved.rows.map(row=>({key:stable.data[0].key,topic:stable.data[0].topic,channel:'open_interest',
+  event_time_ms:row.event_time_ms,received_at_ms:row.received_at_ms,source:row.source,sequence:row.event_time_ms,
+  data:{open_interest:row.open_interest,is_final:Boolean(row.is_final),sample_kind:row.is_final?'final':'provisional',
+   ...(row.open_interest_value===null?{}:{open_interest_value:row.open_interest_value})}}));
+ assert.equal(expectedData.length,stable.data.length);
+ for(let i=0;i<expectedData.length;i++)assert.deepEqual({...expectedData[i],received_at_ms:stable.data[i].received_at_ms},stable.data[i],
+  'Pane hydration changed a persisted source value/identity, not just its acquisition timestamp');
  running=true;await launched();await ready();
- const restored=await history('local_only');covered(restored);assert.deepEqual(restored.data,stable.data);
+ const restored=await history('local_only');covered(restored);assert.deepEqual(restored.data,expectedData);
  const after=receipts();for(const receipt of savedReceipts)assert.ok(after.some(row=>JSON.stringify(row)===JSON.stringify(receipt)),'Durable query receipt missing or silently rewritten');
  await q.s.page.locator('[data-market-pane="open-interest"]').waitFor({timeout:90000});
  group=await catalog();const snapshot=await q.s.control.call('app.query',{windowId:'main-window',groupId:group.id,command:'inspect',args:{}});
  const study=snapshot.snapshot.marketStudies.find(row=>row.id==='market:open-interest');assert.ok(study?.added&&study.visible,JSON.stringify(study));await catalogCommand(group,'close',{});
  await q.screenshot('restored-oi-pane');await q.record('restart-restored',{receipts:after,study,range:{start,end},count:restored.count});
- assert.deepEqual(q.s.receipt.errors,[]);await closed();running=false;q.s.receipt.passed=true;
+ assert.deepEqual(q.s.receipt.errors,[]);await closed();running=false;
+ const afterCold=coldWitness();await q.record('cold-storage-after-restart',afterCold);
+ assert.deepEqual(afterCold.rows,coldSaved.rows,'Every saved SQLite row field must remain unchanged');
+ for(const receipt of coldSaved.receipts)assert.ok(afterCold.receipts.some(row=>JSON.stringify(row)===JSON.stringify(receipt)),
+  'Cold saved query receipt was rewritten or removed');
+ q.s.receipt.passed=true;
 }catch(error){q.s.receipt.passed=false;q.s.receipt.failure=String(error.stack??error);process.exitCode=1;if(q.s.page)await q.screenshot('failure').catch(()=>{});}
 finally{if(running&&q.s.app){q.s.identity??={pid:q.s.app.process()?.pid};try{await closed();}catch(error){q.s.receipt.exitFailure=String(error);}}await fs.mkdir(q.s.root,{recursive:true});await q.save();console.log(JSON.stringify({passed:q.s.receipt.passed??false,failure:q.s.receipt.failure}));}
