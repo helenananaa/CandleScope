@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 from threading import Event
 
 import pytest
@@ -54,6 +55,60 @@ async def creation_phase(owner,phase,key="request"):
                 if row["phase"]==phase:return row
                 await subscription.wait()
     finally:subscription.close()
+
+
+def reparse_attribute(monkeypatch, target):
+    """Exercise Windows lstat metadata without claiming native junction QA."""
+    original=Path.lstat
+    class WindowsStat:
+        st_file_attributes=0x400
+        def __init__(self,actual):self.actual=actual
+        def __getattr__(self,name):return getattr(self.actual,name)
+    def lstat(path,*args,**kwargs):
+        actual=original(path,*args,**kwargs)
+        return WindowsStat(actual) if path==target else actual
+    monkeypatch.setattr(Path,"lstat",lstat)
+
+
+@pytest.mark.parametrize("location",["root","marker","datasets","dataset","staging","nested"])
+def test_reparse_inputs_rejected_before_collection_preserves_every_file(tmp_path,monkeypatch,location):
+    store=ContinuousStrategyStore(tmp_path/'run.db')
+    try:
+        inputs=ContinuousInputs(store);inputs.datasets.start()
+        orphan=inputs.datasets.root/('local-'+'a'*32);orphan.mkdir()
+        (orphan/'keep').write_text('original source')
+        nested=orphan/'nested';nested.mkdir();(nested/'keep').write_text('nested source')
+        staging=inputs.datasets.root/'.staging'/'pending';staging.mkdir();(staging/'keep').write_text('uncommitted source')
+        targets={"root":inputs.root,"marker":inputs.root/'owner.json',"datasets":inputs.datasets.root,
+            "dataset":orphan,"staging":staging,"nested":nested}
+        before={str(p.relative_to(inputs.root)):p.read_bytes() for p in inputs.root.rglob('*') if p.is_file()}
+        reparse_attribute(monkeypatch,targets[location])
+        with pytest.raises(BacktestError,match="reparse"):inputs.collect()
+        after={str(p.relative_to(inputs.root)):p.read_bytes() for p in inputs.root.rglob('*') if p.is_file()}
+        assert before==after
+    finally:store.close()
+
+
+def test_reparse_lock_rejected_without_modifying_existing_file(tmp_path,monkeypatch):
+    lock=tmp_path/'lock';lock.write_bytes(b'preserved lock')
+    reparse_attribute(monkeypatch,lock)
+    lease=None
+    try:
+        with pytest.raises(BacktestError,match="reparse"):lease=ProfileLease(lock)
+        assert lock.read_bytes()==b'preserved lock'
+    finally:
+        if lease is not None:lease.close()
+
+
+def test_reparse_database_rejected_before_creating_owner_files(tmp_path,monkeypatch):
+    database=tmp_path/'continuous.db';database.write_bytes(b'preserved database')
+    reparse_attribute(monkeypatch,database)
+    async def scenario():
+        with pytest.raises(BacktestError,match="reparse"):
+            await open_owner(tmp_path,DataManager(),[START+20*STEP])
+        assert database.read_bytes()==b'preserved database'
+        assert sorted(p.name for p in tmp_path.iterdir())==['continuous.db']
+    asyncio.run(scenario())
 
 
 @pytest.mark.parametrize("history",[False,True])
@@ -473,8 +528,9 @@ def test_database_alias_cannot_bypass_profile_exclusive_ownership(tmp_path):
     (alias/'run.db').symlink_to(real)
     async def scenario():
         try:
-            with pytest.raises(BacktestError,match="database symlink"):
+            with pytest.raises(BacktestError,match="symlink or reparse point") as failure:
                 await ContinuousStrategyController.open(alias/'run.db',manager,clock_ms=lambda:START)
+            assert failure.value.code=="CONTINUOUS_INPUT_OWNERSHIP"
             with pytest.raises(BacktestError,match="absolute"):
                 await ContinuousStrategyController.open('relative.db',manager,clock_ms=lambda:START)
             assert not (alias/'continuous-execution.lock').exists()
