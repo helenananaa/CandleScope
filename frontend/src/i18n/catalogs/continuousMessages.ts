@@ -1,6 +1,8 @@
 import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
+import { readerEnglish, readerChinese, readerJapanese, readerKorean, readerPortuguese } from "./continuousReaderMessages.js";
 export const continuousEnglish = {
   ...repairEnglish,
+  ...readerEnglish,
   "continuous.savedRuns": "Saved runs for this chart and mode", "continuous.pendingRun": "Pending request",
   "continuous.initializing": "Initial history is not complete. Any displayed account is the committed partial result; pause or stop remains available.",
   "continuous.signal": "Signal", "continuous.target": "Target position", "continuous.order": "Order intent",
@@ -24,6 +26,7 @@ export const continuousEnglish = {
 } as const;
 export const continuousChinese: Record<keyof typeof continuousEnglish, string> = {
   ...repairChinese,
+  ...readerChinese,
   "continuous.savedRuns": "当前图表与模式的保存运行", "continuous.pendingRun": "待确认请求",
   "continuous.initializing": "初始历史尚未计算完成。当前如有账户结果，仅为已提交的部分；仍可暂停或停止运行。",
   "continuous.signal": "方向信号", "continuous.target": "目标持仓", "continuous.order": "订单意图",
@@ -47,6 +50,7 @@ export const continuousChinese: Record<keyof typeof continuousEnglish, string> =
 };
 export const continuousJapanese: Record<keyof typeof continuousEnglish, string> = {
   ...repairJapanese,
+  ...readerJapanese,
   "continuous.savedRuns": "このチャートとモードの保存済み実行", "continuous.pendingRun": "確認待ちのリクエスト",
   "continuous.initializing": "初期履歴の計算は未完了です。表示中の口座は確定済みの途中結果です。一時停止や停止は利用できます。",
   "continuous.signal": "方向シグナル", "continuous.target": "目標ポジション", "continuous.order": "注文指示",
@@ -70,6 +74,7 @@ export const continuousJapanese: Record<keyof typeof continuousEnglish, string> 
 };
 export const continuousKorean: Record<keyof typeof continuousEnglish, string> = {
   ...repairKorean,
+  ...readerKorean,
   "continuous.savedRuns": "이 차트와 모드에 저장된 실행", "continuous.pendingRun": "확인 대기 요청",
   "continuous.initializing": "초기 이력 계산이 완료되지 않았습니다. 표시된 계좌는 확정된 부분 결과입니다. 일시 중지와 중지는 계속 사용할 수 있습니다.",
   "continuous.signal": "방향 신호", "continuous.target": "목표 포지션", "continuous.order": "주문 의도",
@@ -93,6 +98,7 @@ export const continuousKorean: Record<keyof typeof continuousEnglish, string> = 
 };
 export const continuousPortuguese: Record<keyof typeof continuousEnglish, string> = {
   ...repairPortuguese,
+  ...readerPortuguese,
   "continuous.savedRuns": "Execuções salvas para este gráfico e modo", "continuous.pendingRun": "Solicitação pendente",
   "continuous.initializing": "O histórico inicial ainda não terminou. A conta exibida contém apenas o resultado parcial confirmado; pausar ou encerrar continua disponível.",
   "continuous.signal": "Sinal", "continuous.target": "Posição desejada", "continuous.order": "Intenção de ordem",

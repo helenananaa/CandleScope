@@ -5,6 +5,7 @@ import { StrategyDataManager } from "../../../src/features/market-data/manager/s
 import type { ContinuousObservation } from "../../../src/features/market-data/manager/continuousStrategyDataManager.js";
 import type { ContinuousCapabilities } from "../../../src/features/backtest/continuous/continuousTypes.js";
 import ContinuousRepairPanel from "../../../src/features/backtest/continuous/ContinuousRepairPanel.js";
+import { SavedContinuousAccounts } from "../../../src/features/backtest/continuous/SavedContinuousAccounts.js";
 import "../../../src/styles/tokens.css";
 import "../../../src/features/backtest/continuous/continuousStrategy.css";
 
@@ -12,6 +13,7 @@ const backend = String(import.meta.env.VITE_BACKTEST_API_BASE).replace(/\/api\/v
 const response = await fetch(backend+"/_qa/bootstrap"), bootstrap = await response.json() as { run_id: string };
 await setLocaleAsync("zh-CN");
 const manager = new StrategyDataManager();
+const reader = new URLSearchParams(location.search).has("reader");
 let latest: ContinuousObservation | null = null;
 Object.assign(window, { continuousRepairQA: { inspect: () => latest, diagnostics: () => manager.continuous.diagnostics() } });
 
@@ -20,6 +22,7 @@ export function Fixture() {
   const [shown, setShown] = useState(true);
   useEffect(() => {
     const abort = new AbortController();
+    if (reader) return () => abort.abort();
     void manager.continuous.capabilities(abort.signal).then(setCaps);
     const release = manager.continuous.observe(bootstrap.run_id, (value) => { latest = value; setState(value); });
     return () => { abort.abort(); release(); };
@@ -33,7 +36,8 @@ export function Fixture() {
       <span>数据：{view?.identity.data_revision.slice(-8)}</span><span>过期：{String(view?.stale)}</span>
     </div>
     <div className="fixture-tools"><button type="button" onClick={() => setShown((value) => !value)}>{shown ? "关闭修复视图" : "重新打开修复视图"}</button></div>
-    {shown && view && <ContinuousRepairPanel key={view.identity.id} manager={manager.continuous} view={view}
+    {shown && reader && <SavedContinuousAccounts manager={manager.continuous} />}
+    {shown && !reader && view && <ContinuousRepairPanel key={view.identity.id} manager={manager.continuous} view={view}
       repair={state?.repair ?? null} active available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}
     {state?.error && <p role="alert">{state.error.message}</p>}
   </main>;

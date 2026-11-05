@@ -69,6 +69,7 @@ const StrategyResearchLiveChart = lazy(() => import("./StrategyResearchLiveChart
 const NativeStrategyPanel = lazy(() => import("../backtest/native/NativeStrategyPanel.js"));
 const NativeStrategyReport = lazy(() => import("../backtest/native/NativeStrategyReport.js").then((module) => ({ default: module.NativeStrategyReport })));
 const StrategyRunHistory = lazy(() => import("./StrategyRunHistory.js"));
+const SavedContinuousAccounts = lazy(() => import("../backtest/continuous/SavedContinuousAccounts.js"));
 import {
   strategyResearchDeepLinkSearch,
   strategyResearchLaunchActions,
@@ -382,6 +383,7 @@ export default function StrategyResearchApp({
   });
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [accountsOpen, setAccountsOpen] = useState(false);
   useEffect(() => { if (researchRun.inputStale && !state.result.stale) dispatch({ type: "result/invalidate" }); }, [dispatch, researchRun.inputStale, state.result.stale]);
   const openAdvanced = useCallback(() => {
     if (researchRun.session === null || source === null) {
@@ -514,6 +516,7 @@ export default function StrategyResearchApp({
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (
     <>
+      <button type="button" className="research-header-btn ui-control" onClick={() => setAccountsOpen((open) => !open)} aria-expanded={accountsOpen}>{t("reader.title")}</button>
       <button type="button" className="research-header-btn ui-control" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>{t("ux.history")}</button>
       <button
         type="button"
@@ -541,6 +544,11 @@ export default function StrategyResearchApp({
   );
   const extraSurfaces = (
     <>
+      {accountsOpen && <aside className="research-data-drawer continuous-reader-drawer" role="dialog" aria-label={t("reader.title")}
+        onKeyDown={(event) => { if (event.key === "Escape") setAccountsOpen(false); }}>
+        <header><strong>{t("reader.title")}</strong><button type="button" onClick={() => setAccountsOpen(false)}>{t("backtest.close")}</button></header>
+        <Suspense fallback={<p>{t("reader.loading")}</p>}><SavedContinuousAccounts /></Suspense>
+      </aside>}
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>

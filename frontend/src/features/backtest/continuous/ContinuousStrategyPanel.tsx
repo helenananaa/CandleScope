@@ -9,6 +9,7 @@ import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTeste
 import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
+import ContinuousAccountView from "./ContinuousAccountView.js";
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
@@ -20,7 +21,6 @@ const connectionMessages = { loading: "continuous.loading", connected: "continuo
   closed: "continuous.closed", error: "continuous.error" } as const;
 const empty: ContinuousObservation = { creation: null, result: null, initialReady: false, connection: "loading", error: null, repair: null };
 function object(value: unknown): Record<string, unknown> { return value !== null && typeof value === "object" ? value as Record<string, unknown> : {}; }
-function text(value: unknown): string { return typeof value === "number" || typeof value === "string" ? String(value) : "—"; }
 function time(value: unknown): string {
   const number = Number(value);
   return value !== undefined && Number.isFinite(number) && Math.abs(number) <= 8640000000000000
@@ -77,11 +77,6 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     catch (failure) { setError(String(failure)); }
   }, [manager, props.active, reference?.runId, attempt]);
   const view = state.result;
-  const fills = useMemo(() => manager && view ? manager.rows(view.identity.id, "fills", view.identity, 100) : [], [manager, view]);
-  const equity = useMemo(() => manager && view ? manager.rows(view.identity.id, "equity_curve", view.identity, 200) : [], [manager, view]);
-  const values = equity.map((row) => Number(object(row).equity)).filter(Number.isFinite);
-  const low = Math.min(...values), high = Math.max(...values);
-  const points = values.map((value, index) => `${index * 600 / Math.max(1, values.length - 1)},${80 - (value - low) * 75 / Math.max(1e-12, high - low)}`).join(" ");
 
   function save(next: ContinuousRunReference) {
     try {
@@ -142,7 +137,6 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const observed = state.creation ?? creation;
   const phase = view?.run.phase ?? observed?.phase;
   const failure = object(view?.run.error ?? observed?.error);
-  const valuation = object(view?.summary.valuation), account = object(view?.summary.account);
   return <div className="continuous-strategy" data-continuous-strategy>
     <p>{t("continuous.hint")}</p><p>{t("continuous.support")}</p>
     {savedRuns.length > 0 && <label>{t("continuous.savedRuns")}<select disabled={busy || storageFailed} value={reference?.requestKey ?? ""} onChange={(event) => {
@@ -183,13 +177,6 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {manager && view && reference?.runId === view.identity.id && <ContinuousRepairPanel key={scope+":"+view.identity.id}
       manager={manager} view={view} repair={state.repair} active={props.active}
       available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}
-    {view ? <section aria-label={t("continuous.account")}>
-      <dl className="continuous-account"><div><dt>{t("continuous.equity")}</dt><dd>{text(valuation.equity)}</dd></div>
-        <div><dt>{t("continuous.position")}</dt><dd>{text(account.position_qty)}</dd></div>
-        <div><dt>{t("continuous.sequence")}</dt><dd>{view.identity.sequence}</dd></div></dl>
-      {values.length > 1 && <svg viewBox="0 0 600 90" role="img" aria-label={t("continuous.recentEquity")}><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
-      <h3>{t("continuous.fills")}</h3><table><thead><tr>{(["continuous.time", "continuous.side", "continuous.quantity", "continuous.price"] as const).map((key) => <th key={key}>{t(key)}</th>)}</tr></thead>
-        <tbody>{fills.map((value, index) => { const row = object(value); return <tr key={index}><td>{time(row.event_time_ms)}</td><td>{text(row.side)}</td><td>{text(row.qty)}</td><td>{text(row.price)}</td></tr>; })}</tbody></table>
-    </section> : <p>{t("continuous.empty")}</p>}
+    {manager && view ? <ContinuousAccountView manager={manager} view={view} /> : <p>{t("continuous.empty")}</p>}
   </div>;
 }
