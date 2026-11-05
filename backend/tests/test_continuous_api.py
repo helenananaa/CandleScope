@@ -122,6 +122,27 @@ def test_initial_http_to_ws_handoff_catches_injected_tail_without_reexecution(ap
     assert not api.active
 
 
+@pytest.mark.parametrize('action',['pause','cancel','resume','retry'])
+def test_http_control_cannot_act_on_generation_changed_after_manager_precheck(api,monkeypatch,action):
+    accepted=create(api,payload(python=True));run_id=accepted['run_id'];controller=api.gate.continuous
+    initial,page,_values=full_initial(api,run_id)
+    original=controller.control;restored=[]
+    async def interleave(key,command,**kwargs):
+        await original(key,'pause',revision=initial['creation']['revision'])
+        await original(key,'resume',revision=initial['creation']['revision'])
+        await wait_row(controller.store,run_id,lambda row:row['phase']=='LIVE')
+        restored.append(controller.store.load(run_id))
+        return await original(key,command,**kwargs)
+    monkeypatch.setattr(controller,'control',interleave)
+    response=api.client.post(BASE+'/requests/request%2Ftest/control',json={
+        'action':action,'revision':initial['creation']['revision'],'expected':page['identity']})
+    assert response.status_code==409,response.text
+    assert response.json()['error']['code']=='CONTINUOUS_COMMIT_CONFLICT'
+    assert len(restored)==1 and restored[0]['run']['generation']>page['identity']['generation']
+    assert controller.store.load(run_id)==restored[0] and api.active
+    assert not controller.runtime.actors[run_id].stopping
+
+
 def test_http_preflight_validation_rejects_legacy_and_ambiguous_inputs_before_reserving(api):
     cases=[]
     for field,value in [('strategy_revision_id','fake'),('snapshot_hash','fake'),('skip_smoke',True),('cutoff_ms',0)]:
