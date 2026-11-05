@@ -109,7 +109,7 @@ export async function indicatorsReady(count=2,timeout=25000) {
 // Guard before Electron launch: startup itself discovers public catalogs.
 export async function assertPublicGate() {
  let deadline=Date.parse('2026-11-02T16:14:01.202Z');
- for(const file of ['/Users/ryanliang/CandleScope/output/backend-goal-20261102/STATE.json',s.root+'/new-cooldown.json']) {
+ for(const file of ['/Users/ryanliang/CandleScope/output/backend-goal-20261102/STATE.json','/Users/ryanliang/CandleScope/output/development-goal-20261104/state.json',s.root+'/new-cooldown.json']) {
   let value;try{value=JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code==='ENOENT')continue;throw error;}
   const observed=Date.parse(value.public_cooldown?.retry_not_before_utc??value.retry_not_before_utc??'');
   if(Number.isFinite(observed))deadline=Math.max(deadline,observed);
@@ -129,7 +129,12 @@ export async function checkCircuit() {
  }
  const circuit=visit(await response.json());if(!circuit)return;
  const deadline=Math.max(Date.now()+Math.ceil(circuit.cooldown_remaining_seconds*1000),circuit.opened_at_ms+Number(circuit.last_headers?.['retry-after']||0)*1000)+1000;
- const evidence={circuit,retry_not_before_utc:new Date(deadline).toISOString()};
+ const evidence={circuit,retry_not_before_ms:deadline,retry_not_before_utc:new Date(deadline).toISOString()};
  await fs.writeFile(s.root+'/new-cooldown.json',JSON.stringify(evidence,null,2));
+ for(const file of ['/Users/ryanliang/CandleScope/output/backend-goal-20261102/STATE.json','/Users/ryanliang/CandleScope/output/development-goal-20261104/state.json']) {
+  const state=JSON.parse(await fs.readFile(file,'utf8'));
+  const existing=Date.parse(state.public_cooldown?.retry_not_before_utc??'');
+  if(!Number.isFinite(existing)||existing<deadline){state.public_cooldown=evidence;await fs.writeFile(file,JSON.stringify(state,null,2)+'\n');}
+ }
  await record('public-ip-circuit-stop',evidence);throw new Error('PUBLIC_COOLDOWN_STOP '+evidence.retry_not_before_utc);
 }
