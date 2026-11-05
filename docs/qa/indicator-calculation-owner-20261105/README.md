@@ -75,6 +75,13 @@ The original Native counter failure remains unresolved.
 
 ## Remaining production integration
 
+[Backend HTTP/WS domain integration](transport.md) is qualified on source
+`3b8a6dde`: 268 backend tests passed with zero skips, including thirteen actual
+ASGI/SDK/Pine transport cases. Real DataManager prefix acquisition/commit proof
+still needs qualification before frontend adoption. The frontend remains unbound and the original
+Native failure remains unresolved. The list below describes the full integration
+requirements; backend ownership/transport portions now have that scoped evidence.
+
 1. Bind one bounded, application-owned calculation instance to a chart's explicit
    source/parameter/series identity and calculation origin. HTTP and WS must
    acquire the same owner and dependency leases, not create independent state.
