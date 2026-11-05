@@ -55,6 +55,8 @@ let running=false;
 try{
  verifyPackage();await fs.copyFile(q.s.root+'/verified-after.json',q.s.root+'/verified-before.json');
  running=true;await launched();
+ const configured=await q.configure([{session:{exchange:'binance',marketType:'futures',symbol:'BTCUSDT',interval:'5m'},indicators:[]}],'single');assert.ok(['applied','ready'].includes(configured.result.state));await ready();
+ await q.record('futures-market-ready-before-receipts',await q.inspect());
  const cold=await history('local_only');assert.equal(cold.count,0);assert.equal(cold.complete,false);assert.ok(cold.coverage.missing_ranges.length>0);
  const acquired=await history('fill_missing');covered(acquired);assert.ok(acquired.count>0,'No real BTCUSDT OI records acquired');
  const before=receipts();assert.ok(before.length>0);
@@ -62,7 +64,7 @@ try{
  const local=await history('local_only');covered(local);assert.deepEqual(local.data,acquired.data);assert.deepEqual(receipts(),before,'Local-only must not rewrite receipts');
  const refreshed=await history('refresh');covered(refreshed);const stable=await history('local_only');assert.deepEqual(stable.data,refreshed.data);
  const savedReceipts=receipts();assert.ok(savedReceipts.some(row=>row.observed_at_ms>Math.max(...before.map(item=>item.observed_at_ms))),'Explicit refresh must record a new source observation');
- const configured=await q.configure([{session:{exchange:'binance',marketType:'futures',symbol:'BTCUSDT',interval:'5m'},indicators:[]}],'single');assert.ok(['applied','ready'].includes(configured.result.state));await ready();
+
  let group=await catalog();await catalogCommand(group,'marketStudy',{studyId:'market:open-interest',action:'add'});await catalogCommand(group,'close',{});
  const pane=q.s.page.locator('[data-market-pane="open-interest"]');await pane.waitFor({timeout:90000});assert.ok((await pane.innerText()).includes('Open Interest'));await ready();await q.screenshot('saved-oi-pane');
  await q.record('saved-oi-pane',{text:await pane.innerText(),receipts:savedReceipts,range:{start,end}});
