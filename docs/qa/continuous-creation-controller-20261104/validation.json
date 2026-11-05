@@ -1,0 +1,25 @@
+{
+  "application_commit": "ded12580c9bd02595bb75753dd5d2d42d25aad44",
+  "base": "e456132d0c147845e17b3e4302277c0b1d428d3d",
+  "final_tests": {
+    "passed": 291,
+    "warnings": 5,
+    "failed": 0,
+    "skipped": 0,
+    "log": "controller-final.log.gz"
+  },
+  "controller_tests": {
+    "passed": 16,
+    "warnings": 5,
+    "log": "controller-fourth.log.gz",
+    "total_scenarios_in_final_suite": 17
+  },
+  "architecture": {
+    "existing_findings": 10,
+    "byte_equal_main_baseline": true
+  },
+  "public_api": false,
+  "frontend": false,
+  "native_live_launched": false,
+  "native_public_retry_not_before_utc": "2026-11-04T15:42:40.340Z"
+}

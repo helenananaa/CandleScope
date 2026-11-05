@@ -31,6 +31,7 @@ from app.backtest.trade_explanation import (
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_bundle import (
     freeze_bundle,
+    editor_bundle_files,
     inspect_directory,
     inspect_zip,
 )
@@ -313,23 +314,11 @@ class BacktestService:
         import io
         import zipfile
 
-        manifest = {
-            "schemaVersion": "candlescope.python-strategy-bundle/1",
-            "name": str(payload["name"]),
-            "entrypoint": "strategy:Strategy",
-            "signalClock": "BAR_CLOSE",
-            "outputModes": ["TARGET_POSITION", "SIGNAL", "ORDER_INTENT"],
-            "requiredFeatures": ["open", "high", "low", "close", "volume"],
-            "warmup": {"kind": "FIXED_BARS", "bars": 0},
-            "parameters": payload.get("parameter_schema") or [],
-            "reproducibility": "BEST_EFFORT_LOCAL",
-        }
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
-            archive.writestr("strategy.json", json.dumps(manifest, sort_keys=True))
-            archive.writestr("strategy.py", str(payload.get("source_text") or ""))
-            archive.writestr("candlescope-editor.json", json.dumps({"schemaVersion": "candlescope.python-editor/1"}))
-            archive.writestr("requirements.lock", "# CandleScope bundled SDK; no additional dependencies\n")
+            for name, data in editor_bundle_files(str(payload["name"]),
+                    str(payload.get("source_text") or ""), payload.get("parameter_schema")).items():
+                archive.writestr(name, data)
         bundle = self.create_python_strategy_bundle(zip_bytes=buffer.getvalue(), now_ms=now_ms)
         return self.create_python_strategy_revision(str(bundle["bundle_id"]), now_ms=now_ms)
 
@@ -4338,101 +4327,7 @@ class BacktestService:
 
     def _execution_from_payload(self, payload, *, fidelity, parameters_json, warmup_bars, book_data_hash=None):
         """Normalize the existing financial and provider execution contract."""
-        account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
-        if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
-            raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
-        if str(payload.get("gap_policy") or "REJECT") not in {
-            "REJECT",
-            "PAUSE",
-            "SKIP_WITH_WARNING",
-        }:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown gap_policy")
-        contract_data_mode = str(payload.get("contract_data_mode") or "LEGACY_FIXED_V1")
-        if contract_data_mode not in {
-            "LEGACY_FIXED_V1",
-            "HISTORICAL_CONTRACT_V1",
-        }:
-            raise BacktestError("FIDELITY_UNSUPPORTED", "unknown contract_data_mode")
-        funding_mode = str(payload.get("funding_mode") or "OFF")
-        if funding_mode not in {"OFF", "FIXED_SCENARIO", "HISTORICAL_REQUIRED"}:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown funding_mode")
-        leverage = _config_decimal(payload, "leverage", "1")
-        if leverage < 1 or leverage > 125:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "leverage must be 1..125")
-        if (
-            account_model == "LINEAR_PERP_ONE_WAY_V2"
-            and contract_data_mode != "HISTORICAL_CONTRACT_V1"
-        ):
-            raise BacktestError(
-                "DATA_ROLE_COVERAGE_MISSING",
-                "LINEAR_PERP_ONE_WAY_V2 requires historical mark and instrument rules",
-            )
-        for name, default, strictly_positive in (
-            ("initial_balance", "10000", True),
-            ("slippage_bps", "1", False),
-            ("taker_fee_bps", "0", False),
-            ("maker_fee_bps", "0", False),
-        ):
-            value = _config_decimal(payload, name, default)
-            if strictly_positive and value <= 0:
-                raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"{name} must be positive")
-            if not strictly_positive and value < 0:
-                raise BacktestError(
-                    "SCHEMA_UNKNOWN_FIELD", f"{name} cannot be negative"
-                )
-        funding_rate = _config_decimal(payload, "funding_rate", "0")
-        if account_model == "SPOT_CASH_V1" and (
-            str(payload.get("market_type") or "").lower() != "spot" or leverage != 1
-            or funding_mode != "OFF" or funding_rate != 0 or contract_data_mode != "LEGACY_FIXED_V1"
-        ):
-            raise BacktestError("SPOT_ACCOUNT_CONFIG_INVALID", "Spot cash requires a spot market, leverage 1, funding OFF and no contract multiplier")
-        if abs(funding_rate) > Decimal("1"):
-            raise BacktestError(
-                "SCHEMA_UNKNOWN_FIELD", "funding_rate must be between -1 and 1"
-            )
-        if account_model == "LINEAR_PERP_ONE_WAY_V2":
-            if funding_mode in {"OFF", "HISTORICAL_REQUIRED"} and funding_rate != 0:
-                raise BacktestError(
-                    "SCHEMA_UNKNOWN_FIELD",
-                    f"{funding_mode} requires funding_rate=0",
-                )
-        try:
-            funding_interval_hours = int(payload.get("funding_interval_hours") or 8)
-        except (TypeError, ValueError) as exc:
-            raise BacktestError(
-                "SCHEMA_UNKNOWN_FIELD", "invalid funding_interval_hours"
-            ) from exc
-        if funding_interval_hours < 1 or funding_interval_hours > 168:
-            raise BacktestError(
-                "SCHEMA_UNKNOWN_FIELD", "funding_interval_hours must be 1..168"
-            )
-        output_mode = str(payload.get("output_mode") or "TARGET_POSITION")
-        if output_mode not in {"SIGNAL", "TARGET_POSITION", "ORDER_INTENT"}:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unsupported output_mode")
-        try:
-            host_policy = HostPolicyConfig.from_mapping(payload)
-        except StrategyProviderError as exc:
-            raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
-        quick_preset_id = str(payload.get("quick_preset_id") or "").strip()
-        quick_preset_revision = str(payload.get("quick_preset_revision") or "").strip()
-        fee_source = str(payload.get("fee_source") or "").strip()
-        quick_fee_fields = ("taker_fee_bps", "maker_fee_bps", "slippage_bps")
-        missing_quick_fee_fields = [
-            name
-            for name in quick_fee_fields
-            if name not in payload or not str(payload.get(name) or "").strip()
-        ]
-        if quick_preset_id and (
-            not quick_preset_revision or not fee_source or missing_quick_fee_fields
-        ):
-            raise BacktestError(
-                "FEE_PRESET_UNKNOWN",
-                "quick backtests require a versioned, confirmed fee preset",
-                details={
-                    "next_step": "select or confirm the market fee preset",
-                    "missing_fields": missing_quick_fee_fields,
-                },
-            )
+        (account_model, contract_data_mode, funding_mode, leverage, funding_rate, funding_interval_hours, output_mode, host_policy, quick_preset_id, quick_preset_revision, fee_source) = _base_execution_contract(payload)
         strategy_source = payload.get("strategy_source")
         if strategy_source is not None and len(str(strategy_source)) > 2_000:
             raise BacktestError(
@@ -5789,3 +5684,103 @@ def _new_host_planner(config, **kwargs):
             raise BacktestError("IDENTITY_MUTATION", "Pine Host order implementation changed; create a fresh run")
         return PineHostPlanner(config, **kwargs)
     return HostOrderPlanner(config, **kwargs)
+
+
+def _base_execution_contract(payload):
+    """Shared financial preflight; no revision, input, provider or storage access."""
+    account_model = str(payload.get("account_model") or "LINEAR_PERP_ONE_WAY_V1")
+    if account_model not in {"LINEAR_PERP_ONE_WAY_V1", "LINEAR_PERP_ONE_WAY_V2", "SPOT_CASH_V1"}:
+        raise BacktestError("FIDELITY_UNSUPPORTED", "unsupported account model")
+    if str(payload.get("gap_policy") or "REJECT") not in {
+        "REJECT",
+        "PAUSE",
+        "SKIP_WITH_WARNING",
+    }:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown gap_policy")
+    contract_data_mode = str(payload.get("contract_data_mode") or "LEGACY_FIXED_V1")
+    if contract_data_mode not in {
+        "LEGACY_FIXED_V1",
+        "HISTORICAL_CONTRACT_V1",
+    }:
+        raise BacktestError("FIDELITY_UNSUPPORTED", "unknown contract_data_mode")
+    funding_mode = str(payload.get("funding_mode") or "OFF")
+    if funding_mode not in {"OFF", "FIXED_SCENARIO", "HISTORICAL_REQUIRED"}:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unknown funding_mode")
+    leverage = _config_decimal(payload, "leverage", "1")
+    if leverage < 1 or leverage > 125:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "leverage must be 1..125")
+    if (
+        account_model == "LINEAR_PERP_ONE_WAY_V2"
+        and contract_data_mode != "HISTORICAL_CONTRACT_V1"
+    ):
+        raise BacktestError(
+            "DATA_ROLE_COVERAGE_MISSING",
+            "LINEAR_PERP_ONE_WAY_V2 requires historical mark and instrument rules",
+        )
+    for name, default, strictly_positive in (
+        ("initial_balance", "10000", True),
+        ("slippage_bps", "1", False),
+        ("taker_fee_bps", "0", False),
+        ("maker_fee_bps", "0", False),
+    ):
+        value = _config_decimal(payload, name, default)
+        if strictly_positive and value <= 0:
+            raise BacktestError("SCHEMA_UNKNOWN_FIELD", f"{name} must be positive")
+        if not strictly_positive and value < 0:
+            raise BacktestError(
+                "SCHEMA_UNKNOWN_FIELD", f"{name} cannot be negative"
+            )
+    funding_rate = _config_decimal(payload, "funding_rate", "0")
+    if account_model == "SPOT_CASH_V1" and (
+        str(payload.get("market_type") or "").lower() != "spot" or leverage != 1
+        or funding_mode != "OFF" or funding_rate != 0 or contract_data_mode != "LEGACY_FIXED_V1"
+    ):
+        raise BacktestError("SPOT_ACCOUNT_CONFIG_INVALID", "Spot cash requires a spot market, leverage 1, funding OFF and no contract multiplier")
+    if abs(funding_rate) > Decimal("1"):
+        raise BacktestError(
+            "SCHEMA_UNKNOWN_FIELD", "funding_rate must be between -1 and 1"
+        )
+    if account_model == "LINEAR_PERP_ONE_WAY_V2":
+        if funding_mode in {"OFF", "HISTORICAL_REQUIRED"} and funding_rate != 0:
+            raise BacktestError(
+                "SCHEMA_UNKNOWN_FIELD",
+                f"{funding_mode} requires funding_rate=0",
+            )
+    try:
+        funding_interval_hours = int(payload.get("funding_interval_hours") or 8)
+    except (TypeError, ValueError) as exc:
+        raise BacktestError(
+            "SCHEMA_UNKNOWN_FIELD", "invalid funding_interval_hours"
+        ) from exc
+    if funding_interval_hours < 1 or funding_interval_hours > 168:
+        raise BacktestError(
+            "SCHEMA_UNKNOWN_FIELD", "funding_interval_hours must be 1..168"
+        )
+    output_mode = str(payload.get("output_mode") or "TARGET_POSITION")
+    if output_mode not in {"SIGNAL", "TARGET_POSITION", "ORDER_INTENT"}:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "unsupported output_mode")
+    try:
+        host_policy = HostPolicyConfig.from_mapping(payload)
+    except StrategyProviderError as exc:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", str(exc)) from exc
+    quick_preset_id = str(payload.get("quick_preset_id") or "").strip()
+    quick_preset_revision = str(payload.get("quick_preset_revision") or "").strip()
+    fee_source = str(payload.get("fee_source") or "").strip()
+    quick_fee_fields = ("taker_fee_bps", "maker_fee_bps", "slippage_bps")
+    missing_quick_fee_fields = [
+        name
+        for name in quick_fee_fields
+        if name not in payload or not str(payload.get(name) or "").strip()
+    ]
+    if quick_preset_id and (
+        not quick_preset_revision or not fee_source or missing_quick_fee_fields
+    ):
+        raise BacktestError(
+            "FEE_PRESET_UNKNOWN",
+            "quick backtests require a versioned, confirmed fee preset",
+            details={
+                "next_step": "select or confirm the market fee preset",
+                "missing_fields": missing_quick_fee_fields,
+            },
+        )
+    return (account_model, contract_data_mode, funding_mode, leverage, funding_rate, funding_interval_hours, output_mode, host_policy, quick_preset_id, quick_preset_revision, fee_source)

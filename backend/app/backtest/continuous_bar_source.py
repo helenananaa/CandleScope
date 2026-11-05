@@ -104,7 +104,7 @@ class ContinuousMarketBarSource:
                 yield {**payload,"open_time_ms":opened,"close_time_ms":opened+STEP-1,"is_closed":True}
             cursor = last+1
 
-    def freeze_initial(self, receipt, *, through_ms, dataset_id):
+    def freeze_initial(self, receipt, *, through_ms, dataset_id, max_payload_bytes=None):
         """Prepare one immutable input; caller guards initial financial creation.
 
         The whole source window is protected before the first page query. The
@@ -117,10 +117,19 @@ class ContinuousMarketBarSource:
         count = (through_ms+1-receipt.from_ms)//STEP
         if not 1 <= count <= MAX_INITIAL_BARS:
             raise BacktestError("BUDGET_EXCEEDED","Initial input exceeds its bounded snapshot budget")
+        if max_payload_bytes is not None and (type(max_payload_bytes) is not int or max_payload_bytes<1):
+            raise BacktestError("CONTINUOUS_INPUT_INVALID","Initial input byte budget must be positive")
         proof = self.manager.bars.prefixes.prepare(receipt,
             committed_through_ms=receipt.through_ms,through_ms=through_ms)
+        def rows():
+            used=0
+            for row in self._query_rows(receipt.from_ms,through_ms,proof.storage_revision):
+                used+=64+sum(len(row[name]) for name in ("open","high","low","close","volume"))
+                if max_payload_bytes is not None and used>max_payload_bytes:
+                    raise BacktestError("BUDGET_EXCEEDED","Initial OHLCV payload exceeds its byte budget")
+                yield row
         manifest = self.local_datasets.freeze_host_bars(
-            self._query_rows(receipt.from_ms,through_ms,proof.storage_revision),
+            rows(),
             dataset_id=dataset_id,name="Strategy initialization",exchange=self.key.exchange,
             market_type=self.key.market_type,symbol=self.key.symbol,interval=self.key.interval,
             chart_context_hash=proof.owner)
