@@ -64,6 +64,15 @@ package is changed. Frontend and package product diffs are empty.
   Original failed Native profiles/responses/assertions were not overwritten or
   staged. Only this new QA directory is added.
 
+## Lifecycle follow-up
+
+[The bounded registry and explicit stream-release follow-up](lifecycle.md) is
+qualified on product/test source `1f9ada60`: 145 backend, 185 SDK, 240 Pine
+passed (one existing core-capability skip in Pine). It adds application ownership
+and durable per-stream cleanup without binding chart HTTP/WS/frontend. Earlier
+81/104-test and observation claims above retain their original source identities.
+The original Native counter failure remains unresolved.
+
 ## Remaining production integration
 
 1. Bind one bounded, application-owned calculation instance to a chart's explicit
