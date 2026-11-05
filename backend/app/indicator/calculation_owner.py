@@ -18,8 +18,9 @@ from app.core.runtime_output import RuntimeOutputReference, RuntimeOutputSnapsho
 
 
 class CalculationOwnerError(RuntimeError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, *, payload: dict | None = None):
         self.code = code
+        self.payload = payload
         super().__init__(code)
 
 

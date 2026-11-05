@@ -223,3 +223,23 @@ async def test_collector_releases_orphaned_open_without_next_request():
         assert registry.snapshot()['entries'] == 0
     finally:
         await registry.stop()
+
+
+@pytest.mark.anyio
+async def test_idle_transport_hold_prevents_expiry_but_cannot_block_explicit_retire():
+    now = [0.0]
+    registry = CalculationRegistry(idle_seconds=1, clock=lambda:now[0])
+    async def create(owner_id): return Runtime(owner_id)
+    owner_id = await registry.open(create)
+    try:
+        async with registry.hold(owner_id) as transport:
+            now[0] = 100
+            async with registry.borrow(owner_id) as command:
+                assert command is transport
+            assert registry.snapshot()['holders'] == 1
+            await asyncio.wait_for(registry.retire(owner_id),5)
+            assert transport.closes == 1 and registry.snapshot()['entries'] == 0
+            with pytest.raises(CalculationOwnerError,match='NOT_FOUND'):
+                async with registry.borrow(owner_id): pytest.fail('Retired idle hold executed')
+    finally:
+        await registry.stop()

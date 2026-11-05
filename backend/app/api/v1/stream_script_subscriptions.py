@@ -881,6 +881,17 @@ async def handle_script_indicator_subscribe(
     )
     custom_handles[client_id] = realtime_handle
 
+    correction_state = register_script_correction(dm=dm, script_correction_state=script_correction_state,
+        client_id=client_id, meta=meta, exchange=exchange, market_type=market_type, symbol=symbol,
+        _on_data_event=_on_data_event, _require_resync=_require_resync)
+    await send_json(subscribed_payload)
+    if resume_patch is not None:
+        await send_json(resume_patch)
+
+
+
+def register_script_correction(*, dm, script_correction_state, client_id, meta, exchange,
+                               market_type, symbol, _on_data_event, _require_resync):
     # One wildcard correction subscriber per WebSocket connection prevents
     # every global amendment/backfill event from being copied into N separate
     # DataManager subscriber queues.  The connection-local fanout is bounded
@@ -936,9 +947,7 @@ async def handle_script_indicator_subscribe(
                 DataEventType.BACKFILL_COMPLETED,
             },
         )
-    await send_json(subscribed_payload)
-    if resume_patch is not None:
-        await send_json(resume_patch)
+    return correction_state
 
 
 def _payload_times(payload: dict[str, Any] | None) -> list[int]:

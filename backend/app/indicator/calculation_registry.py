@@ -35,6 +35,7 @@ class _Entry:
     closing: asyncio.Task | None = None
     retired: bool = False
     borrowers: int = 0
+    holders: int = 0
     unborrowed: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -121,7 +122,7 @@ class CalculationRegistry:
     def _expire_idle(self):
         now = self._clock()
         for entry in tuple(self._entries.values()):
-            if (not entry.retired and not entry.borrowers
+            if (not entry.retired and not entry.borrowers and not entry.holders
                     and entry.opening is not None and entry.opening.done()
                     and now - entry.last_used >= self.idle_seconds):
                 self._begin_close(entry)
@@ -158,6 +159,22 @@ class CalculationRegistry:
         if entry is not None:
             await finish_cleanup(self._begin_close(entry))
 
+    @asynccontextmanager
+    async def hold(self, owner_id: str) -> AsyncIterator[CalculationRuntime]:
+        """Keep a connected transport alive while idle, without blocking retire.
+
+        Holders must borrow separately for every command. Explicit retirement
+        closes the resource and its transport hooks even with idle holders.
+        """
+        async with self.borrow(owner_id) as runtime:
+            entry = self._entries[owner_id]
+            entry.holders += 1
+        try:
+            yield runtime
+        finally:
+            entry.holders -= 1
+            entry.last_used = self._clock()
+
     async def stop(self):
         if self._stop_task is None or (self._stop_task.done() and (
                 self._stop_task.cancelled() or self._stop_task.exception() is not None)):
@@ -182,4 +199,5 @@ class CalculationRegistry:
         return {'capacity': self.max_entries, 'entries': len(entries),
                 'opening': sum(entry.runtime is None and not entry.retired for entry in entries),
                 'borrowers': sum(entry.borrowers for entry in entries),
+                'holders': sum(entry.holders for entry in entries),
                 'retiring': sum(entry.retired for entry in entries), 'closed': self._closing}
