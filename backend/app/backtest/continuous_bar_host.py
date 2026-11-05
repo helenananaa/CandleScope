@@ -106,11 +106,14 @@ class ContinuousBarHost:
 
     @classmethod
     def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory,
-                   source_receipt=None, commit_checkpoint=None):
+                   source_receipt=None, commit_checkpoint=None, creation_request=None):
         point = cls._source_point(run_id,definition,source_receipt,event_time_ms,data_revision)
-        existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision, event_time_ms=event_time_ms)
+        existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision,
+            event_time_ms=event_time_ms,creation_request=creation_request)
         if existing is not None:
             return existing
+        if creation_request is not None and commit_checkpoint is None:
+            raise error("CONTINUOUS_INPUT_INVALID","Owned creation requires its synchronous source commit fence")
         host = cls(run_id, definition, provider_factory)
         host.source_receipt = point
         try:
@@ -122,7 +125,7 @@ class ContinuousBarHost:
                 if not allowed or published or threading.get_ident() != owner_thread:
                     raise error("CONTINUOUS_COMMIT_CONFLICT","Creation must be synchronous and owned exactly once")
                 result = store.create(run_id, definition=definition, mode=mode, data_revision=data_revision,
-                                      event_time_ms=event_time_ms, checkpoint=prepared)
+                                      event_time_ms=event_time_ms, checkpoint=prepared,creation_request=creation_request)
                 published = True
                 return result
             try:
