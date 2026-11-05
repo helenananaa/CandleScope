@@ -7,6 +7,7 @@ readers. This private controller is not yet a public API or default live owner.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
@@ -363,7 +364,7 @@ class ContinuousStrategyController:
             if not job.cleaned:await job.cleanup()
             if self.jobs.get(key) is job:self.jobs.pop(key)
 
-    async def control(self,key,action,*,revision,refresh_input=False):
+    async def control(self,key,action,*,revision,refresh_input=False,expected=None):
         self._ready()
         if action not in {"pause","resume","retry","cancel"}:raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown creation control")
         if type(refresh_input) is not bool:raise BacktestError("CONTINUOUS_INPUT_INVALID","Input refresh must be explicit")
@@ -371,7 +372,7 @@ class ContinuousStrategyController:
         if self.actions:raise BacktestError("CONTINUOUS_NOT_READY","Creation control is draining")
         if self.jobs and key not in self.jobs:
             raise BacktestError("BUDGET_EXCEEDED","Another initialization owns preparation and cleanup")
-        task=asyncio.create_task(self._control(key,action,revision,refresh_input))
+        task=asyncio.create_task(self._control(key,action,revision,refresh_input,expected))
         self.actions[key]=task
         def done(value):
             if self.actions.get(key) is value:self.actions.pop(key)
@@ -379,10 +380,23 @@ class ContinuousStrategyController:
         task.add_done_callback(done)
         return await asyncio.shield(task)
 
-    async def _control(self,key,action,revision,refresh_input):
+    async def _control(self,key,action,revision,refresh_input,expected=None):
         row=await run_storage(self.store.creations.describe,key)
         if type(revision) is not int or row["revision"]!=revision:
             raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Creation control is stale")
+        if expected is not None:
+            if row["phase"]!="COMMITTED":
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Preparation has no committed account identity")
+            # The action slot is already owned. A Manager precheck can become
+            # stale before admission; validate again before stopping an actor
+            # or starting a newer account generation.
+            current=await run_storage(self.store.summary,row["run_id"])
+            identity=self.store.results.identity(current)
+            if (not isinstance(expected,Mapping) or set(expected)!=set(identity)
+                    or any(type(expected[name]) is not type(value) for name,value in identity.items())):
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Account control requires its full committed identity")
+            if expected!=identity:
+                raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Account changed before control admission")
         if action in {"resume","retry"}:
             if row["phase"]=="COMMITTED":
                 if action=="retry" and refresh_input:raise BacktestError("CONTINUOUS_NOT_READY","Financial input repair requires separate authorization")
