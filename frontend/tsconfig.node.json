@@ -5,6 +5,7 @@
   },
   "include": [
     "tests/fixtures/pine-host-entry/**/*.tsx",
+    "tests/fixtures/continuous-repair/**/*.tsx",
     "scripts/**/*.ts",
     "scripts/**/*.tsx",
     "src/**/__tests__/**/*.ts",
