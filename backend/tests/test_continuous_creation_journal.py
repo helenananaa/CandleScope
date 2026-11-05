@@ -63,7 +63,7 @@ def test_retry_and_store_restart_keep_first_cutoff_then_continue_same_account(st
     try:
         context=ready(store,row,source);store.close()
         store=ContinuousStrategyStore(tmp_path/'creation.db')
-        retry=store.creations.reserve("request",definition=definition,mode=row["mode"],cutoff_ms=END,
+        retry=store.creations.reserve("request",definition=definition,mode=row["mode"],cutoff_ms=END+200_001*STEP,
             **({"from_ms":START} if history else {}))
         assert retry["run_id"]==row["run_id"] and retry["cutoff_ms"]==CUTOFF
         context=store.creations.creation_context("request")

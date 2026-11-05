@@ -280,6 +280,18 @@ class ContinuousStrategyRuntime:
                 result["not_admitted"][row["id"]]={"code":failure.code,"message":str(failure)[:256]}
         return result
 
+    async def cancel(self,run_id):
+        """Explicit terminal stop preserves every committed financial result."""
+        if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Continuous runtime is closed")
+        if run_id in self.starts:await asyncio.shield(self.starts[run_id])
+        actor=self.actors.get(run_id)
+        if actor is not None:
+            actor.request_stop()
+            await finish_cleanup(asyncio.shield(actor.task))
+        row=await run_storage(self.store.summary,run_id)
+        if row["phase"]=="CANCELLED":return row
+        return await run_storage(self.store.stop,run_id,generation=row["generation"],revision=row["revision"],phase="CANCELLED")
+
     def _request_shutdown(self):
         self.closed=True
         for actor in tuple(self.actors.values()):actor.request_stop()

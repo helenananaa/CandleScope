@@ -15,6 +15,7 @@ from .continuous_store import _text, _counter, _wire, fail, MAX_DEFINITION_BYTES
 
 STEP = 60_000
 MAX_INPUT_METADATA = 32_768
+MAX_CREATION_DEFINITION_BYTES = 64 * 1024 * 1024
 SUMMARY = "request_key,run_id,mode,from_ms,cutoff_ms,dataset_id,revision,phase,error_json"
 
 
@@ -35,6 +36,10 @@ def _summary(row):
 
 class ContinuousCreationJournal:
     def __init__(self,store):self.store=store
+
+    def _notify(self,key,run_id):
+        self.store.updates.notify(run_id)
+        self.store.updates.notify("creation:"+key)
 
     def _row(self,key):
         if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
@@ -61,7 +66,7 @@ class ContinuousCreationJournal:
                 "SELECT "+SUMMARY+" FROM creation_requests WHERE phase!='COMMITTED' ORDER BY request_key")]
 
     def _pending_count(self,exclude=None):
-        return self.store.db.execute("SELECT count(*) FROM creation_requests WHERE phase!='COMMITTED' AND request_key IS NOT ?",
+        return self.store.db.execute("SELECT count(*) FROM creation_requests WHERE phase NOT IN ('COMMITTED','CANCELLED') AND request_key IS NOT ?",
                                      (exclude,)).fetchone()[0]
 
     def reserve(self,key,*,definition,mode,cutoff_ms,from_ms=None):
@@ -73,7 +78,7 @@ class ContinuousCreationJournal:
         wire=_wire(definition,MAX_DEFINITION_BYTES)
         if mode=="HISTORY_LIVE":
             _counter(from_ms)
-            if from_ms < STEP or from_ms%STEP or not 1<=(cutoff_ms+1-from_ms)//STEP<=200_000:
+            if from_ms < STEP or from_ms%STEP:
                 raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty closed minute window")
         elif from_ms is not None:
             raise fail("CONTINUOUS_INPUT_INVALID","Pure live creation cannot initialize chart history")
@@ -84,19 +89,26 @@ class ContinuousCreationJournal:
                         or _wire(self._definition(row),MAX_DEFINITION_BYTES)!=wire):
                     raise fail("CONTINUOUS_COMMIT_CONFLICT","Creation key already owns different code or conditions")
                 return self._describe(row)  # Never move the first cutoff on retry.
+            if mode=="HISTORY_LIVE" and not 1<=(cutoff_ms+1-from_ms)//STEP<=200_000:
+                raise fail("CONTINUOUS_INPUT_INVALID","Creation history must be a bounded nonempty closed minute window")
             if self.store.db.execute("SELECT count(*) FROM runs").fetchone()[0]+self._pending_count()>=self.store.max_runs:
                 raise fail("BUDGET_EXCEEDED","Continuing creation capacity reached")
+            if self.store.db.execute("SELECT count(*) FROM creation_requests").fetchone()[0]>=self.store.max_runs*4:
+                raise fail("BUDGET_EXCEEDED","Continuing creation identity retention capacity reached")
+            used=self.store.db.execute("SELECT COALESCE(SUM(LENGTH(CAST(definition_json AS BLOB))),0) FROM creation_requests").fetchone()[0]
+            if used+len(wire.encode("utf-8"))>MAX_CREATION_DEFINITION_BYTES:
+                raise fail("BUDGET_EXCEEDED","Continuing preparation definition budget reached")
             run_id="cs_"+uuid.uuid4().hex
             dataset_id="local-"+uuid.uuid4().hex if mode=="HISTORY_LIVE" else None
             self.store.db.execute("INSERT INTO creation_requests VALUES(?,?,?,?,?,?,?,1,'REQUESTED',NULL,NULL,NULL)",
                 (key,run_id,mode,from_ms if mode=="HISTORY_LIVE" else cutoff_ms+1,cutoff_ms,dataset_id,wire))
             result=self._describe(self._row(key))
-        self.store.updates.notify(run_id)
+        self._notify(key,run_id)
         return result
 
     def _expected(self,key,revision):
         _counter(revision);row=self._row(key);_summary(row)
-        if row["revision"]!=revision or row["phase"] in {"FAILED","COMMITTED"}:
+        if row["revision"]!=revision or row["phase"] in {"FAILED","COMMITTED","PAUSED","CANCELLED"}:
             raise fail("CONTINUOUS_COMMIT_CONFLICT","Creation preparation changed or is no longer open")
         return row
 
@@ -119,7 +131,7 @@ class ContinuousCreationJournal:
             self.store.db.execute("UPDATE creation_requests SET watch_json=?,revision=revision+1,phase=? WHERE request_key=?",
                 (raw,"READY" if row["mode"]=="LIVE_ONLY" else "WATCHED",key))
             result=self._describe(self._row(key))
-        self.store.updates.notify(row["run_id"])
+        self._notify(key,row["run_id"])
         return result
 
     def freeze_input(self,key,*,revision,descriptor,proof):
@@ -141,7 +153,7 @@ class ContinuousCreationJournal:
                 raise fail("CONTINUOUS_INPUT_INVALID","Frozen input must preserve the reserved source window and identity")
             self.store.db.execute("UPDATE creation_requests SET input_json=?,revision=revision+1,phase='READY' WHERE request_key=?",(raw,key))
             result=self._describe(self._row(key))
-        self.store.updates.notify(row["run_id"])
+        self._notify(key,row["run_id"])
         return result
 
     def creation_context(self,key):
@@ -160,7 +172,7 @@ class ContinuousCreationJournal:
             row=self._expected(key,revision)
             self.store.db.execute("UPDATE creation_requests SET phase='FAILED',revision=revision+1,error_json=? WHERE request_key=?",(error,key))
             result=self._describe(self._row(key))
-        self.store.updates.notify(row["run_id"])
+        self._notify(key,row["run_id"])
         return result
 
     def retry_failed(self,key,*,revision,refresh_input=False):
@@ -174,7 +186,62 @@ class ContinuousCreationJournal:
             phase="READY" if input_json or (row["mode"]=="LIVE_ONLY" and row["watch_json"]) else "WATCHED" if row["watch_json"] else "REQUESTED"
             self.store.db.execute("UPDATE creation_requests SET phase=?,input_json=?,revision=revision+1,error_json=NULL WHERE request_key=?",(phase,input_json,key))
             result=self._describe(self._row(key))
-        self.store.updates.notify(row["run_id"])
+        self._notify(key,row["run_id"])
+        return result
+
+    def defer(self,key,*,revision,code,message,refresh_input=False):
+        """Wait/reacquire only before an account exists, retaining first cutoff."""
+        if type(refresh_input) is not bool:raise fail("CONTINUOUS_INPUT_INVALID","Input refresh must be explicit")
+        error=_wire({"code":_text(code,64),"message":str(message)[:256]},1024)
+        with self.store._transaction():
+            row=self._expected(key,revision)
+            phase="WATCHED" if refresh_input and row["mode"]=="HISTORY_LIVE" and row["watch_json"] else row["phase"]
+            self.store.db.execute("UPDATE creation_requests SET phase=?,input_json=?,revision=revision+1,error_json=? WHERE request_key=?",
+                (phase,None if refresh_input else row["input_json"],error,key))
+            result=self._describe(self._row(key))
+        self._notify(key,row["run_id"])
+        return result
+
+    def pause_preparation(self,key,*,revision):
+        with self.store._transaction():
+            row=self._row(key);_summary(row);_counter(revision)
+            if row["phase"]=="PAUSED" and row["revision"]==revision:return self._describe(row)
+            row=self._expected(key,revision)
+            self.store.db.execute("UPDATE creation_requests SET phase='PAUSED',revision=revision+1 WHERE request_key=?",(key,))
+            result=self._describe(self._row(key))
+        self._notify(key,row["run_id"])
+        return result
+
+    def resume_preparation(self,key,*,revision):
+        with self.store._transaction():
+            row=self._row(key);_summary(row);_counter(revision)
+            if row["phase"]!="PAUSED" or row["revision"]!=revision:
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Preparation pause changed")
+            phase="READY" if row["input_json"] or (row["mode"]=="LIVE_ONLY" and row["watch_json"]) else "WATCHED" if row["watch_json"] else "REQUESTED"
+            self.store.db.execute("UPDATE creation_requests SET phase=?,revision=revision+1,error_json=NULL WHERE request_key=?",(phase,key))
+            result=self._describe(self._row(key))
+        self._notify(key,row["run_id"])
+        return result
+
+    def cancel_preparation(self,key,*,revision):
+        with self.store._transaction():
+            row=self._row(key);_summary(row);_counter(revision)
+            if row["phase"]=="CANCELLED" and row["revision"]==revision:return self._describe(row)
+            if row["phase"]=="COMMITTED" or row["revision"]!=revision:
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Cancel the committed account through its execution owner")
+            self.store.db.execute("UPDATE creation_requests SET phase='CANCELLED',revision=revision+1 WHERE request_key=?",(key,))
+            result=self._describe(self._row(key))
+        self._notify(key,row["run_id"])
+        return result
+
+    def clear_cancelled_input(self,key,*,revision):
+        with self.store._transaction():
+            row=self._row(key);_summary(row);_counter(revision)
+            if row["phase"]!="CANCELLED" or row["revision"]!=revision:
+                raise fail("CONTINUOUS_COMMIT_CONFLICT","Cancelled preparation changed during cleanup")
+            self.store.db.execute("UPDATE creation_requests SET watch_json=NULL,input_json=NULL,revision=revision+1 WHERE request_key=?",(key,))
+            result=self._describe(self._row(key))
+        self._notify(key,row["run_id"])
         return result
 
     def guard_creation(self,claim,*,run_id,definition,mode,data_revision,event_time_ms):
