@@ -63,6 +63,8 @@ class RuntimeHost(Protocol):
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult: ...
 
+    async def release_stream(self, runtime_id: str, stream: str) -> None: ...
+
 
 @dataclass(frozen=True, slots=True)
 class IndicatorRuntimeRequest:
@@ -317,6 +319,8 @@ class IndicatorRuntimeService:
         self.observe_result = None
         self.release_inputs = None
         self.stop_inputs = None
+        from .calculation_registry import CalculationRegistry
+        self.calculations = CalculationRegistry()
         self.legacy_languages = legacy_languages
         self.max_pending_shadow_tasks = int(max_pending_shadow_tasks)
         self._start_lock = asyncio.Lock()
@@ -423,6 +427,9 @@ class IndicatorRuntimeService:
             self._started = True
 
     async def stop(self) -> None:
+        # Shared chart owners must physically drain before input dependencies
+        # or the registered sidecar host are released by application shutdown.
+        await self.calculations.stop()
         tasks = tuple(self._background_tasks)
         for task in tasks:
             task.cancel()
@@ -431,6 +438,14 @@ class IndicatorRuntimeService:
         self._background_tasks.clear()
         if self.stop_inputs is not None:
             await self.stop_inputs()
+
+    async def release_stream(self, runtime_id: str, stream: str) -> None:
+        """Release one drained owner, including its bounded conversion base."""
+        if self.host is None:
+            raise RuntimeError('Runtime plugin host is unavailable during stream release')
+        await self.host.release_stream(runtime_id, stream)
+        with _stream_bars_lock:
+            _stream_bars.pop(stream, None)
 
     async def drain_shadow(self) -> None:
         """Wait for current shadow comparisons; intended for gates and tests."""
@@ -918,6 +933,7 @@ class IndicatorRuntimeService:
             "counts": counts,
             "pendingShadow": pending_shadow,
             "maxPendingShadow": self.max_pending_shadow_tasks,
+            "calculations": self.calculations.snapshot(),
             "recent": recent,
         }
 

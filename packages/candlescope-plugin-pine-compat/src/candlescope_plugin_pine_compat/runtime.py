@@ -25,6 +25,7 @@ from candlescope_plugin_sdk import (
     FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
+    FEATURE_STREAM_RELEASE_V1,
     AnalyzeRequest,
     AnalyzeResult,
     BaseRuntimePlugin,
@@ -219,6 +220,7 @@ def _descriptor() -> RuntimeDescriptor:
             FEATURE_RENDER_NATIVE_SCENE_V1,
             FEATURE_RENDER_OUTPUT_PATCH_V1,
             FEATURE_BATCH_BARS_PATCH_V1,
+            FEATURE_STREAM_RELEASE_V1,
         ),
         required_host_features=(
             FEATURE_BATCH_EXECUTION_V1,
@@ -1654,6 +1656,13 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
         self._sessions.clear()
         self._windows.clear()
         self._sessions.journal.close()
+
+    def release_stream(self, stream: str) -> None:
+        # These ids belong to explicit live owners, not saved user scripts.
+        # Journal deletion is transactional and idempotent; a failed release
+        # keeps the host's registry slot for retry instead of evicting it.
+        self._sessions.release(stream)
+        self._windows.pop(stream, None)
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()

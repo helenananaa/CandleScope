@@ -14,7 +14,7 @@ import re
 from uuid import uuid4
 
 from app.core.async_cleanup import finish_cleanup
-from app.plugin_runtime.supervisor import RuntimeOutputReference, RuntimeOutputSnapshot
+from app.core.runtime_output import RuntimeOutputReference, RuntimeOutputSnapshot
 
 
 class CalculationOwnerError(RuntimeError):

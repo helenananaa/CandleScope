@@ -10,7 +10,7 @@ import io
 from bisect import bisect_left
 from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from itertools import compress, count
 from operator import attrgetter, is_not
@@ -21,6 +21,7 @@ from candlescope_plugin_sdk import (
     BARS_PATCH_BASE_UNKNOWN,
     FEATURE_BATCH_BARS_PATCH_V1,
     FEATURE_RENDER_OUTPUT_PATCH_V1,
+    FEATURE_STREAM_RELEASE_V1,
     AnalyzeRequest,
     AnalyzeResult,
     Bar,
@@ -39,6 +40,7 @@ from candlescope_plugin_sdk.constants import (
     METHOD_ANALYZE,
     METHOD_DESCRIBE,
     METHOD_EXECUTE_BATCH,
+    METHOD_RELEASE_STREAM,
     METHOD_HANDSHAKE,
     METHOD_SHUTDOWN,
     RPC_INVALID_PARAMS,
@@ -46,6 +48,7 @@ from candlescope_plugin_sdk.constants import (
 
 from app.plugin_host.framing import JsonLineError, compact_json_bytes, strict_json_loads
 from app.core.executors import run_indicator
+from app.core.runtime_output import RuntimeOutputReference, RuntimeOutputSnapshot
 from app.core.bounded_executor import ExecutorBusyError
 from app.plugin_host.process import (
     SidecarProcessSpec,
@@ -74,22 +77,6 @@ _T = TypeVar("_T")
 MAX_OUTPUT_STREAMS = 8
 # Live bar streams whose last window is kept as a bars patch base.
 MAX_BARS_STREAMS = 8
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeOutputReference:
-    """One published replica, never a calculation checkpoint or input cursor."""
-
-    owner_epoch: str
-    generation: int
-    stream: str
-    revision: str
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeOutputSnapshot:
-    reference: RuntimeOutputReference
-    output: RenderOutput
 
 
 def _utc_now() -> str:
@@ -310,6 +297,21 @@ class RuntimeSupervisor:
             required_feature="batch-execution/1",
             prepare=prepare,
         )
+
+    async def release_stream(self, stream: str) -> None:
+        if not isinstance(stream, str) or not 1 <= len(stream) <= 128 or not stream.strip():
+            raise PluginRequestError(code="PLUGIN_REQUEST_INVALID", message="Invalid stream identity", runtime_id=self.runtime_id)
+
+        def parse(raw):
+            if not isinstance(raw, dict) or raw.get("released") is not True or raw.get("stream") != stream:
+                raise ProtocolError(RPC_INVALID_PARAMS, "INVALID_STREAM_RELEASE", "Runtime did not acknowledge this stream's release.")
+            # Parsing occurs under the same physical lock as executeBatch.
+            self._outputs.pop(stream, None)
+            self._bars.pop(stream, None)
+
+        # An explicit cleanup may start/recover the registered sidecar so its
+        # durable journal can be released. A read still never starts a worker.
+        await self._call(METHOD_RELEASE_STREAM, {"stream": stream}, parse, required_feature=FEATURE_STREAM_RELEASE_V1)
 
     async def read_output(
         self,

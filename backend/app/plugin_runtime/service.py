@@ -107,6 +107,9 @@ class RuntimeHostService:
     async def read_output(self, runtime_id: str, stream: str, *, expected: RuntimeOutputReference | None = None) -> RuntimeOutputSnapshot | None:
         return await self._supervisor(runtime_id).read_output(stream, expected=expected)
 
+    async def release_stream(self, runtime_id: str, stream: str) -> None:
+        await self._supervisor(runtime_id).release_stream(stream)
+
     def _supervisor(self, runtime_id: str) -> RuntimeSupervisor:
         if not self.enabled:
             raise PluginRequestError(

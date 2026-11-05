@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 
-from candlescope_plugin_sdk import FEATURE_RENDER_OUTPUT_PATCH_V1
+from candlescope_plugin_sdk import FEATURE_RENDER_OUTPUT_PATCH_V1, FEATURE_STREAM_RELEASE_V1
 
 from .calculation_owner import CalculationCursor, CalculationExecution, CalculationOwnerError, CalculationPlan, ScriptCalculationOwner
 from .runtime_routes import ROUTE_MODE_SIDECAR
@@ -41,7 +41,9 @@ class PineCalculationRuntime:
         if route.mode != ROUTE_MODE_SIDECAR or service.host is None:
             raise CalculationOwnerError('INDICATOR_CALCULATION_BINDING_UNSUPPORTED')
         descriptor = await service.host.descriptor(route.runtime_id)
-        if FEATURE_RENDER_OUTPUT_PATCH_V1 not in descriptor.features or not callable(getattr(service.host, 'read_output', None)):
+        if (not {FEATURE_RENDER_OUTPUT_PATCH_V1, FEATURE_STREAM_RELEASE_V1}.issubset(descriptor.features)
+                or not callable(getattr(service.host, 'read_output', None))
+                or not callable(getattr(service.host, 'release_stream', None))):
             raise CalculationOwnerError('INDICATOR_CALCULATION_OUTPUT_UNSUPPORTED')
         self = cls()
         self.service, self.runtime_id = service, route.runtime_id
@@ -94,6 +96,7 @@ class PineCalculationRuntime:
 
     async def close(self, *, release=None):
         async def release_owned():
+            await self.service.release_stream(self.runtime_id, self.owner.plan.owner_id)
             if self.service.release_inputs is not None:
                 await self.service.release_inputs(self.owner.plan.owner_id)
             if release is not None:
