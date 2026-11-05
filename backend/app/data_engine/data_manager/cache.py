@@ -456,7 +456,7 @@ class BarCache:
         self._rejected_read_refills = 0
         # Eviction callbacks
         self._eviction_callbacks: list[Any] = []
-        # Configurable ephemeral cache limit (default 86400 = 24h of 1s)
+        # Configurable 1s memory cache limit (default 86400 = 24h of 1s)
         self._ephemeral_max_bars: int = 86_400
         # Metrics
         self._hits = 0
@@ -711,6 +711,14 @@ class BarCache:
         key demotes and immediately trims the least-recently-reserved key.
         """
         requested = max(0, int(requested_bars))
+        from app.data_engine.interval_policy import is_one_second_interval
+
+        if is_one_second_interval(key.interval):
+            capacity = self._ephemeral_max_bars
+            return HistoryCapacityReservation(
+                requested_bars=requested, capacity_bars=capacity,
+                active=False, capped=requested > capacity,
+            )
         normal_capacity = max(1, int(self._cfg.max_bars_per_series))
         history_capacity = max(
             normal_capacity,
@@ -718,12 +726,9 @@ class BarCache:
         )
         max_history_series = max(0, int(self._cfg.history_max_series))
 
-        from app.data_engine.interval_policy import is_ephemeral_interval
-
         if (
             history_capacity <= normal_capacity
             or max_history_series <= 0
-            or is_ephemeral_interval(key.interval)
         ):
             return HistoryCapacityReservation(
                 requested_bars=requested,
@@ -957,7 +962,7 @@ class BarCache:
             return overflow, "trimmed"
 
     def set_ephemeral_limit(self, max_bars: int) -> None:
-        """Update the ephemeral cache limit (e.g. from user settings).
+        """Update the 1s memory cache limit (e.g. from user settings).
 
         Does NOT immediately trim existing series — the periodic
         cleanup task handles that.
@@ -966,10 +971,10 @@ class BarCache:
         if normalized < 1 or normalized > 1_000_000:
             raise ValueError("ephemeral cache limit must be between 1 and 1000000 bars")
         self._ephemeral_max_bars = normalized
-        logger.info("Ephemeral cache limit updated to %d bars", normalized)
+        logger.info("1s memory cache limit updated to %d bars", normalized)
 
     def get_ephemeral_limit(self) -> int:
-        """Return the configured max bars for ephemeral cache series."""
+        """Return the configured max bars for 1s memory cache series."""
         return self._ephemeral_max_bars
 
     # ── Public: Snapshot ─────────────────────────────────────
@@ -1013,11 +1018,10 @@ class BarCache:
         The dependency/block owner may narrow this later. Cache-only ephemeral
         streams are not durable materializations and retain their own lifetime.
         """
-        from app.data_engine.interval_policy import is_ephemeral_interval
         with self._lock:
             keys = set(self._series) | set(self._read_tokens)
             for candidate in keys:
-                if (candidate != key and not is_ephemeral_interval(candidate.interval)
+                if (candidate != key
                         and candidate.exchange == key.exchange and candidate.market_type == key.market_type
                         and candidate.symbol == key.symbol and candidate.identity == key.identity):
                     self._invalidate_read_tokens(candidate)
@@ -1070,10 +1074,10 @@ class BarCache:
                 "LRU eviction: %s (%d bars)", evicted_key, evicted_series.count,
             )
 
-        # Ephemeral intervals (e.g. 1s) get a separate cache capacity
-        # since they are cache-only (no DB backing).
-        from app.data_engine.interval_policy import is_ephemeral_interval
-        if is_ephemeral_interval(key.interval):
+        # Dense 1s history has a separate memory capacity; SQLite retention
+        # and eligibility are independent of this in-memory limit.
+        from app.data_engine.interval_policy import is_one_second_interval
+        if is_one_second_interval(key.interval):
             max_bars = self._ephemeral_max_bars
         else:
             max_bars = self._history_capacities.get(

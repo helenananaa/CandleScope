@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "all_four_ready": true,
+  "first_range": "complete true,99actualbars; requestedlast1793530727000 but effective/expectedclosedthrough1793530726000; helper failed missing last row due explicit clock clipping, not demonstrated stored-data loss.",
+  "fix": "Retain all value assertions, wait if and only if response explicitly clips requested end.",
+  "exit_ms": 15321
+}

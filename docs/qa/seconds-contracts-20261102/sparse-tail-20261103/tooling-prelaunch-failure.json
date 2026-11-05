@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-03T00:08:02.410703+00:00",
+  "appLaunched": false,
+  "profileExists": false,
+  "failure": "Missing temporary playwright-core installation after overnight interruption; MODULE_NOT_FOUND before driver initialization. Restore pinned1.56.1 in persistent isolated tooling root; no product/candidate bytes modified.",
+  "log": "native.log"
+}

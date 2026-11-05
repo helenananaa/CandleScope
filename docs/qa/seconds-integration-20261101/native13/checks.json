@@ -1,0 +1,105 @@
+{
+  "passed": false,
+  "application": "e4540a0d",
+  "canonical_quality": "All four readiness and exact canonical closed-bar values/completeness/finality passed. See acceptance canonical-seconds-quality.",
+  "counts": [
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1s"
+      },
+      "checked": 100
+    },
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "7s"
+      },
+      "checked": 100
+    },
+    {
+      "session": {
+        "exchange": "gate",
+        "marketType": "spot",
+        "symbol": "BTC/USDT",
+        "interval": "1s"
+      },
+      "checked": 100
+    },
+    {
+      "session": {
+        "exchange": "upbit",
+        "marketType": "spot",
+        "symbol": "BTC/KRW",
+        "interval": "1s"
+      },
+      "checked": 38
+    }
+  ],
+  "failure": "Six-minute indicator readiness failed, Upbit zero output points. Independent public MA5 range request202targethistoryunavailable,requestIDs[],waited0; root cause unproven.",
+  "exit_ms": 4575,
+  "renderer_errors": 0,
+  "signing": "Deep strict and source978/162 matching verified before/after; runtime reused, not fresh build. See exact source logs for counts.",
+  "limitations": [
+    "No indicator numeric success, saved workspace/restart qualification from this attempt",
+    "Reviewed example ASGI traceback is expected HTTP disconnect CancelledError; do not generalize all tracebacks"
+  ],
+  "artifacts": [
+    {
+      "path": "acceptance.json.gz",
+      "sha256": "b865f5273ace0de1f2a5d6c6a997638f87b4565e3f6a5ee847a027c67e6c696e"
+    },
+    {
+      "path": "traffic.json.gz",
+      "sha256": "fa7123e8bd629aa1ff3da28b588af67e992868d7feba7e7ba382dd12cc62d613"
+    },
+    {
+      "path": "latest-workspace.json.gz",
+      "sha256": "951b67cc3c402158362c93e0b91d04d0ea03a1e0d56b8133d039287d53e91c4b"
+    },
+    {
+      "path": "assembly.json.gz",
+      "sha256": "9f8bdae4968094c6b839d0dbda3cec79d7b2bf687186cd8030892782488f4c8f"
+    },
+    {
+      "path": "source-match.log.gz",
+      "sha256": "bef60ec16584bcd2377011907471e7e05f25fc0d58b78c81dd465a0348f6eb3e"
+    },
+    {
+      "path": "source-match-after.log.gz",
+      "sha256": "7b54803c430bda77b0b9e3ca6e615f98cef6ce052ef4bb30eb3ec11fd01ad57f"
+    },
+    {
+      "path": "signature-before.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "native-run13.log.gz",
+      "sha256": "32dd631ffc3b0b01dd263a9b34ea167a468fc299fe516688ee5c9bcbf02af6db"
+    },
+    {
+      "path": "snapshot13-indicators.json.gz",
+      "sha256": "32ba91284d9fab459742305466338a7b6d161acaaf949a81ad1537244996add8"
+    },
+    {
+      "path": "upbit13-indicator-diagnostic.json.gz",
+      "sha256": "86c7c9a13eaf2f1cc44462054f070317bf9f37a116cf1e30a4420cce3a81137b"
+    },
+    {
+      "path": "upbit13-indicator-diagnostic2.json.gz",
+      "sha256": "f05f52c25df200201d706204a7888a7c4f4c9384c605dd2f1b9996a95c02004b"
+    },
+    {
+      "path": "backend-sidecar.log.gz",
+      "sha256": "a4d8d34de9c9f56784d9672fb365c3f3c8d369f9895cb067bb6c98c53d1509ec"
+    }
+  ]
+}
