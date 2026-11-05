@@ -47,6 +47,8 @@ async function catalog(){
  return group;
 }
 async function catalogCommand(group,command,args){
+ const {groups}=await q.s.control.call('app.commands',{windowId:'main-window'});
+ group=groups.find(row=>row.id===group.id);assert.ok(group,'Catalog group disappeared');
  const requestId='oi149-'+crypto.randomUUID();
  await q.s.control.call('app.execute',{windowId:'main-window',groupId:group.id,command,args,requestId,expectedContext:group.contextToken});
  const result=await q.until(async()=>{const row=await q.s.control.call('request.get',{requestId});return row.final?row:false;});assert.equal(result.state,'applied',JSON.stringify(result));
