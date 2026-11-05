@@ -21,6 +21,24 @@ test("HTTP creation preserves current code and a stable request key; bounded rea
   await assert.rejects(api.initial("one", signal), { code: "BUDGET_EXCEEDED" });
 });
 
+test("repair transport binds exact consent and stable request identity without editor source", async (t) => {
+  const original = globalThis.fetch; t.after(() => { globalThis.fetch = original; });
+  const api = createContinuousApi("http://local.test/continuous"), signal = new AbortController().signal;
+  const requests: Array<{ url: string; init: RequestInit }> = [];
+  globalThis.fetch = async (url, init) => { requests.push({ url: String(url), init: init! }); return new Response("{}"); };
+  await api.repairPreview("one", { expected: after, resume_after: false }, signal);
+  await api.repair("one", "repair/stable", { expected: after, plan_id: "a".repeat(64), resume_after: false, confirmed: true }, signal);
+  await api.repairStatus("repair/stable", signal);
+  await api.cancelRepair("repair/stable", after, signal);
+  assert.equal(requests[0]!.url, "http://local.test/continuous/runs/one/repair/preview");
+  assert.equal(requests[1]!.url, "http://local.test/continuous/runs/one/repairs");
+  assert.equal((requests[1]!.init.headers as Record<string, string>)["Idempotency-Key"], "repair/stable");
+  assert.deepEqual(JSON.parse(String(requests[1]!.init.body)), { expected: after, plan_id: "a".repeat(64), resume_after: false, confirmed: true });
+  assert.equal(requests[2]!.url, "http://local.test/continuous/repairs/repair%2Fstable");
+  assert.equal(requests[3]!.url, "http://local.test/continuous/repairs/repair%2Fstable/cancel");
+  assert.deepEqual(JSON.parse(String(requests[3]!.init.body)), { expected: after });
+});
+
 class Socket {
   static latest: Socket;
   onopen: (() => void) | null = null;

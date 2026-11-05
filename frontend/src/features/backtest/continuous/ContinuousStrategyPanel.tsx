@@ -17,7 +17,7 @@ export interface ContinuousStrategyPanelProps {
 }
 const connectionMessages = { loading: "continuous.loading", connected: "continuous.connected", reconnecting: "continuous.reconnecting",
   closed: "continuous.closed", error: "continuous.error" } as const;
-const empty: ContinuousObservation = { creation: null, result: null, initialReady: false, connection: "loading", error: null };
+const empty: ContinuousObservation = { creation: null, result: null, initialReady: false, connection: "loading", error: null, repair: null };
 function object(value: unknown): Record<string, unknown> { return value !== null && typeof value === "object" ? value as Record<string, unknown> : {}; }
 function text(value: unknown): string { return typeof value === "number" || typeof value === "string" ? String(value) : "—"; }
 function time(value: unknown): string {

@@ -1,12 +1,14 @@
 import { StrategyRunStreamError } from "../../backtest/backtestRunStream.js";
 import { ContinuousViewReducer, type ContinuousView } from "../../backtest/continuous/continuousView.js";
+import { mergeRepair } from "../../backtest/continuous/continuousRepairView.js";
 import type { CommittedIdentity, ContinuousApi, ContinuousCapabilities, ContinuousControl, ContinuousCreate,
-  ContinuousCreation, ContinuousPage, ContinuousPacket, ResultKind } from "../../backtest/continuous/continuousTypes.js";
+  ContinuousCreation, ContinuousPage, ContinuousPacket, ContinuousRepair, ContinuousRepairConfirm, ResultKind } from "../../backtest/continuous/continuousTypes.js";
 
 export interface ContinuousObservation {
   creation: ContinuousCreation | null; result: ContinuousView | null;
   initialReady: boolean; connection: "loading" | "connected" | "reconnecting" | "closed" | "error";
   error: Error | null;
+  repair: ContinuousRepair | null;
 }
 type Operation = <T>(signal: AbortSignal | undefined, action: (signal: AbortSignal) => Promise<T>) => Promise<T>;
 type Entry = { reducer: ContinuousViewReducer; listeners: Set<(state: ContinuousObservation) => void>;
@@ -35,6 +37,19 @@ export class ContinuousStrategyDataManager {
   request(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.request(key, owned)); }
   status(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.status(id, owned)); }
   control(key: string, body: ContinuousControl, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.control(key, body, owned)); }
+  repairPreview(id: string, body: { expected: CommittedIdentity; resume_after: boolean }, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairPreview(id, body, owned)); }
+  repairStatus(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairStatus(key, owned)); }
+  latestRepair(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.latestRepair(id, owned)); }
+  async repair(id: string, key: string, body: ContinuousRepairConfirm, signal?: AbortSignal) {
+    const response = await this.operation(signal, (owned) => this.api.repair(id, key, body, owned));
+    const entry = this.entries.get(id); if (entry) this.publishRepair(entry, response.repair);
+    return response;
+  }
+  async cancelRepair(key: string, expected: CommittedIdentity, signal?: AbortSignal) {
+    const response = await this.operation(signal, (owned) => this.api.cancelRepair(key, expected, owned));
+    const entry = this.entries.get(response.repair.run_id); if (entry) this.publishRepair(entry, response.repair);
+    return response;
+  }
 
   observe(id: string, accept: (state: ContinuousObservation) => void, creation: ContinuousCreation | null = null): () => void {
     if (this.closed) throw new StrategyRunStreamError("STRATEGY_MANAGER_CLOSED", "Strategy data manager is closed");
@@ -43,7 +58,7 @@ export class ContinuousStrategyDataManager {
     if (!entry) {
       if (this.entries.size >= 4) throw new StrategyRunStreamError("RUN_CAPACITY_EXCEEDED", "Strategy result view capacity reached");
       entry = { reducer: new ContinuousViewReducer(id), listeners: new Set(), controller: new AbortController(), done: false,
-        state: { creation, result: null, initialReady: false, connection: "loading", error: null } };
+        state: { creation, result: null, initialReady: false, connection: "loading", error: null, repair: null } };
       this.entries.set(id, entry);
       const owned = entry;
       void this.operation(entry.controller.signal, (signal) => this.follow(id, owned, signal)).catch((failure: unknown) => {
@@ -72,6 +87,11 @@ export class ContinuousStrategyDataManager {
     if (entry.controller.signal.aborted || this.closed) return;
     entry.state = { ...entry.state, ...patch };
     for (const listener of entry.listeners) { try { listener(entry.state); } catch { /* Consumer errors cannot stop sibling views. */ } }
+  }
+
+  private publishRepair(entry: Entry, repair: ContinuousRepair | null | undefined): void {
+    const next = mergeRepair(entry.state.repair, repair, entry.reducer.runId);
+    if (next !== entry.state.repair) this.publish(entry, { repair: next });
   }
 
   private async initial(id: string, entry: Entry, signal: AbortSignal): Promise<void> {
@@ -108,6 +128,7 @@ export class ContinuousStrategyDataManager {
     if (packet.type === "heartbeat" || packet.type === "pong") return;
     if (packet.type === "reset") { entry.reducer.reset(); return; }
     if (packet.type === "snapshot" || packet.type === "update") {
+      this.publishRepair(entry, packet.repair);
       const result = entry.reducer.accept(packet as ContinuousPage, { snapshot: packet.type === "snapshot",
         begin: packet.begin === true, complete: packet.complete === true, after: packet.after_checkpoint ?? -1 });
       if (result) this.publish(entry, { result, creation: packet.creation ?? entry.state.creation,
@@ -120,6 +141,7 @@ export class ContinuousStrategyDataManager {
   private async follow(id: string, entry: Entry, signal: AbortSignal): Promise<void> {
     const status = await this.api.status(id, signal);
     signal.throwIfAborted(); this.publish(entry, { creation: status.creation });
+    this.publishRepair(entry, status.repair);
     await this.initial(id, entry, signal);
     let failures = 0;
     while (!signal.aborted) {

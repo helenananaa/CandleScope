@@ -43,6 +43,11 @@ export function createContinuousApi(base: string): ContinuousApi {
     initial: (id, signal) => call(`/runs/${encodeURIComponent(id)}/initial`, signal),
     page: (id, body, signal) => call(`/runs/${encodeURIComponent(id)}/results/query`, signal, body),
     control: (key, body, signal) => call(`/requests/${encodeURIComponent(key)}/control`, signal, body),
+    repairPreview: (id, body, signal) => call(`/runs/${encodeURIComponent(id)}/repair/preview`, signal, body),
+    repair: (id, key, body, signal) => call(`/runs/${encodeURIComponent(id)}/repairs`, signal, body, key),
+    repairStatus: (key, signal) => call(`/repairs/${encodeURIComponent(key)}`, signal),
+    latestRepair: (id, signal) => call(`/runs/${encodeURIComponent(id)}/repairs/latest`, signal),
+    cancelRepair: (key, expected, signal) => call(`/repairs/${encodeURIComponent(key)}/cancel`, signal, { expected }),
     stream(id, after, signal, accept) {
       signal.throwIfAborted();
       const url = new URL(`${base}/runs/${encodeURIComponent(id)}/stream`, globalThis.location?.href ?? "http://localhost");

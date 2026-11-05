@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery
+from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,RepairPreview,RepairConfirm,RepairCancel
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
@@ -111,6 +111,13 @@ def _identity(raw):
     return _validate(CommittedIdentity,_decode(raw)).model_dump()
 
 
+def _request_key(request):
+    keys=request.headers.getlist("idempotency-key")
+    if len(keys)!=1 or not 1<=len(keys[0])<=128:
+        raise BacktestError("REQUEST_FIELDS_INVALID","One bounded Idempotency-Key is required")
+    return keys[0]
+
+
 @router.get("/capabilities")
 async def capabilities(request:Request):
     try:
@@ -121,7 +128,8 @@ async def capabilities(request:Request):
             "intervals":["1m"],"account_models":["SPOT_CASH_V1","LINEAR_PERP_ONE_WAY_V1"],
             "python_editor_authorized":is_trusted_operator_origin(origin_from(request.headers)),
             "provider_schema":PROVIDER_SCHEMA,"python_author_contract":AUTHOR_CONTRACT,
-            "repair_available":False,"requires_strategy_revision":False,"initial_result_transport":"HTTP",
+            "repair_available":bool(controller.execution_enabled and callable(getattr(controller,"repair",None))),
+            "requires_strategy_revision":False,"initial_result_transport":"HTTP",
             "limits":{"requests":MAX_REQUESTS,"subscriptions":access.owner.max_subscriptions,
                 "active_runs":controller.runtime.max_active_runs,"page_items":200,"message_bytes":MAX_BYTES}})
     except WIRE_ERRORS as failure:return _error(failure)
@@ -131,15 +139,13 @@ async def capabilities(request:Request):
 async def create(request:Request):
     try:
         payload=await _body(request,ContinuousCreate)
-        keys=request.headers.getlist("idempotency-key")
-        if len(keys)!=1 or not 1<=len(keys[0])<=128:
-            raise BacktestError("REQUEST_FIELDS_INVALID","One bounded Idempotency-Key is required")
+        key=_request_key(request)
         if payload.provider.language=="python" and not is_trusted_operator_origin(origin_from(request.headers)):
             raise BacktestError("TRUSTED_ORIGIN_REQUIRED","Python editor requires a trusted local application origin")
         values=payload.model_dump(exclude_unset=True)
         values["provider"]=payload.provider.model_dump(exclude_unset=True,by_alias=True)
         values["series"]=payload.series.key()
-        creation=await _access(request).create(keys[0],**values)
+        creation=await _access(request).create(key,**values)
         return _reply({"creation":creation},202)
     except WIRE_ERRORS as failure:return _error(failure)
 
@@ -197,6 +203,45 @@ async def results(request:Request,run_id:str):
     try:
         payload=await _body(request,ResultQuery)
         return _reply(await _access(request).read(run_id,**payload.model_dump()))
+    except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.post("/runs/{run_id}/repair/preview")
+async def repair_preview(request:Request,run_id:str):
+    try:
+        payload=await _body(request,RepairPreview)
+        return _reply({"plan":await _access(request).repair_preview(run_id,**payload.model_dump())})
+    except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.post("/runs/{run_id}/repairs")
+async def repair(request:Request,run_id:str):
+    try:
+        payload=await _body(request,RepairConfirm)
+        key=_request_key(request)
+        if not is_trusted_operator_origin(origin_from(request.headers)):
+            raise BacktestError("TRUSTED_ORIGIN_REQUIRED","History repair requires a trusted local application origin")
+        return _reply({"repair":await _access(request).repair(run_id,key,**payload.model_dump())},202)
+    except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.get("/runs/{run_id}/repairs/latest")
+async def latest_repair(request:Request,run_id:str):
+    try:return _reply({"repair":await _access(request).latest_repair(run_id)})
+    except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.get("/repairs/{request_key:path}")
+async def repair_status(request:Request,request_key:str):
+    try:return _reply({"repair":await _access(request).repair_status(request_key)})
+    except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.post("/repairs/{request_key:path}/cancel")
+async def cancel_repair(request:Request,request_key:str):
+    try:
+        payload=await _body(request,RepairCancel)
+        return _reply({"repair":await _access(request).cancel_repair(request_key,expected=payload.expected.model_dump())})
     except WIRE_ERRORS as failure:return _error(failure)
 
 

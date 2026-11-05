@@ -113,6 +113,50 @@ class ContinuousEpochs:
             return [self._describe(row) for row in self.store.db.execute(
                 "SELECT * FROM continuous_epochs ORDER BY updated_at_ms,id LIMIT 64")]
 
+    @staticmethod
+    def _summary_select():
+        columns="id,run_id,request_key,phase,target_revision,base_identity_json,progress_json,error_json,updated_at_ms"
+        for name in ("plan_id","resume_after","from_ms","through_ms","anchor_sequence","full_reinitialization","expanded_range_reason"):
+            columns+=",json_extract(plan_json,'$."+name+"') AS "+name
+        return columns+",json_extract(plan_json,'$.source.from_ms') AS original_from_ms"
+
+    @staticmethod
+    def _summary(row):
+        if row is None:return None
+        value=dict(row)
+        for field in ("base_identity","progress","error"):
+            wire=value.pop(field+"_json");value[field]=None if wire is None else json.loads(wire)
+        for field in ("resume_after","full_reinitialization"):value[field]=bool(value[field])
+        return value
+
+    def summary(self,request_key):
+        from .continuous_store import _text,fail
+        _text(request_key,128)
+        with self.store.lock:
+            if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            value=self._summary(self.store.db.execute("SELECT "+self._summary_select()+" FROM continuous_epochs WHERE request_key=?",(request_key,)).fetchone())
+            if value is None:raise fail("CONTINUOUS_REPAIR_NOT_FOUND","Unknown history repair request")
+            return value
+
+    def latest_summary(self,run_id):
+        from .continuous_store import _text
+        _text(run_id,128)
+        with self.store.lock:
+            self.store.summary(run_id)
+            return self._summary(self.store.db.execute("SELECT "+self._summary_select()+
+                " FROM continuous_epochs WHERE run_id=? ORDER BY target_revision DESC LIMIT 1",(run_id,)).fetchone())
+
+    def summaries(self):
+        from .continuous_store import fail
+        with self.store.lock:
+            if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            return [self._summary(row) for row in self.store.db.execute("SELECT "+self._summary_select()+
+                " FROM continuous_epochs ORDER BY updated_at_ms DESC,id LIMIT 64")]
+
+    def _notify(self,record):
+        self.store.updates.notify("repair:"+record["request_key"])
+        self.store.updates.notify(record["run_id"])
+
     def checkpoint(self,run_id,revision):
         """Decode one explicitly chosen retained checkpoint, never all history."""
         from .continuous_store import _counter,fail
@@ -172,7 +216,9 @@ class ContinuousEpochs:
                 (epoch_id,run_id,request_key,new_source_owner(run_id),None if initial is None else _wire(initial,16384),
                  base,plan_wire,"REQUESTED",target,int(time.time()*1000)))
             self.store._enforce_total_budget()
-            return self._describe(self.store.db.execute("SELECT * FROM continuous_epochs WHERE id=?",(epoch_id,)).fetchone())
+            result=self._describe(self.store.db.execute("SELECT * FROM continuous_epochs WHERE id=?",(epoch_id,)).fetchone())
+        self._notify(result)
+        return result
 
     def prepare(self,epoch_id,*,source=None,initial_snapshot=None,progress=None):
         """Bounded job metadata, separate from either published account."""
@@ -194,7 +240,7 @@ class ContinuousEpochs:
             self.store.db.execute("UPDATE continuous_epochs SET "+",".join(name+"=?" for name in fields)+" WHERE id=?",(*fields.values(),epoch_id))
             self.store._enforce_total_budget()
         result=self.describe(epoch_id)
-        self.store.updates.notify("repair:"+result["request_key"])
+        self._notify(result)
         return result
 
     def fail(self,epoch_id,*,code,message,cancelled=False):
@@ -206,7 +252,7 @@ class ContinuousEpochs:
             self.store.db.execute("UPDATE continuous_epochs SET phase=?,error_json=?,updated_at_ms=? WHERE id=?",
                 ("CANCELLED" if cancelled else "FAILED",_wire({"code":str(code)[:64],"message":str(message)[:256]},4096),int(time.time()*1000),epoch_id))
         result=self.describe(epoch_id)
-        self.store.updates.notify("repair:"+result["request_key"])
+        self._notify(result)
         return result
 
     def cleaned(self,epoch_id):
@@ -220,7 +266,7 @@ class ContinuousEpochs:
             progress.pop("cleanup_error",None)
             self.store.db.execute("UPDATE continuous_epochs SET progress_json=?,updated_at_ms=? WHERE id=?",
                 (_wire(progress,2048),int(time.time()*1000),epoch_id))
-        self.store.updates.notify("repair:"+saved["request_key"])
+        self._notify(saved)
         return self.describe(epoch_id)
 
     def cleanup_deferred(self,epoch_id,failure):
@@ -234,7 +280,7 @@ class ContinuousEpochs:
                 "cleanup_error":{"code":str(getattr(failure,"code","CONTINUOUS_CLEANUP_FAILED"))[:64],"message":str(failure)[:256]}}
             self.store.db.execute("UPDATE continuous_epochs SET progress_json=?,updated_at_ms=? WHERE id=?",
                 (_wire(progress,2048),int(time.time()*1000),epoch_id))
-        self.store.updates.notify("repair:"+saved["request_key"])
+        self._notify(saved)
         return self.describe(epoch_id)
 
     def discard_unpublished(self,epoch_id):

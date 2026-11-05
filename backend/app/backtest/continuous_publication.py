@@ -140,6 +140,7 @@ class ContinuousRepairPublication:
                     self.store._enforce_total_budget()
             finally:staged.db.execute("ROLLBACK")
         self.store.updates.notify("repair:"+saved["request_key"])
+        self.store.updates.notify(saved["run_id"])
         return self.store.epochs.describe(epoch_id)
 
     def publish(self,epoch_id,manager,*,resume_after,check_stopping=lambda:None):

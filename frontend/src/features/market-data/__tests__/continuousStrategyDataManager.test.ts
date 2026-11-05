@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { StrategyDataManager } from "../manager/strategyDataManager.js";
 import { StrategyRunStreamError } from "../../backtest/backtestRunStream.js";
-import { resultKinds, type ContinuousApi, type ContinuousCreation, type ContinuousPacket, type ContinuousPage } from "../../backtest/continuous/continuousTypes.js";
+import { resultKinds, type ContinuousApi, type ContinuousCreation, type ContinuousPacket, type ContinuousPage, type ContinuousRepair } from "../../backtest/continuous/continuousTypes.js";
 import { ContinuousStrategyDataManager, type ContinuousObservation } from "../manager/continuousStrategyDataManager.js";
 
 const creation: ContinuousCreation = { request_key: "chart/one", run_id: "one", revision: 1, phase: "COMMITTED", cutoff_ms: 60000, mode: "HISTORY_LIVE" };
@@ -135,4 +135,39 @@ test("connections that open then drop before a server event cannot reset the ret
   await until(() => observed?.connection === "error");
   assert.equal(streams, 6); assert.deepEqual(delays, [250, 500, 1000, 2000, 4000]);
   assert.equal(observed!.result!.identity.revision, 1); release(); manager.dispose();
+});
+
+test("repair status shares account observation; late submit response cannot rewind socket completion", async () => {
+  const financial = page(2); financial.stale = true; financial.run.phase = "REPAIR_REQUIRED";
+  const repair: ContinuousRepair = { id: "repair-one", request_key: "repair/stable", run_id: "one", phase: "PREPARING",
+    target_revision: 10, base_identity: financial.identity, plan_id: "a".repeat(64), resume_after: false,
+    original_from_ms: 0, from_ms: 60000, through_ms: 179999, anchor_sequence: 1, full_reinitialization: false,
+    expanded_range_reason: null, progress: { sequence: 1 }, error: null, updated_at_ms: 100 };
+  let accept: ((packet: ContinuousPacket) => void) | undefined;
+  let respond: ((value: { repair: ContinuousRepair }) => void) | undefined;
+  let observed: ContinuousObservation | undefined;
+  const manager = new StrategyDataManager(undefined, fixture({
+    async status() { return { creation, run: financial.run, identity: financial.identity, repair }; },
+    async initial() { return { creation, initial_result_ready: true, result: financial }; },
+    async stream(_id, _after, signal, next) { accept = next; await pending(signal); },
+    async repair(id, key, body) {
+      assert.equal(id, "one"); assert.equal(key, repair.request_key); assert.equal(body.confirmed, true);
+      return new Promise((resolve) => { respond = resolve; });
+    },
+  }));
+  const release = manager.continuous.observe("one", (value) => { observed = value; });
+  await until(() => accept !== undefined);
+  assert.equal(observed!.repair!.phase, "PREPARING");
+  const submitting = manager.continuous.repair("one", repair.request_key, { expected: financial.identity,
+    plan_id: repair.plan_id, resume_after: false, confirmed: true });
+  await until(() => respond !== undefined);
+  accept!({ protocol: "continuous.v1", type: "update", ...financial, items: [], complete: true, begin: true,
+    after_checkpoint: financial.identity.checkpoint_revision, repair: { ...repair, phase: "COMMITTED", updated_at_ms: 200 } });
+  assert.equal(observed!.repair!.phase, "COMMITTED");
+  assert.deepEqual(observed!.result!.identity, financial.identity);
+  assert.equal(observed!.result!.stale, true);
+  assert.deepEqual(manager.continuous.rows("one", "fills", financial.identity), ["first"]);
+  respond!({ repair: { ...repair, phase: "REQUESTED", updated_at_ms: 99 } }); await submitting;
+  assert.equal(observed!.repair!.phase, "COMMITTED");
+  release(); manager.dispose(); await until(() => manager.diagnostics().operations === 0);
 });
