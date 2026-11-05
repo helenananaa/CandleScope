@@ -74,7 +74,7 @@ async function selected(id,predicate=()=>true){return wait(async()=>{
 async function pin(id){
  await q.s.page.getByRole('button',{name:'图 1 的交易与笔记',exact:true}).click();
  const dialog=q.s.page.getByRole('dialog',{name:'图 1 的交易与笔记',exact:true});
- await dialog.getByLabel('账户来源',{exact:true}).selectOption(id);
+ await dialog.getByRole('combobox').selectOption(id);
  await dialog.getByLabel('显示成交标记',{exact:true}).check();
  await dialog.getByLabel('显示持仓和保护线',{exact:true}).check();
  await dialog.getByRole('button',{name:'关闭',exact:true}).click();
@@ -144,7 +144,7 @@ try{
  await wait(async()=>{const s=await q.inspect();return s.cells[0]?.runtime.marketReady&&!s.cells[0].runtime.loading&&s.persistence.state==='saved'?s:false;},180000);
  await showPanel();const restored=await selected(a.id,v=>v.trades.some(t=>t.id===tradeId&&t.status==='closed'));assert.deepEqual(stable(restored),saved);assert.deepEqual((await api('/'+a.id+'/fills')).fills,fills);
  const restartObserver=await observe(a.id),restoredCursor=restartObserver.frames[0].state.cursor;assert.equal(restoredCursor.epoch,savedCursor.epoch);assert.ok(restoredCursor.sequence>=savedCursor.sequence);
- await q.s.page.getByRole('button',{name:'图 1 的交易与笔记',exact:true}).click();const menu=q.s.page.getByRole('dialog',{name:'图 1 的交易与笔记',exact:true});assert.equal(await menu.getByLabel('账户来源',{exact:true}).inputValue(),a.id);await menu.getByRole('button',{name:'关闭',exact:true}).click();
+ await q.s.page.getByRole('button',{name:'图 1 的交易与笔记',exact:true}).click();const menu=q.s.page.getByRole('dialog',{name:'图 1 的交易与笔记',exact:true});assert.equal(await menu.getByRole('combobox').inputValue(),a.id);await menu.getByRole('button',{name:'关闭',exact:true}).click();
  await q.screenshot('native-practice-restored');await q.record('full-restart-restored',{view:restored,cursor:restoredCursor,chart:await chart()});
  for(const observer of observers.splice(0))await observer.stop();
  await q.s.page.getByRole('button',{name:'图 1 的交易与笔记',exact:true}).click();
