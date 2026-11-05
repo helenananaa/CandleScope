@@ -135,7 +135,7 @@ class ContinuousStrategyAccess:
                 if expected!=identity:raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Account changed before control admission")
             elif expected is not None:
                 raise BacktestError("CONTINUOUS_INPUT_INVALID","Preparation has no committed account identity")
-            row=await controller.control(key,action,**kwargs)
+            row=await controller.control(key,action,expected=expected,**kwargs)
             run=await self.work(controller.store.summary,row["run_id"]) if row["phase"]=="COMMITTED" else None
             return {"creation":{field:row[field] for field in CREATION_FIELDS},"run":run}
         return await self._command(apply)
