@@ -65,10 +65,15 @@ class ContinuousBarHost:
         self.session = StrategyProviderSession(provider, run_id=run_id)
         self.adapter = StrategyHostAdapter(self.session, step_timeout_s=step_timeout_s)
         try:
+            input_plan = definition["input_plan"]
+            if "provider" in definition:
+                from .continuous_provider import execution_inputs
+                self.config, input_plan = execution_inputs(definition)
+                config = self.config
             capabilities = provider.describe()
             if "BAR_CLOSE" not in capabilities.input_modes or not capabilities.snapshot_restore:
                 raise error("FIDELITY_UNSUPPORTED", "A resumable BAR_CLOSE provider is required")
-            self.adapter.start(dict(definition["input_plan"]))
+            self.adapter.start(dict(input_plan))
             self.feature_names = _declared_feature_names(provider) or ()
             self.input_modes = tuple(provider.describe().input_modes)
             _assert_strategy_frame_inputs(provider,bar={},trade=None,_modes=self.input_modes)
@@ -101,11 +106,14 @@ class ContinuousBarHost:
 
     @classmethod
     def create_run(cls, store, run_id, *, definition, mode, data_revision, event_time_ms, provider_factory,
-                   source_receipt=None, commit_checkpoint=None):
+                   source_receipt=None, commit_checkpoint=None, creation_request=None):
         point = cls._source_point(run_id,definition,source_receipt,event_time_ms,data_revision)
-        existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision, event_time_ms=event_time_ms)
+        existing = store.find_created(run_id, definition=definition, mode=mode, data_revision=data_revision,
+            event_time_ms=event_time_ms,creation_request=creation_request)
         if existing is not None:
             return existing
+        if creation_request is not None and commit_checkpoint is None:
+            raise error("CONTINUOUS_INPUT_INVALID","Owned creation requires its synchronous source commit fence")
         host = cls(run_id, definition, provider_factory)
         host.source_receipt = point
         try:
@@ -117,7 +125,7 @@ class ContinuousBarHost:
                 if not allowed or published or threading.get_ident() != owner_thread:
                     raise error("CONTINUOUS_COMMIT_CONFLICT","Creation must be synchronous and owned exactly once")
                 result = store.create(run_id, definition=definition, mode=mode, data_revision=data_revision,
-                                      event_time_ms=event_time_ms, checkpoint=prepared)
+                                      event_time_ms=event_time_ms, checkpoint=prepared,creation_request=creation_request)
                 published = True
                 return result
             try:

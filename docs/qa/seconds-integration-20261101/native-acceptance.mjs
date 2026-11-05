@@ -114,6 +114,13 @@ async function values(){
 }
 let running=false;
 function verifyPackage(){cp.execFileSync('node',['docs/qa/seconds-contracts-20261102/verify.mjs'],{stdio:'inherit',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}});}
+async function persistenceCheckpoint(name,quality){
+ const expected=q.s.root+'/'+name+'-expected.json',output=q.s.root+'/'+name+'.json';
+ await fs.writeFile(expected,JSON.stringify(quality));
+ const python=manifest.app+'/Contents/Resources/python-runtime/python/bin/python3';
+ const report=JSON.parse(cp.execFileSync(python,['-B','docs/qa/seconds-contracts-20261102/persistence_probe.py','--database',q.s.root+'/profile/data/candlescope.db','--quality',expected,'--output',output],{encoding:'utf8',maxBuffer:4*1024*1024}));
+ await q.record(name,{...report,artifact:output});return report;
+}
 async function launch(){await assertPublicGate(q.s.root);try{await q.record('packaged-launch',await q.launch());running=true;
  await q.s.page.evaluate(()=>{Error.stackTraceLimit=50;});
  q.s.page.on('console',message=>{if(!['error','warning'].includes(message.type()))return;
@@ -151,7 +158,8 @@ try{
   assert.equal(charts.length,4,'All four chart render surfaces must remain mounted');
   return charts.every(c=>c.bars.filter(b=>b.is_closed).at(-1)?.time>before.find(x=>x.cellId===c.cellId).last)?true:false;},90000);
  const saved=await verify();await q.record('new-closes-and-saved-workspace',{quality:saved,values:await values(),workspace:await ready(true)});await q.screenshot('saved-seconds');await quit();
- await launch();await ready(true);const restored=await verify();for(const item of saved){const r=await range(item.session,item.first,item.last);assert.equal(r.status,200);assert.equal(r.body.complete,true);const rows=new Map(r.body.data.map(b=>[b.time,b]));for(const b of item.rows)for(const key of ['open','high','low','close','volume'])assert.equal(rows.get(b.time)?.[key],b[key]);}await q.record('restart-restores-persisted-seconds',{quality:restored,values:await values(),workspace:await q.inspect()});await q.screenshot('restored-seconds');await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
+ const cold=await persistenceCheckpoint('cold-storage-before-restart',saved);assert.equal(cold.matchesSaved,true,JSON.stringify(cold.mismatches).slice(0,1500));
+ await launch();await ready(true);const restored=await verify();await persistenceCheckpoint('storage-after-live-restart',saved);for(const item of saved){const r=await range(item.session,item.first,item.last);assert.equal(r.status,200);assert.equal(r.body.complete,true);const rows=new Map(r.body.data.map(b=>[b.time,b]));for(const b of item.rows)for(const key of ['open','high','low','close','volume'])assert.equal(rows.get(b.time)?.[key],b[key],JSON.stringify({session:item.session,time:b.time,field:key,before:b[key],after:rows.get(b.time)?.[key]}));}await q.record('restart-restores-persisted-seconds',{quality:restored,values:await values(),workspace:await q.inspect()});await q.screenshot('restored-seconds');await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){q.s.receipt.failure=String(error.stack||error);process.exitCode=1;if(running){
  await q.record('failure-renderer-charts',await capture(q).catch(e=>({error:String(e)})));
  await q.record('failure-workspace',await q.inspect().catch(e=>({error:String(e)})));
