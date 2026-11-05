@@ -347,10 +347,10 @@ class ContinuousStrategyController:
         try:
             while True:
                 subscription.clear_before_read()
-                row=await run_storage(self.store.summary,creation["run_id"])
+                row,start_pending=await run_storage(self.store.creations.initial_start_state,creation["run_id"])
                 if row["event_time_ms"]>=creation["cutoff_ms"] or row["phase"] in {"FAILED","REPAIR_REQUIRED","CANCELLED"}:
                     return {"creation":creation,"run":row}
-                if row["phase"]=="PAUSED" and not await run_storage(self.store.creations.initial_start_pending,row["id"]):
+                if row["phase"]=="PAUSED" and not start_pending:
                     return {"creation":creation,"run":row}
                 if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Creation owner is closed")
                 await subscription.wait()
