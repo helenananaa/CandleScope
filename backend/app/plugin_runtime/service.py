@@ -15,7 +15,7 @@ from candlescope_plugin_sdk import (
 
 from .errors import PluginHostError, PluginRequestError
 from .registry import RUNTIME_REGISTRY_SCHEMA_VERSION, RuntimeRegistry
-from .supervisor import STATE_FAILED, STATE_READY, RuntimeSupervisor
+from .supervisor import STATE_FAILED, STATE_READY, RuntimeSupervisor, RuntimeOutputReference, RuntimeOutputSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,9 @@ class RuntimeHostService:
         request: ExecuteBatchRequest,
     ) -> ExecuteBatchResult:
         return await self._supervisor(runtime_id).execute_batch(request)
+
+    async def read_output(self, runtime_id: str, stream: str, *, expected: RuntimeOutputReference | None = None) -> RuntimeOutputSnapshot | None:
+        return await self._supervisor(runtime_id).read_output(stream, expected=expected)
 
     def _supervisor(self, runtime_id: str) -> RuntimeSupervisor:
         if not self.enabled:

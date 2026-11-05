@@ -560,6 +560,7 @@ class IndicatorRuntimeService:
         legacy: LegacyExecutor,
         adapt_sidecar: SidecarAdapter,
         adapt_failure: FailureAdapter = _default_failure_payload,
+        notify_result: bool = True,
     ) -> dict[str, Any]:
         await self.start()
         route = self.route_for(request.language)
@@ -576,6 +577,7 @@ class IndicatorRuntimeService:
                 adapt_sidecar=adapt_sidecar,
                 adapt_failure=adapt_failure,
                 record_failure=True,
+                notify_result=notify_result,
             )
 
         if not self._reserve_shadow():
@@ -607,6 +609,7 @@ class IndicatorRuntimeService:
                 adapt_sidecar=adapt_sidecar,
                 adapt_failure=adapt_failure,
                 record_failure=False,
+                notify_result=notify_result,
             ),
             name=(f"indicator-shadow:{route.runtime_id}:{request.transport}"),
         )
@@ -709,6 +712,7 @@ class IndicatorRuntimeService:
         adapt_sidecar: SidecarAdapter,
         adapt_failure: FailureAdapter,
         record_failure: bool,
+        notify_result: bool = True,
     ) -> dict[str, Any]:
         assert route.runtime_id is not None
         startup_failure = self._route_failures.get(route.language)
@@ -767,7 +771,7 @@ class IndicatorRuntimeService:
                     data = await run_storage(requested_data, sdk_request, requirements, self.pine_data_manager())
                     sdk_request = replace(sdk_request, options={**sdk_request.options, **data})
             result = await self.host.execute_batch(route.runtime_id, sdk_request)
-            if self.observe_result is not None:
+            if notify_result and self.observe_result is not None:
                 try:
                     await self.observe_result(request, result)
                 except Exception:

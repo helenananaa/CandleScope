@@ -10,11 +10,12 @@ import io
 from bisect import bisect_left
 from collections import OrderedDict, deque
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from itertools import compress, count
 from operator import attrgetter, is_not
 from typing import Any, TypeVar
+from uuid import uuid4
 
 from candlescope_plugin_sdk import (
     BARS_PATCH_BASE_UNKNOWN,
@@ -73,6 +74,22 @@ _T = TypeVar("_T")
 MAX_OUTPUT_STREAMS = 8
 # Live bar streams whose last window is kept as a bars patch base.
 MAX_BARS_STREAMS = 8
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOutputReference:
+    """One published replica, never a calculation checkpoint or input cursor."""
+
+    owner_epoch: str
+    generation: int
+    stream: str
+    revision: str
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOutputSnapshot:
+    reference: RuntimeOutputReference
+    output: RenderOutput
 
 
 def _utc_now() -> str:
@@ -171,6 +188,7 @@ class RuntimeSupervisor:
         self._descriptor: RuntimeDescriptor | None = None
         self._negotiated_features: tuple[str, ...] = ()
         self._generation = 0
+        self._output_owner_epoch = uuid4().hex
         self._next_request_id = 1
         self._launch_attempts = 0
         self._restart_times: deque[float] = deque()
@@ -292,6 +310,35 @@ class RuntimeSupervisor:
             required_feature="batch-execution/1",
             prepare=prepare,
         )
+
+    async def read_output(
+        self,
+        stream: str,
+        *,
+        expected: RuntimeOutputReference | None = None,
+    ) -> RuntimeOutputSnapshot | None:
+        """Read the existing live projection without executing any input.
+
+        This is deliberately not an as-of historical computation. Callers must
+        bind it to their explicit calculation owner before exposing it as chart
+        output. A missing/evicted/stopped replica never starts or reseeds a
+        runtime. The same lock as executeBatch makes projection+reference atomic.
+        The SDK projection is borrowed read-only, just like the patch base;
+        execution diagnostics and calculation checkpoints are not reconstructed.
+        """
+        if not isinstance(stream, str) or not stream or len(stream) > 128:
+            raise PluginRequestError(code="PLUGIN_REQUEST_INVALID", message="Invalid output stream", runtime_id=self.runtime_id)
+        async with self._lock:
+            if (self._state != STATE_READY or self._process is None
+                    or self._process.returncode is not None):
+                return None
+            held = self._outputs.get(stream)
+            if held is None or held[0] != self._generation:
+                return None
+            reference = RuntimeOutputReference(self._output_owner_epoch, held[0], stream, held[1])
+            if expected is not None and expected != reference:
+                return None
+            return RuntimeOutputSnapshot(reference, held[2])
 
     async def stop(self) -> None:
         async with self._lock:
