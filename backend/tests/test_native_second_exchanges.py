@@ -357,3 +357,41 @@ def test_partial_delete_preserves_adjacent_empty_evidence(sparse_storage):
     native_empty_seconds.record('BTC/KRW', [(START, START + 8000)])
     klines_repo.delete_klines('BTC/KRW', '1s', start_ms=START + 3000, end_ms=START + 4000, exchange='upbit')
     assert native_empty_seconds.read('BTC/KRW', START, START + 8000) == [(START, START + 2000), (START + 5000, START + 8000)]
+
+
+@pytest.mark.parametrize('purpose', ['history', 'realtime'])
+def test_gate_minute_admission_and_captured_rows_preserve_native_boundaries(purpose):
+    import json
+    from pathlib import Path
+    from app.data_engine.bar_basis import native_bar_spec
+    from app.data_engine.interval_resolution import IntervalResolver
+    from app.data_engine.ingestion.normalize import NormalizeLayer
+    from app.exchanges.ccxt_ext.unified import CcxtUnifiedNormalizer, CCXT_UNIFIED_MARKER
+    fixture = json.loads((Path(__file__).parent / 'fixtures/bar_basis/gate-1m-rest.json').read_text())
+    route = IntervalResolver().resolve(exchange='gate', market_type='spot', interval='1m', purpose=purpose)
+    assert route.is_native and route.source_interval == '1m'
+    contract = native_bar_spec('gate', 'spot', '1m', purpose)
+    contract.validate(1606292580000, 1606292639999)  # Official WS 1m example.
+    with pytest.raises(ValueError, match='boundary_mismatch'):
+        contract.validate(1606292581000, 1606292640999)
+    descriptor = StreamDescriptor('BTC/USDT', StreamType.KLINE, interval='1m', exchange='gate')
+    layer = NormalizeLayer(IngestionConfig(), descriptor)
+    layer._normalizer = CcxtUnifiedNormalizer(descriptor)
+    source = DataSource.HTTP_BACKFILL if purpose == 'history' else DataSource.WEBSOCKET
+    for raw in fixture['body']:
+        at = int(raw[0])*1000
+        unified = [at, float(raw[5]), float(raw[3]), float(raw[4]), float(raw[2]), float(raw[6])]
+        message = RawMessage(payload={'schema': CCXT_UNIFIED_MARKER, 'kind': 'kline',
+            'value': unified, 'is_closed': raw[7] == 'true'}, source=source,
+            stream_type=StreamType.KLINE, received_at_ms=fixture['captured_at_ms'])
+        events = layer.parse_all(message)
+        assert len(events) == 1
+        bar = events[0].data
+        assert (bar['open_time'], bar['close_time']) == (at, at+59999)
+        assert (bar['open'], bar['high'], bar['low'], bar['close'], bar['volume']) == tuple(unified[1:])
+        assert bar['is_closed'] is (raw[7] == 'true')
+        assert bar['basis_qualification'] == 'fixture_verified'
+    # This evidence qualifies neither Gate calendar periods nor other markets/venues.
+    for exchange, market, interval in [('gate', 'spot', '7d'), ('gate', 'spot', '30d'),
+                                        ('gate', 'swap.linear', '1m'), ('upbit', 'spot', '1m')]:
+        assert native_bar_spec(exchange, market, interval, purpose).qualification == 'unknown'
