@@ -24,3 +24,24 @@ after the current Gate owner fully exits and the shared public gate permits it.
 Earlier local/CI/Native records stay separate. Entire #152, Windows and O(N)
 materialization remain open. CI runs in the background; main merge requires exact
 final head/current base checks and applicable Native evidence.
+
+
+## Actual Native failure
+
+The initial control request omitted the required explicit single layout and was
+rejected before indicator exercise. The harness was corrected; its profile
+remains preserved. Two subsequent independent fresh-profile runs reached Pine
+and failed the original monotonic varip assertion. The diagnostic witness shows
+an actual rendered counter500 at1793868900, then202 at1793868960 while chart
+rows grow500->501. Actual HTTP replies classify both as historical-batch:
+the original target500 uses500 input rows, subsequent one-/two-row ranges
+compute with warmup200. This establishes a range-dependent recomputation
+boundary in the observed display; it does not yet establish the complete cause
+or a safe product fix. No monotonic/toggle/marker assertion was removed.
+
+The latest failed run fully exited10 owned processes normally; all recorded
+PIDs were separately verified absent. Source/signature checks pass after exit.
+PR227 remains Draft and **Native qualification fails**. All profiles, requests,
+responses and rendered witnesses remain preserved. Continue investigating
+source/range/stream ownership before a new product claim; do not treat59 backend
+passes as Native success.
