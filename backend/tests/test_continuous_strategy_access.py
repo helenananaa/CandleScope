@@ -324,6 +324,38 @@ def test_stale_account_control_is_rejected_before_stopping_actor(storage,tmp_pat
     finally:service.shutdown()
 
 
+@pytest.mark.parametrize('action',['pause','cancel','resume','retry'])
+def test_account_changed_after_manager_check_is_rejected_by_control_owner(storage,tmp_path,monkeypatch,action):
+    manager,service,gate,active,_calls,_now=access_setup(storage,tmp_path,monkeypatch)
+    async def scenario():
+        try:
+            await gate.start_continuous();access=gate.continuous_access();controller=gate.continuous
+            accepted=await create(access,python=True)
+            await controller.wait_initial('request')
+            await wait_row(controller.store,accepted['run_id'],lambda row:row['phase']=='LIVE')
+            old=await access.read(accepted['run_id']);creation=controller.store.creations.summary('request')
+            original=controller.control;restored=[]
+            async def interleave(key,command,**kwargs):
+                # The public Manager already checked old identity. These real
+                # Controller operations complete before its command admission.
+                await original(key,'pause',revision=creation['revision'])
+                await original(key,'resume',revision=creation['revision'])
+                await wait_row(controller.store,accepted['run_id'],lambda row:row['phase']=='LIVE')
+                restored.append(controller.store.load(accepted['run_id']))
+                return await original(key,command,**kwargs)
+            monkeypatch.setattr(controller,'control',interleave)
+            with pytest.raises(BacktestError,match='changed before control') as failure:
+                await access.control('request',action,revision=creation['revision'],expected=old['identity'])
+            assert failure.value.code=='CONTINUOUS_COMMIT_CONFLICT' and len(restored)==1
+            assert restored[0]['run']['generation']>old['identity']['generation']
+            assert controller.store.load(accepted['run_id'])==restored[0]
+            assert active and not controller.runtime.actors[accepted['run_id']].stopping
+        finally:await gate.shutdown();await manager.event_bus.close()
+        assert not active and gate.continuous.resources_closed
+    try:asyncio.run(scenario())
+    finally:service.shutdown()
+
+
 def test_partial_initialization_streams_progress_then_pause_resume_preserve_financial_prefix(storage,tmp_path,monkeypatch):
     from app.backtest.continuous_runtime import _Actor
     manager,service,gate,active,_calls,now=access_setup(storage,tmp_path,monkeypatch,count=1500)
