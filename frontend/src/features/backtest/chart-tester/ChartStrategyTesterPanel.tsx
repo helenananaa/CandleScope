@@ -689,7 +689,7 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <label className="continuous-mode">{t("continuous.mode")}<select value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
+      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
         <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
       </select></label>
       {runMode === "HISTORY" ? <>
@@ -1039,6 +1039,9 @@ export function CandleScopeStrategyTesterPanel({
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
+          {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
+            ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
+            ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}
           editor={(initialize) => activeDraft ? <>
             <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
               setPythonApproval(null); void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));

@@ -4,6 +4,7 @@ import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
+import type { StrategyExecutionOverrides, StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
 import type { ContinuousObservation } from "../../market-data/manager/continuousStrategyDataManager.js";
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
 import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
@@ -16,6 +17,9 @@ export interface ContinuousStrategyPanelProps {
   scope: string; session: ChartSession; mode: Exclude<ContinuousMode, "HISTORY">;
   source: string; language: string; parameters: Record<string, unknown>;
   trusted: boolean; active: boolean; editor: (run: () => void) => ReactNode;
+  initialization?: StrategyInitializationSettings;
+  initialExecution?: StrategyExecutionOverrides;
+  initialFromMs?: number;
 }
 const connectionMessages = { loading: "continuous.loading", connected: "continuous.connected", reconnecting: "continuous.reconnecting",
   closed: "continuous.closed", error: "continuous.error" } as const;
@@ -40,15 +44,15 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const [attempt, setAttempt] = useState(0);
-  const [from, setFrom] = useState(() => new Date(Date.now() - 86400000).toISOString().slice(0, 16));
-  const [balance, setBalance] = useState("10000"), [percent, setPercent] = useState("10");
-  const [fee, setFee] = useState("0"), [slippage, setSlippage] = useState("1");
-  const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>("SIGNAL");
+  const [from, setFrom] = useState(() => new Date(props.initialFromMs ?? Date.now() - 86400000).toISOString().slice(0, 16));
+  const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
+  const [fee, setFee] = useState(props.initialExecution?.feeBps ?? "0"), [slippage, setSlippage] = useState(props.initialExecution?.slippageBps ?? "1");
+  const [output, setOutput] = useState<ContinuousCreate["provider"]["output_mode"]>(props.initialization?.outputMode ?? "SIGNAL");
   const identity = resolveKlineSeriesIdentity(props.session.exchange, props.session);
   const scope = JSON.stringify([props.scope, props.mode, props.session.exchange, props.session.marketType,
     props.session.symbol, props.session.interval, identity]);
-  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, balance, percent, fee, slippage, output, props.mode === "HISTORY_LIVE" ? from : null]))),
-    [props.source, props.parameters, props.mode, balance, percent, fee, slippage, output, from]);
+  const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
+    [props.source, props.parameters, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
@@ -104,7 +108,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
             series_variant: identity.seriesVariant, price_adjustment: identity.priceAdjustment, session_variant: identity.sessionVariant, volume_semantics: identity.volumeSemantics } },
         provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
         execution: { account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
-          initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage },
+          initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
+          ...(props.initialization ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
+        ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
       setCreation(result.creation); setState(empty); save({ ...next, runId: result.creation.run_id });
@@ -154,7 +160,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       {props.mode === "HISTORY_LIVE" && <label>{t("continuous.from")}<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} /></label>}
       {([["continuous.balance", balance, setBalance], ["continuous.percent", percent, setPercent], ["continuous.fee", fee, setFee], ["continuous.slippage", slippage, setSlippage]] as const).map(([label, value, change]) =>
         <label key={label}>{t(label)}<input type="number" min="0" step="any" value={value} onChange={(event) => change(event.target.value)} /></label>)}
-      <label>{t("continuous.output")}<select value={output} onChange={(event) => setOutput(event.target.value as typeof output)}>
+      <label>{t("continuous.output")}<select aria-label={t("continuous.output")} value={output} onChange={(event) => setOutput(event.target.value as typeof output)}>
         <option value="SIGNAL">{t("continuous.signal")}</option><option value="TARGET_POSITION">{t("continuous.target")}</option><option value="ORDER_INTENT">{t("continuous.order")}</option>
       </select></label>
     </div>

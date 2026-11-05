@@ -424,6 +424,14 @@ def get_run(request: Request, run_id: str) -> dict[str, Any]:
         return _error(exc)
 
 
+@router.get("/runs/{run_id}/strategy-version")
+def selected_run_strategy_version(request: Request, run_id: str) -> dict[str, Any]:
+    try:
+        return _service(request).selected_run_version(run_id)
+    except BacktestError as exc:
+        return _error(exc)
+
+
 @router.get("/runs/{run_id}/events", response_model=None)
 async def stream_run_events(request: Request, run_id: str) -> Any:
     core = getattr(request.app.state, "data_manager_core", None)

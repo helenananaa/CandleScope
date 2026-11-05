@@ -1,6 +1,8 @@
 import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
 import { readerEnglish, readerChinese, readerJapanese, readerKorean, readerPortuguese } from "./continuousReaderMessages.js";
+import { researchReturnEnglish, researchReturnChinese, researchReturnJapanese, researchReturnKorean, researchReturnPortuguese } from "./researchReturnMessages.js";
 export const continuousEnglish = {
+  ...researchReturnEnglish,
   ...repairEnglish,
   ...readerEnglish,
   "continuous.savedRuns": "Saved runs for this chart and mode", "continuous.pendingRun": "Pending request",
@@ -25,6 +27,7 @@ export const continuousEnglish = {
   "continuous.phase": "Backend state: {phase}", "continuous.pending": "A saved creation request is pending. Recover it before initializing another run.",
 } as const;
 export const continuousChinese: Record<keyof typeof continuousEnglish, string> = {
+  ...researchReturnChinese,
   ...repairChinese,
   ...readerChinese,
   "continuous.savedRuns": "当前图表与模式的保存运行", "continuous.pendingRun": "待确认请求",
@@ -49,6 +52,7 @@ export const continuousChinese: Record<keyof typeof continuousEnglish, string> =
   "continuous.phase": "后端状态：{phase}", "continuous.pending": "有已保存的创建请求待确认，请先恢复，再初始化其他运行。",
 };
 export const continuousJapanese: Record<keyof typeof continuousEnglish, string> = {
+  ...researchReturnJapanese,
   ...repairJapanese,
   ...readerJapanese,
   "continuous.savedRuns": "このチャートとモードの保存済み実行", "continuous.pendingRun": "確認待ちのリクエスト",
@@ -73,6 +77,7 @@ export const continuousJapanese: Record<keyof typeof continuousEnglish, string> 
   "continuous.phase": "バックエンドの状態：{phase}", "continuous.pending": "保存済みの作成リクエストが確認待ちです。別の実行を初期化する前に復元してください。",
 };
 export const continuousKorean: Record<keyof typeof continuousEnglish, string> = {
+  ...researchReturnKorean,
   ...repairKorean,
   ...readerKorean,
   "continuous.savedRuns": "이 차트와 모드에 저장된 실행", "continuous.pendingRun": "확인 대기 요청",
@@ -97,6 +102,7 @@ export const continuousKorean: Record<keyof typeof continuousEnglish, string> = 
   "continuous.phase": "백엔드 상태: {phase}", "continuous.pending": "저장된 생성 요청이 대기 중입니다. 다른 실행을 초기화하기 전에 복구하세요.",
 };
 export const continuousPortuguese: Record<keyof typeof continuousEnglish, string> = {
+  ...researchReturnPortuguese,
   ...repairPortuguese,
   ...readerPortuguese,
   "continuous.savedRuns": "Execuções salvas para este gráfico e modo", "continuous.pendingRun": "Solicitação pendente",
