@@ -478,6 +478,22 @@ class SessionCalendar:
     def last_expected_open(
         self, start_ms: int, end_ms: int, interval: str
     ) -> int | None:
+        # Custom expected-open policies retain their own semantics. For the
+        # built-in grid, locating one boundary must not emit every minute in
+        # a multi-year search horizon just to throw those timestamps away.
+        if getattr(self.expected_opens, "__func__", None) is SessionCalendar.expected_opens:
+            if end_ms < start_ms:
+                return None
+            width_ms = _interval_width_ms(interval)
+            if is_monthly_interval(interval) or width_ms >= _DAY_MS:
+                candidates = self._coarse_expected_opens(start_ms, end_ms, interval, width_ms)
+                return candidates[-1] if candidates else None
+            for session_start, session_end in reversed(self._session_segments(start_ms, end_ms)):
+                last_ms = min(end_ms, session_end - 1)
+                candidate = session_start + ((last_ms - session_start) // width_ms) * width_ms
+                if candidate >= start_ms:
+                    return candidate
+            return None
         result: int | None = None
         for result in self.expected_opens(start_ms, end_ms, interval):
             pass

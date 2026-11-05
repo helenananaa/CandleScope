@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from app.core.committed_updates import committed_updates_for
 from .errors import BacktestError
 
-SCHEMA = 1
+SCHEMA = 2
 PHASES = {"CATCHING_UP", "LIVE", "PAUSED", "REPAIR_REQUIRED", "FAILED", "CANCELLED"}
 MAX_DEFINITION_BYTES = 1024 * 1024
 MAX_CHECKPOINT_BYTES = 64 * 1024 * 1024
@@ -119,7 +119,7 @@ class ContinuousStrategyStore:
             self.db.execute("PRAGMA synchronous=FULL")
             with self._transaction():
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, SCHEMA):
+                if version not in (0, 1, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
@@ -134,7 +134,10 @@ class ContinuousStrategyStore:
                         revision INTEGER NOT NULL, generation INTEGER NOT NULL, sequence INTEGER NOT NULL,
                         event_time_ms INTEGER NOT NULL, data_revision TEXT NOT NULL, wire TEXT NOT NULL,
                         stored_bytes INTEGER NOT NULL, PRIMARY KEY(run_id,revision))""")
-                    self.db.execute(f"PRAGMA user_version={SCHEMA}")
+                from .continuous_creation_journal import create_schema, ContinuousCreationJournal
+                if version < 2:create_schema(self.db)
+                self.db.execute(f"PRAGMA user_version={SCHEMA}")
+            self.creations = ContinuousCreationJournal(self)
         except BaseException:
             self.db.close()
             self.closed = True
@@ -202,7 +205,16 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             return [_summary(row) for row in self.db.execute("SELECT "+SUMMARY_COLUMNS+" FROM runs ORDER BY id")]
 
-    def find_created(self, run_id, *, definition, mode, data_revision, event_time_ms):
+    def restore_candidates(self):
+        """One SQLite read for active runs and the committed-before-start window."""
+        with self.lock:
+            if self.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            columns=",".join("r."+name for name in SUMMARY_COLUMNS.split(","))
+            return [_summary(row) for row in self.db.execute("SELECT "+columns+" FROM runs r WHERE "
+                "r.phase IN ('CATCHING_UP','LIVE') OR (r.phase='PAUSED' AND r.generation=1 AND r.revision=1 AND "
+                "EXISTS(SELECT 1 FROM creation_requests c WHERE c.run_id=r.id AND c.phase='COMMITTED')) ORDER BY r.id")]
+
+    def find_created(self, run_id, *, definition, mode, data_revision, event_time_ms, creation_request=None):
         """Resolve an uncertain create before preparing/executing a provider."""
         _text(run_id,128), _text(data_revision,256), _counter(event_time_ms)
         if mode not in {"HISTORY_LIVE","LIVE_ONLY"}:
@@ -211,6 +223,9 @@ class ContinuousStrategyStore:
         with self.lock:
             if self.closed:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
+            if creation_request is not None:
+                self.creations.guard_creation(creation_request,run_id=run_id,definition=definition,mode=mode,
+                    data_revision=data_revision,event_time_ms=event_time_ms)
             row = self.db.execute("SELECT r.*,c.data_revision AS initial_revision,c.event_time_ms AS initial_time "
                 "FROM runs r LEFT JOIN checkpoints c ON c.run_id=r.id AND c.revision=1 WHERE r.id=?", (run_id,)).fetchone()
             if row is None:
@@ -222,12 +237,14 @@ class ContinuousStrategyStore:
                 raise fail("CONTINUOUS_COMMIT_CONFLICT", "Run identity already owns a different creation request")
             return _summary(row)
 
-    def create(self, run_id, *, definition, mode, data_revision, event_time_ms, checkpoint):
+    def create(self, run_id, *, definition, mode, data_revision, event_time_ms, checkpoint, creation_request=None):
         _text(run_id, 128), _text(data_revision, 256), _counter(event_time_ms)
         if mode not in {"HISTORY_LIVE", "LIVE_ONLY"}:
             raise fail("CONTINUOUS_INPUT_INVALID", "Unsupported continuing strategy mode")
         definition_json, state = _wire(definition, MAX_DEFINITION_BYTES), _checkpoint(checkpoint,event_time_ms,data_revision)
         with self._transaction():
+            creation_key = None if creation_request is None else self.creations.guard_creation(creation_request,
+                run_id=run_id,definition=definition,mode=mode,data_revision=data_revision,event_time_ms=event_time_ms)
             previous = self.db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if previous is not None:
                 initial = self.db.execute("SELECT wire,event_time_ms,data_revision FROM checkpoints WHERE run_id=? AND revision=1", (run_id,)).fetchone()
@@ -239,13 +256,15 @@ class ContinuousStrategyStore:
                 # An uncertain create retry observes its original run, never
                 # resets the account/cursor to the newly supplied initial state.
                 return _summary(self._row(run_id))
-            if self.db.execute("SELECT COUNT(*) FROM runs").fetchone()[0] >= self.max_runs:
+            if self.db.execute("SELECT COUNT(*) FROM runs").fetchone()[0]+self.creations._pending_count(exclude=creation_key) >= self.max_runs:
                 raise fail("BUDGET_EXCEEDED", "Continuous strategy run capacity reached")
             self.db.execute("INSERT INTO runs VALUES(?,?,?,1,1,'PAUSED',0,?,?,1,NULL,?)",
                             (run_id, definition_json, mode, event_time_ms, data_revision, int(time.time()*1000)))
             self._insert_checkpoint(run_id, 1, 1, 0, event_time_ms, data_revision, state)
             self._enforce_total_budget()
+            if creation_key is not None:self.creations._commit_creation(creation_key)
         self.updates.notify(run_id)
+        if creation_key is not None:self.updates.notify("creation:"+creation_key)
         return self.summary(run_id)
 
     def resume(self, run_id, *, generation, revision, retry_failed=False):
@@ -308,7 +327,8 @@ class ContinuousStrategyStore:
             raise fail("CONTINUOUS_INPUT_INVALID", "A stopped execution requires its visible reason")
         with self._transaction():
             row = self._expected(run_id, generation, revision)
-            if row["phase"] in {"REPAIR_REQUIRED", "FAILED", "CANCELLED"} and phase != row["phase"]:
+            if (row["phase"] in {"REPAIR_REQUIRED", "FAILED", "CANCELLED"} and phase != row["phase"]
+                    and not (phase=="CANCELLED" and row["phase"]!="CANCELLED")):
                 raise fail("CONTINUOUS_NOT_READY", "Stopped or repair-required state needs explicit resolution")
             self.db.execute("UPDATE runs SET revision=revision+1,phase=?,error_json=?,updated_at_ms=? WHERE id=?",
                             (phase, error_json, int(time.time()*1000), run_id))
