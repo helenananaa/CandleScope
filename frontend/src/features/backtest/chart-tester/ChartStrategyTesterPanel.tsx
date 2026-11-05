@@ -211,7 +211,7 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(): void;
+  onOpenWorkspace?(draft: StrategyDraftRecord): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -528,6 +528,19 @@ export function CandleScopeStrategyTesterPanel({
     }).catch(() => undefined);
   }, [activeDraft, cursor, draftStore, source]);
 
+  const handoffOperation = useRef<Promise<void> | null>(null);
+  const openWorkspace = useCallback((): Promise<void> => {
+    if (handoffOperation.current) return handoffOperation.current;
+    if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
+    const operation = draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName,
+      language: activeDraft.language, source, cursor }).then(onOpenWorkspace);
+    handoffOperation.current = operation;
+    void operation.catch(() => setSaveState("ERROR")).finally(() => {
+      if (handoffOperation.current === operation) handoffOperation.current = null;
+    });
+    return operation;
+  }, [activeDraft, cursor, draftStore, onOpenWorkspace, source]);
+
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const startY = event.clientY;
@@ -588,7 +601,7 @@ export function CandleScopeStrategyTesterPanel({
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
       command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
       command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
-      command("openWorkspace", "Open the existing strategy workspace.", empty, () => onOpenWorkspace?.(), { available: () => !!onOpenWorkspace && !!currentAttachment }),
+      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, openWorkspace, { available: () => !!onOpenWorkspace && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -744,11 +757,8 @@ export function CandleScopeStrategyTesterPanel({
             <details className="strategy-dock-more">
               <summary aria-label={t("report.more")} title={t("report.more")}><Icon name="more" size={14} /></summary>
               <div role="menu">
-                {onOpenWorkspace && <button type="button" role="menuitem" onClick={() => {
-                  if (!activeDraft) return;
-                  void draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName, language: activeDraft.language, source, cursor })
-                    .then(onOpenWorkspace).catch(() => setSaveState("ERROR"));
-                }}>{t("ux.openWorkspace")}</button>}
+                {onOpenWorkspace && <button type="button" role="menuitem" disabled={!activeDraft || !active}
+                  onClick={() => { void openWorkspace().catch(() => undefined); }}>{t("ux.openWorkspace")}</button>}
                 {onOpenAdvanced && <button type="button" role="menuitem" onClick={onOpenAdvanced}>{t("chartTester.openAdvanced")}</button>}
                 <button type="button" role="menuitemcheckbox" aria-checked={focusMode}
                   onClick={() => setFocusMode((focused) => !focused)}>{t("chartTester.focusMode")}</button>
