@@ -38,7 +38,7 @@ async function close(){
 }
 async function showPanel(){if(!await panel().isVisible())await q.s.page.getByRole('button',{name:'交易账户',exact:true}).click();}
 async function create(name){
- await panel().getByRole('button',{name:'添加账户',exact:true}).click();
+ await panel().locator('button.trading-icon-button[aria-label="添加账户"]').click();
  const dialog=q.s.page.getByRole('dialog',{name:'添加账户',exact:true});
  await dialog.getByLabel('名称',{exact:true}).fill(name);
  await dialog.getByLabel('初始资金（USDT）',{exact:true}).fill('1000');
