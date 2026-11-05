@@ -106,7 +106,8 @@ class ContinuousResults:
                 or not {"quote_balance","position_qty","contract_rules"}<=set(engine["account"])
                 or any(not isinstance(engine.get(kind),list) for kind in REQUIRED)):
             with self.store.lock:
-                exists=self.store.db.execute("SELECT 1 FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+                projection=self.store.epochs.projection(run_id)
+                exists=self.store.db.execute(f"SELECT 1 FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
             if exists:raise error("CONTINUOUS_RESULTS_INVALID","A qualified result cannot lose its kernel contract")
             return None  # Preserve opaque legacy recovery state; do not relabel it.
         if engine["account"].get("account_model")=="LINEAR_PERP_ONE_WAY_V2":
@@ -117,14 +118,15 @@ class ContinuousResults:
             raise error("CONTINUOUS_RESULTS_INVALID","Kernel result histories must retain their qualified arrays")
         with self.store.lock:
             if self.store.closed:raise error("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
-            previous=None if initial else self.store.db.execute("SELECT * FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+            projection=self.store.epochs.projection(run_id)
+            previous=None if initial else self.store.db.execute(f"SELECT * FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
             active=[] if previous is None else self.store.db.execute(
-                "SELECT item_index,stored_bytes,wire FROM result_items INDEXED BY idx_result_active_orders "
+                f"SELECT item_index,stored_bytes,wire FROM {projection.items} INDEXED BY {projection.active_index} "
                 "WHERE run_id=? AND kind='orders' AND active=1 ORDER BY item_index",
-                (run_id,)).fetchall()
+                (projection.key,)).fetchall()
             tail=None if previous is None else self.store.db.execute(
-                "SELECT item_index,stored_bytes,wire FROM result_items WHERE run_id=? AND kind='equity_curve' ORDER BY item_index DESC LIMIT 1",
-                (run_id,)).fetchone()
+                f"SELECT item_index,stored_bytes,wire FROM {projection.items} WHERE run_id=? AND kind='equity_curve' ORDER BY item_index DESC LIMIT 1",
+                (projection.key,)).fetchone()
         counts={kind:len(arrays[kind]) for kind in KINDS}
         before={kind:0 for kind in KINDS} if previous is None else json.loads(previous["counts_json"])
         if any(counts[kind]<before[kind] for kind in KINDS):
@@ -166,17 +168,18 @@ class ContinuousResults:
         if patch is None:return
         if not isinstance(patch,ResultPatch) or patch.run_id!=run_id:
             raise error("CONTINUOUS_COMMIT_CONFLICT","Result patch belongs to another account")
-        previous=self.store.db.execute("SELECT checkpoint_revision FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+        projection=self.store.epochs.projection(run_id)
+        previous=self.store.db.execute(f"SELECT checkpoint_revision FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
         if (None if previous is None else previous[0])!=patch.base_checkpoint_revision:
             raise error("CONTINUOUS_COMMIT_CONFLICT","Result projection changed after preparation")
-        self.store.db.executemany("INSERT INTO result_items VALUES(?,?,?,?,?,?,?) "
+        self.store.db.executemany(f"INSERT INTO {projection.items} VALUES(?,?,?,?,?,?,?) "
             "ON CONFLICT(run_id,kind,item_index) DO UPDATE SET changed_revision=excluded.changed_revision,"
             "wire=excluded.wire,stored_bytes=excluded.stored_bytes,active=excluded.active",
-            ((run_id,item.kind,item.index,revision,item.wire,item.stored_bytes,item.active) for item in patch.items))
-        self.store.db.execute("INSERT INTO result_heads VALUES(?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET "
+            ((projection.key,item.kind,item.index,revision,item.wire,item.stored_bytes,item.active) for item in patch.items))
+        self.store.db.execute(f"INSERT INTO {projection.heads} VALUES(?,?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET "
             "checkpoint_revision=excluded.checkpoint_revision,head_json=excluded.head_json,"
             "counts_json=excluded.counts_json,stored_bytes=excluded.stored_bytes",
-            (run_id,revision,patch.head_json,patch.counts_json,patch.stored_bytes))
+            (projection.key,revision,patch.head_json,patch.counts_json,patch.stored_bytes))
 
     def ensure(self,run_id):
         """One-time index of legacy state, without changing the financial run.
@@ -187,7 +190,8 @@ class ContinuousResults:
         """
         with self.store.lock:
             row=self.store.summary(run_id)
-            current=self.store.db.execute("SELECT checkpoint_revision FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+            projection=self.store.epochs.projection(run_id)
+            current=self.store.db.execute(f"SELECT checkpoint_revision FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
             if current is not None and current[0]==row["checkpoint_revision"]:return
         saved=self.store.load(run_id)
         patch=self.prepare(run_id,saved["checkpoint"]["engine"])
@@ -196,7 +200,8 @@ class ContinuousResults:
             current=self.store.summary(run_id)
             if current["checkpoint_revision"]!=saved["run"]["checkpoint_revision"]:
                 raise error("CONTINUOUS_COMMIT_CONFLICT","Financial state advanced during legacy result preparation")
-            head=self.store.db.execute("SELECT checkpoint_revision FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+            projection=self.store.epochs.projection(run_id)
+            head=self.store.db.execute(f"SELECT checkpoint_revision FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
             if head is not None and head[0]==current["checkpoint_revision"]:return
             self.publish(run_id,current["checkpoint_revision"],patch)
             self.store._enforce_total_budget()
@@ -247,7 +252,8 @@ class ContinuousResults:
                 identity=self.identity(row)
                 if expected is not None and expected!=identity:
                     raise error("CONTINUOUS_COMMIT_CONFLICT","Result identity changed; refresh the committed view")
-                head=self.store.db.execute("SELECT * FROM result_heads WHERE run_id=?",(run_id,)).fetchone()
+                projection=self.store.epochs.projection(run_id)
+                head=self.store.db.execute(f"SELECT * FROM {projection.heads} WHERE run_id=?",(projection.key,)).fetchone()
                 if head is None or head["checkpoint_revision"]!=row["checkpoint_revision"]:
                     raise error("CONTINUOUS_RESULTS_UNAVAILABLE","Prepare the committed result projection before reading")
                 if since_revision is not None and since_revision>row["checkpoint_revision"]:
@@ -256,12 +262,12 @@ class ContinuousResults:
                     raise error("CONTINUOUS_COMMIT_CONFLICT","Result change page is ahead of the account")
                 if since_revision is not None:
                     cursor=change_cursor or (since_revision,"",-1)
-                    rows=self.store.db.execute("SELECT kind,item_index,changed_revision,stored_bytes FROM result_items "
+                    rows=self.store.db.execute(f"SELECT kind,item_index,changed_revision,stored_bytes FROM {projection.items} "
                         "WHERE run_id=? AND changed_revision>? AND (changed_revision,kind,item_index)>(?,?,?) "
-                        "ORDER BY changed_revision,kind,item_index LIMIT ?",(run_id,since_revision,*cursor,limit+1)).fetchall()
+                        "ORDER BY changed_revision,kind,item_index LIMIT ?",(projection.key,since_revision,*cursor,limit+1)).fetchall()
                 elif kind is not None:
-                    rows=self.store.db.execute("SELECT kind,item_index,changed_revision,stored_bytes FROM result_items "
-                        "WHERE run_id=? AND kind=? AND item_index>? ORDER BY item_index LIMIT ?",(run_id,kind,after,limit+1)).fetchall()
+                    rows=self.store.db.execute(f"SELECT kind,item_index,changed_revision,stored_bytes FROM {projection.items} "
+                        "WHERE run_id=? AND kind=? AND item_index>? ORDER BY item_index LIMIT ?",(projection.key,kind,after,limit+1)).fetchall()
                 else:rows=[]
                 items=[];used=len(head["head_json"].encode("utf-8"))+len(head["counts_json"].encode("utf-8"))+8192
                 for item in rows[:limit]:
@@ -269,8 +275,8 @@ class ContinuousResults:
                     if not ENTRY_OVERHEAD_BYTES<=size<=MAX_ITEM_BYTES+ENTRY_OVERHEAD_BYTES:
                         raise error("CONTINUOUS_RESULTS_INVALID","Stored result item size is outside its budget")
                     if used+size>MAX_PAGE_BYTES:break
-                    wire=self.store.db.execute("SELECT wire FROM result_items WHERE run_id=? AND kind=? AND item_index=?",
-                        (run_id,item["kind"],item["item_index"])).fetchone()[0]
+                    wire=self.store.db.execute(f"SELECT wire FROM {projection.items} WHERE run_id=? AND kind=? AND item_index=?",
+                        (projection.key,item["kind"],item["item_index"])).fetchone()[0]
                     if len(wire.encode("utf-8"))+ENTRY_OVERHEAD_BYTES!=size:
                         raise error("CONTINUOUS_RESULTS_INVALID","Stored result item size does not match its payload")
                     items.append({"kind":item["kind"],"index":item["item_index"],"changed_revision":item["changed_revision"],"value":json.loads(wire)})

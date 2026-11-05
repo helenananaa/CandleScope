@@ -87,9 +87,8 @@ class ContinuousInputs:
 
     def _references(self):
         keep=set()
-        for row in self.store.list_summaries():
-            initial=self.store.describe(row["id"])["definition"].get("initial_snapshot")
-            if initial:keep.add(initial["dataset_id"])
+        with self.store.lock:
+            for initial in self.store.epochs.input_references():keep.add(initial["dataset_id"])
         for row in self.store.creations.list_pending():
             if row["phase"]=="CANCELLED":continue
             initial=self.store.creations.describe(row["request_key"])["input"]

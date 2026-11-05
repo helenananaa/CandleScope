@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from app.core.committed_updates import committed_updates_for
 from .errors import BacktestError
 
-SCHEMA = 3
+SCHEMA = 4
 PHASES = {"CATCHING_UP", "LIVE", "PAUSED", "REPAIR_REQUIRED", "FAILED", "CANCELLED"}
 MAX_DEFINITION_BYTES = 1024 * 1024
 MAX_CHECKPOINT_BYTES = 64 * 1024 * 1024
@@ -121,7 +121,7 @@ class ContinuousStrategyStore:
             self.db.execute("PRAGMA synchronous=FULL")
             with self._transaction():
                 version = self.db.execute("PRAGMA user_version").fetchone()[0]
-                if version not in (0, 1, 2, SCHEMA):
+                if version not in (0, 1, 2, 3, SCHEMA):
                     raise fail("CONTINUOUS_SCHEMA_UNSUPPORTED", "Continuous strategy schema is unsupported")
                 if version == 0:
                     if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
@@ -140,9 +140,14 @@ class ContinuousStrategyStore:
                 if version < 2:create_schema(self.db)
                 from .continuous_results import create_schema as create_results_schema, ContinuousResults
                 if version < 3:create_results_schema(self.db)
+                from .continuous_epochs import create_schema as create_epoch_schema, ContinuousEpochs
+                if version < 4:create_epoch_schema(self.db)
                 self.db.execute(f"PRAGMA user_version={SCHEMA}")
             self.creations = ContinuousCreationJournal(self)
+            self.epochs = ContinuousEpochs(self)
             self.results = ContinuousResults(self)
+            from .continuous_publication import ContinuousRepairPublication
+            self.repair_publication=ContinuousRepairPublication(self)
         except BaseException:
             self.db.close()
             self.closed = True
@@ -212,7 +217,7 @@ class ContinuousStrategyStore:
                     summary["sequence"],summary["event_time_ms"],summary["data_revision"]):
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state and cursor do not agree")
             try:
-                return {"run": summary, "definition": json.loads(row["definition_json"]), "checkpoint": json.loads(row["wire"])}
+                return {"run": summary, "definition": self.epochs.definition(run_id,row["definition_json"]), "checkpoint": json.loads(row["wire"])}
             except (TypeError, ValueError) as error:
                 raise fail("CONTINUOUS_CHECKPOINT_CORRUPT", "Committed state is unavailable") from error
 
@@ -222,7 +227,7 @@ class ContinuousStrategyStore:
             if self.closed:
                 raise fail("CONTINUOUS_STORE_CLOSED", "Continuous strategy store is closed")
             row = self.db.execute("SELECT "+SUMMARY_COLUMNS+",definition_json FROM runs WHERE id=?",(run_id,)).fetchone()
-            return {"run":_summary(row),"definition":json.loads(row["definition_json"])}
+            return {"run":_summary(row),"definition":self.epochs.definition(run_id,row["definition_json"])}
 
     def list_summaries(self):
         with self.lock:
@@ -401,6 +406,7 @@ class ContinuousStrategyStore:
     def _enforce_total_budget(self):
         total = self.db.execute("SELECT COALESCE(SUM(stored_bytes),0) FROM checkpoints").fetchone()[0]
         total += self.db.execute("SELECT COALESCE(SUM(stored_bytes),0) FROM result_heads").fetchone()[0]
+        total += self.epochs.stored_bytes()
         if total > self.max_total_checkpoint_bytes:
             raise fail("BUDGET_EXCEEDED", "Continuous checkpoints reached the total disk budget; committed recovery points are retained")
 
