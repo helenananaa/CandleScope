@@ -287,4 +287,18 @@ class ContinuousCreationJournal:
                 "WHERE c.phase='COMMITTED' AND r.phase='PAUSED' AND r.generation=1 AND r.revision=1 ORDER BY r.id")]
 
     def initial_start_pending(self,run_id):
-        return run_id in self.list_unstarted()
+        with self.store.lock:
+            if self.store.closed:raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            return self.store.db.execute("SELECT 1 FROM creation_requests c JOIN runs r ON r.id=c.run_id "
+                "WHERE r.id=? AND c.phase='COMMITTED' AND r.phase='PAUSED' AND r.generation=1 AND r.revision=1",
+                (run_id,)).fetchone() is not None
+
+    def initial_start_state(self,run_id):
+        """Observe the cursor and durable launch intent under one owner lock.
+
+        Resume can change PAUSED/revision1 between separate reads. Combining
+        that old row with the new intent state would falsely report completion.
+        """
+        with self.store.lock:
+            row=self.store.summary(run_id)
+            return row,row["phase"]=="PAUSED" and self.initial_start_pending(run_id)
