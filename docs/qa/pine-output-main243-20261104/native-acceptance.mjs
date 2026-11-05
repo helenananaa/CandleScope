@@ -73,7 +73,8 @@ let running=false;
 try{
  verifyPackage();await fs.copyFile(q.s.root+'/verified-after.json',q.s.root+'/verified-before.json');
  running=true;await launch();
- const configured=await q.configure([{session:q.session('BTCUSDT','1m'),indicators:[]}]);assert.ok(['applied','ready'].includes(configured.result.state));
+ const configured=await q.configure([{session:q.session('BTCUSDT','1m'),indicators:[]}],'single');
+ await q.record('configured-single-chart',configured);assert.ok(['applied','ready'].includes(configured.result.state),JSON.stringify(configured.result));
  await q.until(async()=>{await q.checkCircuit();const snapshot=await q.inspect();return snapshot.cells[0]?.runtime.marketReady&&!snapshot.cells[0]?.runtime.loading?snapshot:false;},180000);
  assert.equal((await q.execute('cell-1','addIndicator',{id,name:'Native output ranges',kind:'script',executionTarget:'hosted',language:'pine',securityMode:'safe',script:source,visible:true})).state,'applied');
  await ready();const before=await adopted('old-time-updates-and-deletions');await canonical(before);
