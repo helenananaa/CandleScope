@@ -139,9 +139,10 @@ class ContinuousRepairPublication:
                         (_wire(point.to_dict(),8192),int(time.time()*1000),epoch_id))
                     self.store._enforce_total_budget()
             finally:staged.db.execute("ROLLBACK")
+        self.store.updates.notify("repair:"+saved["request_key"])
         return self.store.epochs.describe(epoch_id)
 
-    def publish(self,epoch_id,manager,*,resume_after):
+    def publish(self,epoch_id,manager,*,resume_after,check_stopping=lambda:None):
         if type(resume_after) is not bool:raise fail("CONTINUOUS_INPUT_INVALID","Repair resume intent must be explicit")
         saved=self.store.epochs.describe(epoch_id)
         if resume_after!=saved["plan"]["resume_after"]:
@@ -150,11 +151,13 @@ class ContinuousRepairPublication:
         if saved["phase"]!="READY":raise fail("CONTINUOUS_NOT_READY","Repair results are not prepared for publication")
         point=PrefixReceipt.from_dict(saved["source"])
         def publish():
+            check_stopping()
             with self.store._transaction():
                 current=self.store.epochs.describe(epoch_id)
                 if current["phase"]!="READY" or current["source"]!=saved["source"]:
                     raise fail("CONTINUOUS_COMMIT_CONFLICT","Prepared repair changed before publication")
                 self._base(saved)
+                check_stopping()
                 checkpoint=self.store.db.execute("SELECT sequence,event_time_ms,data_revision,generation FROM checkpoints WHERE run_id=? AND revision=?",
                     (saved["run_id"],saved["target_revision"])).fetchone()
                 head=self.store.db.execute("SELECT checkpoint_revision FROM epoch_result_heads WHERE run_id=?",(epoch_id,)).fetchone()
@@ -178,3 +181,4 @@ class ContinuousRepairPublication:
             raise
         finally:
             self.store.updates.notify(saved["run_id"])
+            self.store.updates.notify("repair:"+saved["request_key"])

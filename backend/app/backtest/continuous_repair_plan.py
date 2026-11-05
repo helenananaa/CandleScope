@@ -87,5 +87,9 @@ def preview(store, manager, run_id, *, expected, resume_after, now_ms):
         "anchor_sequence": 0 if anchor is None else anchor["sequence"],
         "from_ms": point.from_ms if anchor is None else anchor["event_time_ms"] + 1,
         "full_reinitialization": anchor is None, "expanded_range_reason": reason}
-    wire = json.dumps(plan, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    # Other symbols advance the global SQLite clock continuously. Its current
+    # value proves non-regression above, but cannot expire this series' consent.
+    fingerprint = {**plan, "observed_source": None if plan["observed_source"] is None else
+        {key: value for key, value in plan["observed_source"].items() if key != "storage_revision"}}
+    wire = json.dumps(fingerprint, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return {**plan, "plan_id": hashlib.sha256(wire.encode()).hexdigest()}

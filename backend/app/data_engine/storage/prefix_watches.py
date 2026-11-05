@@ -183,7 +183,7 @@ class PrefixWatchStore:
                 (through_ms,committed_through_ms,receipt.owner))
             return self._receipt(conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(receipt.owner,)).fetchone(),head)
 
-    def fork_unchanged(self,receipt: PrefixReceipt,owner,*,through_ms,expected_version):
+    def fork_unchanged(self,receipt: PrefixReceipt,owner,*,through_ms,expected_version,protected_through_ms=None):
         """Explicit repair may reuse only a prefix before the earliest revision.
 
         This creates a separate durable source epoch before any financial swap.
@@ -192,8 +192,9 @@ class PrefixWatchStore:
         """
         receipt=PrefixReceipt.from_dict(receipt.to_dict())
         values=_scope(owner,receipt.series);_time(through_ms)
+        protected=through_ms if protected_through_ms is None else _time(protected_through_ms)
         if (type(expected_version) is not int or not receipt.version<=expected_version<=MAX_TIME
-                or owner==receipt.owner or not receipt.from_ms-1<=through_ms<=receipt.through_ms):
+                or owner==receipt.owner or not receipt.from_ms-1<=through_ms<=protected<=receipt.through_ms):
             raise PrefixContinuityUnavailable("repair anchor must stay inside its observed financial prefix")
         with closing(self.connect()) as conn,conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -203,14 +204,16 @@ class PrefixWatchStore:
             if (head<receipt.storage_revision or row["acquisition"]<receipt.acquisition
                     or row["through_ms"]<receipt.through_ms or row["version"]!=expected_version
                     or row["dirty_from_ms"] is None or row["dirty_from_ms"]>receipt.through_ms
-                    or through_ms>=row["dirty_from_ms"]):
+                    or protected>=row["dirty_from_ms"]):
                 raise PrefixContinuityUnavailable("source changed or repair anchor crosses revised history")
             if conn.execute("SELECT 1 FROM kline_prefix_watches WHERE owner=?",(owner,)).fetchone():
                 raise PrefixContinuityUnavailable("repair source owner already exists; recover its original receipt")
             if conn.execute("SELECT count(*) FROM kline_prefix_watches").fetchone()[0]>=self.max_watches:
                 raise PrefixContinuityUnavailable("source prefix watch capacity reached")
             columns="owner,incarnation,"+",".join(IDENTITY_COLUMNS)+",from_ms,through_ms,acquisition,version,registered_storage_revision,verified_through_ms,verified_version,committed_acquisition,committed_through_ms"
-            params=(owner,uuid4().hex,*values,receipt.from_ms,through_ms,0,0,head,through_ms,0,0,through_ms)
+            # An unchanged immutable initialization tail may need protection
+            # beyond the financial anchor; it is not acknowledged as executed.
+            params=(owner,uuid4().hex,*values,receipt.from_ms,protected,0,0,head,through_ms,0,0,through_ms)
             conn.execute("INSERT INTO kline_prefix_watches("+columns+") VALUES("+",".join("?" for _ in params)+")",params)
             return self._receipt(conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(owner,)).fetchone(),head)
 

@@ -265,6 +265,7 @@ class ContinuousStrategyRuntime:
             actor.request_stop()
             await finish_cleanup(asyncio.shield(actor.task))
         row=await run_storage(self.store.summary,run_id)
+        if row["phase"]=="REPAIR_REQUIRED":return row
         if row["phase"]=="PAUSED" and not await run_storage(self.store.creations.initial_start_pending,run_id):return row
         return await run_storage(self.store.stop,run_id,generation=row["generation"],revision=row["revision"])
 

@@ -102,6 +102,7 @@ jobs:
             tests/test_continuous_controller.py \
             tests/test_continuous_results.py \
             tests/test_continuous_epochs.py \
+            tests/test_continuous_repairs.py \
             tests/test_continuous_source_identity.py \
             tests/test_continuous_guarded_source.py \
             tests/test_continuous_strategy_store.py \

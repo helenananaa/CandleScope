@@ -1,5 +1,6 @@
 """Persistent source prefix protection across real SQLite writer interleavings."""
 from contextlib import closing
+from dataclasses import replace
 import json
 import sqlite3
 import subprocess
@@ -283,6 +284,22 @@ def test_repair_forks_only_unchanged_prefix_and_preserves_original_watch(storage
     with fresh.commit_guard(retry):pass
     assert store.inspect(original.owner)==observed
     with pytest.raises(ProcessedPrefixChanged):prepare(store,original,through=END+5*STEP)
+
+
+def test_repair_fork_protects_unchanged_initial_tail_without_acknowledging_it_as_executed(storage):
+    store,original,observed=revised_prefix(storage)
+    proof=store.fork_unchanged(original,'repair:protected-initial',through_ms=END,
+        protected_through_ms=END+2*STEP,expected_version=observed['version'])
+    financial=replace(proof,through_ms=END)
+    actual=store.inspect(proof.owner)
+    assert proof.through_ms==END+2*STEP and actual['committed_through_ms']==END
+    acquired=store.prepare(financial,committed_through_ms=END,through_ms=END+2*STEP,frozen_version=0)
+    with store.commit_guard(acquired,committed_through_ms=END+STEP):pass
+    assert store.inspect(proof.owner)['committed_through_ms']==END+STEP
+    klines_repo.upsert_klines('BTCUSDT','1m',[_row(START+2*STEP,300)],source=SOURCE)
+    with pytest.raises(ProcessedPrefixChanged):
+        store.prepare(replace(acquired,through_ms=END+STEP),committed_through_ms=END+STEP,
+            through_ms=END+2*STEP,frozen_version=0)
 
 
 @pytest.mark.parametrize('anchor',[START+3*STEP,END+4*STEP])
