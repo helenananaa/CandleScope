@@ -45,7 +45,9 @@ async function adopted(phase){
    const toggle=state.lines.find(line=>line.name==='toggle')?.data.find(point=>point.time===state.targetTime);
    const markers=state.markers.flatMap(row=>row.data),backgrounds=state.bgcolors.flatMap(row=>row.regions);
    const coherent=(even?toggle?.value===value:toggle===undefined)&&markers.length===(even?1:0)&&backgrounds.length===(even?1:0);
+   await fs.appendFile(q.s.root+'/rendered-observations.ndjson',JSON.stringify({phase,at:Date.now(),counter,even,coherent,state})+'\n');
    if(coherent){
+    if(value<lastCounter)await q.record(phase+'-counter-regression',{lastCounter,observations,pending,state});
     assert.ok(value>=lastCounter,'Counter regressed within this uninterrupted native session');lastCounter=value;
     assert.ok(counter.time<state.bars.at(-1).time,'Offset point must be before source bar');
     assert.ok(state.lines.every(line=>line.data.every(point=>point.time<state.bars.at(-1).time)),'Shifted plots must not acquire a current/future source-time point');
@@ -67,7 +69,10 @@ async function canonical(state){
  const rows=new Map(body.data.map(row=>[row.time,row]));for(const bar of closed)for(const field of ['open','high','low','close','volume'])assert.equal(rows.get(bar.time)?.[field],bar[field]);
  await q.record('real-source-canonical-rows',{closed,quality:{complete:body.complete,all_rows_final:body.all_rows_final}});
 }
-async function launch(){await q.record('launch',await q.launch());await q.checkCircuit();await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor({timeout:60000});await q.enableControl();}
+async function launch(){await q.record('launch',await q.launch());
+ q.s.page.on('response',async response=>{if(!response.url().includes('/api/v1/indicators/'))return;
+  try{await fs.appendFile(q.s.root+'/indicator-responses.ndjson',JSON.stringify({at:Date.now(),url:response.url(),status:response.status(),body:await response.json()})+'\n');}catch{}});
+ await q.checkCircuit();await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor({timeout:60000});await q.enableControl();}
 async function close(){await q.quit();assert.equal(await q.exited(),true);running=false;await q.record('full-owned-exit',{allExited:true});verifyPackage();await q.record('package-after-full-exit',JSON.parse(await fs.readFile(q.s.root+'/verified-after.json','utf8')));}
 let running=false;
 try{
