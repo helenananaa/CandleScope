@@ -84,6 +84,13 @@ stream events coalesce to one frontier/barrier rather than an unbounded task
 chain. The existing connection-level correction fanout serves both subscription
 paths and preserves parent backfill barriers.
 
+Parent repair state belongs to the domain, so a concurrent HTTP range read
+cannot bypass a WS repair wait. It returns `INDICATOR_RANGE_NOT_READY` until
+the same parent is verified. WS waits are cancellable outside admitted math
+commands/borrows; closing an owner cancels only its source waiter and can
+finish while the parent repair remains pending. Duplicate completions do not
+replay the calculation.
+
 Normal live output uses the existing `render.update-range/1` metadata and
 `indicator.replace_range` serialization, including negative offsets, deletion,
 markers/bgcolors and whole drawing-scene replacement. Generation changes use a
@@ -97,3 +104,9 @@ Frontend consumers must bind results to the expected domain, reject decreasing
 generations/sequences and delayed prior-domain HTTP/WS responses, and replace
 the whole projection on a new generation. This backend step does not yet wire
 those checks into the chart hook or establish renderer/package/Native evidence.
+The real DataManager's transaction-owned prefix guarantees also need explicit
+qualification before enabling the hook: initial HTTP-to-WS acquisition and
+background/parent-chunk writes cannot be certified solely by a coarse transport
+revision token. Use the existing source-prefix facade/transaction proofs where
+the actual Manager call chain requires them; controlled BAR fixtures do not
+prove that acquisition/commit boundary.

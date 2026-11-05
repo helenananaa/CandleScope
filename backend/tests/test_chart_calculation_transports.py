@@ -113,7 +113,7 @@ def wire(tmp_path,request):
         return {'ok':True}
     with TestClient(app) as client:
         yield SimpleNamespace(client=client,source=source,host=host,service=service,ranges=ranges,
-                              tmp_path=tmp_path,extra_processes=extra_processes)
+                              tmp_path=tmp_path,extra_processes=extra_processes,engine=engine)
     assert not source.callbacks and not source.leases
     directory = os.environ.get('CALCULATION_TRACE_DIR')
     if directory:
@@ -390,3 +390,51 @@ def test_source_delivery_gap_forces_new_origin_generation_even_without_primary_r
         assert rebuilt['dataRevision']['revisionToken'] == before_gap['dataRevision']['revisionToken']
         assert rebuilt['calculation']['inputRevision'].endswith(':delivery:1')
         assert wire.source.query_windows[-1][0] == rebuilt['calculation']['origin']*1000
+
+
+@pytest.mark.parametrize('close_during_wait',[False,True])
+def test_http_cannot_bypass_ws_parent_repair_barrier_and_close_cancels_only_source_wait(wire,close_during_wait):
+    async def arm():
+        class Coordinator:
+            def __init__(self): self.entered,self.allowed = asyncio.Event(),asyncio.Event()
+            async def wait_for_request(self, request_id):
+                assert request_id == 'parent-owned-chart'
+                self.entered.set()
+                await self.allowed.wait()
+                return SimpleNamespace(verified_contiguous=True,retryable=False,bars_loaded=1)
+        coordinator = Coordinator()
+        wire.engine.backfill_coordinator = coordinator
+        return coordinator
+    coordinator = wire.client.portal.call(arm)
+    initial = wire.client.post('/indicators/calculations',json=open_request()).json()
+    with wire.client.websocket_connect('/ws') as ws:
+        subscribe(ws,ref(initial));assert receive(ws,'indicator.subscribed')['ok']
+        receive(ws,'indicator.snapshot')
+        dirty = wire.source.bars[10].time
+        event = DataEvent(DataEventType.BACKFILL_COMPLETED,SeriesKey('BTCUSDT','1m'),detail={
+            'request_id':'parent-owned-chart','bars_count':1,'request_start_ms':dirty*1000,
+            'request_end_ms':dirty*1000,'range_start_ms':dirty*1000,'range_end_ms':dirty*1000})
+        async def start_repair():
+            wire.source.bars[10] = replace(wire.source.bars[10],close=101)
+            await wire.source.emit(event)
+            await asyncio.wait_for(coordinator.entered.wait(),8)
+        wire.client.portal.call(start_repair)
+        before = wire.host.diagnostics()['runtimes'][0]['requests']
+        blocked = view(wire,ref(initial))
+        assert blocked['code'] == 'INDICATOR_RANGE_NOT_READY'
+        assert wire.host.diagnostics()['runtimes'][0]['requests'] == before
+        if close_during_wait:
+            assert wire.client.delete('/indicators/calculations/'+ref(initial)['domainId']).json()['state'] == 'closed'
+            assert not coordinator.allowed.is_set()
+            assert receive(ws,'error')['code'] == 'INDICATOR_CALCULATION_CLOSED'
+            assert not wire.source.callbacks and not wire.source.leases
+        else:
+            wire.client.portal.call(coordinator.allowed.set)
+            repaired = receive(ws,'indicator.snapshot')
+            assert value(repaired) == 500 and repaired['calculation']['generation'] == 2
+            assert wire.source.query_windows[-1][0] == initial['calculation']['origin']*1000
+            before = wire.host.diagnostics()['runtimes'][0]['requests']
+            wire.client.portal.call(wire.source.emit,event)
+            repeated = receive(ws,'indicator.snapshot')
+            assert ref(repeated) == ref(repaired)
+            assert wire.host.diagnostics()['runtimes'][0]['requests'] == before

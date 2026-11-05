@@ -61,11 +61,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
         try:
             while pending is not None and not entry.get('_disposed'):
                 batch, pending = pending, None
-                if coordinator is not None and batch['barrier']:
-                    outcome = await coordinator.wait_for_request(batch['barrier'])
-                    if (outcome is None or getattr(outcome,'verified_contiguous',False) is not True
-                            or bool(getattr(outcome,'retryable',False))):
-                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
+                await chart.wait_corrections()
                 async with registry.borrow(reference.domainId) as current:
                     payload = await current.live(writer_id=stream_consumer_id, client_id=client_id,
                         through=batch['through'])
@@ -87,7 +83,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
         nonlocal pending
         if entry.get('_disposed'): return
         correction = event.event_type in {DataEventType.BAR_AMENDED,DataEventType.BACKFILL_COMPLETED}
-        barrier, through = None, 0
+        through = 0
         if correction:
             if is_zero_bar_backfill_completion(event): return
             dirty = indicator_dirty_range_for_interval(event,meta['interval'],data_manager=dm)
@@ -96,14 +92,14 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
                 event_id=indicator_correction_event_id(event,interval=meta['interval'],dirty_range=dirty))
             if event.event_type == DataEventType.BACKFILL_COMPLETED:
                 barrier = str((event.detail or {}).get('request_id') or '')
+                chart.require_barrier(coordinator,barrier)
         elif event.bar is not None:
             through = int(event.bar.time)
             if event.event_type == DataEventType.BAR_CLOSED:
                 chart.range_service.note_closed(series_key=chart.series,closed_through=through)
-        if pending is None: pending = {'through':through,'barrier':barrier}
+        if pending is None: pending = {'through':through}
         else:
             pending['through'] = max(pending['through'],through)
-            if barrier: pending['barrier'] = barrier
         task = custom_tasks.get(client_id)
         if task is None or task.done():
             custom_tasks[client_id] = asyncio.create_task(pump(),name='chart-domain-stream:' + client_id)
@@ -119,6 +115,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
     latest = await run_storage(dm.query_latest,meta['symbol'],meta['interval'],limit=2,
         exchange=meta['exchange'],market_type=meta['market_type'],auto_backfill=False)
     closed = max((bar.time for bar in latest.bars if bar.is_closed), default=0)
+    await chart.wait_corrections()
     async with registry.borrow(reference.domainId) as current:
         await current.live(writer_id=stream_consumer_id,client_id=client_id,
             through=closed if closed > current.owner.cursor.closed_through else 0)

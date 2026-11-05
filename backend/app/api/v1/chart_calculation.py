@@ -7,6 +7,7 @@ rows and serialized payloads exist only for the duration of an operation.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from copy import deepcopy
 
 from candlescope_plugin_sdk import ExecuteBatchResult
@@ -45,6 +46,8 @@ class ChartCalculation:
         self._dispose_writer = None
         self._inputs = ()
         self._source_epoch = 0
+        self._barrier = None
+        self._barrier_ids = deque(maxlen=64)
 
     @classmethod
     async def open(cls, service, owner_id, *, dm, meta, range_service, start, end, coordinator=None):
@@ -81,6 +84,27 @@ class ChartCalculation:
         # A delivery gap cannot certify opaque intrabar observations. Fence
         # admitted work immediately and rebuild the next generation at origin.
         self._source_epoch += 1
+
+    def require_barrier(self, coordinator, request_id):
+        if coordinator is not None and request_id and request_id not in self._barrier_ids:
+            self._barrier_ids.append(request_id)
+            self._barrier = (coordinator,request_id)
+            self.invalidate()
+
+    async def wait_corrections(self):
+        # This is a cancellable source wait, outside admitted calculation
+        # commands/borrows. A quiet repair cannot block explicit owner close.
+        while self._barrier is not None:
+            pending = self._barrier
+            outcome = await pending[0].wait_for_request(pending[1])
+            if (outcome is None or getattr(outcome,'verified_contiguous',False) is not True
+                    or bool(getattr(outcome,'retryable',False))):
+                raise IndicatorRangeNotReadyError('Chart source correction is not finalized')
+            if self._barrier is pending: self._barrier = None
+
+    def _require_source_ready(self):
+        if self._barrier is not None:
+            raise IndicatorRangeNotReadyError('Chart source correction is awaiting its parent barrier')
 
     def matches(self, meta):
         candidate = _script_runtime_request(meta, [], transport='chart.attach')
@@ -156,6 +180,7 @@ class ChartCalculation:
     async def view(self, reference, *, client_id, start, end, rebuild=False):
         async def read():
             check_reference(self.owner, reference)
+            self._require_source_ready()
             if start < self.owner.plan.start or end < start:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
@@ -188,6 +213,7 @@ class ChartCalculation:
         async def update():
             if self._writer != writer_id:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_CHANGED')
+            self._require_source_ready()
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
             rebuild = self._input_token(revision,epoch) != cursor.input_revision
             end = max(cursor.observed_through, int(through), int(revision.get('closedThrough') or 0))
