@@ -211,7 +211,7 @@ class ContinuousStrategyRuntime:
             self.last_failures[run_id]={"code":str(getattr(failure,"code",type(failure).__name__))[:64],"message":str(failure)[:256]}
             while len(self.last_failures)>64:self.last_failures.pop(next(iter(self.last_failures)))
 
-    async def start_existing(self,run_id,*,retry_failed=False):
+    async def start_existing(self,run_id,*,retry_failed=False,expected_identity=None):
         if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Continuous runtime is closed")
         if run_id in self.starts:return await asyncio.shield(self.starts[run_id])
         if run_id in self.actors:
@@ -219,7 +219,7 @@ class ContinuousStrategyRuntime:
             return await run_storage(self.store.summary,run_id)
         if len(set(self.actors)|set(self.starts))>=self.max_active_runs:
             raise BacktestError("BUDGET_EXCEEDED","Continuous strategy execution capacity reached")
-        task=asyncio.create_task(self._start(run_id,retry_failed=retry_failed))
+        task=asyncio.create_task(self._start(run_id,retry_failed=retry_failed,expected_identity=expected_identity))
         self.starts[run_id]=task
         def finished(done):
             # A setup cancelled before its first coroutine step has no finally.
@@ -229,10 +229,12 @@ class ContinuousStrategyRuntime:
         # Request/view cancellation does not own an already authorized backend run.
         return await asyncio.shield(task)
 
-    async def _start(self,run_id,*,retry_failed):
+    async def _start(self,run_id,*,retry_failed,expected_identity=None):
         actor=None
         try:
             description=await run_storage(self.store.describe,run_id)
+            if expected_identity is not None and (description["run"]["generation"],description["run"]["revision"])!=expected_identity:
+                raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Execution intent changed before automatic restoration")
             phase=description["run"]["phase"]
             if phase not in {"PAUSED","CATCHING_UP","LIVE"} and not (phase=="FAILED" and retry_failed is True):
                 raise BacktestError("CONTINUOUS_NOT_READY","Run requires explicit failure or repair resolution")
@@ -263,21 +265,32 @@ class ContinuousStrategyRuntime:
             actor.request_stop()
             await finish_cleanup(asyncio.shield(actor.task))
         row=await run_storage(self.store.summary,run_id)
-        if row["phase"]=="PAUSED":return row
+        if row["phase"]=="PAUSED" and not await run_storage(self.store.creations.initial_start_pending,run_id):return row
         return await run_storage(self.store.stop,run_id,generation=row["generation"],revision=row["revision"])
 
     async def restore_active(self):
         """Restore durable execution intent, leaving explicitly stopped runs alone."""
         if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Continuous runtime is closed")
         result={"started":[],"not_admitted":{}}
-        for row in await run_storage(self.store.list_summaries):
-            if row["phase"] not in {"CATCHING_UP","LIVE"}:continue
+        for row in await run_storage(self.store.restore_candidates):
             try:
-                await self.start_existing(row["id"])
+                await self.start_existing(row["id"],expected_identity=(row["generation"],row["revision"]))
                 result["started"].append(row["id"])
             except BacktestError as failure:
                 result["not_admitted"][row["id"]]={"code":failure.code,"message":str(failure)[:256]}
         return result
+
+    async def cancel(self,run_id):
+        """Explicit terminal stop preserves every committed financial result."""
+        if self.closed:raise BacktestError("CONTINUOUS_NOT_READY","Continuous runtime is closed")
+        if run_id in self.starts:await asyncio.shield(self.starts[run_id])
+        actor=self.actors.get(run_id)
+        if actor is not None:
+            actor.request_stop()
+            await finish_cleanup(asyncio.shield(actor.task))
+        row=await run_storage(self.store.summary,run_id)
+        if row["phase"]=="CANCELLED":return row
+        return await run_storage(self.store.stop,run_id,generation=row["generation"],revision=row["revision"],phase="CANCELLED")
 
     def _request_shutdown(self):
         self.closed=True
