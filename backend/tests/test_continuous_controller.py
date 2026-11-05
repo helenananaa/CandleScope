@@ -458,9 +458,35 @@ def test_committed_before_start_crash_window_restores_without_second_account(sto
             assert not active
             owner=await open_owner(tmp_path,manager,now)
             assert owner.store.load(accepted["run_id"])==before
+            # Resume races the two readiness observations: the old PAUSED row
+            # must not be combined with a later "no launch pending" answer.
+            summary_read, resume_probed = Event(), Event()
+            armed = [False]
+            summary, resume = owner.store.summary, owner.store.resume
+            def observed_summary(run_id):
+                row = summary(run_id)
+                if armed[0] and row["phase"] == "PAUSED":
+                    armed[0] = False
+                    summary_read.set()
+                    assert resume_probed.wait(10)
+                return row
+            def racing_resume(*args, **kwargs):
+                assert summary_read.wait(10)
+                acquired = owner.store.lock.acquire(blocking=False)
+                if not acquired:
+                    resume_probed.set()
+                    return resume(*args, **kwargs)
+                try:
+                    return resume(*args, **kwargs)
+                finally:
+                    owner.store.lock.release()
+                    resume_probed.set()
+            monkeypatch.setattr(owner.store, "summary", observed_summary)
+            monkeypatch.setattr(owner.store, "resume", racing_resume)
             assert (await owner.restore())["started"]==[accepted["run_id"]]
+            armed[0] = True
             result=await asyncio.wait_for(owner.wait_initial("request"),10)
-            assert result["run"]["sequence"]==20
+            assert result["run"]["sequence"]==20, result
             assert len(owner.store.list_summaries())==1
         finally:release.set();await owner.close();await manager.event_bus.close()
     asyncio.run(scenario())
