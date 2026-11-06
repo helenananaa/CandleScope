@@ -1,0 +1,218 @@
+{
+  "productSource": "6a2ca016e27a913d2e8fd29d49e8b4cde50d22f6",
+  "testedHead": "f51c8e1cf565b26d150ad5c92c6b3c467e43a4bf",
+  "previousProduct": "26590df1bd2a53c21fa009e070cd5a897e1fcbd2",
+  "baseMain": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
+  "integratedPRs": [
+    268,
+    269
+  ],
+  "productionDelta": {
+    "backend/app/data_engine/market_data/kline_metrics.py": "462013478414d5a028d85d853a5f735858bccc66e8b4926fb2ed7f2eca1447c0",
+    "backend/app/replay/catalog_transport.py": "983a9269012d14778bff41ecf098021909ccb7df2bab0444197f64555652a5df",
+    "backend/app/replay/official_trade_catalog.py": "dd37a23851cc5fef8648cc2e5aa0786d6c11676d3d59c1a324863fee16c6b1d9",
+    "backend/app/replay/runtime.py": "214038d47a8a29043b99adcf029e58dac402dd6d61950894ea5c93abc62b2abd"
+  },
+  "backend": {
+    "suites": 76,
+    "passed": 972,
+    "skipped": 1,
+    "warnings": 5,
+    "errors": 0,
+    "skip": "Windows CRT case; no Windows acceptance"
+  },
+  "workers": {
+    "cases": 23,
+    "processes": 24,
+    "allExit0AndIndependentlyAbsent": true,
+    "resourcesZero": true
+  },
+  "native": {
+    "source": "6a2ca016e27a913d2e8fd29d49e8b4cde50d22f6",
+    "snapshots": 18,
+    "frameTypes": {
+      "connected": 2,
+      "subscription_ack": 4,
+      "backfill_completed": 1,
+      "kline": 90
+    },
+    "klineRows": 90,
+    "klineTimes": [
+      1793966040,
+      1793966100,
+      1793966160,
+      1793966220
+    ],
+    "maxCoordinatorBars": 86,
+    "indicatorRequests": [
+      {
+        "at": 1793966044840,
+        "url": "http://127.0.0.1:59712/api/v1/indicators/diagnostics",
+        "method": "GET",
+        "body": null
+      }
+    ],
+    "chartBarCount": 502,
+    "chartLoading": false,
+    "indicatorOutputCounts": [
+      0
+    ],
+    "newCooldownRecorded": false,
+    "exactSidecarExit": {
+      "launches": [
+        {
+          "pid": 67673,
+          "spawnfile": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-domain-catalog-20261106/native/Installed App/CandleScope.app/Contents/Resources/python-runtime/python/bin/python3",
+          "at": "2026-11-06T11:54:04.669Z"
+        }
+      ],
+      "exits": [
+        {
+          "pid": 67673,
+          "code": 0,
+          "signal": null,
+          "at": "2026-11-06T11:57:18.367Z"
+        }
+      ],
+      "killRequests": []
+    },
+    "nativeQualified": false,
+    "next": "Capture frontend monitor/gates in an offline full market-data-hook reproduction. No unchanged public retry; indicatorWindowDeferred is a hypothesis only."
+  },
+  "preservation": {
+    "worktrees": 33,
+    "dirtyFiles": 3044,
+    "mismatches": []
+  },
+  "evidence": {
+    "checks.json": {
+      "file": "evidence/checks.json.gz",
+      "sha256": "fb1a67d038f88c1b7c42b587b766eae0f1b04a980b682fa242a9e9ac7abab208",
+      "bytes": 5934
+    },
+    "backend-combined.log": {
+      "file": "evidence/backend-combined.log.gz",
+      "sha256": "1038d66929ca02d7339f241c7d2e2ce413a4fd8873543b1176feb749f10c82a3",
+      "bytes": 3947
+    },
+    "initial-trace-directory-checks.json": {
+      "file": "evidence/initial-trace-directory-checks.json.gz",
+      "sha256": "efaac2d012cc8e7e50a4cf2c328ebb395a1a6e61faf0fcc482bde88c138f9bfc",
+      "bytes": 5871
+    },
+    "initial-trace-directory-backend-combined.log": {
+      "file": "evidence/initial-trace-directory-backend-combined.log.gz",
+      "sha256": "01d40329cf3a998b92a594ff8e93b13ff92639eacc9e8d2e63e4475b9a1aa78e",
+      "bytes": 7325
+    },
+    "real-bus-corrected.log": {
+      "file": "evidence/real-bus-corrected.log.gz",
+      "sha256": "9d4302005f69bf696df691d6d3976b3db56ffbcba434376371427e25f5579cce",
+      "bytes": 942
+    },
+    "independent-worker-exit.json": {
+      "file": "evidence/independent-worker-exit.json.gz",
+      "sha256": "4fd16768a1ab0cb3a38f9e872bb33e5ecfaafb756ca8183e3822835b90f0c8fe",
+      "bytes": 14060
+    },
+    "assembly.log": {
+      "file": "evidence/assembly.log.gz",
+      "sha256": "fc639be2cae92643f94d5a0a7b2959f3a2ad061905dad7c0c68c8b533d08e555",
+      "bytes": 478
+    },
+    "package-preflight.log": {
+      "file": "evidence/package-preflight.log.gz",
+      "sha256": "a9226f3e7a7696c4431fed169cfa122ce778258d11c3e816b274026f3abe1c3e",
+      "bytes": 452
+    },
+    "native.log": {
+      "file": "evidence/native.log.gz",
+      "sha256": "198674bca778ddb9e117a59f0daf33e16e156cb83ea83614bac518cccee64ab6",
+      "bytes": 1320
+    },
+    "native-observed.mjs": {
+      "file": "evidence/native-observed.mjs.gz",
+      "sha256": "c0cca18e7a537d86011149bcde2fc30b4fde4cfcaadda5fd8ce09a4804fd11d5",
+      "bytes": 1606
+    },
+    "native-analysis.json": {
+      "file": "evidence/native-analysis.json.gz",
+      "sha256": "85e4345f74fcef162573c7842d3c00e6c47e14124b61d6c3ad3c9472ae292e56",
+      "bytes": 1332
+    },
+    "protected-worktrees.json": {
+      "file": "evidence/protected-worktrees.json.gz",
+      "sha256": "ee4159cc55e93b904462edc2cfca0a9f75e64866d21fa9eae77e976e720dfe4b",
+      "bytes": 64
+    },
+    "native/acceptance.json": {
+      "file": "evidence/native--acceptance.json.gz",
+      "sha256": "2f0e183161519e3cd65395755893c1ed2671869127530e85c614e1a04581ecc3",
+      "bytes": 14358
+    },
+    "native/traffic.json": {
+      "file": "evidence/native--traffic.json.gz",
+      "sha256": "c5bd07078f4ddab724547b21b4f17c603df9b145d340bf7bc22d83dc3dc0cea1",
+      "bytes": 47502
+    },
+    "native/verified-before.json": {
+      "file": "evidence/native--verified-before.json.gz",
+      "sha256": "6f5a912421b1e7508d9472df778e228e982cb852fdadbc5de27f467e4c9c2f5a",
+      "bytes": 528
+    },
+    "native/verified-after.json": {
+      "file": "evidence/native--verified-after.json.gz",
+      "sha256": "3eabc8e70e9422e8d97f82da5f1b6dbf409ed84223cc68396b3685e1699fb2d4",
+      "bytes": 528
+    },
+    "native/source-package-manifest.json": {
+      "file": "evidence/native--source-package-manifest.json.gz",
+      "sha256": "125e5fa1adf921278cf9f2119b19b5cc5ea7bb84beb9f1b0189e851fa19f296c",
+      "bytes": 151142
+    },
+    "native/sidecar-exit-status.json": {
+      "file": "evidence/native--sidecar-exit-status.json.gz",
+      "sha256": "b02f03abb299b35c4799ca0d7d9d83b4f5a5c9444b4c016474894e64e7fa2241",
+      "bytes": 452
+    },
+    "native/independent-post-exit.json": {
+      "file": "evidence/native--independent-post-exit.json.gz",
+      "sha256": "76b6e584c4b86585044e9ad858ad81a88dcadb3c0b7b9c3b61d7c5892cd0f13e",
+      "bytes": 7397
+    },
+    "native/read-only-chart-inspect.json": {
+      "file": "evidence/native--read-only-chart-inspect.json.gz",
+      "sha256": "323857808072e0f039b3abcc9e8656782bde72e342e077eccb292de280b86690",
+      "bytes": 4495
+    },
+    "native/observed-kline-frames.ndjson": {
+      "file": "evidence/native--observed-kline-frames.ndjson.gz",
+      "sha256": "4f03ae61e14516d874a8b4115e5956ce03deeb7336189ff38d2d894538882cf3",
+      "bytes": 120153
+    },
+    "native/observed-source-snapshots.ndjson": {
+      "file": "evidence/native--observed-source-snapshots.ndjson.gz",
+      "sha256": "c4fda48ec7a9618395fbd562723ce0b5e6bacfc6530a52beb9a29aba9f3c0ce9",
+      "bytes": 158671
+    },
+    "native/profile/logs/backend-sidecar.log": {
+      "file": "evidence/native--profile--logs--backend-sidecar.log.gz",
+      "sha256": "9f0dccc00db232886d73f4bc2593e8e87d7d092f2e68a1e8170150bbe162d7b1",
+      "bytes": 24713
+    },
+    "physical-worker-traces/real-event-bus-shutdown.json": {
+      "file": "evidence/physical-worker-traces--real-event-bus-shutdown.json.gz",
+      "sha256": "ad0d9ef96029f8a8515abe1de93045feeeef0fb51b05e575fd70a8734a316503",
+      "bytes": 1138
+    }
+  },
+  "frontendInheritance": {
+    "wholeGitTreeEqual": true,
+    "packagesGitTreeEqual": true,
+    "previousSource": "26590df1bd2a53c21fa009e070cd5a897e1fcbd2",
+    "freshBuild": false,
+    "previousFullCheck": "4908 regular +1 performance +130 desktop; not rerun in this integration",
+    "asarSha256": "c37372d0a57b2ee678af26536b21a96451e17c627f89c56c7b910a4cdc4600f9"
+  },
+  "ci": "background; no main merge proposed"
+}
