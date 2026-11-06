@@ -224,9 +224,10 @@ export default function ReplayTrainingPageShell({
   const controlCellId = cell?.scope ?? "replay-chart";
   useControlCommands(() => providedChartCommands(controlCellId, { runId: integrityRuntime.runId, viewRevision: viewer.viewerState?.semantic_view_revision }, indicators, chartSurfaceActions, drawings, review === null));
   useControlCommands(() => drawingCommands(controlCellId, { actions: chartSurfaceActions }, drawings, controlCellId, review === null));
+  const reviewSessionId = review?.review_id ?? null;
   useEffect(() => {
-    if (review !== null && !trainingResultsOpen) setIntegrityOpen(true);
-  }, [review, trainingResultsOpen]);
+    if (reviewSessionId !== null && !trainingResultsOpen) setIntegrityOpen(true);
+  }, [reviewSessionId, trainingResultsOpen]);
   useEffect(() => {
     if (review !== null) setIndicatorPanelOpen(false);
   }, [review]);
