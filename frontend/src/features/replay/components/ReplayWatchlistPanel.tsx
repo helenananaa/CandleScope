@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../../components/icons/Icon.js";
 import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
+import { sharesReplayMarketScope } from "../replayMarketScope.js";
 import { parseSymbolKey, symbolKey } from "../../../utils/symbolKey.js";
 import type { ReplayCatalog, ReplayCatalogEntry } from "../replayTypes.js";
 import type { ReplayRuntime } from "../useReplayRuntime.js";
@@ -58,8 +59,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
     if (config === null) return [];
     const needle = marketQuery.trim().toLowerCase();
     return (catalog?.entries ?? []).filter((entry) => (
-      entry.identity.exchange === config.exchange
-      && entry.identity.market_type === config.market_type
+      sharesReplayMarketScope(config, entry.identity)
       && (
         needle.length === 0
         || entry.identity.symbol.toLowerCase().includes(needle)
@@ -172,8 +172,7 @@ function ReplayWatchlistPanel({ runtime, viewer, collapsed, onCollapsedChange, e
     const identity = parseSymbolKey(key);
     const selected = track?.track_id === selectedTrackId;
     const sameScope = config !== null
-      && identity.exchange === config.exchange
-      && identity.marketType === config.market_type;
+      && sharesReplayMarketScope(config, { exchange: identity.exchange, market_type: identity.marketType });
     const tier: ReplaySubscriptionTier = track?.subscription_tier ?? "NONE";
     const last = selected ? runtime.store.lastPrice?.close ?? null : track?.public_price ?? null;
     const forced = track?.forced_full_reasons ?? [];
