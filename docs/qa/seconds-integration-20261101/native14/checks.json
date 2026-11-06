@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "failure": "Sixminute4chart readiness timeout;Upbit166bars pending, otherthree ready.",
+  "exit_ms": 5406,
+  "write_conflicts": 29,
+  "evidence": "One retained recent outcome explicitly native history deleted after request permission; Upbit1s deletion watermark5160 despite no registeredderivedUpbitseries. Confirmed monotonicmerge fault separately in real SQLite test."
+}

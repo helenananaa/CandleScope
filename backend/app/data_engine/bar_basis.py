@@ -84,6 +84,16 @@ class NativeBarSpec:
         elif self.provider == "bybit" and self.interval == "5m":
             protocol = {"rest_parameters": {"interval": "5"}, "ws_channel": "kline.5.{symbol}",
                         "finality_evidence": "confirm=true"}
+        elif self.provider == "gate" and self.interval == "1s":
+            protocol = {"rest_parameters": {"interval": "1s"}, "ws_channel": None,
+                        "finality_evidence": "REST row[7]=true; realtime uses bounded REST polling"}
+        elif self.provider == "gate" and self.market_type == "spot" and self.interval == "1m":
+            protocol = {"rest_parameters": {"interval": "1m"}, "ws_channel": "spot.candlesticks",
+                        "ws_payload": ["1m", "{currency_pair}"],
+                        "finality_evidence": "REST row[7]=true; unified WS successor observed"}
+        elif self.provider == "upbit" and self.interval == "1s":
+            protocol = {"rest_endpoint": "/v1/candles/seconds", "ws_channel": "candle.1s",
+                        "finality_evidence": "closed REST window; WS successor observed; absent seconds require bounded REST proof"}
         if basis and self.calendar_id:
             basis = {**basis, "basis_id": f"native-bar/1:{self.provider}:{self.market_type}:{self.interval}:{self.calendar_id}",
                      "alignment": "provider-session", "calendar_id": self.calendar_id,
@@ -165,6 +175,20 @@ def native_bar_spec(provider: str, market_type: str, interval: str, purpose: str
     # The official Bybit 5-minute WS fixture includes both start and end.
     # Other native periods remain unknown until independently qualified.
     bybit_fixture = provider == "bybit" and interval == "5m"
+    if provider == "gate" and market_type == "spot" and interval == "1m":
+        # The official WS example labels 1606292580 as a 1m open; captured
+        # REST rows independently preserve these UTC minute boundaries.
+        # This does not qualify Gate's weekly/monthly or derivatives routes.
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "fixture_verified", "docs/architecture/GATE_SPOT_1M_BASIS.md",
+                             protocol_version="gate/spot-minute/1")
+    if provider in {"gate", "upbit"} and market_type == "spot" and interval == "1s":
+        # Only the explicitly documented Unix-second / UTC-second native
+        # route is admitted. Other periods still require their own contract.
+        evidence = ("https://www.gate.com/docs/developers/apiv4/en/spot/#market-k-line-chart"
+                    if provider == "gate" else "https://global-docs.upbit.com/reference/list-candles-seconds")
+        return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval,
+                             "declared", evidence, protocol_version=provider + "/native-seconds/1")
     if provider == "twelvedata" and market_type in {"stock", "etf", "forex", "commodity", "index"} and purpose == "history":
         calendar = "twelvedata.weekday.24x5.utc" if market_type in {"forex", "commodity"} else "twelvedata.exchange-date.weekdays.utc"
         return NativeBarSpec(provider, market_type, "kline", purpose, interval, interval, "declared", evidence,

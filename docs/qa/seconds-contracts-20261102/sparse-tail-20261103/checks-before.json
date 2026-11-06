@@ -1,0 +1,22 @@
+{
+  "baselineSource": "150bb85c8c715190d0c2c55198aa7cd1ec33877d",
+  "nativePassed": false,
+  "failure": "Error: Timed out waiting for acceptance state\n    at Module.until (file:///Users/ryanliang/.codex/worktrees/seconds-contracts-20261102/CandleScope/docs/qa/backend-batch1-20261101/driver.mjs:29:9)\n    at async file:///Users/ryanliang/.codex/worktrees/seconds-contracts-20261102/CandleScope/docs/qa/seconds-integration-20261101/native-acceptance.mjs:77:2",
+  "allOwnedExits": [
+    {
+      "allExited": true,
+      "elapsedMs": 3835
+    }
+  ],
+  "rendererErrors": 0,
+  "sourceAndSdkUnchanged": true,
+  "strictSignatureAfter": true,
+  "noNewIp418": true,
+  "actualApiRows": 100,
+  "actualCanonicalRows": 268,
+  "actualExpectedRows": 268,
+  "failureScreenshotViewed": true,
+  "newProductFix": "64f525ca",
+  "currentMainIntegration": "38d8ee33",
+  "scope": "Real CIoriginal LIVE initialUpbit readiness FAILED; no MA/save/restart qualification. Before2newtestsfailed/3existingpassed; fixafter113passed2explicitoptinNativeCalendarTestskips. Old package/profile/data preserved unchanged."
+}

@@ -74,6 +74,25 @@ class _SeriesState:
     pending: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class _DeferredSeriesLane:
+    """A deferred chunk protects quota only while its series can dispatch.
+
+    A sibling occupying this lane may need metadata on the same endpoint.
+    Retaining quota priority over that dependency would prevent the sibling
+    from finishing and therefore prevent the protected chunk from dispatching.
+    This is an availability view, not a reservation or an extra quota ledger.
+    """
+
+    series: dict[tuple[str, ...], _SeriesState]
+    key: tuple[str, ...]
+    keys: frozenset[str] = frozenset()
+
+    def available(self) -> bool:
+        state = self.series.get(self.key)
+        return state is None or state.active is None
+
+
 @dataclass(slots=True)
 class _FetchChunk:
     chunk_id: str
@@ -960,6 +979,9 @@ class BackfillScheduler:
         source_row_budget: int | None = None,
     ) -> IntervalWorkPlan:
         budget = self._chunk_bars if source_row_budget is None else source_row_budget
+        page_size = request.metadata.get("history_page_size")
+        if isinstance(page_size, int) and not isinstance(page_size, bool) and page_size > 0:
+            budget = min(budget, page_size)
         try:
             plan = resolve_interval_work_plan(
                 self._interval_resolver,
@@ -996,15 +1018,16 @@ class BackfillScheduler:
                 exc_info=True,
             )
             requested = max(1, int(requested_target_bars))
+            effective = min(requested, max(1, budget))
             return IntervalWorkPlan(
                 requested_target_bars=requested,
-                effective_target_bars=requested,
+                effective_target_bars=effective,
                 base_interval=request.interval,
                 source_factor=1,
                 source_padding_bars=0,
-                planned_source_rows=requested,
+                planned_source_rows=effective,
                 source_row_budget=budget,
-                budget_limited=False,
+                budget_limited=effective < requested,
                 derived=False,
             )
 
@@ -1403,7 +1426,10 @@ class BackfillScheduler:
                 return
             except RateLimitDeferred as exc:
                 if chunk.public_demand is not None:
-                    get_public_admission().protect(chunk.public_demand, exc.bucket_key)
+                    get_public_admission().protect(
+                        chunk.public_demand, exc.bucket_key,
+                        resource=_DeferredSeriesLane(self._series, chunk.request.series_key),
+                    )
                 await self._defer_chunk(chunk, exc)
                 return
             except asyncio.CancelledError:

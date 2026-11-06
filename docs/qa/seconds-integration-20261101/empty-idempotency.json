@@ -1,0 +1,25 @@
+{
+  "schema": "candlescope.second-empty-idempotency/1",
+  "before": "Two identical/subset receipt cases advanced revision from 1 to 5 without any coverage change. Both fail before fix.",
+  "after": "25 empty-coverage/native-seconds tests and 57 trade-candle tests passed. Atomic fences and deletion checks remain in place.",
+  "diagnostics": "Reconciler counts StaleAcquisition write conflicts separately; no exception message or payload is added.",
+  "native": "Attempt4 failed initial-history readiness for the multi-market workspace; repeat pending. This fix alone is not claimed to solve all native waits.",
+  "artifacts": [
+    {
+      "path": "empty-idempotency-before.log.gz",
+      "raw_sha256": "ae0ed7fe728a7e0666fdf7cd00a39cad299eed76e29a92d082405a1cb0232357"
+    },
+    {
+      "path": "empty-idempotency-after.log.gz",
+      "raw_sha256": "c5f78eb528255927d781056b3c54801e073dad1bc80ac960f6173f3cf3dc1ad5"
+    },
+    {
+      "path": "empty-idempotency-after2.log.gz",
+      "raw_sha256": "42660d3cbb86f1f93e08ddaffa0ec65d9d0589b08de72a4d97b63810fbbddb03"
+    },
+    {
+      "path": "empty-idempotency-trades.log.gz",
+      "raw_sha256": "95ad110eca3e2cbb0bda8c418d797c3ff15ea808eaaa8f0c7d5d4ffb631f64c0"
+    }
+  ]
+}

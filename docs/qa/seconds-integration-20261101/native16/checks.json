@@ -1,0 +1,77 @@
+{
+  "passed": false,
+  "application": "437d5026d0133f2f999d7e2d76eed4ba21dfdecc",
+  "source_files": 979,
+  "dist_files": 162,
+  "mismatches": 0,
+  "strict_signature_before_after": true,
+  "failure": "Six minute cold four-chart readiness timeout; no MA/save/restart qualification",
+  "charts": [
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1s"
+      },
+      "bars": 713,
+      "ready": true
+    },
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "7s"
+      },
+      "bars": 521,
+      "ready": false
+    },
+    {
+      "session": {
+        "exchange": "gate",
+        "marketType": "spot",
+        "symbol": "BTC/USDT",
+        "interval": "1s"
+      },
+      "bars": 416,
+      "ready": false
+    },
+    {
+      "session": {
+        "exchange": "upbit",
+        "marketType": "spot",
+        "symbol": "BTC/KRW",
+        "interval": "1s"
+      },
+      "bars": 197,
+      "ready": false
+    }
+  ],
+  "exit_ms": 5384,
+  "renderer_errors": [],
+  "reconciler": {
+    "layer": "Reconciler",
+    "counters": {
+      "reconcile_runs": 28,
+      "archive_objects_imported": 0,
+      "archive_dependent_rows_invalidated": 0,
+      "reconcile_elapsed_ms_total": 60176,
+      "bars_written": 7238,
+      "bars_skipped": 0,
+      "custom_materialization_owners": 6,
+      "custom_materialization_elapsed_ms_total": 17748,
+      "write_errors": 3,
+      "write_revision_conflicts": 3
+    },
+    "gauges": {
+      "last_reconcile_elapsed_ms": 374,
+      "last_custom_materialization_elapsed_ms": 4228
+    },
+    "timestamps": {
+      "last_reconcile_at": 1793535863943
+    }
+  },
+  "diagnostic": "Old custom7s historical range501bars verified contiguous in midrun. Repeated source_gap_timeout and durable delivery recovery remain; underlying cause not yet proven. Do not infer every remaining conflict is the fixed disjoint case.",
+  "component_evidence": "132 regressions and exact disjoint HTTP+SQLite reproducer passed before assembly."
+}

@@ -9,7 +9,6 @@ import threading
 import time
 
 from .models import BarData, QueryResult, QuerySource, SeriesKey
-from app.data_engine.interval_policy import is_ephemeral_interval
 from app.data_engine.storage.revisions import ensure_acquisition, StaleAcquisition
 from app.data_engine.memory_budget import MemoryBudgetExceeded, budgeted_query
 
@@ -108,7 +107,7 @@ def revision_checked_query(function):
         if min_revision is not None and (type(min_revision) is not int or min_revision < 0):
             raise ValueError("min_revision must be a non-negative integer")
         consumer = self._cache.revision_consumer
-        if consumer is None or is_ephemeral_interval(interval):
+        if consumer is None:
             if min_revision is None:
                 return function(self, symbol, interval, *args, **kwargs)
             return _pending(symbol, interval, context, "revision_unsupported", min_revision)
