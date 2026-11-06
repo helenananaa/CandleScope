@@ -41,6 +41,23 @@ async function launched(){
 function verifyPackage(){cp.execFileSync('node',['docs/qa/oi-main266-native-20261106/verify.mjs'],{stdio:'inherit',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}});}
 async function closed(){await q.quit();assert.equal(await q.exited(),true);running=false;await q.record('full-owned-exit',{allExited:true});const status=JSON.parse(await fs.readFile(q.s.root+'/sidecar-exit-status.json','utf8'));const pid=q.s.bootstrap.sidecar.pid,exit=status.exits.find(row=>row.pid===pid);assert.ok(exit,'Exact owned sidecar exit required');assert.equal(exit.code,0);assert.equal(exit.signal,null);assert.equal(status.killRequests.some(row=>row.pid===pid),false);await q.record('exact-sidecar-exit',{pid,exit,killRequests:status.killRequests});verifyPackage();await q.record('package-after-full-exit',JSON.parse(await fs.readFile(q.s.root+'/verified-after.json','utf8')));}
 async function ready(){return q.until(async()=>{await q.checkCircuit();const snapshot=await q.inspect();return snapshot.cells.length===1&&snapshot.cells[0].runtime.marketReady&&!snapshot.cells[0].runtime.loading&&snapshot.persistence.state==='saved'?snapshot:false;},180000);}
+async function paneValues(){return q.until(async()=>{
+ await q.checkCircuit();
+ const value=await q.s.page.evaluate(()=>{
+  const element=document.querySelector('[data-market-pane="open-interest"]');if(!element)return null;
+  let fiber=element[Object.keys(element).find(key=>key.startsWith('__reactFiber$'))];if(!fiber)return null;
+  while(fiber.return)fiber=fiber.return;let result=null;
+  function visit(node){if(!node||result)return;const pane=node.memoizedProps?.pane;
+   if(pane?.dataMarketPane==='open-interest'){
+    const points=(pane.lines??[]).flatMap(line=>line.data??[]);
+    result={id:pane.id,points,pointCount:points.length,metadata:(pane.pointMetadata??[]).slice(-5),
+     visibleValue:element.querySelector('.advanced-market-pane-value')?.textContent??null,
+     ariaLabel:element.getAttribute('aria-label')};return;
+   }visit(node.child);visit(node.sibling);
+  }visit(fiber.stateNode.current);return result;
+ });
+ return value?.visibleValue&&value.pointCount>=2&&value.points.every(point=>Number.isFinite(point.time)&&Number.isFinite(point.value)&&point.value>0)?value:false;
+},90000);}
 async function catalog(){
  await q.s.page.getByRole('button',{name:/^指标 \d+$/}).click();
  const group=await q.until(async()=>{const {groups}=await q.s.control.call('app.commands',{windowId:'main-window'});return groups.find(row=>row.id.startsWith('indicator-catalog:'))??false;});
@@ -69,6 +86,7 @@ try{
 
  let group=await catalog();await catalogCommand(group,'marketStudy',{studyId:'market:open-interest',action:'add'});await catalogCommand(group,'close',{});
  const pane=q.s.page.locator('[data-market-pane="open-interest"]');await pane.waitFor({timeout:90000});assert.ok((await pane.innerText()).includes('Open Interest'));await ready();await q.screenshot('saved-oi-pane');
+ await q.record('actual-oi-pane-values-before-exit',await paneValues());await q.screenshot('saved-oi-pane-values');
  await q.record('saved-oi-pane',{text:await pane.innerText(),receipts:savedReceipts,range:{start,end}});
  await closed();running=false;
  // The pane may legitimately acquire overlapping history after the explicit
@@ -86,6 +104,7 @@ try{
  const restored=await history('local_only');covered(restored);assert.deepEqual(restored.data,expectedData);
  const after=receipts();for(const receipt of savedReceipts)assert.ok(after.some(row=>JSON.stringify(row)===JSON.stringify(receipt)),'Durable query receipt missing or silently rewritten');
  await q.s.page.locator('[data-market-pane="open-interest"]').waitFor({timeout:90000});
+ await q.record('actual-oi-pane-values-after-restart',await paneValues());
  group=await catalog();const snapshot=await q.s.control.call('app.query',{windowId:'main-window',groupId:group.id,command:'inspect',args:{}});
  const study=snapshot.snapshot.marketStudies.find(row=>row.id==='market:open-interest');assert.ok(study?.added&&study.visible,JSON.stringify(study));await catalogCommand(group,'close',{});
  await q.screenshot('restored-oi-pane');await q.record('restart-restored',{receipts:after,study,range:{start,end},count:restored.count});
