@@ -312,8 +312,14 @@ class TrainingAdmissionService:
         exchange = service_validation_ops.identifier(exchange, field_name="exchange")
         market_type = service_validation_ops.identifier(market_type, field_name="market_type")
         symbol = service_validation_ops.identifier(symbol, field_name="symbol")
+        if market_type == "local_bar":
+            raise TrainingRunError(
+                "LOCAL_DATA_PREPARATION_UNSUPPORTED",
+                "Import a local dataset covering this training range; automatic online preparation is disabled for imported data",
+                status_code=409,
+            )
         binding = await self.store.run_binding(run_id)
-        admission_rules_ops.assert_same_market_scope(
+        self.assert_market_scope(
             binding=binding, exchange=exchange, market_type=market_type,
             settlement_asset=str(binding["settlement_asset"]),
         )
@@ -321,7 +327,7 @@ class TrainingAdmissionService:
         identity = self._authoritative_instrument_identity(
             exchange=exchange, market_type=market_type, symbol=symbol,
         )
-        admission_rules_ops.assert_same_market_scope(
+        self.assert_market_scope(
             binding=binding, exchange=exchange, market_type=market_type,
             settlement_asset=identity["settlement_asset"],
         )
@@ -388,7 +394,7 @@ class TrainingAdmissionService:
             symbol=normalized_symbol,
         )
         binding = await self.store.run_binding(normalized_run)
-        admission_rules_ops.assert_same_market_scope(
+        self.assert_market_scope(
             binding=binding,
             exchange=identity["exchange"],
             market_type=identity["market_type"],
@@ -511,9 +517,14 @@ class TrainingAdmissionService:
             settings, entry, capability_admission=capability_admission,
             committed_start_ms=committed_start_ms,
         )
-        if compatibility["state"] != "READY" or self._instrument_metadata_resolver is None:
+        if compatibility["state"] != "READY":
             return compatibility
         exchange, market_type, symbol = admission_rules_ops.catalog_identity_key(entry)
+        if self._instrument_metadata_resolver is None:
+            # Legacy unitless imports retain their single-market approximate
+            # replay. Explicitly declared units must match even on that route.
+            if market_type != "local_bar" or self.replay_service.imported_instrument_metadata(exchange, market_type, symbol) is None:
+                return compatibility
         try:
             instrument = self._authoritative_instrument_identity(
                 exchange=exchange, market_type=market_type, symbol=symbol,
@@ -530,6 +541,16 @@ class TrainingAdmissionService:
             }
         return compatibility
 
+    def assert_market_scope(self, *, binding, exchange, market_type, settlement_asset) -> None:
+        admission_rules_ops.assert_same_market_scope(binding=binding, exchange=exchange,
+            market_type=market_type, settlement_asset=settlement_asset)
+        if market_type == "local_bar" and exchange != binding["exchange"]:
+            config = ReplaySessionConfig.from_dict(binding["adapter_config"])
+            primary = self._authoritative_instrument_identity(exchange=str(binding["exchange"]),
+                market_type=str(binding["market_type"]), symbol=config.symbol)
+            if primary["settlement_asset"] != str(binding["settlement_asset"]):
+                raise TrainingRunError("MARKET_SCOPE_MISMATCH", "Imported price units do not match the Run settlement asset", status_code=409)
+
     def _authoritative_instrument_identity(
         self,
         *,
@@ -538,6 +559,8 @@ class TrainingAdmissionService:
         symbol: str,
     ) -> dict[str, str]:
         resolver = self._instrument_metadata_resolver
+        if resolver is None and market_type == "local_bar":
+            resolver = self.replay_service.imported_instrument_metadata
         if resolver is None:
             raise TrainingRunError(
                 "INSTRUMENT_METADATA_UNAVAILABLE",
@@ -546,6 +569,12 @@ class TrainingAdmissionService:
             )
         metadata = resolver(exchange, market_type, symbol)
         if not isinstance(metadata, Mapping):
+            if market_type == "local_bar":
+                raise TrainingRunError(
+                    "IMPORTED_BAR_UNITS_REQUIRED",
+                    "The imported dataset is unavailable or lacks declared quantity and price quote assets; import it with both units before adding a market",
+                    status_code=409,
+                )
             raise TrainingRunError(
                 "INSTRUMENT_METADATA_UNAVAILABLE",
                 "instrument is absent from the authoritative local catalog",

@@ -5,6 +5,7 @@ import {
   computeLocalIndicatorBatch,
   fetchLocalIndicatorPresets,
   listLocalDatasets,
+  importLocalCsv,
   LocalKlineApi,
   resolveLocalEventTimes,
 } from "./localDataApi.js";
@@ -43,6 +44,22 @@ function manifest(): LocalDatasetManifest {
     imported_at: "2026-08-05T00:00:00+00:00",
   };
 }
+
+test("CSV imports send explicit units and reject invalid declared unit contracts", async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => { globalThis.fetch = originalFetch; });
+  const instrument = { base_asset: "ETH", quote_asset: "USDT", volume_unit: "base_asset" as const };
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input), "http://localhost");
+    assert.equal(url.searchParams.get("base_asset"), "ETH");assert.equal(url.searchParams.get("quote_asset"), "USDT");
+    return jsonResponse({ ...manifest(), instrument });
+  };
+  const result = await importLocalCsv({ file: new File(["time,open,high,low,close"], "bars.csv"), name: "units", symbol: "ETHUSDT",
+    interval: "1m", timezone: "UTC", timestampUnit: "ms", volumeRequired: false, baseAsset: "ETH", quoteAsset: "USDT" });
+  assert.deepEqual(result.instrument, instrument);
+  globalThis.fetch = async () => jsonResponse({ datasets: [{ ...manifest(), instrument: { ...instrument, volume_unit: "unknown" } }], count: 1 });
+  await assert.rejects(listLocalDatasets(), /instrument units are invalid/);
+});
 
 test("local dataset library validates manifests", async (context) => {
   const originalFetch = globalThis.fetch;
