@@ -104,13 +104,23 @@ app.on("window-all-closed",()=>app.quit());
   }
   if (!lines) throw new Error("Owned test browser did not start");
   const base = `http://127.0.0.1:${lines[0]}`;
-  const version = await (await fetch(base + "/json/version")).json();
+  let version, tab, lastProbeError;
+  while (Date.now() < browserStartDeadline) {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error("Owned test browser exited during readiness");
+    try {
+      version = await (await fetch(base + "/json/version", { signal: AbortSignal.timeout(1000) })).json();
+      const tabs = await (await fetch(base + "/json/list", { signal: AbortSignal.timeout(1000) })).json();
+      tab = tabs.find(item => item.type === "page" && item.url === url);
+      if (version.webSocketDebuggerUrl && tab?.webSocketDebuggerUrl) break;
+    } catch (error) { lastProbeError = String(error); }
+    await sleep(100);
+  }
+  if (!version?.webSocketDebuggerUrl || !tab?.webSocketDebuggerUrl) {
+    throw new Error("Owned test browser debugger/page did not become ready: " + (lastProbeError || "page missing"));
+  }
   receipt.browser = version.Browser;
   browser = await CDP.open(version.webSocketDebuggerUrl);
   await browser.send("Target.setDiscoverTargets", { discover: true });
-  const tabs = await (await fetch(base + "/json/list")).json();
-  const tab = tabs.find(item => item.type === "page" && item.url === url);
-  if (!tab) throw new Error("Owned integration page is missing");
   page = await CDP.open(tab.webSocketDebuggerUrl);
   await page.send("Runtime.enable");
   // The tab can be discoverable while its initial document is still being
