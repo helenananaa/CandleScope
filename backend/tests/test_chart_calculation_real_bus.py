@@ -1,4 +1,5 @@
 """Keep the existing chart wire contract on the actual routed event bus."""
+import asyncio
 import json
 import os
 from dataclasses import replace
@@ -132,4 +133,131 @@ def test_actual_aggregator_preview_provenance_keeps_six_live_observations(real_b
             assert transport.value(resumed) == 503
         ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
         transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def delay_next_execution(wire, monkeypatch):
+    async def arm():
+        entered, allowed = asyncio.Event(), asyncio.Event()
+        execute = wire.service.execute
+        first = True
+
+        async def delayed(request, **kwargs):
+            nonlocal first
+            if first:
+                first = False
+                entered.set()
+                await allowed.wait()
+            return await execute(request, **kwargs)
+
+        monkeypatch.setattr(wire.service, 'execute', delayed)
+        return entered, allowed
+
+    return wire.client.portal.call(arm)
+
+
+def test_slow_live_execution_preserves_each_varip_observation(real_bus_wire, monkeypatch):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    assert transport.value(initial) == 500
+
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        assert transport.value(transport.receive(ws, 'indicator.snapshot')) == 500
+        entered, allowed = delay_next_execution(wire, monkeypatch)
+        try:
+            wire.client.post('/fixture/tick/501?close=101')
+
+            async def wait_entered():
+                await asyncio.wait_for(entered.wait(), 5)
+
+            wire.client.portal.call(wait_entered)
+            for observation in range(2, 7):
+                assert wire.client.post('/fixture/tick/501?close=' + str(100 + observation)).json()['ok']
+        finally:
+            wire.client.portal.call(allowed.set)
+        outputs = [transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+                   for _ in range(6)]
+        values = [transport.value(output) for output in outputs]
+        assert values == [501, 502, 503, 504, 505, 506]
+        shifted = transport.bars(501)[-3].time
+        for observation, output in enumerate(outputs, 1):
+            points = [point for line in output['lines'] if line.get('name', line.get('title')) == 'old point'
+                      for point in line['data'] if point['time'] == shifted]
+            assert [point['value'] for point in points] == ([100 + observation] if observation % 2 == 0 else [])
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_repair_during_live_execution_wakes_the_existing_writer(real_bus_wire, monkeypatch):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        assert transport.value(transport.receive(ws, 'indicator.snapshot')) == 500
+        entered, allowed = delay_next_execution(wire, monkeypatch)
+        try:
+            wire.client.post('/fixture/tick/501?close=101')
+
+            async def wait_entered():
+                await asyncio.wait_for(entered.wait(), 5)
+
+            wire.client.portal.call(wait_entered)
+            wire.client.post('/fixture/amend')
+
+            async def wait_correction():
+                meta = dict(exchange='binance', market_type='spot', symbol='BTCUSDT', interval='1m')
+                async with asyncio.timeout(5):
+                    while not wire.ranges.data_revision_for_meta(meta)['correctionRevision']:
+                        await asyncio.sleep(0)
+
+            wire.client.portal.call(wait_correction)
+        finally:
+            wire.client.portal.call(allowed.set)
+        error = transport.receive(ws, 'error')
+        assert error['code'] == 'INDICATOR_CALCULATION_RECOVERY_REQUIRED'
+        assert error['error'] == 'INDICATOR_CALCULATION_SOURCE_CHANGED'
+        recovered = transport.receive(ws, 'indicator.snapshot')
+        assert transport.value(recovered) == 500
+        assert recovered['calculation']['generation'] == initial['calculation']['generation'] + 1
+        assert wire.service.calculations.snapshot()['holders'] == 1
+        wire.client.post('/fixture/tick/501?close=102')
+        assert transport.value(transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')) == 501
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_live_input_overflow_releases_writer_instead_of_dropping_observations(real_bus_wire, monkeypatch):
+    from app.api.v1 import chart_calculation_stream
+    monkeypatch.setattr(chart_calculation_stream, 'MAX_PENDING_CHART_INPUTS', 2)
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        transport.receive(ws, 'indicator.snapshot')
+        entered, allowed = delay_next_execution(wire, monkeypatch)
+        try:
+            wire.client.post('/fixture/tick/501?close=101')
+
+            async def wait_entered():
+                await asyncio.wait_for(entered.wait(), 5)
+
+            wire.client.portal.call(wait_entered)
+            for close in (102, 103, 104):
+                wire.client.post('/fixture/tick/501?close=' + str(close))
+            error = transport.receive(ws, 'error')
+            assert error['code'] == 'INDICATOR_CALCULATION_SOURCE_CHANGED'
+            assert error['detail']['reason'] == 'chart_input_capacity_exhausted'
+        finally:
+            wire.client.portal.call(allowed.set)
+        async def wait_released():
+            async with asyncio.timeout(5):
+                while wire.service.calculations.snapshot()['holders'] or wire.source.leases:
+                    await asyncio.sleep(0)
+        wire.client.portal.call(wait_released)
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'

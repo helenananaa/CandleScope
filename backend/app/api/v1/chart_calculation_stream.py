@@ -1,9 +1,12 @@
 """One live writer joins the chart domain that HTTP already hydrated."""
 import asyncio
+from collections import deque
+from copy import deepcopy
 from pydantic import ValidationError
 
 from app.core.executors import run_storage
 from app.data_engine.data_manager.models import DataEventType
+from app.data_engine.consumer_recovery import ConsumerRecoveryRequired
 from app.indicator.calculation_contract import CalculationReference, reference_for
 from app.indicator.calculation_owner import CalculationOwnerError
 from app.indicator.data_manager_bridge import (
@@ -12,6 +15,8 @@ from app.indicator.data_manager_bridge import (
 from app.indicator.serialization import build_ws_error_payload
 from app.api.v1.stream_script_subscriptions import register_script_correction
 from app.api.v1.stream_indicator_payloads import IndicatorRangeNotReadyError
+
+MAX_PENDING_CHART_INPUTS = 64
 
 
 async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, client_id,
@@ -32,10 +37,11 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
     entry = {**meta, 'streamConsumerId':stream_consumer_id}
     client_meta[client_id] = entry
     ready = asyncio.Event()
-    pending = None
+    pending = deque()
     source_waiting = False
 
     async def release():
+        pending.clear()
         chart.detach(stream_consumer_id)
         await hold.__aexit__(None,None,None)
     entry['_releaseRuntimeInputs'] = release
@@ -53,22 +59,32 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
     async def require_resync(_error):
         if entry.get('_disposed'): return
         chart.invalidate()
-        await unsubscribe_client(client_id)
-        await queue_critical(queue, build_ws_error_payload('INDICATOR_CALCULATION_SOURCE_CHANGED',
-            'Chart source delivery requires recovery.', client_id=client_id))
+        pending.clear()
+        entry['_disposed'] = True
+        # Unsubscribing cancels the bus recovery task that called us. Publish
+        # the terminal notice before that owned cleanup can cancel this waiter.
+        try:
+            await queue_critical(queue, build_ws_error_payload('INDICATOR_CALCULATION_SOURCE_CHANGED',
+                'Chart source delivery requires recovery.', client_id=client_id,
+                detail=_error.to_dict() if isinstance(_error, ConsumerRecoveryRequired) else None))
+        finally:
+            await unsubscribe_client(client_id)
 
     async def pump():
-        nonlocal pending, source_waiting
+        nonlocal source_waiting
         await ready.wait()
         try:
-            while pending is not None and not entry.get('_disposed'):
-                batch, pending = pending, None
+            while pending and not entry.get('_disposed'):
+                batch = pending.popleft()
                 try:
                     await chart.wait_corrections()
                     async with registry.borrow(reference.domainId) as current:
                         payload = await current.live(writer_id=stream_consumer_id, client_id=client_id,
-                            through=batch['through'])
-                except IndicatorRangeNotReadyError as exc:
+                            through=batch['through'], input_bar=batch['bar'])
+                except (IndicatorRangeNotReadyError, CalculationOwnerError) as exc:
+                    if isinstance(exc, CalculationOwnerError) and exc.code not in {
+                            'INDICATOR_CALCULATION_SOURCE_CHANGED', 'INDICATOR_CALCULATION_REBUILD_REQUIRED'}:
+                        raise
                     # A new preview may precede its predecessor's durable close.
                     # Keep source ownership so that the eventual close can wake
                     # recovery. No input is admitted through the gap; fence once
@@ -78,6 +94,12 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
                         chart.invalidate()
                         await queue_critical(queue, build_ws_error_payload(
                             'INDICATOR_CALCULATION_RECOVERY_REQUIRED', str(exc), client_id=client_id))
+                    # A repair may have arrived while execution was fenced.
+                    # Keep one recovery wakeup, never its old preview payload.
+                    wakeup = pending[-1]['through'] if pending else None
+                    pending.clear()
+                    if wakeup is not None:
+                        pending.append({'through': wakeup, 'bar': None})
                     continue
                 source_waiting = False
                 if not entry.get('_disposed'): await queue_critical(queue,payload)
@@ -95,7 +117,6 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
             task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
 
     async def on_event(event):
-        nonlocal pending
         if entry.get('_disposed'): return
         correction = event.event_type in {DataEventType.BAR_AMENDED,DataEventType.BACKFILL_COMPLETED}
         through = 0
@@ -103,6 +124,9 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
             if is_zero_bar_backfill_completion(event): return
             dirty = indicator_dirty_range_for_interval(event,meta['interval'],data_manager=dm)
             if dirty is None: return
+            # Historical repair supersedes queued observations; it does not
+            # certify their opaque intrabar state. Rebuild the new generation.
+            pending.clear()
             chart.range_service.note_correction(series_key=chart.series, start=dirty['start'],end=dirty['end'],
                 event_id=indicator_correction_event_id(event,interval=meta['interval'],dirty_range=dirty))
             if event.event_type == DataEventType.BACKFILL_COMPLETED:
@@ -112,15 +136,16 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
             through = int(event.bar.time)
             if event.event_type == DataEventType.BAR_CLOSED:
                 chart.range_service.note_closed(series_key=chart.series,closed_through=through)
-        if pending is None: pending = {'through':through}
-        else:
-            pending['through'] = max(pending['through'],through)
+        if len(pending) >= MAX_PENDING_CHART_INPUTS:
+            raise ConsumerRecoveryRequired('chart_input_capacity_exhausted')
+        pending.append({'through':through, 'bar':None if correction else deepcopy(event.bar)})
         task = custom_tasks.get(client_id)
         if task is None or task.done():
             custom_tasks[client_id] = asyncio.create_task(pump(),name='chart-domain-stream:' + client_id)
 
     custom_handles[client_id] = dm.subscribe(callback=on_event,on_recovery=require_resync,
         symbol=meta['symbol'], interval=meta['interval'], exchange=meta['exchange'], market_type=meta['market_type'],
+        preserve_updates=True,
         event_types={DataEventType.BAR_UPDATED,DataEventType.BAR_CLOSED})
     register_script_correction(dm=dm,script_correction_state=correction_state, client_id=client_id,
         meta=entry,exchange=meta['exchange'],market_type=meta['market_type'],symbol=meta['symbol'],

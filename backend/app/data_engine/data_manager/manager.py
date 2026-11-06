@@ -1916,12 +1916,15 @@ class DataManager(DataManagerCore):
         series_identity: KlineSeriesIdentity | None = None,
         on_recovery: RecoveryCallback | None = None,
         continuity: ContinuityPolicy | str = "strict",
+        preserve_updates: bool = False,
     ) -> SubscriptionHandle:
         """Subscribe to bar/stream events via callback.
 
         ``continuity`` defaults to strict (10 seconds from gap detection).
         Pass a ContinuityPolicy to set the wait budget, or "gap_aware" to
         receive live events, mandatory gap controls, and historical corrections.
+        ``preserve_updates`` retains distinct pending intrabar observations;
+        exhaustion requires recovery instead of coalescing or dropping them.
 
         Args:
             callback:    Async function ``(DataEvent) -> None``.
@@ -1970,6 +1973,7 @@ class DataManager(DataManagerCore):
             event_types=set(event_types) | CONTROLS if event_types is not None else None,
             on_recovery=recover,
             initial_events=self.source_gaps.initial_events(key),
+            preserve_updates=preserve_updates,
         )
 
     def unsubscribe(self, handle: SubscriptionHandle) -> None:

@@ -229,14 +229,17 @@ class ChartCalculation:
         if self._writer == writer_id:
             self._writer = self._dispose_writer = None
 
-    async def live(self, *, writer_id, client_id, through=0):
+    async def live(self, *, writer_id, client_id, through=0, input_bar=None):
         async def update():
             if self._writer != writer_id:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_CHANGED')
             self._require_source_ready()
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
             rebuild = self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
-            end = max(cursor.observed_through, int(through), int(revision.get('closedThrough') or 0))
+            # An ordered observation must not jump ahead to a close whose
+            # callback has already arrived but is still queued behind it.
+            end = max(cursor.observed_through, int(through),
+                int(revision.get('closedThrough') or 0) if rebuild or input_bar is None else 0)
             acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,
                 through_ms=self.source.end_ms(end),rebuild=rebuild)
             if not through and not rebuild and end == cursor.observed_through:
@@ -246,6 +249,13 @@ class ChartCalculation:
             # sending it alone can only reset, which this owner rejects.
             rows = await self._query(self.owner.plan.start if rebuild else max(self.owner.plan.start,cursor.closed_through),
                 end, live=True, acquisition=acquisition)
+            if input_bar is not None and not rebuild:
+                if int(input_bar.time) != int(through) or int(through) < cursor.observed_through:
+                    raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_OUT_OF_ORDER')
+                # Query proves the confirmed prefix; the admitted event owns
+                # this intrabar observation, which the live cache may already
+                # have replaced. Never write it back into the market cache.
+                rows = [input_bar if row.time == int(through) else row for row in rows]
             return await self._advance(rows, revision, client_id=client_id, rebuild=rebuild,
                 bar_time=0 if rebuild else int(through), epoch=epoch,acquisition=acquisition)
         return await self._command(update)

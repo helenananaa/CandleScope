@@ -94,10 +94,11 @@ class _QueuedEvent:
 class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
     """Bounded pending events; overflow recovery belongs to the bus journal."""
 
-    def __init__(self, maxsize: int = 1000) -> None:
+    def __init__(self, maxsize: int = 1000, *, preserve_updates: bool = False) -> None:
         if maxsize <= 0:
             raise ValueError("subscriber_queue_size must be positive")
         super().__init__(maxsize=maxsize)
+        self.preserve_updates = preserve_updates
         self._latest_forming: dict[tuple[SeriesKey, DataEventType], _QueuedEvent] = {}
         self._closed = False
         self._delivery_ids: OrderedDict[str, None] = OrderedDict()
@@ -119,7 +120,7 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
             return "closed"
         if event.detail.get("delivery_id") in self._delivery_ids:
             return "duplicate"
-        if event.event_type in _REPLACEABLE_TYPES:
+        if not self.preserve_updates and event.event_type in _REPLACEABLE_TYPES:
             pending = self._latest_forming.get((event.key, event.event_type))
             if pending is not None:
                 pending.event = event
@@ -129,7 +130,7 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
         try:
             self.put_nowait(item)
             self._remember_delivery(event)
-            if event.event_type in _REPLACEABLE_TYPES:
+            if not self.preserve_updates and event.event_type in _REPLACEABLE_TYPES:
                 self._latest_forming[(event.key, event.event_type)] = item
             else:
                 # Seal an older forming slot only after the final/correction or
@@ -138,6 +139,10 @@ class _SubscriberQueue(asyncio.Queue[_QueuedEvent | None]):
                 self._seal_previews(event.key)
             return "queued"
         except asyncio.QueueFull:
+            if self.preserve_updates:
+                # Intrabar execution consumers cannot recover discarded
+                # previews from the final-only replay journal.
+                return "ordered_full"
             if event.event_type not in _REPLACEABLE_TYPES:
                 # Prefer reclaiming pending previews before switching to replay.
                 # Removing previews is safe because their latest state is
@@ -308,6 +313,7 @@ class DataEventBus:
         *,
         on_recovery: RecoveryCallback | None = None,
         initial_events: tuple[DataEvent, ...] = (),
+        preserve_updates: bool = False,
     ) -> SubscriptionHandle:
         """Register a callback to receive events.
 
@@ -315,6 +321,8 @@ class DataEventBus:
             callback:    Async function called for each matching event.
             key:         Filter to this (symbol, interval).  None = all.
             event_types: Filter to these event types.  None = all types.
+            preserve_updates: Retain distinct pending previews for execution;
+                queue exhaustion requires a fresh snapshot and subscription.
 
         Returns:
             A ``SubscriptionHandle`` — pass to ``unsubscribe()`` to stop.
@@ -332,6 +340,8 @@ class DataEventBus:
         """
         if self._closed:
             raise RuntimeError("event bus is closed")
+        if type(preserve_updates) is not bool:
+            raise ValueError("preserve_updates must be a boolean")
         handle = SubscriptionHandle(
             key=key,
             event_types=event_types,
@@ -339,10 +349,11 @@ class DataEventBus:
         )
         queue = _SubscriberQueue(
             maxsize=self._cfg.subscriber_queue_size,
+            preserve_updates=preserve_updates,
         )
         sub = _CallbackSubscription(queue=queue, handle=handle, on_recovery=on_recovery)
         for event in initial_events:
-            if queue.offer(deepcopy(event)) == "critical_full":
+            if queue.offer(deepcopy(event)) in {"critical_full", "ordered_full"}:
                 self._require_recovery(sub, "source_gap_snapshot_exhausted", None)
                 break
         with self._protection_lock, self._subscription_lock:
@@ -579,6 +590,8 @@ class DataEventBus:
             offer = sub.queue.offer(event, sequence)
             if offer == "coalesced":
                 sub.coalesced += 1
+            elif offer == "ordered_full":
+                self._require_recovery(sub, "ordered_input_capacity_exhausted", None)
             elif offer == "critical_full":
                 sub.replay_entries += 1
                 sub.queue.replay_next = sequence
@@ -981,6 +994,7 @@ class DataEventBus:
         return {
             "queue_size": sub.queue.qsize(),
             "queue_max_size": sub.queue.maxsize,
+            "preserve_updates": sub.queue.preserve_updates,
             "delivered": sub.delivered,
             "dropped": sub.dropped,
             "coalesced": sub.coalesced,
