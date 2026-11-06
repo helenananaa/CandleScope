@@ -38,7 +38,6 @@ export async function checkChartMarketCalculation({ deepHistory = false }: { dee
   }
   window.WebSocket = ObservedSocket;
   const read = async () => await (await originalFetch(`${API_BASE}/fixture/bars`)).json() as { rows: KlineBar[]; script: string };
-  if (deepHistory) await originalFetch(`${API_BASE}/fixture/seed-left`, { method: "POST" });
   let data = await read(), sequence = 1;
   let releaseDeep: () => void = () => {};
   const deepReady = new Promise<void>(resolve => { releaseDeep = resolve; });
@@ -132,6 +131,8 @@ export async function checkChartMarketCalculation({ deepHistory = false }: { dee
     await until(() => frames.some(frame => frame.type === "indicator.subscribed" && frame.ok === true), "Calculation WS did not attach");
     snapshots.push({ phase: "initial-counter", ...diagnostics() });
     if (deepHistory) {
+      await originalFetch(`${API_BASE}/fixture/seed-left`, { method: "POST" });
+      data = await read();
       releaseDeep();
       await until(() => latest!.market.status.barCount === 1500 && counter() === 1500, "Historical left expansion did not replace the calculation origin");
       await until(() => frames.filter(frame => frame.type === "indicator.subscribed" && frame.ok === true).length >= 2, "Expanded calculation did not reattach WS");
