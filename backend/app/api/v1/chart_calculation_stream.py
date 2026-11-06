@@ -11,6 +11,7 @@ from app.indicator.data_manager_bridge import (
 )
 from app.indicator.serialization import build_ws_error_payload
 from app.api.v1.stream_script_subscriptions import register_script_correction
+from app.api.v1.stream_indicator_payloads import IndicatorRangeNotReadyError
 
 
 async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, client_id,
@@ -32,6 +33,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
     client_meta[client_id] = entry
     ready = asyncio.Event()
     pending = None
+    source_waiting = False
 
     async def release():
         chart.detach(stream_consumer_id)
@@ -56,15 +58,28 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
             'Chart source delivery requires recovery.', client_id=client_id))
 
     async def pump():
-        nonlocal pending
+        nonlocal pending, source_waiting
         await ready.wait()
         try:
             while pending is not None and not entry.get('_disposed'):
                 batch, pending = pending, None
-                await chart.wait_corrections()
-                async with registry.borrow(reference.domainId) as current:
-                    payload = await current.live(writer_id=stream_consumer_id, client_id=client_id,
-                        through=batch['through'])
+                try:
+                    await chart.wait_corrections()
+                    async with registry.borrow(reference.domainId) as current:
+                        payload = await current.live(writer_id=stream_consumer_id, client_id=client_id,
+                            through=batch['through'])
+                except IndicatorRangeNotReadyError as exc:
+                    # A new preview may precede its predecessor's durable close.
+                    # Keep source ownership so that the eventual close can wake
+                    # recovery. No input is admitted through the gap; fence once
+                    # and require a full-origin generation on the next success.
+                    if not source_waiting:
+                        source_waiting = True
+                        chart.invalidate()
+                        await queue_critical(queue, build_ws_error_payload(
+                            'INDICATOR_CALCULATION_RECOVERY_REQUIRED', str(exc), client_id=client_id))
+                    continue
+                source_waiting = False
                 if not entry.get('_disposed'): await queue_critical(queue,payload)
         except asyncio.CancelledError:
             raise
