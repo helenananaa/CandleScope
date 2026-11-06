@@ -1,0 +1,53 @@
+{
+  "source": "58fb675dd2b750bd32c8cf503afb9f454e633ef7",
+  "driverCheckout": "be1af90841c823fcf365eaf52f474d667ce56837",
+  "productSourceChanged": false,
+  "passed": true,
+  "nativeStages": 55,
+  "root": "/Users/ryanliang/CandleScope/output/development-goal-20261104/replay-multichart-indicator-boundary-native-20261106",
+  "immutableApp": "/Users/ryanliang/CandleScope/output/development-goal-20261104/replay-imported-multimarket-review-fixed-native-20261106/Installed App/CandleScope.app",
+  "nativeMA5Oracle": {
+    "computations": 28,
+    "inputRows": 1186,
+    "outputPoints": 1110,
+    "partialDisplayRows": 13,
+    "renderedObservations": 22
+  },
+  "allNativeOwnedPidsIndependentlyAbsent": [
+    36757,
+    36758,
+    36759,
+    36760,
+    36762,
+    36854,
+    36855,
+    36856,
+    36857,
+    36864
+  ],
+  "financialAndLinkOraclePassed": true,
+  "prior44StageProofUnchanged": true,
+  "artifactsSha256": {
+    "README.md": "f73d3c34220ff0c47fe815724a9e764925492a402268087c5720dec5f4d5c766",
+    "audit_indicators.py": "96b7cedd3cbb2edecdd48294f67449aa2670a25363811417b670a9f3fb0105dc",
+    "evidence/acceptance.json.gz": "c3a4031e6f6c453691d4a57fb0ad435c61672d89a248a0210582770e38cd8d03",
+    "evidence/financial-link-oracle.json.gz": "461672edfb67bde2b7b9d1c1ff13bf7a0b2e4dcfb52a2357b2eec69f7a93fd9f",
+    "evidence/fresh-qa-head-build.log.gz": "31708d7c39ab9c9dd77fde8fa4e19ba62733d5e2a39768098e3a921f2c36bd72",
+    "evidence/imported-replay.csv.gz": "886084d74c9a86d686b29953552a90840be5e63963ad0d5eda65d57357d1faed",
+    "evidence/independent-indicator-oracle.json.gz": "f73ac993054592e6fbb4211fcc8134f4a6d91c13e718b269a8093a2460dd9249",
+    "evidence/independent-post-exit.json.gz": "4402f65b8028871c896677dbc132eb0d51fd5cb494e9f0c5b081d95da959baf9",
+    "evidence/indicator-computations.json.gz": "65d33fbd071a7062e51a22cd80249a3846621c4c2cca8fd7687c30692ea4b9e9",
+    "evidence/multimarket-identities.json.gz": "ab19929b615263aa633fd085352d93332592e6a7f6152e4fbe5f01945a3de950",
+    "evidence/native.log.gz": "50ab621be1d15f6ad950426c6a039970840bc5b42945f244d5b7076db531b509",
+    "evidence/prelaunch-build-identity-classification.json.gz": "149acc49061e3d6e16a4a6aa4b05485b5dec72093654877ce049871b199b631a",
+    "evidence/replay-requests.json.gz": "5c6983412d1375b9cf1431820f9010c16ada5328ac216ce5105317450dc62e2a",
+    "evidence/second-replay.csv.gz": "0d60673218908be2d86a474c3b90aa1e0b303f437124c533a26044357f9eed08",
+    "evidence/source-package-manifest.json.gz": "7443abd2b1c832d696380cd3b85b7563e9230fc76e4ddd6e1a709efff2cb9bb3",
+    "evidence/traffic.json.gz": "bcf9dcbf04ff10b4a26e75e8b3f348020c17148d972fd92cf0a03c6e0e9ce65c",
+    "evidence/two-market-live-notes.png": "258793be671d9dbb06d3d8a4d8afe2c91cd5f8786f50f2f57bf371876dc3efd3",
+    "evidence/two-market-review-before-exit.png": "9c962e351c5095a0b3f3cb37ad916279045feacfab7a46cf3f7ebf62a56e7988",
+    "evidence/verified-after.json.gz": "894c21496073438cf6b6d6a1e6b2c4a26c1112a2c8ef1cc0ee7a488bde45ab24",
+    "native.mjs": "4728a22076a53da1726d8644061267591dac510f94f1375a850da8fd15b9a40a",
+    "verify.mjs": "d380c9ba7fbe03a29ca38a8734a1417d0d0f9642eca29a7d7c369c555f78dd92"
+  }
+}
