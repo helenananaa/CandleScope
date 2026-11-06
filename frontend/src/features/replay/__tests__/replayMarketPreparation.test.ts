@@ -19,6 +19,14 @@ const job = (state: PreparationJob["state"]): PreparationJob => ({
 });
 const failure = (code: string) => Response.json({ protocol: "replay.v3", error: { code, message: code, details: {} } }, { status: 409 });
 
+test("missing imported BAR coverage never starts online acquisition", async () => {
+  const calls: string[] = [];
+  const client = new ReplayV2ApiClient({ fetcher: async input => { calls.push(String(input)); return failure("MARKET_COVERAGE_INSUFFICIENT"); } });
+  await assert.rejects(client.planMarketTrack("run-1", { exchange: "local-" + "a".repeat(32), marketType: "local_bar", symbol: "ETHUSDT" }, undefined, () => undefined),
+    error => error instanceof ReplayV2ApiError && error.code === "MARKET_COVERAGE_INSUFFICIENT");
+  assert.deepEqual(calls, ["/api/v1/replay/runs/run-1/tracks/plan"]);
+});
+
 for (const initial of ["READY", "FAILED", "CANCELLED", "BLOCKED_STORAGE"] as const) {
   test(`second-market acquisition reuses ${initial} job and revalidates admission`, async () => {
     const calls: Array<{ path: string; body: unknown }> = [];
