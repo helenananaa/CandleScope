@@ -5,6 +5,7 @@ import asyncio
 from dataclasses import dataclass, replace
 
 from app.core.executors import run_storage
+from app.core.async_cleanup import finish_cleanup
 from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
 from .query_contracts import NumericIndicatorSnapshot
 
@@ -36,6 +37,8 @@ class NumericIndicatorSubscription:
         self._ready = asyncio.Event()
         self._active = set()
         self._closed = False
+        self._close_task = None
+        self._close_initiator = None
         self._failed = False
         self._claimed = False
         self._baseline = False
@@ -111,17 +114,27 @@ class NumericIndicatorSubscription:
             await self.on_recovery(error)
 
     async def close(self):
-        if self._closed:
+        current = asyncio.current_task()
+        if self._close_task is None:
+            self._closed = True
+            self._ready.set()
+            self._close_initiator = current
+            self._close_task = asyncio.create_task(self._close(current), name='numeric-subscription-close')
+        # An external closer drains active callbacks. A callback's own finally
+        # must not join that closer while it is waiting for this callback.
+        if current in self._active and current is not self._close_initiator:
             return
-        self._closed = True
-        self._ready.set()
+        await finish_cleanup(asyncio.shield(self._close_task))
+
+    async def _close(self, initiator):
         if self.handle is not None:
-            await self.manager.unsubscribe_async(self.handle)
+            # Preserve self-unsubscribe semantics when this owned task runs
+            # on behalf of the callback that initiated close.
+            await self.manager.unsubscribe_async(self.handle, originating_task=initiator)
             self.handle = None
         # unsubscribe cancels the worker, but it does not await it. Drain the
         # calculations/callbacks owned here before releasing the stream lease.
-        current = asyncio.current_task()
-        active = [task for task in self._active if task is not current]
+        active = [task for task in self._active if task is not initiator]
         for task in active:
             task.cancel()
         if active:

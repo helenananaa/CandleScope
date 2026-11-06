@@ -362,8 +362,12 @@ class DataEventBus:
         )
         return handle
 
-    def unsubscribe(self, handle: SubscriptionHandle) -> None:
-        """Remove a callback subscription."""
+    def unsubscribe(self, handle: SubscriptionHandle, *, originating_task: asyncio.Task | None = None) -> None:
+        """Remove a callback subscription.
+
+        A delegated close may preserve its originating callback while draining
+        all other workers, just as a callback unsubscribing itself does.
+        """
         with self._protection_lock, self._subscription_lock:
             removed = self._subscriptions.pop(handle.id, None)
             callback_entry = self._callback_subs.pop(handle.id, None)
@@ -395,7 +399,7 @@ class DataEventBus:
             except RuntimeError:
                 current_task = None
             for task in (callback_entry.task, callback_entry.recovery_task):
-                if task is not None and task is not current_task:
+                if task is not None and task is not current_task and task is not originating_task:
                     task.cancel()
             logger.debug("Callback subscription removed: id=%s", handle.id)
 
