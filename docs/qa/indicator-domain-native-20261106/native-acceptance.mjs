@@ -82,7 +82,7 @@ try{
  await q.record('configured-single-chart',configured);assert.ok(['applied','ready'].includes(configured.result.state),JSON.stringify(configured.result));
  await q.until(async()=>{await q.checkCircuit();const snapshot=await q.inspect();return snapshot.cells[0]?.runtime.marketReady&&!snapshot.cells[0]?.runtime.loading?snapshot:false;},180000);
  assert.equal((await q.execute('cell-1','addIndicator',{id,name:'Native output ranges',kind:'script',executionTarget:'hosted',language:'pine',securityMode:'safe',script:source,visible:true})).state,'applied');
- await ready();const before=await adopted('old-time-updates-and-deletions');await canonical(before);
+ await ready();await q.record('installed-plugin-source',JSON.parse(cp.execFileSync(q.s.identity.resources+'/python-runtime/python/bin/python3.12',['-B','docs/qa/indicator-domain-native-20261106/verify_installed_plugins.py'],{encoding:'utf8',env:{...process.env,CANDLESCOPE_BATCH1_QA_ROOT:q.s.root}})));const before=await adopted('old-time-updates-and-deletions');await canonical(before);
  const saved=await ready();const savedDefinition=(await q.query('cell-1')).snapshot.indicators.find(row=>row.id===id);assert.equal(savedDefinition?.script,source);await q.record('saved-source',{workspace:saved,definition:savedDefinition});await q.screenshot('saved-pine-output-ranges');
  await close();running=false;
  running=true;await launch();await ready();const restored=await q.inspect();const restoredDefinition=(await q.query('cell-1')).snapshot.indicators.find(row=>row.id===id);assert.equal(restoredDefinition?.script,source);

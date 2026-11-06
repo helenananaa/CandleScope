@@ -67,5 +67,12 @@
   ],
   "distinctDomains": 2,
   "bothParitiesObservedDuringWindowGrowth": true,
-  "sixDistinctLiveObservationsReached": false
+  "sixDistinctLiveObservationsReached": false,
+  "installedRuntimeEnabled": true,
+  "installedWheelModuleFileCounts": {
+    "candlescope-plugin-pine-compat": 26,
+    "candlescope-plugin-sdk": 50,
+    "pine-compat-runtime": 2
+  },
+  "installedModulesMatchWheels": true
 }

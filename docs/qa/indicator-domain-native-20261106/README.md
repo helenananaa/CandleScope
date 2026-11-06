@@ -7,6 +7,10 @@ Pine bridge0.4.0 wheels around the unchanged hash-verified core0.3.3+cs.1, updat
 ASAR integrity and signs ad hoc. This is not a full runtime/release rebuild.
 1071 tracked source files,164 built frontend files and76 bundled plugin source
 files match; strict deep signature passed before launch and after owned exit.
+A subsequent read-only profile check confirms the enabled/auto-start runtime
+registry points to the exact95037e6e bundle and installation: all26 Pine bridge,
+50 SDK and2 core module files equal the actual wheel bytes. This check performs
+no provider import or public request; it does not complete the gated LIVE test.
 
 The original LIVE native counter/negative-offset/parity/deletion/marker/bgcolor
 and saved-source/full-owned-restart assertions are preserved. Only package paths,
