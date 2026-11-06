@@ -1,0 +1,426 @@
+{
+  "owner_scope": "backend_event_loop_and_catalog_worker",
+  "coverage": "host_estimate_external_consumers_unknown",
+  "priority_enabled": true,
+  "fairness": {
+    "policy": "bounded_priority_bypass",
+    "max_competing_grants": 8
+  },
+  "pending": 10,
+  "protected": 0,
+  "in_flight": 2,
+  "oldest_wait_seconds": 3.4816837910002505,
+  "counts": {
+    "attempts": 13,
+    "class_recovery": 4,
+    "completed": 11,
+    "deferred_probe_in_flight": 9,
+    "deferred_critical_demand": 262,
+    "class_interactive": 2,
+    "class_background": 5,
+    "class_required": 1,
+    "deferred_budget": 7,
+    "class_normal": 1,
+    "deferred_circuit_open": 22,
+    "deferred_endpoint_concurrency": 5
+  },
+  "recent": [
+    {
+      "attempt_id": 2,
+      "observed_at_ms": 1793782778487,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/exchangeInfo",
+      "rules": [
+        "binance_spot_exchange_info"
+      ],
+      "buckets": [
+        "binance:spot:request_weight:ip"
+      ],
+      "costs": [
+        20
+      ],
+      "traffic_class": "recovery",
+      "elapsed_ms": 1606.068,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "63",
+        "x-mbx-used-weight-1m": "63"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 4,
+      "observed_at_ms": 1793782779800,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "ws_connect",
+      "rules": [
+        "binance_ws_connect_window",
+        "binance_ws_connect_pacing"
+      ],
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "costs": [
+        1,
+        1
+      ],
+      "traffic_class": "recovery",
+      "elapsed_ms": 1030.13,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {},
+      "unknown": false
+    },
+    {
+      "attempt_id": 21,
+      "observed_at_ms": 1793782779801,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "ws_control",
+      "rules": [
+        "ws_outgoing_frames"
+      ],
+      "buckets": [
+        "binance:ws_control:connection:1"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "required",
+      "elapsed_ms": 0.135,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {},
+      "unknown": false
+    },
+    {
+      "attempt_id": 23,
+      "observed_at_ms": 1793782779802,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "ws_control",
+      "rules": [
+        "ws_outgoing_frames"
+      ],
+      "buckets": [
+        "binance:ws_control:connection:1"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "recovery",
+      "elapsed_ms": 0.052,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {},
+      "unknown": false
+    },
+    {
+      "attempt_id": 15,
+      "observed_at_ms": 1793782779899,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/time",
+      "rules": [
+        "binance_spot_server_time"
+      ],
+      "buckets": [
+        "binance:spot:request_weight:ip"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "interactive",
+      "elapsed_ms": 914.745,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "66",
+        "x-mbx-used-weight-1m": "66"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 26,
+      "observed_at_ms": 1793782780228,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/klines",
+      "rules": [
+        "binance_spot_klines"
+      ],
+      "buckets": [
+        "binance:spot:request_weight:ip"
+      ],
+      "costs": [
+        2
+      ],
+      "traffic_class": "interactive",
+      "elapsed_ms": 318.267,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "68",
+        "x-mbx-used-weight-1m": "68"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 19,
+      "observed_at_ms": 1793782780314,
+      "exchange": "binance",
+      "market_type": "futures",
+      "endpoint": "/fapi/v1/exchangeInfo",
+      "rules": [
+        "binance_futures_exchange_info"
+      ],
+      "buckets": [
+        "binance:futures:request_weight:ip"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "background",
+      "elapsed_ms": 925.213,
+      "status_code": 418,
+      "body_code": "-1003",
+      "quota_headers": {
+        "x-mbx-used-weight-1m": "0",
+        "retry-after": "24179"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 28,
+      "observed_at_ms": 1793782780778,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/depth",
+      "rules": [
+        "binance_spot_legacy"
+      ],
+      "buckets": [
+        "binance:spot:legacy"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "normal",
+      "elapsed_ms": 500.581,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "138",
+        "x-mbx-used-weight-1m": "138"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 24,
+      "observed_at_ms": 1793782780904,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "ws_connect",
+      "rules": [
+        "binance_ws_connect_window",
+        "binance_ws_connect_pacing"
+      ],
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "costs": [
+        1,
+        1
+      ],
+      "traffic_class": "recovery",
+      "elapsed_ms": 1081.775,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {},
+      "unknown": false
+    },
+    {
+      "attempt_id": 17,
+      "observed_at_ms": 1793782781038,
+      "exchange": "binance",
+      "market_type": "spot",
+      "endpoint": "/api/v3/exchangeInfo",
+      "rules": [
+        "binance_spot_exchange_info"
+      ],
+      "buckets": [
+        "binance:spot:request_weight:ip"
+      ],
+      "costs": [
+        20
+      ],
+      "traffic_class": "background",
+      "elapsed_ms": 1657.993,
+      "status_code": 200,
+      "body_code": null,
+      "quota_headers": {
+        "x-mbx-used-weight": "88",
+        "x-mbx-used-weight-1m": "88"
+      },
+      "unknown": false
+    },
+    {
+      "attempt_id": 30,
+      "observed_at_ms": 1793782782173,
+      "exchange": "okx",
+      "market_type": "spot",
+      "endpoint": "/api/v5/public/instruments",
+      "rules": [
+        "okx_spot_public_instruments"
+      ],
+      "buckets": [
+        "okx:public-instruments:spot:ip"
+      ],
+      "costs": [
+        1
+      ],
+      "traffic_class": "background",
+      "elapsed_ms": 1617.585,
+      "status_code": 200,
+      "body_code": "0",
+      "quota_headers": {},
+      "unknown": false
+    }
+  ],
+  "waiting": [
+    {
+      "owner": "public",
+      "purpose": "ws_heartbeat",
+      "traffic_class": "required",
+      "ticket": 20,
+      "bypasses": 0,
+      "protected": false,
+      "buckets": [
+        "binance:ws_control:connection:2"
+      ],
+      "age_seconds": 1.348296083000605
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 4,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.4816911250018165
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 5,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481661541998619
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 6,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481515416999173
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 7,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481497250002576
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 8,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481485000000248
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 9,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481471582999802
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 10,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.481459624999843
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_connect",
+      "traffic_class": "recovery",
+      "ticket": 11,
+      "bypasses": 1,
+      "protected": false,
+      "buckets": [
+        "binance:ws_connect:ip",
+        "binance:ws_connect_pacing:ip"
+      ],
+      "age_seconds": 3.4810987500022748
+    },
+    {
+      "owner": "public",
+      "purpose": "ws_control",
+      "traffic_class": "recovery",
+      "ticket": 21,
+      "bypasses": 0,
+      "protected": false,
+      "buckets": [
+        "binance:ws_control:connection:2"
+      ],
+      "age_seconds": 1.3480484159990738
+    }
+  ],
+  "waiting_truncated": false
+}

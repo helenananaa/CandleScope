@@ -36,6 +36,8 @@ class SourceQuality:
 SOURCE_QUALITY: dict[str, SourceQuality] = {
     # Revision-selected source evidence; writes are fenced against the durable head.
     "source_snapshot_verified": SourceQuality(100, FinalityTrust.TRUSTED_FINAL),
+    # Complete provider trade windows reduced deterministically into candles.
+    "trade_history_verified": SourceQuality(60, FinalityTrust.TRUSTED_FINAL),
     # Legacy timeout/teardown CLOSED rows did not prove an exchange close.
     "data_manager_closed": SourceQuality(10, FinalityTrust.AMBIGUOUS),
     # Explicit exchange close (for example Binance kline x=true).

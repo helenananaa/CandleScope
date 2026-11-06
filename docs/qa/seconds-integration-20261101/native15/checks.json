@@ -1,0 +1,8 @@
+{
+  "passed": false,
+  "application": "72f21590",
+  "failure": "Sixminute cold readiness timeout: customBinance7s548bars pending, Binance1s873/Gate1s817/Upbit1s132ready.",
+  "write_revision_conflicts": 23,
+  "exit_ms": 8571,
+  "notes": "Currentce174 atomic trigger replacement is component-tested40checks and not yet included in this candidate. Need inspect remaining derived window revisions/fairness; do not promote Upbit readiness to full acceptance."
+}

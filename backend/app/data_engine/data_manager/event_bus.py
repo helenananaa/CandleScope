@@ -56,7 +56,7 @@ import threading
 import time
 import uuid
 from copy import deepcopy
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable, Awaitable
 
@@ -266,6 +266,7 @@ class DataEventBus:
         self._journal: OrderedDict[int, _QueuedEvent] = OrderedDict()
         self._delivery_ids: OrderedDict[str, None] = OrderedDict()
         self._recovery_required = 0
+        self._recent_recoveries = deque(maxlen=16)
         self._closed = False
         self._protection_lock = protection_lock or threading.RLock()
         # Membership changes still serialize with physical GC deletion. Reads
@@ -729,6 +730,7 @@ class DataEventBus:
             "replay_size": len(self._journal),
             "sequence": self._sequence,
             "recovery_required_total": self._recovery_required,
+            "recent_recoveries": list(self._recent_recoveries),
             "consumer_states": {
                 sub_id: {
                     "state": ("recovery_required" if sub.queue.recovery_error else
@@ -929,6 +931,13 @@ class DataEventBus:
         queue.replay_next = None
         queue.close_nowait()
         self._recovery_required += 1
+        # Removed subscriptions disappear from consumer_states. Retain a small
+        # diagnostic trail so repeated recovery is distinguishable from lag.
+        self._recent_recoveries.append({
+            "reason": str(reason)[:96], "subscription_id": sub.handle.id,
+            "key": str(sub.handle.key) if sub.handle.key is not None else None,
+            "first_missing_sequence": first_missing,
+        })
         logger.error("Consumer recovery required: %s", error.to_dict())
         if sub.on_recovery is not None:
             # Separate bounded task: a hung callback must not hide the gap.
