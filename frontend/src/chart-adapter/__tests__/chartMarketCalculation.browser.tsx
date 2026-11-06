@@ -87,7 +87,9 @@ export async function checkChartMarketCalculation() {
     const session = useMemo(() => structuralMock<ChartSessionRuntime>({
       view: { symbol: "BTCUSDT", exchange: "binance", marketType: "spot", interval: "1m", sessionKey: "market-hook", datasetKey: "market-hook",
         datasetVersion: 0, trackedIntervals: ["1m"], prefetchIntervals: [], nativeIntervals: [{ value: "1m", seconds: 60 }],
-        exchangeConfig: { nativeIntervals: [{ value: "1m", seconds: 60 }], intervalDays: { "1m": 1 } }, savedVisibleRange: null },
+        exchangeConfig: { id: "binance", label: "Binance", markets: [{ market_type: "spot", label: "Spot" }],
+          nativeIntervals: [{ value: "1m", seconds: 60 }], intervalDays: { "1m": 1 }, intervalDaysSource: "capability",
+          protocolFeatures: new Set<string>(), limits: {}, knownLimitations: [], wsConnectionModel: "single", raw: null }, savedVisibleRange: null },
       status: { exchangeCatalogStatus: "ready", historyIntervalAvailable: true, realtimeIntervalAvailable: true, marketDataReady: true, webSocketReady: true },
       actions: { handleVisibleRangeChange: noop, updateVisibleRangeDataMeta: noop },
       refs: { intervalRef: { current: "1m" }, trackedIntervalsRef: { current: ["1m"] } },
