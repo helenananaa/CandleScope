@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-11-03T01:00:24.830Z",
+  "sourceCommit": "38d8ee3354dbd7e80fda5c80cde03b23a52cacfd",
+  "sourceFiles": 1048,
+  "builtFiles": 164,
+  "pluginAssets": 9,
+  "ciArtifactId": null,
+  "sdkArtifactFiles": null,
+  "sdkPreexistingPyc": null,
+  "pluginSources": {
+    "bundleSha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+    "pluginSourceFiles": 76,
+    "mismatches": [],
+    "engineUnchanged": true
+  },
+  "mismatches": [],
+  "strictSignature": true,
+  "signatureError": null
+}

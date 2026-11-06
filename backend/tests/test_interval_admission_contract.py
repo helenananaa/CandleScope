@@ -52,9 +52,17 @@ def test_registered_ordinary_usdm_route_does_not_inherit_spot_seconds(purpose):
     registry = bootstrap_default_adapters()
     resolver = IntervalResolver(registry)
     for exchange, market in (("binance", "futures"), ("binanceusdm", "swap.linear")):
-        with pytest.raises(IntervalResolutionError) as failure:
-            resolver.resolve(exchange=exchange, market_type=market, interval="1s", purpose=purpose)
-        assert failure.value.code.value == "no_exact_base"
+        assert "1s" not in registry.get_capabilities(exchange).kline_intervals(
+            market, history=purpose == "history",
+        ), "ordinary contracts must never inherit spot/native seconds"
+        if exchange == "binanceusdm":
+            route = resolver.resolve(exchange=exchange, market_type=market, interval="1s", purpose=purpose)
+            assert route.kind.value == "trade"
+            assert route.native_interval is None and route.base_interval is None
+        else:
+            with pytest.raises(IntervalResolutionError) as failure:
+                resolver.resolve(exchange=exchange, market_type=market, interval="1s", purpose=purpose)
+            assert failure.value.code.value == "no_exact_base"
         assert resolver.resolve(exchange=exchange, market_type=market, interval="1m", purpose=purpose).is_native
     assert resolver.resolve(exchange="binance", market_type="spot", interval="1s", purpose=purpose).is_native
 

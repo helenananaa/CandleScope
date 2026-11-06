@@ -1,0 +1,95 @@
+{
+  "passed": false,
+  "application": "abfedff917cdefb1259f7ec995b31dbe0e802075",
+  "head_after_qa_only": "1d31f2ba",
+  "failure": "Sixminute cold fourchart readiness: onlyUpbitpending, noMA/save/restartqualification",
+  "source_files": 979,
+  "dist_files": 162,
+  "mismatches": 0,
+  "strict_signature_before_after": true,
+  "charts": [
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1s"
+      },
+      "bars": 632,
+      "ready": true
+    },
+    {
+      "session": {
+        "exchange": "binance",
+        "marketType": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "7s"
+      },
+      "bars": 520,
+      "ready": true
+    },
+    {
+      "session": {
+        "exchange": "gate",
+        "marketType": "spot",
+        "symbol": "BTC/USDT",
+        "interval": "1s"
+      },
+      "bars": 774,
+      "ready": true
+    },
+    {
+      "session": {
+        "exchange": "upbit",
+        "marketType": "spot",
+        "symbol": "BTC/KRW",
+        "interval": "1s"
+      },
+      "bars": 379,
+      "ready": false
+    }
+  ],
+  "exit_ms": 3706,
+  "renderer_errors": [],
+  "delivery": {
+    "mode": "durable",
+    "degraded": false,
+    "pending": 0,
+    "recovery_pending": 0,
+    "failures": 0,
+    "last_error": null,
+    "recovery_error": null,
+    "unconfirmed_receipt": false,
+    "active_submissions": 1,
+    "admission_rejected": 0,
+    "published": 393,
+    "rejected": 1,
+    "acknowledgement_batch_size": 16,
+    "acknowledgement_delay_ms": 50,
+    "acknowledgement_batches": 375,
+    "acknowledgement_records": 394
+  },
+  "reconciler": {
+    "layer": "Reconciler",
+    "counters": {
+      "reconcile_runs": 87,
+      "archive_objects_imported": 0,
+      "archive_dependent_rows_invalidated": 0,
+      "reconcile_elapsed_ms_total": 3089,
+      "bars_written": 4933,
+      "bars_skipped": 0,
+      "custom_materialization_owners": 6,
+      "custom_materialization_elapsed_ms_total": 571,
+      "write_errors": 7,
+      "write_revision_conflicts": 7
+    },
+    "gauges": {
+      "last_reconcile_elapsed_ms": 10,
+      "last_custom_materialization_elapsed_ms": 8
+    },
+    "timestamps": {
+      "last_reconcile_at": 1793538168723
+    }
+  },
+  "diagnostic": "Threechartsreadyincludingcustom7s; Upbit379bars stillpending. Snapshot17mid durable delivery failures0, degradedfalse, butsourcegapproofs pending. Sourceavailability may be delayed until whole repair verification completes; thisis underinvestigation, notprovenallremainingfailurecause."
+}

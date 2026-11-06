@@ -126,6 +126,7 @@ export interface UseChartLoadMoreLeftOptions {
   interval: IntervalString;
   seriesIdentity?: KlineSeriesIdentityInput;
   nativeIntervalValues: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   chartData: KlineBar[];
   loading: boolean;
   dataSource: string | null;
@@ -136,11 +137,13 @@ export interface UseChartLoadMoreLeftOptions {
 export function planLoadMorePageSize(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
+  tradeCandlesAvailable = false,
 ): number {
   return planTargetBarRequest({
     desiredTargetBars: LOAD_MORE_PAGE_SIZE,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: LOAD_MORE_SOURCE_ROW_BUDGET,
   })?.targetBars ?? LOAD_MORE_PAGE_SIZE;
 }
@@ -164,6 +167,7 @@ export function useChartLoadMoreLeft({
   interval,
   seriesIdentity,
   nativeIntervalValues,
+  tradeCandlesAvailable = false,
   chartData,
   loading,
   dataSource,
@@ -214,7 +218,7 @@ export function useChartLoadMoreLeft({
   }, []);
 
   const oldestChartTime = chartData[0]?.time ?? null;
-  const loadMorePageSize = planLoadMorePageSize(interval, nativeIntervalValues);
+  const loadMorePageSize = planLoadMorePageSize(interval, nativeIntervalValues, tradeCandlesAvailable);
 
   const resetPagination = useCallback(() => {
     sessionGenerationRef.current += 1;
