@@ -241,7 +241,7 @@ def test_catalog_cache_is_bound_to_source_fingerprint_and_closed_boundary() -> N
     assert catalog.diagnostics()["cache_misses"] == 2
 
 
-def test_catalog_epoch_ignores_volatile_ephemeral_rows_but_not_replay_bases() -> None:
+def test_catalog_epoch_ignores_second_history_rows_but_not_replay_bases() -> None:
     repo, identity, case = _fixture_repo()
     start_ms = int(case["start_ms"])
     now_ms = [int(case["now_ms"])]
@@ -342,3 +342,17 @@ def test_catalog_validates_phase_limits_before_scanning() -> None:
     with pytest.raises(ReplayDomainError, match="horizon"):
         catalog.build(warmup_bars=0, horizon_ms=31 * 86_400_000)
     assert not any(name == "scan_gaps" for name, _ in repo.calls)
+
+
+def test_persisted_seconds_do_not_enable_replay_archives() -> None:
+    case = _case()
+    identity = FixtureIdentity(**case["identity"])
+    start = int(case["start_ms"])
+    repo = FakeKlinesRepo()
+    repo.add_rows(identity, "1s", [make_bar(start + i * 1000, interval_ms=1000) for i in range(120)])
+    catalog = ReplayCatalog(repo, native_intervals=lambda _: ("1s", "1m"), now_ms=lambda: start + 120000)
+    entry = catalog.build(warmup_bars=0, horizon_ms=10000).require_entry(
+        ReplaySeriesIdentity(identity.exchange, identity.market_type, identity.symbol)
+    )
+    assert entry.selected_base_interval is None
+    assert "no_native_local_interval" in entry.limitations

@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "e80c788db3eca55d8f24e694027377e152c06f3a",
+  "appLaunched": false,
+  "nativeQualified": false,
+  "syntaxCheck": true,
+  "publicGateRejectsBeforeElectronLaunch": true,
+  "scope": "Current main220/frontend/SDK/plugin assets preflight only; prior recovery blocker and new clock-delay native qualification remain unproven."
+}

@@ -1,0 +1,8 @@
+{
+  "status": "Component verified; native17 pending",
+  "fix": "On source_gap_timeout, existing batch connection marks every interval reconnecting and suppresses data. Its bounded recovery keyset waits for scoped canonical repair while retaining existing ingestion claims. Then terminal1013 requires freshsnapshot. Source failures andotherfatalrecovery closeimmediately; explicitdisconnect/navigation/cancellation drains claims andwaits.",
+  "scope": "Batch K-line transport only; strict consumerdeadline unchanged. No new unowned sourceclaim, lingering oldconnection copy, orsilent continuation afterconsumerfailure.",
+  "tests": "142 passed across batchsource/transport, sparse, consumer/marketcontinuity, indicatorbridge andwarmstart. SixnewactualConnection/SourceGapRegistry scenarios include mergedsource waits/newgaps andfailedfuture without registrychange notification. Firstnewfixture hadreservedxunitsetupname anddidnotrun; corrected before43/142pass.",
+  "front_contract": "Existing stream_status reconnecting parses in batchcoordinator, clearsfreshness andstartscontrolledHTTPpolling. Pendingoutbox/nextbar forwarding suppressed untilterminalclose; freshsnapshot requirement retained.",
+  "remaining": "Newnative seconds quality/MA/newclose/save/fullownedexit/restart andexactheadCI required beforemerge."
+}

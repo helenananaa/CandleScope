@@ -1,0 +1,8 @@
+{
+  "status": "Componentverified; native18pending",
+  "problem": "RealSQLite+DataManager+BackfillCoordinator: firstsecondabsencecommitted butparentsecondunknown, verificationretry deferred allcompletionnotifications andleft provenfirstgapwaiting. Beforetestfailsat exactgapcompletionassertion.",
+  "fix": "Optionalinternal source_available notification afterengine returns,beforewholeverification/retry. Re-readcurrentD126canonical/absenceforrequestandtoucheddependencyintervals, bounded32keys4096rangeentries. No completionevent orjob-successclaim; no direct row/candleadmission.",
+  "checks": "17initialdirect then128coordinator/ledger/sparse/batchrecovery regressionspassed. Ownscope/otheridentity/unprovenabsence/partialparent/cancellation/boundedfanoutchecked.",
+  "wiring": "RuntimepassesDataManager.source_storage_available; callbackexceptions donotdiscardalreadycommittedrepairresults, cancellationpropagates.",
+  "remaining": "Realpublicfourchartseconds/MA/newclose/save/fullownedexit/restart andcurrentheadCIstillrequired."
+}

@@ -10,7 +10,6 @@ from __future__ import annotations
 import enum
 
 from app.data_engine.interval_policy import (
-    EPHEMERAL_INTERVALS,
     INTERVAL_SECONDS,
     VALID_INTERVALS,
     aggregate_rows_by_month,
@@ -23,7 +22,7 @@ from app.data_engine.interval_policy import (
     find_optimal_fetch_plan,
     get_tier_for_interval,
     is_custom_interval,
-    is_ephemeral_interval,
+    is_one_second_interval,
     is_monthly_interval,
     is_standard_interval,
     is_weekly_interval,
@@ -56,13 +55,12 @@ __all__ = [
     "MarketType",
     "VALID_INTERVALS",
     "INTERVAL_SECONDS",
-    "EPHEMERAL_INTERVALS",
     "parse_interval_spec",
     "parse_custom_interval",
     "parse_interval_ms",
     "is_standard_interval",
     "is_custom_interval",
-    "is_ephemeral_interval",
+    "is_one_second_interval",
     "is_weekly_interval",
     "is_monthly_interval",
     "parse_monthly_count",

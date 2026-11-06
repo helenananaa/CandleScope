@@ -207,7 +207,7 @@ Operational entrypoints are exposed through the settings API:
 - `POST /api/v1/settings/storage/repair`: rebuild custom interval storage from authoritative base data.
 - `POST /api/v1/settings/storage/gap-scan`: scan stored standard intervals and submit backfill.
 - `GET /api/v1/settings/storage/health`: inspect gap ledger, audit series, and backfill coordinator state.
-- `POST /api/v1/settings/cache-limits`: update retention and ephemeral-series limits.
+- `POST /api/v1/settings/cache-limits`: update SQLite retention and 1s memory-cache limits.
 
 ## Directory Index
 

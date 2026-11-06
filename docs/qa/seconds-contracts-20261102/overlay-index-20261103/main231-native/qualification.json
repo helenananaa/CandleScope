@@ -1,0 +1,11 @@
+{
+  "source": "885f00d191aa4db0abc7841594839178098dce33",
+  "native_passed": false,
+  "four_canonical_history": true,
+  "failure": "Upbit visibleMA5 missing frozen targetpoints after90s; 103observations",
+  "renderer_page_errors": [],
+  "new418": false,
+  "full_owned_exit": true,
+  "strict_package_match_after": true,
+  "next": "Trace actual Upbit indicator history/continuity/recovery rather than relaxing visible math assertion"
+}

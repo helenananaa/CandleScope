@@ -768,7 +768,9 @@ class CcxtUnifiedProfile:
         ccxt_symbol: str,
     ) -> Any:
         if descriptor.stream_type == StreamType.KLINE:
-            return await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            value = await exchange.watch_ohlcv(ccxt_symbol, descriptor.interval)
+            # The pinned Upbit native seconds channel returns one OHLCV row.
+            return [value] if self.exchange_id == "upbit" and descriptor.interval == "1s" else value
         if descriptor.stream_type == StreamType.TRADE:
             return await exchange.watch_trades(ccxt_symbol)
         if descriptor.stream_type == StreamType.DEPTH:

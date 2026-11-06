@@ -395,6 +395,8 @@ class CcxtUnifiedNormalizer:
                         end_time <= msg.received_at_ms,
                     )
                 ),
+                "trade_coverage_verified": payload.get("trade_coverage_verified") is True,
+                "trade_candle_source": payload.get("trade_candle_source") is True,
             }
         except (TypeError, ValueError):
             return None
