@@ -1,0 +1,5 @@
+{
+  "change": "Retain last16 event-bus recovery reasons after subscription removal, with96character reason limit; no delivery or fence changes",
+  "tests": "31event-bus routing/consumer recovery/delivery integration passed",
+  "native": "Attempt7 fourchartready timed out6minutes; normalownedexit5759ms,0renderererrors. Pending diagnosis, not accepted."
+}

@@ -1016,6 +1016,7 @@ async def start_data_engine() -> DataEngineRuntime:
             storage=storage,
             bars_backfilled=dm.on_bars_backfilled,
             emit_event=dm.emit_event,
+            source_available=dm.source_storage_available,
             engine=backfill_engine,
             loop=asyncio.get_running_loop(),
             gap_ledger=gap_ledger,

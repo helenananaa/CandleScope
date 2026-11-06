@@ -11,7 +11,7 @@ from typing import Callable, Mapping, Protocol, Sequence
 
 from app.data_engine.interval_policy import (
     compute_bucket_start_ms,
-    is_ephemeral_interval,
+    is_one_second_interval,
     is_monthly_interval,
     last_closed_bar_open_ms,
     parse_interval_ms,
@@ -754,8 +754,8 @@ class ReplayCatalog:
         closed_boundaries = []
         for summary in summaries:
             interval = str(summary["interval"])
-            if is_ephemeral_interval(interval):
-                # Ephemeral series can never become replay base intervals. Keep
+            if is_one_second_interval(interval):
+                # 1s replay archives are not supported. Keep
                 # their stable presence in the catalog identity set, but do not
                 # let live per-second row counts invalidate an otherwise
                 # unchanged exact historical catalog between prepare/create.
@@ -834,7 +834,7 @@ class ReplayCatalog:
                         interval
                         for interval in by_interval
                         if interval in native
-                        and not is_ephemeral_interval(interval)
+                        and not is_one_second_interval(interval)
                         and parse_interval_ms(interval) is not None
                     ),
                     key=lambda interval: (parse_interval_ms(interval) or 0, interval),

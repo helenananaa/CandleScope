@@ -693,3 +693,23 @@ def test_aggregator_bridge_honors_durable_rejection_with_cold_cache(
         await bus.close()
 
     asyncio.run(_run())
+
+
+def test_subminute_warm_start_tail_does_not_force_six_hours_of_source_history():
+    """A new7s chart must not enqueue21,600source seconds before its500bar viewport."""
+    now_ms = 1793524000000
+    for interval, maximum_span in [('7s', 16 * 7 * 1000), ('30s', 16 * 30 * 1000),
+                                   ('7m', 6 * 60 * 60 * 1000)]:
+        agg = BarAggregator(BarAggregatorConfig(update_throttle_ms=0))
+        calls = []
+        service = AggregatorWarmStartService(cache=BarCache(), bar_aggregator=agg,
+            base_interval='1m', storage_provider=lambda: _Storage(),
+            backfill_trigger_provider=lambda: (lambda *args, **kwargs: calls.append((args, kwargs))))
+        with patch('app.data_engine.data_manager.warm_start.time.time', return_value=now_ms / 1000):
+            service._trigger_custom_tail_repair('BTCUSDT', interval)
+        assert len(calls) == 1
+        args, kwargs = calls[0]
+        assert args[0:2] == ('BTCUSDT', interval)
+        assert args[3] == now_ms
+        assert args[3] - args[2] <= maximum_span
+        assert kwargs['requester'] == 'warm_start_custom_tail'

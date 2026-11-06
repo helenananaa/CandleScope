@@ -1,0 +1,22 @@
+{
+  "status": "component-verified; packaged acceptance pending",
+  "scope": "Dense Binance spot custom 2s..59s from default native1s, epoch aligned, max32 target windows and8192 source slots per view",
+  "protection": [
+    "Target fingerprint and original deletion floor captured before HTTP",
+    "Actual fetched inputs equal canonical trusted-final dense1s rows before computation",
+    "Source and target fingerprints checked again in SQLite writer transaction",
+    "Explicit empty deletion and raw SQL delete/restore retain permission floor across restart",
+    "Automatic derived invalidation distinguished from deletion intent; atomic migration and triggers"
+  ],
+  "checks": {
+    "regression": "132 passed; source/target/SQL edits, deletes, rollback, old jobs, actual aggregator, ownership and native fences",
+    "before": "Controlled HTTP/SQLite disjoint live append wrote zero custom rows before fix",
+    "after": "Same controlled case now writes same two custom7s candles as no-append control; numeric OHLCV/enhanced fields checked",
+    "frontend": "Current main199+205 desktop build passed"
+  },
+  "remaining": [
+    "Fresh packaged real seconds+MA/save/full exit/restart acceptance",
+    "Current-head CI before merge"
+  ],
+  "notes": "Other sources, sparse or trade-derived inputs, shifted alignment, large jobs and unproven identities retain strict D126 checks."
+}
