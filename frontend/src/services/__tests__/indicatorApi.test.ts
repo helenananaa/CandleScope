@@ -4,6 +4,9 @@ import { createServer, type ViteDevServer } from "vite";
 import type * as IndicatorApiModule from "../indicatorApi.js";
 
 let server: ViteDevServer;
+let openCalculation: typeof IndicatorApiModule.openIndicatorCalculation;
+let readCalculation: typeof IndicatorApiModule.readIndicatorCalculation;
+let closeCalculation: typeof IndicatorApiModule.closeIndicatorCalculation;
 let computeIndicator: typeof IndicatorApiModule.computeIndicator;
 let computeIndicatorBatch: typeof IndicatorApiModule.computeIndicatorBatch;
 let computeIndicatorRange: typeof IndicatorApiModule.computeIndicatorRange;
@@ -21,6 +24,9 @@ test.before(async () => {
     "/src/services/indicatorApi.js",
   ) as typeof IndicatorApiModule;
   ({
+    openIndicatorCalculation: openCalculation,
+    readIndicatorCalculation: readCalculation,
+    closeIndicatorCalculation: closeCalculation,
     computeIndicator,
     computeIndicatorBatch,
     computeIndicatorRange,
@@ -394,4 +400,27 @@ test("local compute batch rejects identities outside the bounded backend contrac
     }],
   }), /at most 256 characters/);
   assert.equal(fetched, false);
+});
+
+
+test("owned chart API preserves calculation identity and requests complete current projections",async context=>{
+  const originalFetch=globalThis.fetch;
+  context.after(()=>{globalThis.fetch=originalFetch;});
+  const position={schemaVersion:1,domainId:"a".repeat(32),generation:1,sequence:1,view:"current-projection",
+    origin:100,observedThrough:500,closedThrough:500,inputRevision:"source:1"};
+  const requests:Array<{url:string;body:Record<string,unknown>}>=[];
+  globalThis.fetch=async(url,options)=>{
+    requests.push({url:String(url),body:options?.body?JSON.parse(String(options.body)) as Record<string,unknown>:{}});
+    return new Response(JSON.stringify(options?.method==="DELETE"?{ok:true,state:"closed"}:
+      {ok:true,type:"indicator.snapshot",calculation:position}),{headers:{"Content-Type":"application/json"}});
+  };
+  const opened=await openCalculation({clientId:"one",kind:"script",language:"pine",script:"plot(close)",
+    exchange:"binance",marketType:"spot",symbol:"BTCUSDT",interval:"1m",start:100,end:500,
+    requestScope:"old historical scope",requestGeneration:2,signal:new AbortController().signal});
+  assert.equal(opened.calculation?.domainId,position.domainId);assert.equal(opened.type,"indicator.snapshot");
+  assert.equal(requests[0]?.body.schemaVersion,1);assert.equal(requests[0]?.body.requestScope,undefined);
+  const calculation={schemaVersion:1 as const,domainId:position.domainId,generation:1,sequence:1};
+  await readCalculation({calculation,clientId:"one",start:400,end:500});
+  assert.deepEqual(requests[1]?.body,{calculation,clientId:"one",start:400,end:500,complete:true});
+  await closeCalculation(position.domainId);assert.equal(requests[2]?.url.endsWith(position.domainId),true);
 });

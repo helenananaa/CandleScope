@@ -23,7 +23,6 @@ import type {
 } from "./sharedIndicatorStreamCoordinator.js";
 import { formatIndicatorError } from "./indicatorPayloadRuntime.js";
 import {
-  buildCurrentHostedIndicatorSignatures,
   isCurrentHostedIndicatorMessage,
 } from "./indicatorStreamIdentity.js";
 import { canFlushHostedSeedCoverageRefresh } from "./indicatorWindowDeltaRuntime.js";
@@ -38,6 +37,8 @@ import type {
 } from "./indicatorTypes.js";
 
 export interface UseIndicatorStreamControllerOptions {
+  isSubscriptionReady?: (indicator: IndicatorDefinition) => boolean;
+  subscriptionVersion?: number;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   activeIndicators: IndicatorDefinition[];
   activeIndicatorsRef: MutableRefObject<IndicatorDefinition[]>;
@@ -225,6 +226,8 @@ export function useIndicatorStreamController({
   exchange,
   historyWindowPending,
   getIndicatorResumeState,
+  isSubscriptionReady,
+  subscriptionVersion = 0,
   handleIndicatorRecomputed,
   handleIndicatorSubscriptionPending,
   handleIndicatorSubscribed,
@@ -284,12 +287,15 @@ export function useIndicatorStreamController({
     });
   }, [getHostedSubscriptionContext, getIndicatorResumeState]);
 
-  const hostedSubscriptionSignature = useCallback((indicator: IndicatorDefinition) => (
-    buildHostedSubscriptionSignature(indicator, getHostedSubscriptionContext())
-  ), [getHostedSubscriptionContext]);
+  const hostedSubscriptionSignature = useCallback((indicator: IndicatorDefinition) => {
+    const semantic = buildHostedSubscriptionSignature(indicator,getHostedSubscriptionContext());
+    const calculation = getIndicatorResumeState?.(indicator)?.calculation;
+    return calculation ? semantic+":calculation:"+calculation.domainId : semantic;
+  }, [getHostedSubscriptionContext,getIndicatorResumeState]);
 
   const buildDesiredSubscriptions = useCallback((): IndicatorStreamSubscription[] => (
-    getVisibleHostedIndicators(activeIndicatorsRef.current).map((indicator) => ({
+    getVisibleHostedIndicators(activeIndicatorsRef.current)
+      .filter(indicator => isSubscriptionReady?.(indicator) !== false).map((indicator) => ({
       clientId: indicator.id,
       message: buildHostedMessage(indicator),
       signature: hostedSubscriptionSignature(indicator),
@@ -298,12 +304,17 @@ export function useIndicatorStreamController({
     activeIndicatorsRef,
     buildHostedMessage,
     hostedSubscriptionSignature,
+    isSubscriptionReady,
   ]);
 
   const buildDesiredSubscriptionsRef = useRef(buildDesiredSubscriptions);
   useLayoutEffect(() => {
     buildDesiredSubscriptionsRef.current = buildDesiredSubscriptions;
   }, [buildDesiredSubscriptions]);
+
+  const domainGuardsRef = useRef({ getIndicatorResumeState,isSubscriptionReady });
+  useLayoutEffect(() => { domainGuardsRef.current = { getIndicatorResumeState,isSubscriptionReady }; },
+    [getIndicatorResumeState,isSubscriptionReady]);
 
   const handlerRefs = useRef<StreamHandlerRefs>({
     applyWsPatch,
@@ -367,30 +378,26 @@ export function useIndicatorStreamController({
     candleUpColor,
     candleDownColor,
     indicatorWsSignature,
+    subscriptionVersion,
   ]);
   const currentHostedSignaturesRef = useRef<ReadonlyMap<string, string> | null>(null);
   if (currentHostedSignaturesRef.current === null) {
     // React permits deterministic lazy ref initialization during render. Keep
     // line hydration/realtime output renders from rebuilding JSON identities;
     // later semantic changes publish only from the committed layout effect.
-    currentHostedSignaturesRef.current = buildCurrentHostedIndicatorSignatures(
-      activeIndicators,
-      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol, seriesIdentity },
-    );
+    currentHostedSignaturesRef.current = new Map(getVisibleHostedIndicators(activeIndicators).map(indicator => [indicator.id,hostedSubscriptionSignature(indicator)]));
   }
   const currentHostedSignatureKeyRef = useRef(currentHostedSignatureKey);
   useLayoutEffect(() => {
     if (currentHostedSignatureKeyRef.current === currentHostedSignatureKey) return;
-    currentHostedSignaturesRef.current = buildCurrentHostedIndicatorSignatures(
-      activeIndicators,
-      { candleDownColor, candleUpColor, exchange, interval, marketType, symbol, seriesIdentity },
-    );
+    currentHostedSignaturesRef.current = new Map(getVisibleHostedIndicators(activeIndicators).map(indicator => [indicator.id,hostedSubscriptionSignature(indicator)]));
     currentHostedSignatureKeyRef.current = currentHostedSignatureKey;
   }, [
     activeIndicators,
     candleDownColor,
     candleUpColor,
     currentHostedSignatureKey,
+    hostedSubscriptionSignature,
     seriesIdentity,
     exchange,
     interval,
@@ -473,6 +480,10 @@ export function useIndicatorStreamController({
         console.warn("Indicator WS connection recovery:", error);
       },
       onMessage: (message, { subscriptionSignature, wsGeneration }) => {
+        const indicator = activeIndicatorsRef.current.find(item => item.id === message.clientId);
+        if (!indicator || domainGuardsRef.current.isSubscriptionReady?.(indicator) === false) return;
+        const calculation = domainGuardsRef.current.getIndicatorResumeState?.(indicator)?.calculation;
+        if (calculation && !subscriptionSignature?.endsWith(":calculation:"+calculation.domainId)) return;
         const currentSignatures = currentHostedSignaturesRef.current;
         if (!currentSignatures || !isCurrentHostedIndicatorMessage(
           message,
@@ -568,6 +579,7 @@ export function useIndicatorStreamController({
       readySubscriptionsRef.current = [];
     };
   }, [
+    activeIndicatorsRef,
     chartDataReady,
     exchange,
     hasWsHostedIndicators,
@@ -597,6 +609,7 @@ export function useIndicatorStreamController({
     indicatorWsSignature,
     realtimeEnabled,
     subscriptionUpdatesReady,
+    subscriptionVersion,
     syncHostedSubscriptions,
   ]);
 

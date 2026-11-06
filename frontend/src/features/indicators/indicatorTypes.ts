@@ -301,7 +301,24 @@ export interface IndicatorUnifiedAnnotation {
   zIndex?: number;
 }
 
+export interface IndicatorCalculationReference {
+  schemaVersion: 1;
+  domainId: string;
+  generation: number;
+  sequence: number;
+}
+
+export interface IndicatorCalculationPosition extends IndicatorCalculationReference {
+  view: "current-projection";
+  origin: number;
+  observedThrough: number;
+  closedThrough: number;
+  inputRevision: string;
+}
+
 export interface IndicatorPayloadEnvelope {
+  type?: string;
+  calculation?: IndicatorCalculationPosition;
   drawings?: IndicatorDrawing[] | undefined;
   meta?: Record<string, unknown>;
   ok: boolean | null;
@@ -576,6 +593,8 @@ export interface IndicatorWsHandlers {
 }
 
 export interface IndicatorCacheContext {
+  /** Current script projections include chart-owned opaque observations. */
+  projectionOwner?: string | undefined;
   inputSource?: import("./indicatorInputBinding.js").IndicatorCacheInputSource | undefined;
   /** Entire provided input including calculation origin, not just output range. */
   localInputKey?: string | undefined;
@@ -639,6 +658,7 @@ export interface IndicatorCacheResultMetadata {
 }
 
 export interface IndicatorSubscriptionContext {
+  calculation?: IndicatorCalculationReference;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   candleDownColor?: string;
   candleUpColor?: string;
@@ -654,6 +674,7 @@ export interface IndicatorSubscriptionContext {
 }
 
 export interface IndicatorSubscribeMessage {
+  calculation?: IndicatorCalculationReference;
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   action: "subscribe";
   clientId: string;
@@ -718,6 +739,7 @@ export interface IndicatorRecomputedMessage extends IndicatorWsBase {
 }
 
 export interface IndicatorSubscribedMessage extends IndicatorWsBase {
+  calculation?: IndicatorCalculationPosition;
   type: "indicator.subscribed";
   clientId: string;
   ok?: boolean | null;

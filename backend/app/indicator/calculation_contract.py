@@ -21,6 +21,7 @@ class CalculationRangeRequest(BaseModel):
     start: int = Field(strict=True, gt=0)
     end: int = Field(strict=True, gt=0)
     rebuild: bool = Field(default=False, strict=True)
+    complete: bool = Field(default=False, strict=True)
 
 
 def reference_for(owner, cursor=None):

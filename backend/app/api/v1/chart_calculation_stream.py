@@ -120,7 +120,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
         await current.live(writer_id=stream_consumer_id,client_id=client_id,
             through=closed if closed > current.owner.cursor.closed_through else 0)
         payload = await current.view(reference_for(current.owner),
-            client_id=client_id,start=current.owner.plan.start,end=current.owner.cursor.observed_through)
+            client_id=client_id,start=current.owner.plan.start,end=current.owner.cursor.observed_through,complete=True)
     payload['type'] = 'indicator.snapshot'
     await send_json({'type':'indicator.subscribed','ok':True,'clientId':client_id,
         'indicatorId':meta['indicatorId'],'kind':'script','language':'pine','seeded':True,'seedBars':0,

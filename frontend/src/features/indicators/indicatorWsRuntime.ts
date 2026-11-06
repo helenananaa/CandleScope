@@ -147,6 +147,7 @@ export function buildHostedSubscriptionMessage(
     }),
     historyLimit,
   };
+  if (context.calculation) message.calculation = context.calculation;
   if (builtin) {
     message.name = getBuiltinIndicatorName(indicator);
   } else {
@@ -313,7 +314,8 @@ function parseIndicatorWsRecord(value: unknown): IndicatorWsMessage {
     const revisionValue =
       record.dataRevision ?? record.data_revision ?? record.revision;
     const envelope = parseIndicatorPayloadEnvelope(record, path);
-    const message: IndicatorSubscribedMessage = { type, clientId };
+    const message: IndicatorSubscribedMessage = { type, clientId,
+      ...(envelope.calculation ? { calculation: envelope.calculation } : {}) };
     if (seq !== undefined) message.seq = seq;
     const indicatorId = optionalIndicatorString(
       record.indicatorId,

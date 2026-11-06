@@ -1199,7 +1199,7 @@ async def open_chart_calculation(req: ChartCalculationOpenRequest, request: Requ
             await calculation.initialize(service,start=req.start,end=req.end)
             payload = await calculation.view(
                 reference_for(calculation.owner),
-                client_id=req.clientId, start=calculation.owner.plan.start, end=req.end)
+                client_id=req.clientId, start=calculation.owner.plan.start, end=req.end,complete=True)
             payload['type'] = 'indicator.snapshot'
             return payload
     except Exception as exc:
@@ -1217,7 +1217,7 @@ async def read_chart_calculation(domain_id: str, req: CalculationRangeRequest, r
         async with service.calculations.borrow(domain_id) as calculation:
             current = calculation
             return await calculation.view(req.calculation, client_id=req.clientId,
-                start=req.start, end=req.end, rebuild=req.rebuild)
+                start=req.start, end=req.end, rebuild=req.rebuild,complete=req.complete)
     except Exception as exc:
         payload = _batch_range_error_payload(exc, start_s=req.start, end_s=req.end)
         if current is not None: payload['calculation'] = projection_position(current.owner, current.owner.cursor)

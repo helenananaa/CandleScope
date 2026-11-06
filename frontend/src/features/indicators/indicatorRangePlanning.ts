@@ -286,7 +286,11 @@ export function inferFixedIntervalClosedThrough(
 
   for (let index = chartData.length - 1; index >= 0; index -= 1) {
     const barTime = normalizeRangeBoundary(chartBarTimeAt(chartData, index));
-    if (barTime && barTime + step <= nowSec) return barTime;
+    const bar = (chartData as readonly KlineBar[])[index];
+    // Explicit source finality wins over wall-clock inference, including a
+    // delayed/stale forming row after reconnect or in a source fixture.
+    if (bar?.is_closed === false) continue;
+    if (barTime && (bar?.is_closed === true || barTime + step <= nowSec)) return barTime;
   }
 
   const firstTime = normalizeRangeBoundary(chartBarTimeAt(chartData, 0));

@@ -13,10 +13,11 @@ export function indicatorStreamSharingKey(
   owner: string,
 ): string {
   const { action: _action, clientId: _client, historyLimit: _history, resumeFrom: _resume,
-    serverEpoch: _epoch, correctionRevision: _revision, seriesIdentity, ...definition } = subscription.message;
+    serverEpoch: _epoch, correctionRevision: _revision, calculation, seriesIdentity, ...definition } = subscription.message;
   void _action; void _client; void _history; void _resume; void _epoch; void _revision;
   return indicatorRequestKey({ scope, definition: { ...definition,
-    seriesIdentity: resolveKlineSeriesIdentity(definition.exchange, seriesIdentity) },
+    seriesIdentity: resolveKlineSeriesIdentity(definition.exchange, seriesIdentity),
+    ...(calculation ? { calculation: { schemaVersion:1,domainId:calculation.domainId } } : {}) },
   ...(definition.kind === "script" ? { owner } : {}) });
 }
 

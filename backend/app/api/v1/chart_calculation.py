@@ -138,7 +138,9 @@ class ChartCalculation:
             raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
         def publish():
             payload['calculation'] = projection_position(self.owner, cursor)
-            payload['dataRevision'] = dict(revision)
+            # This owner has proved a closed prefix even when the legacy
+            # transport clock only learned about a much older amendment.
+            payload['dataRevision'] = {**revision,'closedThrough':cursor.closed_through}
         acquisition.commit(publish)
         return payload
 
@@ -189,7 +191,7 @@ class ChartCalculation:
         if self._inputs: payload['param_schema'] = [dict(item) for item in self._inputs]
         return self._stamp(payload, cursor, revision, acquisition)
 
-    async def view(self, reference, *, client_id, start, end, rebuild=False):
+    async def view(self, reference, *, client_id, start, end, rebuild=False, complete=False):
         async def read():
             check_reference(self.owner, reference)
             self._require_source_ready()
@@ -207,6 +209,9 @@ class ChartCalculation:
                 # not be sliced into the narrow range that triggered repair.
                 return await self._advance(rows, revision, client_id=client_id, rebuild=reset, epoch=epoch,acquisition=acquisition)
             payload = await self._snapshot(client_id, revision,acquisition)
+            if complete:
+                payload['type'] = 'indicator.snapshot'
+                return payload
             replacement = _replace_range_from_snapshot(payload, reason='chart-domain-view',
                 start_s=start, end_s=min(end,cursor.observed_through))
             return self._stamp(replacement, cursor, revision,acquisition)

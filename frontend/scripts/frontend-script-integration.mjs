@@ -9,6 +9,7 @@ import { build, preview } from "vite";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const rangeMeasure = process.argv.includes("--range-measure");
 const marketHealth = process.argv.includes("--market-health");
+const chartCalculation = process.argv.includes("--chart-calculation");
 const indicatorFlow = process.argv.includes("--indicator-flow");
 const native = process.argv.includes("--native");
 if (native && !marketHealth) throw new Error("The isolated native host currently supports only --market-health");
@@ -21,7 +22,7 @@ const historyStages = process.argv.includes("--history-stages");
 const quickReplayStep = process.argv.includes("--quick-replay-step");
 const chartTimeNavigation = process.argv.includes("--chart-time-navigation");
 const replayNotes = process.argv.includes("--replay-notes");
-const fixture = replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
+const fixture = chartCalculation ? "chart-calculation-browser.html" : replayNotes ? "replay-notes-browser.html" : replayResize ? "replay-resize-browser.html" : rangeMeasure ? "range-measure-browser.html" : accountOverlays ? "chart-account-overlays-browser.html" : quickReplayStep ? "quick-replay-step-browser.html" : chartTimeNavigation ? "chart-time-navigation-browser.html" : indicatorFlow ? "indicator-flow-browser.html" : marketHealth ? "market-health-browser.html" : historyStages ? "history-stages-browser.html" : intervalAdmission ? "interval-admission-browser.html" : trainingInput ? "replay-training-input-browser.html" : replay ? "replay-visible-indicators-browser.html" : "frontend-script-browser.html";
 const requested = process.argv.indexOf("--out");
 const output = requested === -1 ? fs.mkdtempSync(path.join(os.tmpdir(), "candlescope-frontend-js-")) : path.resolve(process.argv[requested + 1]);
 fs.mkdirSync(output, { recursive: true });
@@ -114,7 +115,7 @@ app.on("window-all-closed",()=>app.quit());
   // The tab can be discoverable while its initial document is still being
   // replaced. Probe readiness without starting the fixture, then invoke it
   // exactly once in the committed document.
-  const checkName = indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
+  const checkName = chartCalculation ? "__chartCalculationCheck" : indicatorFlow ? "__indicatorFlowCheck" : marketHealth ? "__marketHealthCheck" : intervalAdmission ? "__intervalAdmissionCheck" : "__frontendScriptCheck";
   let fixtureReady = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
@@ -164,7 +165,7 @@ app.on("window-all-closed",()=>app.quit());
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   if (receipt.exceptions.length) throw new Error("Renderer exceptions occurred during the browser fixture");
   if (receipt.remainingWorkers.length) throw new Error("Browser workers remained after the cleanup deadline");
-  if (!chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
+  if (!chartCalculation && !chartTimeNavigation && !historyStages && !intervalAdmission && !marketHealth && !indicatorFlow && !quickReplayStep) {
     const editor = await page.send("Runtime.evaluate", { expression: "window.__frontendScriptEditorCheck()", awaitPromise: true, returnByValue: true });
     receipt.editor = editor;
     if (editor.exceptionDetails) throw new Error(JSON.stringify(editor.exceptionDetails));

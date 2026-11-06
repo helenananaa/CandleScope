@@ -9,8 +9,9 @@ boundaries, warmup and historyLimit cache identities.
 
 The DTOs and registry are language neutral. The currently admitted binding is
 the registered Pine sidecar, requiring negotiated output patches and explicit
-stream release. This backend contract is opt-in; frontend adoption and Native
-qualification are separate remaining work.
+stream release. Live hosted Pine charts bind to this domain; standalone history,
+provided-BAR/replay and other bindings retain their own contracts. Installed-package
+and Native qualification remain separate work.
 
 ## HTTP
 
@@ -63,6 +64,12 @@ published atomically. Caller `rebuild: true` explicitly recovers a lost output
 or worker from the same origin. Ordinary reads never start a worker. Expanding
 left of origin requires opening/replacing the domain, not merging two origins.
 
+`complete: true` on a range read requests the entire current projection as an
+`indicator.snapshot`, including the full existing output timeline. A narrow
+request still reads without executing; it cannot clip a new generation and then
+label that fragment as a complete replacement. Open and WS attachment use this
+same complete projection. Ordinary independent range responses remain clipped.
+
 `DELETE /indicators/calculations/{domainId}` drains and releases that explicit
 owner idempotently. It also detaches an idle live subscriber and releases its
 market/input leases and durable sidecar session. Other domains and saved user
@@ -100,10 +107,30 @@ serialization; a stale candidate cannot be relabelled with a newer revision or
 reach the alert observer. A cancelled waiter cannot release admitted physical
 work. Shutdown drains it before releasing global dependencies.
 
-Frontend consumers must bind results to the expected domain, reject decreasing
-generations/sequences and delayed prior-domain HTTP/WS responses, and replace
-the whole projection on a new generation. This backend step does not yet wire
-those checks into the chart hook or establish renderer/package/Native evidence.
+The chart hook binds HTTP and WS to a chart-owned session handle. Opens are
+single-flight; left-origin/definition/context replacement and unmount retire the
+old domain, including a late response to an abandoned open. Failed cleanup keeps
+its local slot until retry. The existing bounded range scheduler calls owned
+projection APIs directly rather than the standalone range/batch broker. Stream
+subscription waits for a domain; legacy subscription readiness cannot block its
+first HTTP open. Reconnect uses the latest domain reference without a new history.
+
+Before writing lines, auxiliary output, cache or subscription readiness, consumers
+check the current definition/domain and nondecreasing generation/sequence. New
+generations require complete snapshots and clear old coverage and provisional
+previews. Genuine delayed HTTP responses and old-domain WS frames cannot cross a
+definition replacement. Opaque hosted script caches include a chart projection
+owner; builtin cache sharing is retained. Domain IDs distinguish physical script
+subscriptions while generation/sequence changes do not restart the wire group.
+No calculation response or market history is retained in the session handle.
+
+The calculation's dataRevision.closedThrough comes from its source-guarded
+cursor. A legacy transport clock which only knows about an old amendment must
+not truncate a new chart domain to that amendment's opening. Frontend fixed-
+interval inference also respects explicit source finality: elapsed wall-clock
+time cannot promote an explicitly forming row to closed. These guarantees
+need renderer and final package/Native qualification at their actual revisions;
+component tests do not establish installed application acceptance.
 
 ## Transactional source provenance
 

@@ -222,6 +222,7 @@ def test_http_reads_and_ws_share_one_real_calculation_and_correction_generation(
     initial = wire.client.post('/indicators/calculations',json=open_request()).json()
     assert initial.get('ok') is True,initial
     assert initial['type'] == 'indicator.snapshot' and value(initial) == 500
+    assert initial['dataRevision']['closedThrough'] == bars(500)[-1].time
     before = wire.host.diagnostics()['runtimes'][0]['requests']
     queries = wire.source.queries
     assert value(view(wire,ref(initial),start=bars(500)[-1].time)) == 500
@@ -263,6 +264,7 @@ def test_http_reads_and_ws_share_one_real_calculation_and_correction_generation(
         assert value(repaired) == 501 and repaired['calculation']['generation'] == 2
         assert repaired['calculation']['origin'] == initial['calculation']['origin']
         assert repaired['range']['start'] == initial['calculation']['origin']
+        assert repaired['dataRevision']['closedThrough'] == bars(500)[-1].time
         ws.send_json({'action':'unsubscribe','clientId':'chart-a'})
         receive(ws,'indicator.unsubscribed')
     assert not wire.source.callbacks and not wire.source.leases
@@ -282,6 +284,22 @@ def test_http_closed_catchup_keeps_origin_and_domains_do_not_share_math(wire):
     assert value(view(wire,ref(other),end=bars(50)[-1].time)) == 50
     expanded = view(wire,ref(caught),start=bars(1)[0].time-60)
     assert expanded['code'] == 'INDICATOR_CALCULATION_ORIGIN_REQUIRED'
+
+
+def test_complete_projection_read_is_atomic_and_does_not_clip_or_execute(wire):
+    initial=wire.client.post('/indicators/calculations',json=open_request()).json()
+    before=wire.host.diagnostics()['runtimes'][0]['requests'];queries=wire.source.queries
+    sliced=view(wire,ref(initial),start=bars(500)[-1].time)
+    assert sliced['type']=='indicator.replace_range'
+    complete=view(wire,ref(initial),start=bars(500)[-1].time,complete=True)
+    assert complete['type']=='indicator.snapshot' and ref(complete)==ref(initial)
+    line=lambda payload:next(line['data'] for line in payload['lines'] if line.get('title',line.get('name'))=='counter')
+    assert len(line(sliced))==1 and len(line(complete))==500
+    assert complete['range']==initial['range']
+    assert wire.source.queries==queries and wire.host.diagnostics()['runtimes'][0]['requests']==before
+    bad=wire.client.post('/indicators/calculations/'+ref(initial)['domainId']+'/range',json={
+        'clientId':'chart-a','calculation':ref(initial),'start':bars(1)[0].time,'end':bars(500)[-1].time,'complete':'true'})
+    assert bad.status_code==422
 
 
 def test_active_writer_is_unique_and_http_delete_disposes_its_idle_ws_hold(wire):

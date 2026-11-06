@@ -163,6 +163,7 @@ function normalizeContext(
 ): IndicatorCacheContext {
   return {
     ...(context.inputSource ? { inputSource: context.inputSource } : {}),
+    ...(context.projectionOwner ? { projectionOwner: context.projectionOwner } : {}),
     ...(context.localInputKey === undefined ? {} : { localInputKey: context.localInputKey }),
     ...(isLegacyKlineSeriesIdentity(context.exchange ?? "binance", context.seriesIdentity) ? {} : { seriesIdentity: resolveKlineSeriesIdentity(context.exchange, context.seriesIdentity) }),
     exchange: normalizeSeriesPart(context.exchange, "binance").toLowerCase(),
@@ -701,6 +702,8 @@ export function buildIndicatorResultCacheKey(
     normalizedContext.interval,
     ...(isLegacyKlineSeriesIdentity(normalizedContext.exchange, normalizedContext.seriesIdentity) ? [] : [klineSeriesIdentityKey(normalizedContext.exchange, normalizedContext.seriesIdentity)]),
     ...(normalizedContext.inputSource ? [normalizedContext.inputSource.scope] : []),
+    ...(!isBuiltinIndicator(indicator) && !isFrontendScript(indicator) && indicator.executionTarget !== "local"
+      && normalizedContext.projectionOwner ? ["projection:"+normalizedContext.projectionOwner] : []),
     ...((indicator.executionTarget === "local" || isFrontendScript(indicator)) && normalizedContext.localInputKey !== undefined
       ? [`provided:${normalizedContext.localInputKey}`] : []),
     indicatorIdentity(indicator, normalizedContext),
