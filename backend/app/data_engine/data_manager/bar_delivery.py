@@ -9,7 +9,7 @@ import uuid
 from app.core.executors import run_storage
 from app.core import config
 from app.data_engine.bar_delivery_errors import BarDeliveryUnavailable
-from app.data_engine.interval_policy import is_ephemeral_interval, parse_interval_spec
+from app.data_engine.interval_policy import parse_interval_spec
 from .models import BarData, DataEvent, DataEventType, SeriesKey
 
 logger = logging.getLogger("data_manager.bar_delivery")
@@ -113,7 +113,7 @@ class DurableBarDelivery:
     async def prepare_series(self, key, *, from_ms=None):
         if self._closing:
             raise BarDeliveryUnavailable("Bar delivery is shutting down")
-        if self.journal is None or is_ephemeral_interval(key.interval):
+        if self.journal is None:
             return
         store = getattr(self._storage_provider(), "revision_store", None)
         observed_revision = store.observed_revision if store is not None else None

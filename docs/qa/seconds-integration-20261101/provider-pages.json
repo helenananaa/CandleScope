@@ -1,0 +1,17 @@
+{
+  "problem": "Upbit max200second provider page was ignored by1000source-row scheduler; compound network fetch increased stale-acquisition retries",
+  "change": "Carry admitted HistoryAvailabilityPolicy max_page_size into scheduler source budget; D126 checks unchanged",
+  "failed_before": "501second initial-history request executed as1physical run instead3",
+  "after": "125 coordinator/historyavailability/native seconds tests passed",
+  "native": "attempt6 remained Upbit pending at6minutes, normalfullownedexit8891ms; candidate fix pending native rerun",
+  "logs": [
+    {
+      "path": "page-before.log.gz",
+      "sha256": "c193d8ccf4d1796cb928d5d388507a05e6353e86d67fb44e97d829f5cb8006e4"
+    },
+    {
+      "path": "page-after.log.gz",
+      "sha256": "eb1e1d98be492e8a664f493a57b6fb132966e57bbe85c866973d068324b9ac5c"
+    }
+  ]
+}

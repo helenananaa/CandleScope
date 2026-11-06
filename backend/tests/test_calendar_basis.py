@@ -72,8 +72,14 @@ def test_basis_definition_roundtrip_and_unknown_provider():
     with pytest.raises(ValueError, match="boundary_mismatch"):
         contract.validate(1672324801000, 1672325100999)
     with pytest.raises(IntervalResolutionError) as error:
-        IntervalResolver().resolve(exchange="kraken", market_type="spot", interval="7m", purpose="history")
+        # Kraken's raw native 1m boundaries remain unqualified. A non-native
+        # fixed interval may now use the separately admitted event-time route;
+        # that does not qualify or relabel existing native candle history.
+        IntervalResolver().resolve(exchange="kraken", market_type="spot", interval="1m", purpose="history")
     assert error.value.code.value == "native_bar_basis_unknown"
+    assert IntervalResolver().resolve(
+        exchange="kraken", market_type="spot", interval="7m", purpose="history",
+    ).kind.value == "trade"
 
 
 def test_local_calendar_resampling_keeps_actual_day_end_and_missing_hour(tmp_path):

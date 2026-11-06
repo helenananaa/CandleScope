@@ -59,6 +59,8 @@ class StreamEnsurePlanner:
             if isinstance(series_identity, dict)
             else resolve_kline_series_identity(route.exchange, series_identity)
         )
+        if route.kind is IntervalRouteKind.TRADE and not identity.is_legacy_default_for(route.exchange):
+            raise ValueError("Trade candles require the default crypto series identity")
         requested = SeriesKey.create(
             symbol,
             route.canonical_interval,
@@ -82,7 +84,7 @@ class StreamEnsurePlanner:
             )
             targets.append(base)
             prerequisites.append(base)
-        elif self._needs_policy_base_stream(requested):
+        elif route.kind is IntervalRouteKind.NATIVE and self._needs_policy_base_stream(requested):
             policy = self._realtime_policy(requested.exchange)
             base_spec = parse_interval_spec(policy.base_interval)
             base = SeriesKey.create(

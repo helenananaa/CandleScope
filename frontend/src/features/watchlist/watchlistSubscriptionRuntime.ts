@@ -1,3 +1,4 @@
+import { hasTradeCandleSource } from "../chart-session/intervalPolicy.js";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
@@ -105,7 +106,7 @@ export function resolveWatchlistFullSubscriptionInputs(
   exchangeCatalog: ExchangeCatalog | null,
   customIntervalRecords: CustomIntervalRecord[] = [],
   exchangeCatalogStatus: ExchangeCatalogStatus = "loading",
-): { nativeIntervals: NativeInterval[]; customIntervalRecords: CustomIntervalRecord[] } {
+): { nativeIntervals: NativeInterval[]; customIntervalRecords: CustomIntervalRecord[]; tradeCandlesAvailable?: boolean } {
   const parsed = parseSymbolKey(symbol);
   const resolvedNativeIntervals = resolveWatchlistNativeIntervals({
     exchange: parsed.exchange,
@@ -115,6 +116,7 @@ export function resolveWatchlistFullSubscriptionInputs(
     exchangeCatalogStatus,
   });
   return {
+    ...(exchangeCatalogStatus === "ready" && hasTradeCandleSource(exchangeCatalog, parsed.exchange, parsed.marketType) ? { tradeCandlesAvailable: true } : {}),
     nativeIntervals: resolvedNativeIntervals,
     customIntervalRecords: resolvedNativeIntervals.length > 0 ? customIntervalRecords : [],
   };

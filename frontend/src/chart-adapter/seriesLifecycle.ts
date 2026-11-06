@@ -83,6 +83,22 @@ export function resyncSeriesTimeScaleIndexes(
   return data.length;
 }
 
+export function resyncSharedTimeScaleIndexes(
+  entries: ReadonlyArray<{
+    series: MainSeriesHandle | null | undefined;
+    data: ChartSeriesInputRow[] | null | undefined;
+  }>,
+): number {
+  const seen = new Set<MainSeriesHandle>();
+  let points = 0;
+  for (const entry of entries) {
+    if (!entry.series || seen.has(entry.series)) continue;
+    seen.add(entry.series);
+    points += resyncSeriesTimeScaleIndexes(entry.series, entry.data);
+  }
+  return points;
+}
+
 export function createMainSeries(chart: AdapterChart, {
   chartType,
   data = [],

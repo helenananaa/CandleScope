@@ -1,0 +1,18 @@
+{
+  "circuit": {
+    "key": "binance:ip",
+    "open": true,
+    "cooldown_remaining_seconds": 22249.115,
+    "last_status_code": 418,
+    "last_body_code": "-1003",
+    "last_headers": {
+      "x-mbx-used-weight-1m": "118",
+      "retry-after": "22251"
+    },
+    "opened_at_ms": 1793613788937,
+    "generation": 1,
+    "recovery_pending": true
+  },
+  "retry_not_before_ms": 1793636041202,
+  "retry_not_before_utc": "2026-11-02T16:14:01.202Z"
+}
