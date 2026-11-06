@@ -95,6 +95,22 @@ async def amend():
     return {'ok':True}
 
 
+@app.post('/api/v1/fixture/seed-left')
+async def seed_left():
+    initial = list(source.rows)
+    first = initial[0]
+    source.rows = [replace(first, time=first.time-(1000-index)*60) for index in range(1000)] + initial
+    return {'ok': True}
+
+
+@app.post('/api/v1/fixture/append')
+async def append():
+    latest = source.rows[-1]
+    source.rows = [*source.rows, replace(latest, time=latest.time+60, is_closed=False)]
+    await source.emit(DataEvent(DataEventType.BAR_UPDATED, SeriesKey('BTCUSDT', '1m'), bar=source.rows[-1]))
+    return {'ok': True}
+
+
 @app.get('/api/v1/fixture/state')
 async def state():
     return {'registry':service.calculations.snapshot(),'callbacks':len(source.callbacks),'leases':len(source.leases),
