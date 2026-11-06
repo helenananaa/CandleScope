@@ -622,6 +622,9 @@ export class ReplayV2ApiClient {
         },
       );
     } catch (error) {
+      // A local source is supplied by the user; a missing range must never
+      // become a request to the online preparation service.
+      if (identity.marketType === "local_bar") throw error;
       if (!onPreparation || !(error instanceof ReplayV2ApiError) || ![
         "MARKET_TRACK_UNAVAILABLE", "MARKET_COVERAGE_INSUFFICIENT",
         "MARKET_NOT_LISTED_AT_START", "INSTRUMENT_METADATA_UNAVAILABLE",

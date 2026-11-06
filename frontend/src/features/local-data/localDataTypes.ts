@@ -5,6 +5,7 @@ export interface LocalDatasetManifest {
   name: string;
   source: "local_dataset" | "host_chart_snapshot";
   symbol: string;
+  instrument?: { base_asset: string; quote_asset: string; volume_unit: "base_asset" };
   interval: string;
   alignment?: "fixed_epoch" | "weekly_monday" | "calendar_month";
   alignment_offset_ms?: number;
@@ -23,6 +24,8 @@ export interface LocalDatasetManifest {
 }
 
 export interface LocalImportInput {
+  baseAsset?: string;
+  quoteAsset?: string;
   columns?: Partial<Record<"time" | "open" | "high" | "low" | "close" | "volume", string>>;
   file: File;
   name: string;
