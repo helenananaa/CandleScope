@@ -54,7 +54,8 @@ export async function checkChartMarketCalculation() {
       session_variant: "continuous", volume_semantics: "base_asset" } });
   const result = (kind: string): KlineFetchResult => {
     marketCalls.push(kind);
-    return { data: data.rows, stream_version: wire(), all_rows_final: true, complete: true, retryable: false,
+    const rows = kind === "latest" ? data.rows.slice(-2) : data.rows.filter(row => row.is_closed);
+    return { data: rows, stream_version: wire(), all_rows_final: rows.every(row => row.is_closed === true), complete: true, retryable: false,
       history_state: "ready", verified_contiguous: true, missing_ranges: [], has_tail_gap: false, truncated: false };
   };
   const api: KlineApi = { getMultiStreamUrl: () => "ws://controlled-market-hook",
