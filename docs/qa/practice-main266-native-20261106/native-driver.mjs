@@ -6,7 +6,7 @@ import { ControlClient } from '../../../packages/candlescope-control/client.mjs'
 const require = createRequire(process.env.CANDLESCOPE_PLAYWRIGHT_PACKAGE ?? '/tmp/candlescope-first-stage-tooling/package.json');
 const { _electron } = require('playwright-core');
 export const s = {
-  env: { HOME: "/Users/ryanliang", PATH: "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin", TMPDIR: "/tmp", LANG: "en_US.UTF-8" },
+  env: { HOME: "/Users/ryanliang", PATH: "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin", TMPDIR: "/tmp", LANG: "en_US.UTF-8", CANDLESCOPE_RUNTIME_MODE: "LIVE", PYTHONDONTWRITEBYTECODE: "1" },
   root: process.env.CANDLESCOPE_BATCH1_QA_ROOT ?? process.cwd()+'/output/issue-152-output-range-20261102/native-current-plugins',
   receipt: { schema: 'candlescope.practice-committed-native/2', sourceCommit: cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
     transport: 'packaged backend, real public market inputs and explicit simulated accounts; isolated QA profile, no response substitution', steps: [], errors: [] },
