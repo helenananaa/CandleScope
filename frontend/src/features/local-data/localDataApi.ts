@@ -79,6 +79,10 @@ async function responseJson(response: Response): Promise<unknown> {
 
 function expectManifest(value: unknown): LocalDatasetManifest {
   if (!isJsonRecord(value)) throw new TypeError("Local dataset manifest must be an object");
+  if (value.instrument !== undefined && (!isJsonRecord(value.instrument)
+    || typeof value.instrument.base_asset !== "string" || !/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(value.instrument.base_asset)
+    || typeof value.instrument.quote_asset !== "string" || !/^[A-Z0-9][A-Z0-9._-]{0,31}$/.test(value.instrument.quote_asset)
+    || value.instrument.volume_unit !== "base_asset")) throw new TypeError("Local dataset instrument units are invalid");
   const requiredStrings = [
     "dataset_id",
     "data_epoch",
@@ -159,6 +163,8 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     timezone: input.timezone,
     timestamp_unit: input.timestampUnit,
     volume_required: input.volumeRequired,
+    base_asset: input.baseAsset,
+    quote_asset: input.quoteAsset,
     dataset_id: input.datasetId,
     ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });
@@ -196,6 +202,8 @@ export function createLocalImportJob(
     timezone: input.timezone,
     timestamp_unit: input.timestampUnit,
     volume_required: input.volumeRequired,
+    base_asset: input.baseAsset,
+    quote_asset: input.quoteAsset,
     dataset_id: input.datasetId,
     ...Object.fromEntries(Object.entries(input.columns ?? {}).filter(([, value]) => value).map(([key, value]) => [`${key}_column`, value])),
   });

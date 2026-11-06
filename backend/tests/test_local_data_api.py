@@ -42,6 +42,26 @@ def _client(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(PeerASGIApp(app, "127.0.0.1"), headers=_TRUSTED_HEADERS)
 
 
+def test_sync_and_background_csv_routes_preserve_declared_asset_units(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    for route in ("/imports/csv", "/imports/csv/jobs"):
+        response = client.post("/api/v1/local" + route, params={"name": "Units", "symbol": "ETHUSDT",
+            "interval": "1m", "timestamp_unit": "ms", "base_asset": "ETH", "quote_asset": "USDT"},
+            content="time,open,high,low,close,volume\n1704067200000,1,3,1,2,10\n",
+            headers={"content-type": "text/csv"})
+        assert response.status_code in {201, 202}, response.text
+        result = response.json()
+        if response.status_code == 202:
+            for _ in range(100):
+                job = client.get(f"/api/v1/local/imports/jobs/{result['job_id']}").json()
+                if job["status"] in {"completed", "failed", "cancelled"}:
+                    break
+                time.sleep(0.01)
+            assert job["status"] == "completed", job
+            result = job["dataset"]
+        assert result["instrument"] == {"base_asset": "ETH", "quote_asset": "USDT", "volume_unit": "base_asset"}
+
+
 def test_import_list_and_query_local_csv(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path, monkeypatch)
     csv_body = (
