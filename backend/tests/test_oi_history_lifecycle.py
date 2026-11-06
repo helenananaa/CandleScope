@@ -1,11 +1,70 @@
 import asyncio
 from contextlib import contextmanager
 import threading
+from types import SimpleNamespace
 
 import pytest
 
 from app.data_engine.storage import market_metrics_repo
 from tests.test_oi_local_history import async_test, make_service, query, KEY, START, STEP
+
+
+@pytest.mark.parametrize('read_fails', [False, True])
+@async_test
+async def test_runtime_timeout_keeps_oi_owner_until_physical_read_drains(tmp_path, monkeypatch, read_fails):
+    from app.data_engine.runtime import DataEngineRuntime
+
+    _, transport, service = make_service(tmp_path, monkeypatch)
+    await query(service, mode='local_only')
+    entered, release, finished = hold_sqlite_snapshot(monkeypatch, fail=read_fails)
+    later_stops = []
+
+    class Stop:
+        def __init__(self, name, *, later=False):
+            self.name, self.later = name, later
+
+        async def shutdown(self):
+            if self.later:
+                later_stops.append((self.name, finished.is_set()))
+
+        async def stop(self):
+            await self.shutdown()
+
+    runtime = DataEngineRuntime(
+        data_manager=Stop('DataManager', later=True),
+        ingestion_factory=Stop('IngestionFactory', later=True),
+        backfill_transport=Stop('BackfillTransport', later=True),
+        backfill_engine=SimpleNamespace(),
+        backfill_coordinator=Stop('BackfillCoordinator'),
+        market_data_service=service,
+        trade_flow_service=Stop('PublicTradeService'),
+    )
+    consumer = asyncio.create_task(query(service, mode='local_only'))
+    shutdown = None
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        consumer.cancel()
+        await wait_for_logical_release(service)
+        assert service.diagnostics()['history_queries']['owned_jobs'] == 1
+        shutdown = asyncio.create_task(runtime.shutdown(step_timeout=.02))
+        await asyncio.sleep(.08)
+        assert not shutdown.done(), 'Runtime returned while its cancelled OI job still owns SQLite'
+        assert not later_stops, 'Runtime closed dependent components before physical OI drain'
+        assert not finished.is_set()
+        release.set()
+        await asyncio.wait_for(shutdown, 2)
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
+        assert finished.is_set() and not transport.calls
+        assert service.diagnostics()['history_queries']['owned_jobs'] == 0
+        assert service.diagnostics()['history_queries']['identities'] == 0
+        assert later_stops == [('DataManager', True), ('IngestionFactory', True), ('BackfillTransport', True)]
+    finally:
+        release.set()
+        await asyncio.gather(consumer, return_exceptions=True)
+        if shutdown is not None:
+            await asyncio.gather(shutdown, return_exceptions=True)
+        await service.shutdown()
 
 
 def hold_sqlite_snapshot(monkeypatch, *, fail=False):

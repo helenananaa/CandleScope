@@ -2156,7 +2156,19 @@ class MarketDataService:
                     name="market-data-shutdown",
                 )
             task = self._shutdown_task
-        await asyncio.shield(task)
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Runtime wait_for cancels this waiter at its step deadline. The
+            # owned task can still be draining physical SQLite reads; do not
+            # let dependent runtime components stop before that drain ends.
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()
+            raise
 
     async def _shutdown_impl(self) -> None:
         async with self._lock:
