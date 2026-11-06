@@ -28,7 +28,14 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
  * No ready metadata is injected into the indicator hook.
  */
 export async function checkChartMarketCalculation() {
-  const originalFetch = window.fetch.bind(window), originalNow = Date.now;
+  const originalFetch = window.fetch.bind(window), originalNow = Date.now, NativeSocket = window.WebSocket;
+  const frames: Array<Record<string, unknown>> = [];
+  class ObservedSocket extends NativeSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols); this.addEventListener("message", event => { frames.push(JSON.parse(String(event.data))); });
+    }
+  }
+  window.WebSocket = ObservedSocket;
   const read = async () => await (await originalFetch(`${API_BASE}/fixture/bars`)).json() as { rows: KlineBar[]; script: string };
   let data = await read(), sequence = 1;
   const clockStart = performance.now();
@@ -77,9 +84,9 @@ export async function checkChartMarketCalculation() {
   const diagnostics = () => ({ meta: latest?.market.view.meta, market: latest?.market.status,
     indicatorMonitor: (window as unknown as { __CANDLESCOPE_INDICATOR_MONITOR__?: { snapshot(): unknown } }).__CANDLESCOPE_INDICATOR_MONITOR__?.snapshot(),
     scheduler: resources.workScheduler?.diagnostics(), http, marketCalls });
-  async function until(predicate: () => boolean, message: string) {
+  async function until(predicate: () => boolean | Promise<boolean>, message: string) {
     const end = performance.now() + 15_000;
-    while (!predicate()) { assert(performance.now() < end, message + " " + JSON.stringify(diagnostics())); await delay(20); }
+    while (!await predicate()) { assert(performance.now() < end, message + " " + JSON.stringify(diagnostics())); await delay(20); }
   }
   const noop = () => {};
   function Cell() {
@@ -97,8 +104,9 @@ export async function checkChartMarketCalculation() {
     }), []);
     const runtime = useMarketDataRuntime({ session, realtimePriceRef: price, backgroundPrefetchEnabled: false,
       schedulerCellId: "full-market", workspaceId: "fixture", windowId: "browser" });
+    const streamIdentity = useMemo(() => ({ cellId: "full-market", workspaceId: "fixture", windowId: "browser" }), []);
     const indicator = useIndicatorRuntime({ session, marketData: runtime, autoAddVolume: false, indicatorPersistence: persistence,
-      workSchedulerCellId: "full-market", streamIdentity: { cellId: "full-market", workspaceId: "fixture", windowId: "browser" } });
+      workSchedulerCellId: "full-market", streamIdentity });
     useLayoutEffect(() => { latest = { market: runtime, indicator }; });
     return <output>{runtime.status.barCount} / {indicator.view.activeIndicators[0]?.lines?.[0]?.data.at(-1)?.value}</output>;
   }
@@ -111,6 +119,7 @@ export async function checkChartMarketCalculation() {
     flushSync(() => latest!.indicator.actions.addIndicator({ id: "counter", name: "market counter", kind: "script", language: "pine",
       executionTarget: "hosted", script: data.script, visible: true }));
     await until(() => counter() === 500, "Ready real market hook never opened the Pine calculation");
+    await until(() => frames.some(frame => frame.type === "indicator.subscribed" && frame.ok === true), "Calculation WS did not attach");
     snapshots.push({ phase: "initial-counter", ...diagnostics() });
     await originalFetch(`${API_BASE}/fixture/tick/501`, { method: "POST" });
     data = await read(); sequence++;
@@ -119,11 +128,18 @@ export async function checkChartMarketCalculation() {
         previous_open_ms: Number(data.rows.at(-2)!.time) * 1000 } }, stream.controller);
     await until(() => counter() === 501 && latest!.market.status.barCount === 501, "Live source did not advance chart and calculation");
     snapshots.push({ phase: "forming-counter", ...diagnostics() });
-    return { scope: "Full market/indicator React hooks and actual Pine HTTP/WS/SDK/core; controlled market transport, not Native acceptance", snapshots, http };
+    return { scope: "Full market/indicator React hooks and actual Pine HTTP/WS/SDK/core; controlled market transport, not Native acceptance", snapshots, http, frames: frames.map(frame => ({ type: frame.type, ok: frame.ok, calculation: frame.calculation })) };
   } finally {
     flushSync(() => root.unmount());
     await until(() => http.some(x => x.method === "DELETE") || !http.some(x => x.method === "POST"), "Calculation did not release");
-    resources.dataFlow.dispose(); indicators.dispose(); streams.closeAll(); market.closeAll(); resources.workScheduler?.dispose();
-    host.remove(); window.fetch = originalFetch; Date.now = originalNow;
+    try {
+      await until(async () => {
+        const state = await (await originalFetch(`${API_BASE}/fixture/state`)).json();
+        return state.registry.entries === 0 && state.callbacks === 0 && state.leases === 0;
+      }, "Chart did not physically release the source/domain before server shutdown");
+    } finally {
+      resources.dataFlow.dispose(); streams.closeAll(); market.closeAll(); resources.workScheduler?.dispose();
+      host.remove(); window.fetch = originalFetch; window.WebSocket = NativeSocket; Date.now = originalNow;
+    }
   }
 }
