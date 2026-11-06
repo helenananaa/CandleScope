@@ -26,6 +26,20 @@ class LocalReplayBarRepository:
         self.service = service
         self.max_rows = max_rows
 
+    def instrument_metadata(self, exchange: str, market_type: str, symbol: str) -> dict[str, str] | None:
+        """Only explicit import units authorize a shared simulated account."""
+        try:
+            manifest = self._manifest(symbol, exchange=exchange, market_type=market_type)
+        except ReplayDomainError:
+            return None
+        instrument = manifest.get("instrument")
+        if (not isinstance(instrument, dict) or instrument.get("volume_unit") != "base_asset"
+                or not isinstance(instrument.get("base_asset"), str)
+                or not isinstance(instrument.get("quote_asset"), str)):
+            return None
+        return {"exchange": exchange, "marketType": market_type, "symbol": symbol,
+                "baseAsset": instrument["base_asset"], "quoteAsset": instrument["quote_asset"]}
+
     def list_series(self, custom_only=False, exchange=None, market_type=None):
         result = []
         for manifest in self.service.list_datasets():

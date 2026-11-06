@@ -1,0 +1,6 @@
+{
+  "request": "read-only list_sessions",
+  "gatewayStatus": 429,
+  "hostCommandsExecuted": 0,
+  "qualification": "not qualified; cloud MCP SSE probe rejected before host access"
+}

@@ -342,6 +342,12 @@ class ReplayService:
             self._progressive_history = history
         return history
 
+    def imported_instrument_metadata(self, exchange: str, market_type: str, symbol: str):
+        from .local_bar_repository import LocalReplayBarRepository
+        if isinstance(self._repository, LocalReplayBarRepository):
+            return self._repository.instrument_metadata(exchange, market_type, symbol)
+        return None
+
     async def prepare_instrument_metadata(self, exchange: str, market_type: str, symbol: str) -> None:
         """Resolve the selected instrument before committing a prepared run.
 

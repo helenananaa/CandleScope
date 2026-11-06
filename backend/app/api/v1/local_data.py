@@ -446,6 +446,8 @@ async def import_csv(
     taker_buy_quote_column: str | None = None,
     last_bar_closed: bool = True,
     dataset_id: str | None = None,
+    base_asset: str | None = None,
+    quote_asset: str | None = None,
 ) -> dict[str, Any]:
     service = _service(request)
     upload_path = service.new_upload_path()
@@ -470,6 +472,8 @@ async def import_csv(
             taker_buy_quote_column=taker_buy_quote_column,
             last_bar_closed=last_bar_closed,
             dataset_id=dataset_id,
+            base_asset=base_asset,
+            quote_asset=quote_asset,
         )
         return await asyncio.to_thread(service.import_csv, upload_path, options)
     except LocalDatasetError as exc:
@@ -496,6 +500,8 @@ async def create_import_job(
     volume_column: Annotated[str, Query(min_length=1)] = "volume",
     volume_required: bool = False,
     dataset_id: str | None = None,
+    base_asset: str | None = None,
+    quote_asset: str | None = None,
 ) -> dict[str, Any]:
     service = _service(request)
     upload_path = service.new_upload_path()
@@ -516,6 +522,8 @@ async def create_import_job(
             volume_column=volume_column,
             volume_required=volume_required,
             dataset_id=dataset_id,
+            base_asset=base_asset,
+            quote_asset=quote_asset,
         )
         job = _jobs(request).submit(upload_path, options)
         submitted = True

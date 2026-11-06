@@ -3218,7 +3218,7 @@ class TrainingRunService:
         )
         actor.request_ordered_pause(reason="TRACK_MUTATION")
         if command.type is ReplayV2CommandType.ADD_TRACK:
-            if self._instrument_metadata_resolver is not None:
+            if self._instrument_metadata_resolver is not None or binding["market_type"] == "local_bar":
                 if set(command.payload) != {"plan_id"}:
                     raise TrainingRunError(
                         "MARKET_TRACK_PLAN_REQUIRED",
@@ -3554,6 +3554,8 @@ class TrainingRunService:
         base_config = ReplaySessionConfig.from_dict(config_payload)
         config = replace(
             base_config,
+            exchange=str(track["exchange"]),
+            market_type=str(track["market_type"]),
             symbol=str(track["symbol"]),
             start_policy=StartPolicy.MANUAL,
             requested_start_ms=service_validation_ops._stored_counter(
@@ -4664,15 +4666,15 @@ class TrainingRunService:
     ) -> str:
         return control_rules_ops.multi_command_id(command_id, track_id, operation, revision)
 
-    @staticmethod
     def _assert_same_market_scope(
+        self,
         *,
         binding: Mapping[str, object],
         exchange: str,
         market_type: str,
         settlement_asset: str,
     ) -> None:
-        return admission_rules_ops.assert_same_market_scope(binding=binding, exchange=exchange, market_type=market_type, settlement_asset=settlement_asset)
+        return self._admission_service.assert_market_scope(binding=binding, exchange=exchange, market_type=market_type, settlement_asset=settlement_asset)
 
     def _authoritative_instrument_identity(
         self,
