@@ -102,12 +102,12 @@
   "frontendCommands": [
     "node scripts/run-frontend-tests.mjs 'src/features/indicators/**/*.test.{ts,tsx}' 'src/services/__tests__/indicatorApi.test.ts' 'src/features/market-data/__tests__/indicatorRangeRuntime.test.ts'",
     "npm run typecheck",
-    "targeted npx eslint listed in raw source/logs",
+    "npx eslint src/features/indicators/chartCalculationSessions.ts src/features/indicators/__tests__/chartCalculationSessions.test.ts src/features/indicators/useIndicatorRuntime.ts src/features/indicators/indicatorStreamController.ts src/features/indicators/indicatorStreamSharing.ts src/features/indicators/indicatorTypes.ts src/features/indicators/indicatorContracts.ts src/features/indicators/indicatorWsRuntime.ts src/features/indicators/indicatorResultCacheStore.ts src/features/indicators/__tests__/indicatorResultCacheStore.test.ts src/features/indicators/indicatorRangePlanning.ts src/features/indicators/__tests__/indicatorInitialRange.test.ts src/services/indicatorApi.ts src/services/__tests__/indicatorApi.test.ts src/chart-adapter/__tests__/chartCalculation.browser.tsx",
     "node scripts/check-architecture.mjs"
   ],
   "browserCommands": {
-    "backend": "DATA_DIR=<isolated data> CANDLE_DATA_DIR=<isolated data> PYTHONPATH=packages/candlescope-plugin-sdk/src:backend output/issue-152-output-range-20261102/main226-native-test-env/bin/python -B docs/qa/indicator-calculation-owner-20261105/chart_browser_app.py <isolated scratch> 18746",
-    "frontend": "VITE_API_BASE=http://127.0.0.1:18746/api/v1 node scripts/frontend-script-integration.mjs --chart-calculation --out <isolated output>"
+    "backend": "DATA_DIR=/tmp/candlescope-chart-browser-sixth-20261106/data CANDLE_DATA_DIR=/tmp/candlescope-chart-browser-sixth-20261106/data PYTHONPATH=packages/candlescope-plugin-sdk/src:backend output/issue-152-output-range-20261102/main226-native-test-env/bin/python -B docs/qa/indicator-calculation-owner-20261105/chart_browser_app.py /tmp/candlescope-chart-browser-sixth-20261106/fixtures 18746",
+    "frontend": "VITE_API_BASE=http://127.0.0.1:18746/api/v1 node scripts/frontend-script-integration.mjs --chart-calculation --out /Users/ryanliang/CandleScope/output/development-goal-20261104/chart-calculation-browser-sixth-20261106"
   },
   "browserAssets": {
     "dist/vite.svg": "4a748afd443918bb16591c834c401dae33e87861ab5dbad0811c3a3b4a9214fb",
@@ -162,5 +162,7 @@
   "frontendBound": true,
   "nativeQualified": false,
   "windowsQualified": false,
-  "publicMarketQualified": false
+  "publicMarketQualified": false,
+  "backendCwd": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope",
+  "frontendCwd": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/frontend"
 }
