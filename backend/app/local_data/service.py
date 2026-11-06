@@ -208,6 +208,10 @@ class LocalDatasetService:
         instrument = self._import_instrument(options)
         if options.dataset_id is not None and (self.root / dataset_id).exists():
             current = self.get_manifest(dataset_id)
+            if instrument is None:
+                # Omitted optional fields retain this dataset's established
+                # units, including imports through older CSV clients.
+                instrument = current.get("instrument")
             if current["symbol"] != symbol or current["interval"] != interval.canonical:
                 raise LocalDatasetError(
                     "A new revision must keep the dataset symbol and interval",

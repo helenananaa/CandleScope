@@ -33,6 +33,9 @@ def test_asset_units_are_explicit_versioned_and_immutable_within_a_dataset(tmp_p
     with pytest.raises(LocalDatasetError, match="Declare both"):
         dataset(tmp_path, base=None)
     assert library.get_manifest(explicit["dataset_id"])["data_epoch"] == explicit["data_epoch"]
+    _, inherited = dataset(tmp_path, dataset_id=explicit["dataset_id"], base=None, quote=None, price=300)
+    assert inherited["instrument"] == explicit["instrument"]
+    assert library.revision_details(explicit["dataset_id"], explicit["data_epoch"])["manifest"]["instrument"] == explicit["instrument"]
 
 
 async def service_for(root):
