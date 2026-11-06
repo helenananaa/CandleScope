@@ -7,12 +7,12 @@ import type {
 } from "../../features/settings/chartAppearanceSettings.js";
 
 type CacheTierKey = keyof CacheRowLimits;
-const CACHE_TIER_KEYS: CacheTierKey[] = ["minutes", "hours", "daily"];
+const CACHE_TIER_KEYS: CacheTierKey[] = ["seconds", "minutes", "hours", "daily"];
 
 interface CacheTier {
     key: CacheTierKey;
-    labelKey: "settings.cache.minutes" | "settings.cache.hours" | "settings.cache.daily";
-    descKey: "settings.cache.minutesDesc" | "settings.cache.hoursDesc" | "settings.cache.dailyDesc";
+    labelKey: "settings.cache.seconds" | "settings.cache.minutes" | "settings.cache.hours" | "settings.cache.daily";
+    descKey: "settings.cache.secondsDesc" | "settings.cache.minutesDesc" | "settings.cache.hoursDesc" | "settings.cache.dailyDesc";
     representativeSec: number;
 }
 
@@ -35,6 +35,12 @@ const DEFAULT_EPHEMERAL_BARS = 86400;
 const DEFAULT_FRONTEND_CACHE_BUDGET_BYTES = 64 * 1024 * 1024;
 
 const DB_TIERS: CacheTier[] = [
+    {
+        key: "seconds",
+        labelKey: "settings.cache.seconds",
+        descKey: "settings.cache.secondsDesc",
+        representativeSec: 1,
+    },
     {
         key: 'minutes',
         labelKey: 'settings.cache.minutes',
@@ -61,32 +67,32 @@ const DB_PRESETS: CachePreset[] = [
         labelKey: 'settings.cache.compact',
         descKey: 'settings.cache.compactDesc',
         level: 1,
-        limits: { minutes: 50000, hours: 20000, daily: 0 },
+        limits: { seconds: 3600, minutes: 50000, hours: 20000, daily: 0 },
     },
     {
         key: 'standard',
         labelKey: 'settings.cache.standard',
         descKey: 'settings.cache.standardDesc',
         level: 2,
-        limits: { minutes: 200000, hours: 50000, daily: 0 },
+        limits: { seconds: 86400, minutes: 200000, hours: 50000, daily: 0 },
     },
     {
         key: 'generous',
         labelKey: 'settings.cache.generous',
         descKey: 'settings.cache.generousDesc',
         level: 3,
-        limits: { minutes: 500000, hours: 100000, daily: 0 },
+        limits: { seconds: 604800, minutes: 500000, hours: 100000, daily: 0 },
     },
     {
         key: 'unlimited',
         labelKey: 'settings.cache.unlimited',
         descKey: 'settings.cache.unlimitedDesc',
         level: 4,
-        limits: { minutes: 0, hours: 0, daily: 0 },
+        limits: { seconds: 0, minutes: 0, hours: 0, daily: 0 },
     },
 ];
 
-const DEFAULT_DB_LIMITS: CacheRowLimits = { minutes: 200000, hours: 50000, daily: 0 };
+const DEFAULT_DB_LIMITS: CacheRowLimits = { seconds: 86400, minutes: 200000, hours: 50000, daily: 0 };
 
 function barsToHumanTime(bars: number, representativeSec: number): string {
     if (bars === 0) return t("settings.cache.noCleanup");

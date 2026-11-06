@@ -196,3 +196,8 @@ test("background prefetch enforces a bounded source-row budget for derived inter
     sourceRowBudget: 100,
   }), true);
 });
+
+
+test("trade prefetch uses a bounded admitted history window", () => {
+  assert.equal(planBackgroundPrefetchRequest("7s", ["1m"], 500, 10000, true)?.targetBars, 85);
+});

@@ -7,12 +7,13 @@ export function buildRealtimeTrackedIntervals(
   interval: unknown,
   realtimeNativeIntervals: readonly unknown[],
   fallbackInterval: unknown = "1m",
+  tradeCandlesAvailable = false,
 ): string[] {
   const desired = [interval, fallbackInterval]
     .map((value) => canonicalizeIntervalValue(value))
     .filter((value) => (
       Boolean(value)
-      && canResolveIntervalFromNativeValues(value, realtimeNativeIntervals)
+      && canResolveIntervalFromNativeValues(value, realtimeNativeIntervals, tradeCandlesAvailable)
     ));
   return Array.from(new Set(desired));
 }
