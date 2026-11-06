@@ -86,6 +86,8 @@ class LocalImportOptions:
     taker_buy_quote_column: str | None = None
     last_bar_closed: bool = True
     dataset_id: str | None = None
+    base_asset: str | None = None
+    quote_asset: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,11 +205,17 @@ class LocalDatasetService:
             raise LocalDatasetError("Dataset name is required")
         if not symbol:
             raise LocalDatasetError("Symbol is required")
+        instrument = self._import_instrument(options)
         if options.dataset_id is not None and (self.root / dataset_id).exists():
             current = self.get_manifest(dataset_id)
             if current["symbol"] != symbol or current["interval"] != interval.canonical:
                 raise LocalDatasetError(
                     "A new revision must keep the dataset symbol and interval",
+                    code="dataset_identity_mismatch",
+                )
+            if current.get("instrument") != instrument:
+                raise LocalDatasetError(
+                    "A revision must keep its declared quantity and price assets; import a new dataset to change units",
                     code="dataset_identity_mismatch",
                 )
 
@@ -223,7 +231,7 @@ class LocalDatasetService:
             )
             self._raise_if_cancelled(cancelled)
             self._report_progress(progress, "building_revision", len(bars), len(bars))
-            epoch_hex = self._content_epoch(symbol, interval, bars, excluded_ranges)
+            epoch_hex = self._content_epoch(symbol, interval, bars, excluded_ranges, instrument=instrument)
             manifest = self._write_staging_dataset(
                 staging,
                 dataset_id=dataset_id,
@@ -235,6 +243,7 @@ class LocalDatasetService:
                 bars=bars,
                 excluded_ranges=excluded_ranges,
                 resolved_columns=resolved_columns,
+                manifest_metadata={} if instrument is None else {"instrument": instrument},
             )
             self._raise_if_cancelled(cancelled)
             published = self._publish(staging, dataset_id, epoch_hex, manifest)
@@ -955,11 +964,23 @@ class LocalDatasetService:
         return count
 
     @staticmethod
+    def _import_instrument(options: LocalImportOptions) -> dict[str, str] | None:
+        base = (options.base_asset or "").strip().upper()
+        quote = (options.quote_asset or "").strip().upper()
+        if not base and not quote:
+            return None
+        if any(re.fullmatch(r"[A-Z0-9][A-Z0-9._-]{0,31}", asset) is None for asset in (base, quote)):
+            raise LocalDatasetError("Declare both quantity asset and price quote asset (1-32 ASCII asset characters)")
+        return {"base_asset": base, "quote_asset": quote, "volume_unit": "base_asset"}
+
+    @staticmethod
     def _content_epoch(
         symbol: str,
         interval: IntervalSpec,
         bars: Iterable[_NormalizedBar],
         gaps: list[dict[str, Any]],
+        *,
+        instrument: Mapping[str, str] | None = None,
     ) -> str:
         digest = hashlib.sha256()
         identity = {
@@ -968,6 +989,8 @@ class LocalDatasetService:
             "interval": interval.canonical,
             "alignment": interval.alignment.value,
         }
+        if instrument is not None:
+            identity["instrument"] = dict(instrument)
         digest.update(
             json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
         )
