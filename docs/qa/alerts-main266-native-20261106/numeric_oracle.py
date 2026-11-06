@@ -23,7 +23,8 @@ def ema(values, period):
 def compute(rows):
     assert len(rows) == 250
     times = [row["time"] for row in rows]
-    assert all(b - a == 60000 for a, b in zip(times, times[1:])), "Non-contiguous minute window"
+    # Public kline range rows expose seconds; evaluationCursor.barTime is ms.
+    assert all(b - a == 60 for a, b in zip(times, times[1:])), "Non-contiguous minute window"
     closes = [float(row["close"]) for row in rows]
     assert all(math.isfinite(c) and c > 0 for c in closes)
     changes = [b - a for a, b in zip(closes, closes[1:])]
