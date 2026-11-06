@@ -1,0 +1,31 @@
+{
+  "worktree": "/Users/ryanliang/.codex/worktrees/issue-149-local-history-20261102/CandleScope",
+  "head": "30e3f9626d0e13f475991b5d8de16da8c85660e7",
+  "files": {
+    "docs/qa/issue-149-local-history-20261102/capture_ci_candidate.mjs": "b4ca441412c2efabcc11e150d14ce54fe6cbb0d4d3cbcb1c8cfe7a8ba0de2144",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/README_zh.md": "f8b1123949fe77d009029ba52a75bd3129dee85edb87ce33eb58a9a0d86de372",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/SHA256SUMS": "556399a6d809e57823949c52a953eead3bb58de41889b92205b207a76ad4a0c3",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/build-manifest.json": "1b126633fe47d34eeda89b8977aa0dd8039585848199b8477c7c924e1e45f593",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/ci-artifact-verification.json": "2cefe10f8d0adf1754c9eb0387ac5e0f330014b889dfeb1eb5738d3c8da27e9e",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/preparation.log.gz": "fad9903313fe0f7d19e019e36dc73b1f3949d95ff94c91bacb5ecbbea50a64f9",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/qualification.json": "c22e66ebabe06e66b9179ee84789200ab8b242b0464fc5ffd6ab5d31bd390c8f",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/source-package-manifest.json.gz": "7628f9cfd1c77b5bb7305ad62659fe94dd529723d397931137db18f26a9b5770",
+    "docs/qa/issue-149-local-history-20261102/ci-native-preflight/verified-after.json": "ca5d00cf5fffa7c292bd49f671911fafc85930879eb051b1f8f836f9e81779fa",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/README_zh.md": "4b6dae9f57fe585ec53e477de2b99ce6db525ca07815d4745c9c5fd35c1d08e2",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/assembly.log.gz": "5ea01bc25759cef212b0a1cb145652738ab8e7306a2fbf238c2c8ff36b9b2e5d",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/build.log.gz": "b55ff665d7c8d9707a1808c83a3b052b61e9bcd71a8d39c7a380d87c451686d5",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/engine-cache-provenance.json.gz": "8cfda0c9349f16c962f2c033a2d0d2469dcee760a2a1fe965cb8671957daad13",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/frontend.log.gz": "cc6a72ade316fc820578fde40cfcc95ba99bdeafd24db9ae6e71a8b6a9ae2132",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/package-preflight.json": "99fe25cb26c6de1e6dc17ac57e8e3bad62c7e328c3275d3a16977189dd4db689",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/qualification.json": "fa52a22a7ac939b6176f616fa79b869726a9c2d3f946e633e07d0944994fe786",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/regression.log.gz": "a08d21bdf3a228c066653106d48781ea578586512a33eeb743ff940528f0ea48",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/source-package-manifest.json.gz": "75d5705270095cb901e8480f7f051586e194ed56ab38d9b26c5b47cfcf97faf3",
+    "docs/qa/issue-149-local-history-20261102/main226-20261103/typecheck.log.gz": "de1692a1e980671380f067da58c45d3edad596b0501713ddb1e3514710b18e43",
+    "docs/qa/issue-149-local-history-20261102/prepare_ci_candidate.py": "d2f4dcaac8ce982c71c2aa3bad6631931854118f79cc77365827cc91eabe8bf6",
+    "docs/qa/issue-149-local-history-20261102/assemble.py": "b80e16f5260d863f8d4e854ed69ecc14736ddda89ccdca764ddedc96ef642220",
+    "docs/qa/issue-149-local-history-20261102/native-acceptance.mjs": "d51bf8652dc205564b2ad9b19a5f6069b5f14542284c72dcfd4ba65b16e0b4a3",
+    "docs/qa/issue-149-local-history-20261102/repack.mjs": "b47d2d438c02cf3a2c5ac69d88ebe8cbbb0a38416ce20573e69f43341362b9cd",
+    "docs/qa/issue-149-local-history-20261102/verify.mjs": "f131540d5d46e72005e7cc8698262cacf49fec08fa7f310872d4921b19966f9a"
+  },
+  "policy": "Keep original dirty worktree and checked-out local branch unchanged; integrate in existing clean strategy checkout"
+}

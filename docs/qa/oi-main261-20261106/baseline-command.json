@@ -1,0 +1,25 @@
+{
+  "source": "cf25a8d15e27eae0f0611e8b382554d3ac9e38de",
+  "sourceArchiveSha256": "3572134e1fb542712da1c1481669e0ab9e9bc5425b051ef659436497218453c7",
+  "regressionFile": "backend/tests/test_oi_history_lifecycle.py",
+  "regressionSha256": "64567f02ec3cfac5ccdd08d586a0601adebb45d729aa8c099efbcb68db12c5c8",
+  "cwd": "/tmp/candlescope-oi-main261-20261106/baseline",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_oi_history_lifecycle.py",
+    "--basetemp=/tmp/candlescope-oi-main261-20261106/baseline/pytest",
+    "-q"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/tmp/candlescope-oi-main261-20261106/baseline/data",
+    "CANDLE_DATA_DIR": "/tmp/candlescope-oi-main261-20261106/baseline/data"
+  },
+  "purpose": "Immutable actual pre-fix service baseline, same final regression test; capability bootstrap outside timed ownership assertion",
+  "testScriptsArchiveSha256": "2b5a2274d63fb9aed925595c417df9cc818e94050e7862838431e7e5e36c8433",
+  "initialSetupFailure": "Baseline test conftest needed same-revision backend/scripts/plugin_sdk_isolation.py; original no-test failure log retained"
+}
