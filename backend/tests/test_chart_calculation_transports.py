@@ -32,6 +32,7 @@ from tests.test_query_cache_fencing import SOURCE as QUALITY
 from app.indicator.range_result_service import IndicatorRangeResultService
 from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
 from app.indicator.runtime_service import IndicatorRuntimeService
+from app.indicator.pine_host import PineHostInputs
 from app.plugin_runtime.registry import RuntimeRegistry
 from app.plugin_runtime.service import RuntimeHostService
 from tests.test_runtime_owned_output import owner, bars as runtime_bars, SOURCE
@@ -106,6 +107,11 @@ def wire(tmp_path,request,storage,monkeypatch):
     spec = owner(tmp_path/'wire.sqlite').spec
     host = RuntimeHostService(RuntimeRegistry(plugins=(spec,)),host_name='CandleScope',host_version='0.3.0')
     service = IndicatorRuntimeService(IndicatorRuntimeRoutes((IndicatorRuntimeRoute('pine','sidecar',spec.runtime_id),)),host=host)
+    pine_inputs = PineHostInputs(lambda: source)
+    service.prepare_inputs = pine_inputs.prepare
+    service.release_inputs = pine_inputs.release
+    service.stop_inputs = pine_inputs.stop
+    service.pine_data_manager = lambda: source
     engine = SimpleNamespace(indicator_range_service=ranges,add_listener=lambda callback:None,
                              remove_listener=lambda callback:None)
     trace, extra_processes = [], []

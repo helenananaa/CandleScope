@@ -7,6 +7,7 @@ import pytest
 
 from app.indicator.calculation_owner import CalculationOwnerError
 from app.indicator.pine_calculation import PineCalculationRuntime
+from app.indicator.pine_host import PineHostInputs
 from app.indicator.runtime_routes import IndicatorRuntimeRoutes, IndicatorRuntimeRoute
 from app.indicator.runtime_service import IndicatorRuntimeService, IndicatorRuntimeRequest
 from app.plugin_runtime.registry import RuntimeRegistry
@@ -19,6 +20,34 @@ SERIES = 'binance:spot:BTCUSDT:1m'
 def raw(rows, **changes):
     return replace(IndicatorRuntimeRequest(language='pine', source=SOURCE, exchange='binance', market_type='spot',
         symbol='BTCUSDT', interval='1m', bars=rows), **changes)
+
+
+@pytest.mark.anyio
+async def test_application_host_preparation_preserves_full_origin_epoch_reset(tmp_path):
+    spec = owner(tmp_path/'host-epoch.sqlite').spec
+    host = RuntimeHostService(RuntimeRegistry(plugins=(spec,)), host_name='CandleScope', host_version='0.3.0')
+    service = IndicatorRuntimeService(IndicatorRuntimeRoutes((IndicatorRuntimeRoute('pine', 'sidecar', spec.runtime_id),)), host=host)
+    # Match main._init_plugin_runtime: preparation is part of actual execution,
+    # even for a counter with no request.security/external host inputs.
+    inputs = PineHostInputs(lambda: None)
+    service.prepare_inputs = inputs.prepare
+    service.release_inputs = inputs.release
+    service.stop_inputs = inputs.stop
+    calculation = None
+    try:
+        calculation = await PineCalculationRuntime.open(service, raw(bars(500)), owner_id='actual-host-epoch', series_reference=SERIES, start=bars(1)[0].time)
+        first = await calculation.advance(raw(bars(500)), series_reference=SERIES, input_revision='1', expected=None, rebuild=False, is_current=lambda: True)
+        # A source delivery recovery can require a new generation although all
+        # canonical BAR bytes match. The owner epoch must force a real reset.
+        recovered = await calculation.advance(raw(bars(500)), series_reference=SERIES, input_revision='2', expected=first, rebuild=True, is_current=lambda: True)
+        assert recovered.generation == first.generation + 1
+        assert recovered.sequence == first.sequence + 1
+        assert counter((await calculation.read(expected=recovered)).output) == 500
+    finally:
+        if calculation is not None:
+            await calculation.close()
+        await service.stop()
+        await host.stop()
 
 
 @pytest.mark.anyio
