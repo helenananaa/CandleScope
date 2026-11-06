@@ -165,6 +165,19 @@ class NormalizeLayer:
                 continue
             purpose = "history" if msg.source == DataSource.HTTP_BACKFILL else "realtime"
             interval = event.data["interval"]
+            if event.data.get("trade_candle_source") is True:
+                from app.exchanges.trade_candles import fixed_trade_spec, uses_trade_candles
+                from app.data_engine.bar_basis import BarBasis
+                if msg.source not in {DataSource.HTTP, DataSource.HTTP_BACKFILL} or not uses_trade_candles(event.exchange, event.market_type, interval):
+                    raise ValueError("trade_candle_source_not_admitted")
+                spec = fixed_trade_spec(interval)
+                opened, closed = int(event.data["open_time"]), int(event.data["close_time"])
+                if spec.floor_ms(opened) != opened or spec.next_ms(opened) - 1 != closed:
+                    self._metrics.inc("boundary_errors")
+                    raise ValueError("trade_candle_boundary_mismatch")
+                event.data["basis_id"] = BarBasis.parse(interval).basis_id
+                event.data["basis_qualification"] = "trade_event_time"
+                continue
             key = (purpose, interval)
             if key not in self._bar_contracts:
                 from app.exchanges import get_exchange_registry

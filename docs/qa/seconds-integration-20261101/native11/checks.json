@@ -1,0 +1,68 @@
+{
+  "application": "e4540a0d",
+  "passed": false,
+  "result": "All four chart readiness checks passed, then strict canonical Binance1s range incomplete after20s bounded retry; no indicator/save/restart acceptance.",
+  "missing_open_ms": [
+    1793530341000,
+    1793530342000,
+    1793530343000
+  ],
+  "exit_ms": 15989,
+  "renderer_errors": 0,
+  "provider_check": "Gate previously missing canonical seconds were all returned by later real public Gate REST read, including zero-volume final candles; sparse-no-trade exclusion would be incorrect.",
+  "diagnostic": "Failure snapshot durable delivery degraded, pending/recovery_pending3, failures1, retry incomplete for previously selected defaultBTC1h. Event source gaps/revision recoveries; no queue drops/callback errors. Correlation is not root-cause proof.",
+  "artifacts": [
+    {
+      "path": "acceptance.json.gz",
+      "sha256": "ca432dcb0900eb6cc4dd081094c5fa1717881947b571c4e19f217d94dca4d937"
+    },
+    {
+      "path": "traffic.json.gz",
+      "sha256": "e23fe3059507d0a8c95dd9ce4c9a97f0ff2eb5f5584576d80be42dbe277de265"
+    },
+    {
+      "path": "assembly.json.gz",
+      "sha256": "6adebac3e38c68033076eff5da5484b9c8951ed50e2be5af64452bb59c1133a0"
+    },
+    {
+      "path": "source-match.log.gz",
+      "sha256": "17d4616af446f57ae36aceb33316af9fcb738d901b748f6e8fa9277b27a0fa0b"
+    },
+    {
+      "path": "source-match-after.log.gz",
+      "sha256": "7e3a745a1e509634eb07386df907c54b1e2b9377f9a7913f12b11ee8d15f027b"
+    },
+    {
+      "path": "signature-before.log.gz",
+      "sha256": "0bc68eae9731c81fdaa817da06467bffac70b960b2daf8dbf80878f2a01ca91b"
+    },
+    {
+      "path": "signature-after.log.gz",
+      "sha256": "f1b651238a58fe290baec6c5e32f3bdb1943dd2bd582f02569231f7a757c7837"
+    },
+    {
+      "path": "latest-workspace.json.gz",
+      "sha256": "d89aab41742681fdf3479619febfffb3f81a4a0e9d9137b34e1c16ebca1b2c09"
+    },
+    {
+      "path": "native-run11.log.gz",
+      "sha256": "c4fde57214cece65ad3359bc0d30141dccb1855b47d5b275548c6d5f2e0c1ac1"
+    },
+    {
+      "path": "snapshot11-mid.json.gz",
+      "sha256": "8756e99bd1a743cce60ddf077b784c4e5cb01992291fa744d004999ae2e83ed2"
+    },
+    {
+      "path": "gate11-range-diagnostic.json.gz",
+      "sha256": "9ff6a818c03ff018c27665b537c30636381cb971b43326905eac3a23425ebd19"
+    },
+    {
+      "path": "gate11-provider-gap-check.json.gz",
+      "sha256": "11a1099bae1a663ccec7ea4959ce6251e9b0c61b4ac498b5157513117b6410ba"
+    },
+    {
+      "path": "binance11-missing.json.gz",
+      "sha256": "6233d6d5fd1608b736a8bf678d9a9d9719fe53205141492cfa86f77c0d914f9d"
+    }
+  ]
+}

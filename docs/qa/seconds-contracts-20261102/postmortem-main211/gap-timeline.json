@@ -1,0 +1,880 @@
+{
+  "at": "2026-11-02T14:29:52.004000+00:00",
+  "originalProfileReadOnly": true,
+  "uriFlags": "mode=ro&immutable=1",
+  "source": "native-after-main211/pending-debug.json + indicator-diagnostics.json + exited profile/data/candlescope.db",
+  "sourceDelivery": {
+    "state": "recovering",
+    "error": null
+  },
+  "lastRecovery": {
+    "detail": {
+      "code": "CONSUMER_RESYNC_REQUIRED",
+      "reason": "source_gap_timeout",
+      "subscription_id": "193d214c7900",
+      "epoch": "66b080f598bd4b43965df0c20216f228",
+      "confirmed_sequence": 0,
+      "first_missing_sequence": 1106,
+      "recovery": "snapshot_then_resubscribe"
+    },
+    "at_ms": 1793610137790
+  },
+  "pendingGapCount": 20,
+  "pendingBySource": {
+    "binance": 1,
+    "gate": 19
+  },
+  "canonicalRowsCreatedBeforeDebug": 1,
+  "canonicalRowsInFinalDb": 21,
+  "gaps": [
+    {
+      "key": [
+        "binance",
+        "BTCUSDT",
+        "7s"
+      ],
+      "gap": {
+        "gap_id": "491699276c04400fb03f2e0c2f4a7a65",
+        "range_start_ms": 1793610126000,
+        "range_end_ms": 1793610126000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610126000,
+          "close_time": 1793610132999,
+          "volume": 0.02872,
+          "created_at": 1793610282665,
+          "updated_at": 1793610282665
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610119000,
+          "end_ms": 1793610140000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281184,
+          "last_checked_at": 1793610282726,
+          "resolved_at": 1793610282726
+        },
+        {
+          "start_ms": 1793610126000,
+          "end_ms": 1793610126000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610128582,
+          "last_checked_at": 1793610282726,
+          "resolved_at": 1793610282726
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "f55956bc94694135a5cf21275df18380",
+        "range_start_ms": 1793610142000,
+        "range_end_ms": 1793610142000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610142000,
+          "close_time": 1793610142999,
+          "volume": 0.0,
+          "created_at": 1793610288796,
+          "updated_at": 1793610288796
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610142000,
+          "end_ms": 1793610142000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610142786,
+          "last_checked_at": 1793610289221,
+          "resolved_at": 1793610289221
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "027428f0c76e4635acf7c16936de14ed",
+        "range_start_ms": 1793610147000,
+        "range_end_ms": 1793610147000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610147000,
+          "close_time": 1793610147999,
+          "volume": 0.062944,
+          "created_at": 1793610291060,
+          "updated_at": 1793610291060
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610147000,
+          "end_ms": 1793610147000,
+          "status": "superseded",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610147680,
+          "last_checked_at": 1793610281255,
+          "resolved_at": 1793610281255
+        },
+        {
+          "start_ms": 1793610147000,
+          "end_ms": 1793610149000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281255,
+          "last_checked_at": 1793610291162,
+          "resolved_at": 1793610291162
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "7090ad4187a94a7d97f1b32c0bc2f76d",
+        "range_start_ms": 1793610149000,
+        "range_end_ms": 1793610149000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610149000,
+          "close_time": 1793610149999,
+          "volume": 0.058471,
+          "created_at": 1793610284297,
+          "updated_at": 1793610284297
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610147000,
+          "end_ms": 1793610149000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281255,
+          "last_checked_at": 1793610291162,
+          "resolved_at": 1793610291162
+        },
+        {
+          "start_ms": 1793610149000,
+          "end_ms": 1793610149000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610149957,
+          "last_checked_at": 1793610291162,
+          "resolved_at": 1793610291162
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "42a43dc5433946c799e81f4493d84474",
+        "range_start_ms": 1793610159000,
+        "range_end_ms": 1793610159000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610159000,
+          "close_time": 1793610159999,
+          "volume": 0.0,
+          "created_at": 1793610293580,
+          "updated_at": 1793610293580
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610158000,
+          "end_ms": 1793610161000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610162094,
+          "last_checked_at": 1793610163082,
+          "resolved_at": 1793610163082
+        },
+        {
+          "start_ms": 1793610159000,
+          "end_ms": 1793610159000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610159720,
+          "last_checked_at": 1793610293699,
+          "resolved_at": 1793610293699
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "5249511635584767924ff2884a36290d",
+        "range_start_ms": 1793610166000,
+        "range_end_ms": 1793610166000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610166000,
+          "close_time": 1793610166999,
+          "volume": 0.0,
+          "created_at": 1793610294639,
+          "updated_at": 1793610294639
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610166000,
+          "end_ms": 1793610166000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610166765,
+          "last_checked_at": 1793610294819,
+          "resolved_at": 1793610294819
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "210c570b0f364cbe82e64558874fef1f",
+        "range_start_ms": 1793610170000,
+        "range_end_ms": 1793610171000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610170000,
+          "close_time": 1793610170999,
+          "volume": 0.152059,
+          "created_at": 1793610179368,
+          "updated_at": 1793610179368
+        },
+        {
+          "open_time": 1793610171000,
+          "close_time": 1793610171999,
+          "volume": 0.0,
+          "created_at": 1793610295859,
+          "updated_at": 1793610295859
+        }
+      ],
+      "createdNoLaterThanDebug": [
+        1793610170000
+      ],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610167000,
+          "end_ms": 1793610170000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610171787,
+          "last_checked_at": 1793610179443,
+          "resolved_at": 1793610179443
+        },
+        {
+          "start_ms": 1793610171000,
+          "end_ms": 1793610171000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610281282,
+          "last_checked_at": 1793610296221,
+          "resolved_at": 1793610296221
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "81d1b4abd6bc433bbee3eaf10f6b7ce0",
+        "range_start_ms": 1793610177000,
+        "range_end_ms": 1793610177000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610177000,
+          "close_time": 1793610177999,
+          "volume": 0.0,
+          "created_at": 1793610296950,
+          "updated_at": 1793610296950
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610177000,
+          "end_ms": 1793610177000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610177654,
+          "last_checked_at": 1793610297124,
+          "resolved_at": 1793610297124
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "4e40e021ff0448ffb196932f14383c09",
+        "range_start_ms": 1793610194000,
+        "range_end_ms": 1793610194000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610194000,
+          "close_time": 1793610194999,
+          "volume": 0.001276,
+          "created_at": 1793610298577,
+          "updated_at": 1793610298577
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610194000,
+          "end_ms": 1793610194000,
+          "status": "superseded",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610194679,
+          "last_checked_at": 1793610281297,
+          "resolved_at": 1793610281297
+        },
+        {
+          "start_ms": 1793610194000,
+          "end_ms": 1793610196000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281297,
+          "last_checked_at": 1793610298881,
+          "resolved_at": 1793610298881
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "2d8d70bb43114541b751e821700e53c7",
+        "range_start_ms": 1793610196000,
+        "range_end_ms": 1793610196000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610196000,
+          "close_time": 1793610196999,
+          "volume": 0.0,
+          "created_at": 1793610284867,
+          "updated_at": 1793610284867
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610194000,
+          "end_ms": 1793610196000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281297,
+          "last_checked_at": 1793610298881,
+          "resolved_at": 1793610298881
+        },
+        {
+          "start_ms": 1793610196000,
+          "end_ms": 1793610196000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610196969,
+          "last_checked_at": 1793610298881,
+          "resolved_at": 1793610298881
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "4930e1635dcd495cb2f11b4e941fea7d",
+        "range_start_ms": 1793610201000,
+        "range_end_ms": 1793610201000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610201000,
+          "close_time": 1793610201999,
+          "volume": 0.0,
+          "created_at": 1793610300966,
+          "updated_at": 1793610300966
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610197000,
+          "end_ms": 1793610202000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610203905,
+          "last_checked_at": 1793610210110,
+          "resolved_at": 1793610210110
+        },
+        {
+          "start_ms": 1793610201000,
+          "end_ms": 1793610201000,
+          "status": "superseded",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610201642,
+          "last_checked_at": 1793610281305,
+          "resolved_at": 1793610281305
+        },
+        {
+          "start_ms": 1793610201000,
+          "end_ms": 1793610203000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281305,
+          "last_checked_at": 1793610301106,
+          "resolved_at": 1793610301106
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "83c8f84052794b91b0227179347f8da7",
+        "range_start_ms": 1793610203000,
+        "range_end_ms": 1793610203000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610203000,
+          "close_time": 1793610203999,
+          "volume": 0.066578,
+          "created_at": 1793610286026,
+          "updated_at": 1793610286026
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610201000,
+          "end_ms": 1793610203000,
+          "status": "filled",
+          "reason": "background_gap_audit+ledger_recovery",
+          "first_seen_at": 1793610281305,
+          "last_checked_at": 1793610301106,
+          "resolved_at": 1793610301106
+        },
+        {
+          "start_ms": 1793610203000,
+          "end_ms": 1793610203000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610203907,
+          "last_checked_at": 1793610301106,
+          "resolved_at": 1793610301106
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "c646055e64f649bba7cad3940eb83d23",
+        "range_start_ms": 1793610210000,
+        "range_end_ms": 1793610210000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610210000,
+          "close_time": 1793610210999,
+          "volume": 0.0,
+          "created_at": 1793610301921,
+          "updated_at": 1793610301921
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610209000,
+          "end_ms": 1793610211000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610213214,
+          "last_checked_at": 1793610219190,
+          "resolved_at": 1793610219190
+        },
+        {
+          "start_ms": 1793610210000,
+          "end_ms": 1793610210000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610210951,
+          "last_checked_at": 1793610302202,
+          "resolved_at": 1793610302202
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "da3ce1fd5a1f419fa0dc237db776c2a2",
+        "range_start_ms": 1793610217000,
+        "range_end_ms": 1793610217000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610217000,
+          "close_time": 1793610217999,
+          "volume": 0.122798,
+          "created_at": 1793610302725,
+          "updated_at": 1793610302725
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610217000,
+          "end_ms": 1793610217000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610217972,
+          "last_checked_at": 1793610303186,
+          "resolved_at": 1793610303186
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "ffec50c9348d41a8b1a56cabd25f2af4",
+        "range_start_ms": 1793610237000,
+        "range_end_ms": 1793610237000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610237000,
+          "close_time": 1793610237999,
+          "volume": 0.058946,
+          "created_at": 1793610305511,
+          "updated_at": 1793610305511
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610237000,
+          "end_ms": 1793610237000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610237730,
+          "last_checked_at": 1793610305669,
+          "resolved_at": 1793610305669
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "ae5626ea1d0646e685df379d853bca90",
+        "range_start_ms": 1793610249000,
+        "range_end_ms": 1793610249000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610249000,
+          "close_time": 1793610249999,
+          "volume": 0.0,
+          "created_at": 1793610306014,
+          "updated_at": 1793610306014
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610249000,
+          "end_ms": 1793610249000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610249802,
+          "last_checked_at": 1793610306090,
+          "resolved_at": 1793610306090
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "a3a99fbaa42d4aae9c72e776eab0db3d",
+        "range_start_ms": 1793610254000,
+        "range_end_ms": 1793610254000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610254000,
+          "close_time": 1793610254999,
+          "volume": 0.0,
+          "created_at": 1793610307061,
+          "updated_at": 1793610307061
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610254000,
+          "end_ms": 1793610254000,
+          "status": "filled",
+          "reason": "background_gap_audit",
+          "first_seen_at": 1793610254626,
+          "last_checked_at": 1793610307112,
+          "resolved_at": 1793610307112
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "18b8f6ade0f54eba97d19057943cf2f4",
+        "range_start_ms": 1793610258000,
+        "range_end_ms": 1793610258000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610258000,
+          "close_time": 1793610258999,
+          "volume": 0.020186,
+          "created_at": 1793610265403,
+          "updated_at": 1793610265403
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610255000,
+          "end_ms": 1793610258000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610259215,
+          "last_checked_at": 1793610265559,
+          "resolved_at": 1793610265559
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "912bd6457ed74e548f61a4d9c61f755d",
+        "range_start_ms": 1793610260000,
+        "range_end_ms": 1793610260000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610260000,
+          "close_time": 1793610260999,
+          "volume": 0.0,
+          "created_at": 1793610264080,
+          "updated_at": 1793610264080
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610260000,
+          "end_ms": 1793610261000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610262090,
+          "last_checked_at": 1793610264321,
+          "resolved_at": 1793610264321
+        }
+      ]
+    },
+    {
+      "key": [
+        "gate",
+        "BTC/USDT",
+        "1s"
+      ],
+      "gap": {
+        "gap_id": "e7c86e7f1d7f45c3b0a2ac4ca36dbbdc",
+        "range_start_ms": 1793610261000,
+        "range_end_ms": 1793610261000,
+        "state": "recovering",
+        "missing_bars": 1,
+        "error": null
+      },
+      "snapshotAtMs": 1793610262876,
+      "finalDatabaseBars": [
+        {
+          "open_time": 1793610261000,
+          "close_time": 1793610261999,
+          "volume": 0.07311,
+          "created_at": 1793610263318,
+          "updated_at": 1793610263318
+        }
+      ],
+      "createdNoLaterThanDebug": [],
+      "overlappingFinalLedger": [
+        {
+          "start_ms": 1793610260000,
+          "end_ms": 1793610261000,
+          "status": "filled",
+          "reason": "tail_gap",
+          "first_seen_at": 1793610262090,
+          "last_checked_at": 1793610264321,
+          "resolved_at": 1793610264321
+        }
+      ]
+    }
+  ],
+  "limits": "Final DB after exit is not an atomic DB snapshot at debug time. Later filled status is not proof it was filled when the renderer failed. Shared bridge intentionally fences all indicator admissions while its wildcard source subscription recovers; no claim current clock fix has passed native acceptance."
+}

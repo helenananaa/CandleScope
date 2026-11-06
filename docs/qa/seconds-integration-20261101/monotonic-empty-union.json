@@ -1,0 +1,22 @@
+{
+  "problem": "Physical delete/insert used to merge adjacent verified Upbit empty spans raised deletion permission watermark. Another request unioned absence without deleting a candle, yet older prefetched native window was rejected. SQLite interleaving reproduces delete revision2vs0 beforefix.",
+  "change": "Only native_empty_seconds.record monotonic union tags its old-span deletion inside existing writer transaction. Trigger still emits content revision and derived invalidation, retains previous deletion watermark. Explicit clear/delete and candle invalidation retain deletion fences; context restored in finally. Existing trigger replaced at initialization for migration.",
+  "tests": "84 range/revision/sparse/empty-proof regressions pass. Before-fix controlled test fails.",
+  "native": "Pending15;14fresh run failed6minute Upbit readiness166bars,29writeconflicts; no fullqualification.",
+  "artifacts": [
+    {
+      "path": "monotonic-before.log.gz",
+      "sha256": "09d1edc2e5554b4e50058fd10f3338e3aab5e2f0ee41cd72bfa5b127a2b5518a"
+    },
+    {
+      "path": "monotonic-after.log.gz",
+      "sha256": "b8ee243a70c7bfbc5194a1c7bf5b1676c68ee740b2cb5e621fb27e24ca15f621"
+    },
+    {
+      "path": "atomic-trigger-migration.log.gz",
+      "sha256": "9ee2b285bf581d5042cc3902431b3d0eb7718d6bbb9f0708d4007a1901b31ca5"
+    }
+  ],
+  "migration": "Replace the native-empty deletion trigger inside one BEGIN IMMEDIATE/COMMIT schema transaction so other physical writers never observe a committed untracked interval.",
+  "migration_tests": "40 range and deletion-fence checks pass after atomic replacement change."
+}

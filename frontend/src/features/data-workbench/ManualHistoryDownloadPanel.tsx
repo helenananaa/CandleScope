@@ -1,3 +1,5 @@
+import { useExchangeCatalog } from "../chart-session/exchangeCatalogRuntime.js";
+import { manualHistoryExchanges, manualHistoryMarkets } from "./manualHistoryMarkets.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import { useEffect, useId, useMemo, useState } from "react";
 import { useControlCommands } from "../app-control/useControlCommands.js";
@@ -73,7 +75,11 @@ export function ManualHistoryDownloadPanel({
   const [archiveResult, setArchiveResult] = useState<Record<string, string>>({});
   const locale = useLocale();
 
-  const startEnabled = flagEnabled && isPlanFirstReady(form) && canStartDownload(plan);
+  const { exchangeCatalog, exchangeCatalogStatus } = useExchangeCatalog(flagEnabled);
+  const exchangeChoices = manualHistoryExchanges(exchangeCatalog);
+  const marketChoices = manualHistoryMarkets(exchangeCatalog, form.exchange);
+  const selectionAvailable = marketChoices.some((market) => market.market_type === form.marketType);
+  const startEnabled = flagEnabled && selectionAvailable && isPlanFirstReady(form) && canStartDownload(plan);
   const jobState = String(job?.state || "");
   const jobId = String(job?.job_id || "");
   const jobTargets = Array.isArray(job?.targets)
@@ -295,27 +301,39 @@ export function ManualHistoryDownloadPanel({
       <label>
         {copyText("exchange")}
         <select
+          data-testid="manual-history-exchange"
           value={form.exchange}
+          disabled={exchangeCatalogStatus !== "ready"}
           onChange={(event) => {
-            setForm((current) => ({ ...current, exchange: event.target.value }));
+            const exchange = event.target.value;
+            const markets = manualHistoryMarkets(exchangeCatalog, exchange);
+            setForm((current) => ({ ...current, exchange,
+              marketType: markets.some((market) => market.market_type === current.marketType)
+                ? current.marketType : markets[0]?.market_type || "spot" }));
             setPlan(null);
           }}
         >
-          <option value="binance">{copyText("binance")}</option>
-          <option value="okx">{copyText("okx")}</option>
+          {!exchangeChoices.some((entry) => entry.id === form.exchange)
+            ? <option value={form.exchange} disabled>{form.exchange}</option> : null}
+          {exchangeChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
         </select>
       </label>
       <label>
         {copyText("marketType")}
         <select
+          data-testid="manual-history-market"
           value={form.marketType}
+          disabled={exchangeCatalogStatus !== "ready"}
           onChange={(event) => {
             setForm((current) => ({ ...current, marketType: event.target.value }));
             setPlan(null);
           }}
         >
-          <option value="spot">{copyText("spot")}</option>
-          <option value="futures">{copyText("futures")}</option>
+          {!selectionAvailable ? <option value={form.marketType} disabled>{form.marketType}</option> : null}
+          {marketChoices.map((market) => <option key={market.market_type} value={market.market_type}>
+            {market.market_type === "spot" ? copyText("spot")
+              : market.market_type === "futures" ? copyText("futures") : market.label}
+          </option>)}
         </select>
       </label>
       <label>

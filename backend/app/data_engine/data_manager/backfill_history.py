@@ -17,7 +17,7 @@ from app.data_engine.history.models import (
 )
 from app.data_engine.history.planner import HistoryRequestPlanner
 from app.data_engine.history.service import HistoryAvailabilityService
-from app.data_engine.interval_policy import last_closed_bar_open_ms
+from app.data_engine.interval_policy import last_closed_bar_open_ms, parse_interval_ms
 from app.data_engine.series_identity import identity_from_metadata
 from app.exchanges.models import HistoryAvailabilityPolicy
 from .backfill_contracts import HistoryPolicyResolver, RepairOutcome, RepairRequest
@@ -79,6 +79,8 @@ class BackfillHistoryPlanner:
             {"start_ms": item.start_ms, "end_ms": item.end_ms}
             for item in plan.fetch_ranges
         ]
+        policy = context if isinstance(context, HistoryAvailabilityPolicy) else getattr(context, "policy", None)
+        page_size = getattr(policy, "max_page_size", None)
         prepared = RepairRequest(
             symbol=request.symbol,
             interval=request.interval,
@@ -93,6 +95,10 @@ class BackfillHistoryPlanner:
             metadata={
                 **request.metadata,
                 "history_fetch_ranges": fetch_ranges,
+                # Carry the admitted provider limit to the physical scheduler.
+                # Sparse seconds count wall-clock slots, not returned candles.
+                "history_page_size": page_size,
+
                 "history_calendar_id": plan.calendar_id,
                 "history_exclusions": [
                     {
@@ -246,6 +252,26 @@ class BackfillHistoryPlanner:
             else None
         )
         return self._history_service.calendars.get(calendar_id)
+
+    @staticmethod
+    def source_second_close_delay(request: RepairRequest, plan: HistoryPlan | None) -> float | None:
+        """Keep a source-owned second gap pending across the local close edge.
+
+        A provider's successor/closed observation can arrive while the host
+        still classifies that second as forming. A temporary no-fetch outcome
+        must not finish its sole repair request or truncate the gap's tail.
+        The existing scheduler owns the wait; ordinary viewport requests keep
+        their current not-expected behavior.
+        """
+        width = parse_interval_ms(request.interval)
+        if (not request.interval.endswith("s") or width is None
+                or not request.metadata.get("source_gap_id")
+                or plan is None or not any(
+                    item.reason is BoundaryReason.FORMING_BAR for item in plan.exclusions
+                )):
+            return None
+        close_ms = (int(request.end_ms) // width + 1) * width
+        return max(.01, (close_ms - int(time.time() * 1000)) / 1000)
 
     @staticmethod
     def no_fetch_outcome(
