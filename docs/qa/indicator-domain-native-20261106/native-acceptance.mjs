@@ -73,7 +73,15 @@ async function launch(){await q.record('launch',await q.launch());
  q.s.page.on('response',async response=>{if(!response.url().includes('/api/v1/indicators/'))return;
   try{await fs.appendFile(q.s.root+'/indicator-responses.ndjson',JSON.stringify({at:Date.now(),url:response.url(),status:response.status(),body:await response.json()})+'\n');}catch{}});
  await q.checkCircuit();await q.s.page.getByRole('button',{name:'设置',exact:true}).waitFor({timeout:60000});await q.enableControl();}
-async function close(){await q.quit();assert.equal(await q.exited(),true);running=false;await q.record('full-owned-exit',{allExited:true});verifyPackage();await q.record('package-after-full-exit',JSON.parse(await fs.readFile(q.s.root+'/verified-after.json','utf8')));}
+async function close(){
+ await q.quit();const allExited=await q.exited();running=false;assert.equal(allExited,true);
+ await q.record('full-owned-exit',{allExited:true});
+ const status=JSON.parse(await fs.readFile(q.s.root+'/sidecar-exit-status.json','utf8'));
+ const pid=q.s.bootstrap.sidecar.pid,exit=status.exits.find(row=>row.pid===pid);
+ assert.equal(status.killRequests.some(row=>row.pid===pid&&row.signal==='SIGKILL'),false,'Desktop forced the owned sidecar to exit');
+ assert.ok(exit,'Exact owned sidecar exit status must be recorded');assert.equal(exit.code,0);assert.equal(exit.signal,null);
+ verifyPackage();await q.record('package-after-full-exit',JSON.parse(await fs.readFile(q.s.root+'/verified-after.json','utf8')));
+}
 let running=false;
 try{
  verifyPackage();await fs.copyFile(q.s.root+'/verified-after.json',q.s.root+'/verified-before.json');

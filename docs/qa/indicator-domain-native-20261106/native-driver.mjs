@@ -28,8 +28,11 @@ export async function until(check, timeout=25000) {
 }
 export async function launch() {
   await assertPublicGate();
+  const manifest=JSON.parse(await fs.readFile(s.root+'/source-package-manifest.json','utf8'));
+  const physicalApp=await fs.realpath(manifest.app);
+  assert.equal(await fs.realpath(s.root+'/Installed App/CandleScope.app'),physicalApp);
   s.startedAt=Date.now();
-  s.app=await _electron.launch({executablePath:s.root+'/Installed App/CandleScope.app/Contents/MacOS/CandleScope',
+  s.app=await _electron.launch({executablePath:physicalApp+'/Contents/MacOS/CandleScope',
     args:['--no-sandbox'], env:{...s.env,
       CANDLESCOPE_DESKTOP_USER_DATA:s.root+'/profile',CANDLE_DATA_DIR:s.root+'/profile/data',
       CANDLESCOPE_DESKTOP_UI_PORT:'0',CANDLESCOPE_DESKTOP_BACKEND_PORT:'0',
@@ -38,6 +41,22 @@ export async function launch() {
   s.page=await s.app.firstWindow({timeout:120000}); attach();
   s.identity=await s.app.evaluate(({app})=>({packaged:app.isPackaged,pid:process.pid,userData:app.getPath('userData'),resources:process.resourcesPath}));
   s.bootstrap=await s.page.evaluate(()=>window.candlescopeDesktop.getBootstrap());
+  assert.equal(s.identity.resources,physicalApp+'/Contents/Resources','Native resources must match the verified physical app');
+  s.exitObserver=await s.app.evaluate((_electron,{pid,file})=>{
+    const fs=process.getBuiltinModule('fs');
+    const child=process._getActiveHandles().find(h=>h.constructor?.name==='ChildProcess'&&h.pid===pid);
+    if(!child)throw new Error('Actual sidecar ChildProcess is unavailable for exit observation');
+    const load=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{launches:[],exits:[],killRequests:[]};
+    const update=fn=>{const value=load();fn(value);fs.writeFileSync(file,JSON.stringify(value,null,2));};
+    update(v=>v.launches.push({pid,spawnfile:child.spawnfile,at:new Date().toISOString()}));
+    child.once('exit',(code,signal)=>update(v=>v.exits.push({pid,code,signal,at:new Date().toISOString()})));
+    const originalKill=child.kill;
+    child.kill=function(...args){
+      try{update(v=>v.killRequests.push({pid,signal:args[0]??'SIGTERM',at:new Date().toISOString()}));}catch{}
+      return Reflect.apply(originalKill,this,args);
+    };
+    return {pid,spawnfile:child.spawnfile};
+  },{pid:s.bootstrap.sidecar.pid,file:s.root+'/sidecar-exit-status.json'});
   s.backend=new URL(s.bootstrap.sidecar.healthUrl).origin;
   assert.equal(s.identity.packaged,true);
   assert.ok(s.bootstrap.sidecar.command.startsWith(s.identity.resources));
@@ -95,6 +114,7 @@ export async function quit() {
   // that debugger attached can delay Electron termination. No force kill.
   await s.app.close();
   await record("quit-completed",{elapsedMs:Date.now()-s.quitStartedAt});
+  await record('observed-sidecar-exit',JSON.parse(await fs.readFile(s.root+'/sidecar-exit-status.json','utf8')));
   return s.quitPids.map(p=>({pid:p.pid,args:p.args}));
 }
 export async function exited() {
@@ -127,7 +147,9 @@ export async function checkCircuit() {
   if(value.global_circuit?.open&&value.global_circuit.last_status_code===418&&value.global_circuit.cooldown_remaining_seconds>0)return value.global_circuit;
   for(const child of Object.values(value)){const found=visit(child);if(found)return found;}return null;
  }
- const circuit=visit(await response.json());if(!circuit)return;
+ const health=await response.json();
+ await fs.writeFile(s.root+'/storage-health-latest.json',JSON.stringify({at:new Date().toISOString(),health},null,2));
+ const circuit=visit(health);if(!circuit)return;
  const deadline=Math.max(Date.now()+Math.ceil(circuit.cooldown_remaining_seconds*1000),circuit.opened_at_ms+Number(circuit.last_headers?.['retry-after']||0)*1000)+1000;
  const evidence={circuit,retry_not_before_ms:deadline,retry_not_before_utc:new Date(deadline).toISOString()};
  await fs.writeFile(s.root+'/new-cooldown.json',JSON.stringify(evidence,null,2));

@@ -3,18 +3,18 @@ from pathlib import Path
 import shutil
 import os
 import subprocess
+from app_copy import clone_app
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(os.environ.get('CANDLESCOPE_BATCH1_QA_ROOT', str(ROOT / 'output/pine-output-main243-20261104/native-current-plugins')))
 APP = OUT / 'Installed App/CandleScope.app'
 SOURCE = Path(os.environ.get('CANDLESCOPE_QA_RUNTIME_SOURCE', '/Users/ryanliang/.codex/worktrees/replay-manager-service-20261103/CandleScope/output/replay-manager-service-native-closeout-20261103/Installed App/CandleScope.app'))
-assert not APP.exists(), 'Preserve earlier candidates; do not overwrite a receipt'
+assert not APP.exists() and not APP.is_symlink(), 'Preserve earlier candidates; do not overwrite a receipt'
 assert (ROOT / 'frontend/dist/index.html').exists()
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(SOURCE)], check=True)
 for name in ('requirements.txt', 'ccxt-fork.lock.json'):
     assert (SOURCE / 'Contents/Resources/backend' / name).read_bytes() == (ROOT / 'backend' / name).read_bytes(), name
-APP.parent.mkdir(parents=True, exist_ok=True)
-subprocess.run(['/bin/cp', '-cR', str(SOURCE), str(APP)], check=True)
+SOURCE = clone_app(SOURCE, APP)
 resources = APP / 'Contents/Resources'
 shutil.rmtree(resources / 'backend/app')
 for name in subprocess.check_output(['git', 'ls-files', '-z', 'backend/app'], cwd=ROOT, text=True).split('\0'):
