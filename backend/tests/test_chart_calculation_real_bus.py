@@ -261,3 +261,61 @@ def test_live_input_overflow_releases_writer_instead_of_dropping_observations(re
                     await asyncio.sleep(0)
         wire.client.portal.call(wait_released)
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_queued_close_cannot_certify_superseded_canonical_prices(real_bus_wire, monkeypatch):
+    import threading
+    wire = real_bus_wire
+    script = transport.SOURCE + '\nplot(close,title="source close")\n'
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request(script=script)).json()
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial), script=script)
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        transport.receive(ws, 'indicator.snapshot')
+        wire.client.post('/fixture/tick/501?close=101')
+        assert transport.value(transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')) == 501
+        entered, allowed = threading.Event(), threading.Event()
+        query = wire.source.query
+        first = True
+
+        def delayed_query(*args, **kwargs):
+            nonlocal first
+            if first:
+                first = False
+                entered.set()
+                assert allowed.wait(5), 'Controlled canonical query was not released'
+            return query(*args, **kwargs)
+
+        monkeypatch.setattr(wire.source, 'query', delayed_query)
+        before = wire.host.diagnostics()['runtimes'][0]['requests']
+        try:
+            async def publish_close():
+                wire.source.rows = list(transport.bars(501))
+                await wire.source.emit(transport.DataEvent(transport.DataEventType.BAR_CLOSED,
+                    transport.SeriesKey('BTCUSDT', '1m'), bar=wire.source.rows[-1]))
+
+            wire.client.portal.call(publish_close)
+            assert entered.wait(5), 'Close did not reach the actual canonical query'
+            # Correction reaches SQLite before its notification. The real query
+            # sees104; the queued close still contains102.
+            wire.source.replace_bar(-1, replace(wire.source.rows[-1], close=104))
+        finally:
+            allowed.set()
+        output = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert output['type'] == 'error', {
+            'type': output['type'], 'sourceClose': [line['data'][-1] for line in output.get('lines', [])
+                if line.get('name', line.get('title')) == 'source close'], 'calculation': output.get('calculation')}
+        assert output['code'] == 'INDICATOR_CALCULATION_RECOVERY_REQUIRED'
+        assert output['error'] == 'INDICATOR_CALCULATION_SOURCE_CHANGED'
+        assert wire.host.diagnostics()['runtimes'][0]['requests'] == before
+        wire.client.portal.call(wire.source.emit, transport.DataEvent(transport.DataEventType.BAR_CLOSED,
+            transport.SeriesKey('BTCUSDT', '1m'), bar=wire.source.rows[-1]))
+        recovered = transport.receive(ws, 'indicator.snapshot')
+        assert transport.value(recovered) == 501
+        assert recovered['calculation']['generation'] == initial['calculation']['generation'] + 1
+        assert recovered['calculation']['closedThrough'] == wire.source.rows[-1].time
+        line = next(line for line in recovered['lines'] if line.get('name', line.get('title')) == 'source close')
+        assert line['data'][-1]['value'] == 104
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'

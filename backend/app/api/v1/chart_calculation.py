@@ -252,10 +252,21 @@ class ChartCalculation:
             if input_bar is not None and not rebuild:
                 if int(input_bar.time) != int(through) or int(through) < cursor.observed_through:
                     raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_OUT_OF_ORDER')
-                # Query proves the confirmed prefix; the admitted event owns
-                # this intrabar observation, which the live cache may already
-                # have replaced. Never write it back into the market cache.
-                rows = [input_bar if row.time == int(through) else row for row in rows]
+                if input_bar.is_closed:
+                    # A queued close may precede a newer durable correction.
+                    # Its old prices cannot acknowledge the query's newer
+                    # source proof. Use canonical rows only after matching.
+                    canonical = rows[-1]
+                    if not canonical.is_closed or any(getattr(canonical, field) != getattr(input_bar, field)
+                            for field in ('open', 'high', 'low', 'close', 'volume')):
+                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
+                else:
+                    if int(through) <= cursor.closed_through:
+                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
+                    # Query proves the confirmed prefix; the event owns this
+                    # intrabar observation, already replaced in the live cache.
+                    # Never write it back into that canonical market cache.
+                    rows = [input_bar if row.time == int(through) else row for row in rows]
             return await self._advance(rows, revision, client_id=client_id, rebuild=rebuild,
                 bar_time=0 if rebuild else int(through), epoch=epoch,acquisition=acquisition)
         return await self._command(update)
