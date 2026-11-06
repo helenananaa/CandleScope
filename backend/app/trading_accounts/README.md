@@ -42,6 +42,12 @@ issue #177 qualification are outside this first stage.
 
 ## Practice matching
 
+Application shutdown stops the practice matcher, then awaits
+`DataManagerCore.shutdown_trading()` before closing the ledger. Cancelling
+subscriptions signals their storage tasks to stop; physical reads already in a
+thread remain owned until completion. Cancelling the shutdown waiter also drains
+those reads before propagating cancellation. `close_trading()` only signals stop.
+
 A step replays the 1m candles of one instrument with working orders, from its
 cursor to now, in one storage-executor job (query, match, persist). Live
 matching and catch-up after the app was closed are the same walk. A history gap

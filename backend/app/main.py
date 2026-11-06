@@ -1014,7 +1014,7 @@ async def shutdown_event() -> None:
     if trading_accounts is not None:
         core = getattr(app.state, "data_manager_core", None)
         if core is not None:
-            core.close_trading()
+            await core.shutdown_trading()
         trading_accounts.store.close()
 
     alert_runtime = getattr(app.state, "alert_runtime", None)

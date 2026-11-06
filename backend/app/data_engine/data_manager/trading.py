@@ -161,6 +161,22 @@ class TradingAccountDataManager:
         for task in tuple(self._read_jobs):
             task.cancel()
 
+    async def shutdown(self):
+        """Drain the physical storage reads before their ledger may be closed."""
+        self.close()
+        pending = asyncio.gather(*tuple(self._read_jobs), return_exceptions=True)
+        cancelled = False
+        while not pending.done():
+            try:
+                # run_storage drains running threads on cancellation. Its task
+                # must remain owned even if this shutdown waiter is cancelled.
+                await asyncio.shield(pending)
+            except asyncio.CancelledError:
+                cancelled = True
+        pending.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
     def diagnostics(self):
         return {'closed': self._closed, 'subscriptions': len(self._subscriptions),
                 'control_requests': self._control_requests, 'read_jobs': len(self._read_jobs)}

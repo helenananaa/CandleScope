@@ -35,6 +35,10 @@ class DataManagerCore:
         if self.trading is not None:
             self.trading.close()
 
+    async def shutdown_trading(self) -> None:
+        if self.trading is not None:
+            await self.trading.shutdown()
+
     def bind_replay(self, service, runtime=None) -> ReplayDataManager:
         if self.replay is not None:
             if self.replay.service is not service or self.replay.runtime is not runtime:
