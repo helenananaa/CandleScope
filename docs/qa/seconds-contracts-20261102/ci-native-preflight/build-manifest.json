@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "commit": "150bb85c8c715190d0c2c55198aa7cd1ec33877d",
+  "platform": "darwin",
+  "arch": "arm64",
+  "signature": "ad-hoc",
+  "notarized": false,
+  "workflowRun": "41442721624",
+  "artifacts": [
+    {
+      "name": "CandleScope-0.3.0-macos-arm64.dmg",
+      "size": 403549576,
+      "sha256": "037e90ef2a0eaf69487da79c39ecb0443cdb8436fe5cca39c53ee78f4ff9a16e"
+    },
+    {
+      "name": "CandleScope-0.3.0-macos-arm64.zip",
+      "size": 413250082,
+      "sha256": "1a591e4540c49b22f3ee3fff9121dee1721a03fd2c54bb2f4a957209f68c7f7a"
+    }
+  ]
+}

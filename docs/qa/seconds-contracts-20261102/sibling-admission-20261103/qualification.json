@@ -1,0 +1,12 @@
+{
+  "native_passed": false,
+  "failure": "Upbit canonical read-only history incomplete: 7416/7420/7421 seconds not resolved in180s",
+  "source": "38d8ee3354dbd7e80fda5c80cde03b23a52cacfd",
+  "new_ip418": false,
+  "owned_exit": {
+    "allExited": true,
+    "elapsedMs": 3529
+  },
+  "local_regression": "199 passed; old code three-second reproduction deadlocked; fixed same test passes",
+  "native_requalification_pending": true
+}

@@ -1,0 +1,45 @@
+{
+  "sourceBefore": "885f00d191aa4db0abc7841594839178098dce33",
+  "originalNativeFailure": "../overlay-index-20261103/main231-native/qualification.json",
+  "cause": "Frontend initial hosted hydration refused non-equidistant chart rows before requesting authoritative range; no Upbit hosted WebSocket subscription was sent.",
+  "browserBefore": "Sparse initial hydration and subscription timeout",
+  "browserAfter": {
+    "passed": true,
+    "checks": 15,
+    "remainingWorkers": 0,
+    "rendererExceptions": 0,
+    "includes": "Sparse real hook MA output plus backend pending-gap subscription deferral"
+  },
+  "backendPassed": 56,
+  "frontendUnitPassed": 37,
+  "typecheck": true,
+  "eslintErrors": 0,
+  "nativeRequalification": {
+    "source": "1a341ff1",
+    "qualified": false,
+    "blockedBy": "Binance shared IP418 before chart/source configuration",
+    "retryNotBeforeUTC": "2026-11-04T01:10:58.578Z",
+    "normalFullOwnedExitMs": 15241,
+    "strictPackageBeforeAndAfter": true,
+    "next": "Reassemble current source after revision-owner extraction and run all four sources plus Gate hover"
+  },
+  "storageTriggerOwner": {
+    "movedTo": "storage/revisions.py",
+    "functionBodyAstIdentical": true,
+    "regressionPassed": 104,
+    "architectureRemaining": 10,
+    "remainingReason": "Existing indicator.history_worker depends on HTTP; no new owner allowlist added"
+  },
+  "latestNative": {
+    "source": "2cefc2017686151536c84c3baf8bc9090904886e",
+    "passed": false,
+    "fourSourceMarketReady": true,
+    "canonicalComparison": "incomplete; Gate count mismatch observations retained; new Binance futures IP418 stopped before all comparisons/MA",
+    "indicators": "not reached",
+    "rendererErrors": [],
+    "fullOwnedExitMs": 15216,
+    "strictSignatureAfterExit": true,
+    "sourceAndPluginMismatches": [],
+    "retryNotBeforeUTC": "2026-11-04T08:58:00.900Z"
+  }
+}

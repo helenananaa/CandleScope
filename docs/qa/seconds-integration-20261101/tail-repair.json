@@ -1,0 +1,24 @@
+{
+  "problem": "Native four-chart test exposed a six-hour minimum automatic tail repair for7s charts:21,600source seconds in addition to explicit viewport history.",
+  "change": "Automatic subminute tail repair now requests recent16targetbars. Explicit history/range requests retain their full requested coverage. Minute/monthly behavior unchanged.",
+  "checks": "Reproduced before;141 warm-start/seconds/emptycoverage/coordinator cases passed after. Integrated TypeScript and Vite build passed before backend-only change.",
+  "native": "Pending; attempts1..3 preserved in output/seconds-native-20261101. No native acceptance claimed.",
+  "artifacts": [
+    {
+      "file": "docs/qa/seconds-integration-20261101/tail-before.log.gz",
+      "sha256": "9628e2ead13e39bc70a9681cded601c8d56db9d5d0a78bac0e447915d38323ba"
+    },
+    {
+      "file": "docs/qa/seconds-integration-20261101/tail-after.log.gz",
+      "sha256": "d57554261e1a58b62f3865082afaa0f901af7593e4afb89c56d92c9f2ecec58d"
+    },
+    {
+      "file": "docs/qa/seconds-integration-20261101/integrated-typecheck.log.gz",
+      "sha256": "e2d15869bfb9c7746332e48d31246ef05dbf15488aa0ccbbd415fa22929f5135"
+    },
+    {
+      "file": "docs/qa/seconds-integration-20261101/integrated-build.log.gz",
+      "sha256": "c59d596174416c29119572446154cd8a09aca527a901cc81002c1bebec985ad9"
+    }
+  ]
+}
