@@ -1,0 +1,52 @@
+{
+  "source": "d60ebd7619393c2798cc3772f3f838730cd55ad8",
+  "integration": "34c735839cb2f11d389c3badbe741904d34c1571",
+  "main": "05a1c2a8f9c2c246cf2dffc9fe82109595913139",
+  "priorHead": "006ed9d676a82718eaab31eac650e7b0cd2d4b3b",
+  "root": "/Users/ryanliang/CandleScope/output/development-goal-20261104/oi-main265-20261106",
+  "backend": {
+    "passed": 605,
+    "skipped": 0,
+    "warnings": 6,
+    "suites": 44
+  },
+  "focused": {
+    "passed": 61,
+    "overlapsCombined": true
+  },
+  "frontend": {
+    "sourceTreeFrom": "34c735839cb2f11d389c3badbe741904d34c1571",
+    "regular": 4894,
+    "performance": 1,
+    "desktop": 130,
+    "skipped": 0
+  },
+  "actualRuntimeCounterexamples": 2,
+  "oldSourceRegressionHelperPreserved": true,
+  "firstPatchPlacementFailurePreserved": true,
+  "originalDirtyFilesProtected": 24,
+  "nativeCurrentSourceQualified": false,
+  "newLargeCandidateCreated": false,
+  "publicRequests": false,
+  "windowsQualified": false,
+  "at": "2026-11-06T09:06:55.878745+00:00",
+  "artifactsSha256": {
+    "README.md": "f1b3d9ce8e2790afb2f6808b2191fa981dfe6b4d33846a3662e3360b2494053b",
+    "evidence/architecture-current.log.gz": "92ca27a8c70d39c064dfa4a145274c6de9794ed8f8ce719803f1294a4e014ed3",
+    "evidence/architecture-main.log.gz": "92ca27a8c70d39c064dfa4a145274c6de9794ed8f8ce719803f1294a4e014ed3",
+    "evidence/architecture.json.gz": "fea2d7f69ea9d4d2223c833d945970c4fabd3c6fd6d358e4bb50329368fd303b",
+    "evidence/backend-command.json.gz": "a6455df789a0f8db0065a8124be02b8dd6cbf918668edd076656e0a80c2236b0",
+    "evidence/backend-qualified.log.gz": "6680b100bfdc5e85bca2c2872fbd7e4426d9672453bef50f48bbdf1861d1b928",
+    "evidence/failure-classification.json.gz": "cee1512165ad43a00957403b7c22b2599439d44d99763319b21629bfa619f946",
+    "evidence/first-patch-placement.diff.gz": "fd3a9d20530f0b988c479f802d2ffabdeb9eb7fa5cb18c975ec7737d701df5c4",
+    "evidence/frontend-check.log.gz": "bb0b0817a5b3e4ac88e55a67ec9211a27d3ca9cd1232fc2792c457f3816275f1",
+    "evidence/merge.log.gz": "9b1818797f7e97b8cc9bf6d4529545fccbf52afe3e4cf6304113b66f2bcce4fc",
+    "evidence/original-protection.json.gz": "427580eedb8048d813ef4f7f60c61b7ba13833f5570750712517db92079a438a",
+    "evidence/runtime-after.log.gz": "d591fb6d3db5d32448893956685f384ae2d78f7c6ad5e2f75827d307f80daa8d",
+    "evidence/runtime-before-ready.log.gz": "2e17b8d5980269bb41ce8ddff276a2c568d39f1ef3d4b530a68fe9f543947ad5",
+    "evidence/runtime-before.log.gz": "557c0e2076f703306b9e64943269cd2e51dedfef92e4acd058f2beb10660f307",
+    "evidence/runtime-correct.log.gz": "d1c5086ffab81c09db6fe3fea769c5afec81a10a95ed39dfe671a76f1c0796ff",
+    "evidence/runtime-drain-regression-before.py.gz": "7c5d3ec106cd4987313536f3f907995747a0472de1df84c146c32e0f5949f3a6",
+    "evidence/source-manifest.json.gz": "7ca597d13d484e7574f70da62a3f842378d2d2ebe06fffdeaecad8e982b24c3e"
+  }
+}
