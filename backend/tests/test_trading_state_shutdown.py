@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 import threading
 from types import SimpleNamespace
 
@@ -104,7 +105,7 @@ def test_application_shutdown_keeps_both_sqlite_owners_until_cleanup_finishes(
             restored = TradingStore(tmp_path / 'accounts.db')
             try:
                 assert restored.state_cursor() == expected_cursor
-                assert restored.one('SELECT amount FROM cash_flows WHERE account_id=?', (account,))['amount'] == '1000'
+                assert restored.one('SELECT amount FROM cash_flows WHERE account_id=?', (account,))['amount'] == Decimal('1000')
             finally:
                 restored.close()
         finally:
