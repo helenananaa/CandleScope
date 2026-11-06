@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CSV_FIELDS, parseResearchCsvPreview, validCsvColumns, type CsvColumns, type CsvPreview } from "./researchCsvPreview.js";
 
 import { t } from "../../i18n/index.js";
@@ -24,11 +24,18 @@ export function ResearchDataImportForm({
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("BTC-USDT");
+  const [baseAsset, setBaseAsset] = useState("");
+  const [quoteAsset, setQuoteAsset] = useState("");
   const [interval, setInterval] = useState("1m");
   const [timezone, setTimezone] = useState("UTC");
   const [timestampUnit, setTimestampUnit] = useState<"auto" | "s" | "ms" | "iso">("auto");
   const [volumeRequired, setVolumeRequired] = useState(false);
   const [asRevision, setAsRevision] = useState(false);
+  useEffect(() => {
+    if (!asRevision) return;
+    setBaseAsset(selected?.instrument?.base_asset ?? "");
+    setQuoteAsset(selected?.instrument?.quote_asset ?? "");
+  }, [asRevision, selected]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [columns, setColumns] = useState<CsvColumns | null>(null);
@@ -51,6 +58,8 @@ export function ResearchDataImportForm({
           timezone,
           timestampUnit,
           volumeRequired,
+          baseAsset,
+          quoteAsset,
           ...(asRevision && selected !== null ? { datasetId: selected.dataset_id } : {}),
         }).then(() => {
           setFile(null);
@@ -135,6 +144,13 @@ export function ResearchDataImportForm({
         </label>
       </div>
       <p>{t("local.requiredCols")}</p>
+      <div className="local-import-grid">
+        <label>{t("local.baseAsset")}<input value={baseAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,31}"
+          required={quoteAsset.trim().length > 0} onChange={event => setBaseAsset(event.target.value)} /></label>
+        <label>{t("local.quoteAsset")}<input value={quoteAsset} disabled={asRevision} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,31}"
+          required={baseAsset.trim().length > 0} onChange={event => setQuoteAsset(event.target.value)} /></label>
+      </div>
+      <p>{t("local.assetUnitsHint")}</p>
       {selected !== null && (
         <label className="local-revision-choice">
           <input

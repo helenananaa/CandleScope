@@ -15455,6 +15455,9 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 }
 
 .chart-main-legend[data-pane-width='narrow'] {
+  /* Pane controls share a separate row at this size. Reserving their full
+     width here can reduce the close/indicator legend to zero in split cells. */
+  max-width: calc(100% - 24px);
   max-height: 40px;
   overflow: hidden;
 }
