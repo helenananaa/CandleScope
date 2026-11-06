@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import cp from 'node:child_process';
 import {createRequire} from 'node:module';
-const root=process.cwd(),out=process.env.CANDLESCOPE_BATCH1_QA_ROOT??path.join(root,'output/pine-output-main243-20261104/native-current-plugins');
+const root=process.cwd(),out=process.env.CANDLESCOPE_BATCH1_QA_ROOT??path.join(root,'output/alerts-main266-native-20261106/native');
 const manifest=JSON.parse(fs.readFileSync(path.join(out,'source-package-manifest.json'),'utf8'));
 const asar=createRequire(path.join(root,'frontend/package.json'))('@electron/asar');
 const resources=path.join(manifest.app,'Contents/Resources');
