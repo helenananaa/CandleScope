@@ -178,6 +178,9 @@ class MarketDataService:
         self._snapshot_lock = asyncio.Lock()
         self._snapshot_tasks: dict[tuple[str, str, str, str], asyncio.Task] = {}
         self._history_tasks: dict[tuple, asyncio.Task] = {}
+        # Joinable requests and physically owned work have separate lifetimes:
+        # the last waiter unlinks a request before its storage thread drains.
+        self._history_jobs: set[asyncio.Task] = set()
         self._history_waiters: dict[tuple, int] = {}
         self._history_identity_locks = KeyedAsyncLockPool[tuple]()
         self._funding_refresh_lock = asyncio.Lock()
@@ -660,7 +663,7 @@ class MarketDataService:
         request_id = (identity, start_ms, end_ms, limit, mode, plan.availability_revision)
         task = self._history_tasks.get(request_id)
         if task is None:
-            if len(self._history_tasks) >= 32:
+            if len(self._history_jobs) >= 32:
                 return MarketHistoryPage(events=[], complete=False, retryable=True,
                                          covered_ranges=(), query_mode=mode)
             self._ensure_open()
@@ -669,6 +672,12 @@ class MarketDataService:
                 start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan,
             ), name="market-oi-history")
             self._history_tasks[request_id] = task
+            self._history_jobs.add(task)
+            def completed(done):
+                self._history_jobs.discard(done)
+                if not done.cancelled():
+                    done.exception()
+            task.add_done_callback(completed)
         self._history_waiters[request_id] = self._history_waiters.get(request_id, 0) + 1
         try:
             return await asyncio.shield(task)
@@ -2153,7 +2162,7 @@ class MarketDataService:
         async with self._lock:
             physical_ids = tuple(self._physical_entries)
 
-        history_tasks = list(self._history_tasks.values())
+        history_tasks = list(self._history_jobs)
         self._history_tasks.clear()
         for task in history_tasks:
             task.cancel()
@@ -2217,6 +2226,7 @@ class MarketDataService:
             "physical_streams": len(self._physical_entries),
             "history_queries": {
                 "inflight": len(self._history_tasks),
+                "owned_jobs": len(self._history_jobs),
                 "max_inflight": 32,
                 "identities": self._history_identity_locks.active_keys,
             },
