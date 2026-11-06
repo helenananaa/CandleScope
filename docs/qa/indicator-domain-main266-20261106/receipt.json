@@ -3,7 +3,7 @@
   "main": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
   "outputRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-domain-main266-20261106",
   "nativeRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-domain-main266-native-20261106",
-  "artifactCount": 108,
+  "artifactCount": 113,
   "artifacts": {
     "evidence/plan.json.gz": {
       "sha256": "8ec3206d809b4edf08427c09f7641a907442d8bd24c68e704996c35998debeb2",
@@ -646,6 +646,36 @@
       "rawSha256": "015b5867fc00bf72b3efdcce0094974b9cceb60efa496423d8cf573f0df746b8",
       "rawBytes": 277,
       "bytes": 225
+    },
+    "evidence/symlink-preservation-consumers-after-restore.json.gz": {
+      "sha256": "ada37f041f74eb90cb294e35aac93ae0db6c8903e2809e0fa70c44bc9bc0e48e",
+      "rawSha256": "bf95e67f2ea1cd90a5d613eba3d07ad36418da2137272703673439c4017300a3",
+      "rawBytes": 70,
+      "bytes": 81
+    },
+    "evidence/symlink-preservation-restore-completed-final.json.gz": {
+      "sha256": "11c6f55d537d342ef081feae08721dd34154bfb2e987d99bdcc5f9f452977faa",
+      "rawSha256": "bd6c52437174bb15be1fae4ab9731cb2c087be0e69824b9250a71efc04da7c33",
+      "rawBytes": 1335,
+      "bytes": 669
+    },
+    "evidence/original-worktree-protection-after-recovery.json.gz": {
+      "sha256": "5133d8cb1fd3fdbe24cd76908038ab67957fea3c3a164fc29b5ee4bd5b8ab5c7",
+      "rawSha256": "a1a83032ae4495ceee5a2935e11433bbf807126d1bcfd6a557bc8ee5d2b04977",
+      "rawBytes": 5659,
+      "bytes": 647
+    },
+    "evidence/native-second-final-package-verification.log.gz": {
+      "sha256": "fb407dffe65a1ad0e6332d47d4dbe582b7e498115df093acab048afe45ba1e9b",
+      "rawSha256": "1d70c0b0cc3685359dd8518d7ddaa12812767b045b253aa8b2310e1b60716e4b",
+      "rawBytes": 452,
+      "bytes": 308
+    },
+    "evidence/native-second-final-verified-after.json.gz": {
+      "sha256": "31e983f748dcb93919eb63c4f42438aa7e95f996c8ae8ed3edb0ac5d4ac0014f",
+      "rawSha256": "17b1da98d232e7ff8c811b7b3bc55fd9436867db8b2a521b8ca08245e6cc2bb2",
+      "rawBytes": 528,
+      "bytes": 326
     }
   },
   "profilesAppsCommitted": false,

@@ -30,7 +30,7 @@ The agent requested app.quit and observed15166ms for app.close, with all10 app-o
 
 ## Evidence
 
-`receipt.json` hashes108 archived artifacts and the current4323 source/build/test fingerprints. Raw source/full frontend checks,22 worker traces, actual browser result/server shutdown and original wrapperfalse, real Native attempt/circuit/observations/installed-wheel proof, manifests and helpers are retained. Gzip files were byte-round-tripped and JSONs parsed. No SQLite profile or app is committed.
+`receipt.json` hashes113 archived artifacts and the current4323 source/build/test fingerprints. Raw source/full frontend checks,22 worker traces, actual browser result/server shutdown and original wrapperfalse, real Native attempt/circuit/observations/installed-wheel proof, manifests and helpers are retained. Gzip files were byte-round-tripped and JSONs parsed. No SQLite profile or app is committed.
 
 Keep Draft. Current-source full Native/public-market and Windows, broader #152 O(N) materialization and other contracts remain unqualified. Continue independent offline source work without waiting for CI; before any main merge audit finalhead/currentmain/applicable CI and the still-missing source-specific product proof.
 
