@@ -23,6 +23,8 @@ from app.replay.models import (
     ReplaySessionConfig,
     SlippageModel,
 )
+from app.local_data.service import DATASET_ID_RE
+from app.replay.local_bar_repository import LOCAL_BAR_MARKET
 
 from . import control_rules as control_rules_ops
 from .errors import TrainingRunError
@@ -220,6 +222,15 @@ def assert_same_market_scope(
         str(binding["market_type"]),
         str(binding["settlement_asset"]),
     )
+    # Imported dataset IDs are source identities, not distinct online venues.
+    # Each actor still keeps its own dataset ID and pinned revision. Callers
+    # additionally validate explicit primary/target import units before planning.
+    if (str(binding.get("source_kind")) == "BAR"
+            and market_type == expected[1] == LOCAL_BAR_MARKET
+            and DATASET_ID_RE.fullmatch(exchange) is not None
+            and DATASET_ID_RE.fullmatch(expected[0]) is not None
+            and settlement_asset == expected[2]):
+        return
     if actual != expected:
         raise TrainingRunError(
             "MARKET_SCOPE_MISMATCH",
