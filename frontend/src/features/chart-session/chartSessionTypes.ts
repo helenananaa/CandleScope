@@ -220,6 +220,7 @@ export interface ChartSessionRuntime {
     exchangeCatalogStatus: ExchangeCatalogStatus;
     exchangeLimitations: string[];
     exchangeCapabilityAvailable: boolean;
+    tradeCandlesAvailable?: boolean;
     historyIntervalAvailable: boolean;
     realtimeIntervalAvailable: boolean;
     marketDataReady: boolean;

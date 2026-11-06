@@ -242,6 +242,7 @@ class BarState:
     requires_authoritative_close: bool = False  # native snapshots must receive an explicit close
     finality: BarFinality = BarFinality.PROVISIONAL
     close_reason: str | None = None
+    quality_source: str = ""
     source_snapshots: dict[str, Mapping[str, Any]] = field(default_factory=dict)
     source_refs: dict[str, dict[str, Any]] = field(default_factory=dict)
     status: BarStatus = BarStatus.FORMING

@@ -62,6 +62,7 @@ import {
   replaceMainSeries,
   replaceFutureTimeAxisData,
   resyncSeriesTimeScaleIndexes,
+  resyncSharedTimeScaleIndexes,
   selectIndicatorPaneAnnotationTarget,
   shouldPreferIndicatorSetData,
 } from "../chart-adapter/seriesLifecycle";
@@ -4473,6 +4474,18 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
 
     const nextEntries: IndicatorSeriesEntry[] = [];
     const retainedEntries = new Set<IndicatorSeriesEntry>();
+    const prepareTimeScaleChange = () => {
+      // LWC 5.1 reindexes shared time points before it invalidates the other
+      // series' pane views. Its synchronous offset compensation can hit-test
+      // those old views while the pointer is over a historical viewport.
+      // Invalidate them using their exact committed render snapshots first;
+      // do not clear the crosshair or rewrite source/indicator facts.
+      resyncSharedTimeScaleIndexes([
+        { series: mainSeriesRef.current, data: renderedMainSeriesDataRef.current },
+        ...indicatorSeriesRef.current,
+        ...nextEntries,
+      ]);
+    };
     let createdSeriesCount = 0;
     for (const pane of paneDescriptors) {
       for (const line of pane.lines || []) {
@@ -4524,6 +4537,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
                 usesDerivedAxis,
               }),
               trustedTrailingUpdate,
+              beforeTimeScaleChange: prepareTimeScaleChange,
             });
           }
           // Data replacement can reindex the chart while LWC synchronously
@@ -4549,6 +4563,7 @@ const SingleChartPanes = forwardRef<ChartSurfaceHandle, SingleChartPanesProps>(f
             paneIndex: pane.paneIndex,
             crosshairMarkerVisible: showCrosshairDetails && !drawingEngineToolActive,
           });
+          prepareTimeScaleChange();
           series.setData(validData);
           const nativePrimitive = line.nativeScene ? new PineScenePrimitive(line.nativeScene) : undefined;
           if (nativePrimitive) series.attachPrimitive(nativePrimitive);

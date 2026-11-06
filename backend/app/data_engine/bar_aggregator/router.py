@@ -547,7 +547,8 @@ class EventRouter:
                     data,
                 ),
                 sequence=sequence,
-                extra={"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {},
+                extra={**({"source_ref": dict(data["source_ref"])} if data.get("source_ref") else {}),
+                       "trade_coverage_verified": data.get("trade_coverage_verified") is True},
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning("Failed to convert kline event: %s", exc)
@@ -641,6 +642,7 @@ class EventRouter:
                         explicit_fields=explicit_fields,
                     ),
                     sequence=self._fetched_bar_freshness_sequence(bar),
+                    extra={"trade_coverage_verified": bar.get("source") == "trade_history_verified"},
                 )
             else:
                 # Duck-type: assume FetchedBar dataclass
@@ -683,6 +685,7 @@ class EventRouter:
                         explicit_fields=getattr(bar, "enhanced_fields", None),
                     ),
                     sequence=self._fetched_bar_freshness_sequence(bar),
+                    extra={"trade_coverage_verified": getattr(bar, "source", None) == "trade_history_verified"},
                 )
         except (KeyError, ValueError, TypeError, AttributeError) as exc:
             logger.warning("Failed to convert fetched bar: %s", exc)

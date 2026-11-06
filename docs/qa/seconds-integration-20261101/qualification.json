@@ -1,0 +1,34 @@
+{
+  "status": "integration in progress; not native acceptance",
+  "upstream": "PR147 3cd54ef1a58f99ebf4c91153257ede4632e58bcc",
+  "decisions": [
+    "Keep the current shared CcxtProvider; port protocol functions without restoring per-venue provider ownership.",
+    "Do not alias USD-M continuous-contract 1s candles into the ordinary contract identity. This stage leaves that route unavailable.",
+    "Declare only Gate/Upbit spot1s native boundaries from their explicit protocols. Other unknown native candle calendars remain unknown.",
+    "Admitted trade reduction may supply custom fixed periods without assuming native candle boundaries. An advertised native period with unknown boundaries is rejected, not silently replaced under its existing identity.",
+    "Empty-window evidence is not a fabricated zero-volume candle. It uses existing D126 acquisition fences, semantic identity, revision publication and transaction rollback.",
+    "A new range operation refreshes its durable empty-coverage version once; calendar iteration does not query the revision ledger per second.",
+    "Preserve current request ownership, restore identity, staged viewport admission and native memory limits.",
+    "1s persistence does not enable 1s replay archives in this stage. Existing replay financial behavior and source eligibility remain.",
+    "Historical PR147 QA is retained as dated evidence; it is not proof for this integrated source."
+  ],
+  "protocol_sources": [
+    "https://www.gate.com/docs/developers/apiv4/en/spot/",
+    "https://global-docs.upbit.com/reference/list-candles-seconds",
+    "https://global-docs.upbit.com/v1.2.2/reference/websocket-candle",
+    "https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data"
+  ],
+  "local_checks_so_far": {
+    "backend": "287 integrated source/routes/revision/retention tests passed afterc090db5e.22route/sharedaudit and8emptycoverage cases also passed earlier.",
+    "frontend": "62 selected tests passed earlier;41 finalfeed/epoch cases passed afterc090db5e. Final TypeScript passed.",
+    "h127_recovery": "Integrateddc9e0bcd: shared wildcard indicator recovery waits for source repair or stream retirement; source fix has112 passing upstream owner/process/bridge/consumer/continuity cases.",
+    "counting": "Overlapping selections, not additive; failed runs retained.",
+    "recovery_coverage": "32 focused shared owner/recovery and empty coverage fence cases passed afterf1a25bca."
+  },
+  "remaining": [
+    "Final TypeScript and focused recovery/emptycoverage checks on integratedhead.",
+    "Real publicseconds/customseconds, quality/coverage, save/fullownednativeexit/restart.",
+    "Source/native evidence andCI qualification beforemerge.",
+    "Alert builtin reuse remains the other partofbatch3."
+  ]
+}
