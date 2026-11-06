@@ -1,0 +1,172 @@
+[
+  {
+    "injected_disjoint_live_append": false,
+    "status": "completed",
+    "errors": [],
+    "custom_rows": [
+      {
+        "exchange": "binance",
+        "market_type": "spot",
+        "provider_id": "binance",
+        "venue": "binance",
+        "asset_class": "crypto",
+        "series_variant": "native",
+        "price_adjustment": "raw",
+        "session_variant": "continuous",
+        "volume_semantics": "base_asset",
+        "symbol": "BTCUSDT",
+        "interval": "7s",
+        "open_time": 91000,
+        "close_time": 97999,
+        "open": 100.0,
+        "high": 110.0,
+        "low": 90.0,
+        "close": 105.0,
+        "volume": 10.5,
+        "quote_volume": 1102.5,
+        "trades": 70,
+        "taker_buy_base": 5.25,
+        "taker_buy_quote": 551.25,
+        "source": "backfill_aggregated"
+      },
+      {
+        "exchange": "binance",
+        "market_type": "spot",
+        "provider_id": "binance",
+        "venue": "binance",
+        "asset_class": "crypto",
+        "series_variant": "native",
+        "price_adjustment": "raw",
+        "session_variant": "continuous",
+        "volume_semantics": "base_asset",
+        "symbol": "BTCUSDT",
+        "interval": "7s",
+        "open_time": 98000,
+        "close_time": 104999,
+        "open": 100.0,
+        "high": 110.0,
+        "low": 90.0,
+        "close": 105.0,
+        "volume": 10.5,
+        "quote_volume": 1102.5,
+        "trades": 70,
+        "taker_buy_base": 5.25,
+        "taker_buy_quote": 551.25,
+        "source": "backfill_aggregated"
+      }
+    ],
+    "native_rows": 14,
+    "metrics": {
+      "component": "Reconciler",
+      "dedup_strategy": "overwrite",
+      "write_batch_size": 500,
+      "cache_enabled": true,
+      "materialization_writes_draining": 0,
+      "metrics": {
+        "layer": "Reconciler",
+        "counters": {
+          "reconcile_runs": 1,
+          "archive_objects_imported": 0,
+          "archive_dependent_rows_invalidated": 0,
+          "custom_materialization_owners": 1,
+          "custom_materialization_elapsed_ms_total": 36,
+          "reconcile_elapsed_ms_total": 64,
+          "bars_written": 14,
+          "bars_skipped": 0
+        },
+        "gauges": {
+          "last_custom_materialization_elapsed_ms": 36,
+          "last_reconcile_elapsed_ms": 64
+        },
+        "timestamps": {
+          "last_reconcile_at": 1793535327387
+        }
+      }
+    }
+  },
+  {
+    "injected_disjoint_live_append": true,
+    "status": "completed",
+    "errors": [],
+    "custom_rows": [
+      {
+        "exchange": "binance",
+        "market_type": "spot",
+        "provider_id": "binance",
+        "venue": "binance",
+        "asset_class": "crypto",
+        "series_variant": "native",
+        "price_adjustment": "raw",
+        "session_variant": "continuous",
+        "volume_semantics": "base_asset",
+        "symbol": "BTCUSDT",
+        "interval": "7s",
+        "open_time": 91000,
+        "close_time": 97999,
+        "open": 100.0,
+        "high": 110.0,
+        "low": 90.0,
+        "close": 105.0,
+        "volume": 10.5,
+        "quote_volume": 1102.5,
+        "trades": 70,
+        "taker_buy_base": 5.25,
+        "taker_buy_quote": 551.25,
+        "source": "backfill_aggregated"
+      },
+      {
+        "exchange": "binance",
+        "market_type": "spot",
+        "provider_id": "binance",
+        "venue": "binance",
+        "asset_class": "crypto",
+        "series_variant": "native",
+        "price_adjustment": "raw",
+        "session_variant": "continuous",
+        "volume_semantics": "base_asset",
+        "symbol": "BTCUSDT",
+        "interval": "7s",
+        "open_time": 98000,
+        "close_time": 104999,
+        "open": 100.0,
+        "high": 110.0,
+        "low": 90.0,
+        "close": 105.0,
+        "volume": 10.5,
+        "quote_volume": 1102.5,
+        "trades": 70,
+        "taker_buy_base": 5.25,
+        "taker_buy_quote": 551.25,
+        "source": "backfill_aggregated"
+      }
+    ],
+    "native_rows": 15,
+    "metrics": {
+      "component": "Reconciler",
+      "dedup_strategy": "overwrite",
+      "write_batch_size": 500,
+      "cache_enabled": true,
+      "materialization_writes_draining": 0,
+      "metrics": {
+        "layer": "Reconciler",
+        "counters": {
+          "reconcile_runs": 1,
+          "archive_objects_imported": 0,
+          "archive_dependent_rows_invalidated": 0,
+          "custom_materialization_owners": 1,
+          "custom_materialization_elapsed_ms_total": 21,
+          "reconcile_elapsed_ms_total": 59,
+          "bars_written": 14,
+          "bars_skipped": 0
+        },
+        "gauges": {
+          "last_custom_materialization_elapsed_ms": 21,
+          "last_reconcile_elapsed_ms": 59
+        },
+        "timestamps": {
+          "last_reconcile_at": 1793535327584
+        }
+      }
+    }
+  }
+]
