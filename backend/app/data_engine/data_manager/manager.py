@@ -802,6 +802,11 @@ class DataManager(DataManagerCore):
             logger.exception("Failed to submit source repair for %s", target)
 
     async def _annotate_source_continuity(self, event: DataEvent) -> DataEvent:
+        if event.event_type == DataEventType.BACKFILL_COMPLETED:
+            await self._refresh_source_gap_proof(event.key)
+        elif (event.event_type in {DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED}
+              and event.bar is not None and event.bar.is_closed and event.bar.trusted_final):
+            await self._refresh_source_gap_proof(event.key, opened=event.bar.time_ms)
         if event.event_type == DataEventType.BACKFILL_FAILED:
             gap_id = event.detail.get("source_gap_id")
             gap = self.source_gaps.gaps.get(gap_id)
@@ -838,6 +843,56 @@ class DataManager(DataManagerCore):
                     "gap_ids": [gap.id for gap in pending],
                 }})
         return event
+
+    async def source_storage_available(self, key: SeriesKey) -> None:
+        """Recheck exact canonical gaps after storage work, not job completion."""
+        await self._refresh_source_gap_proof(key)
+
+    async def _refresh_source_gap_proof(self, key: SeriesKey, *, opened: int | None = None) -> None:
+        """Re-read canonical proof after repair or a delayed live final candle.
+
+        Completion metadata is only a notification. The exact default identity,
+        canonical final rows, sparse calendar and D126 adoption fence supply the
+        proof. A later proof deletion or real candle invalidates the read token.
+        """
+        from itertools import islice
+        from .revisions import RevisionUnavailable
+        from app.data_engine.history.exchange_policy import native_kline_calendar
+        from app.data_engine.history.native_seconds import NativeSparseSecondsCalendar
+
+        gaps = [gap for gap in self.source_gaps.pending(key)
+                if not gap.error and (opened is None or opened in gap.expected)]
+        consumer = self.cache.revision_consumer
+        if consumer is None or not gaps:
+            return
+        calendar = (native_kline_calendar(key.exchange, key.market_type, key.interval, key.symbol)
+                    if key.identity.is_legacy_default_for(key.exchange) else None)
+        storage = self.query_engine.storage
+        for gap in gaps:
+            required: set[int] = set()
+
+            def load():
+                nonlocal required
+                required = (set(islice(calendar.expected_opens(gap.start_ms, gap.end_ms, key.interval),
+                                      self.source_gaps.max_bars + 1))
+                            if isinstance(calendar, NativeSparseSecondsCalendar) else set(gap.expected))
+                return storage.query_bars(key.symbol, key.interval, start_ms=gap.start_ms,
+                    end_ms=gap.end_ms, limit=self.source_gaps.max_bars + 1,
+                    exchange=key.exchange, market_type=key.market_type, series_identity=key.identity)
+
+            try:
+                bars = await run_storage(consumer.adopt, key, load)
+            except RevisionUnavailable:
+                continue  # a later authoritative completion can retry the proof
+            if len(required) > self.source_gaps.max_bars:
+                continue
+            previous = dict(gap.repaired)
+            if self.source_gaps.resolve_verified(gap, bars, gap.expected - required):
+                for opened, bar in sorted(gap.repaired.items()):
+                    if previous.get(opened) != bar:
+                        await self.event_bus.emit(DataEvent(DataEventType.BAR_AMENDED, key, bar,
+                            detail={"source_gap_ids": [gap.id], "historical_repair": True}))
+                await self.event_bus.emit(gap.event(resolved=True))
 
     def set_backfill_suppression_lookup(self, lookup: Any | None) -> None:
         """Inject a read-only, non-blocking ledger suppression lookup."""
@@ -921,7 +976,7 @@ class DataManager(DataManagerCore):
         if self.retention.storage_row_limits_enabled:
             await self.run_storage_gc()
 
-        # Ephemeral trim loop (every 30 min)
+        # 1s memory-cache trim loop (every 30 min)
         self._cleanup_task = asyncio.create_task(self.retention.ephemeral_trim_loop())
         if self._auto_gc_policy.enabled:
             self._auto_gc_task = asyncio.create_task(
@@ -1920,13 +1975,13 @@ class DataManager(DataManagerCore):
         """Remove a subscription."""
         self.event_bus.unsubscribe(handle)
 
-    async def wait_for_source_continuity(self) -> None:
+    async def wait_for_source_continuity(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait before replacing a failed wildcard strict consumer.
 
         Returns only when retained source gaps have been repaired or retired;
         the caller must then acquire fresh state and subscribe on this loop.
         """
-        await self.source_gaps.wait_cleared()
+        await self.source_gaps.wait_cleared(key, fail_on_error=fail_on_error)
 
     async def subscribe_iter(
         self,
@@ -3961,7 +4016,7 @@ class DataManager(DataManagerCore):
 
         Args:
             db_limits:      {"minutes": N, "hours": N, "daily": N} where 0 = unlimited.
-            ephemeral_bars: Max bars per ephemeral series (e.g. 86400 for 24h of 1s).
+            ephemeral_bars: In-memory 1s capacity; independent of SQLite retention.
         """
         self.retention.update_limits(
             db_limits=db_limits,

@@ -75,6 +75,7 @@ jobs:
           export PYTHONPATH="$GITHUB_WORKSPACE/frontend/.desktop-runtime/runtime/site-packages"
           ../frontend/.desktop-runtime/runtime/python/bin/python3 -m pytest -q -W error::pytest.PytestUnhandledCoroutineWarning \
             tests/test_market_stream_version.py \
+            tests/test_native_second_exchanges.py \
             tests/test_klines_api.py \
             tests/test_history_calendar.py \
             tests/test_session_calendar_tail.py \

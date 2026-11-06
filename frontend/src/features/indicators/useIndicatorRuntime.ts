@@ -34,7 +34,7 @@ import { computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
 import { useIndicatorComputeController } from "./indicatorComputeController.js";
 import { useFrontendScriptWindow } from "./useFrontendScriptWindow.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
-import { parseIntervalParts, parseIntervalSeconds } from "../../utils/intervals.js";
+import { parseIntervalSeconds } from "../../utils/intervals.js";
 import {
   createIndicatorOutputState,
   filterIndicatorOutputStateByVisibility,
@@ -562,19 +562,6 @@ function resolveMissingHostedRightRange(
 
   if (start == null || start > end) return null;
   return { start, end };
-}
-
-function isContinuousChartRange(chartData: KlineBar[], intervalSeconds: number | null): boolean {
-  if (!Array.isArray(chartData) || chartData.length < 2) return true;
-  if (!intervalSeconds || intervalSeconds <= 0) return true;
-  const tolerance = Math.max(1, Math.floor(intervalSeconds * 0.01));
-  for (let index = 1; index < chartData.length; index += 1) {
-    const prev = Number(chartData[index - 1]?.time);
-    const current = Number(chartData[index]?.time);
-    if (!Number.isFinite(prev) || !Number.isFinite(current)) return false;
-    if (Math.abs((current - prev) - intervalSeconds) > tolerance) return false;
-  }
-  return true;
 }
 
 export function useIndicatorRuntime(
@@ -2887,13 +2874,11 @@ export function useIndicatorRuntime(
     );
     if (!initialRange) return;
 
-    const intervalParts = parseIntervalParts(interval);
-    const intervalSeconds = parseIntervalSeconds(interval) || inferIntervalSecondsFromChartData(chartData);
-    if (intervalParts?.unit !== "M") {
-      const segment = chartData.slice(initialRange.startIndex, initialRange.endIndex + 1);
-      if (!isContinuousChartRange(segment, intervalSeconds)) return;
-    }
-
+    // The backend decides which opens are expected, including proven empty
+    // buckets and session closures. Local timestamp spacing cannot establish
+    // continuity: rejecting sparse rows here can block hydration forever.
+    // Keep the existing range settlement gate, so actual missing input still
+    // defers the live subscription until the authoritative range is ready.
     const signature = currentInitialHydrationSignature;
     if (!initialHostedHydrationGateRef.current.begin(signature)) return;
     const settle = createIndicatorRangeEventSettlementBarrier({

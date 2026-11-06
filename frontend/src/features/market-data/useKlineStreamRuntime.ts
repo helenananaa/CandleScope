@@ -41,11 +41,13 @@ export function planKlineRecoveryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   desiredCountBack = WS_RECOVERY_COUNT_BACK,
+  tradeCandlesAvailable = false,
 ): number {
   return planTargetBarRequest({
     desiredTargetBars: desiredCountBack,
     interval,
     nativeIntervals: nativeIntervalValues,
+    tradeCandlesAvailable,
     sourceRowBudget: WS_RECOVERY_SOURCE_ROW_BUDGET,
   })?.targetBars ?? desiredCountBack;
 }
@@ -54,13 +56,14 @@ export function planHeldKlineRecoveryCountBack(
   interval: IntervalString,
   nativeIntervalValues: readonly IntervalString[],
   heldBarCount: number,
+  tradeCandlesAvailable = false,
 ): number {
   // A reconnect must not deepen an unfinished viewport into full history.
   // Retain already loaded depth; the normal hydration lane owns expansion.
-  const viewport = planInitialViewportCountBack(interval, nativeIntervalValues);
+  const viewport = planInitialViewportCountBack(interval, nativeIntervalValues, tradeCandlesAvailable);
   const held = Number.isFinite(heldBarCount) ? Math.max(0, Math.floor(heldBarCount)) : 0;
   return planKlineRecoveryCountBack(interval, nativeIntervalValues,
-    Math.max(viewport, Math.min(WS_RECOVERY_COUNT_BACK, held)));
+    Math.max(viewport, Math.min(WS_RECOVERY_COUNT_BACK, held)), tradeCandlesAvailable);
 }
 
 export type KlineWebSocketStatus =
@@ -190,6 +193,7 @@ export interface UseKlineStreamRuntimeOptions {
   exchange: ExchangeId;
   marketType: MarketType;
   nativeIntervalValues: readonly IntervalString[];
+  tradeCandlesAvailable?: boolean;
   trackedIntervals: readonly IntervalString[];
   intervalRef: MutableRefObject<IntervalString>;
   seriesDataFeed: SeriesDataFeed;
@@ -215,6 +219,7 @@ export function useKlineStreamRuntime({
   exchange,
   marketType,
   nativeIntervalValues,
+  tradeCandlesAvailable = false,
   trackedIntervals,
   intervalRef,
   seriesDataFeed,
@@ -441,6 +446,7 @@ export function useKlineStreamRuntime({
                   currentIntv,
                   nativeIntervalValues,
                   getCacheRows({ exchange, marketType, symbol, interval: currentIntv }).length,
+                  tradeCandlesAvailable,
                 );
                 console.log(`[WS-Recovery] Reconnected, reloading recent bars for ${symbol}@${currentIntv}`);
                 if (recoveryCountBack <= 0) {
@@ -712,6 +718,7 @@ export function useKlineStreamRuntime({
     intervalRef,
     marketType,
     nativeIntervalValues,
+    tradeCandlesAvailable,
     patchCacheTick,
     seriesDataFeed,
     setWsStatus,

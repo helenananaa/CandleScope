@@ -1,0 +1,18 @@
+{
+  "wire_closes": [
+    {
+      "code": 1013,
+      "reason": "CONSUMER_RESYNC_REQUIRED"
+    }
+  ],
+  "lease_releases": [
+    {
+      "source_repair_pending": true,
+      "args": [
+        "BTCUSDT",
+        "1s"
+      ]
+    }
+  ],
+  "source_gap_still_pending": true
+}

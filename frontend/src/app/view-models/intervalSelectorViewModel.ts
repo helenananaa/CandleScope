@@ -28,6 +28,7 @@ export function buildIntervalSelectorViewModel({
         value,
         nativeIntervalValues,
         sessionView,
+        sessionStatus.tradeCandlesAvailable,
       ),
     nativeIntervals,
     intervalGroups,
