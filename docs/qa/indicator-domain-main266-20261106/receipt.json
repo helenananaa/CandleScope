@@ -3,7 +3,7 @@
   "main": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
   "outputRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-domain-main266-20261106",
   "nativeRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/indicator-domain-main266-native-20261106",
-  "artifactCount": 64,
+  "artifactCount": 66,
   "artifacts": {
     "evidence/plan.json.gz": {
       "sha256": "8ec3206d809b4edf08427c09f7641a907442d8bd24c68e704996c35998debeb2",
@@ -382,6 +382,18 @@
       "rawSha256": "fc3b6f9ced083389b7bd49b7df570e21112f67135bd0cab5d7f92812b189cef8",
       "rawBytes": 560372,
       "bytes": 209551
+    },
+    "evidence/native-exit-status-classification.json.gz": {
+      "sha256": "275adbfb826173cbe3c8949931b6aa9c59a53ed48eb570c989f6611791270768",
+      "rawSha256": "6d78d640fcedb40ee8b250594263ad6258c19137de876474d41fe3769a5d1e67",
+      "rawBytes": 904,
+      "bytes": 551
+    },
+    "evidence/native-backend-sidecar.log.gz": {
+      "sha256": "e48cc1d88a4483d32149364143e85c2302db7860be7b57b589ef52fae425b9fb",
+      "rawSha256": "1738dbd309f9a2bb1e703cf51077855a0534aabb98c155a61b6f1bb3bf6168c1",
+      "rawBytes": 30653,
+      "bytes": 1713
     }
   },
   "profilesAppsCommitted": false
