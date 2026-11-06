@@ -23,31 +23,62 @@ from fastapi.testclient import TestClient
 from app.api.v1 import indicators
 from app.api.v1.stream_indicators import stream_indicators
 from app.data_engine.data_manager.models import DataEvent, DataEventType, SeriesKey
+from app.data_engine.data_manager.models import BarData
+from app.data_engine.data_manager import DataManager
+from app.data_engine.data_manager import query as query_module
+from app.data_engine.storage import klines_repo
+from tests.test_kline_revision_contract import storage as storage
+from tests.test_query_cache_fencing import SOURCE as QUALITY
 from app.indicator.range_result_service import IndicatorRangeResultService
 from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
 from app.indicator.runtime_service import IndicatorRuntimeService
 from app.plugin_runtime.registry import RuntimeRegistry
 from app.plugin_runtime.service import RuntimeHostService
-from tests.test_runtime_owned_output import owner, bars, SOURCE
+from tests.test_runtime_owned_output import owner, bars as runtime_bars, SOURCE
+
+
+def bars(count, *, forming=False):
+    return tuple(replace(bar,time=(bar.time//60)*60) for bar in runtime_bars(count,forming=forming))
 
 TRACE = ContextVar('chart_calculation_wire_trace', default=None)
 
 
-class Source:
-    def __init__(self):
-        self.bars = list(bars(500))
+class Source(DataManager):
+    def __init__(self, storage):
+        super().__init__()
+        self.set_storage(storage)
         self.callbacks, self.leases = {}, set()
         self.queries = 0
         self.query_windows = []
+        self.rows = list(bars(500))
+
+    @property
+    def rows(self): return self._rows
+
+    @rows.setter
+    def rows(self, rows):
+        self._rows = list(rows)
+        self.now_ms = rows[-1].time*1000 + (60_000 if rows[-1].is_closed else 30_000)
+        klines_repo.upsert_klines('BTCUSDT','1m',[dict(open_time=bar.time*1000,
+            close_time=(bar.time+60)*1000-1,quote_volume=0,trades=0,taker_buy_base=0,taker_buy_quote=0,
+            **{name:getattr(bar,name) for name in
+                ('open','high','low','close','volume')}) for bar in rows if bar.is_closed],source=QUALITY)
+        self.cache.revision_consumer.sync(force=True)
+        for bar in rows:
+            if not bar.is_closed:
+                self.cache.upsert(SeriesKey('BTCUSDT','1m'),BarData(**{name:getattr(bar,name)
+                    for name in ('time','open','high','low','close','volume','is_closed')},source='ws_native'))
+
+    def replace_bar(self, index, bar):
+        rows = list(self.rows);rows[index] = bar;self.rows = rows
 
     def query(self, _symbol, _interval, **kwargs):
         self.queries += 1
         self.query_windows.append((kwargs['start_ms'],kwargs['end_ms']))
-        return SimpleNamespace(bars=[bar for bar in self.bars
-            if kwargs['start_ms'] <= bar.time*1000 <= kwargs['end_ms']], missing_ranges=[], metadata={})
+        return super().query(_symbol,_interval,**kwargs)
 
     def query_latest(self, _symbol, _interval, **kwargs):
-        return SimpleNamespace(bars=self.bars[-kwargs['limit']:], missing_ranges=[], metadata={})
+        return super().query_latest(_symbol,_interval,**kwargs)
 
     async def ensure_stream(self, *_args, **kwargs): self.leases.add(kwargs['consumer_id'])
     async def release_stream(self, *_args, **kwargs): self.leases.discard(kwargs['consumer_id'])
@@ -56,17 +87,21 @@ class Source:
     def unsubscribe(self, handle): self.callbacks.pop(handle,None)
 
     async def emit(self, event):
-        for entry in list(self.callbacks.values()):
-            if event.event_type not in entry['event_types']: continue
-            if entry.get('symbol') and entry['symbol'] != event.key.symbol: continue
-            if entry.get('interval') and entry['interval'] != event.key.interval: continue
-            result = entry['callback'](event)
-            if inspect.isawaitable(result): await result
+        ticket = self.event_bus.stream_versions.begin(event)
+        try:
+            for entry in list(self.callbacks.values()):
+                if event.event_type not in entry['event_types']: continue
+                if entry.get('symbol') and entry['symbol'] != event.key.symbol: continue
+                if entry.get('interval') and entry['interval'] != event.key.interval: continue
+                result = entry['callback'](event)
+                if inspect.isawaitable(result): await result
+        finally: self.event_bus.stream_versions.finish(ticket)
 
 
 @pytest.fixture
-def wire(tmp_path,request):
-    source = Source()
+def wire(tmp_path,request,storage,monkeypatch):
+    source = Source(storage)
+    monkeypatch.setattr(query_module,'time',SimpleNamespace(time=lambda:source.now_ms/1000,monotonic=time.monotonic))
     ranges = IndicatorRangeResultService(server_epoch='chart-wire')
     spec = owner(tmp_path/'wire.sqlite').spec
     host = RuntimeHostService(RuntimeRegistry(plugins=(spec,)),host_name='CandleScope',host_version='0.3.0')
@@ -83,6 +118,7 @@ def wire(tmp_path,request):
             if supervisor._process is not None]
         await service.stop()
         await host.stop()
+        await source.shutdown()
         for process in {process.pid:process for process in processes}.values():
             try: os.kill(process.pid,0); absent=False
             except ProcessLookupError: absent=True
@@ -100,21 +136,24 @@ def wire(tmp_path,request):
     @app.post('/fixture/tick/{count}')
     async def tick(count:int, close:float=100):
         rows = list(bars(count,forming=True))
-        rows[-1] = replace(rows[-1],close=close)
-        source.bars = rows
+        rows[-1] = replace(rows[-1],close=close,high=max(rows[-1].high,close))
+        source.rows = rows
         await source.emit(DataEvent(DataEventType.BAR_UPDATED,SeriesKey('BTCUSDT','1m'),bar=rows[-1]))
         return {'ok':True}
     @app.post('/fixture/amend')
     async def amend():
-        old = source.bars[10]
-        source.bars[10] = replace(old,close=101)
+        old = source.rows[10]
+        source.replace_bar(10,replace(old,close=101))
         await source.emit(DataEvent(DataEventType.BAR_AMENDED,SeriesKey('BTCUSDT','1m'),
-            bar=source.bars[10],previous_bar=old))
+            bar=source.rows[10],previous_bar=old))
         return {'ok':True}
     with TestClient(app) as client:
         yield SimpleNamespace(client=client,source=source,host=host,service=service,ranges=ranges,
                               tmp_path=tmp_path,extra_processes=extra_processes,engine=engine)
     assert not source.callbacks and not source.leases
+    with klines_repo._connect() as conn:
+        remaining_watches = conn.execute("SELECT count(*) FROM kline_prefix_watches WHERE owner LIKE 'indicator:%'").fetchone()[0]
+    assert remaining_watches == 0
     directory = os.environ.get('CALCULATION_TRACE_DIR')
     if directory:
         path = Path(directory);path.mkdir(parents=True,exist_ok=True)
@@ -122,7 +161,7 @@ def wire(tmp_path,request):
             'scope':'Actual TestClient HTTP/WS ASGI + repository runtime/SDK + pinned core; controlled BAR source; no renderer/Native/package claim',
             'counterObservations':trace,'queryWindows':source.query_windows,'processes':process_receipts,
             'callbacksAfterStop':len(source.callbacks),'leasesAfterStop':len(source.leases),
-            'registryAfterStop':service.calculations.snapshot()},indent=2)+'\n')
+            'registryAfterStop':service.calculations.snapshot(),'sourceWatchesAfterStop':remaining_watches},indent=2)+'\n')
     TRACE.reset(trace_token)
 
 
@@ -235,7 +274,7 @@ def test_http_closed_catchup_keeps_origin_and_domains_do_not_share_math(wire):
     first = wire.client.post('/indicators/calculations',json=open_request()).json()
     other = wire.client.post('/indicators/calculations',json=open_request(clientId='chart-b',end=bars(50)[-1].time)).json()
     assert value(first) == 500 and value(other) == 50
-    wire.source.bars = list(bars(501))
+    wire.source.rows = list(bars(501))
     caught = view(wire,ref(first),start=bars(501)[-1].time,end=bars(501)[-1].time)
     assert value(caught) == 501 and caught['type'] == 'indicator.snapshot'
     assert caught['calculation']['origin'] == first['calculation']['origin']
@@ -312,7 +351,7 @@ def test_ws_reconnect_reuses_retained_observations_instead_of_reseeding_or_advan
 
 def test_subscribe_catches_closed_prefix_admitted_between_http_and_ws(wire):
     initial = wire.client.post('/indicators/calculations',json=open_request()).json()
-    wire.source.bars = list(bars(501))
+    wire.source.rows = list(bars(501))
     with wire.client.websocket_connect('/ws') as ws:
         subscribe(ws,ref(initial));assert receive(ws,'indicator.subscribed')['ok']
         caught = receive(ws,'indicator.snapshot')
@@ -346,9 +385,9 @@ def test_source_changes_during_real_execution_cannot_publish_or_notify_and_open_
         pending = pool.submit(wire.client.post,'/indicators/calculations',json=open_request())
         try:
             wire.client.portal.call(wait_entered)
-            wire.source.bars[10] = replace(wire.source.bars[10],close=101)
+            wire.source.replace_bar(10,replace(wire.source.rows[10],close=101))
             wire.ranges.note_correction(series_key='binance:spot:BTCUSDT:1m',
-                start=wire.source.bars[10].time,end=wire.source.bars[10].time,event_id='during-real-runtime')
+                start=wire.source.rows[10].time,end=wire.source.rows[10].time,event_id='during-real-runtime')
         finally:
             wire.client.portal.call(allowed.set)
         failed = pending.result(timeout=10).json()
@@ -410,12 +449,12 @@ def test_http_cannot_bypass_ws_parent_repair_barrier_and_close_cancels_only_sour
     with wire.client.websocket_connect('/ws') as ws:
         subscribe(ws,ref(initial));assert receive(ws,'indicator.subscribed')['ok']
         receive(ws,'indicator.snapshot')
-        dirty = wire.source.bars[10].time
+        dirty = wire.source.rows[10].time
         event = DataEvent(DataEventType.BACKFILL_COMPLETED,SeriesKey('BTCUSDT','1m'),detail={
             'request_id':'parent-owned-chart','bars_count':1,'request_start_ms':dirty*1000,
             'request_end_ms':dirty*1000,'range_start_ms':dirty*1000,'range_end_ms':dirty*1000})
         async def start_repair():
-            wire.source.bars[10] = replace(wire.source.bars[10],close=101)
+            wire.source.replace_bar(10,replace(wire.source.rows[10],close=101))
             await wire.source.emit(event)
             await asyncio.wait_for(coordinator.entered.wait(),8)
         wire.client.portal.call(start_repair)

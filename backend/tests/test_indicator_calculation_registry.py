@@ -10,6 +10,7 @@ from app.indicator.calculation_registry import CalculationRegistry
 
 class Runtime:
     def __init__(self, owner_id):
+        self.owner_id = owner_id
         self.owner = SimpleNamespace(plan=SimpleNamespace(owner_id=owner_id))
         self.close_entered = asyncio.Event()
         self.close_allowed = asyncio.Event()

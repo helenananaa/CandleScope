@@ -33,6 +33,9 @@ def calculation_identity(request: IndicatorRuntimeRequest, series_reference: str
 
 
 class PineCalculationRuntime:
+    @property
+    def owner_id(self): return self.owner.plan.owner_id
+
     @classmethod
     async def open(cls, service: IndicatorRuntimeService, request: IndicatorRuntimeRequest, *, owner_id: str,
                    series_reference: str, start: int, max_pending=8):
@@ -55,7 +58,7 @@ class PineCalculationRuntime:
         return await self.service.host.read_output(self.runtime_id, reference.stream, expected=reference)
 
     async def advance(self, request: IndicatorRuntimeRequest, *, series_reference: str, input_revision: str,
-                      expected: CalculationCursor | None, rebuild: bool, is_current, on_result=None):
+                      expected: CalculationCursor | None, rebuild: bool, is_current, on_result=None, commit_cursor=None):
         if not request.bars:
             raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
         identity = calculation_identity(request, series_reference)
@@ -102,7 +105,7 @@ class PineCalculationRuntime:
             input_start=input_start, observed_through=int(_value(last, 'time')),
             closed_through=closed_through,
             input_revision=input_revision, expected=expected, rebuild=rebuild, is_current=is_current, execute=execute,
-            on_publish=notify)
+            on_publish=notify,commit_cursor=commit_cursor)
 
     async def read(self, *, expected: CalculationCursor):
         return await self.owner.read(expected=expected)

@@ -260,3 +260,44 @@ def test_partial_financial_ack_cannot_advance_beyond_the_acquired_source(storage
     with store.commit_guard(proof):pass
     with pytest.raises(StaleAcquisition):
         with store.commit_guard(proof,committed_through_ms=START-1):pytest.fail("acknowledged progress cannot move backwards")
+
+
+def test_family_watch_covers_base_and_empty_deletion_but_keeps_semantic_isolation(storage):
+    from app.data_engine.data_manager import DataManager
+    from app.data_engine.data_manager.models import SeriesKey
+    from app.data_engine.series_identity import KlineSeriesIdentity
+    write();manager=DataManager();manager.set_storage(storage);api=manager.bars.prefixes
+    first=api.register_family('derived-chart',SeriesKey('BTCUSDT','7m'),from_ms=START,committed_through_ms=START-1)
+    proof=api.prepare(first,committed_through_ms=START-1,through_ms=END+STEP)
+    api.commit(proof,lambda:None)
+    alternate=KlineSeriesIdentity.for_exchange('binance',price_adjustment='split_adjusted')
+    write(200,identity=alternate);write(300,symbol='ETHUSDT')
+    api.commit(proof,lambda:None)
+    storage.delete_bars('BTCUSDT','1m',start_ms=START+STEP,end_ms=START+STEP)
+    with pytest.raises(ProcessedPrefixChanged):
+        api.prepare(proof,committed_through_ms=proof.through_ms,through_ms=END+2*STEP)
+
+
+def test_query_proof_accepts_only_version_checked_unprocessed_source(storage):
+    write();store,initial=begin(storage);pending=prepare(store,initial)
+    write(200)
+    # A query fenced at the new durable head may accept the unprocessed input.
+    fresh=store.query_proof(pending,committed_through_ms=START-1,queried_revision=storage.revision_store.head())
+    assert fresh.version>pending.version
+    with store.commit_guard(fresh):pass
+    write(300)
+    with pytest.raises(PrefixContinuityUnavailable):
+        store.query_proof(fresh,committed_through_ms=START-1,queried_revision=storage.revision_store.head())
+    with pytest.raises(ProcessedPrefixChanged):
+        store.query_proof(fresh,committed_through_ms=END,queried_revision=storage.revision_store.head())
+
+
+def test_query_proof_rejects_mutation_after_query_or_newer_acquisition(storage):
+    write();store,initial=begin(storage);pending=prepare(store,initial)
+    query_head=storage.revision_store.head();write(200)
+    from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged
+    with pytest.raises(PrefixAcquisitionChanged):
+        store.query_proof(pending,committed_through_ms=START-1,queried_revision=query_head)
+    prepare(store,initial)
+    with pytest.raises(StaleAcquisition):
+        store.query_proof(pending,committed_through_ms=START-1,queried_revision=storage.revision_store.head())

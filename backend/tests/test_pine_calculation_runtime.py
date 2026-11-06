@@ -22,6 +22,38 @@ def raw(rows, **changes):
 
 
 @pytest.mark.anyio
+async def test_failed_source_commit_restores_cursor_after_actual_runtime_advanced(tmp_path):
+    spec = owner(tmp_path/'failed-commit.sqlite').spec
+    host = RuntimeHostService(RuntimeRegistry(plugins=(spec,)),host_name='CandleScope',host_version='0.3.0')
+    service = IndicatorRuntimeService(IndicatorRuntimeRoutes((IndicatorRuntimeRoute('pine','sidecar',spec.runtime_id),)),host=host)
+    calculation = None
+    observations = []
+    async def observe(*args):observations.append(args)
+    service.observe_result = observe
+    try:
+        calculation = await PineCalculationRuntime.open(service,raw(bars(500)),owner_id='source-commit-chart',
+            series_reference=SERIES,start=bars(1)[0].time)
+        first = await calculation.advance(raw(bars(500)),series_reference=SERIES,input_revision='1',
+            expected=None,rebuild=False,is_current=lambda:True)
+        def failed_commit(publish):
+            publish()
+            raise OSError('source commit failed after publication')
+        with pytest.raises(OSError,match='source commit failed'):
+            await calculation.advance(raw(bars(501,forming=True)),series_reference=SERIES,input_revision='1',
+                expected=first,rebuild=False,is_current=lambda:True,commit_cursor=failed_commit)
+        assert calculation.owner.cursor == first and len(observations) == 1
+        with pytest.raises(CalculationOwnerError,match='REBUILD_REQUIRED'):
+            await calculation.read(expected=first)
+        repaired = await calculation.advance(raw(bars(501,forming=True)),series_reference=SERIES,input_revision='2',
+            expected=first,rebuild=True,is_current=lambda:True)
+        assert repaired.generation == 2 and len(observations) == 2
+        assert counter((await calculation.read(expected=repaired)).output) == 501
+    finally:
+        if calculation is not None:await calculation.close()
+        await service.stop();await host.stop()
+
+
+@pytest.mark.anyio
 async def test_real_service_read_does_not_execute_observe_or_replace_source_domain(tmp_path):
     spec = owner(tmp_path/'service.sqlite').spec
     host = RuntimeHostService(RuntimeRegistry(plugins=(spec,)), host_name='CandleScope', host_version='0.3.0')

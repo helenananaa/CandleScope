@@ -17,12 +17,13 @@ from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_indicator, run_storage
 from app.indicator.calculation_contract import check_reference, projection_position
 from app.indicator.calculation_owner import CalculationOwnerError
+from app.indicator.chart_source import ChartSource
 from app.indicator.pine_calculation import PineCalculationRuntime, calculation_identity
 from app.indicator.series_reference import series_reference
 from app.api.v1.stream_indicator_payloads import (
     IndicatorRangeNotReadyError, _build_plugin_snapshot_from_payload,
     _indicator_warmup_bars, _indicator_compute_query_bounds, _missing_overlaps_target, _plugin_snapshot_or_patch_from_result,
-    _query_indicator_compute_bars_async, _query_indicator_compute_result,
+    _closed_indicator_compute_bars, _query_indicator_compute_result,
     _replace_range_from_snapshot, _script_runtime_request,
 )
 from app.indicator.serialization import serialize_plugin_runtime_result
@@ -34,8 +35,8 @@ def _snapshot_payload(client_id, meta, output):
 
 
 class ChartCalculation:
-    def __init__(self, binding, *, dm, meta, range_service):
-        self.binding, self.owner = binding, binding.owner
+    def __init__(self, owner_id, *, dm, meta, range_service):
+        self.owner_id, self.binding = owner_id, None
         self.dm, self.meta, self.range_service = dm, deepcopy(meta), range_service
         self.series = series_reference(meta)
         self._lock = asyncio.Lock()
@@ -48,28 +49,32 @@ class ChartCalculation:
         self._source_epoch = 0
         self._barrier = None
         self._barrier_ids = deque(maxlen=64)
+        self.source = ChartSource(dm,owner_id,meta)
 
-    @classmethod
-    async def open(cls, service, owner_id, *, dm, meta, range_service, start, end, coordinator=None):
-        revision = range_service.data_revision_for_meta(meta)
-        rows = await _query_indicator_compute_bars_async(dm, meta, start, end,
-            warmup_bars=_indicator_warmup_bars('PINE', meta.get('params') or {}),
-            backfill_coordinator=coordinator, wait_seconds=None)
-        _, end_ms, compute_start, _ = _indicator_compute_query_bounds(dm, meta, start, end,
-            warmup_bars=_indicator_warmup_bars('PINE', meta.get('params') or {}))
-        rows = [row for row in rows if compute_start <= int(row.time)*1000 <= end_ms]
-        if not rows or len(rows) > config.SCRIPT_MAX_BARS:
-            raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
-        binding = await PineCalculationRuntime.open(service,
-            _script_runtime_request(meta, rows, transport='http.chart.open'), owner_id=owner_id,
-            series_reference=series_reference(meta), start=int(rows[0].time))
-        calculation = cls(binding, dm=dm, meta=meta, range_service=range_service)
-        try:
-            await calculation._command(lambda: calculation._advance(rows, revision, client_id='open', rebuild=False))
-        except BaseException:
-            await calculation.close()
-            raise
-        return calculation
+    @property
+    def owner(self):
+        if self.binding is None: raise CalculationOwnerError('INDICATOR_CALCULATION_NOT_READY')
+        return self.binding.owner
+
+    async def initialize(self, service, *, start, end):
+        async def seed():
+            if self.binding is not None: raise CalculationOwnerError('INDICATOR_CALCULATION_CHANGED')
+            revision = self._revision()
+            warmup = _indicator_warmup_bars('PINE',self.meta.get('params') or {})
+            start_ms,end_ms,compute_start,_ = _indicator_compute_query_bounds(self.dm,self.meta,start,end,warmup_bars=warmup)
+            acquisition = await self.source.acquire(start_ms=compute_start,through_ms=self.source.end_ms(end),rebuild=True)
+            result,_,_ = await run_storage(_query_indicator_compute_result,self.dm,self.meta,start,end,
+                warmup_bars=warmup,auto_backfill=False,min_revision=acquisition.proof.storage_revision)
+            rows = _closed_indicator_compute_bars(result,start,end,start_ms,end_ms)
+            rows = [row for row in rows if compute_start <= int(row.time)*1000 <= end_ms]
+            if not rows or len(rows) > config.SCRIPT_MAX_BARS:
+                raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
+            await acquisition.query_proof(result)
+            self.binding = await PineCalculationRuntime.open(service,
+                _script_runtime_request(self.meta,rows,transport='http.chart.open'), owner_id=self.owner_id,
+                series_reference=self.series,start=int(rows[0].time))
+            await self._advance(rows,revision,client_id='open',rebuild=False,acquisition=acquisition)
+        return await self._command(seed)
 
     def _revision(self):
         return self.range_service.data_revision_for_meta(self.meta)
@@ -119,7 +124,7 @@ class ChartCalculation:
         async def run():
             async with self._lock:
                 return await operation()
-        task = asyncio.create_task(run(), name='chart-calculation:' + self.owner.plan.owner_id)
+        task = asyncio.create_task(run(), name='chart-calculation:' + self.owner_id)
         self._tasks.add(task)
         def finished(done):
             self._tasks.discard(done)
@@ -127,15 +132,17 @@ class ChartCalculation:
         task.add_done_callback(finished)
         return await asyncio.shield(task)
 
-    def _stamp(self, payload, cursor, revision):
+    def _stamp(self, payload, cursor, revision, acquisition):
         if (self._token(revision) != self._token(self._revision())
                 or cursor.input_revision != self._input_token(revision)):
             raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
-        payload['calculation'] = projection_position(self.owner, cursor)
-        payload['dataRevision'] = dict(revision)
+        def publish():
+            payload['calculation'] = projection_position(self.owner, cursor)
+            payload['dataRevision'] = dict(revision)
+        acquisition.commit(publish)
         return payload
 
-    async def _advance(self, rows, revision, *, client_id, rebuild, bar_time=0, epoch=None):
+    async def _advance(self, rows, revision, *, client_id, rebuild, acquisition, bar_time=0, epoch=None):
         payload = None
         epoch = self._source_epoch if epoch is None else epoch
         meta = {**self.meta, 'pineLiveUpdate':bool(bar_time), 'pineLiveBarTime':int(bar_time)}
@@ -146,19 +153,23 @@ class ChartCalculation:
             if not bar_time:
                 payload['type'] = 'indicator.snapshot'
                 payload['range'] = {'start':self.owner.plan.start, 'end':cursor.observed_through}
-            self._stamp(payload, cursor, revision)
+            self._stamp(payload, cursor, revision, acquisition)
             self._inputs = tuple(dict(item) for item in result.inputs)
+        closed = max((row.time for row in rows if row.is_closed),default=0)
+        if self.owner.cursor is not None: closed = max(closed,self.owner.cursor.closed_through)
+        acquisition.closed(closed)
         cursor = await self.binding.advance(_script_runtime_request(meta, rows,
                 transport='websocket.chart' if bar_time else 'http.chart.advance'),
             series_reference=self.series, input_revision=self._input_token(revision,epoch),
             expected=self.owner.cursor, rebuild=rebuild,
             is_current=lambda:self._token(revision) == self._token(self._revision()) and epoch == self._source_epoch,
-            on_result=publish)
-        return self._stamp(payload, cursor, revision)
+            on_result=publish,commit_cursor=acquisition.commit)
+        return self._stamp(payload, cursor, revision, acquisition)
 
-    async def _query(self, start, end, *, live=False):
+    async def _query(self, start, end, *, live=False, acquisition):
         result, start_ms, end_ms = await run_storage(_query_indicator_compute_result,
-            self.dm, self.meta, start, end, warmup_bars=0, auto_backfill=False)
+            self.dm, self.meta, start, end, warmup_bars=0, auto_backfill=False,
+            min_revision=acquisition.proof.storage_revision)
         if _missing_overlaps_target(result.missing_ranges, start_ms, end_ms):
             raise IndicatorRangeNotReadyError('Chart calculation input is not contiguous')
         rows = [row for row in result.bars if start <= row.time <= end and (live or row.is_closed)]
@@ -167,15 +178,16 @@ class ChartCalculation:
         if (not rows or rows[0].time != start or len(rows) > config.SCRIPT_MAX_BARS
                 or (self.owner.cursor is not None and rows[-1].time < self.owner.cursor.observed_through)):
             raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+        await acquisition.query_proof(result)
         return rows
 
-    async def _snapshot(self, client_id, revision):
+    async def _snapshot(self, client_id, revision, acquisition):
         cursor = self.owner.cursor
         snapshot = await self.binding.read(expected=cursor)
         payload = await run_indicator(_snapshot_payload,client_id,self.meta,snapshot.output)
         payload['range'] = {'start':self.owner.plan.start, 'end':cursor.observed_through}
         if self._inputs: payload['param_schema'] = [dict(item) for item in self._inputs]
-        return self._stamp(payload, cursor, revision)
+        return self._stamp(payload, cursor, revision, acquisition)
 
     async def view(self, reference, *, client_id, start, end, rebuild=False):
         async def read():
@@ -184,17 +196,20 @@ class ChartCalculation:
             if start < self.owner.plan.start or end < start:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
-            reset = rebuild or self._input_token(revision,epoch) != cursor.input_revision
+            reset = rebuild or self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
+            acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,
+                through_ms=self.source.end_ms(max(end,cursor.observed_through)),rebuild=reset)
             if reset or end > cursor.observed_through:
                 rows = await self._query(self.owner.plan.start if reset else max(self.owner.plan.start,cursor.closed_through),
-                    max(end, cursor.observed_through), live=cursor.observed_through > cursor.closed_through)
+                    max(end, cursor.observed_through), live=cursor.observed_through > cursor.closed_through,
+                    acquisition=acquisition)
                 # Rebuilds preserve the whole old prefix atomically. They may
                 # not be sliced into the narrow range that triggered repair.
-                return await self._advance(rows, revision, client_id=client_id, rebuild=reset, epoch=epoch)
-            payload = await self._snapshot(client_id, revision)
+                return await self._advance(rows, revision, client_id=client_id, rebuild=reset, epoch=epoch,acquisition=acquisition)
+            payload = await self._snapshot(client_id, revision,acquisition)
             replacement = _replace_range_from_snapshot(payload, reason='chart-domain-view',
                 start_s=start, end_s=min(end,cursor.observed_through))
-            return self._stamp(replacement, cursor, revision)
+            return self._stamp(replacement, cursor, revision,acquisition)
         return await self._command(read)
 
     async def attach(self, reference, *, writer_id, dispose):
@@ -215,17 +230,19 @@ class ChartCalculation:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_CHANGED')
             self._require_source_ready()
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
-            rebuild = self._input_token(revision,epoch) != cursor.input_revision
+            rebuild = self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
             end = max(cursor.observed_through, int(through), int(revision.get('closedThrough') or 0))
+            acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,
+                through_ms=self.source.end_ms(end),rebuild=rebuild)
             if not through and not rebuild and end == cursor.observed_through:
-                return await self._snapshot(client_id, revision)
+                return await self._snapshot(client_id, revision,acquisition)
             # Keep the last admitted confirmed row as the transport overlap.
             # A forming row is not a committed prefix anchor in the runtime;
             # sending it alone can only reset, which this owner rejects.
             rows = await self._query(self.owner.plan.start if rebuild else max(self.owner.plan.start,cursor.closed_through),
-                end, live=True)
+                end, live=True, acquisition=acquisition)
             return await self._advance(rows, revision, client_id=client_id, rebuild=rebuild,
-                bar_time=0 if rebuild else int(through), epoch=epoch)
+                bar_time=0 if rebuild else int(through), epoch=epoch,acquisition=acquisition)
         return await self._command(update)
 
     async def close(self):
@@ -235,6 +252,7 @@ class ChartCalculation:
             async def drain():
                 if self._tasks: await asyncio.gather(*tuple(self._tasks), return_exceptions=True)
                 if self._dispose_writer is not None: await self._dispose_writer()
-                await self.binding.close()
-            self._close_task = asyncio.create_task(drain(), name='chart-calculation-close:' + self.owner.plan.owner_id)
+                if self.binding is not None: await self.binding.close(release=self.source.close)
+                else: await self.source.close()
+            self._close_task = asyncio.create_task(drain(), name='chart-calculation-close:' + self.owner_id)
         await finish_cleanup(self._close_task)

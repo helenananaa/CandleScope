@@ -567,6 +567,7 @@ def _query_indicator_compute_result(
     *,
     warmup_bars: int,
     auto_backfill: bool,
+    min_revision: int | None = None,
 ) -> tuple[Any, int, int]:
     start_ms, end_ms, compute_start_ms, needed = _indicator_compute_query_bounds(
         dm, meta, start_s, end_s, warmup_bars=warmup_bars,
@@ -579,6 +580,7 @@ def _query_indicator_compute_result(
         "market_type": meta["market_type"],
         "auto_backfill": auto_backfill,
         **identity_kwargs(meta),
+        **({'min_revision':min_revision} if min_revision is not None else {}),
     }
     result = dm.query(
         meta["symbol"],

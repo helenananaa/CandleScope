@@ -18,10 +18,10 @@ from typing import Protocol
 from uuid import uuid4
 
 from app.core.async_cleanup import finish_cleanup
-from .calculation_owner import CalculationOwnerError, ScriptCalculationOwner
+from .calculation_owner import CalculationOwnerError
 
 class CalculationRuntime(Protocol):
-    owner: ScriptCalculationOwner
+    owner_id: str
 
     async def close(self) -> None: ...
 
@@ -71,7 +71,7 @@ class CalculationRegistry:
                 # The factory is application code, not a public transport.
                 # Never adopt an owner under a different registry identity.
                 entry.runtime = runtime
-                if runtime.owner.plan.owner_id != entry.owner_id:
+                if runtime.owner_id != entry.owner_id:
                     raise CalculationOwnerError('INDICATOR_CALCULATION_OUTPUT_IDENTITY_CHANGED')
                 entry.last_used = self._clock()
                 return runtime

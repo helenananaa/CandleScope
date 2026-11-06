@@ -1193,11 +1193,10 @@ async def open_chart_calculation(req: ChartCalculationOpenRequest, request: Requ
         _validate_jobs([IndicatorRangeBatchJob(req.clientId, meta, req.start, req.end)])
         dm, ranges = _require_data_manager(request), _resolve_indicator_range_service(request)
         async def create(identity):
-            return await ChartCalculation.open(service, identity, dm=dm, meta=meta,
-                range_service=ranges, start=req.start, end=req.end,
-                coordinator=_resolve_backfill_coordinator(request))
+            return ChartCalculation(identity,dm=dm,meta=meta,range_service=ranges)
         owner_id = await service.calculations.open(create)
         async with service.calculations.borrow(owner_id) as calculation:
+            await calculation.initialize(service,start=req.start,end=req.end)
             payload = await calculation.view(
                 reference_for(calculation.owner),
                 client_id=req.clientId, start=calculation.owner.plan.start, end=req.end)

@@ -108,7 +108,8 @@ class ScriptCalculationOwner:
                       observed_through: int, closed_through: int, input_revision: str,
                       expected: CalculationCursor | None, rebuild: bool,
                       is_current: Callable[[], bool], execute: Execute,
-                      on_publish: Callable[[CalculationCursor], Awaitable[None]] | None = None) -> CalculationCursor:
+                      on_publish: Callable[[CalculationCursor], Awaitable[None]] | None = None,
+                      commit_cursor: Callable[[Callable[[], None]], None] | None = None) -> CalculationCursor:
         if (semantic_identity != self.plan.semantic_identity or type(rebuild) is not bool
                 or not isinstance(input_revision, str) or not input_revision or len(input_revision) > 256
                 or any(type(value) is not int for value in (input_start, observed_through, closed_through))
@@ -148,16 +149,23 @@ class ScriptCalculationOwner:
                 reset = old is None or rebuild or execution.reset or (
                     execution.output.owner_epoch, execution.output.generation) != (
                     old.output.owner_epoch, old.output.generation)
-                self._cursor = CalculationCursor(self.plan.owner_id,
+                candidate = CalculationCursor(self.plan.owner_id,
                     1 if old is None else old.generation + int(reset),
                     1 if old is None else old.sequence + 1, input_revision,
                     observed_through, closed_through, execution.output)
+                def publish():
+                    if not is_current():
+                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
+                    self._cursor = candidate
+                if commit_cursor is None: publish()
+                else: commit_cursor(publish)
                 self._runtime_epoch = runtime_epoch
                 self._stale = False
             except BaseException:
                 # The runtime may have progressed before failure/fencing. Only
                 # a full-origin rebuild may make its projection current again.
                 self._stale = True
+                self._cursor = old
                 raise
             if on_publish is not None:
                 # Publication/observer ordering stays under the same owner.

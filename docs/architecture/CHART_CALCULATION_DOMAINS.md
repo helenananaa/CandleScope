@@ -104,9 +104,44 @@ Frontend consumers must bind results to the expected domain, reject decreasing
 generations/sequences and delayed prior-domain HTTP/WS responses, and replace
 the whole projection on a new generation. This backend step does not yet wire
 those checks into the chart hook or establish renderer/package/Native evidence.
-The real DataManager's transaction-owned prefix guarantees also need explicit
-qualification before enabling the hook: initial HTTP-to-WS acquisition and
-background/parent-chunk writes cannot be certified solely by a coarse transport
-revision token. Use the existing source-prefix facade/transaction proofs where
-the actual Manager call chain requires them; controlled BAR fixtures do not
-prove that acquisition/commit boundary.
+
+## Transactional source provenance
+
+The opt-in chart owner registers a bounded source-family prefix through
+`DataManager.bars.prefixes` before its first query. The family keeps the full
+semantic series identity and covers intervals used by lazy derivation, including
+base candles before a custom target has been materialized. Existing exact-series
+strategy receipts and their serialized schema are unchanged. An active chart
+owns at most two watch receipts while replacing a generation; it owns no extra
+OHLCV or output history.
+
+Every input query carries the acquired canonical storage revision as
+`min_revision`, forcing the existing revision-aware cache reader to synchronize.
+A derived query may materialize its own unprocessed target rows. Its final
+version-checked storage head can prove those writes, but cannot rebase an
+acknowledged prefix, roll back progress, or accept changes after that query.
+Unannounced physical writes and deletions dirty overlapping watches in the same
+SQLite transaction; they therefore cover separate writers and the HTTP-to-WS gap
+without relying on a transport revision or callback being delivered.
+
+The runtime cursor and each prepared output publication pass a short synchronous
+source commit guard. Script execution, source reads and serialization stay
+outside the SQLite write fence. A private DataManager amendment cursor also
+fences cache-only correction delivery; ordinary forming, append and duplicate
+backfill notifications do not reset mathematical history. Its generation/epoch
+changes fail closed after bounded clock eviction or reset, without changing the
+existing stream wire schema. Changes to a processed source prefix rebuild from
+the fixed origin; changes during execution or serialization reject the result.
+Read-only projection requests inspect source metadata but still query no market
+rows and execute no script.
+
+Failed source cleanup retains application capacity until retry succeeds. A watch
+which has already disappeared owns no resource to delete; a different incarnation
+is never released as the missing owner's replacement. Registry reservation
+precedes asynchronous registration/query so a failed initialization can retain
+and drain its resources. The existing compiler diagnostic survives failed open.
+
+These source guarantees are qualified with actual DataManager/cache/SQLite,
+HTTP/WS, repository SDK/sidecar and the pinned Pine core. Feed callbacks are
+controlled. They do not establish renderer, public exchange, installed-package,
+macOS save/full quit/restart or Windows acceptance; those remain separate gates.
