@@ -62,23 +62,27 @@ try {
   }], 'single'));
   await q.ready(1, 90000);
   const page = q.s.page;
-  await page.goto(new URL('/strategy.html?source=imported', page.url()).href);
-  await page.getByTestId('strategy-research-result-slot').waitFor();
-  const drawer = page.getByRole('dialog', {name: '数据来源', exact: true});
+  const researchWindow = q.s.app.waitForEvent('window');
+  await page.evaluate(() => window.candlescopeDesktop.openAppPage('/strategy.html?source=imported'));
+  const research = await researchWindow;
+  await research.waitForURL(url => url.pathname === '/strategy.html');
+  await research.getByTestId('strategy-research-result-slot').waitFor();
+  const drawer = research.getByRole('dialog', {name: '数据来源', exact: true});
   if (await drawer.isVisible()) await drawer.getByRole('button', {name: '关闭', exact: true}).click();
-  const hostMode = page.getByRole('button', {name: 'CandleScope 撮合 / 教学模板', exact: true});
+  const hostMode = research.getByRole('button', {name: 'CandleScope 撮合 / 教学模板', exact: true});
   if (await hostMode.isVisible()) await hostMode.click();
-  await page.getByRole('button', {name: '运行记录', exact: true}).click();
-  const history = page.getByRole('dialog', {name: '运行记录', exact: true});
+  await research.getByRole('button', {name: '运行记录', exact: true}).click();
+  const history = research.getByRole('dialog', {name: '运行记录', exact: true});
   await history.waitFor();
   const {runs} = await read('/api/v1/backtests/runs');
   await q.record('research-history', {text: await history.innerText(), runIds: runs.map(run => run.run_id)});
   const row = history.locator('article').filter({hasText: seed.runId.slice(-8)});
   await row.getByRole('button', {name: '查看结果', exact: true}).click({timeout: 10000});
-  const sendBack = page.getByRole('button', {name: '将当前选定版本挂回图表', exact: true});
+  const sendBack = research.getByRole('button', {name: '将当前选定版本挂回图表', exact: true});
   await sendBack.click();
   const dialog = page.getByRole('dialog', {name: '应用选定研究版本', exact: true});
   await dialog.waitFor();
+  assert.equal(new URL(page.url()).searchParams.has('research-version'), false);
   await dialog.getByLabel('目标图表', {exact: true}).selectOption('cell-1');
   await q.screenshot('research-version-target');
   await dialog.getByRole('button', {name: '创建独立图表草稿', exact: true}).click();
@@ -143,6 +147,10 @@ try {
   if (q.s.page && !q.s.page.isClosed()) {
     await fs.writeFile(q.s.root + '/failure-page.txt', await q.s.page.locator('body').ariaSnapshot().catch(() => ''));
     await q.screenshot('failure').catch(() => {});
+    for (const [index, window] of q.s.app.windows().entries()) {
+      await fs.writeFile(q.s.root + '/failure-window-' + index + '.txt',
+        await window.locator('body').ariaSnapshot().catch(() => ''));
+    }
   }
 } finally {
   if (running && q.s.app) {

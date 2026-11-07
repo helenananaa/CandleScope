@@ -542,6 +542,7 @@ function LiveWorkspaceApp() {
   const [statusBarHost, setStatusBarHost] = useState<HTMLElement | null>(null);
   const [strategyPanelOpen, setStrategyPanelOpen] = useState(false);
   const [researchReturnId, setResearchReturnId] = useState(() => new URLSearchParams(window.location.search).get("research-version"));
+  useEffect(() => window.candlescopeDesktop?.onResearchReturn?.(setResearchReturnId), []);
   const closeResearchReturn = useCallback(() => {
     setResearchReturnId(null);
     const url = new URL(window.location.href); url.searchParams.delete("research-version");
