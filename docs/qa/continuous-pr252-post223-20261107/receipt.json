@@ -1,0 +1,56 @@
+{
+  "source": "7d073bcbb5a16e04564f81210f587707b9e6f1fd",
+  "parent": "cfae32af4941e2bcbef600f5f5355f2a0a5f78d8",
+  "main": "5f6b4a3edb4198963c1e868bad299ca1c76ddfc2",
+  "previous": "c72624b6f4a6f67d0085a5b2ae32557f4869e3fb",
+  "expectedTree": "bddc9eb31896bae97117058e651894b085a1276a",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "backend/tests/test_local_offline_main_profile.py",
+    "--basetemp=/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/252/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py",
+    "backend/tests/test_trading_state_stream.py",
+    "backend/tests/test_trading_state_shutdown.py",
+    "-o",
+    "faulthandler_timeout=70"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/252/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/252/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "backendPassed": 257,
+  "architecturePassed": true,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "b6aef104cf68005c95684e5575acb2c4b1f1cfeadf692d197049f698fcaf77b8",
+      "originalSha256": "fe98892a0487f5d3a67cfc8da31fd91669f436abe9add28fc321a45209ff34ae"
+    }
+  }
+}

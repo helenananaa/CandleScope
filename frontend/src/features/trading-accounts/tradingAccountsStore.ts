@@ -45,7 +45,7 @@ function writeSelected(accountId: string | null): void {
 
 /**
  * Account catalog and panel selection. Data belongs to the per-account pool,
- * so pinned charts do not change panel selection or duplicate its polling.
+ * so pinned charts do not change panel selection or duplicate its stream.
  */
 class TradingAccountsStore {
   private allAccounts: TradingAccount[] = [];
@@ -78,7 +78,7 @@ class TradingAccountsStore {
     return () => { this.listeners.delete(listener); };
   };
 
-  /** Keeps data loading and polling alive until the returned release runs. */
+  /** Retains the selected account's data owner until the returned release runs. */
   retain(): () => void {
     this.consumers += 1;
     if (this.consumers === 1) {

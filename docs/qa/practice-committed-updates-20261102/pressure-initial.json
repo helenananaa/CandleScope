@@ -1,0 +1,18 @@
+{
+  "scope": "Controlled real SQLite/manager/executor race at the subscription limit.\n\nNo external market, HTTP, UI, matcher throughput, Windows or production SLO\nclaim. Reports this process's RSS, bounded view adoption and one queued write.\n",
+  "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "subscriptions": 16,
+  "closed_trades": 1000,
+  "fills": 2000,
+  "initial_all_ready_ms": 525.5623340017337,
+  "queued_writer_commit_ms": 493.0588750030438,
+  "all_latest_views_after_write_ms": 1627.8460000030464,
+  "state_reads": 48,
+  "cpu_seconds": 2.013786,
+  "rss_highwater_before": 58589184,
+  "rss_highwater_after": 89309184,
+  "rss_unit": "bytes",
+  "all_latest_views_equal": true,
+  "remaining_subscriptions": 0
+}
