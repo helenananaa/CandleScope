@@ -5,7 +5,7 @@ import { describeError } from "../../i18n/serverErrors.js";
 import type { BacktestRunRecord, RunCompareV3 } from "../backtest/backtestTypes.js";
 import { getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
-import { formatChartStrategyNumber } from "../backtest/chart-tester/chartStrategyResultModel.js";
+import { formatChartStrategyNumber, sampledReportDrawdown } from "../backtest/chart-tester/chartStrategyResultModel.js";
 import { formatDecimal } from "../../shared/formatDecimal.js";
 
 function researchRunConfig(run: BacktestRunRecord): Record<string, unknown> {
@@ -84,6 +84,19 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
   const comparison = activeResponse?.comparison;
   const left = completed.find(({ run }) => run.run_id === comparison?.left.runId);
   const right = completed.find(({ run }) => run.run_id === comparison?.right.runId);
+  const drawdown = comparison?.tradeDiff.maxDrawdown;
+  const needsSampledDrawdown = comparison && left && right && (drawdown?.left == null || drawdown?.right == null);
+  const sampledLeft = needsSampledDrawdown
+    ? sampledReportDrawdown({ equity_curve: comparison.left.equity, account: { initial_balance: left.config.initial_balance } })
+    : null;
+  const sampledRight = needsSampledDrawdown
+    ? sampledReportDrawdown({ equity_curve: comparison.right.equity, account: { initial_balance: right.config.initial_balance } })
+    : null;
+  const sampled = sampledLeft && sampledRight ? {
+    left: sampledLeft.maximum,
+    right: sampledRight.maximum,
+    delta: sampledRight.maximum - sampledLeft.maximum,
+  } : null;
   const currentAvailable = completed.some(({ run }) => run.run_id === currentRunId);
   const date = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? new Date(value).toLocaleString(locale) : "—";
   const optionLabel = ({ run, config }: (typeof completed)[number]) => {
@@ -127,16 +140,16 @@ export default function StrategyRunHistory({ manager, draftId, currentRunId, onO
       <h3>{t("ux.compare")}</h3>
       <p>{t(comparison.directComparisonAllowed ? "chartTester.compare.compatible" : "chartTester.compare.incompatible")}</p>
       {!comparison.directComparisonAllowed && <p>{comparison.incompatibleFields.join(" · ")} {comparison.precisionExplanation}</p>}
-      <table><thead><tr><th>{t("chartTester.tab.settings")}</th><th>{optionLabel(left)}</th><th>{optionLabel(right)}</th></tr></thead><tbody>
+      <table><thead><tr><th scope="col">{t("chartTester.tab.settings")}</th><th scope="col">{optionLabel(left)}</th><th scope="col">{optionLabel(right)}</th></tr></thead><tbody>
         {conditionFields.map(([key, label]) => <tr key={key}><th>{t(label)}</th><td>{key.endsWith("_ms") ? date(left.config[key]) : String(left.config[key] ?? "—")}</td><td>{key.endsWith("_ms") ? date(right.config[key]) : String(right.config[key] ?? "—")}</td></tr>)}
         {Object.entries(comparison.parameterDiff).map(([key, values]) => <tr key={key}><th>{key}</th><td>{JSON.stringify(values.left)}</td><td>{JSON.stringify(values.right)}</td></tr>)}
       </tbody></table>
-      <table><thead><tr><th>{t("chartTester.tab.overview")}</th><th>{left.run.run_id.slice(-8)}</th><th>{right.run.run_id.slice(-8)}</th>
-        {comparison.directComparisonAllowed && <th>{t("researchBatch.compareDelta")}</th>}</tr></thead><tbody>
+      <table><thead><tr><th scope="col">{t("chartTester.tab.overview")}</th><th scope="col">{left.run.run_id.slice(-8)}</th><th scope="col">{right.run.run_id.slice(-8)}</th>
+        {comparison.directComparisonAllowed && <th scope="col">{t("researchBatch.compareDelta")}</th>}</tr></thead><tbody>
         {metrics.map(([key, label]) => {
-          const values = comparison.tradeDiff[key];
+          const values = key === "maxDrawdown" && sampled ? sampled : comparison.tradeDiff[key];
           const format = key === "maxDrawdown" ? (value: unknown) => formatChartStrategyNumber(value, "percent") : metric;
-          return <tr key={key}><th>{t(label)}</th><td>{format(values?.left)}</td><td>{format(values?.right)}</td>
+          return <tr key={key}><th scope="row">{t(label)}{key === "maxDrawdown" && sampled && <small> · {t("chartTester.result.drawdownBasis")}</small>}</th><td>{format(values?.left)}</td><td>{format(values?.right)}</td>
             {comparison.directComparisonAllowed && <td>{format(values?.delta)}</td>}</tr>;
         })}
       </tbody></table>
