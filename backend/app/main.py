@@ -641,8 +641,8 @@ async def _startup_event_impl() -> None:
                     BACKTEST_SETTINGS.db_path,
                 )
             from dataclasses import replace
-            from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
             from app.replay.local_bar_repository import LocalReplayBarRepository
+            from app.replay.local_trade_repository import LocalReplayTradeRepository
             from app.replay.runtime import start_replay_runtime
 
             offline_replay = replace(REPLAY_SETTINGS, replay_history_origin_uri=None,
@@ -652,7 +652,7 @@ async def _startup_event_impl() -> None:
             replay_runtime = await extension_factory(app, "replay", start_replay_runtime)(
                 settings=offline_replay, repository=imported_bars,
                 native_intervals=imported_bars.native_intervals,
-                raw_trade_archive=DisabledRawAggTradeArchive())
+                raw_trade_archive=LocalReplayTradeRepository(local_runtime.service))
             app.state.replay_runtime = replay_runtime
             app.state.replay_service = replay_runtime.service
             if replay_runtime.service is not None:
