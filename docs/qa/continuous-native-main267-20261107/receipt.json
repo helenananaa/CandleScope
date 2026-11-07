@@ -1,0 +1,91 @@
+{
+  "source": "e35d7065cf139e5a20e4bb0aa497ab1422391881",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "steps": 17,
+  "creates": 1,
+  "normalExits": 2,
+  "ownedPidRecordsAbsent": 23,
+  "restarts": 1,
+  "coldSequence": [
+    187,
+    188
+  ],
+  "coldFills": [
+    127,
+    127
+  ],
+  "preservedFills": 127,
+  "renderedEquity": "4981.173706121308849259090291",
+  "renderedPosition": "0E-29",
+  "researchReportPreserved": true,
+  "initialFixtureIssue": "The first runner pointed to the empty seed, so research did not load. A fresh run used the verified imported BAR seed.",
+  "packageVerification": {
+    "verifiedAt": "2026-11-07T08:02:46.326Z",
+    "sourceCommit": "e35d7065cf139e5a20e4bb0aa497ab1422391881",
+    "sourceFiles": 1078,
+    "builtFiles": 172,
+    "pluginAssets": 9,
+    "ciArtifactId": null,
+    "sdkArtifactFiles": null,
+    "sdkPreexistingPyc": null,
+    "pluginSources": {
+      "bundleSha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+      "pluginSourceFiles": 76,
+      "mismatches": [],
+      "engineUnchanged": true
+    },
+    "mismatches": [],
+    "strictSignature": true,
+    "signatureError": null
+  },
+  "artifacts": {
+    "product-diff.txt.gz": {
+      "sha256": "572eb2a3cfc48b553962f2fff386a019046ab7067f72e8b6abc3ccd22430b24e",
+      "originalSha256": "fd58743db4c27a24bd4646c0111d73a7c42204fc347169200570eb7e24140851"
+    },
+    "assembly.log.gz": {
+      "sha256": "76e5a0cd41aa61dfd746c86be46605966dd924f965272896f12e650e1f96c0fc",
+      "originalSha256": "c502fd6bd720678cf6cf50e0e6d354f2295ef3859a79e48e7a3719a0729c5c3f"
+    },
+    "assembly-initial.log.gz": {
+      "sha256": "ce5bbbdfbe95cc487def0476f425315fd2eb54ae57c1ac303295e073f4f4400b",
+      "originalSha256": "58ee13b037b29c31b880fc0cb2cbdf43d286f551af3756692f74364be770d4bb"
+    },
+    "verify.log.gz": {
+      "sha256": "727e4b0d9a87759cd5f606970f19be6d89d8f1463f44539c8da718b58cd457cb",
+      "originalSha256": "d11cc9522ef5356c63d4732f31543abd89dda5151ad974868320c9f372e5b787"
+    },
+    "verify-after.log.gz": {
+      "sha256": "4e9f01b603ff55f8ea0fc04f4462680a0a9f19e005674f510e4830d8d231877a",
+      "originalSha256": "0078d9e6984d481766c70b74486cba35b9f2b12367debdfdb94b50ec49bcf2c4"
+    },
+    "run_native.py.gz": {
+      "sha256": "f1c17b739cce6934038a0a270945b0006845cdae91d501116ab5555641da0dd1",
+      "originalSha256": "20486c44a0121aeee3759f37d27a6e759e11c49c126ca458395e2e59bb5ba79e"
+    },
+    "first-fixture-attempt-acceptance.json.gz": {
+      "sha256": "239674d59ccd9c39d807d97d14ea5eb146744827beacbddb1c2ef04ae63b0afd",
+      "originalSha256": "ea5fb466fbc18c327a4cb6a9f7c2675649f65b1ddcfd31567eb528c092f2a925"
+    },
+    "acceptance.json.gz": {
+      "sha256": "107687bb78c5a9eb9e872aa86019290122a0fc65de6a29d28e2e117b5b7bc220",
+      "originalSha256": "648d6c90a501d95cb3cf93ffbb97f7a039c28697cec0987afb090b0f8dedc5b2"
+    },
+    "source-package-manifest.json.gz": {
+      "sha256": "a559fe04c259be6d273c6104e119c9ec97623ac5f46ec07319d0324747afbbbe",
+      "originalSha256": "c226ca95b7789701f1432aa5f05a9212b22a4f1a1505e94d4eb3cace4f239aa2"
+    },
+    "sidecar-exit-status.json.gz": {
+      "sha256": "15315725f5634c8a06310c1cde706146482ebcb901b9db80d2a7d0ce838c920c",
+      "originalSha256": "bc16f325c0796b1dccd6c78839054481c7e5d8144495ef40835a95b88f466184"
+    },
+    "native.log.gz": {
+      "sha256": "a0b914754e0eb26fa6a09dba6276f33090382e8fddc9063e7cf968c035df116f",
+      "originalSha256": "5e5ad02c813de1cc35bf2056a8ddd643d835bf4a181fefdfa44a0759054ba032"
+    },
+    "research-seed.json.gz": {
+      "sha256": "eacb4cbe8cd3ff4f1a52837af87aa5a2aa80077aa56f5a0ec6a5b5d934fe71c4",
+      "originalSha256": "bbbdea4c2a746d4a8b23cd538ca88bd76bbcb5afa1500d33a505c86dbc577dfc"
+    }
+  }
+}
