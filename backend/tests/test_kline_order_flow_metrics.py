@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 
 from app.data_engine.backfill.models import FetchedBar
 from app.data_engine.bar_aggregator import BarAggregator, BarAggregatorConfig
@@ -349,6 +350,21 @@ def test_aggregation_normalizer_matches_two_legacy_serializer_passes() -> None:
             second["taker_buy_base"],
             second["taker_buy_quote"],
         )
+
+
+def test_aggregation_normalizer_accepts_serialized_volume_before_second_pass() -> None:
+    # Replay/import rows retain decimal strings; the serializer accepts them.
+    # Both enhancement passes must use the same numeric volume boundary.
+    for volume in ("1", "1.000000004", Decimal("1.000000004")):
+        assert normalize_kline_aggregation_fields(
+            volume=volume, quote_volume="10", trades="3",
+            taker_buy_base="0.4", taker_buy_quote="4",
+        ) == (10.0, 3, 0.4, 4.0)
+        # Positive volume and zero quote are unknown, never invented order flow.
+        assert normalize_kline_aggregation_fields(
+            volume=volume, quote_volume="0", trades="3",
+            taker_buy_base="0.4", taker_buy_quote="0",
+        ) == (None, None, None, None)
 
 
 def test_legacy_positive_volume_with_zero_quote_placeholders_fails_closed() -> None:
