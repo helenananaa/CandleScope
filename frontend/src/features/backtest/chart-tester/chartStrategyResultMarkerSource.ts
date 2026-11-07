@@ -130,6 +130,8 @@ export function createChartStrategyResultMarkerSource({
   const selectedChart = () => continuous === undefined ? history : continuous;
   let visibleRange: { from: number; to: number } | null = null;
   let projected: readonly ExternalSeriesMarker[] = [];
+  let eligible: readonly ExternalSeriesMarker[] = [];
+  let checkedSeriesVersion = -1;
   let projectedAxisRevision = -1;
   let projectedRunHash = "";
   let snapshot = EMPTY_SNAPSHOT;
@@ -162,14 +164,27 @@ export function createChartStrategyResultMarkerSource({
       labels,
     }).sort((left, right) => Number(left.time) - Number(right.time));
   };
+  const confirmedMarkers = () => projected.filter((marker) => seriesStore.getByTime(marker.time)?.is_closed === true);
   const getSnapshot = (): ExternalMarkerSnapshot => {
     if (disposed) return EMPTY_SNAPSHOT;
-    if (snapshotRevision === revision && projectedAxisRevision === Number(seriesStore.axisRevision)) return snapshot;
-    if (projectedAxisRevision !== Number(seriesStore.axisRevision)) revision += 1;
-    project();
+    const axisChanged = projectedAxisRevision !== Number(seriesStore.axisRevision);
+    const seriesVersion = Number(seriesStore.version);
+    if (snapshotRevision === revision && !axisChanged) {
+      if (!continuous || checkedSeriesVersion === seriesVersion) return snapshot;
+      checkedSeriesVersion = seriesVersion;
+      const next = confirmedMarkers();
+      if (next.length === eligible.length && next.every((marker, index) => marker === eligible[index])) return snapshot;
+      eligible = next;
+      revision += 1;
+    } else {
+      if (axisChanged) revision += 1;
+      project();
+      eligible = continuous ? confirmedMarkers() : projected;
+      checkedSeriesVersion = seriesVersion;
+    }
     const chart = selectedChart();
     const intervalSeconds = chart ? Math.max(1, parseIntervalSeconds(chart.interval) ?? 1) : 1;
-    const markers = boundVisibleBacktestMarkers(projected, visibleRange, intervalSeconds);
+    const markers = boundVisibleBacktestMarkers(eligible, visibleRange, intervalSeconds);
     const focused: ExternalSeriesMarker[] = [];
     if (focus && continuous === undefined) {
       const { trade, interval, entryLabel, exitLabel } = focus;
@@ -187,11 +202,17 @@ export function createChartStrategyResultMarkerSource({
     return snapshot;
   };
   let unsubscribeSeries: (() => void) | null = null;
-  const observeSeries = () => seriesStore.subscribe(() => {
-    const nextAxisRevision = Number(seriesStore.axisRevision);
-    if (nextAxisRevision === projectedAxisRevision) return;
-    projectedAxisRevision = -1;
-    invalidate();
+  const observeSeries = () => seriesStore.subscribe((delta) => {
+    if (Number(seriesStore.axisRevision) !== projectedAxisRevision) {
+      projectedAxisRevision = -1;
+      invalidate();
+      return;
+    }
+    // A close can update an existing chart time without changing its axis.
+    // Avoid reprojecting or repainting on ticks outside the candidate markers.
+    if (!continuous || (delta.bar && !projected.some((marker) => marker.time === delta.bar?.time))) return;
+    const previous = snapshot;
+    if (getSnapshot() !== previous) publish();
   });
 
   return {
@@ -258,6 +279,7 @@ export function createChartStrategyResultMarkerSource({
       history = null;
       continuous = undefined;
       projected = [];
+      eligible = [];
       listeners.clear();
       unsubscribeSeries?.();
       unsubscribeSeries = null;

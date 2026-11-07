@@ -27,7 +27,9 @@ export default function ContinuousAccountView({ rows, view, onLocateTrade }: {
       <div><dt>{t("continuous.position")}</dt><dd>{text(account.position_qty)}</dd></div>
       <div><dt>{t("continuous.sequence")}</dt><dd>{view.identity.sequence}</dd></div></dl>
     {values.length > 1 && <svg viewBox="0 0 600 90" role="img" aria-label={t("continuous.recentEquity")}><polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" /></svg>}
-    <h3>{t("continuous.fills")}</h3><table><thead><tr>{(["continuous.time", "continuous.side", "continuous.quantity", "continuous.price"] as const).map((key) => <th key={key}>{t(key)}</th>)}</tr></thead>
+    <h3>{t("continuous.fills")}</h3>
+    <p>{t("continuous.fillBoundary")}</p>
+    <table><thead><tr>{(["continuous.time", "continuous.side", "continuous.quantity", "continuous.price"] as const).map((key) => <th key={key}>{t(key)}</th>)}</tr></thead>
       <tbody>{fills.map((value, index) => { const at = continuousFillTimeMs(value);
         return <tr key={index}><td>{at !== null && at <= view.identity.event_time_ms && onLocateTrade && !view.stale
           ? <button type="button" className="strategy-dock-button" onClick={() => onLocateTrade(at)}>{time(at)}</button>
