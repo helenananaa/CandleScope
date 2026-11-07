@@ -1,0 +1,80 @@
+{
+  "source": "7fb023c742d6720c6804d5f3419b07e280299f3a",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "backendPassed": 690,
+  "architecturePassed": true,
+  "native": {
+    "passed": true,
+    "steps": 35,
+    "normalExits": 3,
+    "restarts": 2,
+    "beforeRestartCloseEventsChecked": 2,
+    "afterRestartCloseEventsChecked": 1,
+    "initialAssemblyError": "The runner pointed to the wrong local app_copy.py directory. Assembly was retried before opening the app.",
+    "verification": {
+      "verifiedAt": "2026-11-07T07:22:22.182Z",
+      "sourceCommit": "7fb023c742d6720c6804d5f3419b07e280299f3a",
+      "sourceFiles": 1070,
+      "builtFiles": 164,
+      "pluginAssets": 9,
+      "ciArtifactId": null,
+      "sdkArtifactFiles": null,
+      "sdkPreexistingPyc": null,
+      "pluginSources": {
+        "bundleSha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+        "pluginSourceFiles": 76,
+        "mismatches": [],
+        "engineUnchanged": true
+      },
+      "mismatches": [],
+      "strictSignature": true,
+      "signatureError": null
+    }
+  },
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "b7b5180dbd6c00b0b085325a35929f109a75c10a1aa918059c6667e223bb8de0",
+      "originalSha256": "4ddc8cd81e8997b901a8b749b7c619471e95a562bdcf2afdf9418b37d67ae3e4"
+    },
+    "checks.json.gz": {
+      "sha256": "2ec85c990e2b05c6ead9ec69ac1061bb7d1ff1530469e01b7f3a056a45684ce9",
+      "originalSha256": "53cfd4503381578f68326c93ac37d5b7b5be0cbb87fcc217f3b3f1fdb8a8b5f9"
+    },
+    "assemble.py.gz": {
+      "sha256": "f6f6692af7918b4bd4091329b5a53848b758db9f454e9f6716923fe2ad248ba3",
+      "originalSha256": "1eb9efee7e3ee747808c7fb87bec551300152b061fcb600af5ed0b51345cd879"
+    },
+    "assembly-initial.log.gz": {
+      "sha256": "228931a938f573856f7deb0615f3bb9cddbfd818aeb573c34a88b9d98f138660",
+      "originalSha256": "e42ac4f8b069416413c95756795d1c174121e40959073f4e20e1acbd1320cffc"
+    },
+    "assembly.log.gz": {
+      "sha256": "c9d930ebd6b686f4bc808e60cbce7dc9e61a6c3c21d6e222ed197acdbb44cbfd",
+      "originalSha256": "14fcd1f7b3687902563ecfca4f1161452a304defc4bc526a9f4fcbce669e3158"
+    },
+    "native.log.gz": {
+      "sha256": "bb75e84733dd32c1761c850a8737c060ec2ba4303b01526eeab51d4f5bd26c9a",
+      "originalSha256": "f34bef13b8467d0e58c5602dcaa5a7bb72378de5c5304268bd29b140e2c834c2"
+    },
+    "acceptance.json.gz": {
+      "sha256": "10923f97803cf251510b72fdb18e404a151393d07e340ff2144e39d194e5c4e5",
+      "originalSha256": "31f2a12c7b837ed933ce932e585570b2137361c6a1c6f39e97e94b17043df6e3"
+    },
+    "source-package-manifest.json.gz": {
+      "sha256": "e0ea0f57ab4fdd3ab97f2f2be7bae1bb12a47a3407ddbdcdbfc4aa1a0701c7e5",
+      "originalSha256": "ea8f03c34d43403f7a1d514a1fdaf05c2614a0ddba28bee236e77a3d35377913"
+    },
+    "sidecar-exit-status.json.gz": {
+      "sha256": "866097d0386debc4ebfa212b2d782c305123ce9c66b4b11c767e56a91e5fefb1",
+      "originalSha256": "a645dcae23fb5a4279855b8443d4608ab8ff63a943aa51ce40c71ea5153c9b35"
+    },
+    "verified-after.json.gz": {
+      "sha256": "121b249024cacfb6cf068fb74580cbb31823d070d1ef7f6ef250408e3ff088f1",
+      "originalSha256": "fdfaf36577bcbb0583efe4b3a96301da18420c4e88d3beffe1ca02ae7cb13bf6"
+    }
+  }
+}

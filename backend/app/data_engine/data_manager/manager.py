@@ -303,6 +303,7 @@ class DataManager(DataManagerCore):
     def __init__(self, config: DataManagerConfig | None = None) -> None:
         super().__init__()
         self._cfg = config or DataManagerConfig()
+        self._numeric_indicator_service = None
         self._storage_gc_guard = threading.RLock()
         self._storage_gc_protection_epoch = 0
         self.interval_resolver = IntervalResolver()
@@ -991,6 +992,8 @@ class DataManager(DataManagerCore):
         self.close_strategy()
         self.close_readonly_account()
         self.close_trading()
+        if self._numeric_indicator_service is not None:
+            await self._numeric_indicator_service.close()
         if self.history_prefix_runtime is not None:
             await self.history_prefix_runtime.close()
         self.shared_blocks.close()
@@ -1900,9 +1903,28 @@ class DataManager(DataManagerCore):
         """Register an event-loop consumer after any contending GC transaction."""
         return await self._apply_gc_protected(self.subscribe, callback, **kwargs)
 
-    async def unsubscribe_async(self, handle: SubscriptionHandle) -> None:
+    def bind_indicator_queries(self, service) -> None:
+        """Bind numeric calculations owned by the indicator domain."""
+        if self._numeric_indicator_service is not None and self._numeric_indicator_service is not service:
+            raise RuntimeError('Numeric indicator service is already bound')
+        self._numeric_indicator_service = service
+
+    async def query_indicator(self, request):
+        if self._numeric_indicator_service is None:
+            raise RuntimeError('Numeric indicator service is unavailable')
+        return await self._numeric_indicator_service.query(request)
+
+    async def subscribe_indicator(self, request, callback, **kwargs):
+        if self._numeric_indicator_service is None:
+            raise RuntimeError('Numeric indicator service is unavailable')
+        return await self._numeric_indicator_service.subscribe(request, callback, **kwargs)
+
+    async def unsubscribe_async(self, handle: SubscriptionHandle, *, originating_task: asyncio.Task | None = None) -> None:
         """Remove a consumer without synchronously waiting on a storage writer."""
-        await self._apply_gc_protected(self.unsubscribe, handle)
+        if originating_task is None:
+            await self._apply_gc_protected(self.unsubscribe, handle)
+        else:
+            await self._apply_gc_protected(self.unsubscribe, handle, originating_task=originating_task)
 
     def subscribe(
         self,
@@ -1972,9 +1994,12 @@ class DataManager(DataManagerCore):
             initial_events=self.source_gaps.initial_events(key),
         )
 
-    def unsubscribe(self, handle: SubscriptionHandle) -> None:
+    def unsubscribe(self, handle: SubscriptionHandle, *, originating_task: asyncio.Task | None = None) -> None:
         """Remove a subscription."""
-        self.event_bus.unsubscribe(handle)
+        if originating_task is None:
+            self.event_bus.unsubscribe(handle)
+        else:
+            self.event_bus.unsubscribe(handle, originating_task=originating_task)
 
     async def wait_for_source_continuity(self, key: SeriesKey | frozenset[SeriesKey] | None = None, *, fail_on_error: bool = False) -> None:
         """Wait before replacing a failed wildcard strict consumer.

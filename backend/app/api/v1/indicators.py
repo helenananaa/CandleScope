@@ -539,6 +539,7 @@ def _build_diagnostics_snapshot(
     store: CustomIndicatorStore,
     range_service: IndicatorRangeResultService | None = None,
     runtime_service: IndicatorRuntimeService | None = None,
+    numeric_service: Any = None,
 ) -> dict[str, Any]:
     """Build a compact, stable diagnostics payload for support/debugging."""
     custom_error = None
@@ -570,6 +571,7 @@ def _build_diagnostics_snapshot(
         },
         "executors": executors_snapshot(),
         "rangeCache": range_service.snapshot() if range_service is not None else None,
+        "numericQueries": numeric_service.snapshot() if numeric_service is not None else None,
         "scriptRuntimeRouting": runtime_service.snapshot() if runtime_service is not None else None,
     }
 
@@ -581,6 +583,7 @@ async def get_indicator_diagnostics(request: Request):
         engine=_resolve_runtime_engine(request),
         store=_custom_store,
         range_service=getattr(request.app.state, "indicator_range_service", None),
+        numeric_service=getattr(request.app.state, "numeric_indicator_service", None),
         runtime_service=getattr(
             request.app.state,
             "indicator_runtime_service",
