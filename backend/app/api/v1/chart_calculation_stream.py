@@ -2,6 +2,7 @@
 import asyncio
 from collections import deque
 from copy import deepcopy
+from time import time
 from pydantic import ValidationError
 
 from app.core.executors import run_storage
@@ -76,6 +77,13 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
         try:
             while pending and not entry.get('_disposed'):
                 batch = pending.popleft()
+                if batch['bar'] is not None and batch['bar'].is_closed:
+                    # The venue can finalize just before the local query's
+                    # closed boundary. Keep the ordered input while waiting
+                    # outside the calculation borrow and owner lock.
+                    close_ms = chart.source.end_ms(batch['through']) + 1
+                    while (remaining_ms := close_ms - int(time() * 1000)) > 0:
+                        await asyncio.sleep(remaining_ms / 1000)
                 try:
                     await chart.wait_corrections()
                     async with registry.borrow(reference.domainId) as current:

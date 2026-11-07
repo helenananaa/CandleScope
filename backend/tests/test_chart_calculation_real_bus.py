@@ -2,11 +2,13 @@
 import asyncio
 import json
 import os
+import threading
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from app.api.v1 import chart_calculation_stream
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.models import BarData
 from app.data_engine.bar_aggregator import BarEvent, BarEventType, BarFinality, BarState
@@ -131,6 +133,63 @@ def test_actual_aggregator_preview_provenance_keeps_six_live_observations(real_b
             assert wire.client.post('/fixture/aggregator-preview/3?bucket=1').json()['status'] == 'accepted'
             resumed = transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
             assert transport.value(resumed) == 503
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+
+def test_early_final_waits_for_boundary_without_resetting_pine(real_bus_wire, monkeypatch):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    final = transport.bars(501)[-1]
+    boundary = (final.time + 60) * 1000
+    observed = threading.Event()
+    executions = []
+
+    def wall_clock():
+        now = wire.source.now_ms
+        observed.set()
+        return now / 1000
+
+    execute = wire.service.execute
+
+    async def track_execution(request, **kwargs):
+        if request.bars[-1].time == final.time and request.bars[-1].is_closed:
+            executions.append(wire.source.now_ms)
+            observed.set()
+        return await execute(request, **kwargs)
+
+    monkeypatch.setattr(chart_calculation_stream, 'time', wall_clock, raising=False)
+    monkeypatch.setattr(wire.service, 'execute', track_execution)
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        assert transport.value(transport.receive(ws, 'indicator.snapshot')) == 500
+        for close in (101, 103):
+            wire.client.post('/fixture/tick/501?close=' + str(close))
+            preview = transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert transport.value(preview) == 502
+
+        async def publish_final():
+            wire.source.rows = list(transport.bars(501))
+            wire.source.now_ms = boundary - 250
+            await wire.source.emit(transport.DataEvent(transport.DataEventType.BAR_CLOSED, transport.SeriesKey('BTCUSDT', '1m'), bar=final))
+
+        wire.client.portal.call(publish_final)
+        assert observed.wait(5), 'The ordered writer did not inspect or execute the early final'
+        assert executions == [], 'The early final executed before the local close boundary'
+        wire.source.now_ms = boundary
+        confirmed = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert confirmed['type'] != 'error', confirmed
+        assert transport.value(confirmed) == 503
+        assert confirmed['calculation']['generation'] == initial['calculation']['generation']
+        assert confirmed['calculation']['closedThrough'] == final.time
+        assert executions == [boundary]
+        wire.client.post('/fixture/tick/502?close=101')
+        advanced = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert advanced['type'] != 'error', advanced
+        assert transport.value(advanced) == 504
         ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
         transport.receive(ws, 'indicator.unsubscribed')
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
