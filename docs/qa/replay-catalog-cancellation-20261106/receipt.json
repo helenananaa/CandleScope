@@ -1,0 +1,222 @@
+{
+  "schema": "candlescope.replay-catalog-cancellation/1",
+  "source": "fb4cba41a203ecbc7ebbdcf02f41f407ed7600d3",
+  "base": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
+  "files": {
+    "backend/app/replay/catalog_transport.py": "983a9269012d14778bff41ecf098021909ccb7df2bab0444197f64555652a5df",
+    "backend/app/replay/official_trade_catalog.py": "dd37a23851cc5fef8648cc2e5aa0786d6c11676d3d59c1a324863fee16c6b1d9",
+    "backend/app/replay/runtime.py": "214038d47a8a29043b99adcf029e58dac402dd6d61950894ea5c93abc62b2abd",
+    "backend/tests/test_replay_catalog_shutdown.py": "1d9e0f73e41670b1c48d58fe539372f5b07cd5ac44605ce0b44247ca0c43e8ec"
+  },
+  "evidence": {
+    "checks.json": {
+      "file": "evidence/checks.json.gz",
+      "sha256": "ce1b245d55ee701afebc85a9de60f7895fcf896e5e43ec9e5b56543e0f87a79a",
+      "bytes": 2254
+    },
+    "backend-combined.log": {
+      "file": "evidence/backend-combined.log.gz",
+      "sha256": "ca485621bed3dacc7e1b06e5f26064ee600fdd2c44ea3c669201ff4ef0c0a325",
+      "bytes": 7837
+    },
+    "initial-missing-basetemp-parent-checks.json": {
+      "file": "evidence/initial-missing-basetemp-parent-checks.json.gz",
+      "sha256": "be5a1ae8d35f33d0a4d8ce52ae6cfc674c53654c254f3a530870adc0e74aab45",
+      "bytes": 2254
+    },
+    "initial-missing-basetemp-parent-backend-combined.log": {
+      "file": "evidence/initial-missing-basetemp-parent-backend-combined.log.gz",
+      "sha256": "03797888a5bf8300ef77f54df05c4b40a0be60de7209221dc768a1c1b0e9d2b0",
+      "bytes": 94114
+    },
+    "candlescope-catalog-before-20261106.log": {
+      "file": "evidence/candlescope-catalog-before-20261106.log.gz",
+      "sha256": "a07d7479ccda892b0fbb4b54bef621f79d3babf12eb27d0d73ce2b59176c1931",
+      "bytes": 338432
+    },
+    "candlescope-catalog-after-20261106.log": {
+      "file": "evidence/candlescope-catalog-after-20261106.log.gz",
+      "sha256": "f65d8771022c9b02b7e9698d641500ddcadb8a8ca9678f3ee37989bae59e58c7",
+      "bytes": 99
+    },
+    "candlescope-catalog-expanded-20261106.log": {
+      "file": "evidence/candlescope-catalog-expanded-20261106.log.gz",
+      "sha256": "45e531012d1e0625bdb07411ee584e84dd1dc60b273e87d7efba872afae3c7e8",
+      "bytes": 99
+    },
+    "candlescope-catalog-final-focused-20261106.log": {
+      "file": "evidence/candlescope-catalog-final-focused-20261106.log.gz",
+      "sha256": "80458683522bed20a358904a330ae0a431918236b25e33a9fc1e96c329a17287",
+      "bytes": 98
+    },
+    "baseline-main-parity.log": {
+      "file": "evidence/baseline-main-parity.log.gz",
+      "sha256": "a7a3c7671881007e91878385075bf1254fd669b9d682b65268cd5edc49c2eff8",
+      "bytes": 6376
+    },
+    "architecture.log": {
+      "file": "evidence/architecture.log.gz",
+      "sha256": "f355856f92f3e9c9c2aa68666ae36b9a5abfe82d36a3a6401c7dbf8d3c8f1c76",
+      "bytes": 2634
+    },
+    "architecture-main.log": {
+      "file": "evidence/architecture-main.log.gz",
+      "sha256": "f355856f92f3e9c9c2aa68666ae36b9a5abfe82d36a3a6401c7dbf8d3c8f1c76",
+      "bytes": 2634
+    },
+    "architecture-comparison.json": {
+      "file": "evidence/architecture-comparison.json.gz",
+      "sha256": "145fcd48637cd8d3bed3509c95bfc73547c0c6b0d00821f2b76906e1ae0e55e0",
+      "bytes": 105
+    },
+    "protected-worktrees.json": {
+      "file": "evidence/protected-worktrees.json.gz",
+      "sha256": "64f0717596a4be9f232bf15f976eff95a29efc9ddc0ca0bdd3af626695b3f70d",
+      "bytes": 73
+    },
+    "assembly.log": {
+      "file": "evidence/assembly.log.gz",
+      "sha256": "0ab0919ed24dc1fabf10b060ec15ca27f522f5cda95cffa04580de2050a19ac2",
+      "bytes": 484
+    },
+    "initial-native-harness-classification.json": {
+      "file": "evidence/initial-native-harness-classification.json.gz",
+      "sha256": "b7617dd2070cf3c06113644c3120fe6e47669b124053d17a2d975372539ffe46",
+      "bytes": 7126
+    },
+    "native.log": {
+      "file": "evidence/native.log.gz",
+      "sha256": "9c9e9e4bcf05fe7068cee6e967e104f9e21bbcb32f9aed801098aa3f3911cc91",
+      "bytes": 201
+    },
+    "native-confirmed.log": {
+      "file": "evidence/native-confirmed.log.gz",
+      "sha256": "2060d8e5fe1ba8eab98e074313c0a41a9ded83b27dfd87ce4ed93242dfda6de4",
+      "bytes": 19
+    },
+    "run_checks.py": {
+      "file": "evidence/run_checks.py.gz",
+      "sha256": "6c4d71afada628ce77704b147202c7f68e090b11d8e8d94059c91a2c2e3455cc",
+      "bytes": 726
+    },
+    "assemble_candidate.py": {
+      "file": "evidence/assemble_candidate.py.gz",
+      "sha256": "29c3e00d2cf8482727b9ffa607609717c18c1b8cd7cb2bd3d41eb1c4d143126e",
+      "bytes": 2847
+    },
+    "app_copy.py": {
+      "file": "evidence/app_copy.py.gz",
+      "sha256": "30763cddb59e7f25a4cdd2d1bd6aa96e7b38137070dd868810da3db0ddd9516a",
+      "bytes": 935
+    },
+    "native-driver.mjs": {
+      "file": "evidence/native-driver.mjs.gz",
+      "sha256": "2a077ab3742e97ea16250d2dcffd97a0daee2acb065f02f828efd9f958010004",
+      "bytes": 13532
+    },
+    "native_shutdown.mjs": {
+      "file": "evidence/native_shutdown.mjs.gz",
+      "sha256": "a5f9295cdec5691eb273ba1a6f6a6e079b3b86986a19e2f5cf0ab50da5afd62d",
+      "bytes": 2495
+    },
+    "native/acceptance.json": {
+      "file": "evidence/native--acceptance.json.gz",
+      "sha256": "ef669bd592c84f27d98a71b1016e17702f21c4133210c644ab1444944c059f09",
+      "bytes": 16122
+    },
+    "native/sidecar-exit-status.json": {
+      "file": "evidence/native--sidecar-exit-status.json.gz",
+      "sha256": "be43fb5524205fd69cef70f392574853cecfb65e7351108c34b15dd842f0cf45",
+      "bytes": 455
+    },
+    "native/source-package-manifest.json": {
+      "file": "evidence/native--source-package-manifest.json.gz",
+      "sha256": "7ea40a702845bd2ba58619051e04174d123164b1c0b7255db4c7baa7c2386ce9",
+      "bytes": 150206
+    },
+    "native/profile/logs/backend-sidecar.log": {
+      "file": "evidence/native--profile--logs--backend-sidecar.log.gz",
+      "sha256": "4595251877b96e5566153c881891cd38d88c04c8dd4f19fb21369ab2b5ce97b3",
+      "bytes": 8668
+    },
+    "native-confirmed/acceptance.json": {
+      "file": "evidence/native-confirmed--acceptance.json.gz",
+      "sha256": "98a6c82146c742183946950e421f0c1328e6f43aea45818f22b6b294b5505415",
+      "bytes": 33650
+    },
+    "native-confirmed/sidecar-exit-status.json": {
+      "file": "evidence/native-confirmed--sidecar-exit-status.json.gz",
+      "sha256": "2f7cdf906daa06e1633fce94253b89a5335636e36042ce09a20bdfe4e9a74e90",
+      "bytes": 849
+    },
+    "native-confirmed/source-package-manifest.json": {
+      "file": "evidence/native-confirmed--source-package-manifest.json.gz",
+      "sha256": "7ea40a702845bd2ba58619051e04174d123164b1c0b7255db4c7baa7c2386ce9",
+      "bytes": 150206
+    },
+    "native-confirmed/independent-post-exit.json": {
+      "file": "evidence/native-confirmed--independent-post-exit.json.gz",
+      "sha256": "d3fa418b592303bb7d0b9cdd72dd8b2db76008b7c0f0068664464970cdb5bef0",
+      "bytes": 13457
+    },
+    "native-confirmed/debug-before-quit-0.json": {
+      "file": "evidence/native-confirmed--debug-before-quit-0.json.gz",
+      "sha256": "46d56ed395e01476f23666d00651a02501a35d612a33548d2a58b500f739ef40",
+      "bytes": 126362
+    },
+    "native-confirmed/debug-before-quit-1.json": {
+      "file": "evidence/native-confirmed--debug-before-quit-1.json.gz",
+      "sha256": "2f061271e15c14b3a972119f51e2d7d23301835ee7486d53a6ebe02d78e9131e",
+      "bytes": 143952
+    },
+    "native-confirmed/profile/logs/backend-sidecar.log": {
+      "file": "evidence/native-confirmed--profile--logs--backend-sidecar.log.gz",
+      "sha256": "e3cb654f2edcc02996d0d929f23bb825179a473e44b54d6f2da8cc144a1b1a92",
+      "bytes": 12400
+    }
+  },
+  "backend": {
+    "suites": 27,
+    "passed": 306,
+    "failed": 2,
+    "skipped": 1,
+    "warnings": 4,
+    "knownMainFailures": [
+      "test_every_trade_builds_exchange_parity_bars[5m]",
+      "test_every_trade_builds_exchange_parity_bars[15m]"
+    ],
+    "mainBaselineParity": {
+      "passed": 6,
+      "failed": 2
+    },
+    "skip": "Windows CRT regression; macOS did not qualify Windows"
+  },
+  "native": {
+    "qualifiedScope": "Actual macOS LIVE active-catalog cancel, normal complete shutdown and restart; no Pine attached",
+    "launches": 2,
+    "sidecarExitCodes": [
+      0,
+      0
+    ],
+    "signals": [
+      null,
+      null
+    ],
+    "killRequests": [],
+    "ownedPidsIndependentlyAbsent": 20,
+    "pageErrors": [],
+    "closeElapsedMs": [
+      2251,
+      11824
+    ],
+    "publicCatalogCompleted": false,
+    "releaseBuild": false,
+    "freshFrontendBuild": false
+  },
+  "preservation": {
+    "protectedWorktrees": 33,
+    "dirtyFiles": 3044,
+    "mismatches": []
+  },
+  "ci": "background; not awaited; main merge requires exact-head/current-base applicable CI audit"
+}
