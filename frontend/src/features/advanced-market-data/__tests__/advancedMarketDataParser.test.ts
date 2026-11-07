@@ -49,6 +49,21 @@ test("history accepts MarketStateEvent rows without Hub revision", () => {
   assert.equal(parsed.data[0]?.data.sample_kind, "settlement");
 });
 
+test("history retains acquisition proof and tail expiry while rejecting reversed ranges", () => {
+  const payload = {
+    type: "market.history", key: record().key, count: 0, data: [],
+    coverage: { earliest_ms: null, latest_ms: null, complete: false,
+      basis: "native_binance_oi_bounded_query_v1", revalidate_after_ms: 12345,
+      ranges: [{ start_ms: 100, end_ms: 199 }],
+      missing_ranges: [{ start_ms: 200, end_ms: 299 }] },
+  };
+  const parsed = parseMarketHistoryPayload(payload);
+  assert.deepEqual(parsed.coverage, payload.coverage);
+  assert.throws(() => parseMarketHistoryPayload({ ...payload, coverage: {
+    ...payload.coverage, ranges: [{ start_ms: 200, end_ms: 100 }],
+  } }));
+});
+
 test("history parses terminal availability metadata for empty pages", () => {
   const parsed = parseMarketHistoryPayload({
     type: "market.history",
