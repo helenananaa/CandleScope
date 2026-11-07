@@ -117,7 +117,7 @@ class ContinuousBarHost:
         host = cls(run_id, definition, provider_factory)
         host.source_receipt = point
         try:
-            prepared = store.prepare_checkpoint(host.checkpoint(),event_time_ms=event_time_ms,data_revision=data_revision)
+            prepared = store.prepare_checkpoint(host.checkpoint(),event_time_ms=event_time_ms,data_revision=data_revision,run_id=run_id,initial=True)
             owner_thread = threading.get_ident()
             allowed, published = True, False
             def publish():
@@ -235,7 +235,7 @@ class ContinuousBarHost:
             try:
                 self.kernel.advance(batch, self._observe)
                 self._check_stopping()
-                prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision)
+                prepared = self.store.prepare_checkpoint(self.checkpoint(point),event_time_ms=stamp,data_revision=data_revision,run_id=self.row["id"])
                 published = False
                 publication_allowed = True
                 owner_thread = threading.get_ident()
