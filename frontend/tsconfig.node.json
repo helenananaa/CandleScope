@@ -6,6 +6,7 @@
   "include": [
     "tests/fixtures/pine-host-entry/**/*.tsx",
     "tests/fixtures/continuous-repair/**/*.tsx",
+    "tests/fixtures/research-isolation/**/*.tsx",
     "scripts/**/*.ts",
     "scripts/**/*.tsx",
     "src/**/__tests__/**/*.ts",
