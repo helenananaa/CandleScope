@@ -27,6 +27,15 @@ assert len({e["id"] for e in events}) == len(events)
 keys = [(e["ruleId"], json.dumps(e["evaluationCursor"], sort_keys=True)) for e in events]
 assert len(set(keys)) == len(keys), "Duplicate accepted evaluation cursor"
 assert any(e.get("acknowledgedAt") for e in events)
+resumed = next(s["evidence"] for s in steps if s["name"] == "restarted-background-rule-admits-new-close")
+active_before_restart = next(r for r in cold[0]["rules"] if r["enabled"])
+saved_cursor = active_before_restart["lastAcceptedCursor"]
+assert resumed["savedCursor"] == saved_cursor
+assert resumed["values"]
+for item in resumed["values"]:
+    event = item["event"]
+    assert event["ruleId"] == active_before_restart["id"]
+    assert event["evaluationCursor"]["barTime"] > saved_cursor["barTime"]
 checked = []
 for step in steps:
     evidence = step["evidence"]
@@ -41,7 +50,7 @@ for step in steps:
             assert math.isclose(value, event["values"][key], rel_tol=1e-10, abs_tol=1e-9), key
         assert any(e["id"] == event["id"] and e["values"] == event["values"] for e in events)
         checked.append({"eventId": event["id"], "cursor": event["evaluationCursor"], "expected": expected})
-assert len(checked) >= 3
+assert len(checked) >= 4
 # The packaged facade creates an outbox only when webhook delivery is configured.
 assert not (root / "native/profile/data/alerts-outbox.sqlite3").exists()
 assert all(d["type"] == "in_app" or d["status"] == "skipped"
@@ -53,6 +62,8 @@ result = {
     "coldExits": len(cold), "coldDisabledStateEqualAcrossRestart": True,
     "finalDiskEqualsColdWitness": True, "rules": len(rules), "events": len(events),
     "uniqueEvaluationCursors": True, "acknowledged": True,
+    "savedCursor": saved_cursor,
+    "newCursorsAfterRestart": [item["event"]["evaluationCursor"] for item in resumed["values"]],
     "independentlyCheckedWindows": checked, "localOnlyChannels": True,
     "webhookOutboxAbsent": True, "inAppToastReceipts": len(events),
     "externalDeliveryQualified": False,
