@@ -20,6 +20,8 @@ from .dual_clock_book import BOOK_MODES, apply_quote, execution_type, report_ide
 DualClockStrategyFn = Callable[[tuple[MarketEvent, ...], MarketEvent], list[dict]]
 
 
+MAX_REPLAY_CLOSED_BAR_SIGNALS = 10_000
+
 @dataclass(slots=True)
 class DualClockSimulationKernel:
     signal_interval: str
@@ -46,6 +48,9 @@ class DualClockSimulationKernel:
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
     scale_stream_decisions: bool = False
+    capture_result_replay: bool = False
+    replay_closed_bar_signals: list[dict] = field(default_factory=list)
+    replay_signal_trace_complete: bool = True
     execution_reporter: Callable[[dict], None] | None = field(default=None, repr=False)
     execution: TradeSimulationKernel = field(init=False)
     builder: TradeBarBuilder = field(init=False)
@@ -123,6 +128,11 @@ class DualClockSimulationKernel:
             ),
             "execution_event_count": self.execution_event_count,
             "last_source_sequence": self._last_source_sequence,
+            **({
+                "replay_closed_bar_signals": history_encoder("dual_replay_signals", self.replay_closed_bar_signals)
+                if extended else list(self.replay_closed_bar_signals),
+                "replay_signal_trace_complete": self.replay_signal_trace_complete,
+            } if self.capture_result_replay else {}),
             **(
                 {"frozen_intents": history_encoder("dual_frozen_intents", self.frozen_intents) if extended else list(self.frozen_intents)}
                 if self.execution_model_revision is not None
@@ -157,6 +167,9 @@ class DualClockSimulationKernel:
                 raise MarketDatasetError("invalid chart book cursor", code="CHECKPOINT_CORRUPT")
         self.builder.restore(payload["bar_builder"])
         self.decisions = [dict(item) for item in payload.get("decisions") or []]
+        if self.capture_result_replay:
+            self.replay_closed_bar_signals = [dict(item) for item in payload.get("replay_closed_bar_signals") or []]
+            self.replay_signal_trace_complete = payload.get("replay_signal_trace_complete") is True
         if self.scale_stream_decisions:
             self._decision_chain_hash = str(
                 payload.get("decision_chain_hash") or "sha256:GENESIS"
@@ -229,6 +242,8 @@ class DualClockSimulationKernel:
                     )
                     if fill_callback is not None or tick_callback is not None:
                         decision.update(trigger="BAR_CLOSE", signal_sequence=bar.sequence)
+                    if self.capture_result_replay and self.replay_signal_trace_complete:
+                        self._record_replay_closed_bar_signal(decision, bar, source)
                     if self.scale_stream_decisions:
                         self._decision_chain_hash = "sha256:" + sha256_hex(
                             {"previous": self._decision_chain_hash, "decision": decision}
@@ -296,6 +311,8 @@ class DualClockSimulationKernel:
             publish_account_liquidation(self.execution)
 
         for trade in events:
+            if self.capture_result_replay:
+                self.execution.order_reveal_sequence = trade.sequence
             if self.execution_fidelity in BOOK_MODES:
                 previous = self.execution._last_event
                 if previous is not None and (trade.sequence <= previous.sequence or trade.event_time_ms < previous.event_time_ms):
@@ -417,8 +434,34 @@ class DualClockSimulationKernel:
             emit(self.builder.close_before(end_time_ms+1),boundary)
         self.execution._append_terminal_curve_point()
         if finalize:
+            if self.capture_result_replay and self.execution._last_event is not None:
+                self.execution.order_reveal_sequence = self.execution._last_event.sequence
             self.execution.finalize_orders()
         return self.result()
+
+    def _record_replay_closed_bar_signal(self, decision, bar, source):
+        wire = decision.get("provider_decision")
+        if not isinstance(wire, Mapping):
+            return
+        kind = wire.get("kind")
+        payload = wire.get("payload") or {}
+        if kind == "SIGNAL":
+            value = str(payload.get("direction") or "FLAT")
+        elif kind == "TARGET_POSITION":
+            value = str(payload.get("targetExposure") or "0")
+        elif kind == "ORDER_INTENT":
+            intents = payload.get("intents")
+            value = str(len(intents) if isinstance(intents, list) else 1)
+        else:
+            return
+        if len(self.replay_closed_bar_signals) >= MAX_REPLAY_CLOSED_BAR_SIGNALS:
+            self.replay_closed_bar_signals.clear()
+            self.replay_signal_trace_complete = False
+            return
+        self.replay_closed_bar_signals.append({
+            "reveal_sequence": source.sequence, "signal_sequence": bar.sequence,
+            "event_time_ms": bar.event_time_ms, "kind": kind, "value": value,
+        })
 
     def result(self) -> SimulationResult:
         if (type(self.execution) is TradeSimulationKernel

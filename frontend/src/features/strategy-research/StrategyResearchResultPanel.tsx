@@ -22,6 +22,7 @@ export function StrategyResearchResultPanel({
   runStatus,
   network,
   onOpenAdvanced,
+  onOpenReplay,
   onLocateTrade,
   dataResolution,
 }: {
@@ -33,6 +34,7 @@ export function StrategyResearchResultPanel({
   runStatus: string;
   network: StrategyResearchNetworkDiagnostics | null;
   onOpenAdvanced?(): void;
+  onOpenReplay?(): void;
   onLocateTrade?(timeMs: number): void;
   dataResolution?: ChartContextResolution | null;
 }) {
@@ -82,6 +84,7 @@ export function StrategyResearchResultPanel({
         locale={locale}
         stale={stale}
       />
+      {onOpenReplay && <button type="button" onClick={onOpenReplay}>{t("report.replay")}</button>}
       {barOnly ? (
         <p data-testid="strategy-research-no-precise">{t("chartTester.result.fidelityFast")}</p>
       ) : null}

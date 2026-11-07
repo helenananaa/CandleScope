@@ -1,5 +1,5 @@
 import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
-import type { BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
@@ -9,7 +9,7 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Partial<Pick<BacktestApiClient, "getResultReplay">>;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -87,6 +87,26 @@ export class StrategyDataManager {
 
   loadResult(runId: string, signal?: AbortSignal) {
     return this.operation(signal, (owned) => this.readResult(runId, owned));
+  }
+
+  loadResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
+      const frame = await this.api.getResultReplay(cursor, owned);
+      if (frame.schema !== "candlescope.user-trade-result-replay/1" || frame.run_id !== cursor.runId
+        || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
+        || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
+        || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
+        || !Array.isArray(frame.bars) || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
+        || !Array.isArray(frame.closed_bar_signals)
+        || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)
+        || frame.fills.some((fill) => fill.cursor > frame.cursor)
+        || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)
+        || frame.bars.some((bar) => frame.time_ms === null || bar.open_time_ms > frame.time_ms)) {
+        throw new StrategyRunStreamError("DATA_SNAPSHOT_MISMATCH", "Result replay frame does not match the requested boundary");
+      }
+      return frame;
+    });
   }
 
   restoreRun(runId: string, signal?: AbortSignal) {

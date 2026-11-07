@@ -503,6 +503,24 @@ def get_chart(request: Request, run_id: str) -> dict[str, Any]:
         return _error(exc)
 
 
+@router.get("/runs/{run_id}/result-replay")
+def get_result_replay(
+    request: Request, run_id: str,
+    snapshot_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    report_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
+    cursor: int = Query(ge=0),
+    interval: str = Query(min_length=2, max_length=64),
+) -> dict[str, Any]:
+    from app.backtest.user_trade_replay import project_user_trade_replay
+
+    try:
+        return project_user_trade_replay(
+            _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash, cursor=cursor, interval=interval,
+        )
+    except BacktestError as exc:
+        return _error(exc)
+
+
 @router.get("/runs/{run_id}/comparison")
 def compare_recent_compatible_run(request: Request, run_id: str) -> dict[str, Any]:
     try:

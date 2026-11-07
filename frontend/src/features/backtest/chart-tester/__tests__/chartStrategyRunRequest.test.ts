@@ -742,3 +742,32 @@ test("continuous handoff sends its profile to preparation and never falls back t
   fallback.prepareChartContext = async () => { throw new Error("Unexpected preparation"); };
   await assert.rejects(runChartStrategyBacktest({ api: fallback, request: chart }), /profile was not prepared/);
 });
+
+test("Strategy Manager rejects a replay response for a different cursor or result hash", async () => {
+  const cursor = { runId: "bt_replay", snapshotHash: "sha256:snapshot", reportHash: "sha256:report", cursor: 1, interval: "5m" };
+  const good = {
+    schema: "candlescope.user-trade-result-replay/1" as const, run_id: cursor.runId,
+    snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash, interval: cursor.interval,
+    cursor: cursor.cursor, signal_interval: "1m", symbol: "ETH/USDC", quote_asset: "USDC",
+    total: 20, time_ms: 1000, source_sequence: 200, bars: [], fills: [], order_events: [],
+    order_trace_available: true, closed_bar_signals: [], signal_trace_available: true, fill_count: 0, cash: "10000", position: "0", equity: "10000",
+  };
+  let response = good;
+  const api: StrategyDataApi = {
+    ...importedApi([]),
+    async getReport() { return assert.fail("unexpected report load"); },
+    async getChart() { return assert.fail("unexpected chart load"); },
+    async cancelRun() { return assert.fail("unexpected cancellation"); },
+    async listRuns() { return assert.fail("unexpected list"); },
+    async compareRuns() { return assert.fail("unexpected comparison"); },
+    async streamRun() { return assert.fail("unexpected stream"); },
+    async getResultReplay() { return response; },
+  };
+  const manager = new StrategyDataManager(api);
+  assert.deepEqual(await manager.loadResultReplay(cursor), good);
+  response = { ...good, cursor: 2 };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  response = { ...good, report_hash: "sha256:other" };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  manager.dispose();
+});

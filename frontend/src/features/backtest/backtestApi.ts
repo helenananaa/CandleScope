@@ -7,6 +7,8 @@ import type {
   BacktestChartData,
   BacktestResearchLaunchContext,
   BacktestResearchLaunchContextInput,
+  BacktestResultReplayCursor,
+  BacktestResultReplayFrame,
   BacktestRunRecord,
   RecentRunCompareV1,
   RunCompareV3,
@@ -216,6 +218,7 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
+  getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   cancelRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   resumeRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
@@ -488,6 +491,16 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
           requestOptions({}, signal),
         ),
       );
+    },
+    async getResultReplay(cursor, signal) {
+      const query = new URLSearchParams({
+        snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
+        cursor: String(cursor.cursor), interval: cursor.interval,
+      });
+      return readJson(await fetch(
+        `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,
+        requestOptions({}, signal),
+      ));
     },
     async exportRun(runId, signal) {
       return readJson(

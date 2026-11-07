@@ -314,3 +314,62 @@
 
 /* Runtime guidance participates in rail layout; controls must never overlap the analysis section. */
 .strategy-research-script > div > p[role="status"] { flex-shrink: 0; margin: 8px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+
+.strategy-result-replay {
+  max-width: 1080px;
+  height: 100dvh;
+  margin: 0 auto;
+  overflow: auto;
+  padding: 16px 24px 32px;
+}
+
+.strategy-result-replay header,
+.strategy-result-replay-controls,
+.strategy-result-replay-controls form,
+.strategy-result-replay-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.strategy-result-replay header {
+  justify-content: space-between;
+}
+
+.strategy-result-replay-controls input {
+  max-width: 8em;
+}
+
+.strategy-result-replay-status {
+  margin: 12px 0;
+}
+
+.strategy-result-replay-status dd {
+  margin: 4px 0 0;
+}
+
+.strategy-result-replay-candles {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+}
+
+.strategy-result-replay button,
+.strategy-result-replay input,
+.strategy-result-replay select {
+  padding: 5px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.strategy-result-replay button:hover:not(:disabled) { background: var(--bg-hover); }
+.strategy-result-replay button:disabled { opacity: 0.45; }
+
+.strategy-result-replay-candles {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  background: var(--bg-secondary);
+}
