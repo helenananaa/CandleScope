@@ -7,6 +7,7 @@ readers. This private controller is not yet a public API or default live owner.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 from functools import partial
@@ -214,6 +215,8 @@ class ContinuousStrategyController:
     def __init__(self,store,manager,inputs,lease,*,clock_ms,max_active_runs=2,provider_factory=None):
         self.store,self.manager,self.inputs,self.lease=store,manager,inputs,lease
         self.clock_ms=clock_ms
+        self.runtime_mode=config.RUNTIME_MODE
+        self.execution_enabled=self.runtime_mode=="LIVE" and manager is not None
         self.loop=asyncio.get_running_loop()
         self.runtime=ContinuousStrategyRuntime(store,manager,inputs.datasets,
             provider_factory or ContinuousProviderFactory(),clock_ms=clock_ms,max_active_runs=max_active_runs)
@@ -262,7 +265,8 @@ class ContinuousStrategyController:
 
     def _live(self):
         self._ready()
-        if config.RUNTIME_MODE!="LIVE":raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile")
+        if config.RUNTIME_MODE!="LIVE" or not self.execution_enabled:
+            raise BacktestError("CONTINUOUS_NOT_READY","Market continuation requires the LIVE profile and its DataManager")
         if self.restore_task is not None and not self.restore_task.done():
             raise BacktestError("CONTINUOUS_NOT_READY","Profile restoration is in progress")
 
@@ -360,7 +364,7 @@ class ContinuousStrategyController:
             if not job.cleaned:await job.cleanup()
             if self.jobs.get(key) is job:self.jobs.pop(key)
 
-    async def control(self,key,action,*,revision,refresh_input=False):
+    async def control(self,key,action,*,revision,refresh_input=False,expected=None):
         self._ready()
         if action not in {"pause","resume","retry","cancel"}:raise BacktestError("CONTINUOUS_INPUT_INVALID","Unknown creation control")
         if type(refresh_input) is not bool:raise BacktestError("CONTINUOUS_INPUT_INVALID","Input refresh must be explicit")
@@ -368,7 +372,7 @@ class ContinuousStrategyController:
         if self.actions:raise BacktestError("CONTINUOUS_NOT_READY","Creation control is draining")
         if self.jobs and key not in self.jobs:
             raise BacktestError("BUDGET_EXCEEDED","Another initialization owns preparation and cleanup")
-        task=asyncio.create_task(self._control(key,action,revision,refresh_input))
+        task=asyncio.create_task(self._control(key,action,revision,refresh_input,expected))
         self.actions[key]=task
         def done(value):
             if self.actions.get(key) is value:self.actions.pop(key)
@@ -376,10 +380,23 @@ class ContinuousStrategyController:
         task.add_done_callback(done)
         return await asyncio.shield(task)
 
-    async def _control(self,key,action,revision,refresh_input):
+    async def _control(self,key,action,revision,refresh_input,expected=None):
         row=await run_storage(self.store.creations.describe,key)
         if type(revision) is not int or row["revision"]!=revision:
             raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Creation control is stale")
+        if expected is not None:
+            if row["phase"]!="COMMITTED":
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Preparation has no committed account identity")
+            # The action slot is already owned. A Manager precheck can become
+            # stale before admission; validate again before stopping an actor
+            # or starting a newer account generation.
+            current=await run_storage(self.store.summary,row["run_id"])
+            identity=self.store.results.identity(current)
+            if (not isinstance(expected,Mapping) or set(expected)!=set(identity)
+                    or any(type(expected[name]) is not type(value) for name,value in identity.items())):
+                raise BacktestError("CONTINUOUS_INPUT_INVALID","Account control requires its full committed identity")
+            if expected!=identity:
+                raise BacktestError("CONTINUOUS_COMMIT_CONFLICT","Account changed before control admission")
         if action in {"resume","retry"}:
             if row["phase"]=="COMMITTED":
                 if action=="retry" and refresh_input:raise BacktestError("CONTINUOUS_NOT_READY","Financial input repair requires separate authorization")
@@ -465,11 +482,15 @@ class ContinuousStrategyController:
 
     async def close(self):
         if self.resources_closed:return
+        self.request_shutdown()
+        if self.close_task is None or self.close_task.done():self.close_task=asyncio.create_task(self._close())
+        await finish_cleanup(asyncio.shield(self.close_task))
+
+    def request_shutdown(self):
+        """Stop producers before their Manager drains outstanding view reads."""
         self.closed=True
         self.runtime._request_shutdown()
         for job in tuple(self.jobs.values()):job.request_stop()
-        if self.close_task is None or self.close_task.done():self.close_task=asyncio.create_task(self._close())
-        await finish_cleanup(asyncio.shield(self.close_task))
 
     async def _close(self):
         # This owned task exists before the first await in close, including

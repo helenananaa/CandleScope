@@ -316,6 +316,28 @@ async def _init_trading_accounts() -> None:
         print(f"[startup] Trading accounts unavailable: {exc}")
 
 
+async def _init_continuous_strategies() -> None:
+    """Adopt one profile owner after StrategyDataManager is bound."""
+    core=getattr(app.state,"data_manager_core",None)
+    gate=None if core is None else getattr(core,"strategy",None)
+    if gate is None:return
+    try:
+        if (RUNTIME_MODE=="LIVE" and gate.market_manager is not None
+                and getattr(app.state,"data_manager",None) is not gate.market_manager):
+            app.state.continuous_strategy_status={"available":False,"execution_enabled":False,"reason":"MARKET_UNAVAILABLE"}
+            return
+        app.state.continuous_strategy_status=await gate.start_continuous()
+    except Exception as failure:
+        app.state.continuous_strategy_status={"available":False,"execution_enabled":False,
+            "error":{"code":str(getattr(failure,"code","CONTINUOUS_STARTUP_FAILED"))[:64],"message":str(failure)[:256]}}
+        owner=getattr(gate,"continuous",None)
+        if owner is not None and not owner.store.closed:
+            # Physical ownership must remain intact; the outer startup cleanup
+            # retries strategy shutdown before touching market dependencies.
+            raise
+        logger.warning("Continuous strategies unavailable: %s",failure,exc_info=True)
+
+
 async def _init_replay_runtime() -> None:
     """Start replay as an application sibling, independent of live DataEngine."""
 
@@ -613,6 +635,7 @@ async def _startup_event_impl() -> None:
                 app.state.backtest_runtime = backtest_runtime
                 app.state.backtest_service = backtest_runtime.service
                 app.state.data_manager_core.bind_strategy(backtest_runtime.service, backtest_runtime)
+                await _init_continuous_strategies()
                 logger.info(
                     "Started LOCAL_OFFLINE backtest runtime at %s",
                     BACKTEST_SETTINGS.db_path,
@@ -635,6 +658,8 @@ async def _startup_event_impl() -> None:
             if replay_runtime.service is not None:
                 app.state.data_manager_core.bind_replay(replay_runtime.service, replay_runtime)
         except BaseException:
+            core=getattr(app.state,"data_manager_core",None)
+            if core is not None:await core.shutdown_strategy()
             await stop_extensions(app)
             if replay_runtime is not None:
                 await replay_runtime.shutdown()
@@ -730,6 +755,7 @@ async def _startup_event_impl() -> None:
             app.state.data_manager_core.bind_replay(app.state.replay_service, app.state.replay_runtime)
         if getattr(app.state, "backtest_service", None) is not None:
             app.state.data_manager_core.bind_strategy(app.state.backtest_service, app.state.backtest_runtime)
+            await _init_continuous_strategies()
         from app.core.config import DATA_DIR, getenv
         from app.data_preparation.bar_adapter import BarPreparationAdapter
         from app.data_preparation.repository import PreparationRepository
