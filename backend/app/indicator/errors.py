@@ -45,3 +45,18 @@ def error_detail(
         hint=hint,
     ).to_dict()
 
+
+class IndicatorRangeNotReadyError(RuntimeError):
+    """Exact K-line repair did not finish inside the bounded request wait."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        request_ids: list[str] | None = None,
+        waited_ms: int = 0,
+    ) -> None:
+        super().__init__(message)
+        self.request_ids = list(request_ids or [])
+        self.waited_ms = max(0, int(waited_ms))
+
