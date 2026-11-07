@@ -32,6 +32,7 @@ export class ContinuousStrategyDataManager {
   constructor(private readonly api: ContinuousApi, private readonly operation: Operation, private readonly retryDelay = wait) {}
 
   capabilities(signal?: AbortSignal): Promise<ContinuousCapabilities> { return this.operation(signal, (owned) => this.api.capabilities(owned)); }
+  editorParameters(source: string, signal: AbortSignal) { return this.operation(signal, (owned) => this.api.editorParameters(source, owned)); }
   catalog(signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.catalog(owned)); }
   create(key: string, body: ContinuousCreate, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.create(key, body, owned)); }
   request(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.request(key, owned)); }

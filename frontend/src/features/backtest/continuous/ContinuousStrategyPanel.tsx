@@ -8,8 +8,9 @@ import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides, type StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
 import type { ContinuousObservation } from "../../market-data/manager/continuousStrategyDataManager.js";
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
-import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
+import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference, saveContinuousReference, continuousArchiveScope } from "./continuousRunReference.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
+import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
 import { continuousFillTimeMs, readContinuousAccountRows } from "./continuousAccountRows.js";
@@ -28,6 +29,9 @@ export interface ContinuousStrategyPanelProps {
   markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   onLocateTrade?(timeMs: number): void;
   onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
+  saveDraft?(): Promise<void>;
+  onParameterChange?(name: string, value: string | number | boolean): void;
+  literalParameters?(disabled: boolean): ReactNode;
 }
 const connectionMessages = { loading: "continuous.loading", connected: "continuous.connected", reconnecting: "continuous.reconnecting",
   closed: "continuous.closed", error: "continuous.error" } as const;
@@ -53,6 +57,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [storageFailed, setStorageFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [attempt, setAttempt] = useState(0);
   const [from, setFrom] = useState(() => new Date(props.initialFromMs ?? Date.now() - 86400000).toISOString().slice(0, 16));
   const [balance, setBalance] = useState(props.initialExecution?.initialBalance ?? "10000"), [percent, setPercent] = useState(props.initialExecution?.equityPercent ?? "10");
@@ -123,6 +132,8 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     }
     catch { setStorageFailed(true); throw new Error(t("continuous.storage")); }
   }
+  const matchingPending = savedRuns.find((item) => !item.runId && item.inputRevision === inputRevision);
+  const changedInputs = !!reference?.runId && reference.inputRevision !== inputRevision;
   async function initialize() {
     if (submitting.current || busy || storageFailed || !manager || !caps?.execution_enabled || !caps.python_editor_authorized || !props.trusted || !qualified) return;
     submitting.current = true;
@@ -132,11 +143,22 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       if (![balance, percent, fee, slippage].every((value) => value.trim() && Number.isFinite(Number(value)))
         || Number(balance) <= 0 || Number(percent) <= 0 || Number(percent) > 100 || Number(fee) < 0 || Number(slippage) < 0
         || (props.mode === "HISTORY_LIVE" && (!Number.isSafeInteger(start) || start < 0 || start >= Date.now()))) throw new Error(t("continuous.invalid"));
-      const next: ContinuousRunReference = reference && !reference.runId ? reference : { schema: 1, requestKey: "chart/" + crypto.randomUUID(), runId: null, inputRevision, createdAtMs: Date.now(),
+      const next: ContinuousRunReference = reference && !reference.runId ? reference : matchingPending ?? { schema: 1, requestKey: "chart/" + crypto.randomUUID(), runId: null, inputRevision, createdAtMs: Date.now(),
         settings: { from, balance, percent, fee, slippage, output } };
       if (next.inputRevision !== inputRevision) throw new Error(t("continuous.pending"));
-      // Persist the idempotency key before submitting; uncertain requests can be recovered after restart.
-      save(next);
+      await props.saveDraft?.();
+      if (!mounted.current) return;
+      // Persist the request before submission while keeping a known account
+      // selected until the backend acknowledges the replacement.
+      if (reference?.runId) {
+        try {
+          saveContinuousReference(localStorage, continuousArchiveScope(scope, next.requestKey), next);
+          setSavedRuns(listContinuousReferences(localStorage, scope));
+        } catch {
+          setStorageFailed(true);
+          throw new Error(t("continuous.storage"));
+        }
+      } else save(next);
       const result = await manager.create(next.requestKey, { mode: props.mode,
         series: { exchange: props.session.exchange, market_type: props.session.marketType, symbol: props.session.symbol, interval: props.session.interval,
           identity: { provider_id: identity.providerId, venue: identity.venue, asset_class: identity.assetClass,
@@ -148,7 +170,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
-      setCreation(result.creation); setState(empty); save({ ...next, runId: result.creation.run_id });
+      save({ ...next, runId: result.creation.run_id }); setCreation(result.creation); setState(empty);
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -219,12 +241,18 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         <option value="SIGNAL">{t("continuous.signal")}</option><option value="TARGET_POSITION">{t("continuous.target")}</option><option value="ORDER_INTENT">{t("continuous.order")}</option>
       </select></label>
     </div>
+    {props.onParameterChange && <ContinuousParameterEditor
+      manager={manager} source={props.source} parameters={props.parameters}
+      enabled={props.active && props.language === "python" && !!caps?.python_editor_authorized}
+      disabled={busy} onChange={props.onParameterChange}
+      fallback={props.literalParameters?.(busy)}
+    />}
     {props.editor(() => { void initialize(); })}
     {!qualified && <p role="status">{t("continuous.unsupported")}</p>}
     {reference && reference.inputRevision !== inputRevision && <p role="status">{t("continuous.edited")}</p>}
     {reference && !reference.runId && <p role="status">{t("continuous.pending")}</p>}
     <div className="continuous-actions">
-      <button type="button" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t(reference && !reference.runId ? "continuous.resubmit" : "continuous.start")}</button>
+      <button type="button" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</button>
       {reference && <button type="button" disabled={busy} onClick={() => { void recover(); }}>{t(reference.runId ? "continuous.observe" : "continuous.recover")}</button>}
       {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <button type="button" key={action} disabled={busy || !caps?.execution_enabled}
         onClick={() => { void control(action); }}>{t(`continuous.${action}`)}</button>)}

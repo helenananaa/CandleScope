@@ -31,6 +31,8 @@ import {
   currentChartStrategyTesterToken,
   type ResultProjectionIdentity,
 } from "./chartStrategyTesterState.js";
+import { loadChartStrategyPanelPreferences } from "./chartStrategyPanelPreferences.js";
+import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
 import {
   chartStrategyResultCache,
@@ -116,6 +118,7 @@ export default function ChartStrategyTesterCellBridge({
   const locale = useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
+  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
   const [runtimeState, setRuntimeState] = useState(() => (
     createChartStrategyTesterState(null, cellScope)
   ));
@@ -175,8 +178,8 @@ export default function ChartStrategyTesterCellBridge({
     sessionKey: `${session.exchange}\u0000${session.marketType}\u0000${session.symbol}\u0000${session.interval}`,
     attachmentKey: autoRunAttachmentKey,
     contentRevision: draftContentRevision,
-    enabled: attachment?.autoRun === true,
-  }), [attachment?.autoRun, autoRunAttachmentKey, draftContentRevision, session.exchange,
+    enabled: runMode === "HISTORY" && attachment?.autoRun === true,
+  }), [attachment?.autoRun, autoRunAttachmentKey, draftContentRevision, runMode, session.exchange,
     session.interval, session.marketType, session.symbol]);
   const autoRunContextKey = `${autoRunContext.sessionKey}\u0000${autoRunContext.attachmentKey ?? ""}\u0000${autoRunContext.contentRevision ?? ""}\u0000${autoRunContext.enabled ? "1" : "0"}`;
   const projectionSeriesStore = useMemo(() => seriesStore ?? new SeriesWindowStore({
@@ -536,7 +539,7 @@ export default function ChartStrategyTesterCellBridge({
       queueMicrotask(() => setAutoRunPauseReason("FLAG_DISABLED"));
       return undefined;
     }
-    if (!attachment.autoRun) {
+    if (!autoRunContext.enabled) {
       cancelPendingAutoRun();
       queueMicrotask(() => setAutoRunPauseReason("USER_DISABLED"));
       return undefined;
@@ -777,6 +780,7 @@ export default function ChartStrategyTesterCellBridge({
       onLocateTrade={onLocateTrade}
       continuousChartActive={continuousChartActive}
       continuousMarkerSource={resultMarkerSource}
+      onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
       onStopObserving={handleStopObserving}
