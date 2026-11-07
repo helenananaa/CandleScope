@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from collections.abc import Awaitable, Mapping, Sequence
 from typing import Callable, TypeVar
 
+from app.core.async_cleanup import finish_cleanup
 from app.core.config import REPLAY_SETTINGS, ReplaySettings
 from app.data_engine.storage.raw_trade_archive import (
     DisabledRawAggTradeArchive,
@@ -39,43 +40,43 @@ class ReplayRuntime:
     service: ReplayService | None = None
     archive_lease: ReplayHistoryArchiveRuntimeLease | None = None
     catalog_refresh_task: asyncio.Task | None = None
+    _shutdown_task: asyncio.Task | None = None
 
     @property
     def enabled(self) -> bool:
         return self.settings.enabled
 
     async def shutdown(self, *, step_timeout: float = 5.0) -> None:
+        if self._shutdown_task is None:
+            self._shutdown_task = asyncio.create_task(
+                self._shutdown_owned(step_timeout=step_timeout),
+                name="replay-runtime-shutdown",
+            )
+        task = self._shutdown_task
+        try:
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                try:
+                    await finish_cleanup(task)
+                except BaseException:
+                    # Retain the original cancellation even if owned cleanup
+                    # failed. Service/lease references remain available to retry.
+                    pass
+                raise
+        finally:
+            # Failed cleanup keeps service/lease ownership and remains retryable.
+            if task.done() and self._shutdown_task is task:
+                self._shutdown_task = None
+
+    async def _shutdown_owned(self, *, step_timeout: float) -> None:
         if self.catalog_refresh_task is not None:
             self.catalog_refresh_task.cancel()
             await asyncio.gather(self.catalog_refresh_task, return_exceptions=True)
             self.catalog_refresh_task = None
-        service = self.service
-        if service is None:
-            if self.archive_lease is not None:
-                self.archive_lease.release()
-                self.archive_lease = None
-            return
-        shutdown_task = asyncio.create_task(
-            service.shutdown(step_timeout=step_timeout),
-            name="replay-runtime-shutdown",
-        )
-        try:
-            await asyncio.shield(shutdown_task)
-        except asyncio.CancelledError:
-            try:
-                await _await_task_uninterruptibly(shutdown_task)
-            except BaseException:
-                # Preserve the service reference when cleanup itself failed so
-                # the owner can retry shutdown.  Cancellation remains the
-                # externally observable lifecycle result.
-                pass
-            else:
-                self.service = None
-                if self.archive_lease is not None:
-                    self.archive_lease.release()
-                    self.archive_lease = None
-            raise
-        self.service = None
+        if self.service is not None:
+            await self.service.shutdown(step_timeout=step_timeout)
+            self.service = None
         if self.archive_lease is not None:
             self.archive_lease.release()
             self.archive_lease = None
@@ -203,11 +204,11 @@ async def start_replay_runtime(
         async def refresh_catalog() -> None:
             while True:
                 try:
-                    await asyncio.to_thread(raw_trade_archive.prune_metadata_cache)
+                    await finish_cleanup(asyncio.to_thread(raw_trade_archive.prune_metadata_cache))
                 except OSError:
                     logger.warning("Could not retire replay catalog metadata; retrying next cycle", exc_info=True)
                 if isinstance(raw_trade_archive, OfficialAggTradeArchive) and raw_trade_archive.needs_catalog_refresh():
-                    await asyncio.to_thread(raw_trade_archive.refresh_official_catalog)
+                    await raw_trade_archive.refresh_official_catalog_async()
                 await asyncio.sleep(60)
         runtime.catalog_refresh_task = asyncio.create_task(refresh_catalog(), name="replay-official-catalog-refresh")
     return runtime
