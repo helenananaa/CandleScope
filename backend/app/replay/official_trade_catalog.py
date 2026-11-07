@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import shutil
 import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 from pathlib import Path
 
+from app.core.async_cleanup import finish_cleanup
+
+from .catalog_transport import CatalogListingTransport, CatalogRefreshStopped
 from .canonical import canonical_sha256
 from .history_archive import ReplayHistoryArchiveError, _atomic_write_json
 from .metadata_retention import detach_obsolete_generations, remove_retired_generations
@@ -113,7 +117,32 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
                 active=() if self._catalog_stage is None else (self._catalog_stage.name,))
         remove_retired_generations(self.catalog_root)
 
-    def refresh_official_catalog(self):
+    async def refresh_official_catalog_async(self):
+        transport = CatalogListingTransport()
+        stop = threading.Event()
+        worker = asyncio.create_task(asyncio.to_thread(
+            self.refresh_official_catalog, opener=transport.open, stop_event=stop,
+        ), name="replay-catalog-worker")
+
+        async def cleanup():
+            stop.set()
+            try:
+                await transport.close()
+            finally:
+                await worker
+
+        try:
+            await asyncio.shield(worker)
+        finally:
+            # Keep ownership through repeated cancellation, including physical
+            # parser/publication threads after their HTTP tasks are drained.
+            await finish_cleanup(cleanup())
+
+    def refresh_official_catalog(self, *, opener=None, stop_event=None):
+        stop = stop_event or threading.Event()
+        io_kwargs = {} if opener is None else {"opener": opener}
+        if stop.is_set():
+            return
         if not self._catalog_guard.acquire(blocking=False):
             return
         self.catalog_refreshing = True
@@ -123,8 +152,10 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
         self._catalog_stage = stage
         try:
             symbols = self.symbols or list_official_agg_trade_symbols(
-                timeout_seconds=self.catalog_timeout
+                timeout_seconds=self.catalog_timeout, **io_kwargs,
             )
+            if stop.is_set():
+                return
             self.catalog_discovered = len(symbols)
             # Publish familiar markets early while the full historical catalog
             # continues in the background. This is ordering, never a whitelist.
@@ -138,6 +169,8 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             if current.exists():
                 payload = json.loads(current.read_text())
                 for item in payload.get("official_availability_indexes", []):
+                    if stop.is_set():
+                        return
                     source = self.catalog_root / item["path"]
                     relative = item["path"].split("_official_availability/", 1)[-1]
                     if Path(relative).parts[-2].removeprefix("symbol=") not in symbols:
@@ -147,12 +180,14 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
                     shutil.copy2(source, destination)
 
             def sync(symbol):
+                if stop.is_set():
+                    raise CatalogRefreshStopped("official catalog discovery stopped")
                 cached = stage / "_official_availability" / "exchange=binance" / "market_type=futures" / ("symbol=" + symbol) / "availability.json"
                 if retrying and cached.exists() and time.time() - cached.stat().st_mtime < 3600:
                     return
                 return sync_official_agg_trade_availability(
                     stage, exchange="binance", market_type="futures",
-                    symbol=symbol, timeout_seconds=self.catalog_timeout,
+                    symbol=symbol, timeout_seconds=self.catalog_timeout, **io_kwargs,
                 )
 
             # Bounded concurrency keeps full discovery practical without
@@ -160,17 +195,39 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
             successes = 0
             last_publish = time.monotonic()
             with ThreadPoolExecutor(max_workers=16, thread_name_prefix="replay-catalog") as pool:
-                futures = {pool.submit(sync, symbol): symbol for symbol in symbols}
-                for future in as_completed(futures):
-                    self.catalog_completed += 1
-                    try:
-                        future.result()
-                        successes += 1
-                    except OfficialTradeHistoryEmpty:
-                        pass
-                    except Exception:
-                        self.catalog_failed += 1
-                        logger.warning("Official history listing unavailable for %s", futures[future], exc_info=True)
+                remaining = iter(symbols)
+                futures = {}
+
+                def fill():
+                    while len(futures) < 16 and not stop.is_set():
+                        symbol = next(remaining, None)
+                        if symbol is None:
+                            break
+                        futures[pool.submit(sync, symbol)] = symbol
+
+                fill()
+                while futures:
+                    if stop.is_set():
+                        for future in futures:
+                            future.cancel()
+                        return  # Executor context drains all physical workers.
+                    done, _ = wait(futures, timeout=0.1, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        symbol = futures.pop(future)
+                        if stop.is_set():
+                            return
+                        self.catalog_completed += 1
+                        try:
+                            future.result()
+                            successes += 1
+                        except OfficialTradeHistoryEmpty:
+                            pass
+                        except Exception:
+                            self.catalog_failed += 1
+                            logger.warning("Official history listing unavailable for %s", symbol, exc_info=True)
+                    fill()
+                    if stop.is_set():
+                        return
                     if successes and time.monotonic() - last_publish >= 15:
                         # Worker files are replaced atomically. Copy into an
                         # immutable generation before exposing a partial update.
@@ -179,6 +236,8 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
                         self._publish(snapshot)
                         self._prune_catalog()
                         last_publish = time.monotonic()
+            if stop.is_set():
+                return
             if successes:
                 self._publish(stage)
                 self._prune_catalog()
@@ -188,7 +247,8 @@ class OfficialAggTradeArchive(RemoteRawAggTradeArchive):
                     "discovered_count": len(symbols),
                 })
         except Exception:
-            logger.warning("Could not refresh official replay history catalog; retaining cached availability", exc_info=True)
+            if not stop.is_set():
+                logger.warning("Could not refresh official replay history catalog; retaining cached availability", exc_info=True)
         finally:
             self._catalog_stage = None
             try:

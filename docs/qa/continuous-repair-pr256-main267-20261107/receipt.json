@@ -1,0 +1,60 @@
+{
+  "source": "d43345da4e032ec876b65f23e8cc6d59f580eb1e",
+  "base": "06a127241679419cbaad96ef8e6f5d0fe0d7ed13",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_epochs.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_repairs.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_source_identity.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "backend/tests/test_kline_prefix_watches.py",
+    "--basetemp=/private/tmp/candlescope-repair-main269-20261107/output/pr256-main267/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-repair-main269-20261107/output/pr256-main267/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-repair-main269-20261107/output/pr256-main267/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "started": "2026-11-07T07:03:11.723598+00:00",
+  "architectureExitCode": 0,
+  "architecturePassed": true,
+  "pytestExitCode": 0,
+  "finished": "2026-11-07T07:04:07.756038+00:00",
+  "passed": 317,
+  "skipped": 0,
+  "suites": 21,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "5e9807d6674ba51e9e66b4f9348d161d564a32a549304d6fec865c4a937281d1",
+      "originalSha256": "ba8c1b5cef1b998f25482e60ec21f715f5b1b5f69a79ce76901df33cba43b142"
+    }
+  }
+}
