@@ -572,6 +572,21 @@ export interface BacktestResultReplayMA {
   points: Array<{ open_time_ms: number; value: number }>;
 }
 
+export interface BacktestResultReplayNote {
+  id: string;
+  revision: number;
+  cursor: number;
+  time_ms: number | null;
+  body: string;
+  saved_at_ms: number;
+}
+
+export interface BacktestResultReplayNoteDraft {
+  id: string;
+  expectedRevision: number;
+  body: string;
+}
+
 export interface BacktestResultReplayFrame {
   schema: "candlescope.user-trade-result-replay/1" | "candlescope.local-bar-result-replay/1";
   run_id: string;
@@ -603,6 +618,7 @@ export interface BacktestResultReplayFrame {
   closed_bar_signals: Array<{ reveal_sequence: number; signal_sequence: number; event_time_ms: number; kind: string; value: string }>;
   signal_trace_available: boolean;
   fill_count: number;
+  notes?: BacktestResultReplayNote[];
   cash: string;
   position: string;
   equity: string;

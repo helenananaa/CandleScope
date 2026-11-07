@@ -9,6 +9,7 @@ import type {
   BacktestResearchLaunchContextInput,
   BacktestResultReplayCursor,
   BacktestResultReplayFrame,
+  BacktestResultReplayNoteDraft,
   BacktestRunRecord,
   RecentRunCompareV1,
   RunCompareV3,
@@ -219,6 +220,8 @@ export interface BacktestApiClient {
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
   getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
+  saveResultReplayNote?(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft,
+    signal?: AbortSignal): Promise<{ revision: number }>;
   exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   cancelRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   resumeRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
@@ -503,6 +506,20 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
       return readJson(await fetch(
         `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,
         requestOptions({}, signal),
+      ));
+    },
+    async saveResultReplayNote(cursor, note, signal) {
+      return readJson(await fetch(
+        `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay/notes`,
+        requestOptions({
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
+            cursor: cursor.cursor, interval: cursor.interval,
+            note_id: note.id, expected_revision: note.expectedRevision, body: note.body,
+          }),
+        }, signal),
       ));
     },
     async exportRun(runId, signal) {

@@ -265,5 +265,6 @@ def project_result_replay(
         "fills": list(visible_fills), "fill_count": visible_fill_count,
         "order_events": list(visible_orders), "order_trace_available": order_trace_available,
         "closed_bar_signals": list(visible_signals), "signal_trace_available": signals is not None,
+        "notes": runtime.service.repository.result_replay_notes(run_id, snapshot_hash, report_hash, cursor),
         "cash": str(account.quote_balance), "position": str(account.position_qty), "equity": str(account.equity()),
     }

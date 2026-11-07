@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayMA } from "../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayMA, BacktestResultReplayNote, BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
@@ -71,6 +71,9 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
   const [playing, setPlaying] = useState(false);
   const [target, setTarget] = useState(String(initial.cursor));
   const [error, setError] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<BacktestResultReplayNoteDraft | null>(null);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
   const frame = received?.request === request ? received.frame : null;
   const total = received?.frame.total;
   const candidate = target.trim() === "" ? NaN : Number(target);
@@ -117,6 +120,28 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
         ...(comparisonMaPeriod === undefined ? {} : { comparisonMaPeriod }) } : {}),
     });
   };
+  const editNote = (note?: BacktestResultReplayNote) => {
+    setPlaying(false);
+    setNoteError(null);
+    setNoteDraft(note
+      ? { id: note.id, expectedRevision: note.revision, body: note.body }
+      : { id: crypto.randomUUID(), expectedRevision: 0, body: "" });
+  };
+  const saveNote = async () => {
+    if (!frame || !noteDraft?.body.trim() || noteSaving) return;
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      await manager.saveResultReplayNote(request, noteDraft);
+      setNoteDraft(null);
+      setRequest(current => current === request ? { ...current } : current);
+    } catch (reason) {
+      setNoteError(describeError(reason, t("replay.notes.saveFailed")));
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
   const canAdvance = frame !== null && frame.cursor < frame.total;
   const lastBar = frame?.bars.at(-1);
   return (
@@ -124,9 +149,9 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
       data-cursor={frame?.cursor} data-interval={frame?.interval}>
       <header>
         <h1>{t("report.replay")}{frame ? ` · ${frame.symbol}` : ""}</h1>
-        <button type="button" onClick={onClose}>{t("report.analysis")}</button>
+        <button type="button" disabled={noteDraft !== null} onClick={onClose}>{t("report.analysis")}</button>
       </header>
-      <div className="strategy-result-replay-controls">
+      <fieldset className="strategy-result-replay-controls" disabled={noteDraft !== null}>
         <button type="button" disabled={request.cursor === 0} onClick={() => navigate(0)}>⏮ {t("native.replay.seek")}</button>
         <button type="button" disabled={request.cursor === 0} onClick={() => navigate(request.cursor - 1)}>← {t("native.replay.seek")}</button>
         <button type="button" disabled={!canAdvance} onClick={() => navigate(request.cursor + 1)}>{t("native.replay.step")}</button>
@@ -161,7 +186,7 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
           onChange={maPeriod => navigate(request.cursor, { maPeriod })} />
         {request.comparisonInterval && <ReplayMaControl testId="strategy-replay-comparison-ma" interval={request.comparisonInterval}
           period={request.comparisonMaPeriod} onChange={comparisonMaPeriod => navigate(request.cursor, { comparisonMaPeriod })} />}
-      </div>
+      </fieldset>
       {error ? <p role="alert">{error} <button type="button" onClick={() => navigate(request.cursor)}>{t("shell.retry")}</button></p>
         : !frame ? <p role="status">{t("research.loading")}</p> : <>
           <div className="strategy-result-replay-status" role="status">
@@ -190,6 +215,30 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
             <div><dt>{t("replay.wb.positions")}</dt><dd>{frame.position}</dd></div>
             <div><dt>{t("replay.wb.equity")}</dt><dd data-testid="strategy-replay-equity">{frame.equity} {frame.quote_asset}</dd></div>
           </dl>
+          {frame.notes && <section className="strategy-result-replay-notes" data-testid="strategy-replay-notes">
+            <h2>{t("replay.notes.title")}</h2>
+            {frame.notes.length === 0 && <p>{t("replay.notes.empty")}</p>}
+            {frame.notes.map(note => <article key={note.id} data-testid="strategy-replay-note"
+              data-revision={note.revision} data-cursor={note.cursor}>
+              <span>#{note.cursor} {note.time_ms !== null && <time>{new Date(note.time_ms).toISOString()}</time>}</span>
+              <p>{note.body}</p>
+              <button type="button" disabled={noteDraft !== null || note.revision >= 20}
+                onClick={() => editNote(note)}>{t("replay.notes.edit")}</button>
+            </article>)}
+            {noteDraft ? <form onSubmit={event => { event.preventDefault(); void saveNote(); }}>
+              <label>{t("replay.notes.body")}
+                <textarea data-testid="strategy-replay-note-body" rows={4} maxLength={2000} required
+                  value={noteDraft.body} disabled={noteSaving}
+                  onChange={event => setNoteDraft({ ...noteDraft, body: event.target.value })} />
+              </label>
+              {noteError && <p role="alert">{noteError}</p>}
+              <button type="submit" disabled={noteSaving || !noteDraft.body.trim()}>
+                {t(noteSaving ? "replay.notes.saving" : "replay.notes.save")}
+              </button>
+              <button type="button" disabled={noteSaving} onClick={() => setNoteDraft(null)}>{t("replay.notes.close")}</button>
+            </form> : <button type="button" disabled={frame.notes.length >= 100}
+              onClick={() => editNote()}>{t("replay.notes.add")}</button>}
+          </section>}
           <details open><summary>{t("chartTester.tab.trades")} · {frame.fill_count}</summary>
             <ol data-testid="strategy-replay-fills">
               {frame.fills.map((fill, i) => <li key={`${fill.cursor}:${fill.order_id}:${i}`}>#{fill.cursor} · {fill.side} · {fill.qty} @ {fill.price}</li>)}

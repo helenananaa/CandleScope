@@ -190,6 +190,14 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                     assert frame["source_sequence"] == 201 and frame["bars"][-1]["close"] == "101"
             rewind = client.get(replay_path, params={**replay_identity, "cursor": 1, "interval": interval, "ma_period": 2})
             assert rewind.json() == early
+        note = client.post(f"{replay_path}/notes", json={
+            **replay_identity, "cursor": 2, "interval": "5m", "expected_revision": 0,
+            "note_id": "aadd1804-0dba-4f53-bc01-57c689808ea7", "body": "Second print at the same time",
+        })
+        assert note.status_code == 200, note.text
+        second_print = client.get(replay_path, params={**replay_identity, "cursor": 2, "interval": "5m"}).json()
+        assert second_print["time_ms"] == early["time_ms"]
+        assert [note["cursor"] for note in second_print["notes"]] == [2]
         cold_params = {**replay_identity, "cursor": 1, "interval": "5m", "ma_period": 2}
         assert client.get(replay_path, params={**cold_params, "snapshot_hash": "sha256:" + "0" * 64}).status_code != 200
         assert len(client.get(RUNS).json()["runs"]) == 1

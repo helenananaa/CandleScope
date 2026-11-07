@@ -337,6 +337,13 @@
   justify-content: space-between;
 }
 
+.strategy-result-replay-controls {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .strategy-result-replay-controls input {
   max-width: 8em;
 }
@@ -357,7 +364,8 @@
 
 .strategy-result-replay button,
 .strategy-result-replay input,
-.strategy-result-replay select {
+.strategy-result-replay select,
+.strategy-result-replay textarea {
   padding: 5px 9px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-control);
@@ -382,4 +390,21 @@
 
 .strategy-result-replay-charts section {
   min-width: 0;
+}
+
+.strategy-result-replay-notes textarea {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  resize: vertical;
+}
+
+.strategy-result-replay-notes article {
+  border-top: 1px solid var(--border-color);
+  padding: 8px 0;
+}
+
+.strategy-result-replay-notes article p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

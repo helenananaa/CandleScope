@@ -765,6 +765,13 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
   };
   const manager = new StrategyDataManager(api);
   assert.deepEqual(await manager.loadResultReplay(cursor), good);
+  const note = { id: "n", revision: 1, cursor: 1, time_ms: 1000, body: "Current print", saved_at_ms: 4000 };
+  response = { ...good, notes: [note] };
+  assert.deepEqual(await manager.loadResultReplay(cursor), response);
+  response = { ...good, notes: [{ ...note, cursor: 2 }] };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  response = { ...good, notes: [{ ...note, time_ms: 1001 }] };
+  await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
   response = { ...good, cursor: 2 };
   await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
   response = { ...good, report_hash: "sha256:other" };

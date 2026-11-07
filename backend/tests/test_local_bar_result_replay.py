@@ -112,7 +112,36 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
             assert Decimal(visible["equity"]) == cash + qty * close
         assert frame(10)["bars"][-1]["high"] == "1000"
         assert frame(1)["bars"][0]["high"] == "101"
+        note_id = "ebee5398-f389-4171-9d75-6206578fd88d"
+        later_id = "1b9a9721-4eca-4e1e-9adc-dc6414097dc0"
+
+        def save_note(cursor, body, *, revision=0, id=note_id, **overrides):
+            return client.post(f"{replay_path}/notes", json={
+                "snapshot_hash": snap, "report_hash": report["hashes"]["report"], "interval": "1m",
+                "cursor": cursor, "note_id": id, "expected_revision": revision, "body": body, **overrides,
+            })
+
+        first = save_note(1, "  First close  ")
+        assert first.status_code == 200 and first.json() == {"revision": 1}
+        assert save_note(5, "Fifth close", revision=1).json() == {"revision": 2}
+        assert save_note(9, "Ninth close", id=later_id).json() == {"revision": 1}
+        assert save_note(1, "First close").json() == first.json()
+        assert save_note(4, "Conflicting edit", revision=1).json()["error"]["code"] == "RESULT_REPLAY_NOTE_CONFLICT"
+        assert save_note(4, "Backdated edit", revision=2).json()["error"]["code"] == "RESULT_REPLAY_NOTE_CONFLICT"
+        assert save_note(6, "   ", revision=2).status_code == 422
+        assert save_note(11, "Outside snapshot", revision=2).status_code == 400
+        wrong = save_note(7, "Wrong report", revision=2, report_hash="sha256:" + "0" * 64)
+        assert wrong.status_code == 400 and wrong.json()["error"]["code"] == "DATA_SNAPSHOT_MISMATCH"
+        assert frame(0)["notes"] == []
         before = frame(4)
+        assert [(note["id"], note["revision"], note["cursor"], note["time_ms"], note["body"]) for note in before["notes"]] == [
+            (note_id, 1, 1, START + 59_999, "First close"),
+        ]
+        after = frame(10)
+        assert [(note["id"], note["revision"], note["cursor"], note["body"]) for note in after["notes"]] == [
+            (note_id, 2, 5, "Fifth close"), (later_id, 1, 9, "Ninth close"),
+        ]
+        assert client.get(f"{RUNS}/{run_id}/report").json()["hashes"]["report"] == report["hashes"]["report"]
         replacement = client.post(import_path, params={**params, "dataset_id": manifest["dataset_id"]},
                                   content=bars_csv(1200))
         assert replacement.status_code == 201, replacement.text
@@ -128,6 +157,8 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
     try:
         restored = app_client(cold).get(replay_path, params={**replay_params, "cursor": 4})
         assert restored.status_code == 200 and restored.json() == before
+        latest = app_client(cold).get(replay_path, params={**replay_params, "cursor": 10})
+        assert latest.status_code == 200 and latest.json() == after
     finally:
         cold.shutdown()
 
