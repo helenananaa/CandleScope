@@ -9,9 +9,9 @@ from pathlib import Path
 import sys
 import time
 
-from app.backtest.service import BacktestService
+from app.backtest.runtime import BacktestRuntime
 from app.core.config import load_backtest_settings
-from app.market_dataset.snapshot import MarketEvent
+from app.local_data.service import LocalDatasetService, LocalImportOptions
 
 profile = Path(sys.argv[1]).resolve()
 data = profile / "data"
@@ -24,8 +24,19 @@ settings = load_backtest_settings(
     klines_db_path=data / "market.db",
     replay_db_path=data / "replay.db",
 )
-service = BacktestService.start(settings, enforce_registered_revisions=True)
 start = (int(time.time()) // 60 - 25) * 60000
+end = start + 20 * 60000
+csv = profile.parent / "research-bars.csv"
+csv.write_text("time,open,high,low,close,volume\n" + "".join(
+    f"{start + i * 60000},{100 + i % 7},{102 + i % 7},{99 + i % 7},{101 + i % 7},100\n"
+    for i in range(20)
+))
+local_root = profile / "local-data"
+manifest = LocalDatasetService(local_root).import_csv(
+    csv, LocalImportOptions(name="Native QA frozen research", symbol="BTCUSDT", interval="1m", timestamp_unit="ms")
+)
+runtime = BacktestRuntime.start(settings, local_data_dir=local_root)
+service = runtime.service
 try:
     revision = service.create_strategy_revision({
         "name": "Native QA selected Python SMA",
@@ -33,9 +44,14 @@ try:
         "source_text": program,
         "parameter_schema": [],
     })
+    snapshot = runtime.preview_snapshot(
+        dataset_id=manifest["dataset_id"], data_epoch=manifest["data_epoch"],
+        start_time_ms=start, end_time_ms=end, interval="1m", exchange="binance",
+        market_type="spot", account_model="SPOT_CASH_V1",
+    )
     body = dict(
-        strategy_revision_id=revision["revision_id"], dataset_id="native-selected-20",
-        data_epoch="native-selected-epoch", snapshot_hash="sha256:native-selected-20",
+        strategy_revision_id=revision["revision_id"], dataset_id=manifest["dataset_id"],
+        data_epoch=manifest["data_epoch"], snapshot_hash=snapshot["snapshot_hash"],
         fidelity_mode="BAR_APPROX", source_event_kind="BAR",
         start_time_ms=start, end_time_ms=start + 20 * 60000,
         symbol="BTCUSDT", interval="1m", parameters={"fast": 3, "slow": 7},
@@ -50,26 +66,28 @@ try:
         python_runtime_mode="TRUSTED_LOCAL", python_trusted_confirmed=True,
     )
     service.smoke_strategy_revision(revision["revision_id"], body)
-    provider = service.build_python_host_provider(revision["revision_id"], mode="TRUSTED_LOCAL", trusted_confirmed=True)
     run = service.create_run(body, idempotency_key="native-selected-research-20")
-    events = tuple(
-        MarketEvent(sequence=i + 1, event_time_ms=start + (i + 1) * 60000 - 1,
-                    role="BARS", payload={"open": str(100 + i % 7), "high": str(102 + i % 7),
-                                          "low": str(99 + i % 7), "close": str(101 + i % 7), "volume": "100"})
-        for i in range(20)
-    )
-    completed = service.execute_bar_run(run["run_id"], events=events, provider=provider)
-    assert completed["state"] == "COMPLETED" and completed["report"]["fills"]
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        completed = service.get_run(run["run_id"])
+        if completed["state"] in {"COMPLETED", "FAILED", "CANCELLED"}:
+            break
+        time.sleep(0.05)
+    assert completed["state"] == "COMPLETED", completed
+    report = service.get_report(run["run_id"])
+    assert report["fills"]
+    chart = runtime.chart_data(run["run_id"])
+    assert len(chart["bars"]) == 20
     selected = service.selected_run_version(run["run_id"])
     assert selected["program"]["source_text"] == program
     assert selected["configuration"]["start_time_ms"] == start
 finally:
-    service.shutdown()
+    runtime.shutdown()
 
 receipt = {
     "scope": "Completed synthetic research fixture only, no continuous account and no LIVE launch.",
     "runId": run["run_id"], "selected": selected,
-    "researchFillCount": len(completed["report"]["fills"]),
+    "researchFillCount": len(report["fills"]),
     "backtestDbSha256": hashlib.sha256(settings.db_path.read_bytes()).hexdigest(),
 }
 (profile.parent / "research-seed.json").write_text(json.dumps(receipt, indent=2) + "\n")
