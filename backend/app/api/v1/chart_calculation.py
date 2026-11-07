@@ -253,8 +253,16 @@ class ChartCalculation:
             # callback has already arrived but is still queued behind it.
             end = max(cursor.observed_through, int(through),
                 int(revision.get('closedThrough') or 0) if rebuild or input_bar is None else 0)
+            captured_open_ms = None
+            if input_bar is not None and not rebuild:
+                if int(input_bar.time) != int(through) or int(through) < cursor.observed_through:
+                    raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_OUT_OF_ORDER')
+                if not input_bar.is_closed:
+                    if int(through) <= cursor.closed_through:
+                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
+                    captured_open_ms = int(through) * 1000
             acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,
-                through_ms=self.source.end_ms(end),rebuild=rebuild)
+                through_ms=self.source.end_ms(end),rebuild=rebuild,captured_open_ms=captured_open_ms)
             if not through and not rebuild and end == cursor.observed_through:
                 return await self._snapshot(client_id, revision,acquisition)
             # Keep the last admitted confirmed row as the transport overlap.
@@ -263,8 +271,6 @@ class ChartCalculation:
             rows = await self._query(self.owner.plan.start if rebuild else max(self.owner.plan.start,cursor.closed_through),
                 end, live=True, acquisition=acquisition)
             if input_bar is not None and not rebuild:
-                if int(input_bar.time) != int(through) or int(through) < cursor.observed_through:
-                    raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_OUT_OF_ORDER')
                 if input_bar.is_closed:
                     # A queued close may precede a newer durable correction.
                     # Its old prices cannot acknowledge the query's newer
@@ -274,8 +280,6 @@ class ChartCalculation:
                             for field in ('open', 'high', 'low', 'close', 'volume')):
                         raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
                 else:
-                    if int(through) <= cursor.closed_through:
-                        raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_CHANGED')
                     # Query proves the confirmed prefix; the event owns this
                     # intrabar observation, already replaced in the live cache.
                     # Never write it back into that canonical market cache.

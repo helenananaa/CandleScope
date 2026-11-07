@@ -61,7 +61,7 @@ class ChartSource:
         except StaleAcquisition as error:
             raise _source_error(error) from error
 
-    async def acquire(self, *, start_ms, through_ms, rebuild):
+    async def acquire(self, *, start_ms, through_ms, rebuild, captured_open_ms=None):
         await self.retire_unused()
         watch = self.active
         try:
@@ -74,9 +74,14 @@ class ChartSource:
                     from_ms=start_ms,committed_through_ms=start_ms-1)
                 watch = _Watch(receipt,receipt,clock)
                 self.watches[receipt.owner] = watch
+            protected_through = max(through_ms, watch.latest.through_ms)
+            if captured_open_ms is not None:
+                # This slot comes from the ordered observation, not the query.
+                # A previous acquisition may have watched its canonical value.
+                protected_through = min(protected_through, captured_open_ms - 1)
             proof = await run_storage(self.api.prepare,watch.receipt,
                 committed_through_ms=watch.receipt.through_ms,
-                through_ms=max(through_ms,watch.latest.through_ms))
+                through_ms=protected_through)
             watch.latest = proof
             return SourceAcquisition(self,watch,proof,clock)
         except StaleAcquisition as error:

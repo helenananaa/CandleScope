@@ -378,3 +378,40 @@ def test_queued_close_cannot_certify_superseded_canonical_prices(real_bus_wire, 
         ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
         transport.receive(ws, 'indicator.unsubscribed')
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_finalizing_current_bucket_preserves_inflight_observation(real_bus_wire, monkeypatch):
+    wire = real_bus_wire
+    script = transport.SOURCE + '\nplot(close, title="captured close")\n'
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request(script=script)).json()
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial), script=script)
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        assert transport.value(transport.receive(ws, 'indicator.snapshot')) == 500
+        entered, allowed = delay_next_execution(wire, monkeypatch)
+        try:
+            wire.client.post('/fixture/tick/501?close=103')
+
+            async def wait_entered():
+                await asyncio.wait_for(entered.wait(), 5)
+
+            wire.client.portal.call(wait_entered)
+
+            async def publish_final():
+                wire.source.rows = list(transport.bars(501))
+                await wire.source.emit(transport.DataEvent(transport.DataEventType.BAR_CLOSED,
+                    transport.SeriesKey('BTCUSDT', '1m'), bar=wire.source.rows[-1]))
+
+            wire.client.portal.call(publish_final)
+        finally:
+            wire.client.portal.call(allowed.set)
+        for value, close in ((501, 103), (502, 102)):
+            output = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+            assert output['type'] != 'error', output
+            assert transport.value(output) == value
+            assert output['calculation']['generation'] == initial['calculation']['generation']
+            line = next(row for row in output['lines'] if row.get('name', row.get('title')) == 'captured close')
+            assert line['data'][-1]['value'] == close
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
