@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import { t } from "../../i18n/index.js";
@@ -72,6 +73,7 @@ export function StrategyResearchScriptPanel({
   onOpenAdvanced,
   configuration = DEFAULT_STRATEGY_RUN_SETTINGS,
   onConfigure,
+  batchControls,
 }: {
   cellScope: string;
   session: ChartSession | null;
@@ -87,6 +89,7 @@ export function StrategyResearchScriptPanel({
   onOpenAdvanced(): void;
   configuration?: StrategyRunSettings | undefined;
   onConfigure?(settings: StrategyRunSettings): void;
+  batchControls?(request: ChartStrategyRunRequest | null): ReactNode;
 }) {
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
@@ -251,10 +254,9 @@ export function StrategyResearchScriptPanel({
     onOpenAdvanced();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
-  const run = useCallback(() => {
-    if (draft === null || session === null) return;
-    if (!validStrategyRunSettings(configuration)) { setPane("conditions"); return; }
-    onRun({
+  const runRequest = useMemo<ChartStrategyRunRequest | null>(() => {
+    if (draft === null || session === null || !validStrategyRunSettings(configuration)) return null;
+    return {
       cellScope,
       session,
       draftId: draft.id,
@@ -275,8 +277,13 @@ export function StrategyResearchScriptPanel({
         autoRun: false,
         ...configuration,
       },
-    });
-  }, [cellScope, configuration, draft, onRun, session, source, pythonTrustedConfirmed]);
+    };
+  }, [cellScope, configuration, draft, session, source, pythonTrustedConfirmed]);
+
+  const run = useCallback(() => {
+    if (!runRequest) { setPane("conditions"); return; }
+    onRun(runRequest);
+  }, [onRun, runRequest]);
 
   const controlReady = () => session !== null && sourceKind !== null && !["RUNNING", "QUEUED", "RESOLVING"].includes(runStatus);
   useControlCommands(() => ({ id: `host-strategy:${cellScope}`, title: "Host strategy editor and saved drafts", context: () => ({ session, sourceKind, draftId, source, configuration, runStatus }),
@@ -365,6 +372,9 @@ export function StrategyResearchScriptPanel({
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
           </button>
+          {batchControls?.(runRequest?.attachment.fidelityPreference === "FAST"
+            && !runRequest.attachment.pythonBarExecution
+            && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
           <button
             type="button"
             className="chart-strategy-advanced-link"

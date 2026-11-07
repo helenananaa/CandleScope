@@ -1,0 +1,123 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { StrategyStorage } from "../../../shared/strategyStorage.js";
+import type { ChartStrategyRunOutcome } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
+import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
+import type { ChartStrategyResultBundle } from "../../backtest/chart-tester/chartStrategyResultCache.js";
+import type { ResultProjectionIdentity } from "../../backtest/chart-tester/chartStrategyTesterState.js";
+import type { BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { LocalDatasetManifest } from "../../local-data/localDataTypes.js";
+import type { StrategyDataManager } from "../../market-data/manager/strategyDataManager.js";
+import { StrategyResearchBatch } from "../strategyResearchBatch.js";
+
+function memory(): StrategyStorage {
+  const values = new Map<string, string>();
+  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); } };
+}
+function dataset(id: string): LocalDatasetManifest {
+  return { schema_version: 1, dataset_id: `local-${id}`, data_epoch: `epoch-${id}`, name: `Data ${id}`,
+    source: "local_dataset", symbol: id, interval: "1m", volume_available: true, timezone: "UTC",
+    timestamp_semantics: "bar_open", rows: 4, first_open_ms: 0, last_open_ms: 180000, all_rows_final: true,
+    excluded_range_count: 0, sqlite_sha256: "fixture", imported_at: "2026-11-07T00:00:00Z" };
+}
+function request(): ChartStrategyRunRequest {
+  return { cellScope: "research", session: { exchange: "local", marketType: "spot", symbol: "a", interval: "1m" },
+    draftId: "draft", draftContentRevision: 7, displayName: "SMA", language: "python", pythonTrustedConfirmed: true,
+    source: "original source", attachment: { schemaVersion: 1, strategyDraftId: "draft", strategyRevisionId: null,
+      displayName: "SMA", language: "python", parameters: { size: 3 }, rangeMode: "ALL_AVAILABLE", customRange: null,
+      fidelityPreference: "FAST", quickPresetId: "CRYPTO_SPOT_STANDARD_V1", autoRun: false } };
+}
+function dataRun(id: string, source: LocalDatasetManifest): BacktestRunRecord {
+  return { run_id: `bt_${id}`, state: "RUNNING", dataset_id: source.dataset_id, data_epoch: source.data_epoch,
+    snapshot_hash: `snapshot-${id}`, config_hash: "config", source_event_kind: "BAR", fidelity_mode: "BAR_APPROX" };
+}
+async function waitFor(predicate: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, "timed out waiting for batch state");
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+const done = { kind: "TERMINAL" } as ChartStrategyRunOutcome;
+
+test("batch captures each source and strategy before queuing and isolates job completion and failure", async () => {
+  const inputs = [dataset("a"), dataset("b"), dataset("c")];
+  const draft = request();
+  const storage = memory();
+  const pending = new Map<string, () => void>();
+  const seen: Array<Parameters<StrategyDataManager["runResearch"]>[0]> = [];
+  let active = 0, maxActive = 0;
+  const owner = new StrategyResearchBatch({
+    async runResearch(input) {
+      const selected = input.source;
+      assert.equal(selected.kind, "IMPORTED_DATASET");
+      seen.push(input);
+      const source = inputs.find(item => item.dataset_id === selected.datasetId)!;
+      const id = source.symbol;
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      try {
+        if (id === "b") throw new Error("fixture preparation failure");
+        await input.onRunCreated?.(dataRun(id, source), { strategyRevisionId: `revision-${id}`, snapshotHash: `snapshot-${id}` } as ResultProjectionIdentity);
+        await new Promise<void>(resolve => pending.set(id, resolve));
+        return done;
+      } finally {
+        active -= 1;
+      }
+    },
+    async restoreRun() { throw new Error("unexpected restore"); },
+  }, storage);
+  await owner.submit(draft, inputs);
+  draft.source = "edited later";
+  draft.attachment.parameters.size = 99;
+  await waitFor(() => pending.size === 2);
+  assert.equal(maxActive, 2);
+  for (const input of seen) {
+    assert.equal(input.request.source, "original source");
+    assert.equal(input.request.attachment.parameters.size, 3);
+    assert.notEqual(input.request.cellScope, draft.cellScope);
+  }
+  pending.forEach(resolve => resolve());
+  await waitFor(() => owner.snapshot().jobs.filter(job => job.status === "COMPLETED").length === 2);
+  assert.deepEqual(owner.snapshot().jobs.map(job => [job.datasetId, job.status, job.runId, job.snapshotHash]), [
+    ["local-a", "COMPLETED", "bt_a", "snapshot-a"], ["local-b", "FAILED", null, null], ["local-c", "COMPLETED", "bt_c", "snapshot-c"],
+  ]);
+  const raw = storage.getItem("candlescope:strategy-research-batch:v1")!;
+  assert.doesNotMatch(raw, /original source|pythonTrustedConfirmed/);
+  owner.dispose();
+});
+
+test("restart follows a saved run and never recreates a task with an unknown outcome", async () => {
+  const source = dataset("a");
+  const storage = memory();
+  const base = { batchId: "batch", name: "SMA", datasetName: source.name, draftId: "draft", draftContentRevision: 7,
+    datasetId: source.dataset_id, dataEpoch: source.data_epoch, interval: "1m", startMs: 0, endMs: 180001, error: null };
+  storage.setItem("candlescope:strategy-research-batch:v1", JSON.stringify({ schema: 1, jobs: [
+    { ...base, id: "one", status: "RUNNING", runId: "bt_a", strategyRevisionId: "revision-a", snapshotHash: "snapshot-a" },
+    { ...base, id: "two", status: "PREPARING", runId: null, strategyRevisionId: null, snapshotHash: null },
+  ] }));
+  const restored: string[] = [];
+  const owner = new StrategyResearchBatch({
+    async runResearch() { assert.fail("must not recreate a run"); },
+    async restoreRun(id) {
+      restored.push(id);
+      return { run: { ...dataRun("a", source), state: "COMPLETED" }, config: { strategy_revision_id: "revision-a" } } as ChartStrategyResultBundle;
+    },
+  }, storage);
+  owner.start();
+  owner.start();
+  await waitFor(() => owner.snapshot().jobs.every(job => ["COMPLETED", "INTERRUPTED"].includes(job.status)));
+  assert.deepEqual(restored, ["bt_a"]);
+  assert.equal(owner.snapshot().jobs[1]?.status, "INTERRUPTED");
+  owner.dispose();
+});
+
+test("batch submission performs no run when its initial durable write fails", async () => {
+  const owner = new StrategyResearchBatch({
+    async runResearch() { assert.fail("must not launch without a persisted task"); },
+    async restoreRun() { assert.fail("must not restore"); },
+  }, { getItem: () => null, setItem: () => { throw new Error("storage full"); } });
+  await assert.rejects(owner.submit(request(), [dataset("a"), dataset("b")]), /storage full/);
+  assert.deepEqual(owner.snapshot(), { jobs: [], storageFailed: true });
+  owner.dispose();
+});

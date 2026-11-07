@@ -1,8 +1,10 @@
+import { researchBatchEnglish, researchBatchChinese } from "./researchBatchMessages.js";
 import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
 import { readerEnglish, readerChinese, readerJapanese, readerKorean, readerPortuguese } from "./continuousReaderMessages.js";
 import { researchReturnEnglish, researchReturnChinese, researchReturnJapanese, researchReturnKorean, researchReturnPortuguese } from "./researchReturnMessages.js";
 export const continuousEnglish = {
   ...researchReturnEnglish,
+  ...researchBatchEnglish,
   ...repairEnglish,
   ...readerEnglish,
   "continuous.savedRuns": "Saved runs for this chart and mode", "continuous.pendingRun": "Pending request",
@@ -42,6 +44,7 @@ export const continuousEnglish = {
 } as const;
 export const continuousChinese: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnChinese,
+  ...researchBatchChinese,
   ...repairChinese,
   ...readerChinese,
   "continuous.savedRuns": "当前图表与模式的保存运行", "continuous.pendingRun": "待确认请求",
@@ -81,6 +84,7 @@ export const continuousChinese: Record<keyof typeof continuousEnglish, string> =
 };
 export const continuousJapanese: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnJapanese,
+  ...researchBatchEnglish,
   ...repairJapanese,
   ...readerJapanese,
   "continuous.savedRuns": "このチャートとモードの保存済み実行", "continuous.pendingRun": "確認待ちのリクエスト",
@@ -120,6 +124,7 @@ export const continuousJapanese: Record<keyof typeof continuousEnglish, string> 
 };
 export const continuousKorean: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnKorean,
+  ...researchBatchEnglish,
   ...repairKorean,
   ...readerKorean,
   "continuous.savedRuns": "이 차트와 모드에 저장된 실행", "continuous.pendingRun": "확인 대기 요청",
@@ -159,6 +164,7 @@ export const continuousKorean: Record<keyof typeof continuousEnglish, string> = 
 };
 export const continuousPortuguese: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnPortuguese,
+  ...researchBatchEnglish,
   ...repairPortuguese,
   ...readerPortuguese,
   "continuous.savedRuns": "Execuções salvas para este gráfico e modo", "continuous.pendingRun": "Solicitação pendente",

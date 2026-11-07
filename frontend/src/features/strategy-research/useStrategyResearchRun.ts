@@ -20,6 +20,8 @@ import { currentChartStrategyTesterToken } from "../backtest/chart-tester/chartS
 import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
+import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { StrategyResearchBatch } from "./strategyResearchBatch.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
 import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
 import { DEFAULT_STRATEGY_RUN_SETTINGS, validStrategyRunSettings, type StrategyRunSettings } from "../../shared/strategyRunSettings.js";
@@ -73,7 +75,11 @@ export function useStrategyResearchRun(input: {
   const tester = useMemo(() => new ChartStrategyTesterRuntime("strategy-research", null), []);
   const dataManager = useMemo(() => new MarketDataManagerCore(), []);
   const managerLifecycle = useMemo(() => new StrategyResearchRunEffectGuard(), []);
-  useEffect(() => managerLifecycle.mount({ dispose: () => dataManager.closeAll() }), [dataManager, managerLifecycle]);
+  const batch = useMemo(() => new StrategyResearchBatch(dataManager.strategy, getStrategyStorage()), [dataManager]);
+  useEffect(() => {
+    batch.start();
+    return managerLifecycle.mount({ dispose() { batch.dispose(); dataManager.closeAll(); } });
+  }, [batch, dataManager, managerLifecycle]);
   const [, setTesterVersion] = useState(0);
   const [result, setResult] = useState<ChartStrategyResultBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -279,6 +285,7 @@ export function useStrategyResearchRun(input: {
 
   return {
     session,
+    batch,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
     stale: inputStale || updatingResult,

@@ -587,7 +587,7 @@ export async function runResearchBacktest(options: {
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onResolution?(resolution: ChartContextResolution): void;
-  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void;
+  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
   waitForTerminal?: (runId: string, signal: AbortSignal | undefined, onUpdate: (run: BacktestRunRecord) => void) => Promise<BacktestRunRecord>;
 }): Promise<ChartStrategyRunOutcome> {
@@ -775,7 +775,7 @@ export async function runResearchBacktest(options: {
     frozenContext,
   });
   options.onStage?.(created.state === "QUEUED" ? "QUEUED" : "RUNNING");
-  options.onRunCreated?.(created, identity);
+  await options.onRunCreated?.(created, identity);
   if (created.state === "COMPLETED") {
     return { kind: "TERMINAL", frozen, revision, resolution: refreshed, run: created, identity, frozenContext };
   }
@@ -806,7 +806,7 @@ export async function runChartStrategyBacktest(options: {
   onStage?(stage: ChartStrategyRunStage): void;
   onRevision?(revision: StrategyRevisionRecord): void;
   onResolution?(resolution: ChartContextResolution): void;
-  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void;
+  onRunCreated?(run: BacktestRunRecord, identity: ResultProjectionIdentity): void | Promise<void>;
   onRunUpdate?(run: BacktestRunRecord): void;
 }): Promise<ChartStrategyRunOutcome> {
   return runResearchBacktest({
