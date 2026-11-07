@@ -24,7 +24,6 @@ from app.data_engine.interval_policy import (
 from app.data_engine.storage.raw_trade_archive import (
     DisabledRawAggTradeArchive,
     RawAggTradeArchive,
-    RawAggTradeDatasetRef,
     RawAggTradeSelectionWindow,
 )
 from .actor import (
@@ -56,6 +55,7 @@ from .broker.models import (
 )
 from .broker.risk import build_order_capacity, build_order_preview
 from .canonical import canonical_json_bytes, canonical_sha256
+from .local_trade_repository import LocalReplayTradeRepository, TradeDatasetRef, decode_trade_dataset_ref
 from .official_trade_history import OfficialTradeHistoryRepository, TradeHistoryRouter
 from .remote_trade_archive import RemoteRawAggTradeArchive
 from .checkpoints import CheckpointCodec, CheckpointError
@@ -160,7 +160,7 @@ class ReplaySessionHandle:
         default_factory=asyncio.Event,
         repr=False,
     )
-    trade_dataset_ref: RawAggTradeDatasetRef | None = None
+    trade_dataset_ref: TradeDatasetRef | None = None
     trade_pin_token: str | None = None
     bar_paging_manifest: Mapping[str, object] | None = None
 
@@ -180,7 +180,7 @@ class ReplayService:
         settings: ReplaySettings,
         store: ReplaySQLiteStore,
         repository: object | None = None,
-        raw_trade_archive: RawAggTradeArchive | None = None,
+        raw_trade_archive: RawAggTradeArchive | LocalReplayTradeRepository | None = None,
         now_ms: Callable[[], int] = lambda: int(time.time() * 1_000),
         session_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
         training_run_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
@@ -321,7 +321,7 @@ class ReplayService:
         return self._repository  # type: ignore[return-value]
 
     @property
-    def raw_trade_archive(self) -> RawAggTradeArchive:
+    def raw_trade_archive(self) -> RawAggTradeArchive | LocalReplayTradeRepository:
         """Expose the replay-owned read-only exact trade archive."""
 
         return self._raw_trade_archive
@@ -440,7 +440,7 @@ class ReplayService:
         archive_enabled = bool(archive_diagnostics.get("enabled"))
         archive_ready = archive_diagnostics.get("state") == "ready"
         exact_dataset_available = bool(
-            archive_diagnostics.get("verified_partitions_available")
+            archive_diagnostics.get("verified_partitions_available") or archive_diagnostics.get("user_trade_datasets_available")
         )
         if not archive_enabled:
             trade_capability: dict[str, object] = {
@@ -462,7 +462,7 @@ class ReplayService:
         else:
             trade_capability = {
                 "enabled": True,
-                "fidelity": (DataFidelity.VERIFIED_AGG_TRADE_APPROXIMATE_BARS.value),
+                "fidelity": self._trade_data_fidelity.value,
                 "execution_fidelity": ExecutionFidelity.AGG_TRADE_TAPE.value,
                 "requires_exact_dataset": True,
                 "bar_parity_required": False,
@@ -594,12 +594,14 @@ class ReplayService:
                     replace(
                         entry,
                         eligible_ranges=eligible_ranges,
-                        quality=DataFidelity.VERIFIED_AGG_TRADE_APPROXIMATE_BARS,
+                        quality=self._trade_data_fidelity,
                         limitations=tuple(
                             dict.fromkeys(
                                 (
                                     *entry.limitations,
-                                    "AGG_TRADE_OFFICIAL_AVAILABILITY_INTERSECTION",
+                                    "USER_DECLARED_TRADE_COVERAGE"
+                                    if isinstance(self._raw_trade_archive, LocalReplayTradeRepository)
+                                    else "AGG_TRADE_OFFICIAL_AVAILABILITY_INTERSECTION",
                                 )
                             )
                         ),
@@ -1445,7 +1447,7 @@ class ReplayService:
                 )
             except ReplayDomainError as exc:
                 raise self._blind_safe_dataset_error(config, exc) from exc
-            trade_dataset_ref: RawAggTradeDatasetRef | None = None
+            trade_dataset_ref: TradeDatasetRef | None = None
             if config.source_kind is SourceKind.AGG_TRADE:
                 trade_dataset_ref = await self._freeze_trade_dataset(
                     config,
@@ -2718,7 +2720,7 @@ class ReplayService:
 
     async def _pin_trade_dataset(
         self,
-        dataset_ref: RawAggTradeDatasetRef,
+        dataset_ref: TradeDatasetRef,
         *,
         task_name: str,
     ) -> str:
@@ -2794,7 +2796,7 @@ class ReplayService:
         *,
         config: ReplaySessionConfig,
         actual_dataset: BarDatasetSnapshot,
-        trade_dataset_ref: RawAggTradeDatasetRef | None = None,
+        trade_dataset_ref: TradeDatasetRef | None = None,
         bar_paging_manifest: Mapping[str, object] | None = None,
         restore_checkpoint: bytes | None,
         forked: bool,
@@ -3084,7 +3086,7 @@ class ReplayService:
                 ReplayErrorCode.DATASET_MISMATCH,
                 "persisted replay dataset must be an object",
             )
-        trade_dataset_ref: RawAggTradeDatasetRef | None = None
+        trade_dataset_ref: TradeDatasetRef | None = None
         bar_paging_manifest: Mapping[str, object] | None = None
         if config.source_kind is SourceKind.AGG_TRADE:
             expected = {
@@ -3103,7 +3105,7 @@ class ReplayService:
                     "persisted aggregate-trade dataset bundle is incompatible",
                 )
             actual_dataset = BarDatasetSnapshot.from_dict(decoded["bar_dataset"])
-            trade_dataset_ref = RawAggTradeDatasetRef.from_dict(
+            trade_dataset_ref = decode_trade_dataset_ref(
                 decoded["trade_dataset_ref"]
             )
             if trade_dataset_ref.data_epoch != record["data_epoch"]:
@@ -3284,7 +3286,7 @@ class ReplayService:
         session_id: str,
         config: ReplaySessionConfig,
         dataset: BarDatasetSnapshot,
-        trade_dataset_ref: RawAggTradeDatasetRef | None,
+        trade_dataset_ref: TradeDatasetRef | None,
         bar_paging_manifest: Mapping[str, object] | None,
         actual_dataset: BarDatasetSnapshot,
         reducer: ConservativeBarBroker,
@@ -4140,7 +4142,7 @@ class ReplayService:
         dataset: BarDatasetSnapshot,
         broker_config: BrokerConfig,
         *,
-        trade_dataset_ref: RawAggTradeDatasetRef | None = None,
+        trade_dataset_ref: TradeDatasetRef | None = None,
         bar_paging_manifest: Mapping[str, object] | None = None,
         actual_dataset: BarDatasetSnapshot | None = None,
         execution_mode: str = PAPER_LINEAR_EXECUTION_MODE,
@@ -4309,11 +4311,10 @@ class ReplayService:
                 ReplayErrorCode.ARCHIVE_DEGRADED,
                 "aggregate-trade replay archive is degraded",
             )
-        if not diagnostics.get("verified_partitions_available"):
+        if not (diagnostics.get("verified_partitions_available") or diagnostics.get("user_trade_datasets_available")):
             raise ReplayDomainError(
                 ReplayErrorCode.DATASET_INCOMPLETE,
-                "aggregate-trade replay archive has no official contiguous "
-                "daily availability",
+                "No contiguous market-trade coverage is available for replay",
             )
 
     async def _select_random_window(
@@ -4670,7 +4671,7 @@ class ReplayService:
         self,
         config: ReplaySessionConfig,
         dataset: BarDatasetSnapshot,
-    ) -> RawAggTradeDatasetRef:
+    ) -> TradeDatasetRef:
         try:
             reference = await asyncio.to_thread(
                 self._raw_trade_archive.freeze_dataset,
@@ -4680,6 +4681,8 @@ class ReplayService:
                 start_time_ms=dataset.replay_start_ms,
                 end_time_ms=dataset.replay_rows[-1].close_time_ms,
                 page_rows=self.settings.trade_page_rows,
+                **({"source_revision": dataset.provenance.source_revision}
+                   if isinstance(self._raw_trade_archive, LocalReplayTradeRepository) else {}),
             )
         except ReplayDomainError as exc:
             raise self._blind_safe_dataset_error(config, exc) from exc
@@ -4692,8 +4695,7 @@ class ReplayService:
             )
             raise ReplayDomainError(
                 code,
-                "no checksum-verified contiguous aggregate-trade dataset covers "
-                "the selected replay window",
+                "No pinned market-trade dataset covers the selected replay window",
             ) from exc
         expected_identity = (
             config.exchange.lower(),
@@ -4759,7 +4761,7 @@ class ReplayService:
     @staticmethod
     def _persisted_extension_dataset(
         dataset: BarDatasetSnapshot,
-        trade_dataset_ref: RawAggTradeDatasetRef | None,
+        trade_dataset_ref: TradeDatasetRef | None,
     ) -> tuple[dict[str, object], dict[str, object]]:
         """Encode the immutable archive segment owned by a training Run."""
 
@@ -4773,7 +4775,7 @@ class ReplayService:
     @staticmethod
     def _persisted_dataset(
         dataset: BarDatasetSnapshot,
-        trade_dataset_ref: RawAggTradeDatasetRef | None,
+        trade_dataset_ref: TradeDatasetRef | None,
         *,
         bar_paging_manifest: Mapping[str, object] | None = None,
     ) -> tuple[dict[str, object], dict[str, object]]:
@@ -4816,10 +4818,15 @@ class ReplayService:
         }
         return reference, bundle
 
-    @staticmethod
-    def _data_fidelity(config: ReplaySessionConfig) -> str:
+    @property
+    def _trade_data_fidelity(self) -> DataFidelity:
+        return (DataFidelity.USER_MARKET_TRADE_COVERAGE
+                if isinstance(self._raw_trade_archive, LocalReplayTradeRepository)
+                else DataFidelity.VERIFIED_AGG_TRADE_APPROXIMATE_BARS)
+
+    def _data_fidelity(self, config: ReplaySessionConfig) -> str:
         return (
-            DataFidelity.VERIFIED_AGG_TRADE_APPROXIMATE_BARS.value
+            self._trade_data_fidelity.value
             if config.source_kind is SourceKind.AGG_TRADE
             else DataFidelity.EXACT_BAR_COVERAGE.value
         )

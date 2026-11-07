@@ -1026,7 +1026,7 @@ export function parseReplaySessionResponse(value: unknown, path = "$"): ReplaySe
   const dataFidelity = enumeration(source.data_fidelity, REPLAY_DATA_FIDELITIES, `${path}.data_fidelity`);
   const executionFidelity = enumeration(source.execution_fidelity, REPLAY_EXECUTION_FIDELITIES, `${path}.execution_fidelity`);
   const expectedDataFidelity: ReplayDataFidelity = snapshot.config.source_kind === "agg_trade"
-    ? "VERIFIED_AGG_TRADE_APPROXIMATE_BARS"
+    ? (snapshot.config.market_type === "local_bar" ? "USER_MARKET_TRADE_COVERAGE" : "VERIFIED_AGG_TRADE_APPROXIMATE_BARS")
     : "EXACT_BAR_COVERAGE";
   const expectedExecutionFidelity = snapshot.config.source_kind === "agg_trade"
     ? "AGG_TRADE_TAPE"
@@ -1073,7 +1073,7 @@ function parseSourceCapability(value: unknown, path: string, sourceKind: "bar" |
   const barParityRequired = hasBarParityPolicy
     ? bool(source.bar_parity_required, `${path}.bar_parity_required`)
     : false;
-  if (fidelity !== "VERIFIED_AGG_TRADE_APPROXIMATE_BARS"
+  if ((fidelity !== "VERIFIED_AGG_TRADE_APPROXIMATE_BARS" && fidelity !== "USER_MARKET_TRADE_COVERAGE")
     || executionFidelity !== "AGG_TRADE_TAPE"
     || !requiresExactDataset
     || barParityRequired
