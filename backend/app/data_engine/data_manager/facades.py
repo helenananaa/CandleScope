@@ -59,6 +59,14 @@ class BarSourcePrefixFacade:
             raise PrefixContinuityUnavailable('source correction clock is unavailable')
         return self._clock().correction_cursor(series)
 
+    def delivery_watermark(self, series):
+        """A stable publication watermark for the series, including previews."""
+        if self._clock is not None:
+            version = self._clock().snapshot(series)
+            if version["stable"]:
+                return version
+        return None
+
     def commit(self, proof, publish: Callable[[], Any], *, committed_through_ms=None,
                series=None, source_cursor=None):
         # Computation and provider snapshots belong before this short guard.

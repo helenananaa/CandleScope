@@ -89,6 +89,8 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
                     async with registry.borrow(reference.domainId) as current:
                         payload = await current.live(writer_id=stream_consumer_id, client_id=client_id,
                             through=batch['through'], input_bar=batch['bar'])
+                        if batch['watermark'] is not None:
+                            current.acknowledge_delivery(stream_consumer_id, batch['watermark'])
                 except (IndicatorRangeNotReadyError, CalculationOwnerError) as exc:
                     if isinstance(exc, CalculationOwnerError) and exc.code not in {
                             'INDICATOR_CALCULATION_SOURCE_CHANGED', 'INDICATOR_CALCULATION_REBUILD_REQUIRED'}:
@@ -107,7 +109,7 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
                     wakeup = pending[-1]['through'] if pending else None
                     pending.clear()
                     if wakeup is not None:
-                        pending.append({'through': wakeup, 'bar': None})
+                        pending.append({'through': wakeup, 'bar': None, 'watermark': None})
                     continue
                 source_waiting = False
                 if not entry.get('_disposed'): await queue_critical(queue,payload)
@@ -146,11 +148,15 @@ async def handle_chart_calculation_subscribe(*, dm, service, meta, reference, cl
                 chart.range_service.note_closed(series_key=chart.series,closed_through=through)
         if len(pending) >= MAX_PENDING_CHART_INPUTS:
             raise ConsumerRecoveryRequired('chart_input_capacity_exhausted')
-        pending.append({'through':through, 'bar':None if correction else deepcopy(event.bar)})
+        pending.append({'through':through, 'bar':None if correction else deepcopy(event.bar),
+            'watermark':event.detail.get('stream_version')})
         task = custom_tasks.get(client_id)
         if task is None or task.done():
             custom_tasks[client_id] = asyncio.create_task(pump(),name='chart-domain-stream:' + client_id)
 
+    # No await between capturing the boundary and subscribing. Inputs emitted
+    # during the subsequent snapshot are owned by the new subscription.
+    chart.begin_delivery(stream_consumer_id)
     custom_handles[client_id] = dm.subscribe(callback=on_event,on_recovery=require_resync,
         symbol=meta['symbol'], interval=meta['interval'], exchange=meta['exchange'], market_type=meta['market_type'],
         preserve_updates=True,

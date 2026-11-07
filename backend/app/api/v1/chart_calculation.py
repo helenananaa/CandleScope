@@ -68,6 +68,8 @@ class ChartCalculation:
         self._inputs = ()
         self._rebuild_notice = None
         self._source_epoch = 0
+        self._delivery_started = False
+        self._delivered_through = None
         self._barrier = None
         self._barrier_ids = deque(maxlen=64)
         self.source = ChartSource(dm,owner_id,meta)
@@ -177,6 +179,9 @@ class ChartCalculation:
     async def _advance(self, rows, revision, *, client_id, rebuild, acquisition, bar_time=0, epoch=None, reset_reason='sourceRebuild'):
         payload = None
         epoch = self._source_epoch if epoch is None else epoch
+        # A successful detached rebuild already clears the gap. Only retain
+        # its new baseline if no later publication raced the execution.
+        detached_watermark = self.source.delivery_watermark() if rebuild and self._writer is None else None
         meta = {**self.meta, 'pineLiveUpdate':bool(bar_time), 'pineLiveBarTime':int(bar_time)}
         async def publish(cursor, result):
             nonlocal payload
@@ -206,6 +211,9 @@ class ChartCalculation:
                 'sessionRecovered': False,
             }
             payload['meta'] = {**payload.get('meta', {}), **self._rebuild_notice}
+            if (detached_watermark is not None and self._writer is None
+                    and detached_watermark == self.source.delivery_watermark()):
+                self._delivered_through = self._delivery_position(detached_watermark)
         return payload
 
     async def _read_inputs(self, bounds, acquisition):
@@ -305,6 +313,27 @@ class ChartCalculation:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_BUSY')
             self._writer, self._dispose_writer = writer_id, dispose
         await self._command(claim)
+
+    @staticmethod
+    def _delivery_position(watermark):
+        if watermark is not None:
+            return watermark['epoch'], watermark['generation'], watermark['sequence']
+        return None
+
+    def begin_delivery(self, writer_id):
+        if self._writer != writer_id:
+            raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_CHANGED')
+        position = self._delivery_position(self.source.delivery_watermark())
+        if self._delivery_started and (position is None or position != self._delivered_through):
+            # The final-only replay window cannot recover missed forming inputs.
+            # Even an identical latest BAR can hide multiple executions.
+            self.invalidate()
+        self._delivery_started = True
+        self._delivered_through = position
+
+    def acknowledge_delivery(self, writer_id, watermark):
+        if self._writer == writer_id:
+            self._delivered_through = self._delivery_position(watermark)
 
     def detach(self, writer_id):
         if self._writer == writer_id:

@@ -34,13 +34,17 @@ class ChartSource:
     def __init__(self, manager, owner_id, meta):
         self.api = getattr(getattr(manager,'bars',None),'prefixes',None)
         if self.api is None or any(not callable(getattr(self.api,name,None)) for name in
-                ('register_family','prepare','query_proof','correction_cursor','inspect','commit','release')):
+                ('register_family','prepare','query_proof','correction_cursor','delivery_watermark',
+                 'inspect','commit','release')):
             raise CalculationOwnerError('INDICATOR_CALCULATION_SOURCE_UNAVAILABLE')
         self.owner_id = owner_id
         self.key = SeriesKey.create(meta['symbol'],meta['interval'],exchange=meta['exchange'],
             market_type=meta['market_type'],identity=identity_for_meta(meta))
         self.active = None
         self.watches = {}
+
+    def delivery_watermark(self):
+        return self.api.delivery_watermark(self.key)
 
     def end_ms(self, seconds):
         return compute_bucket_end_ms(seconds*1000,parse_interval_ms(self.key.interval),

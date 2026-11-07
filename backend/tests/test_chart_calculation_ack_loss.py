@@ -126,3 +126,37 @@ def test_reconnect_reads_admitted_projection_after_ws_frame_loss(real_bus_wire, 
         assert next_frame['calculation']['generation'] == initial['calculation']['generation']
         assert next_frame['calculation']['sequence'] == dropped[0]['calculation']['sequence'] + 1
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_reconnect_fences_forming_observations_missed_while_detached(real_bus_wire):
+    wire = real_bus_wire
+    initial = open_chart(wire)
+    with wire.client.websocket_connect('/ws') as ws:
+        assert transport.value(join(ws, initial)) == 500
+        for close in (101, 102):
+            assert wire.client.post('/fixture/tick/501', params={'close': close}).json()['ok']
+            observed = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(observed) == 502
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.service.calculations.snapshot()['holders'] == 0
+
+    # The same forming bar returns to its old OHLCV. A latest-row comparison
+    # alone cannot see either of the two missed execution opportunities.
+    for close in (103, 102):
+        assert wire.client.post('/fixture/tick/501', params={'close': close}).json()['ok']
+
+    with wire.client.websocket_connect('/ws') as ws:
+        recovered = join(ws, observed)
+        assert recovered['calculation']['domainId'] == observed['calculation']['domainId']
+        assert recovered['calculation']['generation'] == observed['calculation']['generation'] + 1
+        assert recovered['calculation']['closedThrough'] == observed['calculation']['closedThrough']
+        assert recovered['dataRevision']['revisionToken'] == observed['dataRevision']['revisionToken']
+        assert recovered['meta']['sessionReset'] is True
+        assert recovered['meta']['sessionRecovered'] is False
+        assert transport.value(recovered) == 501
+        assert wire.client.post('/fixture/tick/501?close=104').json()['ok']
+        next_frame = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(next_frame) == 502
+        assert next_frame['calculation']['generation'] == recovered['calculation']['generation']
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
