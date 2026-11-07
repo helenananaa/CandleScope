@@ -41,6 +41,19 @@ export function sessionFromResearchSource(
   return null;
 }
 
+export function researchResultMatchesSource(
+  result: ChartStrategyResultBundle,
+  source: ResearchSourceRefV1 | null,
+  session: ChartSession | null,
+): boolean {
+  if (!session || result.chart.symbol !== session.symbol || result.chart.interval !== session.interval) return false;
+  if (source?.kind === "IMPORTED_DATASET") {
+    return result.run.dataset_id === source.datasetId && result.run.data_epoch === source.dataEpoch;
+  }
+  return source?.kind === "CURRENT_CHART"
+    && result.config.exchange === session.exchange && result.config.market_type === session.marketType;
+}
+
 function isAbortError(reason: unknown): boolean {
   if (reason instanceof DOMException && reason.name === "AbortError") return true;
   return reason instanceof Error && reason.name === "AbortError";
@@ -119,13 +132,8 @@ export function useStrategyResearchRun(input: {
 
   const snapshot = tester.snapshot();
   const barOnly = input.source?.kind === "IMPORTED_DATASET";
-  const restoredContextChanged = result !== null && session !== null && (
-    result.chart.symbol !== session.symbol || result.chart.interval !== session.interval
-    || (input.source?.kind === "IMPORTED_DATASET" && (
-      result.run.dataset_id !== input.source.datasetId || result.run.data_epoch !== input.source.dataEpoch
-    ))
-  );
-  const inputStale = snapshot.status === "STALE" || restoredContextChanged;
+  const sourceResult = result && researchResultMatchesSource(result, input.source, session) ? result : null;
+  const inputStale = snapshot.status === "STALE" || (result !== null && sourceResult === null);
   const updatingResult = result !== null && ["RESOLVING", "QUEUED", "RUNNING"].includes(snapshot.status);
 
   const execute = useCallback(async (request: ChartStrategyRunRequest, materialize?: ChartContextResolution | null) => {
@@ -277,6 +285,7 @@ export function useStrategyResearchRun(input: {
     inputStale,
     staleReasons: snapshot.staleReasons as ChartStrategyTesterStaleReason[],
     result,
+    sourceResult,
     error,
     needsData: needsData !== null,
     dataResolution: needsData,
