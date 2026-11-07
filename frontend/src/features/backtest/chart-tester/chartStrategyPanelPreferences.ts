@@ -1,3 +1,6 @@
+import { normalizeChartStrategyAttachment } from "../../chart-workspace/chartWorkspaceStorage.js";
+import type { ChartStrategyAttachmentRecord } from "../../chart-workspace/chartWorkspaceTypes.js";
+
 export type ChartStrategyPanelTab = "script" | "overview" | "trades" | "settings";
 
 export interface ChartStrategyPanelPreferences {
@@ -62,5 +65,30 @@ export function saveChartStrategyPanelPreferences(
     }));
   } catch {
     // Preference storage is best-effort and must not block a Run or its result.
+  }
+}
+
+function detachedAttachmentKey(cellScope: string): string {
+  return `candlescope.chart-strategy-detached.v1.${encodeURIComponent(cellScope)}`;
+}
+
+export function loadDetachedChartStrategy(cellScope: string): ChartStrategyAttachmentRecord | null {
+  try {
+    const raw = localStorage.getItem(detachedAttachmentKey(cellScope));
+    const attachment = raw ? normalizeChartStrategyAttachment(JSON.parse(raw)) : null;
+    return attachment?.strategyDraftId ? attachment : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDetachedChartStrategy(cellScope: string, value: ChartStrategyAttachmentRecord): boolean {
+  const attachment = normalizeChartStrategyAttachment(value);
+  if (!attachment?.strategyDraftId) return false;
+  try {
+    localStorage.setItem(detachedAttachmentKey(cellScope), JSON.stringify(attachment));
+    return true;
+  } catch {
+    return false;
   }
 }

@@ -25,6 +25,8 @@ export class ContinuousViewReducer {
 
   constructor(readonly runId: string, readonly maxBytes = 16 * 1024 * 1024) {}
 
+  get hasPendingGroup(): boolean { return this.group !== null; }
+
   reset(): void { this.group = null; }
 
   accept(page: ContinuousPage, options: { snapshot: boolean; begin: boolean; complete: boolean; after: number }): ContinuousView | null {

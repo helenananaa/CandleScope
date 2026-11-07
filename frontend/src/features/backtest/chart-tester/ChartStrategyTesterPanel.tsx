@@ -71,6 +71,8 @@ import {
   CHART_STRATEGY_MIN_PANEL_HEIGHT,
   clampChartStrategyPanelHeight,
   loadChartStrategyPanelPreferences,
+  loadDetachedChartStrategy,
+  saveDetachedChartStrategy,
   saveChartStrategyPanelPreferences,
   type ChartStrategyPanelTab,
 } from "./chartStrategyPanelPreferences.js";
@@ -276,7 +278,8 @@ export default function ChartStrategyTesterPanel(props: ChartStrategyTesterPanel
     {(mode === "CANDLESCOPE" || visited.has("CANDLESCOPE")) && <StrategyDockPane hidden={mode !== "CANDLESCOPE"}>
       {availability === "error" && <StrategyDockSlot name="notice"><p className="strategy-notice" data-tone="info" role="status">{t("indicator.editor.runtimeUnavailableHelp")}</p></StrategyDockSlot>}
       {availability === "unavailable" && <StrategyDockSlot name="notice"><p className="strategy-notice" data-tone="info" role="status">{t("native.platformHelp")}</p></StrategyDockSlot>}
-      <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"} />
+      <CandleScopeStrategyTesterPanel {...props} active={props.active !== false && mode === "CANDLESCOPE"}
+        continuousChartActive={mode === "CANDLESCOPE" && !!props.continuousChartActive} />
     </StrategyDockPane>}
   </StrategyDock>;
 }
@@ -325,6 +328,14 @@ export function CandleScopeStrategyTesterPanel({
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
   ));
   const currentAttachment = attachment;
+  const [detachedAttachment, setDetachedAttachment] = useState(() => loadDetachedChartStrategy(cellScope));
+  const [restorePending, setRestorePending] = useState(false);
+  const [restoreError, setRestoreError] = useState(false);
+  const attachmentContext = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    attachmentContext.current = {};
+    return () => { attachmentContext.current = null; };
+  }, [active, cellScope, currentAttachment, runMode, session]);
   const [draft, setDraft] = useState<StrategyDraftRecord | null>(null);
   const activeDraft = draft?.id === currentAttachment?.strategyDraftId ? draft : null;
   const [source, setSource] = useState("");
@@ -457,8 +468,9 @@ export function CandleScopeStrategyTesterPanel({
     record: StrategyDraftRecord,
     shouldFocus: boolean,
     nextSaveState: StrategyDraftAutoSaveState = "SAVED",
+    restoredAttachment?: ChartStrategyAttachmentRecord,
   ) => {
-    const nextAttachment = attachmentForDraft(record, session);
+    const nextAttachment = restoredAttachment ?? attachmentForDraft(record, session);
     setDraft(record);
     setSource(record.source);
     setCursor(record.cursor);
@@ -545,6 +557,43 @@ export function CandleScopeStrategyTesterPanel({
     return draftStore.save(input ?? { id: activeDraft.id, displayName: activeDraft.displayName,
       language: activeDraft.language, source, cursor });
   }, [activeDraft, cursor, draftStore, source]);
+
+  async function detachStrategy() {
+    if (!currentAttachment || !activeDraft) throw new Error(t("continuous.draftUnavailable"));
+    const context = attachmentContext.current;
+    const edit = pendingSaveRef.current;
+    await persistCurrentDraft();
+    const latest = pendingSaveRef.current;
+    if (!context || attachmentContext.current !== context) return;
+    if (edit.source !== latest.source || edit.cursor !== latest.cursor) throw new Error(t("continuous.detachChanged"));
+    if (!saveDetachedChartStrategy(cellScope, currentAttachment)) throw new Error(t("continuous.storage"));
+    setDetachedAttachment(currentAttachment);
+    setRestoreError(false);
+    setPythonApproval(null);
+    onAttachmentChange(null);
+  }
+
+  async function restoreStrategy() {
+    const id = detachedAttachment?.strategyDraftId;
+    if (!id || restorePending) return;
+    const context = attachmentContext.current;
+    setRestorePending(true);
+    setRestoreError(false);
+    try {
+      const view = await draftStore.load(id);
+      if (!context || attachmentContext.current !== context) return;
+      if (view.record?.id !== id || view.record.language !== detachedAttachment.language) {
+        setRestoreError(true);
+        return;
+      }
+      setPythonApproval(null);
+      attachRecord(view.record, false, view.saveState, detachedAttachment);
+    } catch {
+      if (attachmentContext.current === context) setRestoreError(true);
+    } finally {
+      setRestorePending(false);
+    }
+  }
 
   const handoffOperation = useRef<Promise<void> | null>(null);
   const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
@@ -712,7 +761,7 @@ export function CandleScopeStrategyTesterPanel({
       }}>
         <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
       </select></label>
-      {runMode === "HISTORY" ? <>
+      {runMode === "HISTORY" || !currentAttachment ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
           {PANEL_TABS.map((tab) => (
@@ -809,6 +858,12 @@ export function CandleScopeStrategyTesterPanel({
         {!currentAttachment && (
           <div className="chart-strategy-start">
             <p className="chart-strategy-start-lead">{t("chartTester.startLead", { symbol: session.symbol, interval: session.interval })}</p>
+            {detachedAttachment && <p>
+              <button type="button" className="strategy-dock-button" disabled={restorePending} onClick={() => { void restoreStrategy(); }}>
+                {t("continuous.restoreAttachment", { name: detachedAttachment.displayName })}
+              </button>
+            </p>}
+            {restoreError && <p role="alert">{t("continuous.draftUnavailable")}</p>}
             <div className="chart-strategy-start-columns">
               <section aria-label={t("chartTester.templateTitle")}>
                 <h3>{t("chartTester.start.template")}</h3>
@@ -1063,6 +1118,7 @@ export function CandleScopeStrategyTesterPanel({
           {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           saveDraft={async () => { await persistCurrentDraft(); }}
+          onDetach={detachStrategy}
           {...(currentAttachment && activeDraft?.language === "python" ? {
             onParameterChange(name: string, value: string | number | boolean) {
               onAttachmentChange({ ...currentAttachment, parameters: { ...currentAttachment.parameters, [name]: value } });

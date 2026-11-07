@@ -31,6 +31,7 @@ export interface ContinuousStrategyPanelProps {
   marketWindow?: SeriesWindowView | null;
   markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   onLocateTrade?(timeMs: number): void;
+  onDetach?(): Promise<void>;
   onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
   saveDraft?(): Promise<void>;
   onParameterChange?(name: string, value: string | number | boolean): void;
@@ -221,10 +222,18 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { submitting.current = false; setBusy(false); }
   }
+  async function detach() {
+    if (submitting.current || busy || !props.onDetach) return;
+    submitting.current = true;
+    setBusy(true); setError(null);
+    try { await props.onDetach(); }
+    catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { submitting.current = false; if (mounted.current) setBusy(false); }
+  }
   const phase = view?.run.phase ?? observed?.phase;
   const failure = object(view?.run.error ?? observed?.error);
   return <div className="continuous-strategy" data-continuous-strategy>
-    <p>{t("continuous.hint")}</p><p>{t("continuous.support")}</p>
+    <p>{t("continuous.hint")}</p><p>{t("continuous.scopeHint")}</p><p>{t("continuous.support")}</p>
     {savedRuns.length > 0 && <label>{t("continuous.savedRuns")}<select disabled={busy || storageFailed} value={reference?.requestKey ?? ""} onChange={(event) => {
       const selected = savedRuns.find((value) => value.requestKey === event.target.value);
       if (!selected) return;
@@ -256,6 +265,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {reference && !reference.runId && <p role="status">{t("continuous.pending")}</p>}
     <div className="continuous-actions">
       <button type="button" disabled={busy || storageFailed || !qualified || !props.trusted || !caps?.execution_enabled || !caps.python_editor_authorized || (!!reference && !reference.runId && reference.inputRevision !== inputRevision)} onClick={() => { void initialize(); }}>{t((reference && !reference.runId) || matchingPending ? "continuous.resubmit" : changedInputs ? "continuous.recalculate" : "continuous.start")}</button>
+      {props.onDetach && <button type="button" disabled={busy || !props.language} onClick={() => { void detach(); }}>{t("continuous.detach")}</button>}
       {reference && <button type="button" disabled={busy} onClick={() => { void recover(); }}>{t(reference.runId ? "continuous.observe" : "continuous.recover")}</button>}
       {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <button type="button" key={action} disabled={busy || !caps?.execution_enabled}
         onClick={() => { void control(action); }}>{t(`continuous.${action}`)}</button>)}
