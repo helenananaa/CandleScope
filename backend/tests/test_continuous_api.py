@@ -335,3 +335,37 @@ def test_current_frontend_sdk_signal_template_and_equity_policy_execute_through_
     _initial,_page,values=full_initial(api,accepted['run_id'])
     assert_values(api.gate.continuous,accepted['run_id'],values)
     assert len(values['fills'])>0
+
+
+def test_editor_parameter_defaults_are_static_bounded_and_local(api):
+    source = """
+raise AssertionError("The parameter reader must not execute editor code")
+class Strategy:
+    def prepare(self, ctx):
+        self.fast = int(ctx.parameters.get("fast", 3))
+        self.enabled = ctx.parameters.get("enabled", False)
+        self.delta = ctx.parameters.get("delta", -0.25)
+        self.label = ctx.parameters.get("label", "paper")
+        self.conflicting = ctx.parameters.get("ambiguous", 1)
+        self.another = ctx.parameters.get("ambiguous", 2)
+        self.dynamic = ctx.parameters.get("dynamic", unknown())
+        self.decoy = other.parameters.get("foreign", 1)
+        self.message = 'ctx.parameters.get("string_literal", 4)'
+        # ctx.parameters.get("comment", 9)
+"""
+    url = BASE + "/editor-parameters"
+    request = {"source_text": source}
+    assert api.client.post(url, json=request, headers={"Origin": "https://remote.invalid"}).status_code == 403
+    headers = {"Origin": next(iter(trusted_operator_origins()))}
+    response = api.client.post(url, json=request, headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["fields"] == [
+        {"name": "fast", "type": "integer", "default": 3},
+        {"name": "enabled", "type": "boolean", "default": False},
+        {"name": "delta", "type": "number", "default": -0.25},
+        {"name": "label", "type": "string", "default": "paper"},
+    ]
+    assert api.client.post(url, json={"source_text": "invalid("}, headers=headers).json() == {"fields": []}
+    invalid = api.client.post(url, json={"source_text": "x" * 262145}, headers=headers)
+    assert invalid.status_code == 422 and "xxxx" not in invalid.text
+    assert api.client.get(BASE + "/runs").json()["runs"] == []

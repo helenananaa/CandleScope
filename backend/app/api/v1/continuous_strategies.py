@@ -10,14 +10,16 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,RepairPreview,RepairConfirm,RepairCancel
+from app.backtest.continuous_contracts import ContinuousCreate,ContinuousControl,CommittedIdentity,ResultQuery,EditorParameters,RepairPreview,RepairConfirm,RepairCancel
 from app.backtest.errors import BacktestError
 from app.backtest.strategy.protocol import StrategyProviderError
 from app.backtest.strategy.python_author_v1 import AUTHOR_CONTRACT
+from app.backtest.strategy.python_bundle import editor_parameter_defaults
 from app.backtest.continuous_provider import SCHEMA as PROVIDER_SCHEMA
 from app.data_engine.data_manager.continuous_strategy import MAX_REQUESTS
 from app.core.async_cleanup import finish_cleanup
 from app.core.bounded_executor import ExecutorBusyError
+from app.core.executors import run_storage
 from app.core.operator_origin import is_trusted_operator_origin,origin_from
 from .stream_utils import send_text_with_timeout
 
@@ -133,6 +135,17 @@ async def capabilities(request:Request):
             "limits":{"requests":MAX_REQUESTS,"subscriptions":access.owner.max_subscriptions,
                 "active_runs":controller.runtime.max_active_runs,"page_items":200,"message_bytes":MAX_BYTES}})
     except WIRE_ERRORS as failure:return _error(failure)
+
+
+@router.post("/editor-parameters")
+async def editor_parameters(request: Request):
+    try:
+        if not is_trusted_operator_origin(origin_from(request.headers)):
+            raise BacktestError("TRUSTED_ORIGIN_REQUIRED", "Python editor requires a trusted local application origin")
+        payload = await _body(request, EditorParameters)
+        return _reply({"fields": await run_storage(editor_parameter_defaults, payload.source_text)})
+    except WIRE_ERRORS as failure:
+        return _error(failure)
 
 
 @router.post("/runs")

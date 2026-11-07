@@ -204,6 +204,7 @@ export interface ChartStrategyTesterPanelProps {
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
   continuousChartActive?: boolean;
+  onRunModeChange?(mode: ContinuousMode): void;
   continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
@@ -300,6 +301,7 @@ export function CandleScopeStrategyTesterPanel({
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
   continuousChartActive,
+  onRunModeChange,
   continuousMarkerSource,
   onReviewTrade,
   active = true,
@@ -533,18 +535,25 @@ export function CandleScopeStrategyTesterPanel({
     }).catch(() => undefined);
   }, [activeDraft, cursor, draftStore, source]);
 
+  const persistCurrentDraft = useCallback(async () => {
+    if (!activeDraft) throw new Error("DRAFT_UNAVAILABLE");
+    const input = pendingStrategyDraftSave({ draft: activeDraft, source, cursor });
+    if (!input && draftStore.snapshot(activeDraft.id).saveState === "SAVED") return activeDraft;
+    return draftStore.save(input ?? { id: activeDraft.id, displayName: activeDraft.displayName,
+      language: activeDraft.language, source, cursor });
+  }, [activeDraft, cursor, draftStore, source]);
+
   const handoffOperation = useRef<Promise<void> | null>(null);
   const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
     if (handoffOperation.current) return handoffOperation.current;
     if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
-    const operation = draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName,
-      language: activeDraft.language, source, cursor }).then((saved) => onOpenWorkspace(saved, settings));
+    const operation = persistCurrentDraft().then((saved) => onOpenWorkspace(saved, settings));
     handoffOperation.current = operation;
     void operation.catch(() => setSaveState("ERROR")).finally(() => {
       if (handoffOperation.current === operation) handoffOperation.current = null;
     });
     return operation;
-  }, [activeDraft, cursor, draftStore, onOpenWorkspace, source]);
+  }, [activeDraft, onOpenWorkspace, persistCurrentDraft]);
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -694,7 +703,10 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
-      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
+      <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => {
+        const next = event.target.value as ContinuousMode;
+        setRunMode(next); onRunModeChange?.(next);
+      }}>
         <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
       </select></label>
       {runMode === "HISTORY" ? <>
@@ -1047,6 +1059,16 @@ export function CandleScopeStrategyTesterPanel({
           chartActive={!!continuousChartActive} onLocateTrade={onLocateTrade}
           {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
+          saveDraft={async () => { await persistCurrentDraft(); }}
+          {...(currentAttachment && activeDraft?.language === "python" ? {
+            onParameterChange(name: string, value: string | number | boolean) {
+              onAttachmentChange({ ...currentAttachment, parameters: { ...currentAttachment.parameters, [name]: value } });
+            },
+            literalParameters(disabled: boolean) {
+              return <StrategyParametersEditor source={source} disabled={disabled}
+                onChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} />;
+            },
+          } : {})}
           {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}
