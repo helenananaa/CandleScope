@@ -1,0 +1,21 @@
+{
+  "source": "b2d4832f6607f61491e238fd731223afc24149b6",
+  "passed": true,
+  "nativeSteps": 13,
+  "metrics": {
+    "ambiguity_count": 0,
+    "fill_count": 508,
+    "realized_net_pnl": "-803.7515412168049013875687940",
+    "rejected_order_count": 0,
+    "risk_rejection_count": 0,
+    "trade_count": 478,
+    "win_rate": "0.8786610878661087866108786611",
+    "winning_trade_count": 420
+  },
+  "reportHashesEqualAfterRestart": true,
+  "blockedExternalAttempts": 0,
+  "rendererErrors": 0,
+  "fullExitCount": 2,
+  "strictSignatureAfterExit": true,
+  "scope": "Native LOCAL_OFFLINE host strategy only; not LIVE practice accounts"
+}

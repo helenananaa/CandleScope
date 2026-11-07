@@ -39,10 +39,21 @@ export async function checkChartAccountOverlays() {
     let data: unknown;
     if (path.endsWith("/trading/accounts")) data = { accounts: [account("a"), account("b"), account("broken")], kinds: ["manual"], plannedKinds: [] };
     else {
-      const match = path.match(/\/trading\/accounts\/([^/]+)\/(summary|trades|journal)$/);
+      const match = path.match(/\/trading\/accounts\/([^/]+)\/(summary|trades|journal|events)$/);
       assert(match, `unexpected read: ${path}`);
       const [, id, endpoint] = match!;
       if (id === "broken") return Response.json({ detail: "Account source unavailable" }, { status: 503 });
+      if (endpoint === "events") {
+        const epoch = "a".repeat(32);
+        const event = { schema: "candlescope.trading-account-state/1", type: "snapshot", replacement: true,
+          identity: { accountId: id, ledgerEpoch: epoch }, connectionEpoch: "b".repeat(32), sequence: 1,
+          state: { cursor: { epoch, sequence: 1 }, summary: summary(id!), trades: [trade(id!)],
+            entries: [note(id!, "visible", start + 1200), note(id!, "hole", start + 1800), note(id!, "outside", start - 60)], journalError: null } };
+        return new Response(new ReadableStream({ start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(event) + "\n"));
+          init?.signal?.addEventListener("abort", () => controller.close(), { once: true });
+        } }), { headers: { "content-type": "application/x-ndjson" } });
+      }
       data = endpoint === "summary" ? summary(id!) : endpoint === "trades" ? { trades: [trade(id!)] }
         : { entries: [note(id!, "visible", start + 1200), note(id!, "hole", start + 1800), note(id!, "outside", start - 60)] };
     }
@@ -89,7 +100,8 @@ export async function checkChartAccountOverlays() {
     await act(async () => root.render(<><Cell key="left" id="cell-1" /><Cell key="right" id="cell-2" /></>));
     await waitFor(() => lines("cell-1")[0]?.id === "trading:entry:a-trade" && markers("cell-2").length === 1, "default panel account did not reach both actual charts");
     assert(host.querySelectorAll("canvas").length >= 4, "real chart surfaces were not mounted");
-    for (const endpoint of ["summary", "trades", "journal"]) assert(requests.filter(r => r.path.endsWith(`/a/${endpoint}`)).length === 1, `duplicated account ${endpoint} read`);
+    assert(requests.filter(r => r.path.endsWith("/a/events")).length === 1, "panel and charts opened duplicate account streams");
+    for (const endpoint of ["summary", "trades", "journal"]) assert(requests.filter(r => r.path.endsWith(`/a/${endpoint}`)).length === 0, `unexpected account ${endpoint} polling`);
     await openLeft(); await choose("b");
     await waitFor(() => lines("cell-1")[0]?.id === "trading:entry:b-trade", "pinned account did not replace prior position");
     assert(tradingAccountsStore.getSnapshot().selected?.id === "a" && lines("cell-2")[0]?.id === "trading:entry:a-trade", "pinning a chart changed panel or sibling");

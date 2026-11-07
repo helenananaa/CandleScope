@@ -1,0 +1,1 @@
+源码19d2558c；功能13步通过、600bars508fills，报告重启一致、0renderererrors、外网尝试0；两次正常完整退出。启动前1037source/sdk161built与深度严格签名通过。退出后严格签名失败：策略worker在resources/packages/candlescope-backtest-sdk/src中新增6个pyc。该轮不计完整原生合格；保留原包/profile，修复子进程启动后必须以新候选重测，不重签此失败原包。
