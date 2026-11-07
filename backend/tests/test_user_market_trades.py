@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
 from collections import defaultdict
 from decimal import Decimal
@@ -125,10 +126,6 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         report = client.get(RUNS + "/" + run_id + "/report")
         assert report.status_code == 200, report.text
         assert report.json()["data_quality"]["quote_asset"] == "USDC"
-        checkpoint = runtime.service.repository.latest_checkpoint(run_id)
-        assert checkpoint is not None
-        checkpoint_trace = json.loads(checkpoint["payload_json"])["engine"]["replay_closed_bar_signals"]
-        assert checkpoint_trace == report.json()["strategy"]["replayClosedBarSignals"]
         chart = client.get(RUNS + "/" + run_id + "/chart")
         assert chart.status_code == 200, chart.text
         chart_body = chart.json()
@@ -204,3 +201,29 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         assert replay.status_code == 200 and replay.json() == early
     finally:
         cold.shutdown()
+
+def test_signal_reveal_trace_round_trips_through_checkpoint_chunks():
+    from app.backtest.checkpoint_history import EXTENDED_TRADE_ENCODING, HistoryEncoder, expand_checkpoint, publish_chunks
+    from app.backtest.identity import canonical_json, sha256_hex
+    from app.simulation.dual_clock_kernel import DualClockSimulationKernel
+
+    signals = [
+        {"signal_sequence": i, "reveal_sequence": 2 * i + 1, "event_time_ms": START + 60_000 * i - 1,
+         "kind": "SIGNAL", "value": "FLAT"} for i in range(1, 258)
+    ]
+    kernel = DualClockSimulationKernel("1m", capture_result_replay=True)
+    kernel.replay_closed_bar_signals = signals
+    history = HistoryEncoder(dict, extended=True)
+    state = {"historyEncoding": EXTENDED_TRADE_ENCODING, "checkpointMode": "DUAL_CLOCK",
+             "engine": kernel.snapshot(history_encoder=history)}
+    assert len(state["engine"]["replay_closed_bar_signals"]["chunks"]) == 1
+    row = {"run_id": "bt_checkpoint", "payload_json": canonical_json(state),
+           "state_hash": "sha256:" + sha256_hex(state), "history_chunks": history.pending}
+    with sqlite3.connect(":memory:") as database:
+        database.execute("CREATE TABLE backtest_checkpoint_chunks (run_id TEXT, chunk_hash TEXT, payload_json TEXT, PRIMARY KEY (run_id, chunk_hash))")
+        publish_chunks(database, row)
+        restored_state = json.loads(expand_checkpoint(row, database)["payload_json"])
+    restored = DualClockSimulationKernel("1m", capture_result_replay=True)
+    restored.restore(restored_state["engine"])
+    assert restored.replay_signal_trace_complete
+    assert restored.replay_closed_bar_signals == signals
