@@ -121,12 +121,12 @@ try {
     const result = await read(continuous + '/runs/' + account.id);
     return result.run?.phase === 'LIVE' && result.run.sequence > cold.sequence ? result : false;
   }, 150000);
-  await q.record('same-account-advanced', restored);
+  await q.record('same-account-advanced', {...restored, observedMs: Date.now()});
   assert.equal(creates.length, 1);
   assert.equal((await read(continuous + '/runs')).runs.length, 1);
   const reopened = q.s.page.locator('[data-continuous-account="' + account.id + '"]');
   if (!await reopened.isVisible()) {
-    const dock = q.s.page.getByRole('button', {name: '图表策略', exact: true});
+    const dock = q.s.page.getByRole('button', {name: /^图表策略/});
     if (await dock.isVisible()) await dock.click();
   }
   await reopened.waitFor();
