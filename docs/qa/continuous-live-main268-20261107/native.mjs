@@ -64,6 +64,8 @@ try {
   const page = q.s.page;
   await page.goto(new URL('/strategy.html?source=imported', page.url()).href);
   await page.getByTestId('strategy-research-result-slot').waitFor();
+  const drawer = page.getByRole('dialog', {name: '数据来源', exact: true});
+  if (await drawer.isVisible()) await drawer.getByRole('button', {name: '关闭', exact: true}).click();
   const hostMode = page.getByRole('button', {name: 'CandleScope 撮合 / 教学模板', exact: true});
   if (await hostMode.isVisible()) await hostMode.click();
   await page.getByRole('button', {name: '运行记录', exact: true}).click();
