@@ -29,6 +29,7 @@ class ContinuousStrategyAccess:
         self.executor=None
         self.pending=set()
         self.operations=set()
+        self.initial_waiters=set()
         self.ensures={}
         self.subscriptions=set()
 
@@ -93,11 +94,17 @@ class ContinuousStrategyAccess:
         return future
 
     async def work(self,function,*args,**kwargs):
-        return await asyncio.shield(self._submit(partial(function,*args,**kwargs)))
+        future=self._submit(partial(function,*args,**kwargs))
+        try:return await asyncio.shield(future)
+        except asyncio.CancelledError as cancelled:
+            if asyncio.current_task() in self.initial_waiters:
+                try:await finish_cleanup(future)
+                except BaseException:pass
+            raise cancelled
 
     async def _command(self,function,*args,**kwargs):
         self.ready()
-        if len(self.operations)>=MAX_REQUESTS:raise BacktestError("BUDGET_EXCEEDED","Continuous request capacity reached")
+        if len(self.operations)+len(self.initial_waiters)>=MAX_REQUESTS:raise BacktestError("BUDGET_EXCEEDED","Continuous request capacity reached")
         task=asyncio.create_task(function(*args,**kwargs))
         self.operations.add(task)
         def done(value):
@@ -154,6 +161,52 @@ class ContinuousStrategyAccess:
             await self._ensure(run_id)
             return await self.work(controller.store.results.read,run_id,**kwargs)
 
+    async def status(self,run_id):
+        async def read():
+            controller=self.controller()
+            creation=await self.work(controller.store.creations.summary_for_run,run_id)
+            if creation is not None and creation["phase"]!="COMMITTED":
+                return {"creation":{field:creation[field] for field in CREATION_FIELDS},"run":None,"initial_result_ready":False}
+            page=await self._read_result(run_id)
+            return {"creation":None if creation is None else {field:creation[field] for field in CREATION_FIELDS},
+                "run":page["run"],"identity":page["identity"],
+                "initial_result_ready":creation is not None and page["run"]["event_time_ms"]>=creation["cutoff_ms"]}
+        return await self._command(read)
+
+    async def request(self,key):
+        async def read():
+            row=await self.work(self.controller().store.creations.summary,key)
+            return {field:row[field] for field in CREATION_FIELDS}
+        return await self._command(read)
+
+    async def initial(self,run_id):
+        """HTTP initial result wait is a view, not ownership of the execution."""
+        controller=self.controller()
+        if len(self.operations)+len(self.initial_waiters)>=MAX_REQUESTS:
+            raise BacktestError("BUDGET_EXCEEDED","Continuous request capacity reached")
+        # Admit the whole view operation before its first I/O. Cancellation may
+        # release this waiter; Controller's accepted creation remains independent.
+        task=asyncio.create_task(self._initial(controller,run_id))
+        self.initial_waiters.add(task)
+        def done(value):
+            self.initial_waiters.discard(value)
+            if not value.cancelled():value.exception()
+        task.add_done_callback(done)
+        return await task
+
+    async def _initial(self,controller,run_id):
+        creation=await self.work(controller.store.creations.summary_for_run,run_id)
+        if creation is None:
+            await self.work(controller.store.summary,run_id)
+            raise BacktestError("CONTINUOUS_NOT_READY","Legacy account has no creation cutoff; inspect committed results")
+        state=await controller.wait_initial(creation["request_key"])
+        if state["creation"]["phase"]!="COMMITTED":
+            return {"creation":{field:state["creation"][field] for field in CREATION_FIELDS},
+                "initial_result_ready":False,"result":None}
+        page=await self._read_result(run_id,since_revision=0,limit=100)
+        return {"creation":{field:state["creation"][field] for field in CREATION_FIELDS},
+            "initial_result_ready":page["run"]["event_time_ms"]>=creation["cutoff_ms"],"result":page}
+
     async def catalog(self):
         return await self._command(self._catalog)
 
@@ -170,13 +223,18 @@ class ContinuousStrategyAccess:
                 finally:controller.store.db.execute("ROLLBACK")
         return await self.work(read)
 
-    async def subscribe(self,run_id):
+    async def subscribe(self,run_id,*,after=None):
         self.ready()
         if len(self.subscriptions)+len(self.owner._subscriptions)>=self.owner.max_subscriptions:
             raise BacktestError("RUN_CAPACITY_EXCEEDED","strategy subscription capacity reached")
         subscription=ContinuousStrategySubscription(self,run_id)
         self.subscriptions.add(subscription)
         try:
+            if after is not None:
+                cursor=await self.work(self.controller().store.resume_cursor,run_id,after)
+                subscription.baseline=cursor["after"]
+                subscription.resume_reason=cursor["reason"]
+                if cursor["after"]:subscription.last_complete=dict(after)
             await subscription.prepare()
             return subscription
         except BaseException:
@@ -186,6 +244,7 @@ class ContinuousStrategyAccess:
     def close_views(self):
         self.closed=True
         for subscription in tuple(self.subscriptions):subscription.close()
+        for task in tuple(self.initial_waiters):task.cancel()
         controller=self.owner.continuous
         if controller is not None:
             stop=getattr(controller,"request_shutdown",None) or getattr(controller,"_request_shutdown",None)
@@ -197,6 +256,7 @@ class ContinuousStrategyAccess:
             if self.start_task is not None and not self.start_task.done():self.start_task.cancel()
             if self.start_task is not None:await asyncio.gather(self.start_task,return_exceptions=True)
             await asyncio.gather(*tuple(self.operations),return_exceptions=True)
+            await asyncio.gather(*tuple(self.initial_waiters),return_exceptions=True)
             await asyncio.gather(*tuple(self.pending),return_exceptions=True)
             if self.executor is not None:self.executor.shutdown(wait=True)
             if self.owner.continuous is not None:await self.owner.continuous.close()
@@ -218,6 +278,7 @@ class ContinuousStrategySubscription:
         self.last_complete=None
         self.last_creation=None
         self.last_initializing=None
+        self.resume_reason=None
 
     async def _read(self):
         if self.cursor is None:self.updates.clear_before_read()
@@ -250,11 +311,18 @@ class ContinuousStrategySubscription:
             return {"schema":SCHEMA,"type":"reset","terminal":False,"run_id":self.run_id,
                 "reason":"COMMITTED_VIEW_CHANGED","complete":False}
         if page["identity"]==self.last_complete and not page["items"]:return None
+        if (self.baseline and self.last_complete is not None and (
+                self.last_complete["generation"],self.last_complete["data_revision"])!=(
+                page["identity"]["generation"],page["identity"]["data_revision"])):
+            self.baseline=0;self.cursor=None;self.page_identity=None;self.last_complete=None
+            return {"schema":SCHEMA,"type":"reset","terminal":False,"run_id":self.run_id,
+                "reason":"RUN_GENERATION_CHANGED","complete":False}
         initial=creation is None or page["run"]["event_time_ms"]>=creation["cutoff_ms"]
         event={"schema":SCHEMA,"type":"snapshot" if self.baseline==0 else "update","profile":profile,
             "terminal":page["run"]["phase"]=="CANCELLED" and not page["more"],"initial_result_ready":initial,
             "creation":None if creation is None else {field:creation[field] for field in CREATION_FIELDS},
             **page,"complete":not page["more"],"begin":self.cursor is None,"after_checkpoint":self.baseline}
+        if self.resume_reason is not None:event["resume_reason"]=self.resume_reason
         if page["more"]:
             self.cursor=list(page["next_cursor"]);self.page_identity=dict(page["identity"])
         else:
