@@ -1,5 +1,5 @@
 import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
-import type { BacktestResultReplayCursor, BacktestRunRecord } from "../../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
 import { StrategyRunStreamError, type StrategyRunUpdate } from "../../backtest/backtestRunStream.js";
 import { ChartStrategyResultCache } from "../../backtest/chart-tester/chartStrategyResultCache.js";
@@ -9,7 +9,7 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Partial<Pick<BacktestApiClient, "getResultReplay">>;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote">;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -108,7 +108,15 @@ export class StrategyDataManager {
           return invalid;
         });
       };
-      if ((frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
+      const notes = frame.notes;
+      const invalidNotes = notes !== undefined && (!Array.isArray(notes) || notes.length > 100
+        || new Set(notes.map(note => note?.id)).size !== notes.length
+        || notes.some(note => !note || typeof note.id !== "string" || !Number.isSafeInteger(note.revision)
+          || note.revision < 1 || note.revision > 20 || typeof note.body !== "string" || !note.body.trim()
+          || !Number.isSafeInteger(note.cursor) || note.cursor < 0 || note.cursor > frame.cursor
+          || (note.cursor === 0 ? note.time_ms !== null : (!Number.isSafeInteger(note.time_ms)
+            || frame.time_ms === null || note.time_ms === null || note.time_ms > frame.time_ms))));
+      if (invalidNotes || (frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
         || frame.run_id !== cursor.runId
         || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
         || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
@@ -127,6 +135,16 @@ export class StrategyDataManager {
         throw new StrategyRunStreamError("DATA_SNAPSHOT_MISMATCH", "Result replay frame does not match the requested boundary");
       }
       return frame;
+    });
+  }
+
+  saveResultReplayNote(cursor: BacktestResultReplayCursor, note: BacktestResultReplayNoteDraft, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!this.api.saveResultReplayNote) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay notes are unavailable");
+      const saved = await this.api.saveResultReplayNote(cursor, note, owned);
+      if (saved.revision !== note.expectedRevision + 1) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Result replay note revision does not match the requested save");
+      }
     });
   }
 
