@@ -301,3 +301,31 @@ def test_query_proof_rejects_mutation_after_query_or_newer_acquisition(storage):
     prepare(store,initial)
     with pytest.raises(StaleAcquisition):
         store.query_proof(pending,committed_through_ms=START-1,queried_revision=storage.revision_store.head())
+
+
+def test_paged_proof_rebases_future_rows_but_refuses_an_amended_earlier_page(storage):
+    from app.data_engine.storage.prefix_watches import PrefixAcquisitionChanged
+
+    write()
+    store, initial = begin(storage)
+    pending = prepare(store, initial, through=END + 2 * STEP)
+
+    def check(proof, read_through):
+        return store.query_proof(proof, committed_through_ms=START - 1,
+                                queried_revision=storage.revision_store.head(),
+                                read_through_ms=read_through)
+
+    # The first and second page can materialize their own unprocessed rows.
+    write(200)
+    first = check(pending, START - 1)
+    klines_repo.upsert_klines("BTCUSDT", "1m", [_row(START + STEP)], source=SOURCE)
+    second = check(first, END)
+    assert pending.version < first.version < second.version
+    assert store.inspect(initial.owner)['committed_through_ms'] == START - 1
+
+    # A valid later query revision cannot certify a page read before the edit.
+    write(300)
+    with pytest.raises(PrefixAcquisitionChanged):
+        check(second, END + STEP)
+    with pytest.raises(PrefixAcquisitionChanged), store.commit_guard(second):
+        pytest.fail("a mixed prefix must never reach publication")

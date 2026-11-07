@@ -115,11 +115,12 @@ class SourceAcquisition:
         self.source,self.watch,self.proof,self.clock = source,watch,proof,clock
         self.acknowledged = watch.receipt.through_ms
 
-    async def query_proof(self, result):
+    async def query_proof(self, result, *, read_through_ms=None):
         try:
             self.proof = await run_storage(self.source.api.query_proof,self.proof,
                 committed_through_ms=self.watch.receipt.through_ms,
-                queried_revision=result.metadata.get('storage_revision'))
+                queried_revision=result.metadata.get('storage_revision'),
+                read_through_ms=read_through_ms)
             self.watch.latest = self.proof
         except StaleAcquisition as error:
             raise _source_error(error) from error

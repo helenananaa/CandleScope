@@ -333,6 +333,20 @@ def _query_indicator_compute_bars(
     return _closed_indicator_compute_bars(result, start_s, end_s, start_ms, end_ms)
 
 
+def _indicator_history_calendar(dm, meta: dict[str, Any]):
+    history_policy = getattr(dm, "history_policy", None)
+    if history_policy is None:
+        return None
+    try:
+        series = history_policy.series_key(
+            exchange=meta["exchange"], market_type=meta["market_type"],
+            symbol=meta["symbol"], channel="kline", variant=meta["interval"],
+        )
+        return history_policy.resolve(series).calendar
+    except Exception:
+        return None
+
+
 def _indicator_compute_query_bounds(
     dm, meta: dict[str, Any], start_s: int, end_s: int, *, warmup_bars: int,
 ) -> tuple[int, int, int, int]:
@@ -343,20 +357,7 @@ def _indicator_compute_query_bounds(
     start_ms = start_s * 1000
     end_ms = end_s * 1000
     compute_start_ms = max(0, start_ms - warmup_bars * interval_ms)
-    calendar = None
-    history_policy = getattr(dm, "history_policy", None)
-    if history_policy is not None:
-        try:
-            series = history_policy.series_key(
-                exchange=meta["exchange"],
-                market_type=meta["market_type"],
-                symbol=meta["symbol"],
-                channel="kline",
-                variant=meta["interval"],
-            )
-            calendar = history_policy.resolve(series).calendar
-        except Exception:
-            calendar = None
+    calendar = _indicator_history_calendar(dm, meta)
     if calendar is not None:
         start_bucket = compute_bucket_start_ms(
             start_ms,
@@ -404,22 +405,20 @@ def _query_indicator_compute_result(
     start_ms, end_ms, compute_start_ms, needed = _indicator_compute_query_bounds(
         dm, meta, start_s, end_s, warmup_bars=warmup_bars,
     )
-    query_kwargs: dict[str, Any] = {
-        "start_ms": compute_start_ms,
-        "end_ms": end_ms,
-        "limit": needed + 5,
-        "exchange": meta["exchange"],
-        "market_type": meta["market_type"],
-        "auto_backfill": auto_backfill,
-        **identity_kwargs(meta),
-        **({'min_revision':min_revision} if min_revision is not None else {}),
-    }
-    result = dm.query(
-        meta["symbol"],
-        meta["interval"],
-        **query_kwargs,
+    result = _query_indicator_window(
+        dm, meta, compute_start_ms, end_ms, limit=needed+5,
+        auto_backfill=auto_backfill, min_revision=min_revision,
     )
     return result, start_ms, end_ms
+
+
+def _query_indicator_window(dm, meta, start_ms, end_ms, *, limit, auto_backfill, min_revision):
+    return dm.query(
+        meta["symbol"], meta["interval"], start_ms=start_ms, end_ms=end_ms, limit=limit,
+        exchange=meta["exchange"], market_type=meta["market_type"], auto_backfill=auto_backfill,
+        **identity_kwargs(meta),
+        **({"min_revision": min_revision} if min_revision is not None else {}),
+    )
 
 
 def _closed_indicator_compute_bars(

@@ -551,3 +551,60 @@ def test_http_tail_rebuilds_from_origin_after_runtime_state_is_released(wire):
     assert rebuilt['meta']['sessionResetReason'] == 'runtimeRebuild'
     assert rebuilt['meta']['sessionRecovered'] is False
     assert wire.client.delete('/indicators/calculations/' + reference['domainId']).json()['state'] == 'closed'
+
+
+@pytest.mark.parametrize('amend_between_pages', [False, True])
+def test_long_chart_origin_uses_bounded_coherent_source_pages(wire, monkeypatch, amend_between_pages):
+    history = 12_001
+    wire.source.rows = bars(history)
+    original_query = wire.source.query
+    limits = []
+
+    def query(symbol, interval, **kwargs):
+        if amend_between_pages and len(limits) == 1:
+            first_page = wire.source.query_windows[-1]
+            bar = wire.source.rows[10]
+            assert first_page[0] <= bar.time * 1000 <= first_page[1]
+            wire.source.replace_bar(10, replace(bar, close=106, high=107))
+        limits.append(kwargs['limit'])
+        return original_query(symbol, interval, **kwargs)
+
+    monkeypatch.setattr(wire.source, 'query', query)
+    script = ('//@version=6\nindicator("Long chart input")\n'
+              'varip int ticks = 0\nticks += 1\nplot(ticks, "counter")\nplot(close, "source")')
+    request = open_request(end=wire.source.rows[-1].time, script=script)
+    response = wire.client.post('/indicators/calculations', json=request).json()
+    assert len(limits) == 2
+    assert max(limits) <= wire.source.query_row_limit == 10_000
+    if amend_between_pages:
+        assert response['code'] == 'INDICATOR_CALCULATION_SOURCE_CHANGED', response
+        assert wire.service.calculations.snapshot()['entries'] == 0
+        assert all(runtime['requests'] == 0 for runtime in wire.host.diagnostics()['runtimes'])
+        response = wire.client.post('/indicators/calculations', json=request).json()
+    assert response['ok'] is True
+    assert value(response) == history
+    assert response['calculation']['origin'] == request['start']
+    prices = next(line['data'] for line in response['lines'] if line.get('name') == 'source')
+    assert len(prices) == history
+    assert prices[10]['value'] == wire.source.rows[10].close
+
+    # An explicit rebuild must read the same origin, including the prefix that
+    # no single bounded DataManager query can return.
+    query_count = len(limits)
+    rebuilt = view(wire, ref(response), start=prices[-1]['time'], end=prices[-1]['time'], rebuild=True)
+    assert rebuilt['type'] == 'indicator.snapshot'
+    assert rebuilt['calculation']['generation'] == response['calculation']['generation'] + 1
+    assert rebuilt['calculation']['origin'] == request['start']
+    assert value(rebuilt) == history and len(limits) == query_count + 2
+    assert wire.client.delete('/indicators/calculations/' + ref(response)['domainId']).json()['state'] == 'closed'
+
+
+def test_long_chart_origin_does_not_seed_across_an_interior_gap(wire):
+    wire.source.rows = bars(12_001)
+    missing = wire.source.rows[7_000].time * 1000
+    assert klines_repo.delete_klines('BTCUSDT', '1m', missing, missing) == 1
+    request = open_request(end=wire.source.rows[-1].time)
+    response = wire.client.post('/indicators/calculations', json=request).json()
+    assert response['code'] == 'INDICATOR_RANGE_NOT_READY', response
+    assert wire.service.calculations.snapshot()['entries'] == 0
+    assert all(runtime['requests'] == 0 for runtime in wire.host.diagnostics()['runtimes'])

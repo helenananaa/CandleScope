@@ -1080,6 +1080,11 @@ class DataManager(DataManagerCore):
         """
         return self.query_engine.read_history_blocks(source, start_ms, end_ms, **options)
 
+    @property
+    def query_row_limit(self) -> int:
+        """Maximum rows returned by one bounded history query."""
+        return self._cfg.query.max_limit
+
     def query(
         self,
         symbol: str,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from copy import deepcopy
+from dataclasses import replace
 import logging
 
 from candlescope_plugin_sdk import ExecuteBatchResult
@@ -16,6 +17,7 @@ from candlescope_plugin_sdk import ExecuteBatchResult
 from app.core import config
 from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_indicator, run_storage
+from app.data_engine.history.calendar import AlwaysOpenCalendar
 from app.indicator.calculation_contract import check_reference, projection_position
 from app.indicator.calculation_owner import CalculationOwnerError, RuntimeTailReset
 from app.indicator.chart_source import ChartSource
@@ -24,7 +26,7 @@ from app.indicator.series_reference import series_reference
 from app.api.v1.stream_indicator_payloads import (
     IndicatorRangeNotReadyError, _build_plugin_snapshot_from_payload,
     _indicator_warmup_bars, _indicator_compute_query_bounds, _missing_overlaps_target, _plugin_snapshot_or_patch_from_result,
-    _closed_indicator_compute_bars, _query_indicator_compute_result,
+    _closed_indicator_compute_bars, _indicator_history_calendar, _query_indicator_window,
     _replace_range_from_snapshot, _script_runtime_request,
 )
 from app.indicator.serialization import serialize_plugin_runtime_result
@@ -35,6 +37,21 @@ logger = logging.getLogger(__name__)
 def _snapshot_payload(client_id, meta, output):
     return _build_plugin_snapshot_from_payload(client_id,meta,
         serialize_plugin_runtime_result(ExecuteBatchResult(ok=True,output=output)))
+
+
+def _chart_query_pages(calendar, interval, start_ms, end_ms, row_limit):
+    count = calendar.count_expected(start_ms, end_ms, interval)
+    if count == 0:
+        return
+    if count <= row_limit:
+        yield start_ms, end_ms, count
+        return
+    # DataManager's cache uses whole seconds, so disjoint millisecond ranges
+    # must split on a second boundary to keep their BARs disjoint as well.
+    split = ((start_ms + end_ms) // 2000 + 1) * 1000
+    assert start_ms < split <= end_ms
+    yield from _chart_query_pages(calendar, interval, start_ms, split - 1, row_limit)
+    yield from _chart_query_pages(calendar, interval, split, end_ms, row_limit)
 
 
 class ChartCalculation:
@@ -65,15 +82,16 @@ class ChartCalculation:
             if self.binding is not None: raise CalculationOwnerError('INDICATOR_CALCULATION_CHANGED')
             revision = self._revision()
             warmup = _indicator_warmup_bars('PINE',self.meta.get('params') or {})
-            start_ms,end_ms,compute_start,_ = _indicator_compute_query_bounds(self.dm,self.meta,start,end,warmup_bars=warmup)
+            bounds = _indicator_compute_query_bounds(self.dm,self.meta,start,end,warmup_bars=warmup)
+            start_ms, end_ms, compute_start, _ = bounds
             acquisition = await self.source.acquire(start_ms=compute_start,through_ms=self.source.end_ms(end),rebuild=True)
-            result,_,_ = await run_storage(_query_indicator_compute_result,self.dm,self.meta,start,end,
-                warmup_bars=warmup,auto_backfill=False,min_revision=acquisition.proof.storage_revision)
+            result, paged = await self._read_inputs(bounds, acquisition)
             rows = _closed_indicator_compute_bars(result,start,end,start_ms,end_ms)
             rows = [row for row in rows if compute_start <= int(row.time)*1000 <= end_ms]
             if not rows or len(rows) > config.SCRIPT_MAX_BARS:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
-            await acquisition.query_proof(result)
+            if not paged:
+                await acquisition.query_proof(result)
             self.binding = await PineCalculationRuntime.open(service,
                 _script_runtime_request(self.meta,rows,transport='http.chart.open'), owner_id=self.owner_id,
                 series_reference=self.series,start=int(rows[0].time))
@@ -190,10 +208,39 @@ class ChartCalculation:
             payload['meta'] = {**payload.get('meta', {}), **self._rebuild_notice}
         return payload
 
+    async def _read_inputs(self, bounds, acquisition):
+        _, end_ms, compute_start, needed = bounds
+        if needed > config.SCRIPT_MAX_BARS:
+            raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
+        limit = self.dm.query_row_limit
+
+        async def query(first, last, count):
+            return await run_storage(
+                _query_indicator_window, self.dm, self.meta, first, last,
+                limit=count, auto_backfill=False, min_revision=acquisition.proof.storage_revision,
+            )
+
+        if needed <= limit:
+            return await query(compute_start, end_ms, needed + 5), False
+        calendar = _indicator_history_calendar(self.dm, self.meta) or AlwaysOpenCalendar()
+        rows, missing = [], []
+        read_through = acquisition.proof.from_ms - 1
+        for first, last, count in _chart_query_pages(
+            calendar, self.meta['interval'], compute_start, end_ms, limit,
+        ):
+            page = await query(first, last, count)
+            if not page.bars and page.history_state == 'pending' and not page.missing_ranges:
+                raise IndicatorRangeNotReadyError('Chart history page is not available yet')
+            await acquisition.query_proof(page, read_through_ms=read_through)
+            rows.extend(row for row in page.bars if first <= row.time_ms <= last)
+            missing.extend(page.missing_ranges)
+            read_through = last
+        return replace(page, bars=rows, total=len(rows), missing_ranges=missing), True
+
     async def _query(self, start, end, *, live=False, acquisition):
-        result, start_ms, end_ms = await run_storage(_query_indicator_compute_result,
-            self.dm, self.meta, start, end, warmup_bars=0, auto_backfill=False,
-            min_revision=acquisition.proof.storage_revision)
+        bounds = _indicator_compute_query_bounds(self.dm,self.meta,start,end,warmup_bars=0)
+        start_ms, end_ms, _, _ = bounds
+        result, paged = await self._read_inputs(bounds, acquisition)
         if _missing_overlaps_target(result.missing_ranges, start_ms, end_ms):
             raise IndicatorRangeNotReadyError('Chart calculation input is not contiguous')
         rows = [row for row in result.bars if start <= row.time <= end and (live or row.is_closed)]
@@ -211,7 +258,8 @@ class ChartCalculation:
                 result.metadata.get('storage_revision'),
             )
             raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
-        await acquisition.query_proof(result)
+        if not paged:
+            await acquisition.query_proof(result)
         return rows
 
     async def _snapshot(self, client_id, revision, acquisition):

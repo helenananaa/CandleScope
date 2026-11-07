@@ -188,15 +188,21 @@ class PrefixWatchStore:
                 (through_ms,committed_through_ms,receipt.owner))
             return self._receipt(conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(receipt.owner,)).fetchone(),head)
 
-    def query_proof(self, proof: PrefixReceipt, *, committed_through_ms, queried_revision):
+    def query_proof(self, proof: PrefixReceipt, *, committed_through_ms, queried_revision,
+                    read_through_ms=None):
         """Accept a version-checked query's own unprocessed materializations.
 
         A derived query may write its target after reading protected inputs.
         It may not rebase an already processed prefix, or a change after the
         query's final durable head. No raw query or caller-supplied rows prove
         this contract; the DataManager's forced-revision reader owns it.
+
+        Paged readers additionally fence the uncommitted pages already read.
+        A later page can materialize its own rows without rebasing those pages.
         """
         _time(committed_through_ms)
+        if read_through_ms is not None and not proof.from_ms-1 <= _time(read_through_ms) <= proof.through_ms:
+            raise ValueError("read watermark must stay inside the acquired prefix")
         if type(queried_revision) is not int or queried_revision < proof.storage_revision:
             raise PrefixContinuityUnavailable('query did not prove its required storage revision')
         with closing(self.connect()) as conn, conn:
@@ -215,8 +221,18 @@ class PrefixWatchStore:
             if row['version'] != proof.version:
                 if row['dirty_from_ms'] is None or row['dirty_from_ms'] <= committed_through_ms:
                     raise ProcessedPrefixChanged(row['dirty_from_ms'],row['dirty_through_ms'])
-                if head != queried_revision:
+                if (head != queried_revision or
+                        (read_through_ms is not None and row['dirty_from_ms'] <= read_through_ms)):
                     raise PrefixAcquisitionChanged(row['dirty_from_ms'],row['dirty_through_ms'])
+                if read_through_ms is not None:
+                    # Later writes must report their own dirty range. This
+                    # verifies the existing committed prefix without advancing
+                    # its durable consumer cursor.
+                    conn.execute(
+                        "UPDATE kline_prefix_watches SET verified_through_ms=?,verified_version=version,"
+                        "dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
+                        (committed_through_ms, proof.owner),
+                    )
             return self._receipt(row,head)
 
     @contextmanager
