@@ -26,7 +26,7 @@ test("explicit selected version produces independent inputs and no account, curs
   const value = projectSelectedVersion(selected);
   assert.equal(value.attachment.autoRun, false);
   assert.deepEqual(value.attachment.executionOverrides, { initialBalance: "5000", equityPercent: "20", leverage: "1", feeBps: "3.5", slippageBps: "2" });
-  assert.deepEqual(value.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash, outputMode: "TARGET_POSITION", warmupBars: 20 });
+  assert.deepEqual(value.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash, outputMode: "TARGET_POSITION", warmupBars: 20, preferredRunMode: "HISTORY_LIVE" });
   assert.deepEqual(value.attachment.customRange, { startMs: 1700000040000, endMs: 1700036040000 });
   assert.deepEqual(selected, before);
   (value.attachment.parameters.nested as { fast: number }).fast = 99;
@@ -107,7 +107,7 @@ test("return preserves legacy SIGNAL with its futures preset revision and warmup
   const projected = projectSelectedVersion(selected);
   assert.equal(projected.session.marketType, "futures");
   assert.deepEqual(projected.attachment.initialization, { runId: "bt_selected", versionHash: selected.version_hash,
-    outputMode: "SIGNAL", executionModel: "LEGACY", warmupBars: 20 });
+    outputMode: "SIGNAL", executionModel: "LEGACY", warmupBars: 20, preferredRunMode: "HISTORY_LIVE" });
   c.participation_rate = "0.1";
   assert.throws(() => projectSelectedVersion(selected), /participation_rate/);
 });
