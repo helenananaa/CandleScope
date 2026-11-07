@@ -46,6 +46,7 @@ class ChartCalculation:
         self._writer = None
         self._dispose_writer = None
         self._inputs = ()
+        self._source_rebuild_notice = None
         self._source_epoch = 0
         self._barrier = None
         self._barrier_ids = deque(maxlen=64)
@@ -166,7 +167,17 @@ class ChartCalculation:
             expected=self.owner.cursor, rebuild=rebuild,
             is_current=lambda:self._token(revision) == self._token(self._revision()) and epoch == self._source_epoch,
             on_result=publish,commit_cursor=acquisition.commit)
-        return self._stamp(payload, cursor, revision, acquisition)
+        self._stamp(payload, cursor, revision, acquisition)
+        if rebuild:
+            # The owner accepted a new runtime epoch from canonical BARs.
+            # Keep its recovery notice for readers of the cached projection.
+            self._source_rebuild_notice = {
+                'sessionReset': True,
+                'sessionResetReason': 'sourceRebuild',
+                'sessionRecovered': False,
+            }
+            payload['meta'] = {**payload.get('meta', {}), **self._source_rebuild_notice}
+        return payload
 
     async def _query(self, start, end, *, live=False, acquisition):
         result, start_ms, end_ms = await run_storage(_query_indicator_compute_result,
@@ -189,6 +200,8 @@ class ChartCalculation:
         payload = await run_indicator(_snapshot_payload,client_id,self.meta,snapshot.output)
         payload['range'] = {'start':self.owner.plan.start, 'end':cursor.observed_through}
         if self._inputs: payload['param_schema'] = [dict(item) for item in self._inputs]
+        if self._source_rebuild_notice is not None:
+            payload['meta'] = {**payload.get('meta', {}), **self._source_rebuild_notice}
         return self._stamp(payload, cursor, revision, acquisition)
 
     async def view(self, reference, *, client_id, start, end, rebuild=False, complete=False):

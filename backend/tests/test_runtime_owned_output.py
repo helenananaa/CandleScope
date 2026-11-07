@@ -103,11 +103,24 @@ async def test_projection_reference_fences_streams_restarts_and_supervisor_insta
         assert counter(other.output) == 7 and counter(old.output) == 20
         assert await live.read_output('chart-b', expected=old.reference) is None
         assert await live.read_output('chart-a', expected=replace(old.reference, owner_epoch='another-backend')) is None
+        def forming_request(close):
+            rows = bars(21, forming=True)
+            return request((*rows[:-1], replace(rows[-1], close=close)))
+
+        first_tick = await live.execute_batch(forming_request(101))
+        second_tick = await live.execute_batch(forming_request(102))
+        assert first_tick.ok and second_tick.ok
+        assert (counter(first_tick.output), counter(second_tick.output)) == (21, 22)
+        observed = await live.read_output('chart-a')
         before = live.snapshot()['starts']
         await live.stop()
         assert await live.read_output('chart-a') is None
         assert live.snapshot()['starts'] == before
-        await live.execute_batch(request(bars(20)))
+        resumed = await live.execute_batch(forming_request(103))
+        assert resumed.ok and resumed.meta['sessionRecovered'] and not resumed.meta['sessionReset']
+        assert counter(resumed.output) == 23
+        assert live.snapshot()['starts'] == before + 1
+        assert await live.read_output('chart-a', expected=observed.reference) is None
         new = await live.read_output('chart-a')
         assert new.reference.generation != old.reference.generation
         assert await live.read_output('chart-a', expected=old.reference) is None

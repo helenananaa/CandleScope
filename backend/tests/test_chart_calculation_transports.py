@@ -271,6 +271,38 @@ def test_http_reads_and_ws_share_one_real_calculation_and_correction_generation(
         assert repaired['calculation']['origin'] == initial['calculation']['origin']
         assert repaired['range']['start'] == initial['calculation']['origin']
         assert repaired['dataRevision']['closedThrough'] == bars(500)[-1].time
+        assert repaired['meta']['sessionReset'] is True
+        assert repaired['meta']['sessionResetReason'] == 'sourceRebuild'
+        assert repaired['meta']['sessionRecovered'] is False
+        assert repaired['calculation']['sequence'] > deleted['calculation']['sequence']
+        ws.send_json({'action':'unsubscribe','clientId':'chart-a'})
+        receive(ws,'indicator.unsubscribed')
+
+    runtime_calls = wire.host.diagnostics()['runtimes'][0]['requests']
+    cached = view(wire, ref(repaired))
+    assert cached['meta']['sessionReset'] is True
+    assert cached['meta']['sessionResetReason'] == 'sourceRebuild'
+    assert cached['meta']['sessionRecovered'] is False
+    with wire.client.websocket_connect('/ws') as ws:
+        subscribe(ws, ref(repaired))
+        assert receive(ws, 'indicator.subscribed')['ok']
+        reattached = receive(ws, 'indicator.snapshot')
+        assert value(reattached) == 501 and ref(reattached) == ref(repaired)
+        assert reattached['meta']['sessionReset'] is True
+        assert reattached['meta']['sessionResetReason'] == 'sourceRebuild'
+        assert reattached['meta']['sessionRecovered'] is False
+        assert wire.host.diagnostics()['runtimes'][0]['requests'] == runtime_calls
+        async def next_observation():
+            # Advance the forming BAR without undoing the confirmed correction.
+            latest = replace(wire.source.rows[-1], close=105, high=105)
+            wire.source.rows = [*wire.source.rows[:-1], latest]
+            await wire.source.emit(DataEvent(DataEventType.BAR_UPDATED, SeriesKey('BTCUSDT', '1m'), bar=latest))
+
+        wire.client.portal.call(next_observation)
+        continued = receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert value(continued) == 502
+        assert continued['calculation']['generation'] == repaired['calculation']['generation']
+        assert continued['meta']['sessionReset'] is False
         ws.send_json({'action':'unsubscribe','clientId':'chart-a'})
         receive(ws,'indicator.unsubscribed')
     assert not wire.source.callbacks and not wire.source.leases
