@@ -4305,6 +4305,7 @@ export const nl = {
   "research.data.noContext": "Deze ingang heeft geen bevroren datasetidentiteit.",
   "research.data.available": "Beschikbare lokale datasets",
   "research.execution.precise": "Getrouwheid van de transactiereeks en uitvoeringsaannames blijven per Run expliciet en onveranderlijk.",
+  "research.execution.preciseArchiveHint": "Automatisch downloaden gebruikt geaggregeerde transacties van Binance USD-M-futures. Kies een periode binnen afgesloten UTC-dagen.",
   "research.execution.python": "Python- en externe-modelruntimes initialiseren alleen in deze onderzoekstoepassing.",
   "research.execution.general": "Uitvoeringsbediening blijft beperkt tot de geselecteerde taak en muteert nooit een voltooide Run.",
   "research.run.none": "Er is geen BacktestRun geselecteerd.",

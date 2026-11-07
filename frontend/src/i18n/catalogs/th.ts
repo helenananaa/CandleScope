@@ -4305,6 +4305,7 @@ export const th = {
   "research.data.noContext": "รายการนี้ไม่มีข้อมูลระบุชุดข้อมูลที่แช่แข็ง",
   "research.data.available": "ชุดข้อมูลในเครื่องที่ใช้ได้",
   "research.execution.precise": "ความเที่ยงตรงของลำดับเทรดและการสมมติการส่งคำสั่งยังระบุและแก้ไม่ได้ต่อ Run",
+  "research.execution.preciseArchiveHint": "การดาวน์โหลดอัตโนมัติใช้ข้อมูลการซื้อขายแบบรวมของ Binance USD-M Futures เลือกช่วงเวลาภายในวันที่สิ้นสุดแล้วตามเวลา UTC",
   "research.execution.python": "รันไทม์ Python และโมเดลภายนอกเริ่มต้นเฉพาะในแอปวิจัยนี้",
   "research.execution.general": "ตัวควบคุมการส่งคำสั่งยังอยู่ในขอบเขตงานที่เลือก และไม่แก้ Run ที่เสร็จแล้ว",
   "research.run.none": "ยังไม่ได้เลือก BacktestRun",

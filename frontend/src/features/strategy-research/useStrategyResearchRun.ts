@@ -217,7 +217,8 @@ export function useStrategyResearchRun(input: {
           tester.dispatch({
             type: "REQUEST_STATUS",
             token,
-            status: resolution.status === "NEEDS_DATA" ? "NEEDS_DATA" : "RESOLVING",
+            status: resolution.status === "NEEDS_DATA" && !resolution.automatic_preparation_available
+              ? "NEEDS_DATA" : "RESOLVING",
           });
         },
         onRunUpdate(run) {

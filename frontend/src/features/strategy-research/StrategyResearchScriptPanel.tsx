@@ -254,8 +254,9 @@ export function StrategyResearchScriptPanel({
     onOpenAdvanced();
   }, [draftId, flushPendingDraft, onOpenAdvanced]);
 
+  const preciseBlocked = barOnly && configuration.fidelityPreference === "PRECISE";
   const runRequest = useMemo<ChartStrategyRunRequest | null>(() => {
-    if (draft === null || session === null || !validStrategyRunSettings(configuration)) return null;
+    if (draft === null || session === null || preciseBlocked || !validStrategyRunSettings(configuration)) return null;
     return {
       cellScope,
       session,
@@ -278,7 +279,7 @@ export function StrategyResearchScriptPanel({
         ...configuration,
       },
     };
-  }, [cellScope, configuration, draft, session, source, pythonTrustedConfirmed]);
+  }, [cellScope, configuration, draft, preciseBlocked, session, source, pythonTrustedConfirmed]);
 
   const run = useCallback(() => {
     if (!runRequest) { setPane("conditions"); return; }
@@ -292,10 +293,10 @@ export function StrategyResearchScriptPanel({
       command("selectDraft", "Select a currently listed draft.", object({ draftId: nullable(text(128)) }), ({ draftId }) => { if (draftId && !recentDrafts.some((row) => row.id === draftId)) throw new Error("DRAFT_UNAVAILABLE"); onDraftId(draftId); }, { available: controlReady }),
       command("source", "Edit the saved strategy source; flush separately to verify persistence.", object({ source: text(48000, 0) }), ({ source }) => setSource(source), { available: () => controlReady() && !!draft }),
       command("flush", "Flush the existing strategy draft persistence workflow.", empty, () => flushPendingDraft(), { available: () => !!draft }),
-      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
+      command("configure", "Edit known host run settings using the same validation as the UI.", object({ rangeMode: choice(["ALL_AVAILABLE", "CUSTOM"]), customRange: nullable(object({ startMs: number(0, 1e15, true), endMs: number(0, 1e15, true) })), parameters: optional(record), fidelityPreference: optional(choice(["FAST", "PRECISE"])), executionOverrides: optional(object({ initialBalance: text(64), equityPercent: text(64), leverage: text(64), feeBps: text(64), slippageBps: text(64) })) }), (value) => { if (!validStrategyRunSettings(value) || (barOnly && value.fidelityPreference === "PRECISE") || !onConfigure) throw new Error("RUN_SETTINGS_INVALID"); onConfigure(value); }, { available: () => controlReady() && !!onConfigure }),
       command("pane", "Select editor pane.", object({ pane: choice(["parameters", "code", "conditions"]) }), ({ pane }) => { setPane(pane); setOpenEditor(true); }),
-      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && !!draft && validStrategyRunSettings(configuration) }),
-      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData }),
+      command("run", "Start the host strategy through its draft/session/attachment ownership workflow.", empty, () => run(), { available: () => controlReady() && runRequest !== null }),
+      command("prepare", "Confirm the current missing-data preparation workflow.", empty, () => onConfirmNeedsData(), { available: () => controlReady() && needsData && runRequest !== null }),
       command("openAdvanced", "Flush the draft and open advanced research.", empty, () => openAdvanced()),
     ] }));
   if (session === null || sourceKind === null) {
@@ -313,7 +314,7 @@ export function StrategyResearchScriptPanel({
       </label>}
       {barOnly ? (
         <p className="strategy-research-bar-only" data-testid="strategy-research-bar-only">
-          {t("chartTester.result.fidelityFast")}
+          {t("research.capability.tapeDenied")}
         </p>
       ) : null}
       {draft === null ? (
@@ -347,7 +348,7 @@ export function StrategyResearchScriptPanel({
             {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
           </div>
           {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} onChange={onConfigure} />}
+          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} preciseAvailable={!barOnly} onChange={onConfigure} />}
           {openEditor && pane === "code" ? (
             <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
               <StrategyScriptWorkspace
@@ -367,7 +368,7 @@ export function StrategyResearchScriptPanel({
             type="button"
             data-testid="strategy-research-run"
             className="research-primary"
-            disabled={(draft.language === "python" && !pythonTrustedConfirmed) || !validStrategyRunSettings(configuration) || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
+            disabled={(draft.language === "python" && !pythonTrustedConfirmed) || !runRequest || runStatus === "RUNNING" || runStatus === "QUEUED" || runStatus === "RESOLVING"}
             onClick={needsData ? onConfirmNeedsData : run}
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}

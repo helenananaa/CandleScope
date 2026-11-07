@@ -4305,6 +4305,7 @@ export const de = {
   "research.data.noContext": "Dieser Einstieg hat keine eingefrorene Datensatzidentität.",
   "research.data.available": "Verfügbare lokale Datensätze",
   "research.execution.precise": "Trade-Sequenz-Genauigkeit und Ausführungsannahmen bleiben je Lauf explizit und unveränderlich.",
+  "research.execution.preciseArchiveHint": "Der automatische Download verwendet aggregierte Trades von Binance USD-M Futures. Wähle einen Zeitraum innerhalb abgeschlossener UTC-Tage.",
   "research.execution.python": "Python- und externe Modelllaufzeiten werden nur innerhalb dieser Forschungsanwendung initialisiert.",
   "research.execution.general": "Ausführungssteuerungen bleiben auf die gewählte Aufgabe beschränkt und ändern niemals einen abgeschlossenen Lauf.",
   "research.run.none": "Kein BacktestRun ausgewählt.",

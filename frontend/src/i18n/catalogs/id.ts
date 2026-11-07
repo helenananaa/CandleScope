@@ -4305,6 +4305,7 @@ export const id = {
   "research.data.noContext": "Entri ini tidak memiliki identitas kumpulan data beku.",
   "research.data.available": "Kumpulan data lokal yang tersedia",
   "research.execution.precise": "Fidelitas urutan transaksi dan asumsi eksekusi tetap eksplisit dan tidak dapat diubah per Run.",
+  "research.execution.preciseArchiveHint": "Pengunduhan otomatis menggunakan perdagangan agregat futures Binance USD-M. Pilih rentang dalam hari UTC yang sudah berakhir.",
   "research.execution.python": "Runtime Python dan model eksternal diinisialisasi hanya di dalam aplikasi riset ini.",
   "research.execution.general": "Kontrol eksekusi tetap tercakup pada tugas yang dipilih dan tidak pernah mengubah Run yang selesai.",
   "research.run.none": "Tidak ada BacktestRun yang dipilih.",

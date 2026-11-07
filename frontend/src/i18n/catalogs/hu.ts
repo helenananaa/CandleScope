@@ -4305,6 +4305,7 @@ export const hu = {
   "research.data.noContext": "Ennek a belépőnek nincs befagyasztott adatkészlet-azonosítója.",
   "research.data.available": "Elérhető helyi adatkészletek",
   "research.execution.precise": "Az ügyletsorozat-pontosság és a végrehajtási feltételezések futtatásonként explicit és megváltoztathatatlan maradnak.",
+  "research.execution.preciseArchiveHint": "Az automatikus letöltés a Binance USD-M határidős ügyleteinek összesített kötéseit használja. Válassz lezárt UTC-napokon belüli időszakot.",
   "research.execution.python": "A Python és a külső modell futási környezetei csak ebben a kutatási alkalmazásban inicializálódnak.",
   "research.execution.general": "A végrehajtási vezérlők a kiválasztott feladatra korlátozódnak, és soha nem módosítanak befejezett futtatást.",
   "research.run.none": "Nincs kiválasztott BacktestRun.",

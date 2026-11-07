@@ -207,7 +207,10 @@ export function chartContextRequestForFrozen(
     interval: frozen.session.interval,
     range_mode: rangeMode,
     start_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.startMs,
-    end_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.endMs,
+    // The precise research editor uses an exclusive end. Preparation expands
+    // the inclusive wire timestamp to the end of its containing bar.
+    end_time_ms: rangeMode === "ALL_AVAILABLE" ? null : range!.endMs
+      - (rangeMode === "CUSTOM" && frozen.attachment.fidelityPreference === "PRECISE" ? 1 : 0),
     fidelity_preference: frozen.attachment.fidelityPreference,
   };
 }
@@ -465,7 +468,9 @@ export async function assembleFrozenContextFromResolution(
       symbol: resolution.request.symbol,
       qualitySummary: quality,
     },
-    projectResearchCapabilities({ sourceKind, quality }),
+    projectResearchCapabilities({
+      sourceKind, quality, hasFrozenTrades: resolution.fidelity.mode === "AGG_TRADE_EXECUTION",
+    }),
     identity.snapshotHash,
   );
 }
@@ -603,6 +608,12 @@ export async function runResearchBacktest(options: {
     }
     : options.request;
   const frozen = await freezeChartStrategyRunRequest(request);
+  const precise = frozen.attachment.fidelityPreference === "PRECISE";
+  if (precise && options.source.kind === "IMPORTED_DATASET") {
+    throw new ChartStrategyRunError(
+      "FIDELITY_UNSUPPORTED", "Imported data only supports bar estimates", { next_step: "use bar estimate" },
+    );
+  }
   options.onStage?.("COMPILING");
   const revision = await options.api.createStrategyRevision({
     name: frozen.displayName,
@@ -620,13 +631,6 @@ export async function runResearchBacktest(options: {
   let resolution: ChartContextResolution;
   let frozenContext: FrozenResearchContextV1 | null = null;
   if (options.source.kind === "IMPORTED_DATASET") {
-    if (frozen.attachment.fidelityPreference === "PRECISE") {
-      throw new ChartStrategyRunError(
-        "FIDELITY_UNSUPPORTED",
-        "imported data only supports bar estimate",
-        { next_step: "use bar estimate" },
-      );
-    }
     options.onStage?.("RESOLVING");
     const preview = await previewImportedSnapshot(options.api, options.source, options.signal);
     resolution = resolutionFromImportedPreview({ source: options.source, frozen, preview });
@@ -646,7 +650,7 @@ export async function runResearchBacktest(options: {
       throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile needs Python 1-minute BAR preparation");
     }
     const contextRequest = chartContextRequestForFrozen(frozen);
-    if (options.source.materializeResolution) {
+    if (!precise && options.source.materializeResolution) {
       options.onStage?.("MATERIALIZING");
       await options.api.materializeChartContext({
         resolution_token: options.source.materializeResolution.resolution_token,
@@ -663,6 +667,9 @@ export async function runResearchBacktest(options: {
     options.onStage?.("RESOLVING");
     resolution = await options.api.resolveChartContext(contextRequest, options.signal);
     options.onResolution?.(resolution);
+    if (precise && resolution.status === "READY" && resolution.fidelity.mode !== "AGG_TRADE_EXECUTION") {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The resolved snapshot lacks aggregate-trade fidelity");
+    }
     if (options.api.prepareChartContext && resolution.automatic_preparation_available !== false
       && (resolution.status === "NEEDS_DATA" || (resolution.status === "READY" && resolution.automatic_preparation_available))) {
       options.onStage?.("MATERIALIZING");
@@ -685,10 +692,20 @@ export async function runResearchBacktest(options: {
     if (profile && resolution.status === "READY" && !resolution.prepared_run) {
       throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The continuous execution profile was not prepared");
     }
+    if (precise && (resolution.status === "NEEDS_DATA" || resolution.status === "UNSUPPORTED_FIDELITY")) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Verified aggregate-trade coverage is unavailable for this run");
+    }
+    if (precise && resolution.status === "READY" && resolution.fidelity.mode !== "AGG_TRADE_EXECUTION") {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "Preparation did not return an aggregate-trade run context");
+    }
     if (resolution.status === "NEEDS_DATA") {
       return { kind: "NEEDS_DATA", frozen, revision, resolution, frozenContext: null };
     }
     if (resolution.status !== "READY") {
+      if (precise) {
+        const warning = resolution.quality_warnings[0];
+        throw new ChartStrategyRunError(warning?.code ?? resolution.status, warning?.message ?? "Trade-sequence data is unavailable");
+      }
       return { kind: "UNSUPPORTED", frozen, revision, resolution, frozenContext: null };
     }
     frozenContext = await assembleFrozenContextFromResolution(
@@ -766,6 +783,9 @@ export async function runResearchBacktest(options: {
     },
   });
   const created = resolution.prepared_run ?? await options.api.createRun(refreshedBody, idempotencyKey, options.signal);
+  if (precise && (created.fidelity_mode !== "AGG_TRADE_EXECUTION" || created.source_event_kind !== "AGG_TRADE")) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The run was not created with aggregate-trade fidelity");
+  }
   const identity = resultIdentity({
     frozen,
     revision,

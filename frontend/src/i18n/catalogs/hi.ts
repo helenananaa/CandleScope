@@ -4305,6 +4305,7 @@ export const hi = {
   "research.data.noContext": "इस प्रवेश की कोई फ़्रीज़ डेटासेट पहचान नहीं।",
   "research.data.available": "उपलब्ध स्थानीय डेटासेट",
   "research.execution.precise": "ट्रेड-क्रम फ़िडेलिटी और निष्पादन मान्यताएँ प्रति Run स्पष्ट और अपरिवर्तनीय रहती हैं।",
+  "research.execution.preciseArchiveHint": "स्वचालित डाउनलोड Binance USD-M फ़्यूचर्स के समेकित ट्रेड का उपयोग करता है। पूरे हो चुके UTC दिनों के भीतर की अवधि चुनें।",
   "research.execution.python": "Python और बाहरी-मॉडल रनटाइम केवल इस रिसर्च एप्लिकेशन के अंदर आरंभ होते हैं।",
   "research.execution.general": "निष्पादन नियंत्रण चयनित कार्य तक सीमित रहते हैं और पूर्ण Run कभी नहीं बदलते।",
   "research.run.none": "कोई BacktestRun चयनित नहीं।",

@@ -4305,6 +4305,7 @@ export const he = {
   "research.data.noContext": "לכניסה זו אין זהות מערך קפואה.",
   "research.data.available": "מערכי נתונים מקומיים זמינים",
   "research.execution.precise": "נאמנות רצף עסקאות והנחות ביצוע נשארות מפורשות ובלתי ניתנות לשינוי לכל Run.",
+  "research.execution.preciseArchiveHint": "ההורדה האוטומטית משתמשת בעסקאות מצטברות של חוזי Binance USD-M. יש לבחור טווח בתוך ימי UTC שכבר הסתיימו.",
   "research.execution.python": "סביבות Python ומודלים חיצוניים מאותחלות רק בתוך יישום מחקר זה.",
   "research.execution.general": "בקרי ביצוע נשארים בהיקף המשימה שנבחרה ולעולם אינם משנים Run שהושלם.",
   "research.run.none": "לא נבחר BacktestRun.",

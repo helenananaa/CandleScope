@@ -4305,6 +4305,7 @@ export const tr = {
   "research.data.noContext": "Bu girişin dondurulmuş veri kümesi kimliği yok.",
   "research.data.available": "Kullanılabilir yerel veri kümeleri",
   "research.execution.precise": "İşlem sırası doğruluğu ve yürütme varsayımları her Çalıştırma için açık ve değiştirilemez kalır.",
+  "research.execution.preciseArchiveHint": "Otomatik indirme, Binance USD-M vadeli işlemlerinin toplulaştırılmış işlem verilerini kullanır. Tamamlanmış UTC günleri içinde bir aralık seçin.",
   "research.execution.python": "Python ve dış model çalışma zamanları yalnızca bu araştırma uygulamasının içinde başlatılır.",
   "research.execution.general": "Yürütme denetimleri seçilen görevle sınırlı kalır ve tamamlanmış bir Çalıştırmayı asla değiştirmez.",
   "research.run.none": "BacktestRun seçilmedi.",

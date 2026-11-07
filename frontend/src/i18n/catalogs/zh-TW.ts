@@ -4345,6 +4345,7 @@ export const zhTW = {
   "research.data.noContext": "該入口沒有凍結資料身份。",
   "research.data.available": "本地可用資料集",
   "research.execution.precise": "逐筆精度和執行假設在每個 Run 內顯式記錄且不可變。",
+  "research.execution.preciseArchiveHint": "自動下載使用 Binance USD-M 合約的聚合成交資料。請選擇已結束的 UTC 日期內的時間範圍。",
   "research.execution.python": "Python 與外部模型 runtime 只在該研究應用內初始化。",
   "research.execution.general": "執行控制只屬於當前任務，不會修改已完成 Run。",
   "research.run.none": "尚未選擇 BacktestRun。",

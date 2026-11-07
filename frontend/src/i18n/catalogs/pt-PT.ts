@@ -4305,6 +4305,7 @@ export const ptPT = {
   "research.data.noContext": "Esta entrada não tem uma identidade de conjunto de dados congelada.",
   "research.data.available": "Conjuntos de dados locais disponíveis",
   "research.execution.precise": "A fidelidade da sequência de negócios e as premissas de execução permanecem explícitas e imutáveis por Run.",
+  "research.execution.preciseArchiveHint": "A transferência automática usa transações agregadas de futuros Binance USD-M. Selecione um intervalo em dias UTC já terminados.",
   "research.execution.python": "Os runtimes Python e de modelos externos inicializam-se apenas dentro desta aplicação de investigação.",
   "research.execution.general": "Os controlos de execução permanecem no âmbito da tarefa seleccionada e nunca alteram um Run concluído.",
   "research.run.none": "Nenhum BacktestRun está seleccionado.",

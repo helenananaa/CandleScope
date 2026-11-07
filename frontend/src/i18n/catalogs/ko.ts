@@ -4838,6 +4838,7 @@ export const ko = {
   "research.data.noContext": "이 항목에 고정된 데이터셋 식별이 없음.",
   "research.data.available": "사용 가능한 로컬 데이터셋",
   "research.execution.precise": "체결 시퀀스 정밀도와 실행 가정은 Run마다 명시되고 불변.",
+  "research.execution.preciseArchiveHint": "자동 다운로드는 Binance USD-M 선물의 집계 체결을 사용합니다. 이미 종료된 UTC 날짜 내에서 기간을 선택하세요.",
   "research.execution.python": "Python과 외부 모델 런타임은 이 연구 앱 안에서만 초기화됨.",
   "research.execution.general": "실행 제어는 선택한 작업에만 적용되며 완료된 Run을 변경하지 않음.",
   "research.run.none": "BacktestRun이 선택되지 않음.",
