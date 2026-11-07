@@ -496,6 +496,7 @@ export function createBacktestApi(base = `${API_BASE}/backtests`): BacktestApiCl
       const query = new URLSearchParams({
         snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash,
         cursor: String(cursor.cursor), interval: cursor.interval,
+        ...(cursor.comparisonInterval ? { comparison_interval: cursor.comparisonInterval } : {}),
       });
       return readJson(await fetch(
         `${base}/runs/${encodeURIComponent(cursor.runId)}/result-replay?${query}`,

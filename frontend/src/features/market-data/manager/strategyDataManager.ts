@@ -93,16 +93,23 @@ export class StrategyDataManager {
     return this.operation(signal, async (owned) => {
       if (!this.api.getResultReplay) throw new StrategyRunStreamError("STRATEGY_STREAM_UNAVAILABLE", "Result replay is unavailable");
       const frame = await this.api.getResultReplay(cursor, owned);
-      if (frame.schema !== "candlescope.user-trade-result-replay/1" || frame.run_id !== cursor.runId
+      const invalidBars = (bars: typeof frame.bars) => !Array.isArray(bars)
+        || bars.some(bar => frame.time_ms === null || bar.open_time_ms > frame.time_ms
+          || (bar.closed && bar.close_time_ms !== undefined && bar.close_time_ms > frame.time_ms));
+      if ((frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
+        || frame.run_id !== cursor.runId
         || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
         || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
         || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
-        || !Array.isArray(frame.bars) || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
+        || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
+          || frame.display_intervals.some(interval => typeof interval !== "string")))
+        || frame.comparison?.interval !== cursor.comparisonInterval
+        || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
+        || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
         || !Array.isArray(frame.closed_bar_signals)
         || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)
         || frame.fills.some((fill) => fill.cursor > frame.cursor)
-        || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)
-        || frame.bars.some((bar) => frame.time_ms === null || bar.open_time_ms > frame.time_ms)) {
+        || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)) {
         throw new StrategyRunStreamError("DATA_SNAPSHOT_MISMATCH", "Result replay frame does not match the requested boundary");
       }
       return frame;

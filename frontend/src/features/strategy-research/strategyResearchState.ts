@@ -157,7 +157,10 @@ function loadResultReplay(value: unknown, runId: unknown): BacktestResultReplayC
     || typeof replay.cursor !== "number" || !Number.isSafeInteger(replay.cursor) || replay.cursor < 0
     || typeof replay.interval !== "string" || replay.interval.length < 2 || replay.interval.length > 64) return undefined;
   return { runId: replay.runId, snapshotHash: replay.snapshotHash, reportHash: replay.reportHash,
-    cursor: replay.cursor, interval: replay.interval };
+    cursor: replay.cursor, interval: replay.interval,
+    ...(typeof replay.comparisonInterval === "string" && replay.comparisonInterval !== replay.interval
+      && replay.comparisonInterval.length >= 2 && replay.comparisonInterval.length <= 64
+      ? { comparisonInterval: replay.comparisonInterval } : {}) };
 }
 
 export function loadStrategyResearchWorkspace(): StrategyResearchState {

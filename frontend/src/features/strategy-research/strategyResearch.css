@@ -373,3 +373,13 @@
   border-radius: var(--radius-control);
   background: var(--bg-secondary);
 }
+
+.strategy-result-replay-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  gap: 16px;
+}
+
+.strategy-result-replay-charts section {
+  min-width: 0;
+}

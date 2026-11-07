@@ -394,8 +394,10 @@ export default function StrategyResearchApp({
   const replayReport = savedResult?.report.hashes.report;
   const canReplay = savedResult?.run.state === "COMPLETED"
     && savedResult.run.run_id === state.result.runId
-    && savedResult.run.fidelity_mode === "AGG_TRADE_EXECUTION"
-    && savedResult.report.data_quality?.source_quality === "user_market_trades"
+    && savedResult.config.exchange === "local" && savedResult.config.market_type === "spot"
+    && savedResult.config.account_model === "SPOT_CASH_V1"
+    && (savedResult.run.fidelity_mode === "BAR_APPROX" || (savedResult.run.fidelity_mode === "AGG_TRADE_EXECUTION"
+      && savedResult.report.data_quality?.source_quality === "user_market_trades"))
     && typeof replaySnapshot === "string" && typeof replayReport === "string";
   const openResultReplay = () => {
     if (canReplay) saveResultReplay({
@@ -500,7 +502,7 @@ export default function StrategyResearchApp({
         sourceKind={source?.kind ?? null}
         draftId={state.script.draftId}
         barOnly={researchRun.barOnly}
-        capitalAsset={importedManifest?.market_trade_input ? importedManifest.instrument?.quote_asset : undefined}
+        capitalAsset={importedManifest?.instrument?.quote_asset}
         runStatus={researchRun.runStatus}
         needsData={researchRun.needsData}
         onDraftId={handleDraftId}

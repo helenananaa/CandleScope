@@ -93,6 +93,9 @@ class BacktestRuntime:
             self.local_data,
             max_rows=settings.max_bar_rows,
         )
+        self.pinned_bar_snapshots = LocalBarSnapshotProvider(
+            self.local_data, max_rows=settings.max_bar_rows, pinned_revisions=True,
+        )
         self.trade_archive = (
             None
             if trade_archive_dir is None or not settings.trade_tape_effective
@@ -401,29 +404,9 @@ class BacktestRuntime:
             preview,_,bars=freeze(self,config)
             require_identity(record,preview)
         elif record["fidelity_mode"] == "BAR_APPROX":
-            ref = self._dataset_ref(
-                dataset_id=record["dataset_id"],
-                data_epoch=record["data_epoch"],
-                snapshot_hash=record["snapshot_hash"],
-                start_time_ms=config["start_time_ms"],
-                end_time_ms=config["end_time_ms"],
-                interval=interval,
-                contract_data_mode=config.get("contract_data_mode"),
-                account_model=config.get("account_model"),
-                funding_mode=config.get("funding_mode"),
-                exchange=str(config.get("exchange") or "binance"),
-                market_type=str(config.get("market_type") or "usdm"),
-            )
+            snapshot = self.open_saved_bar_snapshot(record, config, interval)
             try:
-                snapshot = self.snapshots.open(ref)
-            except MarketDatasetError as exc:
-                raise BacktestError(exc.code, exc.message) from exc
-            try:
-                bars = [
-                    _bar_wire(event)
-                    for event in snapshot.events
-                    if event.role == "BARS"
-                ]
+                bars = [_bar_wire(event) for event in snapshot.events if event.role == "BARS"]
             finally:
                 snapshot.close()
         elif record["fidelity_mode"] in {"AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}:
@@ -468,6 +451,27 @@ class BacktestRuntime:
         }
         payload["chart_hash"] = "sha256:" + sha256_hex(canonical_json(payload))
         return payload
+
+    def open_saved_bar_snapshot(
+        self, record: Mapping[str, object], config: Mapping[str, Any], interval: str,
+    ) -> MarketDatasetSnapshot:
+        ref = self._dataset_ref(
+            dataset_id=record["dataset_id"],
+            data_epoch=record["data_epoch"],
+            snapshot_hash=record["snapshot_hash"],
+            start_time_ms=config["start_time_ms"],
+            end_time_ms=config["end_time_ms"],
+            interval=interval,
+            contract_data_mode=config.get("contract_data_mode"),
+            account_model=config.get("account_model"),
+            funding_mode=config.get("funding_mode"),
+            exchange=str(config.get("exchange") or "binance"),
+            market_type=str(config.get("market_type") or "usdm"),
+        )
+        try:
+            return self.pinned_bar_snapshots.open(ref)
+        except MarketDatasetError as exc:
+            raise BacktestError(exc.code, exc.message) from exc
 
     def _legacy_trade_chart_bars(
         self,
@@ -644,6 +648,9 @@ class BacktestWorker:
         self.snapshots = LocalBarSnapshotProvider(
             self.local_data,
             max_rows=settings.max_bar_rows,
+        )
+        self.pinned_bar_snapshots = LocalBarSnapshotProvider(
+            self.local_data, max_rows=settings.max_bar_rows, pinned_revisions=True,
         )
         self.trade_archive = (
             None
@@ -870,7 +877,7 @@ class BacktestWorker:
                     source="local_immutable",
                     retention_policy="user_local",
                 )
-                snapshot = self.snapshots.open(ref)
+                snapshot = self.pinned_bar_snapshots.open(ref)
                 market_events = (
                     tuple(snapshot.events)
                     if str(config.get("account_model")) == "LINEAR_PERP_ONE_WAY_V2"
@@ -895,7 +902,7 @@ class BacktestWorker:
                         "quality": {
                             **snapshot.quality,
                             **({"quote_asset": manifest["instrument"]["quote_asset"]}
-                               if manifest.get("source") == USER_TRADE_SOURCE else {}),
+                               if config.get("exchange") == "local" and manifest.get("instrument", {}).get("quote_asset") else {}),
                         },
                         "contract_coverage": snapshot.quality.get(
                             "contract_data",

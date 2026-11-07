@@ -41,7 +41,8 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
   const frame = received?.request === request ? received.frame : null;
   const total = received?.frame.total;
   const candidate = target.trim() === "" ? NaN : Number(target);
-  const selectableIntervals = [...new Set(["1m", "5m", "15m", "1h", received?.frame.signal_interval ?? initial.interval])];
+  const selectableIntervals = received?.frame.display_intervals ?? [initial.interval];
+  const barClock = received?.frame.schema === "candlescope.local-bar-result-replay/1";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,11 +68,12 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
     return () => clearTimeout(timer);
   }, [frame, playing, request]);
 
-  const navigate = (cursor: number, interval = request.interval) => {
+  const navigate = (cursor: number, interval = request.interval, comparison = request.comparisonInterval ?? null) => {
     setPlaying(false);
     setError(null);
     setTarget(String(cursor));
-    setRequest({ ...request, cursor, interval });
+    const { comparisonInterval: _comparison, ...identity } = request;
+    setRequest({ ...identity, cursor, interval, ...(comparison ? { comparisonInterval: comparison } : {}) });
   };
   const canAdvance = frame !== null && frame.cursor < frame.total;
   const lastBar = frame?.bars.at(-1);
@@ -93,7 +95,7 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
           event.preventDefault();
           if (Number.isSafeInteger(candidate) && candidate >= 0 && total !== undefined && candidate <= total) navigate(candidate);
         }}>
-          <label>{t("settings.exchange.channel.trade")}
+          <label>{t(barClock ? "native.replay.cursor" : "settings.exchange.channel.trade")}
             <input type="number" min={0} max={total} step={1} value={target} onChange={event => setTarget(event.target.value)} />
           </label>
           <button disabled={!Number.isSafeInteger(candidate) || candidate < 0 || total === undefined || candidate > total}>
@@ -101,8 +103,16 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
           </button>
         </form>
         <label>{t("local.interval")}
-          <select value={request.interval} onChange={event => navigate(request.cursor, event.target.value)}>
-            {selectableIntervals.map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
+          <select data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, event.target.value)}>
+            {selectableIntervals.filter(interval => interval !== request.comparisonInterval).map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
+          </select>
+        </label>
+        <label>{t("local.interval")} · {t("replay.workspace.openNew")}
+          <select data-testid="strategy-replay-comparison-period" value={request.comparisonInterval ?? ""}
+            onChange={event => navigate(request.cursor, request.interval, event.target.value || null)}>
+            <option value="">{t("backtest.none")}</option>
+            {selectableIntervals.filter(interval => interval !== request.interval).map(interval =>
+              <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
           </select>
         </label>
       </div>
@@ -113,8 +123,20 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
             {frame.time_ms !== null && <time>{new Date(frame.time_ms).toISOString()}</time>}
             {frame.source_sequence !== null && <span>#{frame.source_sequence}</span>}
           </div>
-          <ReplayCandles bars={frame.bars} />
-          {lastBar && <p data-testid="strategy-replay-last-ohlc">{lastBar.open} / {lastBar.high} / {lastBar.low} / {lastBar.close}</p>}
+          <div className="strategy-result-replay-charts">
+            <section aria-label={formatIntervalLabel(frame.interval)} data-testid="strategy-replay-primary-chart">
+              <strong>{formatIntervalLabel(frame.interval)}</strong>
+              <ReplayCandles bars={frame.bars} />
+              {lastBar && <p data-testid="strategy-replay-last-ohlc">{lastBar.open} / {lastBar.high} / {lastBar.low} / {lastBar.close}</p>}
+            </section>
+            {frame.comparison && <section aria-label={formatIntervalLabel(frame.comparison.interval)} data-testid="strategy-replay-comparison-chart">
+              <strong>{formatIntervalLabel(frame.comparison.interval)}</strong>
+              <ReplayCandles bars={frame.comparison.bars} />
+              {frame.comparison.bars.slice(-1).map(bar => <p key={bar.open_time_ms} data-testid="strategy-replay-comparison-ohlc">
+                {bar.open} / {bar.high} / {bar.low} / {bar.close}
+              </p>)}
+            </section>}
+          </div>
           <dl className="strategy-result-replay-status">
             <div><dt>{t("replay.wb.balance")}</dt><dd>{frame.cash} {frame.quote_asset}</dd></div>
             <div><dt>{t("replay.wb.positions")}</dt><dd>{frame.position}</dd></div>

@@ -551,10 +551,22 @@ export interface BacktestResultReplayCursor {
   reportHash: string;
   cursor: number;
   interval: string;
+  comparisonInterval?: string;
+}
+
+export interface BacktestResultReplayBar {
+  open_time_ms: number;
+  close_time_ms?: number;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string | null;
+  closed: boolean;
 }
 
 export interface BacktestResultReplayFrame {
-  schema: "candlescope.user-trade-result-replay/1";
+  schema: "candlescope.user-trade-result-replay/1" | "candlescope.local-bar-result-replay/1";
   run_id: string;
   snapshot_hash: string;
   report_hash: string;
@@ -566,15 +578,9 @@ export interface BacktestResultReplayFrame {
   total: number;
   time_ms: number | null;
   source_sequence: number | null;
-  bars: Array<{
-    open_time_ms: number;
-    open: string;
-    high: string;
-    low: string;
-    close: string;
-    volume: string;
-    closed: boolean;
-  }>;
+  bars: BacktestResultReplayBar[];
+  display_intervals?: string[];
+  comparison?: { interval: string; bars: BacktestResultReplayBar[] } | null;
   fills: Array<{
     cursor: number;
     event_time_ms: number;
