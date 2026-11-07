@@ -44,6 +44,7 @@ from .hub import MarketEventHub, MarketHubSubscription
 from .lifecycle import KeyedAsyncLockPool, drain_cancellation_safe_cleanup
 from .models import MarketChannel, MarketStreamKey
 from .storage_writer import MarketMetricStorageWriter
+from .oi_history import merge_ranges, missing_ranges
 
 
 logger = logging.getLogger("data_engine.market_data")
@@ -112,6 +113,13 @@ class MarketHistoryPage:
     earliest_available_ms: int | None = None
     availability_revision: str | None = None
     excluded_ranges: tuple[dict[str, Any], ...] = ()
+    covered_ranges: tuple[dict[str, Any], ...] | None = None
+    missing_ranges: tuple[dict[str, Any], ...] = ()
+    has_more: bool | None = None
+    next_end_ms: int | None = None
+    query_mode: str | None = None
+    coverage_basis: str = "unqualified_local"
+    revalidate_after_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +177,12 @@ class MarketDataService:
         self._identity_locks = KeyedAsyncLockPool[tuple[str, str, str, str]]()
         self._snapshot_lock = asyncio.Lock()
         self._snapshot_tasks: dict[tuple[str, str, str, str], asyncio.Task] = {}
+        self._history_tasks: dict[tuple, asyncio.Task] = {}
+        # Joinable requests and physically owned work have separate lifetimes:
+        # the last waiter unlinks a request before its storage thread drains.
+        self._history_jobs: set[asyncio.Task] = set()
+        self._history_waiters: dict[tuple, int] = {}
+        self._history_identity_locks = KeyedAsyncLockPool[tuple]()
         self._funding_refresh_lock = asyncio.Lock()
         self._funding_refresh_coverage: dict[
             tuple[str, str, str],
@@ -414,6 +428,7 @@ class MarketDataService:
         start_ms: int | None = None,
         end_ms: int | None = None,
         view: str | None = None,
+        mode: str | None = None,
     ) -> list[MarketStateEvent]:
         page = await self.history_page(
             key,
@@ -422,6 +437,7 @@ class MarketDataService:
             start_ms=start_ms,
             end_ms=end_ms,
             view=view,
+            mode=mode,
         )
         return page.events
 
@@ -434,8 +450,9 @@ class MarketDataService:
         start_ms: int | None = None,
         end_ms: int | None = None,
         view: str | None = None,
+        mode: str | None = None,
     ) -> MarketHistoryPage:
-        """Refresh one Funding/OI history page and serve it from SQLite.
+        """Read one Funding/OI page, reusing qualified local acquisition ranges.
 
         Without an injected repository this preserves the original upstream-
         only behavior for tests and alternate embeddings.  With storage
@@ -444,6 +461,10 @@ class MarketDataService:
 
         self._ensure_open()
         self._validate_key(key, history=True)
+        if mode not in {None, "local_only", "fill_missing", "refresh"}:
+            raise ValueError("history mode must be local_only, fill_missing or refresh")
+        if not 1 <= limit <= 1000:
+            raise ValueError("history limit must be between 1 and 1000")
         if start_ms is not None and end_ms is not None and start_ms > end_ms:
             raise ValueError("start_ms must be less than or equal to end_ms")
         stream_type = _HISTORY_STREAM_TYPES.get(key.channel)
@@ -468,6 +489,8 @@ class MarketDataService:
             period = period_spec.canonical
             if self._metrics_repository is None:
                 raise ValueError("hybrid funding history requires metric storage")
+            if mode == "refresh":
+                raise ValueError("explicit refresh is not yet supported for hybrid funding history")
 
         descriptor = StreamDescriptor(
             symbol=key.symbol,
@@ -498,6 +521,39 @@ class MarketDataService:
             start_ms=start_ms,
             end_ms=end_ms,
         )
+        # This first adapter qualifies bounded native OI query receipts. Sparse
+        # funding and other CCXT histories retain their existing fetch owner.
+        native_oi = (
+            key.channel == MarketChannel.OPEN_INTEREST
+            and key.exchange == "binance" and key.market_type == "futures"
+            and start_ms is not None and end_ms is not None
+            and self._metrics_repository is not None
+        )
+        if native_oi:
+            step_ms = parse_interval_ms(period or "")
+            assert step_ms is not None
+            return await self._shared_oi_history(
+                event_key, descriptor, period=period or "", step_ms=step_ms,
+                start_ms=start_ms, end_ms=end_ms, limit=limit,
+                mode=mode or "fill_missing", plan=refresh_plan,
+            )
+        if mode == "fill_missing":
+            raise ValueError("fill_missing requires bounded native Binance futures OI history")
+        if mode == "local_only":
+            if hybrid_funding:
+                result = await self._build_hybrid_funding_history(
+                    event_key, period=period or "", start_ms=start_ms,
+                    end_ms=end_ms, limit=limit, fetch_missing=False,
+                )
+                return MarketHistoryPage(events=result.events, complete=False,
+                                         covered_ranges=(), query_mode=mode)
+            return MarketHistoryPage(
+                events=await self._read_persisted_history(
+                    event_key, period=period, limit=limit,
+                    start_ms=start_ms, end_ms=end_ms,
+                ), complete=False, covered_ranges=(), query_mode=mode,
+                excluded_ranges=refresh_plan.excluded_ranges,
+            )
         if hybrid_funding:
             return await self._hybrid_funding_history_page(
                 event_key,
@@ -599,6 +655,165 @@ class MarketDataService:
             events=self._apply_history_event_cutoff(persisted_events, refresh_plan),
             excluded_ranges=refresh_plan.excluded_ranges,
         )
+
+    async def _shared_oi_history(
+        self, key, descriptor, *, period, step_ms, start_ms, end_ms, limit, mode, plan,
+    ) -> MarketHistoryPage:
+        identity = (key.exchange, key.market_type, key.symbol, period)
+        request_id = (identity, start_ms, end_ms, limit, mode, plan.availability_revision)
+        task = self._history_tasks.get(request_id)
+        if task is None:
+            if len(self._history_jobs) >= 32:
+                return MarketHistoryPage(events=[], complete=False, retryable=True,
+                                         covered_ranges=(), query_mode=mode)
+            self._ensure_open()
+            task = asyncio.create_task(self._oi_history_page(
+                key, descriptor, identity=identity, period=period, step_ms=step_ms,
+                start_ms=start_ms, end_ms=end_ms, limit=limit, mode=mode, plan=plan,
+            ), name="market-oi-history")
+            self._history_tasks[request_id] = task
+            self._history_jobs.add(task)
+            def completed(done):
+                self._history_jobs.discard(done)
+                if not done.cancelled():
+                    done.exception()
+            task.add_done_callback(completed)
+        self._history_waiters[request_id] = self._history_waiters.get(request_id, 0) + 1
+        try:
+            return await asyncio.shield(task)
+        finally:
+            remaining = self._history_waiters.get(request_id, 1) - 1
+            if remaining:
+                self._history_waiters[request_id] = remaining
+            else:
+                self._history_waiters.pop(request_id, None)
+                if self._history_tasks.get(request_id) is task:
+                    self._history_tasks.pop(request_id, None)
+                if not task.done():
+                    task.cancel()
+                async def drain():
+                    await asyncio.gather(task, return_exceptions=True)
+                if await drain_cancellation_safe_cleanup(drain(), name="market-oi-history-release"):
+                    raise asyncio.CancelledError
+
+    async def _oi_history_page(
+        self, key, descriptor, *, identity, period, step_ms,
+        start_ms, end_ms, limit, mode, plan,
+    ) -> MarketHistoryPage:
+        # Timestamps may be irregular and no-trade periods may be absent. Only
+        # a qualified successful bounded response proves acquisition coverage.
+        async with self._history_identity_locks.hold(identity):
+            self._ensure_open()
+            repository = self._metrics_repository
+            assert repository is not None
+            now_ms = int(time.time() * 1000)
+            page_limit = min(500, plan.max_page_size or 500)
+            window_start = max(start_ms, end_ms - 86_400_000 + 1)
+            revision = "binance-oi-range-v1:" + (plan.availability_revision or "static")
+            common = dict(exchange=key.exchange, market_type=key.market_type,
+                          symbol=key.symbol, period=period)
+
+            async def read():
+                return await run_storage(
+                    repository.read_open_interest_with_coverage, **common,
+                    start_ms=window_start, end_ms=min(end_ms, now_ms), limit=limit,
+                    policy_revision=revision, now_ms=int(time.time() * 1000),
+                )
+
+            rows, covered, more_rows, revalidate_after_ms = await read()
+            fetch_start = max(window_start, plan.start_ms or window_start)
+            fetch_end = min(end_ms, plan.end_ms if plan.end_ms is not None else now_ms)
+            excluded = list(plan.excluded_ranges)
+            if window_start < fetch_start:
+                excluded.append({"start_ms": window_start, "end_ms": fetch_start - 1,
+                                 "disposition": "unavailable", "reason": plan.terminal_reason or "outside_upstream_retention"})
+            if not plan.should_fetch:
+                reason = plan.terminal_reason or "future"
+                excluded.append({"start_ms": window_start, "end_ms": end_ms,
+                                 "disposition": "not_expected" if reason == "future" else "unavailable",
+                                 "reason": reason})
+            fetchable = plan.should_fetch and fetch_start <= fetch_end
+            pending = ([{"start_ms": fetch_start, "end_ms": fetch_end}] if mode == "refresh"
+                       else missing_ranges(fetch_start, fetch_end, covered)) if fetchable else []
+            failed = False
+            if mode != "local_only":
+                calls = 0
+                while pending and calls < 16:
+                    run = pending.pop(0)
+                    calls += 1
+                    try:
+                        raw = await self._fetch_market(
+                            descriptor, limit=page_limit, start_ms=run["start_ms"],
+                            end_ms=run["end_ms"], history=True,
+                        )
+                        projected = [self._project(item, key) for item in raw]
+                        if any(event is None or not run["start_ms"] <= event.event_time_ms <= run["end_ms"]
+                               for event in projected):
+                            raise RuntimeError("OI history response did not satisfy its requested range")
+                        stamps = [event.event_time_ms for event in projected]
+                        if len(set(stamps)) != len(stamps):
+                            raise RuntimeError("OI history response contained duplicate timestamps")
+                        await self._persist_final_history(projected, period=period)
+                        if len(raw) >= page_limit:
+                            # No ordering or exhaustion is assumed at capacity.
+                            # Bisect time, with a strict per-call work budget.
+                            midpoint = (run["start_ms"] + run["end_ms"]) // 2
+                            if midpoint >= run["end_ms"]:
+                                raise RuntimeError("OI history page cannot be resolved within its timestamp range")
+                            pending[:0] = [{"start_ms": run["start_ms"], "end_ms": midpoint},
+                                           {"start_ms": midpoint + 1, "end_ms": run["end_ms"]}]
+                            continue
+                        expected_rows = [dict(event_time_ms=event.event_time_ms,
+                                              open_interest=event.data["open_interest"],
+                                              open_interest_value=event.data.get("open_interest_value"),
+                                              is_final=True) for event in projected]
+                        # Stable history and the mutable tail get independent
+                        # receipts; a new tail does not invalidate old history.
+                        stable_end = now_ms - 2 * step_ms
+                        segments = [(run["start_ms"], min(run["end_ms"], stable_end), None),
+                                    (max(run["start_ms"], stable_end + 1), run["end_ms"], now_ms + 60_000)]
+                        for left, right, expires in segments:
+                            if left > right:
+                                continue
+                            await run_storage(
+                                repository.record_open_interest_query, **common,
+                                start_ms=left, end_ms=right, policy_revision=revision,
+                                expected_rows=[row for row in expected_rows if left <= row["event_time_ms"] <= right],
+                                observed_at_ms=now_ms, expires_at_ms=expires,
+                            )
+                    except ValueError:
+                        raise
+                    except Exception:
+                        logger.warning("OI history range fetch failed", exc_info=True)
+                        failed = True
+                        break
+                if calls:
+                    rows, covered, more_rows, revalidate_after_ms = await read()
+            response_start = rows[0]["event_time_ms"] if more_rows else window_start
+            covered = merge_ranges([{ "start_ms": max(response_start, r["start_ms"]), "end_ms": r["end_ms"] }
+                                    for r in covered if r["end_ms"] >= response_start])
+            unresolved = missing_ranges(response_start, end_ms, [*covered, *excluded])
+            events = [MarketStateEvent(
+                key=key, event_time_ms=row["event_time_ms"], received_at_ms=row["received_at_ms"],
+                source=row["source"], sequence=row["event_time_ms"],
+                data={"open_interest": row["open_interest"], "is_final": bool(row["is_final"]),
+                      "sample_kind": "final" if row["is_final"] else "provisional",
+                      **({"open_interest_value": row["open_interest_value"]} if row["open_interest_value"] is not None else {})},
+            ) for row in rows]
+            earlier = response_start > start_ms
+            return MarketHistoryPage(
+                events=events, fallback=failed and bool(events),
+                complete=not unresolved and not earlier and not failed,
+                retryable=(bool(unresolved) or failed) and mode != "local_only",
+                covered_ranges=tuple(covered), missing_ranges=tuple(unresolved),
+                excluded_ranges=tuple(excluded), has_more=earlier,
+                next_end_ms=response_start - 1 if earlier else None,
+                terminal_reason=plan.terminal_reason,
+                earliest_available_ms=plan.earliest_available_ms,
+                availability_revision=plan.availability_revision, query_mode=mode,
+                coverage_basis="native_binance_oi_bounded_query_v1",
+                revalidate_after_ms=revalidate_after_ms,
+            )
 
     async def _hybrid_funding_history_page(
         self,
@@ -906,6 +1121,8 @@ class MarketDataService:
         current_ms: int,
     ) -> int:
         policy = getattr(capability, "history_policy", None)
+        if getattr(getattr(capability, "channel", None), "value", None) == "open_interest":
+            return current_ms
         cadence = getattr(getattr(policy, "cadence", None), "value", None)
         if cadence == "regular" and period:
             period_ms = parse_interval_ms(period)
@@ -1939,11 +2156,30 @@ class MarketDataService:
                     name="market-data-shutdown",
                 )
             task = self._shutdown_task
-        await asyncio.shield(task)
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Runtime wait_for cancels this waiter at its step deadline. The
+            # owned task can still be draining physical SQLite reads; do not
+            # let dependent runtime components stop before that drain ends.
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()
+            raise
 
     async def _shutdown_impl(self) -> None:
         async with self._lock:
             physical_ids = tuple(self._physical_entries)
+
+        history_tasks = list(self._history_jobs)
+        self._history_tasks.clear()
+        for task in history_tasks:
+            task.cancel()
+        if history_tasks:
+            await asyncio.gather(*history_tasks, return_exceptions=True)
 
         async with self._snapshot_lock:
             snapshot_tasks = list(self._snapshot_tasks.values())
@@ -2000,6 +2236,12 @@ class MarketDataService:
                 len(lease.consumers) for lease in self._logical_leases.values()
             ),
             "physical_streams": len(self._physical_entries),
+            "history_queries": {
+                "inflight": len(self._history_tasks),
+                "owned_jobs": len(self._history_jobs),
+                "max_inflight": 32,
+                "identities": self._history_identity_locks.active_keys,
+            },
             "limits": {
                 "summary_streams": self._max_summary_streams,
                 "open_interest_streams": self._max_open_interest_streams,
@@ -2296,7 +2538,7 @@ class MarketDataService:
             event.event_time_ms if event_time_ms is None else event_time_ms
         )
         period_ms = parse_interval_ms(period)
-        if period_ms is not None and period_ms > 0:
+        if not is_final and period_ms is not None and period_ms > 0:
             resolved_event_time_ms = (
                 resolved_event_time_ms // period_ms
             ) * period_ms

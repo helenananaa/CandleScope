@@ -1,0 +1,57 @@
+{
+  "source": "0f4d53ed31530e59d5c9ea51a9c5d08c1e8808a3",
+  "base": "d877efff",
+  "local_passed": true,
+  "native_qualified": false,
+  "backend_tests": 143,
+  "frontend_tests": 81,
+  "typecheck": true,
+  "architecture": true,
+  "eslint_changed_files": true,
+  "production_build": true,
+  "source_contract": "https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics",
+  "rejected_design": "UTC fixed-grid presence for OI: provider explicitly omits periods without trades and does not promise UTC-aligned sample timestamps. Prototype/tests retained, not shipped.",
+  "query_scope": "Bounded binance/futures OI only. Queries use valid native periods; completeness describes acquisition, including proven no-record ranges, not event presence.",
+  "bounds": {
+    "window_ms": 86400000,
+    "fetches_per_call": 16,
+    "physical_page_rows": 500,
+    "response_limit": 1000,
+    "inflight_queries": 32,
+    "receipts_per_series": 128,
+    "mutable_tail_periods": 2,
+    "tail_receipt_ttl_ms": 60000,
+    "frontend_failed_page_attempts": 3
+  },
+  "legacy_data": "Preserved; mismatching existing final rows prevent qualification. No automatic deletion/relabeling of old rounded rows.",
+  "not_completed": [
+    "Native UI/save/full exit/restart for this source",
+    "Current-head cloud CI",
+    "Other venues/funding/trades/orderbooks/archives",
+    "Cross-process deduplication",
+    "Delete/old-backfill fencing integration with #126",
+    "Stable fixed archive inventory integration with #146"
+  ],
+  "network_gate": {
+    "retry_not_before_utc": "2026-11-02T16:14:01.202Z",
+    "reason": "New source-close seconds native BinanceIP418 at10:03UTC; strict public retry gate retained."
+  },
+  "main217": {
+    "source": "85f55f15",
+    "backend_tests": 107,
+    "frontend_tests": 81,
+    "typecheck": true,
+    "owning_OI_product_changed": false,
+    "native_qualified": false
+  },
+  "main220_preflight": {
+    "source": "56bdd999",
+    "native_qualified": false,
+    "app_launched": false,
+    "strict_signature": true,
+    "source_sdk_files": 1037,
+    "built_files": 161,
+    "plugin_assets": 9,
+    "plugin_wheel_source_files": 76
+  }
+}

@@ -289,6 +289,18 @@ export function parseMarketHistoryPayload(
   if (result.count !== data.length) {
     throw new AdvancedMarketPayloadError(`${path}.count`, "must equal data.length");
   }
+  if ("ranges" in coverage) {
+    result.coverage.ranges = parseExcludedRanges(coverage.ranges, `${path}.coverage.ranges`);
+  }
+  if ("missing_ranges" in coverage) {
+    result.coverage.missing_ranges = parseExcludedRanges(coverage.missing_ranges, `${path}.coverage.missing_ranges`);
+  }
+  if ("basis" in coverage) {
+    result.coverage.basis = expectNonEmptyString(coverage.basis, `${path}.coverage.basis`);
+  }
+  if ("revalidate_after_ms" in coverage) {
+    result.coverage.revalidate_after_ms = expectNonNegativeInteger(coverage.revalidate_after_ms, `${path}.coverage.revalidate_after_ms`);
+  }
   if ("fallback" in record) {
     result.fallback = expectBoolean(record.fallback, `${path}.fallback`);
   }

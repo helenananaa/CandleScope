@@ -704,7 +704,7 @@ async def test_fully_future_history_is_not_fetched_and_is_explicitly_excluded(
 
 
 @_async_test
-async def test_mixed_history_range_clamps_to_wall_clock_and_regular_cadence(
+async def test_mixed_history_range_clamps_to_wall_clock_without_inventing_oi_grid(
     monkeypatch,
 ) -> None:
     period_ms = 5 * 60 * 1000
@@ -742,9 +742,9 @@ async def test_mixed_history_range_clamps_to_wall_clock_and_regular_cadence(
         limit=500,
     )
     assert factory.fetch_calls[-1]["start_ms"] == oi_start_ms
-    assert factory.fetch_calls[-1]["end_ms"] == latest_oi_event_ms
+    assert factory.fetch_calls[-1]["end_ms"] == now_ms
     assert oi_page.excluded_ranges == ({
-        "start_ms": latest_oi_event_ms + 1,
+        "start_ms": now_ms + 1,
         "end_ms": now_ms + period_ms,
         "disposition": "not_expected",
         "reason": "future",

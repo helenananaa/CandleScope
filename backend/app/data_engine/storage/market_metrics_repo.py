@@ -9,6 +9,8 @@ rows always win over provisional observations.
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
 import math
 import sqlite3
 import time
@@ -90,6 +92,15 @@ def init_market_metrics_storage(db_path: Path | str | None = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_funding_rate_history_lookup
             ON funding_rate_history(
                 exchange, market_type, symbol, funding_time_ms DESC
+            );
+
+            CREATE TABLE IF NOT EXISTS open_interest_query_receipts (
+                exchange TEXT NOT NULL, market_type TEXT NOT NULL,
+                symbol TEXT NOT NULL, period TEXT NOT NULL,
+                start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL,
+                policy_revision TEXT NOT NULL, rows_digest TEXT NOT NULL,
+                observed_at_ms INTEGER NOT NULL, expires_at_ms INTEGER,
+                PRIMARY KEY(exchange, market_type, symbol, period, start_ms, end_ms, policy_revision)
             );
 
             CREATE INDEX IF NOT EXISTS idx_open_interest_history_lookup
@@ -267,6 +278,82 @@ class MarketMetricsRepository:
             )
             conn.commit()
         return len(payload)
+
+    @staticmethod
+    def _oi_receipt_rows(conn, identity, start_ms, end_ms):
+        return [dict(row) for row in conn.execute(
+            "SELECT * FROM open_interest_history WHERE exchange=? AND market_type=? "
+            "AND symbol=? AND period=? AND is_final=1 AND event_time_ms BETWEEN ? AND ? "
+            "ORDER BY event_time_ms LIMIT 501", (*identity, start_ms, end_ms),
+        )]
+
+    @staticmethod
+    def _oi_digest(rows):
+        values = sorted((int(row["event_time_ms"]), float(row["open_interest"]),
+                         None if row.get("open_interest_value") is None else float(row["open_interest_value"]),
+                         bool(row["is_final"])) for row in rows)
+        return hashlib.sha256(json.dumps(values, allow_nan=False).encode()).hexdigest()
+
+    def record_open_interest_query(
+        self, *, exchange: str, market_type: str, symbol: str, period: str,
+        start_ms: int, end_ms: int, policy_revision: str,
+        expected_rows: list[dict[str, Any]], observed_at_ms: int,
+        expires_at_ms: int | None = None,
+    ) -> bool:
+        """Record a successful exhaustive bounded query only after its rows commit.
+
+        The digest is checked against the same repository, including on every
+        future read. A failed commit, concurrent edit, deletion, or provisional
+        row cannot silently become verified acquisition coverage.
+        """
+        identity = (exchange, market_type, symbol, period)
+        with _connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = self._oi_receipt_rows(conn, identity, start_ms, end_ms)
+            if len(rows) > 500 or self._oi_digest(rows) != self._oi_digest(expected_rows):
+                return False
+            conn.execute(
+                "INSERT OR REPLACE INTO open_interest_query_receipts VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (*identity, start_ms, end_ms, policy_revision, self._oi_digest(rows),
+                 observed_at_ms, expires_at_ms),
+            )
+            conn.execute(
+                "DELETE FROM open_interest_query_receipts WHERE rowid IN ("
+                "SELECT rowid FROM open_interest_query_receipts WHERE exchange=? AND market_type=? "
+                "AND symbol=? AND period=? ORDER BY observed_at_ms DESC, rowid DESC LIMIT -1 OFFSET 128)",
+                identity,
+            )
+            conn.commit()
+        return True
+
+    def read_open_interest_with_coverage(
+        self, *, exchange: str, market_type: str, symbol: str, period: str,
+        start_ms: int, end_ms: int, limit: int, policy_revision: str, now_ms: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, int]], bool, int | None]:
+        """Return rows and still-valid query receipts from one SQLite snapshot."""
+        identity = (exchange, market_type, symbol, period)
+        with _connect(self.db_path) as conn:
+            conn.execute("BEGIN")
+            rows = [dict(row) for row in conn.execute(
+                "SELECT * FROM open_interest_history WHERE exchange=? AND market_type=? "
+                "AND symbol=? AND period=? AND event_time_ms BETWEEN ? AND ? "
+                "ORDER BY event_time_ms DESC LIMIT ?", (*identity, start_ms, end_ms, limit + 1),
+            )]
+            ranges = []
+            next_expiry = None
+            for receipt in conn.execute(
+                "SELECT * FROM open_interest_query_receipts WHERE exchange=? AND market_type=? "
+                "AND symbol=? AND period=? AND policy_revision=? AND end_ms>=? AND start_ms<=? "
+                "AND (expires_at_ms IS NULL OR expires_at_ms>?) LIMIT 128",
+                (*identity, policy_revision, start_ms, end_ms, now_ms),
+            ):
+                current = self._oi_receipt_rows(conn, identity, receipt["start_ms"], receipt["end_ms"])
+                if len(current) <= 500 and self._oi_digest(current) == receipt["rows_digest"]:
+                    ranges.append({"start_ms": max(start_ms, receipt["start_ms"]),
+                                   "end_ms": min(end_ms, receipt["end_ms"])})
+                    if receipt["expires_at_ms"] is not None:
+                        next_expiry = min(next_expiry or receipt["expires_at_ms"], receipt["expires_at_ms"])
+            return list(reversed(rows[:limit])), ranges, len(rows) > limit, next_expiry
 
     def query_funding(
         self,
