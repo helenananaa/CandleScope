@@ -2214,6 +2214,7 @@ export const tr = {
   "replay.liq.adlHint": "Karşı taraf defteri {count} satır · belirleyici simülasyon, tarihsel borsa özel kuyruğu değil",
   "local.import": "CSV içe aktar",
   "local.localOnly": "Veri bu makinede kalır",
+  "local.marketTradeCoverage": "Ardışık kaynak sıra numaraları olan bir piyasa işlem dosyası kullanın. UTC kapsamını belirtin. İçe aktarma yerel kalır.",
   "local.chooseFile": "CSV dosyası seçin",
   "local.baseAsset": "Miktar varlığı (hacim birimi)",
   "local.quoteAsset": "Fiyat kotasyon varlığı",

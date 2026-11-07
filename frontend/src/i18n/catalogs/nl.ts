@@ -2213,6 +2213,7 @@ export const nl = {
   "replay.liq.adlHint": "Tegenpartijgrootboek {count} rijen · deterministische simulatie, geen historische private wachtrij van de beurs",
   "local.import": "CSV importeren",
   "local.localOnly": "Gegevens blijven op deze machine",
+  "local.marketTradeCoverage": "Gebruik een bestand met markttransacties en opeenvolgende bronnummers. Geef het UTC-bereik op. De import blijft lokaal.",
   "local.chooseFile": "Kies een CSV-bestand",
   "local.baseAsset": "Hoeveelheidsactivum (volume-eenheid)",
   "local.quoteAsset": "Prijsnoteringsactivum",

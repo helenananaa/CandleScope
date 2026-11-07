@@ -2214,6 +2214,7 @@ export const pl = {
   "replay.liq.adlHint": "Księga kontrahenta {count} wierszy · symulacja deterministyczna, nie historyczna prywatna kolejka giełdy",
   "local.import": "Importuj CSV",
   "local.localOnly": "Dane pozostają na tej maszynie",
+  "local.marketTradeCoverage": "Użyj pliku transakcji rynkowych z kolejnymi numerami sekwencji. Określ zakres UTC. Import pozostaje lokalny.",
   "local.chooseFile": "Wybierz plik CSV",
   "local.baseAsset": "Aktywo ilości (jednostka wolumenu)",
   "local.quoteAsset": "Aktywo kwotowania ceny",

@@ -1,10 +1,12 @@
 import { t } from "../../../i18n/index.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 
-export function StrategyConditionsEditor({ settings, marketType, preciseAvailable, onChange }: {
+export function StrategyConditionsEditor({ settings, marketType, capitalAsset = "USDT", preciseAvailable, preciseArchiveHint = true, onChange }: {
   settings: StrategyRunSettings;
   marketType: string;
+  capitalAsset?: string | undefined;
   preciseAvailable?: boolean;
+  preciseArchiveHint?: boolean;
   onChange(settings: StrategyRunSettings): void;
 }) {
   const profile = settings.pythonBarExecution;
@@ -12,7 +14,7 @@ export function StrategyConditionsEditor({ settings, marketType, preciseAvailabl
     initialBalance: "10000", equityPercent: "10", leverage: "1", feeBps: marketType === "spot" ? "10" : "4", slippageBps: "1",
   };
   const fields = [
-    ["initialBalance", "chartTester.settings.capital", "USDT"],
+    ["initialBalance", "chartTester.settings.capital", capitalAsset],
     ["equityPercent", "backtest.equityPct", ""],
     ["leverage", "backtest.leverage", "×"],
     ["feeBps", "chartTester.settings.fee", "bps"],
@@ -34,7 +36,7 @@ export function StrategyConditionsEditor({ settings, marketType, preciseAvailabl
         </select>
       </label>
       {!preciseAvailable ? <p>{t("research.capability.tapeDenied")}</p>
-        : settings.fidelityPreference === "PRECISE" && <p>{t("research.execution.preciseArchiveHint")}</p>}
+        : preciseArchiveHint && settings.fidelityPreference === "PRECISE" && <p>{t("research.execution.preciseArchiveHint")}</p>}
     </>}
     <label className="strategy-condition-range">{t("chartTester.settings.date")}
       <select disabled={!!profile} value={settings.rangeMode} onChange={(event) => onChange({ ...settings, rangeMode: event.target.value as StrategyRunSettings["rangeMode"], customRange: event.target.value === "ALL_AVAILABLE" ? null : { startMs: 0, endMs: 0 } })}>

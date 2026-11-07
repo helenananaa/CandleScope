@@ -2743,6 +2743,7 @@ export const ko = {
   "replay.liq.adlHint": "상대방 원장 {count}행 · 결정적 시뮬레이션이며 과거 거래소 사설 큐가 아님",
   "local.import": "CSV 가져오기",
   "local.localOnly": "데이터는 이 기기에만 저장",
+  "local.marketTradeCoverage": "원본 순번이 연속된 시장 전체 체결 파일을 사용하고 UTC 범위를 지정하세요. 가져온 데이터는 로컬에 저장됩니다.",
   "local.chooseFile": "CSV 파일 선택",
   "local.baseAsset": "수량 자산 (거래량 단위)",
   "local.quoteAsset": "가격 표시 자산",

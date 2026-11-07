@@ -2213,6 +2213,7 @@ export const ptPT = {
   "replay.liq.adlHint": "Livro-razão da contraparte {count} linhas · simulação determinística, não uma fila privada histórica da exchange",
   "local.import": "Importar CSV",
   "local.localOnly": "Os dados permanecem nesta máquina",
+  "local.marketTradeCoverage": "Utilize um ficheiro de transações do mercado com números de sequência consecutivos. Declare a cobertura UTC. A importação é local.",
   "local.chooseFile": "Escolher um ficheiro CSV",
   "local.baseAsset": "Ativo de quantidade (unidade do volume)",
   "local.quoteAsset": "Ativo de cotação do preço",

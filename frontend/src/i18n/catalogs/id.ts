@@ -2214,6 +2214,7 @@ export const id = {
   "replay.liq.adlHint": "Buku besar counterparty {count} baris · simulasi deterministik, bukan antrean privat bursa historis",
   "local.import": "Impor CSV",
   "local.localOnly": "Data tetap di mesin ini",
+  "local.marketTradeCoverage": "Gunakan berkas perdagangan pasar dengan nomor urut sumber yang berurutan. Nyatakan cakupan UTC. Impor tetap lokal.",
   "local.chooseFile": "Pilih berkas CSV",
   "local.baseAsset": "Aset kuantitas (satuan volume)",
   "local.quoteAsset": "Aset kuotasi harga",

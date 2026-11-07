@@ -435,6 +435,11 @@ export default function StrategyResearchApp({
         onRevisionActivated={handleRevisionActivated}
         onSettingsImported={setSettings}
         onProjectRestored={(manifest) => { dispatchImportedSource(dispatch, runtime.state.source.source, manifest); setProjectRestoreRevision((revision) => revision + 1); }}
+        onMarketTradesImported={async (dataset) => {
+          await library.refresh(dataset.dataset_id);
+          dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+          dispatch({ type: "source/libraryOpen", open: false });
+        }}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
           if (dataset) {
@@ -475,6 +480,7 @@ export default function StrategyResearchApp({
         sourceKind={source?.kind ?? null}
         draftId={state.script.draftId}
         barOnly={researchRun.barOnly}
+        capitalAsset={importedManifest?.market_trade_input ? importedManifest.instrument?.quote_asset : undefined}
         runStatus={researchRun.runStatus}
         needsData={researchRun.needsData}
         onDraftId={handleDraftId}

@@ -2213,6 +2213,7 @@ export const cs = {
   "replay.liq.adlHint": "Kniha protistrany {count} řádků · deterministická simulace, nikoli historická soukromá fronta burzy",
   "local.import": "Importovat CSV",
   "local.localOnly": "Data zůstávají na tomto počítači",
+  "local.marketTradeCoverage": "Použijte soubor tržních obchodů se souvislým číslováním. Zadejte rozsah UTC. Import zůstává místní.",
   "local.chooseFile": "Zvolte soubor CSV",
   "local.baseAsset": "Aktivum množství (jednotka objemu)",
   "local.quoteAsset": "Aktivum cenové kotace",

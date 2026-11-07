@@ -693,6 +693,37 @@ test("imported precise fidelity is rejected as BAR_ONLY", async () => {
   assert.deepEqual(calls, []);
 });
 
+test("user market trades bind the local spot snapshot and never use online preparation", async () => {
+  const calls: string[] = [];
+  const api = importedApi(calls);
+  const source = { ...importedSource, marketTradeInput: true };
+  const precise = { ...preciseRequest, session: { ...preciseRequest.session, marketType: "spot" } };
+  api.previewSnapshot = async (body) => {
+    calls.push("preview");
+    assert.equal(body.exchange, "local");
+    assert.equal(body.account_model, "SPOT_CASH_V1");
+    assert.equal(body.fidelity_mode, "AGG_TRADE_EXECUTION");
+    return { ...importedPreview(), fidelity_capabilities: ["AGG_TRADE_EXECUTION"],
+      quality: { source_quality: "user_market_trades" } };
+  };
+  api.createRun = async (body) => {
+    calls.push("create");
+    assert.equal(body.dataset_id, source.datasetId);
+    assert.equal(body.data_epoch, source.dataEpoch);
+    assert.equal(body.source_event_kind, "AGG_TRADE");
+    assert.equal(body.fidelity_mode, "AGG_TRADE_EXECUTION");
+    return { ...completed(), source_event_kind: "AGG_TRADE", fidelity_mode: "AGG_TRADE_EXECUTION" };
+  };
+  const run = await runResearchBacktest({ api, request: precise, source });
+  assert.equal(run.kind, "TERMINAL");
+  assert.equal(run.frozenContext?.sourceKind, "IMPORTED_DATASET");
+  assert.equal(run.frozenContext?.capabilitySummary.fidelityCeiling, "TRADE_TAPE");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "preview", "smoke", "validate", "preview", "create"]);
+
+  await assert.rejects(runResearchBacktest({ api: importedApi([]), request: precise, source }),
+    /frozen snapshot lacks the requested user market trades/);
+});
+
 test("continuous handoff sends its profile to preparation and never falls back to the default executor", async () => {
   const pythonBarExecution = { executionModel: "LEGACY", outputMode: "SIGNAL", warmupBars: 5 } as const;
   const chart = { ...request, language: "python" as const, pythonTrustedConfirmed: true,

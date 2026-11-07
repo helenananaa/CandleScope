@@ -2213,6 +2213,7 @@ export const hi = {
   "replay.liq.adlHint": "काउंटरपार्टी लेजर {count} पंक्तियाँ · नियतात्मक सिमुलेशन, ऐतिहासिक एक्सचेंज निजी कतार नहीं",
   "local.import": "CSV आयात",
   "local.localOnly": "डेटा इसी मशीन पर रहता है",
+  "local.marketTradeCoverage": "लगातार स्रोत क्रमांक वाली बाज़ार ट्रेड फ़ाइल इस्तेमाल करें। UTC अवधि घोषित करें। आयात स्थानीय रहता है।",
   "local.chooseFile": "CSV फ़ाइल चुनें",
   "local.baseAsset": "मात्रा परिसंपत्ति (वॉल्यूम की इकाई)",
   "local.quoteAsset": "मूल्य उद्धरण परिसंपत्ति",

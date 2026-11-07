@@ -36,6 +36,7 @@ import type {
   LocalEventTimeResolutionMode,
   LocalEventTimeResolutionResponse,
   LocalImportInput,
+  LocalMarketTradeImportInput,
   LocalImportJob,
   LocalIndicatorName,
   LocalRevisionComparison,
@@ -117,9 +118,22 @@ function expectManifest(value: unknown): LocalDatasetManifest {
   if (value.volume_available !== undefined && typeof value.volume_available !== "boolean") {
     throw new TypeError("Local dataset manifest field volume_available is invalid");
   }
-  if ((value.source !== "local_dataset" && value.source !== "host_chart_snapshot") || value.timestamp_semantics !== "bar_open") {
+  if (!["local_dataset", "host_chart_snapshot", "user_market_trades"].includes(String(value.source))
+    || value.timestamp_semantics !== "bar_open") {
     throw new TypeError("Local dataset manifest has unsupported source semantics");
   }
+  const trades = value.market_trade_input;
+  if (value.source === "user_market_trades" && (!isJsonRecord(trades)
+    || trades.schema_version !== 1 || !["MARKET_TRADE", "MARKET_AGG_TRADE"].includes(String(trades.kind))
+    || trades.timezone !== "UTC" || !["s", "ms"].includes(String(trades.timestamp_unit))
+    || trades.sequence_policy !== "CONTIGUOUS_SOURCE_SEQUENCE"
+    || !Number.isSafeInteger(trades.coverage_start_ms) || !Number.isSafeInteger(trades.coverage_end_ms_exclusive)
+    || Number(trades.coverage_start_ms) !== value.first_open_ms || Number(trades.coverage_end_ms_exclusive) !== Number(value.last_open_ms) + 60_000
+    || !Number.isSafeInteger(trades.row_count) || Number(trades.row_count) < Number(value.rows)
+    || value.instrument === undefined || value.interval !== "1m")) {
+    throw new TypeError("Local market trade coverage declaration is invalid");
+  }
+  if (value.source !== "user_market_trades" && trades !== undefined) throw new TypeError("Unexpected market trade declaration");
   return {
     ...value,
     volume_available: value.volume_available ?? true,
@@ -174,6 +188,17 @@ export async function importLocalCsv(input: LocalImportInput): Promise<LocalData
     body: input.file,
   }));
   return expectManifest(payload);
+}
+
+export async function importLocalMarketTrades(input: LocalMarketTradeImportInput): Promise<LocalDatasetManifest> {
+  const url = localUrl("/imports/market-trades/csv", {
+    name: input.name, symbol: input.symbol, base_asset: input.baseAsset, quote_asset: input.quoteAsset,
+    timestamp_unit: input.timestampUnit, coverage_start_ms: String(input.coverageStartMs), coverage_end_ms: String(input.coverageEndMs),
+    trade_kind: input.tradeKind, dataset_id: input.datasetId,
+  });
+  return expectManifest(await responseJson(await fetch(url, {
+    method: "POST", headers: { "Content-Type": "text/csv" }, body: input.file,
+  })));
 }
 
 function expectImportJob(value: unknown): LocalImportJob {
