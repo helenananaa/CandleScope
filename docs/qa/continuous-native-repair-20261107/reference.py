@@ -1,4 +1,5 @@
 """Recompute from the revised canonical BARs using an empty, separate strategy store."""
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -54,7 +55,18 @@ try:
             break
     expected = private.load(run_id)
     assert expected["run"]["sequence"] == sequence
-    assert expected["checkpoint"]["engine"] == actual["engine"]
+    def engine_state(checkpoint):
+        engine = deepcopy(checkpoint["engine"])
+        for event in engine["fill_source_events"]:
+            payload = event["payload"]
+            # Frozen imported snapshots carry a row locator and explicitly
+            # absent metrics. Direct canonical BAR input omits those fields.
+            payload.pop("source_row", None)
+            for field in ("quote_volume", "taker_buy_base", "taker_buy_quote", "trades"):
+                if payload.get(field) is None:
+                    payload.pop(field, None)
+        return engine
+    assert engine_state(expected["checkpoint"]) == engine_state(actual)
     def provider_state(checkpoint):
         return {key: value for key, value in checkpoint["provider"].items() if key != "generation"}
     assert provider_state(expected["checkpoint"]) == provider_state(actual)
@@ -67,4 +79,6 @@ finally:
 assert hashlib.sha256(actual_path.read_bytes()).hexdigest() == before
 print(json.dumps({"runId": run_id, "sequence": sequence, "throughMs": through,
                   "financialStateEqual": True, "providerStateEqual": True,
+                  "comparedFillSourceRows": len(actual["engine"]["fill_source_events"]),
+                  "normalizedMetadataOnly": ["source_row", "explicit null optional BAR metrics"],
                   "actualReadOnlySha256": before}))
