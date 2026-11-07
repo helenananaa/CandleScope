@@ -69,6 +69,7 @@ interface NativeDesktopBridge extends Partial<AiControlBridge> {
   getExtensionDiagnostics?(): Promise<import("../features/extensions/contracts.js").ExtensionDiagnostics>;
   downloadReplayPortfolio?(runId: string): Promise<{ started: true }>;
   openAppPage?(url: string): Promise<{ windowId: string }>;
+  onResearchReturn?(listener: (id: string) => void): () => void;
   getBootstrap(): Promise<DesktopBootstrap>;
   reconcileWorkspace(payload: DesktopTopologyPayload): Promise<DesktopTopologyResult>;
   onLifecycle(listener: (event: DesktopWindowLifecycleEvent) => void): () => void;

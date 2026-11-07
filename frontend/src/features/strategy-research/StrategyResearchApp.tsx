@@ -53,6 +53,7 @@ import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
 import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
 import { readResearchHandoff } from "./strategyResearchHandoff.js";
+import ResearchReturnButton from "./ResearchReturnButton.js";
 import { StrategyResearchShell } from "./StrategyResearchShell.js";
 import type { NativeFeedbackStatus } from "../backtest/native/nativeDiagnostics.js";
 import { useStrategyResearchRun } from "./useStrategyResearchRun.js";
@@ -493,6 +494,10 @@ export default function StrategyResearchApp({
       } }))} />
     </div>
   </Suspense> : null : (
+    <>
+    {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
+      runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
+        : source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
@@ -512,6 +517,7 @@ export default function StrategyResearchApp({
         },
       }))}
     />
+    </>
   );
   const advancedWorkspace = intent.kind === "advanced" || intent.kind === "deep-link";
   const controls = (

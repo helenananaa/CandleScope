@@ -4,7 +4,7 @@ import { normalizeNativeStrategies } from "../backtest/native/nativeStrategyColl
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { canonicalizeIntervalValue } from "../../utils/intervals.js";
 import { t } from "../../i18n/index.js";
-import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
+import { validExecutionOverrides, validStrategyInitialization } from "../../shared/strategyRunSettings.js";
 import type { ExchangeId, MarketType, SymbolCode } from "../../utils/symbolKey.js";
 import { loadInitialChartSession } from "../chart-session/chartSessionModel.js";
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
@@ -303,6 +303,7 @@ function normalizeAttachment(
     ? value.quickPresetId.trim()
     : "";
   const valid = strategyDraftId !== undefined
+    && (value.initialization === undefined || validStrategyInitialization(value.initialization))
     && (value.executionOverrides === undefined || validExecutionOverrides(value.executionOverrides))
     && strategyRevisionId !== undefined
     && displayName.length > 0
@@ -332,6 +333,7 @@ function normalizeAttachment(
     quickPresetId,
     autoRun: value.autoRun as boolean,
     ...(validExecutionOverrides(value.executionOverrides) ? { executionOverrides: { ...value.executionOverrides } } : {}),
+    ...(validStrategyInitialization(value.initialization) ? { initialization: { ...value.initialization } } : {}),
   };
 }
 

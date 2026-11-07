@@ -18,7 +18,10 @@ export default function StrategyRunHistory({ draftId, currentRunId, onOpen }: { 
   useEffect(() => {
     const controller = new AbortController();
     void defaultBacktestApi.listRuns(controller.signal).then((items) => {
-      if (!controller.signal.aborted) setRuns(items.filter((run) => researchRunConfig(run).strategy_draft_id === draftId));
+      if (!controller.signal.aborted) {
+        // A run created outside a chart draft omits this field in its saved configuration.
+        setRuns(items.filter((run) => (researchRunConfig(run).strategy_draft_id ?? null) === draftId));
+      }
     }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(String(reason)); });
     return () => controller.abort();
   }, [draftId, currentRunId]);

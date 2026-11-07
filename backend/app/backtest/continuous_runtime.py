@@ -42,6 +42,7 @@ class _Actor:
         self.retry_failed=retry_failed
         self.stopping=False
         self.wake=asyncio.Event()
+        self.close_wakeup: asyncio.TimerHandle | None = None
         self.subscription=None
         self.demand_attempted=False
         self.stream_lost=False
@@ -68,8 +69,26 @@ class _Actor:
     def request_stop(self):
         self.stopping=True
         self.source.request_stop()
+        if self.close_wakeup is not None:
+            self.close_wakeup.cancel()
+            self.close_wakeup = None
         if self.host is not None:self.host.request_stop()
         self.wake.set()
+
+    def _wake_after_close(self, boundary_ms: int):
+        if self.stopping:
+            return
+        delay_ms = boundary_ms - self.owner.clock_ms()
+        if delay_ms <= 0:
+            self.wake.set()
+        elif delay_ms <= STEP and self.close_wakeup is None:
+            self.close_wakeup = asyncio.get_running_loop().call_later(
+                delay_ms / 1000, self._close_boundary_reached, boundary_ms,
+            )
+
+    def _close_boundary_reached(self, boundary_ms: int):
+        self.close_wakeup = None
+        self._wake_after_close(boundary_ms)
 
     async def subscribe(self):
         async def changed(event):
@@ -80,6 +99,12 @@ class _Actor:
                 self.stream_unavailable=False
             elif event.event_type==DataEventType.SOURCE_GAP:
                 self.interrupted.set()
+            elif event.event_type == DataEventType.BAR_CLOSED and event.bar is not None and event.bar.is_closed:
+                # A source close can precede our UTC minute boundary. Wake again
+                # when the closed input becomes eligible, without moving the fence.
+                boundary_ms = event.bar.time * 1000 + STEP
+                if boundary_ms % STEP == 0:
+                    self._wake_after_close(boundary_ms)
             self.wake.set()
         async def lost(_error):
             self.stream_lost=True
