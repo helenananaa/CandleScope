@@ -346,3 +346,58 @@ def test_complete_render_update_preserves_retained_time_coverage_before_slid_inp
     )
     assert message["range"] == full_range
     assert len(message["lines"][0]["data"]) == 8
+
+
+@pytest.mark.parametrize("damage", ["older", "removed", "none"])
+def test_ordered_render_range_matches_existing_patch_without_serializing_history(monkeypatch, damage):
+    bars = _bars(2000)
+    result = _pine_like_result(bars)
+    first, last = bars[-4]["time"], bars[-2]["time"]
+    if damage == "removed":
+        first = last = bars[-1]["time"] + STEP
+    changed = None if damage == "none" else {"start": first, "end": last}
+    update = {"schema": "render.update-range/1", "mode": "range", "range": changed}
+    bar_time = bars[-1]["time"]
+
+    def payload(update):
+        return payload_api._plugin_snapshot_or_patch_from_result(
+            "client", dict(META), bars, replace(result, meta={"outputUpdate": update}),
+            bar_time=bar_time,
+        )
+
+    expected = payload(update)
+    calls = []
+    original = LinePoint.to_wire
+
+    def tracked(point):
+        calls.append(point.time)
+        return original(point)
+
+    monkeypatch.setattr(LinePoint, "to_wire", tracked)
+    actual = payload({**update, "timeOrder": "ascending"})
+    assert actual["meta"]["outputUpdate"].pop("timeOrder") == "ascending"
+    assert actual == expected
+    if damage == "none":
+        first = last = bar_time
+    assert set(calls) == {
+        point.time for line in result.output.series for point in line.points
+        if first <= point.time <= last and point.value is not None
+    }
+    assert len(calls) <= len(result.output.series) * 3
+
+
+def test_legacy_range_without_time_order_keeps_out_of_order_points():
+    bars = _bars(8)
+    times = [bars[index]["time"] for index in (4, 0, 3, 7, 1, 2, 5, 6)]
+    result = ExecuteBatchResult(ok=True, output=RenderOutput(series=(
+        LineSeries(id="unordered", title="unordered", points=tuple(LinePoint(time, 1) for time in times)),
+    )), meta={"outputUpdate": {
+        "schema": "render.update-range/1", "mode": "range",
+        "range": {"start": bars[0]["time"], "end": bars[4]["time"]},
+    }})
+    message = payload_api._plugin_snapshot_or_patch_from_result(
+        "client", dict(META), bars, result, bar_time=bars[-1]["time"],
+    )
+    assert [point["time"] for point in message["lines"][0]["data"]] == [
+        times[index] for index in (0, 1, 2, 4, 5)
+    ]

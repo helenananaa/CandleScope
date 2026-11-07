@@ -1638,7 +1638,9 @@ def _output_update(previous: _Normalized | None, current: _Normalized) -> dict[s
                         timestamp = _item_time(point)
                         lower = timestamp if lower is None else min(lower, timestamp)
                         upper = timestamp if upper is None else max(upper, timestamp)
-    return {"schema": "render.update-range/1", "mode": "range",
+    # Per-bar records follow increasing host bar time, including fixed plot
+    # offsets. Signals each contain one point and drawing scenes stay whole.
+    return {"schema": "render.update-range/1", "mode": "range", "timeOrder": "ascending",
             "range": None if lower is None else {"start": lower, "end": upper}}
 
 

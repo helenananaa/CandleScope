@@ -172,8 +172,9 @@ def _patch_from_snapshot(
     reason: str,
     start_s: int,
     end_s: int,
+    ordered_times: bool = False,
 ) -> dict[str, Any]:
-    patch = _filter_payload_to_range(payload, start_s, end_s)
+    patch = _filter_payload_to_range(payload, start_s, end_s, ordered_times=ordered_times)
     if patch.get("kind") == "script":
         # A script ``result`` is the structured Render IR with every
         # collection's full history. The browser's WS envelope never reads it;
@@ -734,10 +735,15 @@ def _plugin_snapshot_or_patch_from_result(
     bar_time: int = 0,
     reason: str = "bar_update",
 ) -> dict[str, Any]:
+    ordered_range = None
+    if bar_time and result.ok and result.output is not None:
+        update = result.meta.get("outputUpdate", result.output.meta.get("outputUpdate"))
+        if isinstance(update, dict) and update.get("timeOrder") == "ascending":
+            ordered_range = _render_update_range(update, bar_time)
     payload = _build_plugin_snapshot_from_payload(
         client_id,
         meta,
-        serialize_plugin_runtime_result(result),
+        serialize_plugin_runtime_result(result, ordered_range=ordered_range),
         bar_time=bar_time,
     )
     return _finish_plugin_snapshot_or_patch(
@@ -771,6 +777,27 @@ def _plugin_snapshot_or_patch_from_failure(
     )
 
 
+def _render_update_range(update: Any, bar_time: int) -> tuple[int, int] | None:
+    if (
+        not isinstance(update, dict)
+        or update.get("schema") != "render.update-range/1"
+        or update.get("mode") != "range"
+        or "range" not in update
+    ):
+        return None
+    changed = update["range"]
+    if changed is None:
+        return bar_time, bar_time
+    if (
+        isinstance(changed, dict)
+        and type(changed.get("start")) is int
+        and type(changed.get("end")) is int
+        and 0 <= changed["start"] <= changed["end"]
+    ):
+        return changed["start"], changed["end"]
+    return None
+
+
 def _finish_plugin_snapshot_or_patch(
     payload: dict[str, Any],
     bars: list[Any],
@@ -782,30 +809,16 @@ def _finish_plugin_snapshot_or_patch(
         metadata = payload.get("meta")
         if isinstance(metadata, dict) and "outputUpdate" in metadata:
             update = metadata["outputUpdate"]
-            # Optional language-neutral output contract. Unknown/malformed
-            # ranges are safely delivered as a snapshot, never a tail guess.
-            if (
-                isinstance(update, dict)
-                and update.get("schema") == "render.update-range/1"
-                and update.get("mode") == "range"
-                and "range" in update
-            ):
-                changed = update.get("range")
-                if changed is None:
-                    start_s = end_s = int(bar_time)
-                elif (
-                    isinstance(changed, dict)
-                    and type(changed.get("start")) is int
-                    and type(changed.get("end")) is int
-                    and 0 <= changed["start"] <= changed["end"]
-                ):
-                    start_s, end_s = changed["start"], changed["end"]
-                else:
-                    return _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
-                patch = _patch_from_snapshot(payload, reason=reason, start_s=start_s, end_s=end_s)
+            changed = _render_update_range(update, bar_time)
+            if changed is not None:
+                patch = _patch_from_snapshot(
+                    payload, reason=reason, start_s=changed[0], end_s=changed[1],
+                    ordered_times=update.get("timeOrder") == "ascending",
+                )
                 # A changed range is authoritative, including point deletion.
                 patch["type"] = "indicator.replace_range"
                 return patch
+            # Unknown or malformed ranges require a complete replacement.
             snapshot = _finish_plugin_snapshot_or_patch(payload, bars, bar_time=0, reason=reason)
             if (
                 isinstance(update, dict)

@@ -5,6 +5,9 @@ module owns no request, application composition or market-data lookup.
 """
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
+from functools import partial
+from operator import itemgetter
 from typing import Any
 
 from app.indicator import create_engine
@@ -15,8 +18,17 @@ from app.indicator.warmup import indicator_warmup_bars as _indicator_warmup_bars
 
 
 def _filter_points_to_range(
-    points: list[dict[str, Any]], start_s: int, end_s: int
+    points: list[dict[str, Any]], start_s: int, end_s: int, *, ordered_times: bool
 ) -> list[dict[str, Any]]:
+    if ordered_times:
+        timestamp = itemgetter("time")
+        try:
+            first = bisect_left(points, start_s, key=timestamp)
+            last = bisect_right(points, end_s, lo=first, key=timestamp)
+            return points[first:last]
+        except (KeyError, TypeError):
+            # Malformed producer records retain the generic filter.
+            pass
     filtered: list[dict[str, Any]] = []
     for point in points or []:
         try:
@@ -29,21 +41,22 @@ def _filter_points_to_range(
 
 
 def filter_payload_to_range(
-    payload: dict[str, Any], start_s: int, end_s: int
+    payload: dict[str, Any], start_s: int, end_s: int, *, ordered_times: bool = False
 ) -> dict[str, Any]:
     """Trim a snapshot-like indicator payload down to a range patch."""
+    slice_points = partial(
+        _filter_points_to_range, start_s=start_s, end_s=end_s, ordered_times=ordered_times,
+    )
     next_payload = dict(payload)
 
     if isinstance(next_payload.get("lines"), list):
         next_payload["lines"] = [
             {
                 **line,
-                "data": _filter_points_to_range(line.get("data") or [], start_s, end_s),
+                "data": slice_points(line.get("data") or []),
                 **(
                     {
-                        "colorData": _filter_points_to_range(
-                            line.get("colorData") or [], start_s, end_s
-                        )
+                        "colorData": slice_points(line.get("colorData") or [])
                     }
                     if line.get("colorData")
                     else {}
@@ -57,15 +70,11 @@ def filter_payload_to_range(
         for item in next_payload["series"]:
             style = dict(item.get("style") or {})
             if style.get("colorData"):
-                style["colorData"] = _filter_points_to_range(
-                    style.get("colorData") or [], start_s, end_s
-                )
+                style["colorData"] = slice_points(style.get("colorData") or [])
             series.append(
                 {
                     **item,
-                    "data": _filter_points_to_range(
-                        item.get("data") or [], start_s, end_s
-                    ),
+                    "data": slice_points(item.get("data") or []),
                     "style": style,
                 }
             )
@@ -86,16 +95,10 @@ def filter_payload_to_range(
                 continue
             filtered_outputs[name] = {
                 **output,
-                "data": _filter_points_to_range(
-                    output.get("data") or [], start_s, end_s
-                ),
+                "data": slice_points(output.get("data") or []),
                 **(
                     {
-                        "colorData": _filter_points_to_range(
-                            output.get("colorData") or [],
-                            start_s,
-                            end_s,
-                        )
+                        "colorData": slice_points(output.get("colorData") or [])
                     }
                     if output.get("colorData")
                     else {}
@@ -109,7 +112,7 @@ def filter_payload_to_range(
         for item in next_payload["annotations"]:
             data = item.get("data") or []
             if data and isinstance(data[0], dict) and "time" in data[0]:
-                data = _filter_points_to_range(data, start_s, end_s)
+                data = slice_points(data)
             annotations.append({**item, "data": data})
         next_payload["annotations"] = annotations
 
@@ -118,15 +121,11 @@ def filter_payload_to_range(
             next_payload[key] = [
                 {
                     **group,
-                    "data": _filter_points_to_range(
-                        group.get("data") or [], start_s, end_s
-                    ),
+                    "data": slice_points(group.get("data") or []),
                     # Script bgcolors keep their per-bar runs in ``regions``.
                     **(
                         {
-                            "regions": _filter_points_to_range(
-                                group["regions"], start_s, end_s
-                            )
+                            "regions": slice_points(group["regions"])
                         }
                         if isinstance(group.get("regions"), list)
                         else {}
@@ -142,7 +141,7 @@ def filter_payload_to_range(
             {
                 **fill,
                 **{
-                    field: _filter_points_to_range(fill[field], start_s, end_s)
+                    field: slice_points(fill[field])
                     for field in ("data", "colorData")
                     if isinstance(fill.get(field), list)
                 },

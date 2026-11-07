@@ -35,7 +35,7 @@ def test_negative_offset_change_and_removal_include_the_previous_displayed_time(
         assert tick.ok, tick.diagnostics
         assert tick.output_patch is not None
         assert tick.meta["outputUpdate"] == {
-            "schema": "render.update-range/1", "mode": "range",
+            "schema": "render.update-range/1", "mode": "range", "timeOrder": "ascending",
             "range": {"start": history[-1].time, "end": history[-1].time},
         }
         resolved = tick.patched(seed.output).output
