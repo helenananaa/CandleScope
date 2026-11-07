@@ -58,7 +58,7 @@ try {
   await page.getByRole('button', {name: '运行记录', exact: true}).click();
   const history = page.getByRole('dialog', {name: '运行记录', exact: true});
   await history.waitFor();
-  const runs = await read('/api/v1/backtests/runs');
+  const {runs} = await read('/api/v1/backtests/runs');
   await q.record('research-history', {text: await history.innerText(), runIds: runs.map(run => run.run_id)});
   const row = history.locator('article').filter({hasText: seed.runId.slice(-8)});
   await row.getByRole('button', {name: '查看结果', exact: true}).click({timeout: 10000});
