@@ -1,9 +1,10 @@
 import { t } from "../../../i18n/index.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 
-export function StrategyConditionsEditor({ settings, marketType, preciseAvailable, preciseArchiveHint = true, onChange }: {
+export function StrategyConditionsEditor({ settings, marketType, capitalAsset = "USDT", preciseAvailable, preciseArchiveHint = true, onChange }: {
   settings: StrategyRunSettings;
   marketType: string;
+  capitalAsset?: string | undefined;
   preciseAvailable?: boolean;
   preciseArchiveHint?: boolean;
   onChange(settings: StrategyRunSettings): void;
@@ -13,7 +14,7 @@ export function StrategyConditionsEditor({ settings, marketType, preciseAvailabl
     initialBalance: "10000", equityPercent: "10", leverage: "1", feeBps: marketType === "spot" ? "10" : "4", slippageBps: "1",
   };
   const fields = [
-    ["initialBalance", "chartTester.settings.capital", "USDT"],
+    ["initialBalance", "chartTester.settings.capital", capitalAsset],
     ["equityPercent", "backtest.equityPct", ""],
     ["leverage", "backtest.leverage", "×"],
     ["feeBps", "chartTester.settings.fee", "bps"],

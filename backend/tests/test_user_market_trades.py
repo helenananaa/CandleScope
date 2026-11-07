@@ -65,7 +65,7 @@ def test_rejects_invalid_source_without_publishing(tmp_path, source, unit, code)
 
 def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp_path):
     params = {
-        "name": "User market fixture", "symbol": "ETHUSDT", "base_asset": "ETH", "quote_asset": "USDT",
+        "name": "User market fixture", "symbol": "ETHUSDC", "base_asset": "ETH", "quote_asset": "USDC",
         "timestamp_unit": "ms", "coverage_start_ms": START, "coverage_end_ms": END, "trade_kind": "MARKET_AGG_TRADE",
     }
     runtime = _runtime(tmp_path)
@@ -98,7 +98,7 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                 "source_event_kind": "AGG_TRADE", "strategy_revision_id": revision["revision_id"],
                 "python_runtime_mode": "TRUSTED_LOCAL", "python_trusted_confirmed": True,
                 "output_mode": "SIGNAL", "equity_percent": "10", "sizing_policy": "EQUITY_PERCENT_V1",
-                "symbol": "ETHUSDT"}
+                "symbol": "ETHUSDC"}
         smoke = client.post("/api/v1/backtests/strategy-revisions/" + revision["revision_id"] + "/smoke", json={
             key: body[key] for key in ("dataset_id", "snapshot_hash", "start_time_ms", "end_time_ms",
                                       "python_runtime_mode", "python_trusted_confirmed")
@@ -119,6 +119,9 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
             time.sleep(0.05)
         assert run["state"] == "COMPLETED", run
         assert run["snapshot_hash"] == preview["snapshot_hash"]
+        report = client.get(RUNS + "/" + run_id + "/report")
+        assert report.status_code == 200, report.text
+        assert report.json()["data_quality"]["quote_asset"] == "USDC"
         chart = client.get(RUNS + "/" + run_id + "/chart")
         assert chart.status_code == 200, chart.text
         chart_body = chart.json()

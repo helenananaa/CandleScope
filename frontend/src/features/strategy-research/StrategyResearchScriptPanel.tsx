@@ -64,6 +64,7 @@ export function StrategyResearchScriptPanel({
   sourceKind,
   draftId,
   barOnly,
+  capitalAsset,
   runStatus,
   needsData,
   onDraftId,
@@ -80,6 +81,7 @@ export function StrategyResearchScriptPanel({
   sourceKind: ResearchSourceKind | null;
   draftId: string | null;
   barOnly: boolean;
+  capitalAsset?: string | undefined;
   runStatus: string;
   needsData: boolean;
   onDraftId(draftId: string | null): void;
@@ -348,7 +350,7 @@ export function StrategyResearchScriptPanel({
             {(["parameters", "code", "conditions"] as const).map((value) => <button type="button" role="tab" key={value} aria-selected={pane === value} onClick={() => setPane(value)}>{t(value === "parameters" ? "ux.parameters" : value === "code" ? "chartTester.tab.script" : "chartTester.tab.settings")}</button>)}
           </div>
           {pane === "parameters" && <StrategyParametersEditor source={source} onChange={setSource} />}
-          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} preciseAvailable={!barOnly} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
+          {pane === "conditions" && onConfigure && <StrategyConditionsEditor settings={configuration} marketType={session.marketType} capitalAsset={capitalAsset} preciseAvailable={!barOnly} preciseArchiveHint={sourceKind === "CURRENT_CHART"} onChange={onConfigure} />}
           {openEditor && pane === "code" ? (
             <Suspense fallback={<p>{t("strategy.scriptSlot")}</p>}>
               <StrategyScriptWorkspace

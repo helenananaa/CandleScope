@@ -61,6 +61,7 @@ def open_user_trade_snapshot(
         "source_event_kind": "AGG_TRADE",
         "completeness": "user_declared_coverage",
         "source_quality": "user_market_trades",
+        "quote_asset": manifest["instrument"]["quote_asset"],
         "gap_count": 0,
         "row_count": count,
     }

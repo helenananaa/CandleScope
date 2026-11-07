@@ -892,7 +892,11 @@ class BacktestWorker:
                     provider=provider,
                     observation_market=observation_market,
                     snapshot_evidence={
-                        "quality": snapshot.quality,
+                        "quality": {
+                            **snapshot.quality,
+                            **({"quote_asset": manifest["instrument"]["quote_asset"]}
+                               if manifest.get("source") == USER_TRADE_SOURCE else {}),
+                        },
                         "contract_coverage": snapshot.quality.get(
                             "contract_data",
                             {
