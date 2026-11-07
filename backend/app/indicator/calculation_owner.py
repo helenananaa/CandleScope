@@ -10,11 +10,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+import logging
 import re
 from uuid import uuid4
 
 from app.core.async_cleanup import finish_cleanup
 from app.core.runtime_output import RuntimeOutputReference, RuntimeOutputSnapshot
+
+logger = logging.getLogger(__name__)
 
 
 class CalculationOwnerError(RuntimeError):
@@ -129,6 +132,12 @@ class ScriptCalculationOwner:
             if old is not None and (observed_through < old.observed_through or closed_through < old.closed_through):
                 raise CalculationOwnerError('INDICATOR_CALCULATION_CLOCK_REGRESSED')
             if (old is None or rebuild or self._stale) and input_start != self.plan.start:
+                logger.warning(
+                    "Chart origin admission rejected owner=%s origin=%d input=%d:%d "
+                    "expected=%s rebuild=%s stale=%s",
+                    self.plan.owner_id, self.plan.start, input_start, observed_through,
+                    old is not None, rebuild, self._stale,
+                )
                 raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
             if self._stale and not rebuild:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_REBUILD_REQUIRED')
@@ -147,6 +156,11 @@ class ScriptCalculationOwner:
                 # A dropped runtime/session cannot silently restart a cumulative
                 # script from the currently displayed/sliding tail.
                 if not execution.retained:
+                    logger.warning(
+                        "Chart origin runtime rejected owner=%s origin=%d input=%d:%d reset=%s",
+                        self.plan.owner_id, self.plan.start, input_start, observed_through,
+                        execution.reset,
+                    )
                     raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
                 if execution.reset and input_start != self.plan.start:
                     raise RuntimeTailReset()

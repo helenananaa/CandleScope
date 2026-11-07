@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from copy import deepcopy
+import logging
 
 from candlescope_plugin_sdk import ExecuteBatchResult
 
@@ -27,6 +28,8 @@ from app.api.v1.stream_indicator_payloads import (
     _replace_range_from_snapshot, _script_runtime_request,
 )
 from app.indicator.serialization import serialize_plugin_runtime_result
+
+logger = logging.getLogger(__name__)
 
 
 def _snapshot_payload(client_id, meta, output):
@@ -198,6 +201,15 @@ class ChartCalculation:
             raise IndicatorRangeNotReadyError('Chart input has not reached the requested bar opening')
         if (not rows or rows[0].time != start or len(rows) > config.SCRIPT_MAX_BARS
                 or (self.owner.cursor is not None and rows[-1].time < self.owner.cursor.observed_through)):
+            logger.warning(
+                "Chart origin query rejected owner=%s requested=%d:%d returned=%s:%s "
+                "rows=%d closed_through=%s observed_through=%s storage_revision=%s",
+                self.owner_id, start, end, rows[0].time if rows else None,
+                rows[-1].time if rows else None, len(rows),
+                self.owner.cursor.closed_through if self.owner.cursor else None,
+                self.owner.cursor.observed_through if self.owner.cursor else None,
+                result.metadata.get('storage_revision'),
+            )
             raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
         await acquisition.query_proof(result)
         return rows
