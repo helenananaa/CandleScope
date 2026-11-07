@@ -13,6 +13,13 @@ export function desktopBackendEnvironment(config) {
   return { KLINE_BATCH_STREAM_ENABLED: config.klineBatchStreamEnabled ? "1" : "0" };
 }
 
+export function resolvePineChartTransport(value = "calculation") {
+  if (value !== "calculation" && value !== "snapshot") {
+    throw new Error("CANDLESCOPE_PINE_CHART_TRANSPORT must be calculation or snapshot");
+  }
+  return value;
+}
+
 export function desktopRuntimeConfigPlugin() {
   let environment;
   return {

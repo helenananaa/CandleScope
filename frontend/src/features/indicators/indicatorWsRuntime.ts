@@ -7,6 +7,7 @@ import {
   normalizeIndicatorRange,
   normalizeIndicatorRevision,
 } from "./indicatorRangeCoverage.js";
+import { isPineScriptSubscription, PINE_CHART_TRANSPORT } from "./pineChartTransport.js";
 import { estimateOutputWarmupBars } from "./indicatorRangePlanning.js";
 import {
   getBuiltinIndicatorName,
@@ -157,6 +158,9 @@ export function buildHostedSubscriptionMessage(
     if (indicator.securityMode !== undefined) {
       message.securityMode = indicator.securityMode;
     }
+  }
+  if (PINE_CHART_TRANSPORT === "snapshot" && isPineScriptSubscription(message)) {
+    message.pineChartTransport = "snapshot";
   }
   if (Number.isFinite(Number(resumeFrom)) && Number(resumeFrom) > 0) {
     message.resumeFrom = Math.floor(Number(resumeFrom));

@@ -52,6 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.core.config import (
+    PINE_CHART_TRANSPORT,
     REPLAY_SETTINGS,
     CORS_ORIGINS,
     EVENT_LOOP_LAG_INTERVAL_SECONDS,
@@ -1080,7 +1081,7 @@ async def root() -> dict:
 @app.get("/health", tags=["system"])
 async def health_check() -> dict:
     dm = getattr(app.state, "data_manager", None)
-    result: dict = {"status": "ok", "runtime_mode": RUNTIME_MODE}
+    result: dict = {"status": "ok", "runtime_mode": RUNTIME_MODE, "pine_chart_transport": PINE_CHART_TRANSPORT}
     import os
 
     if instance_id := os.environ.get("CANDLESCOPE_DESKTOP_INSTANCE_ID"):

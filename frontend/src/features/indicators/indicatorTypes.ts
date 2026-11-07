@@ -675,6 +675,7 @@ export interface IndicatorSubscriptionContext {
 
 export interface IndicatorSubscribeMessage {
   calculation?: IndicatorCalculationReference;
+  pineChartTransport?: "snapshot";
   seriesIdentity?: KlineSeriesIdentityInput | undefined;
   action: "subscribe";
   clientId: string;

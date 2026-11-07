@@ -116,6 +116,9 @@ def _indicator_stream_failure(
         if code == "INDICATOR_SNAPSHOT_WRITER_BUSY":
             message = "Another connection still owns this Pine snapshot session."
             hint = "请等待旧连接完成清理后重新订阅，或为独立图表使用不同的订阅 ID。"
+        elif code == "INDICATOR_PINE_CHART_TRANSPORT_MISMATCH":
+            message = "The selected Pine chart transport differs from the server startup configuration."
+            hint = "请按同一 Pine 图表传输配置重启客户端与后端。"
     elif isinstance(exc, IndicatorRuntimeRoutesError):
         code = "INDICATOR_LANGUAGE_UNAVAILABLE"
         message = str(exc)
@@ -470,7 +473,11 @@ async def _handle_indicator_subscribe(
             f"{client_id}:{id(websocket)}"
         )
         try:
-            if 'calculation' in msg:
+            # A reference selects calculation transport. New snapshot clients
+            # declare their route; old unmarked clients retain compatibility.
+            if "calculation" in msg:
+                if "pineChartTransport" in msg or config.PINE_CHART_TRANSPORT != "calculation":
+                    raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
                 from app.api.v1.chart_calculation_stream import handle_chart_calculation_subscribe
                 from app.api.v1.indicators import IndicatorRangeRequest, _build_range_meta
                 chart_meta = _build_range_meta(IndicatorRangeRequest.model_validate({**msg,'start':1,'end':1}),
@@ -485,6 +492,10 @@ async def _handle_indicator_subscribe(
                         custom_tasks=custom_tasks,client_meta=client_meta),
                     coordinator=getattr(indicator_engine,'backfill_coordinator',None))
                 return
+            if "pineChartTransport" in msg and (
+                msg["pineChartTransport"] != "snapshot" or config.PINE_CHART_TRANSPORT != "snapshot"
+            ):
+                raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
             await handle_script_indicator_subscribe(
                 dm=dm,
                 custom_handles=custom_handles,

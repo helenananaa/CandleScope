@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { downloadReplayPortfolio } from "./replay-portfolio-download.mjs";
 import { resolvePythonCommand } from "./python-runtime.mjs";
-import { desktopBackendEnvironment } from "./runtime-config.mjs";
+import { desktopBackendEnvironment, resolvePineChartTransport } from "./runtime-config.mjs";
 import { isTrustedAppUrl } from "./app-origin.mjs";
 import { startProfileAssetServer } from "./profile-origin.mjs";
 
@@ -40,6 +40,7 @@ if (process.env.CANDLESCOPE_DESKTOP_USER_DATA) {
   app.setPath("userData", path.resolve(process.env.CANDLESCOPE_DESKTOP_USER_DATA));
 }
 app.setAppLogsPath(path.join(app.getPath("userData"), "logs"));
+const pineChartTransport = resolvePineChartTransport(process.env.CANDLESCOPE_PINE_CHART_TRANSPORT);
 const multiWindowEnabled = process.env.MULTI_WINDOW_ENABLED === "1"
   || process.env.VITE_MULTI_WINDOW_ENABLED === "1";
 let appUrl = process.env.CANDLESCOPE_DESKTOP_URL || "http://127.0.0.1:15173/";
@@ -145,6 +146,7 @@ function createSupervisor() {
         CANDLESCOPE_BUNDLED_PLUGIN_MANIFEST: path.join(runtimeRoot, "python-runtime", "plugins", "manifest.json"),
         CANDLESCOPE_BUNDLED_INDICATOR_RUNTIME_ROUTES: path.join(runtimeRoot, "python-runtime", "plugins", "indicator-runtime-routes.json"),
       } : {}),
+      CANDLESCOPE_PINE_CHART_TRANSPORT: pineChartTransport,
       CANDLE_HOST: "127.0.0.1",
       CANDLE_PORT: String(backendPort),
       CANDLE_DATA_DIR: process.env.CANDLE_DATA_DIR || path.join(app.getPath("userData"), "data"),
@@ -247,7 +249,9 @@ async function boot() {
   });
 
   trustedIpc.on(DESKTOP_IPC.backendEndpoint, (event) => {
-    event.returnValue = { port: backendPort, windowId: windowIdForSender(event.sender), controlScopes: workflowScopes };
+    event.returnValue = {
+      port: backendPort, windowId: windowIdForSender(event.sender), controlScopes: workflowScopes, pineChartTransport,
+    };
   });
 
   desktopExtensions = new TrustedDesktopExtensionHost({

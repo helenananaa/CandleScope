@@ -1186,6 +1186,8 @@ async def open_chart_calculation(req: ChartCalculationOpenRequest, request: Requ
     service = _resolve_indicator_runtime_service(request)
     owner_id = None
     try:
+        if config.PINE_CHART_TRANSPORT != "calculation":
+            raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
         meta = _build_range_meta(req, trusted_origin=_trusted_origin(request))
         if meta.get('kind') != 'script' or meta.get('language') != 'pine' or req.end < req.start:
             raise CalculationOwnerError('INDICATOR_CALCULATION_BINDING_UNSUPPORTED')
@@ -1212,6 +1214,8 @@ async def read_chart_calculation(domain_id: str, req: CalculationRangeRequest, r
     service = _resolve_indicator_runtime_service(request)
     current = None
     try:
+        if config.PINE_CHART_TRANSPORT != "calculation":
+            raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
         if domain_id != req.calculation.domainId:
             raise CalculationOwnerError('INDICATOR_CALCULATION_CHANGED')
         async with service.calculations.borrow(domain_id) as calculation:

@@ -1,5 +1,5 @@
 import type { IndicatorCalculationPosition, IndicatorCalculationReference, IndicatorPayloadEnvelope,
-  IndicatorRangeRequest, IndicatorSubscribeMessage } from "./indicatorTypes.js";
+  IndicatorRangeRequest } from "./indicatorTypes.js";
 
 export interface ChartCalculationApi {
   open(input: IndicatorRangeRequest): Promise<IndicatorPayloadEnvelope>;
@@ -17,10 +17,6 @@ interface Entry {
   opening: Promise<IndicatorPayloadEnvelope> | null;
   closing: Promise<void> | null;
   pending: number;
-}
-
-export function usesChartCalculation(message: Pick<IndicatorSubscribeMessage, "kind" | "language">): boolean {
-  return message.kind === "script" && (message.language || "pine").toLowerCase() === "pine";
 }
 
 function reference(position: IndicatorCalculationPosition): IndicatorCalculationReference {

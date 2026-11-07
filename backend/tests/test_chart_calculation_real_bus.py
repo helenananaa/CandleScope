@@ -578,3 +578,49 @@ def test_snapshot_writer_remains_claimed_until_older_shielded_work_drains(real_b
         transport.receive(first, "indicator.unsubscribed")
         reconnect.send_json(message)
         assert transport.receive(reconnect, "indicator.subscribed")["ok"]
+
+
+def test_explicit_snapshot_transport_fences_chart_calculation_and_preserves_cleanup(real_bus_wire, monkeypatch):
+    from app.core import config
+
+    wire = real_bus_wire
+    message = transport.open_request(historyLimit=501)
+    for key in ("schemaVersion", "start", "end"):
+        del message[key]
+    message.update(action="subscribe", pineChartTransport="snapshot")
+    code = "INDICATOR_PINE_CHART_TRANSPORT_MISMATCH"
+
+    with wire.client.websocket_connect("/ws") as snapshot:
+        snapshot.send_json(message)
+        failure = transport.receive(snapshot, "indicator.subscribed")
+        assert not failure["ok"] and failure["code"] == code
+        assert not wire.source.leases
+
+    initial = wire.client.post("/indicators/calculations", json=transport.open_request()).json()
+    assert initial["ok"] and transport.value(initial) == 500
+    position = transport.ref(initial)
+    # Exercise the admissions in both startup modes with the same source.
+    # Full process exit/relaunch and profile reuse are separate native checks.
+    monkeypatch.setattr(config, "PINE_CHART_TRANSPORT", "snapshot")
+    requests = wire.host.diagnostics()["runtimes"][0]["requests"]
+    blocked_open = wire.client.post("/indicators/calculations", json=transport.open_request()).json()
+    assert blocked_open["code"] == code
+    assert transport.view(wire, position)["code"] == code
+    with wire.client.websocket_connect("/ws") as calculation:
+        transport.subscribe(calculation, position)
+        failure = transport.receive(calculation, "indicator.subscribed")
+        assert not failure["ok"] and failure["code"] == code
+        assert not wire.source.leases
+    assert wire.host.diagnostics()["runtimes"][0]["requests"] == requests
+    domain = "/indicators/calculations/" + position["domainId"]
+    assert wire.client.delete(domain).json()["state"] == "closed"
+
+    batch = wire.client.post("/indicators/range/batch", json={"requests": [transport.open_request()]}).json()
+    assert batch["ok"] and transport.value(batch["results"][0]["payload"]) == 500
+    with wire.client.websocket_connect("/ws") as snapshot:
+        snapshot.send_json(message)
+        assert transport.receive(snapshot, "indicator.subscribed")["ok"]
+        assert wire.client.post("/fixture/tick/501?close=104").json()["ok"]
+        update = transport.receive(snapshot, "indicator.snapshot", "indicator.replace_range", "indicator.patch")
+        assert update.get("calculation") is None and transport.value(update) == 501
+    assert wire.service.calculations.snapshot()["holders"] == 0
