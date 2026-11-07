@@ -1,0 +1,35 @@
+# Historical indicator range projection outside HTTP
+
+Product source **`4cfe6afb8c16e1de64dd627a09450ea1b2f515a6`**, based on actual main #266 `7acba72e56dfafd3a25ee4ec861509f4e9dc6f96`. The isolated builtin history process imported `app.api.v1.stream_indicator_payloads` for range computation. That reverse dependency also made shared contracts/market owners transitively depend on HTTP composition, accounting for all ten existing static architecture findings.
+
+The single range computation/confirmed-boundary/filter/replacement implementation now belongs to `app.indicator.range_projection`; HTTP adapters and the actual worker call it directly. `IndicatorRangeNotReadyError` is owned by indicator errors, with its exact constructor/attributes preserved, including IPC reconstruction. Existing API helper names are direct imported references, not another implementation. Five extracted function ASTs match the originals except for the explicitly recorded symbol renames; the domain error AST is unchanged. Formula, warmup, actual target coverage, clipping of legacy/v2/color/fill collections, envelopes, admission and physical lifecycle are unchanged.
+
+## Counterexample and source qualification
+
+A fresh isolated executable installs an import hook before importing the application, and spawn re-executes that guard in the real child. Denying `app.api`, `app.main`, FastAPI and Starlette makes main7ac fail with `ImportError: Range worker imported HTTP composition: app.api`. After extraction the same actual `BuiltinHistoryExecutor` computes independent MA5 values105/106/107 for the three available target rows, reports only480…600 rather than the requested end720, propagates the unavailable-target domain error across IPC, then computes successfully in the same child. Normal close leaves that child absent. It does not substitute the engine, dispatcher or result. The probe and failure are archived.
+
+During local extraction review a mechanical replacement also removed the thread-mode batch callable argument. The first90-case focused run used the default process setting and therefore did not expose it. An explicit false/true parametrization of the existing real multi-indicator batch/cache scenario reproduced the intermediate thread failure; the callable was restored before the product commit. The intermediate patch/failure and final pass are preserved. This was an uncommitted local editing error, not an original-main defect.
+
+Final focused run:91passed/zero skips/one warning. Final single combined run: **670 passed / zero skips / seven existing warnings**,56 suites, covering every indicator test, replay indicator/context/prefix/viewport paths, HTTP/WS/runtime/plugin projection, serial/history owners and cancellation/deadline cleanup, GC, current imported BAR/notes/financial boundaries and architecture tests.91 is included in670 and is not added. Exact command/environment and logs are archived. Pine-related component tests use the explicit isolated source bridge/current repository SDK with a retained compiled core; this is not installed Pine Native acceptance.
+
+`backend/scripts/check_architecture.py` now exits0, with **zero findings against the existing rules**. The ten-finding actual-main baseline is inherited from the already verified immutable895 Python Git blobs; its file hashes and findings remain recorded. No rule, allowlist or checker was weakened. This is a static dependency result, not a claim that every architecture objective is finished.
+
+Entire frontend/packages/workflow trees equal qualified sourcec6. Its full frontend4891regular+1performance+130desktop/zero skips are explicitly inherited, not rerun. A fresh production build at the new product source passed. Existing lint/bundle notices remain. All33 original other worktrees, refs and3044 dirty files remain unchanged.
+
+## Actual current-source Native regression
+
+A fresh arm64 acceptance candidate reuses verified c6 runtime/plugin assets and replaces the exact current backend/SDK and newly built frontend/desktop.1,064 source files,164 built files,nine plugin assets and76 plugin source files matched, zero differences, strict deep ad-hoc signature passed before and after. It is not a standalone runtime or release rebuild. A completely fresh LOCAL_OFFLINE profile was used; no old profile was copied.
+
+**55 actual packaged Native stages passed**, including two imported6000-bar sources, two FULL tracks, independent1m/5m display, global advancement, displayed prices/MA5, note edit/history/screenshot/trade linking, true frozen Review and same-profile full exit/restart. The only driver change from the qualified #265 helper selects the ordinary fresh-package verifier instead of its older immutable-artifact-reuse verifier; all behavioral assertions remain. The restart Review screenshot was visually inspected.
+
+Two stdlib-only CSV/Decimal audits passed without importing app calculations. Indicator audit checked28 actual computations,1186 canonical input rows,1110 output points,13 partial display rows and22 actual rendered MA5 observations against source CSV and each revealed boundary. Future sentinel values remained excluded. The separate financial/link audit checked two fills, correct track-scoped colliding local fill IDs and screenshots, independently reconstructing equity9999.963756980 and available/margin/account values. Native observation and independent audit remain separate evidence.
+
+Normal complete app exits were546ms and515ms. All ten observed owned PIDs were independently absent afterward. Offline guard was installed, zero blocked attempts, captured HTTP/WS loopback-only and renderer errors empty. The original compatible app remains retained. This Native regression establishes the recorded offline app/replay behavior; **it does not claim a public-feed Native historical-range exercise, Pine/Python/custom indicator Native behavior, Windows, or full #120/#161/#166/#181 acceptance**.
+
+One initial inline Native wrapper contained a syntax error and stopped before any filesystem mutation or app launch. Its classification is retained; the successful execution is the authoritative receipt.
+
+## Evidence and reproduction
+
+`receipt.json` hashes the compressed logs, exact commands/environments, source fingerprints, before/intermediate/final checks, package manifests, actual Native observations, full indicator responses and requests, CSVs, oracles and screenshots. All gzip payloads are byte-round-tripped and JSONs parsed. No database, profile or large app is committed. Native helpers and the two independent auditors are unchanged at `docs/qa/replay-imported-multimarket-20261106` and `docs/qa/replay-multichart-indicator-boundary-20261106`; the small local driver is included here. Use a fresh candidate/profile/output root and a verified compatible runtime.
+
+Development does not wait on CI. Before merging main, audit the final delivery head, actual current main, all applicable checks and the exact product/test trees. These changes are a bounded follow-up to #120/#161 and do not close broader issues.
