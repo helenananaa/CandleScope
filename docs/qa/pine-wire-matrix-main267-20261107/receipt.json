@@ -1,0 +1,299 @@
+{
+  "environment": {
+    "sourceHead": "519944f7a4e9786c01045dfa83fc9e4ea22a4579",
+    "sourceTree": "5026986d9a1d07e67f3ef321ecb58727860177fe",
+    "currentMain": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+    "pythonVersion": "3.12.15",
+    "pythonLauncher": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "cpu": "Apple M1",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "macOSBuild": "25G83",
+    "pineCoreVersion": "0.3.3+cs.1",
+    "coreBinary": "pine_compat/pine_compat.abi3.so",
+    "coreBinarySha256": "9c6f63447e84fdb4e3b5523baf9f92713a4cfd03c31277bfb78457e00ff39ad5",
+    "faultTestSourceSha256": "b71b2986a8da7d3f8224d9e0aab1d8e0a3e34f98aab1b2102857832773887e95"
+  },
+  "faultAndAdjacentTestsPassed": 40,
+  "matrixModes": {
+    "delta": "Negotiated output patch",
+    "full": "Force null output base only. Actual worker returns full output and host emits full WebSocket snapshot."
+  },
+  "modeTestsPassed": {
+    "delta": 3,
+    "full": 3
+  },
+  "matrix": [
+    {
+      "history": 1000,
+      "delta": {
+        "queryMax": 10000,
+        "ipcRequestMedianBytes": 883.0,
+        "ipcResponseMedianBytes": 2748.0,
+        "wsMedianBytes": 3449.0,
+        "hostSerializationMedianMs": 0.226333,
+        "latencyMs": {
+          "p50": 13.5805625,
+          "p95": 14.174072599999999,
+          "p99": 14.26891452
+        },
+        "seed": {
+          "httpBytes": 98312,
+          "httpMs": 2016.672334,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 101681,
+            "rows": 1000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 0.753
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 68518,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 1.547292
+          }
+        },
+        "joinSnapshotBytes": 98320,
+        "projectionSha256": "4a5f4728c3468e2d3d4608933dfbdad3d52057fbce267b68b3962b214f797334"
+      },
+      "full": {
+        "queryMax": 10000,
+        "ipcRequestMedianBytes": 866.0,
+        "ipcResponseMedianBytes": 68555.0,
+        "wsMedianBytes": 99741.0,
+        "hostSerializationMedianMs": 0.1593125,
+        "latencyMs": {
+          "p50": 21.151104,
+          "p95": 21.656350000000003,
+          "p99": 23.512269999999997
+        },
+        "seed": {
+          "httpBytes": 98312,
+          "httpMs": 2400.204625,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 101681,
+            "rows": 1000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 0.769666
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 68518,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 1.598291
+          }
+        },
+        "joinSnapshotBytes": 98320,
+        "projectionSha256": "4a5f4728c3468e2d3d4608933dfbdad3d52057fbce267b68b3962b214f797334"
+      }
+    },
+    {
+      "history": 10000,
+      "delta": {
+        "queryMax": 10000,
+        "ipcRequestMedianBytes": 883.0,
+        "ipcResponseMedianBytes": 2754.0,
+        "wsMedianBytes": 3452.0,
+        "hostSerializationMedianMs": 1.469042,
+        "latencyMs": {
+          "p50": 14.6227705,
+          "p95": 19.99190655,
+          "p99": 64.38904771
+        },
+        "seed": {
+          "httpBytes": 989317,
+          "httpMs": 441.134333,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 1010681,
+            "rows": 10000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 7.00125
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 680522,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 7.307708
+          }
+        },
+        "joinSnapshotBytes": 989325,
+        "projectionSha256": "9e68775721b45ab4fc0a87c284b1100711c47a5d96e92ad91f7e41b2f7279031"
+      },
+      "full": {
+        "queryMax": 10000,
+        "ipcRequestMedianBytes": 866.0,
+        "ipcResponseMedianBytes": 680561.0,
+        "wsMedianBytes": 990749.0,
+        "hostSerializationMedianMs": 1.2695625000000001,
+        "latencyMs": {
+          "p50": 93.749042,
+          "p95": 142.6125423,
+          "p99": 149.42910846
+        },
+        "seed": {
+          "httpBytes": 989317,
+          "httpMs": 510.689875,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 1010681,
+            "rows": 10000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 7.261125
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 680522,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 7.294791
+          }
+        },
+        "joinSnapshotBytes": 989325,
+        "projectionSha256": "9e68775721b45ab4fc0a87c284b1100711c47a5d96e92ad91f7e41b2f7279031"
+      }
+    },
+    {
+      "history": 40000,
+      "delta": {
+        "queryMax": 50000,
+        "ipcRequestMedianBytes": 883.0,
+        "ipcResponseMedianBytes": 2754.0,
+        "wsMedianBytes": 3452.0,
+        "hostSerializationMedianMs": 5.475771,
+        "latencyMs": {
+          "p50": 27.5729995,
+          "p95": 27.963958299999998,
+          "p99": 28.33762446
+        },
+        "seed": {
+          "httpBytes": 4049317,
+          "httpMs": 1529.181834,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 4040681,
+            "rows": 40000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 29.030375
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 2780522,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 28.702083
+          }
+        },
+        "joinSnapshotBytes": 4049325,
+        "projectionSha256": "c38564d4d27ea7c96e7aa7f8de19cb4bd520c5acacfaa1874bde45fbffc4b79c"
+      },
+      "full": {
+        "queryMax": 50000,
+        "ipcRequestMedianBytes": 866.0,
+        "ipcResponseMedianBytes": 2780561.0,
+        "wsMedianBytes": 4050749.0,
+        "hostSerializationMedianMs": 4.9173124999999995,
+        "latencyMs": {
+          "p50": 334.53114600000004,
+          "p95": 387.3101964499999,
+          "p99": 393.56860568999997
+        },
+        "seed": {
+          "httpBytes": 4049317,
+          "httpMs": 1532.349625,
+          "ipcRequest": {
+            "id": "host-1-4",
+            "bytes": 4040681,
+            "rows": 40000,
+            "barsBase": false,
+            "outputBase": false,
+            "encodeMs": 28.915584
+          },
+          "ipcResponse": {
+            "id": "host-1-4",
+            "bytes": 2780522,
+            "outputPatch": false,
+            "fullOutput": true,
+            "decodeMs": 29.157792
+          }
+        },
+        "joinSnapshotBytes": 4049325,
+        "projectionSha256": "c38564d4d27ea7c96e7aa7f8de19cb4bd520c5acacfaa1874bde45fbffc4b79c"
+      }
+    }
+  ],
+  "artifacts": {
+    "environment.json.gz": {
+      "sha256": "5b9d1ade8fe5c74937fdca612110422e60d5b700725a741b0647f4db88a51531",
+      "originalSha256": "a79df38ef9a2332cfb455fd040cb57d5b70ccbd3cc09271ab391b56a7fe54aeb"
+    },
+    "fault.log.gz": {
+      "sha256": "aa2cfbb6da3ebc1ef914864a96e43f0a42f5c42368efcf46c2b56a793e06d17e",
+      "originalSha256": "c3b8589f734bdefa785d9ae459b133ff2a2bf69ac7573a85ba4348620f64d022"
+    },
+    "fault-initial.log.gz": {
+      "sha256": "47f3f02c1783a34c911122a90b8dded603525d2dec623a48fd9bc95dc3b8eb07",
+      "originalSha256": "54fa782c7acd06b1c6314766afb3b6d35e2c23d3a7df0810d1384315dd119950"
+    },
+    "matrix-delta.log.gz": {
+      "sha256": "66f3827080222a515bf5987077b2584dc79b6dba0c9b841b0ed0c266cee9d429",
+      "originalSha256": "9eb802fa0e3103341af162e5957b774fd32ad8cd780cc9ae6b3e7e4cee6f1ace"
+    },
+    "matrix-full.log.gz": {
+      "sha256": "197c07294a2f9040bd4c1ac5f8893253d06454ad85599c3dddba4fc28a4ef0f9",
+      "originalSha256": "d5e4925c82b7abfb75224b7de0bd3b787fbee319ad270204d76a817e1fd18c90"
+    },
+    "matrix-default-cap.log.gz": {
+      "sha256": "9dac8bfad45646b4ab6a57728dc64e7613c70c4009a04c5528460918ef07df8e",
+      "originalSha256": "b6f5280d72267717f9d30ff28083ddf08c13713d819720d01a470e5deebc06ac"
+    },
+    "matrix-full-initial.log.gz": {
+      "sha256": "a8d9e6abb1afeffdb917a057bd41025cf02ecac1167ba2f2e4caa703a71999bb",
+      "originalSha256": "de272c23361432984afc1a71ac9230b4191d8186f6549bac978e4dd30ed14510"
+    },
+    "test_applied_worker_response_lost_rebuilds_before_serving_projection.json.gz": {
+      "sha256": "a6eb372a002a433d286b6360349d264d6f346ddf3df70380a69812ac52678651",
+      "originalSha256": "217de7e55fafae24c328dfcc3f90e664a0054bd3cfa5487b72413751fa390684"
+    },
+    "test_reconnect_reads_admitted_projection_after_ws_frame_loss.json.gz": {
+      "sha256": "023f7b1f27a14a70e79d1ec38aaa978884326882e028e35d89844f0cae85bba7",
+      "originalSha256": "0bdb404268790643124a6847bf94ba634d5bdd33e43c21fd4d2659c87250fa67"
+    },
+    "matrix-delta-1000.json.gz": {
+      "sha256": "a7eb3cf7cedf3b381d615baad8543c62236f36c9f07541d739bd3ea2e707b41b",
+      "originalSha256": "82eae85964febbd74308afe563d43af1af48304f0d690976fd1268a81e2c797c"
+    },
+    "matrix-full-1000.json.gz": {
+      "sha256": "667aa2e5d3aeb6325d0713a4b8ff5e3cf8cafcb8a3778e9d25ee4ad9e551e36b",
+      "originalSha256": "8a6ec04a1ac456c66b511a27a6e491d9778d93b2631ffc0472d17c9a49324b22"
+    },
+    "matrix-delta-10000.json.gz": {
+      "sha256": "7d773f5cff1d78f9b9b9d0241ec50415314e017f5cc9352ab2aabdb8d2aa340d",
+      "originalSha256": "911c195c8626d6e4ce1f0ebf5ef7e9e38fbd66c55d9d81c22971c9dfbbd338b5"
+    },
+    "matrix-full-10000.json.gz": {
+      "sha256": "44f388b967d8cb97d474197c12927f8beb08e9dcf24d0343db4a13d64857f1ba",
+      "originalSha256": "92deecc2408045c66c483a73e149fd044df10b17ba36f1395b3c2c248b197fe1"
+    },
+    "matrix-delta-40000.json.gz": {
+      "sha256": "58b4f975c8bf98516ffe74fc98efe9330b969462e77fc896dfcfd2cff78ef57f",
+      "originalSha256": "d20dc1402dcc47dd8667262a2d2191905f6966466a238b218adf7313511d609d"
+    },
+    "matrix-full-40000.json.gz": {
+      "sha256": "40e711ad471374c7eeed8047526aa958a45bbff60549e332312299a2e7fa936f",
+      "originalSha256": "d2ad02f53b8b4462e0c343c2e535e6d70829c94542cc10d7fe5876d52dc0412e"
+    },
+    "test_pine_wire_matrix.py": {
+      "sha256": "97e1a2046ed2549b50f0b62716b0f3661d3a6cead6c0cbc1aa019a4fde43aad7"
+    }
+  }
+}
