@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
@@ -189,6 +190,17 @@ def _ledger_snapshot(method):
     return read
 
 
+def _observed_state(method):
+    @wraps(method)
+    def update(self, *args, **kwargs):
+        result = method(self, *args, **kwargs)
+        # A successful matcher observation may only update the unflushed mark.
+        # Wake readers without inventing a durable ledger revision for it.
+        self.store.updates.notify("state")
+        return result
+    return update
+
+
 class TradingAccountService(JournalService):
     def __init__(
         self,
@@ -202,6 +214,7 @@ class TradingAccountService(JournalService):
         super().__init__(store, snapshot_dir=snapshot_dir, clock=clock, id_factory=id_factory)
         self.market = market
         self._feeds: dict[Instrument, _Feed] = {}
+        self._projection_state = threading.local()
         self._practice_position_version: tuple[int, int] | None = None
         self._practice_position_instruments: set[Instrument] = set()
 
@@ -352,7 +365,13 @@ class TradingAccountService(JournalService):
     # ══════════════════════════════════════════════════════════
 
     def _trades(self, account_id: str) -> list[Trade]:
-        return build_trades(account_id, self.store.fills(account_id))
+        projection = getattr(self._projection_state, "trades", None)
+        if projection is not None and account_id in projection:
+            return projection[account_id]
+        trades = build_trades(account_id, self.store.fills(account_id))
+        if projection is not None:
+            projection[account_id] = trades
+        return trades
 
     def _balance(self, account_id: str, trades: list[Trade]) -> Decimal:
         cash = sum((row["amount"] for row in self.store.cash_flows(account_id)), ZERO)
@@ -360,6 +379,15 @@ class TradingAccountService(JournalService):
         return cash + realized
 
     def _mark(self, instrument: Instrument) -> tuple[Decimal | None, int | None, str]:
+        marks = getattr(self._projection_state, "marks", None)
+        if marks is not None and instrument in marks:
+            return marks[instrument]
+        value = self._read_mark(instrument)
+        if marks is not None:
+            marks[instrument] = value
+        return value
+
+    def _read_mark(self, instrument: Instrument) -> tuple[Decimal | None, int | None, str]:
         feed = self._feed(instrument)
         cursor = feed.cursor if feed is not None else None
         now = self.clock()
@@ -375,6 +403,34 @@ class TradingAccountService(JournalService):
         if cursor is not None:
             return cursor.last_close, cursor.observed_ms, "stale"
         return None, None, "none"
+
+    @_ledger_snapshot
+    def account_state(self, account_id: str) -> dict[str, Any]:
+        # Pin the cursor and every financial projection to the same WAL read.
+        cursor = self.store.state_cursor()
+        with self.store.locked():
+            self._projection_state.feeds = {key: replace(feed, timing=dict(feed.timing))
+                                            for key, feed in self._feeds.items()}
+        self._projection_state.marks = {}
+        self._projection_state.trades = {}
+        try:
+            summary = self.account_summary(account_id)
+            try:
+                trades = self.list_trades(account_id)["trades"]
+                entries, journal_error = self.list_entries(account_id)["entries"], None
+            except Exception:
+                # Keep financial views available if optional journal decoding
+                # fails. No empty journal is advertised as a successful read.
+                trades = [trade.to_dict(mark=self._mark((trade.exchange, trade.market_type, trade.symbol))[0]
+                                        if trade.status == "open" else None)
+                          for trade in list(reversed(self._trades(account_id)))[:200]]
+                entries, journal_error = None, "Trading journal unavailable"
+            return {"cursor": cursor, "summary": summary, "trades": trades,
+                    "entries": entries, "journalError": journal_error}
+        finally:
+            del self._projection_state.marks
+            del self._projection_state.feeds
+            del self._projection_state.trades
 
     @_ledger_snapshot
     def account_summary(self, account_id: str) -> dict[str, Any]:
@@ -884,6 +940,17 @@ class TradingAccountService(JournalService):
     # path that produced no fills (every fill is written with its cursor).
 
     def _feed(self, instrument: Instrument) -> _Feed | None:
+        frozen = getattr(self._projection_state, "feeds", None)
+        if frozen is not None:
+            if instrument not in frozen:
+                row = self.store.cursor(*instrument)
+                if row is None:
+                    frozen[instrument] = None
+                else:
+                    cursor = _cursor_from_row(row)
+                    frozen[instrument] = _Feed(cursor, row["status"], row["detail"],
+                        _cursor_key(cursor, row["status"], row["detail"]), int(row["updated_at_ms"]), cursor)
+            return frozen[instrument]
         with self.store.locked():
             feed = self._feeds.get(instrument)
             if feed is None:
@@ -925,6 +992,7 @@ class TradingAccountService(JournalService):
         feed.flushed_at_ms = now
         feed.flushed_cursor = cursor
 
+    @_observed_state
     def apply_market_bars(
         self,
         instrument: Instrument,
@@ -1013,6 +1081,7 @@ class TradingAccountService(JournalService):
             )))
         return sessions
 
+    @_observed_state
     def set_feed_status(self, instrument: Instrument, status: str, detail: str = "") -> None:
         detail = detail[:500]
         with self.store.locked():
@@ -1027,6 +1096,7 @@ class TradingAccountService(JournalService):
                 self._write_feed(conn, instrument, feed.cursor, status, detail, now)
             self._mark_flushed(feed, feed.cursor, status, detail, now)
 
+    @_observed_state
     def record_feed_timing(self, instrument: Instrument, timing: dict[str, int]) -> None:
         with self.store.locked():
             feed = self._feed(instrument)

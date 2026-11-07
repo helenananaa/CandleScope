@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from .strategy import StrategyDataManager
 from .account import ReadOnlyAccountDataManager
+from .trading import TradingAccountDataManager
 from .replay import ReplayDataManager
 
 if TYPE_CHECKING:
@@ -17,9 +18,26 @@ class DataManagerCore:
     def __init__(self) -> None:
         self.strategy: StrategyDataManager | None = None
         self.readonly_account: ReadOnlyAccountDataManager | None = None
+        self.trading: TradingAccountDataManager | None = None
         self.replay: ReplayDataManager | None = None
         self._history_studies = None
         self._study_lock = threading.Lock()
+
+    def bind_trading(self, service) -> TradingAccountDataManager:
+        if self.trading is not None:
+            if self.trading.service is not service:
+                raise RuntimeError("trading account service is already bound")
+            return self.trading
+        self.trading = TradingAccountDataManager(service)
+        return self.trading
+
+    def close_trading(self) -> None:
+        if self.trading is not None:
+            self.trading.close()
+
+    async def shutdown_trading(self) -> None:
+        if self.trading is not None:
+            await self.trading.shutdown()
 
     def bind_replay(self, service, runtime=None) -> ReplayDataManager:
         if self.replay is not None:
