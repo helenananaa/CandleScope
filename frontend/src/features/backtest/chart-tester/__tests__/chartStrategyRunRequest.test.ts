@@ -515,6 +515,8 @@ test("fixed-history DataManager owns the actual research stream without Run poll
     async getReport() { throw new Error("Result loading is a separate operation"); },
     async getChart() { throw new Error("Result loading is a separate operation"); },
     async cancelRun() { throw new Error("Releasing a consumer must not cancel execution"); },
+    async listRuns() { throw new Error("Run history is a separate operation"); },
+    async compareRuns() { throw new Error("Run comparison is a separate operation"); },
     async streamRun(runId, signal, onUpdate) {
       calls.push("stream");
       assert.equal(runId, completed().run_id);

@@ -1,4 +1,8 @@
 export const researchBatchEnglish = {
+  "researchBatch.compareFirst": "First run",
+  "researchBatch.compareSecond": "Second run",
+  "researchBatch.compareDelta": "Difference",
+  "researchBatch.compareLoading": "Comparing saved runs…",
   "researchBatch.sources": "Batch over imported data",
   "researchBatch.help": "Select two to {max} datasets. Each task uses the current strategy and settings with a fixed data version.",
   "researchBatch.run": "Run selected datasets",
@@ -13,6 +17,10 @@ export const researchBatchEnglish = {
 } as const;
 
 export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "第一项运行",
+  "researchBatch.compareSecond": "第二项运行",
+  "researchBatch.compareDelta": "差值",
+  "researchBatch.compareLoading": "正在比较已保存的运行…",
   "researchBatch.sources": "批量运行导入数据",
   "researchBatch.help": "选择 2 至 {max} 份数据。每项任务都使用当前策略和设置，以及各自固定的数据版本。",
   "researchBatch.run": "运行所选数据",

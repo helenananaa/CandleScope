@@ -573,7 +573,7 @@ export default function StrategyResearchApp({
       </aside>}
       {historyOpen && <aside className="research-data-drawer" role="dialog" aria-label={t("ux.history")}>
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
-        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setHistoryOpen(false); }} /></Suspense>
+        <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
           onResume={id => researchRun.batch.resume(id)}
           onOpen={job => {
