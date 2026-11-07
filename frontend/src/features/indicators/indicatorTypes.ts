@@ -39,7 +39,7 @@ export interface ScriptRuntimeCatalog {
 }
 
 export interface IndicatorDefinition {
-  runtimeNotice?: "pine.host.recovered" | "pine.host.resetNotice" | "pine.host.alertFailed" | null;
+  runtimeNotice?: "pine.host.recovered" | "pine.host.resetNotice" | "pine.host.runtimeResetNotice" | "pine.host.alertFailed" | null;
   id: string;
   /** Stable identity shared by linked chart groups; computed results remain cell-local. */
   bindingId?: string;

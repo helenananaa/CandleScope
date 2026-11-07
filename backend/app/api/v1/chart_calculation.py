@@ -16,7 +16,7 @@ from app.core import config
 from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_indicator, run_storage
 from app.indicator.calculation_contract import check_reference, projection_position
-from app.indicator.calculation_owner import CalculationOwnerError
+from app.indicator.calculation_owner import CalculationOwnerError, RuntimeTailReset
 from app.indicator.chart_source import ChartSource
 from app.indicator.pine_calculation import PineCalculationRuntime, calculation_identity
 from app.indicator.series_reference import series_reference
@@ -46,7 +46,7 @@ class ChartCalculation:
         self._writer = None
         self._dispose_writer = None
         self._inputs = ()
-        self._source_rebuild_notice = None
+        self._rebuild_notice = None
         self._source_epoch = 0
         self._barrier = None
         self._barrier_ids = deque(maxlen=64)
@@ -117,14 +117,22 @@ class ChartCalculation:
         if calculation_identity(candidate, series_reference(meta)) != self.owner.plan.semantic_identity:
             raise CalculationOwnerError('INDICATOR_CALCULATION_INPUT_INVALID')
 
-    async def _command(self, operation):
+    async def _command(self, operation, *, recover_tail=False):
         if self._closing:
             raise CalculationOwnerError('INDICATOR_CALCULATION_CLOSED')
         if len(self._tasks) >= 8:
             raise CalculationOwnerError('INDICATOR_CALCULATION_BUSY')
         async def run():
             async with self._lock:
-                return await operation()
+                try:
+                    return await operation()
+                except RuntimeTailReset:
+                    if not recover_tail:
+                        raise
+                    # The rejected tail never becomes a public cursor. Keep
+                    # the writer and reseed once from the canonical origin.
+                    self.invalidate()
+                    return await operation(reset_reason='runtimeRebuild')
         task = asyncio.create_task(run(), name='chart-calculation:' + self.owner_id)
         self._tasks.add(task)
         def finished(done):
@@ -145,7 +153,7 @@ class ChartCalculation:
         acquisition.commit(publish)
         return payload
 
-    async def _advance(self, rows, revision, *, client_id, rebuild, acquisition, bar_time=0, epoch=None):
+    async def _advance(self, rows, revision, *, client_id, rebuild, acquisition, bar_time=0, epoch=None, reset_reason='sourceRebuild'):
         payload = None
         epoch = self._source_epoch if epoch is None else epoch
         meta = {**self.meta, 'pineLiveUpdate':bool(bar_time), 'pineLiveBarTime':int(bar_time)}
@@ -171,12 +179,12 @@ class ChartCalculation:
         if rebuild:
             # The owner accepted a new runtime epoch from canonical BARs.
             # Keep its recovery notice for readers of the cached projection.
-            self._source_rebuild_notice = {
+            self._rebuild_notice = {
                 'sessionReset': True,
-                'sessionResetReason': 'sourceRebuild',
+                'sessionResetReason': reset_reason,
                 'sessionRecovered': False,
             }
-            payload['meta'] = {**payload.get('meta', {}), **self._source_rebuild_notice}
+            payload['meta'] = {**payload.get('meta', {}), **self._rebuild_notice}
         return payload
 
     async def _query(self, start, end, *, live=False, acquisition):
@@ -200,12 +208,12 @@ class ChartCalculation:
         payload = await run_indicator(_snapshot_payload,client_id,self.meta,snapshot.output)
         payload['range'] = {'start':self.owner.plan.start, 'end':cursor.observed_through}
         if self._inputs: payload['param_schema'] = [dict(item) for item in self._inputs]
-        if self._source_rebuild_notice is not None:
-            payload['meta'] = {**payload.get('meta', {}), **self._source_rebuild_notice}
+        if self._rebuild_notice is not None:
+            payload['meta'] = {**payload.get('meta', {}), **self._rebuild_notice}
         return self._stamp(payload, cursor, revision, acquisition)
 
     async def view(self, reference, *, client_id, start, end, rebuild=False, complete=False):
-        async def read():
+        async def read(*, reset_reason='sourceRebuild'):
             check_reference(self.owner, reference)
             self._require_source_ready()
             if start < self.owner.plan.start or end < start:
@@ -220,7 +228,7 @@ class ChartCalculation:
                     acquisition=acquisition)
                 # Rebuilds preserve the whole old prefix atomically. They may
                 # not be sliced into the narrow range that triggered repair.
-                return await self._advance(rows, revision, client_id=client_id, rebuild=reset, epoch=epoch,acquisition=acquisition)
+                return await self._advance(rows, revision, client_id=client_id, rebuild=reset, epoch=epoch,acquisition=acquisition,reset_reason=reset_reason)
             payload = await self._snapshot(client_id, revision,acquisition)
             if complete:
                 payload['type'] = 'indicator.snapshot'
@@ -228,7 +236,7 @@ class ChartCalculation:
             replacement = _replace_range_from_snapshot(payload, reason='chart-domain-view',
                 start_s=start, end_s=min(end,cursor.observed_through))
             return self._stamp(replacement, cursor, revision,acquisition)
-        return await self._command(read)
+        return await self._command(read,recover_tail=True)
 
     async def attach(self, reference, *, writer_id, dispose):
         async def claim():
@@ -243,7 +251,7 @@ class ChartCalculation:
             self._writer = self._dispose_writer = None
 
     async def live(self, *, writer_id, client_id, through=0, input_bar=None):
-        async def update():
+        async def update(*, reset_reason='sourceRebuild'):
             if self._writer != writer_id:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_WRITER_CHANGED')
             self._require_source_ready()
@@ -285,8 +293,8 @@ class ChartCalculation:
                     # Never write it back into that canonical market cache.
                     rows = [input_bar if row.time == int(through) else row for row in rows]
             return await self._advance(rows, revision, client_id=client_id, rebuild=rebuild,
-                bar_time=0 if rebuild else int(through), epoch=epoch,acquisition=acquisition)
-        return await self._command(update)
+                bar_time=0 if rebuild else int(through), epoch=epoch,acquisition=acquisition,reset_reason=reset_reason)
+        return await self._command(update,recover_tail=True)
 
     async def close(self):
         if self._close_task is None or (self._close_task.done() and (

@@ -16,6 +16,7 @@ test("native scene survives unified parsing and state clearing removes drawable 
   assert.deepEqual(clearIndicatorLineData(parsed.lines)[0]?.nativeScene?.times, []);
   assert.equal(pineRuntimeNotice({ sessionRecovered: true }), "pine.host.recovered");
   assert.equal(pineRuntimeNotice({ sessionReset: true, sessionResetReason: "historyChanged" }), "pine.host.resetNotice");
+  assert.equal(pineRuntimeNotice({ sessionReset: true, sessionResetReason: "runtimeRebuild" }), "pine.host.runtimeResetNotice");
 });
 
 test("native scene projects actual time/price coordinates, repaints tables and detaches", () => {

@@ -533,3 +533,21 @@ def test_http_cannot_bypass_ws_parent_repair_barrier_and_close_cancels_only_sour
             repeated = receive(ws,'indicator.snapshot')
             assert ref(repeated) == ref(repaired)
             assert wire.host.diagnostics()['runtimes'][0]['requests'] == before
+
+
+def test_http_tail_rebuilds_from_origin_after_runtime_state_is_released(wire):
+    initial = wire.client.post('/indicators/calculations', json=open_request()).json()
+    reference = ref(initial)
+    assert value(initial) == 500
+    route = wire.service.route_for('pine')
+    wire.client.portal.call(wire.host.release_stream, route.runtime_id, reference['domainId'])
+    wire.source.rows = list(bars(501))
+    rebuilt = view(wire, reference, end=bars(501)[-1].time)
+    assert value(rebuilt) == 501
+    assert rebuilt['type'] == 'indicator.snapshot'
+    assert rebuilt['calculation']['origin'] == initial['calculation']['origin']
+    assert rebuilt['calculation']['generation'] == initial['calculation']['generation'] + 1
+    assert rebuilt['calculation']['sequence'] == initial['calculation']['sequence'] + 1
+    assert rebuilt['meta']['sessionResetReason'] == 'runtimeRebuild'
+    assert rebuilt['meta']['sessionRecovered'] is False
+    assert wire.client.delete('/indicators/calculations/' + reference['domainId']).json()['state'] == 'closed'

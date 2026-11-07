@@ -415,3 +415,42 @@ def test_finalizing_current_bucket_preserves_inflight_observation(real_bus_wire,
         ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
         transport.receive(ws, 'indicator.unsubscribed')
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_discarded_runtime_tail_is_reseeded_from_origin_without_losing_writer(real_bus_wire):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    reference = transport.ref(initial)
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, reference)
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        assert transport.value(transport.receive(ws, 'indicator.snapshot')) == 500
+        for close, value in ((101, 501), (103, 502)):
+            wire.client.post('/fixture/tick/501?close=' + str(close))
+            last = transport.receive(ws, 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+            assert transport.value(last) == value
+
+        # The actual sidecar loses its retained execution and output while
+        # the chart still owns its source, reference, and live subscription.
+        route = wire.service.route_for('pine')
+        wire.client.portal.call(wire.host.release_stream, route.runtime_id, reference['domainId'])
+        wire.client.post('/fixture/tick/501?close=104')
+        rebuilt = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert rebuilt['type'] == 'indicator.snapshot', rebuilt
+        assert transport.value(rebuilt) == 501
+        assert rebuilt['calculation']['generation'] == last['calculation']['generation'] + 1
+        assert rebuilt['calculation']['sequence'] == last['calculation']['sequence'] + 1
+        assert rebuilt['calculation']['origin'] == initial['calculation']['origin']
+        assert rebuilt['meta']['sessionResetReason'] == 'runtimeRebuild'
+        assert rebuilt['meta']['sessionRecovered'] is False
+        cached = transport.view(wire, transport.ref(rebuilt))
+        assert cached['meta']['sessionResetReason'] == 'runtimeRebuild'
+        assert wire.service.calculations.snapshot()['holders'] == 1
+        wire.client.post('/fixture/tick/501?close=105')
+        continued = transport.receive(ws, 'error', 'indicator.replace_range', 'indicator.patch', 'indicator.snapshot')
+        assert continued['type'] != 'error', continued
+        assert transport.value(continued) == 502
+        assert continued['calculation']['generation'] == rebuilt['calculation']['generation']
+        ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
+        transport.receive(ws, 'indicator.unsubscribed')
+    assert wire.client.delete('/indicators/calculations/' + reference['domainId']).json()['state'] == 'closed'

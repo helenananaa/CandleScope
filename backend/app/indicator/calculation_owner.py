@@ -24,6 +24,13 @@ class CalculationOwnerError(RuntimeError):
         super().__init__(code)
 
 
+class RuntimeTailReset(CalculationOwnerError):
+    """A real runtime reset its partial input and must be reseeded from origin."""
+
+    def __init__(self):
+        super().__init__('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+
+
 @dataclass(frozen=True, slots=True)
 class CalculationPlan:
     owner_id: str
@@ -139,8 +146,10 @@ class ScriptCalculationOwner:
                     raise CalculationOwnerError('INDICATOR_CALCULATION_REBUILD_NOT_APPLIED')
                 # A dropped runtime/session cannot silently restart a cumulative
                 # script from the currently displayed/sliding tail.
-                if not execution.retained or (execution.reset and input_start != self.plan.start):
+                if not execution.retained:
                     raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED')
+                if execution.reset and input_start != self.plan.start:
+                    raise RuntimeTailReset()
                 snapshot = await self._read(execution.output)
                 if snapshot is None or snapshot.reference != execution.output:
                     raise CalculationOwnerError('INDICATOR_CALCULATION_OUTPUT_LOST')
