@@ -286,6 +286,7 @@ export function useStrategyResearchRun(input: {
   return {
     session,
     batch,
+    historyManager: dataManager.strategy,
     barOnly,
     runStatus: (restoringRun ? "RUNNING" : snapshot.status) as ChartStrategyTesterStatus,
     stale: inputStale || updatingResult,

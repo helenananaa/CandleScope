@@ -9,7 +9,7 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns">;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -95,6 +95,23 @@ export class StrategyDataManager {
       const terminal = isBacktestTerminalState(current.state) && current.state !== "FAILED" ? current : await this.wait(runId, owned);
       this.requireCompleted(terminal);
       return this.readResult(runId, owned);
+    });
+  }
+
+  listRuns(signal?: AbortSignal) {
+    return this.operation(signal, (owned) => this.api.listRuns(owned));
+  }
+
+  compareRuns(leftRunId: string, rightRunId: string, signal?: AbortSignal) {
+    return this.operation(signal, async (owned) => {
+      if (!leftRunId || !rightRunId || leftRunId === rightRunId) {
+        throw new StrategyRunStreamError("COMPARISON_PAIR_INVALID", "Select two different runs");
+      }
+      const comparison = await this.api.compareRuns(leftRunId, rightRunId, owned);
+      if (comparison.schema !== "RUN_COMPARE_V3" || comparison.left.runId !== leftRunId || comparison.right.runId !== rightRunId) {
+        throw new StrategyRunStreamError("RESULT_IDENTITY_MISMATCH", "Comparison response does not match the selected runs");
+      }
+      return comparison;
     });
   }
 
