@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import * as q from './native-driver.mjs';
 
 const seed = JSON.parse(await fs.readFile(q.s.root + '/research-seed.json', 'utf8'));
@@ -45,6 +46,13 @@ async function quit() {
   assert.equal(exit?.signal, null);
   assert.deepEqual(receipt.killRequests, []);
   await q.record('full-exit', {exit, owned: q.s.quitPids});
+}
+
+function coldAccount(id) {
+  return JSON.parse(execFileSync('python3', [
+    '-B', 'docs/qa/continuous-live-main268-20261107/cold_account.py',
+    q.s.root + '/profile', id, seed.runId, process.env.CANDLESCOPE_QA_SEED_PROFILE,
+  ], {encoding: 'utf8'}));
 }
 
 try {
@@ -96,17 +104,32 @@ try {
   await q.screenshot('live-chart-account');
   await q.record('live-account', account);
   await quit();
+  const cold = coldAccount(account.id);
+  await q.record('cold-account-before-restart', cold);
   await launch();
   const restored = await q.until(async () => {
     await q.checkCircuit();
     const result = await read(continuous + '/runs/' + account.id);
-    return result.run?.phase === 'LIVE' && result.run.sequence > account.sequence ? result : false;
+    return result.run?.phase === 'LIVE' && result.run.sequence > cold.sequence ? result : false;
   }, 150000);
   await q.record('same-account-advanced', restored);
   assert.equal(creates.length, 1);
   assert.equal((await read(continuous + '/runs')).runs.length, 1);
+  const reopened = q.s.page.locator('[data-continuous-account="' + account.id + '"]');
+  if (!await reopened.isVisible()) {
+    const dock = q.s.page.getByRole('button', {name: '图表策略', exact: true});
+    if (await dock.isVisible()) await dock.click();
+  }
+  await reopened.waitFor();
+  const rendered = await reopened.locator('.continuous-account dd').allTextContents();
+  assert.ok(Number(rendered[2]) >= restored.run.sequence);
+  assert.equal(await q.s.page.getByTestId('strategy-python-confirm').isChecked(), false);
   await q.screenshot('restarted-chart-account');
   await quit();
+  const after = coldAccount(account.id);
+  assert.ok(after.sequence > cold.sequence && after.eventTimeMs > cold.eventTimeMs);
+  assert.deepEqual(after.fills.slice(0, cold.fills.length), cold.fills);
+  await q.record('cold-account-after-restart', {after, rendered});
   assert.deepEqual(q.s.receipt.errors, []);
   q.s.receipt.passed = true;
 } catch (error) {
