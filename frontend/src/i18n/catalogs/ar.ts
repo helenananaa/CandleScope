@@ -4305,6 +4305,7 @@ export const ar = {
   "research.data.noContext": "هذه المدخلة بلا هوية مجموعة مجمَّدة.",
   "research.data.available": "مجموعات محلية متاحة",
   "research.execution.precise": "تبقى دقة تسلسل الصفقات وافتراضات التنفيذ صريحة وثابتة لكل تشغيل.",
+  "research.execution.preciseArchiveHint": "يستخدم التنزيل التلقائي صفقات العقود الآجلة المجمّعة من Binance USD-M. اختر نطاقًا زمنيًا ضمن أيام UTC المنتهية.",
   "research.execution.python": "تُهيَّأ بيئات بايثون والنماذج الخارجية داخل تطبيق البحث هذا فقط.",
   "research.execution.general": "تبقى عناصر تحكم التنفيذ في نطاق المهمة المحددة ولا تعدِّل تشغيلاً مكتملاً أبداً.",
   "research.run.none": "لم يُحدَّد BacktestRun.",

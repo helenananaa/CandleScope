@@ -4305,6 +4305,7 @@ export const it = {
   "research.data.noContext": "Questa voce non ha un'identità di dataset congelata.",
   "research.data.available": "Dataset locali disponibili",
   "research.execution.precise": "La fedeltà della sequenza dei trade e le ipotesi di esecuzione restano esplicite e immutabili per Run.",
+  "research.execution.preciseArchiveHint": "Il download automatico usa gli scambi aggregati dei futures Binance USD-M. Seleziona un intervallo compreso in giorni UTC già conclusi.",
   "research.execution.python": "I runtime Python e di modelli esterni si inizializzano solo all'interno di questa applicazione di ricerca.",
   "research.execution.general": "I controlli di esecuzione restano circoscritti al compito selezionato e non mutano mai una Run completata.",
   "research.run.none": "Nessun BacktestRun selezionato.",

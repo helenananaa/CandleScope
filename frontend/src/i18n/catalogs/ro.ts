@@ -4305,6 +4305,7 @@ export const ro = {
   "research.data.noContext": "Această intrare nu are o identitate de set de date înghețată.",
   "research.data.available": "Seturi de date locale disponibile",
   "research.execution.precise": "Fidelitatea secvenței de tranzacții și ipotezele de execuție rămân explicite și imutabile per Run.",
+  "research.execution.preciseArchiveHint": "Descărcarea automată folosește tranzacțiile agregate ale contractelor futures Binance USD-M. Selectați un interval în zile UTC deja încheiate.",
   "research.execution.python": "Runtime-urile Python și de modele externe se inițializează doar în interiorul acestei aplicații de cercetare.",
   "research.execution.general": "Controalele de execuție rămân în domeniul sarcinii selectate și nu mută niciodată un Run finalizat.",
   "research.run.none": "Niciun BacktestRun nu este selectat.",

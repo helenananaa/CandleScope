@@ -4305,6 +4305,7 @@ export const sv = {
   "research.data.noContext": "Den här ingången har ingen fryst datasetidentitet.",
   "research.data.available": "Tillgängliga lokala dataset",
   "research.execution.precise": "Transaktionssekvensprecision och utförandeantaganden förblir explicita och oföränderliga per Run.",
+  "research.execution.preciseArchiveHint": "Automatisk nedladdning använder aggregerade avslut för Binance USD-M-terminer. Välj ett intervall inom avslutade UTC-dygn.",
   "research.execution.python": "Python- och externa modell-runtime initieras bara inne i den här research-applikationen.",
   "research.execution.general": "Utförandekontroller förblir begränsade till den valda uppgiften och muterar aldrig en avslutad Run.",
   "research.run.none": "Ingen BacktestRun är vald.",

@@ -4305,6 +4305,7 @@ export const cs = {
   "research.data.noContext": "Tento vstup nemá zmrazenou identitu datové sady.",
   "research.data.available": "Dostupné místní datové sady",
   "research.execution.precise": "Věrnost posloupnosti obchodů a předpoklady provedení zůstávají explicitní a neměnné na Run.",
+  "research.execution.preciseArchiveHint": "Automatické stahování používá agregované obchody futures Binance USD-M. Vyberte období v rámci ukončených dnů UTC.",
   "research.execution.python": "Běhová prostředí Pythonu a externích modelů se inicializují jen uvnitř této výzkumné aplikace.",
   "research.execution.general": "Ovládací prvky provedení zůstávají v rozsahu zvolené úlohy a nikdy nemění dokončený Run.",
   "research.run.none": "Není vybrán žádný BacktestRun.",

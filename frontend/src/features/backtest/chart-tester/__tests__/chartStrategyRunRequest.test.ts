@@ -618,18 +618,79 @@ test("gapped imported windows are not READY and never create a Run", async () =>
   assert.equal(calls.includes("create"), false);
 });
 
+const preciseRequest = {
+  ...request,
+  attachment: {
+    ...request.attachment,
+    fidelityPreference: "PRECISE" as const,
+    rangeMode: "CUSTOM" as const,
+    customRange: { startMs: Date.UTC(2026, 9, 24, 23), endMs: Date.UTC(2026, 9, 25) },
+  },
+};
+
+test("precise research never launches an estimated snapshot", async () => {
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution()], calls);
+  api.prepareChartContext = async () => assert.fail("unexpected preparation of an estimated snapshot");
+  await assert.rejects(
+    runResearchBacktest({ api, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /resolved snapshot lacks aggregate-trade fidelity/,
+  );
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve"]);
+});
+
+test("precise research prepares and archives the trade snapshot without manual BAR materialization", async () => {
+  const calls: string[] = [];
+  const unresolved = resolution("NEEDS_DATA");
+  const api = apiWithResolutions([unresolved], calls);
+  api.prepareChartContext = async (context) => {
+    assert.equal(context.fidelity_preference, "PRECISE");
+    assert.equal(context.end_time_ms, preciseRequest.attachment.customRange.endMs - 1);
+    return {
+      ...resolution(),
+      request: context,
+      fidelity: { preference: "PRECISE", mode: "AGG_TRADE_EXECUTION", capabilities: ["AGG_TRADE_EXECUTION"] },
+      prepared_run: { ...completed(), fidelity_mode: "AGG_TRADE_EXECUTION", source_event_kind: "AGG_TRADE" },
+    };
+  };
+  const outcome = await runResearchBacktest({
+    api, request: preciseRequest, source: { kind: "CURRENT_CHART", materializeResolution: unresolved },
+  });
+  assert.equal(outcome.kind, "TERMINAL");
+  assert.equal(outcome.resolution.fidelity.mode, "AGG_TRADE_EXECUTION");
+  assert.equal(outcome.frozenContext?.capabilitySummary.fidelityCeiling, "TRADE_TAPE");
+  assert.deepEqual(calls, ["revision:PINE_ENGINE", "resolve"]);
+  const prepare = api.prepareChartContext;
+  const mismatchApi = apiWithResolutions([unresolved], []);
+  mismatchApi.prepareChartContext = async (context, signal, intent, key) => ({
+    ...await prepare(context, signal, intent, key),
+    prepared_run: completed(),
+  });
+  await assert.rejects(
+    runResearchBacktest({ api: mismatchApi, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /run was not created with aggregate-trade fidelity/,
+  );
+});
+
+test("precise research surfaces missing verified coverage when automatic preparation is unavailable", async () => {
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], []);
+  await assert.rejects(
+    runResearchBacktest({ api, request: preciseRequest, source: { kind: "CURRENT_CHART" } }),
+    /Verified aggregate-trade coverage is unavailable/,
+  );
+});
+
 test("imported precise fidelity is rejected as BAR_ONLY", async () => {
+  const calls: string[] = [];
   await assert.rejects(
     () => runResearchBacktest({
-      api: importedApi([]),
-      request: {
-        ...request,
-        attachment: { ...request.attachment, fidelityPreference: "PRECISE" },
-      },
+      api: importedApi(calls),
+      request: preciseRequest,
       source: importedSource,
     }),
     (error: unknown) => error instanceof Error && "code" in error && error.code === "FIDELITY_UNSUPPORTED",
   );
+  assert.deepEqual(calls, []);
 });
 
 test("continuous handoff sends its profile to preparation and never falls back to the default executor", async () => {

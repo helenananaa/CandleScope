@@ -4306,6 +4306,7 @@ export const fr = {
   "research.data.noContext": "Cette entrée n’a pas d’identité figée de jeu de données.",
   "research.data.available": "Jeux de données locaux disponibles",
   "research.execution.precise": "La fidélité de la séquence d’exécutions et les hypothèses d’exécution restent explicites et immuables pour chaque Run.",
+  "research.execution.preciseArchiveHint": "Le téléchargement automatique utilise les transactions agrégées des contrats à terme Binance USD-M. Sélectionnez une période comprise dans des jours UTC terminés.",
   "research.execution.python": "Les runtimes Python et de modèles externes ne s’initialisent que dans cette application de recherche.",
   "research.execution.general": "Les commandes d’exécution restent limitées à la tâche sélectionnée et ne modifient jamais un Run terminé.",
   "research.run.none": "Aucun BacktestRun n’est sélectionné.",

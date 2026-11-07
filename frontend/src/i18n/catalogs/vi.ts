@@ -4305,6 +4305,7 @@ export const vi = {
   "research.data.noContext": "Mục này không có danh tính tập dữ liệu đóng băng.",
   "research.data.available": "Tập dữ liệu cục bộ khả dụng",
   "research.execution.precise": "Độ trung thực chuỗi giao dịch và giả định thực thi vẫn rõ ràng và bất biến trên mỗi lần Chạy.",
+  "research.execution.preciseArchiveHint": "Tải tự động sử dụng giao dịch gộp từ hợp đồng tương lai Binance USD-M. Hãy chọn khoảng thời gian trong những ngày UTC đã kết thúc.",
   "research.execution.python": "Runtime Python và mô hình bên ngoài chỉ khởi tạo trong ứng dụng nghiên cứu này.",
   "research.execution.general": "Điều khiển thực thi luôn giới hạn trong nhiệm vụ đã chọn và không bao giờ sửa một lần Chạy đã hoàn tất.",
   "research.run.none": "Chưa chọn BacktestRun.",

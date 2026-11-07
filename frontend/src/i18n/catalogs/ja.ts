@@ -4637,6 +4637,7 @@ export const ja = {
   "research.data.noContext": "このエントリには凍結データセット ID がありません。",
   "research.data.available": "利用可能なローカルデータセット",
   "research.execution.precise": "約定系列の忠実度と執行前提は、ランごとに明示され不変です。",
+  "research.execution.preciseArchiveHint": "自動ダウンロードには Binance USD-M 先物の集約約定を使用します。終了済みの UTC 日付内で期間を指定してください。",
   "research.execution.python": "Python と外部モデルのランタイムは、この研究アプリ内でのみ初期化されます。",
   "research.execution.general": "執行コントロールは選択中のタスクに限定され、完了ランは変更しません。",
   "research.run.none": "BacktestRun が未選択です。",

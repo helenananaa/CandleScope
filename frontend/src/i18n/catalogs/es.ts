@@ -4315,6 +4315,7 @@ export const es = {
   "research.data.noContext": "Esta entrada no tiene identidad de conjunto de datos congelado.",
   "research.data.available": "Conjuntos de datos locales disponibles",
   "research.execution.precise": "La fidelidad de la secuencia de operaciones y las hipótesis de ejecución permanecen explícitas e inmutables en cada Run.",
+  "research.execution.preciseArchiveHint": "La descarga automática usa operaciones agregadas de futuros Binance USD-M. Selecciona un intervalo dentro de días UTC ya finalizados.",
   "research.execution.python": "Los runtimes de Python y de modelos externos se inicializan solo dentro de esta aplicación de investigación.",
   "research.execution.general": "Los controles de ejecución quedan limitados a la tarea seleccionada y nunca modifican un Run completado.",
   "research.run.none": "No hay ningún BacktestRun seleccionado.",

@@ -4305,6 +4305,7 @@ export const ms = {
   "research.data.noContext": "Pintu ini tiada identiti set data beku.",
   "research.data.available": "Set data setempat tersedia",
   "research.execution.precise": "Ketepatan jujukan dagangan dan andaian pelaksanaan kekal eksplisit dan tidak boleh diubah setiap Run.",
+  "research.execution.preciseArchiveHint": "Muat turun automatik menggunakan dagangan agregat niaga hadapan Binance USD-M. Pilih julat dalam hari UTC yang telah tamat.",
   "research.execution.python": "Runtime Python dan model luaran dimulakan hanya dalam aplikasi penyelidikan ini.",
   "research.execution.general": "Kawalan pelaksanaan kekal terhad kepada tugas yang dipilih dan tidak pernah mengubah Run siap.",
   "research.run.none": "Tiada BacktestRun dipilih.",

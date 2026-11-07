@@ -1,9 +1,10 @@
 import { t } from "../../../i18n/index.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 
-export function StrategyConditionsEditor({ settings, marketType, onChange }: {
+export function StrategyConditionsEditor({ settings, marketType, preciseAvailable, onChange }: {
   settings: StrategyRunSettings;
   marketType: string;
+  preciseAvailable?: boolean;
   onChange(settings: StrategyRunSettings): void;
 }) {
   const profile = settings.pythonBarExecution;
@@ -23,6 +24,18 @@ export function StrategyConditionsEditor({ settings, marketType, onChange }: {
       output: t(profile.outputMode === "SIGNAL" ? "continuous.signal" : profile.outputMode === "ORDER_INTENT" ? "continuous.order" : "continuous.target"),
       model: profile.executionModel, warmup: profile.warmupBars,
     })}</p>}
+    {preciseAvailable !== undefined && !profile && <>
+      <label className="strategy-condition-range">{t("chartTester.settings.fidelity")}
+        <select value={settings.fidelityPreference ?? "FAST"} onChange={(event) => onChange({
+          ...settings, fidelityPreference: event.currentTarget.value === "PRECISE" ? "PRECISE" : "FAST",
+        })}>
+          <option value="FAST">{t("chartTester.settings.fast")}</option>
+          <option value="PRECISE" disabled={!preciseAvailable}>{t("chartTester.settings.precise")}</option>
+        </select>
+      </label>
+      {!preciseAvailable ? <p>{t("research.capability.tapeDenied")}</p>
+        : settings.fidelityPreference === "PRECISE" && <p>{t("research.execution.preciseArchiveHint")}</p>}
+    </>}
     <label className="strategy-condition-range">{t("chartTester.settings.date")}
       <select disabled={!!profile} value={settings.rangeMode} onChange={(event) => onChange({ ...settings, rangeMode: event.target.value as StrategyRunSettings["rangeMode"], customRange: event.target.value === "ALL_AVAILABLE" ? null : { startMs: 0, endMs: 0 } })}>
         <option value="ALL_AVAILABLE">{t("chartTester.settings.allAvailable")}</option><option value="CUSTOM">{t("ux.customRange")}</option>

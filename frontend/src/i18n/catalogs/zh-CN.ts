@@ -4900,6 +4900,7 @@ export const zhCN = {
   "research.data.noContext": "该入口没有冻结数据身份。",
   "research.data.available": "本地可用数据集",
   "research.execution.precise": "逐笔精度和执行假设在每个 Run 内显式记录且不可变。",
+  "research.execution.preciseArchiveHint": "自动下载使用 Binance USD-M 合约聚合成交数据。请选择已结束的 UTC 日期内的时间范围。",
   "research.execution.python": "Python 与外部模型 runtime 只在该研究应用内初始化。",
   "research.execution.general": "执行控制只属于当前任务，不会修改已完成 Run。",
   "research.run.none": "尚未选择 BacktestRun。",
