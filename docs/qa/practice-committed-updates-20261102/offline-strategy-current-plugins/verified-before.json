@@ -1,0 +1,16 @@
+{
+  "verifiedAt": "2026-11-02T12:00:37.879Z",
+  "sourceCommit": "026c600e0eb44fac8c8267291977450749038031",
+  "sourceFiles": 1037,
+  "builtFiles": 161,
+  "pluginAssets": 9,
+  "pluginSources": {
+    "bundleSha256": "sha256:f9a075b9f5c2153ba3577f60d9cc5cd68469a030b06bb6b049f8481252d51912",
+    "pluginSourceFiles": 76,
+    "mismatches": [],
+    "engineUnchanged": true
+  },
+  "mismatches": [],
+  "strictSignature": true,
+  "signatureError": null
+}

@@ -991,6 +991,7 @@ class DataManager(DataManagerCore):
         """Gracefully shut down everything."""
         self.close_strategy()
         self.close_readonly_account()
+        self.close_trading()
         if self.history_prefix_runtime is not None:
             await self.history_prefix_runtime.close()
         self.shared_blocks.close()
