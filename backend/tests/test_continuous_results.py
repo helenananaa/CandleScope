@@ -244,6 +244,9 @@ def test_byte_limited_pages_and_oversize_item_fail_without_partial_financial_pub
         page=store.results.read('cs_test',kind='rejected',limit=200)
         assert page['more'] and 1<=len(page['items'])<8
         assert len(encode_response(page))<=MAX_PAGE_BYTES
+        envelope={**page,'protocol':'continuous.v1','repair':{'metadata':'x'*(16*1024)},
+            'creation':{'metadata':'x'*4096},'profile':{'runtime_mode':'LIVE','execution_enabled':True}}
+        assert len(encode_response(envelope))<=MAX_PAGE_BYTES
         assert len(projection(store,'rejected'))==8
         before=store.load('cs_test');view=store.results.read('cs_test',since_revision=0)
         bad=deepcopy(state);bad['engine']['rejected'].append({'payload':'x'*(256*1024)})

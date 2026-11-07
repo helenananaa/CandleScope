@@ -86,3 +86,22 @@ class ResultQuery(StrictInput):
     expected:CommittedIdentity|None=None
     since_revision:int|None=Field(default=None,ge=0,le=MAX_COUNTER)
     change_cursor:list[Any]|None=Field(default=None,min_length=3,max_length=3)
+
+
+class RepairPreview(StrictInput):
+    expected:CommittedIdentity
+    resume_after:bool
+
+
+class RepairConfirm(RepairPreview):
+    plan_id:str=Field(min_length=64,max_length=64,pattern=r"^[0-9a-f]{64}$")
+    confirmed:bool
+
+    @model_validator(mode="after")
+    def consent(self):
+        if self.confirmed is not True:raise ValueError("Repair requires explicit consent")
+        return self
+
+
+class RepairCancel(StrictInput):
+    expected:CommittedIdentity

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from functools import partial
+import json
 import time
 
 from app.backtest.errors import BacktestError
@@ -18,6 +19,9 @@ CREATION_FIELDS=("request_key","run_id","mode","from_ms","cutoff_ms","revision",
 
 
 def utc_ms():return time.time_ns()//1_000_000
+
+
+def json_token(value):return json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False)
 
 
 class ContinuousStrategyAccess:
@@ -140,6 +144,39 @@ class ContinuousStrategyAccess:
             return {"creation":{field:row[field] for field in CREATION_FIELDS},"run":run}
         return await self._command(apply)
 
+    async def repair_preview(self,run_id,*,expected,resume_after):
+        controller=self.controller()
+        async def apply():
+            plan=await controller.repair_preview(run_id,expected=expected,resume_after=resume_after)
+            fields=("plan_id","expected","resume_after","from_ms","through_ms","anchor_sequence",
+                "full_reinitialization","expanded_range_reason","dirty_from_ms","dirty_through_ms")
+            return {**{field:plan[field] for field in fields},"schema":"candlescope.continuous-repair-preview/1",
+                "original_from_ms":plan["source"]["from_ms"],"expires_in_seconds":300,
+                "recompute_bars":(plan["through_ms"]+1-plan["from_ms"])//60000}
+        return await self._command(apply)
+
+    async def repair(self,run_id,key,**kwargs):
+        controller=self.controller()
+        async def apply():
+            await controller.repair(run_id,key,**kwargs)
+            return await self.work(controller.store.epochs.summary,key)
+        return await self._command(apply)
+
+    async def cancel_repair(self,key,*,expected):
+        controller=self.controller()
+        async def apply():
+            await controller.cancel_repair(key,expected=expected)
+            return await self.work(controller.store.epochs.summary,key)
+        return await self._command(apply)
+
+    async def repair_status(self,key):
+        async def read():return await self.work(self.controller().store.epochs.summary,key)
+        return await self._command(read)
+
+    async def latest_repair(self,run_id):
+        async def read():return await self.work(self.controller().store.epochs.latest_summary,run_id)
+        return await self._command(read)
+
     async def _ensure(self,run_id):
         future=self.ensures.get(run_id)
         if future is None:
@@ -170,6 +207,7 @@ class ContinuousStrategyAccess:
             page=await self._read_result(run_id)
             return {"creation":None if creation is None else {field:creation[field] for field in CREATION_FIELDS},
                 "run":page["run"],"identity":page["identity"],
+                "repair":await self.work(controller.store.epochs.latest_summary,run_id),
                 "initial_result_ready":creation is not None and page["run"]["event_time_ms"]>=creation["cutoff_ms"]}
         return await self._command(read)
 
@@ -218,6 +256,7 @@ class ContinuousStrategyAccess:
                 controller.store.db.execute("BEGIN")
                 try:
                     return {"runs":controller.store.list_summaries(),
+                        "repairs":controller.store.epochs.summaries(),
                         "preparations":[{field:row[field] for field in CREATION_FIELDS}
                             for row in controller.store.creations.list_pending()]}
                 finally:controller.store.db.execute("ROLLBACK")
@@ -279,6 +318,7 @@ class ContinuousStrategySubscription:
         self.last_creation=None
         self.last_initializing=None
         self.resume_reason=None
+        self.last_repair=None
 
     async def _read(self):
         if self.cursor is None:self.updates.clear_before_read()
@@ -310,7 +350,9 @@ class ContinuousStrategySubscription:
             self.baseline=0;self.cursor=None;self.page_identity=None;self.last_complete=None
             return {"schema":SCHEMA,"type":"reset","terminal":False,"run_id":self.run_id,
                 "reason":"COMMITTED_VIEW_CHANGED","complete":False}
-        if page["identity"]==self.last_complete and not page["items"]:return None
+        repair=await self.access.work(controller.store.epochs.latest_summary,self.run_id)
+        repair_token=json_token(repair)
+        if page["identity"]==self.last_complete and not page["items"] and repair_token==self.last_repair:return None
         if (self.baseline and self.last_complete is not None and (
                 self.last_complete["generation"],self.last_complete["data_revision"])!=(
                 page["identity"]["generation"],page["identity"]["data_revision"])):
@@ -321,7 +363,8 @@ class ContinuousStrategySubscription:
         event={"schema":SCHEMA,"type":"snapshot" if self.baseline==0 else "update","profile":profile,
             "terminal":page["run"]["phase"]=="CANCELLED" and not page["more"],"initial_result_ready":initial,
             "creation":None if creation is None else {field:creation[field] for field in CREATION_FIELDS},
-            **page,"complete":not page["more"],"begin":self.cursor is None,"after_checkpoint":self.baseline}
+            "repair":repair,**page,"complete":not page["more"],"begin":self.cursor is None,"after_checkpoint":self.baseline}
+        self.last_repair=repair_token
         if self.resume_reason is not None:event["resume_reason"]=self.resume_reason
         if page["more"]:
             self.cursor=list(page["next_cursor"]);self.page_identity=dict(page["identity"])

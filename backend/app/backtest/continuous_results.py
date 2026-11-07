@@ -23,6 +23,7 @@ REQUIRED=("orders","fills","decisions","rejected","equity_curve")
 MAX_HEAD_BYTES=32*1024
 MAX_ITEM_BYTES=256*1024
 MAX_PAGE_BYTES=1024*1024
+RESPONSE_METADATA_BYTES=32*1024
 MAX_PAGE_ITEMS=200
 ENTRY_OVERHEAD_BYTES=256
 HEAD_OVERHEAD_BYTES=1024
@@ -269,7 +270,9 @@ class ContinuousResults:
                     rows=self.store.db.execute(f"SELECT kind,item_index,changed_revision,stored_bytes FROM {projection.items} "
                         "WHERE run_id=? AND kind=? AND item_index>? ORDER BY item_index LIMIT ?",(projection.key,kind,after,limit+1)).fetchall()
                 else:rows=[]
-                items=[];used=len(head["head_json"].encode("utf-8"))+len(head["counts_json"].encode("utf-8"))+8192
+                # Reserve the run/creation envelope plus bounded repair status;
+                # adding progress must not overflow the 1MiB transport frame.
+                items=[];used=len(head["head_json"].encode("utf-8"))+len(head["counts_json"].encode("utf-8"))+RESPONSE_METADATA_BYTES
                 for item in rows[:limit]:
                     size=item["stored_bytes"]
                     if not ENTRY_OVERHEAD_BYTES<=size<=MAX_ITEM_BYTES+ENTRY_OVERHEAD_BYTES:

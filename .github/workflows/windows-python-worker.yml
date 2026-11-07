@@ -58,6 +58,7 @@ jobs:
           python -B -m pytest -q tests/test_continuous_controller.py
           tests/test_continuous_provider.py tests/test_continuous_epochs.py
           tests/test_continuous_repairs.py tests/test_continuous_source_identity.py
+          tests/test_continuous_repair_api.py
           tests/test_kline_prefix_watches.py
           --junitxml=../output/windows-python-worker/continuous-junit.xml
           --basetemp="${{ runner.temp }}/continuous-worker-${{ github.run_id }}-${{ github.run_attempt }}"
