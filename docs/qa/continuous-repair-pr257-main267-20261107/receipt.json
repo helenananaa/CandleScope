@@ -1,0 +1,70 @@
+{
+  "source": "1b9d09b4755a88b02bc0d0eb6df46df1577fb38c",
+  "base": "4b252128cfd976c0cfcceaec7cde699ee71a8469",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_epochs.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_repair_api.py",
+    "backend/tests/test_continuous_repairs.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_source_identity.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "--basetemp=/private/tmp/candlescope-repair-api-main267-20261107/output/pr257-main267/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-repair-api-main267-20261107/output/pr257-main267/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-repair-api-main267-20261107/output/pr257-main267/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "started": "2026-11-07T07:15:24.367535+00:00",
+  "architectureExitCode": 0,
+  "architecturePassed": true,
+  "pytestExitCode": 0,
+  "finished": "2026-11-07T07:16:06.506032+00:00",
+  "frontendPassed": 16,
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/continuous/continuousApi.test.ts",
+    "src/features/backtest/continuous/continuousRepairView.test.ts",
+    "src/features/market-data/__tests__/continuousStrategyDataManager.test.ts"
+  ],
+  "artifacts": {
+    "frontend.log.gz": {
+      "sha256": "6985592282ed27989965e994e154e40cd9e40b5d2d3dcc9eccfaefec9faca597",
+      "originalSha256": "a7d0849fe69e5bcdcf8fececee4db300aa73f1510dc63dfdef93fd13dcb96321"
+    },
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "688fe3f60c7075d5acac65ae391da5831a8ad62fae10f105e3bcc44dba031ff6",
+      "originalSha256": "f70de65ab149b1e4c14d019eed2478265b303ebfae7acc64fd068ce136f1f753"
+    }
+  },
+  "backendPassed": 300
+}
