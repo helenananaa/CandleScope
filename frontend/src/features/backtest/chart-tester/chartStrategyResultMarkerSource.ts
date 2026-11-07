@@ -13,6 +13,7 @@ import type { TradeExplanationV1 } from "../backtestTypes.js";
 import {
   projectBacktestResultMarkers,
   type BacktestMarkerLabels,
+  type BacktestMarkerChart,
 } from "./chartStrategyResultProjection.js";
 import type { ChartStrategyTesterMarkerSource } from "./ChartStrategyTesterRuntime.js";
 
@@ -94,6 +95,7 @@ export interface ChartStrategyResultMarkerSource
   extends ExternalMarkerSource, ChartStrategyTesterMarkerSource {
   setTradeFocus(trade: StrategyTradeFocus | null, interval: string, entryLabel: string, exitLabel: string): void;
   setResult(chart: BacktestChartData | null): void;
+  setContinuousResult(chart: BacktestMarkerChart | null | undefined): void;
   setVisibleRange(range: ChartSurfaceVisibleRange | null): void;
   clear(): void;
   dispose(): void;
@@ -121,7 +123,11 @@ export function createChartStrategyResultMarkerSource({
   onActivate?: (evidence: ChartStrategyMarkerEvidence) => void;
 }): ChartStrategyResultMarkerSource {
   let focus: { trade: StrategyTradeFocus; interval: string; entryLabel: string; exitLabel: string } | null = null;
-  let chart: BacktestChartData | null = null;
+  let history: BacktestChartData | null = null;
+  // Undefined returns ownership to the historical tester. Null reserves the
+  // chart for a continuous run whose committed result is not ready.
+  let continuous: BacktestMarkerChart | null | undefined;
+  const selectedChart = () => continuous === undefined ? history : continuous;
   let visibleRange: { from: number; to: number } | null = null;
   let projected: readonly ExternalSeriesMarker[] = [];
   let projectedAxisRevision = -1;
@@ -140,6 +146,7 @@ export function createChartStrategyResultMarkerSource({
     publish();
   };
   const project = () => {
+    const chart = selectedChart();
     if (!chart) {
       projected = [];
       projectedAxisRevision = Number(seriesStore.axisRevision);
@@ -160,10 +167,11 @@ export function createChartStrategyResultMarkerSource({
     if (snapshotRevision === revision && projectedAxisRevision === Number(seriesStore.axisRevision)) return snapshot;
     if (projectedAxisRevision !== Number(seriesStore.axisRevision)) revision += 1;
     project();
+    const chart = selectedChart();
     const intervalSeconds = chart ? Math.max(1, parseIntervalSeconds(chart.interval) ?? 1) : 1;
     const markers = boundVisibleBacktestMarkers(projected, visibleRange, intervalSeconds);
     const focused: ExternalSeriesMarker[] = [];
-    if (focus) {
+    if (focus && continuous === undefined) {
       const { trade, interval, entryLabel, exitLabel } = focus;
       for (const [kind, timeMs, label, price] of [["entry", trade.entryTimeMs, entryLabel, trade.entryPrice], ["exit", trade.exitTimeMs, exitLabel, trade.exitPrice]] as const) {
         if (timeMs === null) continue;
@@ -198,6 +206,7 @@ export function createChartStrategyResultMarkerSource({
       };
     },
     activate(markerId) {
+      const chart = selectedChart();
       if (!chart || !markerId.startsWith("backtest:")) return false;
       const index = Number(markerId.slice(markerId.lastIndexOf(":") + 1));
       if (!Number.isSafeInteger(index) || index < 0) return false;
@@ -220,10 +229,13 @@ export function createChartStrategyResultMarkerSource({
       invalidate();
     },
     setResult(next) {
-      if (disposed || chart?.chart_hash === next?.chart_hash) return;
-      chart = next;
-      projectedAxisRevision = -1;
-      projectedRunHash = "";
+      if (disposed || history?.chart_hash === next?.chart_hash) return;
+      history = next;
+      if (continuous === undefined) invalidate();
+    },
+    setContinuousResult(next) {
+      if (disposed || (continuous === next || (continuous && next && continuous.chart_hash === next.chart_hash))) return;
+      continuous = next;
       invalidate();
     },
     setVisibleRange(next) {
@@ -234,18 +246,17 @@ export function createChartStrategyResultMarkerSource({
       invalidate();
     },
     clear() {
-      if (disposed || (chart === null && focus === null)) return;
+      if (disposed || (history === null && focus === null)) return;
       focus = null;
-      chart = null;
-      projected = [];
-      projectedRunHash = "";
-      invalidate();
+      history = null;
+      if (continuous === undefined) invalidate();
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       focus = null;
-      chart = null;
+      history = null;
+      continuous = undefined;
       projected = [];
       listeners.clear();
       unsubscribeSeries?.();
@@ -254,7 +265,7 @@ export function createChartStrategyResultMarkerSource({
     diagnostics() {
       const current = getSnapshot();
       return {
-        runId: chart?.run_id ?? null,
+        runId: selectedChart()?.run_id ?? null,
         projectedMarkers: projected.length,
         visibleMarkers: current.markers.length,
         hasVisibleRange: visibleRange !== null,

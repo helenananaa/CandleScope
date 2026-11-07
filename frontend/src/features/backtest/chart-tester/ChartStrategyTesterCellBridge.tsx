@@ -77,6 +77,7 @@ export interface ChartStrategyTesterCellBridgeProps {
   onNativeStrategiesChange?(value: NativeStrategyCollection): void;
   active: boolean;
   panelOpen: boolean;
+  continuousChartActive: boolean;
   bottomPanelHost: HTMLElement | null;
   seriesStore: SeriesWindowView | null;
   getCurrentVisibleRange(): ChartSurfaceVisibleRange | null;
@@ -100,6 +101,7 @@ export default function ChartStrategyTesterCellBridge({
   onNativeStrategiesChange,
   active,
   panelOpen,
+  continuousChartActive,
   bottomPanelHost,
   seriesStore,
   getCurrentVisibleRange,
@@ -773,6 +775,8 @@ export default function ChartStrategyTesterCellBridge({
       }}
       onCloseExplanation={() => setSelectedExplanation(null)}
       onLocateTrade={onLocateTrade}
+      continuousChartActive={continuousChartActive}
+      continuousMarkerSource={resultMarkerSource}
       {...(onReviewTrade ? { onReviewTrade } : {})}
       onPrepareData={handlePrepareData}
       onStopObserving={handleStopObserving}

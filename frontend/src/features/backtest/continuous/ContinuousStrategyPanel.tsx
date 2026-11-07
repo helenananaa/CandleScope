@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { t } from "../../../i18n/index.js";
+import { floorIntervalTime } from "../../../utils/intervalTimeline.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
@@ -11,6 +12,9 @@ import { activateContinuousReference, listContinuousReferences, readContinuousRe
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
+import { continuousFillTimeMs, readContinuousAccountRows } from "./continuousAccountRows.js";
+import type { ChartStrategyResultMarkerSource } from "../chart-tester/chartStrategyResultMarkerSource.js";
+import type { BacktestMarkerChart } from "../chart-tester/chartStrategyResultProjection.js";
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
@@ -20,10 +24,15 @@ export interface ContinuousStrategyPanelProps {
   initialization?: StrategyInitializationSettings;
   initialExecution?: StrategyExecutionOverrides;
   initialFromMs?: number;
+  chartActive?: boolean;
+  markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
+  onLocateTrade?(timeMs: number): void;
 }
 const connectionMessages = { loading: "continuous.loading", connected: "continuous.connected", reconnecting: "continuous.reconnecting",
   closed: "continuous.closed", error: "continuous.error" } as const;
-const empty: ContinuousObservation = { creation: null, result: null, initialReady: false, connection: "loading", error: null, repair: null };
+const empty = { creation: null, result: null, initialReady: false, connection: "loading", error: null, repair: null,
+  rows: { fills: [], equity: [] },
+} satisfies ContinuousObservation & { rows: ReturnType<typeof readContinuousAccountRows> };
 function object(value: unknown): Record<string, unknown> { return value !== null && typeof value === "object" ? value as Record<string, unknown> : {}; }
 function time(value: unknown): string {
   const number = Number(value);
@@ -38,7 +47,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
   const [reference, setReference] = useState<ContinuousRunReference | null>(null);
   const [savedRuns, setSavedRuns] = useState<ContinuousRunReference[]>([]);
   const [creation, setCreation] = useState<ContinuousCreation | null>(null);
-  const [state, setState] = useState<ContinuousObservation>(empty);
+  const [state, setState] = useState<ContinuousObservation & { rows: ReturnType<typeof readContinuousAccountRows> }>(empty);
   const [error, setError] = useState<string | null>(null);
   const [storageFailed, setStorageFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,12 +84,36 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     void manager.capabilities(controller.signal).then(setCaps).catch((failure: Error) => { if (!controller.signal.aborted) setError(failure.message); });
     return () => controller.abort();
   }, [manager, props.active]);
+  const observe = props.active || props.chartActive;
   useEffect(() => {
-    if (!manager || !props.active || !reference?.runId) return;
-    try { return manager.observe(reference.runId, setState); }
-    catch (failure) { setError(String(failure)); }
-  }, [manager, props.active, reference?.runId, attempt]);
-  const view = state.result;
+    if (!manager || !observe || !reference?.runId) return;
+    try {
+      return manager.observe(reference.runId, (next) => {
+        // Read against the commit being published. React may render after the
+        // Manager has already advanced to a later checkpoint.
+        setState({ ...next, rows: readContinuousAccountRows(manager, next.result) });
+      });
+    } catch (failure) { setError(String(failure)); }
+  }, [manager, observe, reference?.runId, attempt]);
+  const view = state.result?.identity.id === reference?.runId ? state.result : null;
+  const markerSource = props.markerSource;
+  const chart = useMemo<BacktestMarkerChart | null>(() => {
+    if (!props.chartActive || !view || view.stale) return null;
+    const { identity: point } = view;
+    return {
+      run_id: point.id,
+      chart_hash: JSON.stringify(["continuous", point.id, point.generation, point.revision, point.checkpoint_revision, point.data_revision]),
+      interval: props.session.interval,
+      fills: state.rows.fills.filter((fill) => {
+        const time = continuousFillTimeMs(fill);
+        return time !== null && time <= point.event_time_ms && (fill.side === "BUY" || fill.side === "SELL");
+      }),
+    };
+  }, [props.chartActive, props.session.interval, state.rows.fills, view]);
+  useLayoutEffect(() => () => markerSource?.setContinuousResult(undefined), [markerSource]);
+  useLayoutEffect(() => {
+    markerSource?.setContinuousResult(chart);
+  }, [chart, markerSource]);
 
   function save(next: ContinuousRunReference) {
     try {
@@ -183,6 +216,10 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {manager && view && reference?.runId === view.identity.id && <ContinuousRepairPanel key={scope+":"+view.identity.id}
       manager={manager} view={view} repair={state.repair} active={props.active}
       available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}
-    {manager && view ? <ContinuousAccountView manager={manager} view={view} /> : <p>{t("continuous.empty")}</p>}
+    {view ? <ContinuousAccountView rows={state.rows} view={view}
+      {...(props.chartActive && props.onLocateTrade ? { onLocateTrade(timeMs: number) {
+        const barTime = floorIntervalTime(props.session.interval, timeMs / 1000);
+        if (barTime !== null) props.onLocateTrade?.(barTime * 1000);
+      } } : {})} /> : <p>{t("continuous.empty")}</p>}
   </div>;
 }
