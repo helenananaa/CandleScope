@@ -1,0 +1,27 @@
+export const researchBatchEnglish = {
+  "researchBatch.sources": "Batch over imported data",
+  "researchBatch.help": "Select two to {max} datasets. Each task uses the current strategy and settings with a fixed data version.",
+  "researchBatch.run": "Run selected datasets",
+  "researchBatch.jobs": "Research batch tasks",
+  "researchBatch.preparing": "Preparing fixed input",
+  "researchBatch.failed": "Task or observation failed",
+  "researchBatch.interrupted": "Interrupted before a run ID was saved",
+  "researchBatch.storage": "Could not save or read batch tasks.",
+  "researchBatch.submitFailed": "Could not submit the batch. Check the selected data, strategy settings and task limit.",
+  "researchBatch.open": "Open result",
+  "researchBatch.resume": "Reconnect to run",
+} as const;
+
+export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.sources": "批量运行导入数据",
+  "researchBatch.help": "选择 2 至 {max} 份数据。每项任务都使用当前策略和设置，以及各自固定的数据版本。",
+  "researchBatch.run": "运行所选数据",
+  "researchBatch.jobs": "研究批量任务",
+  "researchBatch.preparing": "正在准备固定输入",
+  "researchBatch.failed": "任务或观察失败",
+  "researchBatch.interrupted": "保存运行 ID 前中断",
+  "researchBatch.storage": "无法保存或读取批量任务。",
+  "researchBatch.submitFailed": "批量提交失败，请检查所选数据、策略设置及任务上限。",
+  "researchBatch.open": "打开结果",
+  "researchBatch.resume": "重新连接运行",
+};
