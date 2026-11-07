@@ -19,6 +19,7 @@ export async function saveResearchHandoff(input: { session: ChartSession; worksp
     fidelityPreference: input.attachment.fidelityPreference,
     rangeMode: input.attachment.rangeMode === "VISIBLE" ? "CUSTOM" : input.attachment.rangeMode,
     customRange: input.attachment.customRange,
+    ...(input.attachment.pythonBarExecution ? { pythonBarExecution: input.attachment.pythonBarExecution } : {}),
     ...(input.attachment.executionOverrides ? { executionOverrides: input.attachment.executionOverrides } : {}),
   }));
   if (!input.attachment.strategyDraftId || input.draft.id !== input.attachment.strategyDraftId

@@ -134,6 +134,7 @@ function cloneFrozen<T>(value: T): T {
 }
 
 function selectedOutputMode(frozen: ChartStrategyFrozenRunRequest, revision: StrategyRevisionRecord): "SIGNAL" | "TARGET_POSITION" | "ORDER_INTENT" {
+  if (frozen.attachment.pythonBarExecution) return frozen.attachment.pythonBarExecution.outputMode;
   if (frozen.language === "pine" && revision.output_modes.includes("ORDER_INTENT")) return "ORDER_INTENT";
   if (revision.output_modes.includes("TARGET_POSITION")) return "TARGET_POSITION";
   return revision.output_modes[0] === "ORDER_INTENT" ? "ORDER_INTENT" : "SIGNAL";
@@ -288,6 +289,7 @@ export function buildChartStrategyRunBody(input: {
     );
   }
   const overrides = input.frozen.attachment.executionOverrides;
+  const profile = input.frozen.attachment.pythonBarExecution;
   return {
     ...(input.frozen.language === "python" ? {
       python_runtime_mode: "TRUSTED_LOCAL",
@@ -303,7 +305,7 @@ export function buildChartStrategyRunBody(input: {
     end_time_ms: range.endTimeMs,
     symbol: input.frozen.session.symbol,
     interval: input.frozen.session.interval,
-    warmup_bars: input.resolution.preparation?.warmup_bars ?? 0,
+    warmup_bars: profile?.warmupBars ?? input.resolution.preparation?.warmup_bars ?? 0,
     parameters: executionParameters(input.frozen),
     ...(input.pineContexts?.length ? { pine_contexts: input.pineContexts } : {}),
     output_mode: selectedOutputMode(input.frozen, input.revision),
@@ -321,8 +323,9 @@ export function buildChartStrategyRunBody(input: {
     leverage: overrides?.leverage ?? requireString(account, "leverage"),
     sizing_policy: requireString(account, "sizing_policy"),
     equity_percent: overrides?.equityPercent ?? requireString(account, "equity_percent"),
-    execution_model_revision: requireString(account, "execution_model_revision"),
-    participation_rate: "0.1",
+    ...(profile?.executionModel === "LEGACY" ? {} : {
+      execution_model_revision: requireString(account, "execution_model_revision"), participation_rate: "0.1",
+    }),
     latency_ms: 0,
     latency_events: 0,
     order_end_policy: "CANCEL_AT_END",
@@ -637,6 +640,11 @@ export async function runResearchBacktest(options: {
       options.source.quality,
     );
   } else {
+    const profile = frozen.attachment.pythonBarExecution;
+    if (profile && (frozen.language !== "python" || frozen.attachment.fidelityPreference !== "FAST"
+      || frozen.session.interval !== "1m" || !options.api.prepareChartContext)) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile needs Python 1-minute BAR preparation");
+    }
     const contextRequest = chartContextRequestForFrozen(frozen);
     if (options.source.materializeResolution) {
       options.onStage?.("MATERIALIZING");
@@ -663,6 +671,7 @@ export async function runResearchBacktest(options: {
         strategy_revision_id: revision.revision_id,
         parameters: executionParameters(frozen),
         ...(frozen.language === "pine" ? { output_mode: selectedOutputMode(frozen, revision) } : {}),
+        ...(profile ? { python_bar_execution: profile } : {}),
         ...(pineContexts.length ? { pine_contexts: pineContexts } : {}),
         ...(frozen.attachment.executionOverrides ? { execution_overrides: frozen.attachment.executionOverrides } : {}),
         chart_cell_scope: frozen.cellScope,
@@ -672,6 +681,9 @@ export async function runResearchBacktest(options: {
         resolved_context: resolution.chart_context_hash });
       resolution = await options.api.prepareChartContext(contextRequest, options.signal, strategyIntent, preparationKey);
       options.onResolution?.(resolution);
+    }
+    if (profile && resolution.status === "READY" && !resolution.prepared_run) {
+      throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The continuous execution profile was not prepared");
     }
     if (resolution.status === "NEEDS_DATA") {
       return { kind: "NEEDS_DATA", frozen, revision, resolution, frozenContext: null };

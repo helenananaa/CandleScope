@@ -5,7 +5,7 @@ import { useLocale } from "../../../i18n/useLocale.js";
 import { useMarketDataWorkspaceResources } from "../../market-data/marketDataWorkspaceContext.js";
 import { resolveKlineSeriesIdentity } from "../../market-data/klineSeriesIdentity.js";
 import type { ChartSession } from "../../chart-session/chartSessionTypes.js";
-import type { StrategyExecutionOverrides, StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
+import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides, type StrategyInitializationSettings } from "../../../shared/strategyRunSettings.js";
 import type { ContinuousObservation } from "../../market-data/manager/continuousStrategyDataManager.js";
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
 import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
@@ -27,6 +27,7 @@ export interface ContinuousStrategyPanelProps {
   chartActive?: boolean;
   markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   onLocateTrade?(timeMs: number): void;
+  onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
 }
 const connectionMessages = { loading: "continuous.loading", connected: "continuous.connected", reconnecting: "continuous.reconnecting",
   closed: "continuous.closed", error: "continuous.error" } as const;
@@ -62,6 +63,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     props.session.symbol, props.session.interval, identity]);
   const inputRevision = useMemo(() => String(strategyDraftContentRevision(JSON.stringify([props.source, props.parameters, balance, percent, fee, slippage, output, props.initialization, props.mode === "HISTORY_LIVE" ? from : null]))),
     [props.source, props.parameters, props.mode, props.initialization, balance, percent, fee, slippage, output, from]);
+  const executionModel = props.initialization ? props.initialization.executionModel ?? "V2" : "LEGACY";
   const hasSource = useMemo(() => props.source.trim().length > 0, [props.source]);
   const qualified = props.language === "python" && hasSource && props.session.interval === "1m"
     && (props.session.marketType === "spot" || (props.session.exchange === "binance" && props.session.marketType === "futures"))
@@ -142,7 +144,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
         provider: { language: "python", source_text: props.source, parameters: props.parameters, output_mode: output, runtime_mode: "TRUSTED_LOCAL", trusted_confirmed: true },
         execution: { account_model: props.session.marketType === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
           initial_balance: balance, sizing_policy: "EQUITY_PERCENT_V1", equity_percent: percent, taker_fee_bps: fee, maker_fee_bps: fee, slippage_bps: slippage,
-          ...(props.initialization ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
+          ...(executionModel === "V2" ? { execution_model_revision: "EXECUTION_REALISM_V2", participation_rate: "0.1", order_end_policy: "CANCEL_AT_END" } : {}) },
         ...(props.initialization ? { warmup_bars: props.initialization.warmupBars } : {}),
         ...(props.mode === "HISTORY_LIVE" ? { from_ms: start } : {}),
       });
@@ -174,6 +176,26 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     finally { setBusy(false); }
   }
   const observed = state.creation ?? creation;
+  const start = props.mode === "HISTORY_LIVE" ? Date.parse(from + ":00Z") : (observed?.cutoff_ms ?? -1) + 1;
+  const warmupBars = props.initialization?.warmupBars ?? 0;
+  const researchSettings: StrategyRunSettings | null = view && !view.stale && observed?.run_id === view.identity.id
+    && start > 0 && start % 60_000 === 0 && (view.identity.event_time_ms + 1) % 60_000 === 0
+    && view.identity.event_time_ms >= start + warmupBars * 60_000 ? {
+      parameters: props.parameters, fidelityPreference: "FAST", rangeMode: "CUSTOM",
+      customRange: { startMs: start, endMs: view.identity.event_time_ms },
+      executionOverrides: { initialBalance: balance, equityPercent: percent, leverage: "1", feeBps: fee, slippageBps: slippage },
+      pythonBarExecution: { outputMode: output, executionModel, warmupBars },
+    } : null;
+
+  async function openResearch() {
+    if (submitting.current || busy || !props.onOpenWorkspace || !researchSettings
+      || !validStrategyRunSettings(researchSettings) || !qualified) return;
+    submitting.current = true;
+    setBusy(true); setError(null);
+    try { await props.onOpenWorkspace(researchSettings); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
   const phase = view?.run.phase ?? observed?.phase;
   const failure = object(view?.run.error ?? observed?.error);
   return <div className="continuous-strategy" data-continuous-strategy>
@@ -207,6 +229,11 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
       {observed && (["pause", "resume", "retry", "cancel"] as const).map((action) => <button type="button" key={action} disabled={busy || !caps?.execution_enabled}
         onClick={() => { void control(action); }}>{t(`continuous.${action}`)}</button>)}
     </div>
+    {props.onOpenWorkspace && <div className="continuous-actions">
+      <button type="button" disabled={busy || !qualified || !validStrategyRunSettings(researchSettings)}
+        onClick={() => { void openResearch(); }}>{t("ux.openWorkspace")}</button>
+      <small>{t("continuous.researchHint")}</small>
+    </div>}
     {error && <p role="alert">{error}</p>}
     {state.error && <p role="alert">{state.error.message}</p>}
     {typeof failure.message === "string" && <p role="alert">{failure.message}</p>}

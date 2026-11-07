@@ -783,9 +783,11 @@ export default function ChartStrategyTesterCellBridge({
       onResumeObserving={handleResumeObserving}
       onSourceDirty={() => setSourceDiagnostics([])}
       onOpenAdvanced={handleOpenAdvanced}
-      onOpenWorkspace={async (draft) => {
+      onOpenWorkspace={async (draft, settings) => {
         if (!attachment) return;
-        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId, attachment, draft, runId: result?.run.run_id ?? null })); }
+        try { window.location.assign(await saveResearchHandoff({ session, workspaceId, cellId,
+          attachment: settings ? { ...attachment, ...settings } : attachment,
+          draft, runId: settings ? null : result?.run.run_id ?? null })); }
         catch (reason) { setResultError(reason instanceof Error ? describeError(reason, reason.message) : String(reason)); throw reason; }
       }}
       onOpenBatchStudy={handleOpenBatchStudy}
