@@ -2213,6 +2213,7 @@ export const ar = {
   "replay.liq.adlHint": "دفتر الطرف المقابل {count} صفوف · محاكاة حتمية وليست طابوراً خاصاً تاريخياً للبورصة",
   "local.import": "استيراد CSV",
   "local.localOnly": "تبقى البيانات على هذا الجهاز",
+  "local.marketTradeCoverage": "استخدم ملف صفقات السوق بأرقام تسلسل متتالية من المصدر. حدد نطاق UTC. تبقى البيانات المستوردة محلية.",
   "local.chooseFile": "اختيار ملف CSV",
   "local.baseAsset": "أصل الكمية (وحدة الحجم)",
   "local.quoteAsset": "أصل تسعير السعر",

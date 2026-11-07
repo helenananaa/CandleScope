@@ -2213,6 +2213,7 @@ export const ms = {
   "replay.liq.adlHint": "Lejar pihak lawan {count} baris · simulasi deterministik, bukan baris gilir peribadi bursa sejarah",
   "local.import": "Import CSV",
   "local.localOnly": "Data kekal pada mesin ini",
+  "local.marketTradeCoverage": "Gunakan fail dagangan pasaran dengan nombor jujukan sumber berturutan. Nyatakan liputan UTC. Import kekal setempat.",
   "local.chooseFile": "Pilih fail CSV",
   "local.baseAsset": "Aset kuantiti (unit volum)",
   "local.quoteAsset": "Aset sebut harga",

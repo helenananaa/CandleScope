@@ -1,10 +1,11 @@
 import { t } from "../../../i18n/index.js";
 import { validStrategyRunSettings, type StrategyRunSettings, type StrategyExecutionOverrides } from "../../../shared/strategyRunSettings.js";
 
-export function StrategyConditionsEditor({ settings, marketType, preciseAvailable, onChange }: {
+export function StrategyConditionsEditor({ settings, marketType, preciseAvailable, preciseArchiveHint = true, onChange }: {
   settings: StrategyRunSettings;
   marketType: string;
   preciseAvailable?: boolean;
+  preciseArchiveHint?: boolean;
   onChange(settings: StrategyRunSettings): void;
 }) {
   const profile = settings.pythonBarExecution;
@@ -34,7 +35,7 @@ export function StrategyConditionsEditor({ settings, marketType, preciseAvailabl
         </select>
       </label>
       {!preciseAvailable ? <p>{t("research.capability.tapeDenied")}</p>
-        : settings.fidelityPreference === "PRECISE" && <p>{t("research.execution.preciseArchiveHint")}</p>}
+        : preciseArchiveHint && settings.fidelityPreference === "PRECISE" && <p>{t("research.execution.preciseArchiveHint")}</p>}
     </>}
     <label className="strategy-condition-range">{t("chartTester.settings.date")}
       <select disabled={!!profile} value={settings.rangeMode} onChange={(event) => onChange({ ...settings, rangeMode: event.target.value as StrategyRunSettings["rangeMode"], customRange: event.target.value === "ALL_AVAILABLE" ? null : { startMs: 0, endMs: 0 } })}>

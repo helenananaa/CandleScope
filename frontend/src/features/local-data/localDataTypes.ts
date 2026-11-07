@@ -3,7 +3,17 @@ export interface LocalDatasetManifest {
   dataset_id: string;
   data_epoch: string;
   name: string;
-  source: "local_dataset" | "host_chart_snapshot";
+  source: "local_dataset" | "host_chart_snapshot" | "user_market_trades";
+  market_trade_input?: {
+    schema_version: 1;
+    kind: "MARKET_TRADE" | "MARKET_AGG_TRADE";
+    timestamp_unit: "s" | "ms";
+    timezone: "UTC";
+    coverage_start_ms: number;
+    coverage_end_ms_exclusive: number;
+    sequence_policy: "CONTIGUOUS_SOURCE_SEQUENCE";
+    row_count: number;
+  };
   symbol: string;
   instrument?: { base_asset: string; quote_asset: string; volume_unit: "base_asset" };
   interval: string;
@@ -34,6 +44,19 @@ export interface LocalImportInput {
   timezone: string;
   timestampUnit: "auto" | "s" | "ms" | "iso";
   volumeRequired: boolean;
+  datasetId?: string;
+}
+
+export interface LocalMarketTradeImportInput {
+  file: File;
+  name: string;
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  timestampUnit: "s" | "ms";
+  coverageStartMs: number;
+  coverageEndMs: number;
+  tradeKind: "MARKET_TRADE" | "MARKET_AGG_TRADE";
   datasetId?: string;
 }
 

@@ -2213,6 +2213,7 @@ export const sv = {
   "replay.liq.adlHint": "Motpartsledger {count} rader · deterministisk simulering, inte en historisk privat börskö",
   "local.import": "Importera CSV",
   "local.localOnly": "Data stannar på den här datorn",
+  "local.marketTradeCoverage": "Använd en fil med marknadsavslut med löpande sekvensnummer. Ange UTC-intervallet. Importen stannar lokalt.",
   "local.chooseFile": "Välj en CSV-fil",
   "local.baseAsset": "Kvantitetstillgång (volymenhet)",
   "local.quoteAsset": "Prisets noteringstillgång",

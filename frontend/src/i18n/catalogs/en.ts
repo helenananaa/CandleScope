@@ -2534,6 +2534,7 @@ export const en = {
 
   "local.import": "Import CSV",
   "local.localOnly": "Data stays on this machine",
+  "local.marketTradeCoverage": "Use a market-wide trade file with contiguous source sequence numbers. Declare the UTC coverage. This import stays local.",
   "local.chooseFile": "Choose a CSV file",
   "local.baseAsset": "Quantity asset (volume unit)",
   "local.quoteAsset": "Price quote asset",

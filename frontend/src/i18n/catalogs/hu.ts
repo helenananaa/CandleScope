@@ -2213,6 +2213,7 @@ export const hu = {
   "replay.liq.adlHint": "Ellenoldali főkönyv {count} sor · determinisztikus szimuláció, nem történelmi tőzsdei privát sor",
   "local.import": "CSV importálása",
   "local.localOnly": "Az adatok ezen a gépen maradnak",
+  "local.marketTradeCoverage": "Folytonos sorszámú piaci kötéseket tartalmazó fájlt használjon. Adja meg az UTC-időtartományt. Az import helyben marad.",
   "local.chooseFile": "CSV-fájl kiválasztása",
   "local.baseAsset": "Mennyiségi eszköz (forgalmi egység)",
   "local.quoteAsset": "Az ár jegyzési eszköze",

@@ -2214,6 +2214,7 @@ export const it = {
   "replay.liq.adlHint": "Ledger controparte {count} righe · simulazione deterministica, non una coda privata storica dell’exchange",
   "local.import": "Importa CSV",
   "local.localOnly": "I dati restano su questa macchina",
+  "local.marketTradeCoverage": "Usa un file di scambi di mercato con numeri di sequenza consecutivi. Indica la copertura UTC. L’importazione resta locale.",
   "local.chooseFile": "Scegli un file CSV",
   "local.baseAsset": "Asset di quantità (unità del volume)",
   "local.quoteAsset": "Asset di quotazione del prezzo",

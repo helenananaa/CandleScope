@@ -25,6 +25,7 @@ from app.market_dataset.adapters.contract_aux import (
     ContractAuxSnapshotProvider,
 )
 from app.market_dataset.models import DatasetRef
+from app.local_data.user_market_trades import USER_TRADE_SOURCE
 from app.market_dataset.snapshot import (
     MarketDatasetError,
     MarketDatasetSnapshot,
@@ -207,6 +208,8 @@ class BacktestRuntime:
         execution_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if fidelity_mode in BOOK_MODES:
+            if self._manifest(dataset_id).get("source") == USER_TRADE_SOURCE:
+                raise BacktestError("FIDELITY_UNSUPPORTED", "User market trades do not provide order book data")
             from .chart_book import freeze
             preview,_,_ = freeze(self,dict(dataset_id=dataset_id,data_epoch=data_epoch,
                 start_time_ms=start_time_ms,end_time_ms=end_time_ms,interval=interval,
@@ -218,6 +221,18 @@ class BacktestRuntime:
             raise BacktestError('FIDELITY_MISLABEL', 'frozen book data requires a chart book mode')
         if fidelity_mode in {"AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}:
             manifest = self._manifest(dataset_id)
+            if manifest.get("source") == USER_TRADE_SOURCE:
+                if not self.settings.trade_tape_effective or fidelity_mode != "AGG_TRADE_EXECUTION":
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "User market trades require trade-sequence execution")
+                from .user_trade_input import open_user_trade_snapshot
+
+                preview, _ = open_user_trade_snapshot(
+                    self.local_data, dataset_id=dataset_id, data_epoch=data_epoch,
+                    start_time_ms=start_time_ms, end_time_ms=end_time_ms, interval=interval,
+                    max_events=self.settings.max_trade_events, exchange=exchange, market_type=market_type,
+                    contract_data_mode=contract_data_mode, account_model=account_model, funding_mode=funding_mode,
+                )
+                return preview
             dataset = self._freeze_trade_dataset(
                 exchange=exchange,
                 market_type=market_type,
@@ -462,6 +477,13 @@ class BacktestRuntime:
     ) -> list[dict[str, object]]:
         """Compatibility path for completed pre-v5 Runs without a chart cache."""
         manifest = self._manifest(str(record["dataset_id"]))
+        if manifest.get("source") == USER_TRADE_SOURCE:
+            from .user_trade_input import open_user_trade_run_snapshot
+
+            _, events = open_user_trade_run_snapshot(
+                self.local_data, record, config, max_events=self.settings.max_trade_events,
+            )
+            return [_bar_wire(event) for event in derive_complete_trade_bars(events, interval)]
         dataset = self._freeze_trade_dataset(
             exchange=str(config.get("exchange") or "binance"),
             market_type=str(config.get("market_type") or "usdm"),
@@ -889,7 +911,19 @@ class BacktestWorker:
                 service.execute_dual_clock_run(run_id,events=events,provider=provider,
                     observation_market=observation_market,
                     snapshot_evidence={'quality':preview['quality']})
+            elif record["fidelity_mode"] == "AGG_TRADE_EXECUTION" and manifest.get("source") == USER_TRADE_SOURCE:
+                from .user_trade_input import open_user_trade_run_snapshot
+
+                preview, events = open_user_trade_run_snapshot(
+                    self.local_data, record, config, max_events=self.settings.max_trade_events,
+                )
+                service.execute_dual_clock_run(
+                    run_id, events=events, provider=provider, observation_market=observation_market,
+                    snapshot_evidence={"quality": preview["quality"]},
+                )
             elif record["fidelity_mode"] in {"AGG_TRADE_TAPE", "AGG_TRADE_EXECUTION"}:
+                if manifest.get("source") == USER_TRADE_SOURCE:
+                    raise BacktestError("FIDELITY_UNSUPPORTED", "User market trades require trade-sequence execution")
                 if self.trade_archive is None:
                     raise MarketDatasetError(
                         "local verified aggregate-trade archive is not configured",

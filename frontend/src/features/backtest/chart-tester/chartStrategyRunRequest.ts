@@ -46,6 +46,7 @@ export type ResearchRunSource =
     startTimeMs: number;
     endTimeMs: number;
     quality: ResearchQualitySummaryV1;
+    marketTradeInput?: boolean;
   };
 
 export type ChartStrategyRunStage =
@@ -479,11 +480,10 @@ function resolutionFromImportedPreview(input: {
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>;
   frozen: ChartStrategyFrozenRunRequest;
   preview: BacktestSnapshot;
+  precise: boolean;
 }): ChartContextResolution {
   const presets = importedSpotExecutionPresets();
-  const capabilities = (input.preview.fidelity_capabilities ?? []).includes("BAR_APPROX")
-    ? ["BAR_APPROX"]
-    : ["BAR_APPROX"];
+  const mode = input.precise ? "AGG_TRADE_EXECUTION" : "BAR_APPROX";
   const gapped = input.source.quality.status === "gap";
   return {
     schema_version: "candlescope.backtest-chart-context/1",
@@ -499,7 +499,7 @@ function resolutionFromImportedPreview(input: {
       range_mode: input.frozen.attachment.rangeMode,
       start_time_ms: input.source.startTimeMs,
       end_time_ms: input.source.endTimeMs,
-      fidelity_preference: "FAST",
+      fidelity_preference: input.precise ? "PRECISE" : "FAST",
     },
     dataset_id: input.source.datasetId,
     data_epoch: input.source.dataEpoch,
@@ -521,9 +521,9 @@ function resolutionFromImportedPreview(input: {
       complete: !gapped,
     },
     fidelity: {
-      preference: "FAST",
-      mode: "BAR_APPROX",
-      capabilities,
+      preference: input.precise ? "PRECISE" : "FAST",
+      mode,
+      capabilities: [mode],
     },
     quality_warnings: input.source.quality.status === "gap"
       ? [{ code: "DATA_GAP", message: "imported data has gaps" }]
@@ -538,6 +538,7 @@ function resolutionFromImportedPreview(input: {
 async function previewImportedSnapshot(
   api: ChartStrategyRunApi,
   source: Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }>,
+  precise: boolean,
   signal?: AbortSignal,
 ): Promise<BacktestSnapshot> {
   if (typeof api.previewSnapshot !== "function") {
@@ -553,11 +554,11 @@ async function previewImportedSnapshot(
     start_time_ms: source.startTimeMs,
     end_time_ms: source.endTimeMs,
     interval: source.interval,
-    fidelity_mode: "BAR_APPROX",
+    fidelity_mode: precise ? "AGG_TRADE_EXECUTION" : "BAR_APPROX",
     exchange: "local",
     market_type: "spot",
     contract_data_mode: "LEGACY_FIXED_V1",
-    account_model: "LINEAR_PERP_ONE_WAY_V1",
+    account_model: precise ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
     funding_mode: "OFF",
   }, signal);
   if (preview.data_epoch !== source.dataEpoch) {
@@ -573,11 +574,10 @@ async function previewImportedSnapshot(
       "snapshot hash must come from the backend freeze step",
     );
   }
-  const tradeTape = (preview.fidelity_capabilities ?? []).some((item) => (
-    item === "AGG_TRADE_EXECUTION" || item === "AGG_TRADE_TAPE" || item === "TRADE_TAPE"
-  ));
-  if (tradeTape) {
-    // Imported CSV remains BAR_ONLY even if a preview lists unused tape capabilities.
+  if (precise && (!(preview.fidelity_capabilities ?? []).includes("AGG_TRADE_EXECUTION")
+    || preview.quality?.source_quality !== "user_market_trades"
+    || preview.coverage_start_ms !== source.startTimeMs || preview.coverage_end_ms !== source.endTimeMs)) {
+    throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The frozen snapshot lacks the requested user market trades");
   }
   return preview;
 }
@@ -609,7 +609,7 @@ export async function runResearchBacktest(options: {
     : options.request;
   const frozen = await freezeChartStrategyRunRequest(request);
   const precise = frozen.attachment.fidelityPreference === "PRECISE";
-  if (precise && options.source.kind === "IMPORTED_DATASET") {
+  if (precise && options.source.kind === "IMPORTED_DATASET" && !options.source.marketTradeInput) {
     throw new ChartStrategyRunError(
       "FIDELITY_UNSUPPORTED", "Imported data only supports bar estimates", { next_step: "use bar estimate" },
     );
@@ -632,8 +632,8 @@ export async function runResearchBacktest(options: {
   let frozenContext: FrozenResearchContextV1 | null = null;
   if (options.source.kind === "IMPORTED_DATASET") {
     options.onStage?.("RESOLVING");
-    const preview = await previewImportedSnapshot(options.api, options.source, options.signal);
-    resolution = resolutionFromImportedPreview({ source: options.source, frozen, preview });
+    const preview = await previewImportedSnapshot(options.api, options.source, precise, options.signal);
+    resolution = resolutionFromImportedPreview({ source: options.source, frozen, preview, precise });
     options.onResolution?.(resolution);
     if (resolution.status !== "READY" || !resolution.coverage.complete) {
       return { kind: "UNSUPPORTED", frozen, revision, resolution, frozenContext: null };
@@ -737,8 +737,8 @@ export async function runResearchBacktest(options: {
 
   let refreshed = resolution;
   if (options.source.kind === "IMPORTED_DATASET") {
-    const preview = await previewImportedSnapshot(options.api, options.source, options.signal);
-    refreshed = resolutionFromImportedPreview({ source: options.source, frozen, preview });
+    const preview = await previewImportedSnapshot(options.api, options.source, precise, options.signal);
+    refreshed = resolutionFromImportedPreview({ source: options.source, frozen, preview, precise });
     if (!sameReadyContext(resolution, refreshed)) {
       throw new ChartStrategyRunError(
         "DATA_SNAPSHOT_MISMATCH",

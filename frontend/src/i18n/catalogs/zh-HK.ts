@@ -2213,6 +2213,7 @@ export const zhHK = {
   "replay.liq.adlHint": "對手方帳本 {count} 條 · 確定性模擬，不代表歷史交易所私有佇列",
   "local.import": "匯入 CSV",
   "local.localOnly": "數據唯寫入本機",
+  "local.marketTradeCoverage": "請選擇市場成交檔案，來源序號必須連續。請聲明 UTC 涵蓋區間。匯入資料只儲存在本機。",
   "local.chooseFile": "選擇 CSV 檔案",
   "local.baseAsset": "數量資產（成交量單位）",
   "local.quoteAsset": "價格計價資產",

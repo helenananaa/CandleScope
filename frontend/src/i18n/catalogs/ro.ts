@@ -2213,6 +2213,7 @@ export const ro = {
   "replay.liq.adlHint": "Registru contraparte {count} rânduri · simulare deterministă, nu o coadă privată istorică a bursei",
   "local.import": "Importă CSV",
   "local.localOnly": "Datele rămân pe acest calculator",
+  "local.marketTradeCoverage": "Folosiți un fișier de tranzacții ale pieței cu numere de secvență consecutive. Declarați intervalul UTC. Importul rămâne local.",
   "local.chooseFile": "Alegeți un fișier CSV",
   "local.baseAsset": "Activ de cantitate (unitatea volumului)",
   "local.quoteAsset": "Activ de cotare a prețului",

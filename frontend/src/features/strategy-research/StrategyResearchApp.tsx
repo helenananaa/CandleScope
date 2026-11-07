@@ -435,6 +435,11 @@ export default function StrategyResearchApp({
         onRevisionActivated={handleRevisionActivated}
         onSettingsImported={setSettings}
         onProjectRestored={(manifest) => { dispatchImportedSource(dispatch, runtime.state.source.source, manifest); setProjectRestoreRevision((revision) => revision + 1); }}
+        onMarketTradesImported={async (dataset) => {
+          await library.refresh(dataset.dataset_id);
+          dispatchImportedSource(dispatch, runtime.state.source.source, dataset);
+          dispatch({ type: "source/libraryOpen", open: false });
+        }}
         onImport={async (input) => {
           const dataset = await library.handleImport(input);
           if (dataset) {

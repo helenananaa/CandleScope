@@ -2213,6 +2213,7 @@ export const he = {
   "replay.liq.adlHint": "ספר נגד {count} שורות · סימולציה דטרמיניסטית, לא תור פרטי היסטורי של בורסה",
   "local.import": "ייבוא CSV",
   "local.localOnly": "הנתונים נשארים במחשב זה",
+  "local.marketTradeCoverage": "יש להשתמש בקובץ עסקאות שוק עם מספרים סידוריים רציפים ולציין את טווח UTC. הנתונים המיובאים נשארים מקומיים.",
   "local.chooseFile": "בחירת קובץ CSV",
   "local.baseAsset": "נכס הכמות (יחידת הנפח)",
   "local.quoteAsset": "נכס ציטוט המחיר",

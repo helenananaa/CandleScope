@@ -2220,6 +2220,7 @@ export const es = {
   "replay.liq.adlHint": "Libro mayor de contraparte {count} filas · simulación determinista, no una cola privada histórica del exchange",
   "local.import": "Importar CSV",
   "local.localOnly": "Los datos permanecen en esta máquina",
+  "local.marketTradeCoverage": "Usa un archivo de operaciones del mercado con números de secuencia consecutivos. Declara la cobertura UTC. La importación es local.",
   "local.chooseFile": "Elegir un archivo CSV",
   "local.baseAsset": "Activo de cantidad (unidad del volumen)",
   "local.quoteAsset": "Activo de cotización del precio",

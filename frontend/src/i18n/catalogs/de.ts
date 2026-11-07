@@ -2214,6 +2214,7 @@ export const de = {
   "replay.liq.adlHint": "Gegenpartei-Ledger {count} Zeilen · deterministische Simulation, keine historische private Börsenwarteschlange",
   "local.import": "CSV importieren",
   "local.localOnly": "Daten bleiben auf diesem Gerät",
+  "local.marketTradeCoverage": "Verwende eine Markttransaktionsdatei mit lückenlosen Sequenznummern. Gib den UTC-Zeitraum an. Der Import bleibt lokal.",
   "local.chooseFile": "CSV-Datei wählen",
   "local.baseAsset": "Mengenwert (Volumeneinheit)",
   "local.quoteAsset": "Preisnotierungswert",

@@ -2542,6 +2542,7 @@ export const ja = {
   "replay.liq.adlHint": "相手方台帳 {count} 件 · 決定論的シミュレーションであり、過去の取引所プライベートキューではありません",
   "local.import": "CSV をインポート",
   "local.localOnly": "データはこのマシン内のみ",
+  "local.marketTradeCoverage": "市場全体の約定ファイルを使用し、元の連番と UTC の対象期間を指定してください。データはローカルに保存されます。",
   "local.chooseFile": "CSV ファイルを選択",
   "local.baseAsset": "数量資産（出来高の単位）",
   "local.quoteAsset": "価格の建値資産",

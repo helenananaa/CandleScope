@@ -2214,6 +2214,7 @@ export const vi = {
   "replay.liq.adlHint": "Sổ cái đối tác {count} hàng · mô phỏng xác định, không phải hàng đợi riêng lịch sử của sàn",
   "local.import": "Nhập CSV",
   "local.localOnly": "Dữ liệu ở lại máy này",
+  "local.marketTradeCoverage": "Dùng tệp giao dịch toàn thị trường có số thứ tự nguồn liên tục. Khai báo phạm vi UTC. Dữ liệu nhập được lưu cục bộ.",
   "local.chooseFile": "Chọn tệp CSV",
   "local.baseAsset": "Tài sản số lượng (đơn vị khối lượng)",
   "local.quoteAsset": "Tài sản định giá",

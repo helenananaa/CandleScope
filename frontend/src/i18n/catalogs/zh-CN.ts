@@ -2768,6 +2768,7 @@ export const zhCN = {
 
   "local.import": "导入 CSV",
   "local.localOnly": "数据只写入本机",
+  "local.marketTradeCoverage": "请选择市场成交文件，源序号必须连续。请声明 UTC 覆盖区间。导入数据仅保存在本机。",
   "local.chooseFile": "选择 CSV 文件",
   "local.baseAsset": "数量资产（成交量单位）",
   "local.quoteAsset": "价格计价资产",
