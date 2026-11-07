@@ -26,7 +26,11 @@ const ENGINE_SCRIPT_MARKER = "# __ENGINE__:";
 
 export function pineRuntimeNotice(meta: Record<string, unknown> | undefined, previous?: IndicatorDefinition["runtimeNotice"]): NonNullable<IndicatorDefinition["runtimeNotice"]> | null {
   if (meta?.notificationStatus === "failed") return "pine.host.alertFailed";
-  if (meta?.sessionReset === true) return meta.sessionResetReason === "initial" ? null : "pine.host.resetNotice";
+  if (meta?.sessionReset === true) {
+    if (meta.sessionResetReason === "initial") return null;
+    if (meta.sessionResetReason === "runtimeRebuild") return "pine.host.runtimeResetNotice";
+    return "pine.host.resetNotice";
+  }
   if (meta?.sessionRecovered === true) return "pine.host.recovered";
   return previous || null;
 }

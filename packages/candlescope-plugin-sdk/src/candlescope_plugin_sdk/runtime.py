@@ -16,9 +16,11 @@ from .constants import (
     FEATURE_RENDER_LINE_SERIES_V1,
     FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
+    FEATURE_STREAM_RELEASE_V1,
     METHOD_ANALYZE,
     METHOD_DESCRIBE,
     METHOD_EXECUTE_BATCH,
+    METHOD_RELEASE_STREAM,
     METHOD_HANDSHAKE,
     METHOD_SHUTDOWN,
     MAX_BARS_STREAMS,
@@ -62,6 +64,11 @@ class BaseRuntimePlugin(ABC):
 
     def shutdown(self) -> None:
         """Release runtime-owned resources before the sidecar exits."""
+
+    def release_stream(self, stream: str) -> None:
+        """Idempotently release one owned stream, if advertised and negotiated."""
+        raise ProtocolError(RPC_FEATURE_UNSUPPORTED, "STREAM_RELEASE_UNSUPPORTED",
+                            "This runtime does not implement stream release.")
 
 
 class RuntimeDispatcher:
@@ -107,6 +114,17 @@ class RuntimeDispatcher:
             )
         if method == METHOD_DESCRIBE:
             return self._runtime_descriptor().to_wire()
+        if method == METHOD_RELEASE_STREAM:
+            self._require_feature(FEATURE_STREAM_RELEASE_V1)
+            stream = params.get("stream")
+            if (set(params) != {"stream"} or not isinstance(stream, str)
+                    or not 1 <= len(stream) <= 128 or not stream.strip()):
+                raise ProtocolError(RPC_INVALID_PARAMS, "INVALID_STREAM", "stream must be a nonempty string of at most 128 characters.")
+            # Clear the SDK base only after the plugin's durable release
+            # succeeds. Failure/retry cannot revive or partially drop a base.
+            self._plugin.release_stream(stream)
+            self._bars.pop(stream, None)
+            return {"stream": stream, "released": True}
         if method == METHOD_ANALYZE:
             self._require_feature(FEATURE_SOURCE_ANALYSIS_V1)
             result = self._plugin.analyze(AnalyzeRequest.from_wire(params))

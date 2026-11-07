@@ -1,0 +1,55 @@
+{
+  "scope": "Source qualification, not installed package/Native. Qualified core launcher preserved; isolated native registry and repo SDK/bridge runner override inherited installed adapters.",
+  "launcher": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+  "coreVersion": "0.3.3+cs.1",
+  "moduleFiles": {
+    "candlescope_plugin_sdk": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/packages/candlescope-plugin-sdk/src/candlescope_plugin_sdk/__init__.py",
+    "candlescope_plugin_pine_compat": "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/packages/candlescope-plugin-pine-compat/src/candlescope_plugin_pine_compat/__init__.py",
+    "pine_compat": "/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/h127-r129-adoption-20261101-39b9de42/output/h127-r129-native-20261101/attempts/attempt9/profile/data/plugins/installs/candlescope.pine-compat/c99fa34216a8e7f90e2953891bf306872e94b3edfd4fe1103159e12619cae3b7/venv/lib/python3.12/site-packages/pine_compat/__init__.py"
+  },
+  "sourceLauncher": "/Users/ryanliang/CandleScope/output/development-goal-20261104/chart-source-pine-20261105/python",
+  "sourceLauncherSha256": "37bf02fd3d4d09860c043b224374224986bb41ad59661e2703aab6db7c04d67c",
+  "sourceLauncherContent": "#!/bin/sh\nexec /Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python -I -B /Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/docs/qa/indicator-calculation-owner-20261105/source_runtime_runner.py \"$@\"\n",
+  "nativeRegistrySha256": "9e0b08b49cc1a7e505725a6bb8db20be88db969f69981e56b648748c145a7e38",
+  "nativeRegistry": {
+    "schemaVersion": 1,
+    "plugins": [
+      {
+        "id": "candlescope.pine-compat",
+        "package": "candlescope-plugin-pine-compat",
+        "version": "0.4.0",
+        "enabled": true,
+        "autoStart": false,
+        "required": false,
+        "launch": {
+          "executable": "/Users/ryanliang/CandleScope/output/development-goal-20261104/chart-source-pine-20261105/python",
+          "args": []
+        },
+        "timeouts": {
+          "startupSeconds": 5.0,
+          "requestSeconds": 30.0,
+          "shutdownSeconds": 2.0
+        },
+        "limits": {
+          "maxMessageBytes": 16777216,
+          "maxStderrBytes": 65536
+        },
+        "restart": {
+          "maxAttempts": 3,
+          "windowSeconds": 60.0
+        }
+      }
+    ]
+  },
+  "resolvedPine": {
+    "command": [
+      "/Users/ryanliang/CandleScope/output/development-goal-20261104/chart-source-pine-20261105/python",
+      "-I",
+      "-m",
+      "candlescope_plugin_pine_compat.native_strategy"
+    ],
+    "plugin_id": "candlescope.pine-compat",
+    "plugin_version": "0.4.0",
+    "installation": null
+  }
+}

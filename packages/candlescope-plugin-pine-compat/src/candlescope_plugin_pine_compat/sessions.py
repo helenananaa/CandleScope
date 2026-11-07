@@ -156,9 +156,9 @@ class PineSessions:
         entry.header, entry.last_observation = None, observation
 
     def release(self, key):
-        self.entries.pop(key, None)
         if key:
             self.journal.delete(key)
+        self.entries.pop(key, None)
 
     def _restore(self, engine, record):
         if record.get("schema") == 1:

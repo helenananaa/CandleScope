@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld("candlescopeDesktop", Object.freeze({
   controlReady: () => ipcRenderer.send(channels.controlReady),
   controlFile: (operation, input) => ipcRenderer.invoke(channels.controlFile, operation, input),
   apiBase: `http://127.0.0.1:${backendPort}/api/v1`,
+  pineChartTransport: endpoint.pineChartTransport,
   aiControlStatus: () => ipcRenderer.invoke(channels.aiControlStatus),
   aiControlSetMode: (mode, workflows = false) => ipcRenderer.invoke(channels.aiControlMode, mode, workflows),
   aiControlPublish: (views) => ipcRenderer.invoke(channels.aiControlPublish, views),

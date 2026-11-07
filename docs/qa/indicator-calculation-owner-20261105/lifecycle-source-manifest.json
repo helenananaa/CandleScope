@@ -1,0 +1,61 @@
+{
+  "source": "1f9ada60b62d971e706d76dc9be87349da630771",
+  "base": "a6ea98311a01a49cf88ed60cbd648bd6156c4c36",
+  "currentMain": "a1302842a2a886d27025c73a1c5c151e07fe0fe1",
+  "files": {
+    "backend/app/core/runtime_output.py": "a2d2dbcbecb919052ac51d1e6f64f80c2319018a4d8d14453a76414ce629fa73",
+    "backend/app/indicator/calculation_owner.py": "6ff1e88534431be8a6d2a832c9e2cb5025d50ac24d6b773847a6ad087d6f1426",
+    "backend/app/indicator/calculation_registry.py": "30a1d4f05317632dfd6ebd28e0778e5c82c4246ba0897f4405f14726b789c708",
+    "backend/app/indicator/pine_calculation.py": "7b9ad9e031acdb315792485e48a3bd0454f92ed893981c1cd2c9d94dcbdb5a38",
+    "backend/app/indicator/runtime_service.py": "a400666f11a0796ba030b2790476ff71ccc88f1ec4cbff4fa3e65bad7a9478ac",
+    "backend/app/plugin_runtime/service.py": "c6a0c0d71d4ce836aff5949a413df4c8308d68f98cb5113cb2e7a1b19c6ffa24",
+    "backend/app/plugin_runtime/supervisor.py": "e4ce85dd89c1e0677708a1314c8d53dd54de633c65619629d8e9e584398b6f9b",
+    "backend/tests/test_indicator_calculation_registry.py": "3377799b40abad64601bf2e679cb4d9c83a448133446ce908fc243ffe1e045bc",
+    "backend/tests/test_runtime_stream_release.py": "9a587cbb6e2bbca33852b8334ed850d1ee7297d052777e8c162babebfb75d86f",
+    "backend/tests/test_pine_calculation_runtime.py": "ab987cceead5d88b389ba09f04a804816ab255023b24ee8b701df5c7d1ef872a",
+    "packages/candlescope-plugin-sdk/src/candlescope_plugin_sdk/constants.py": "06084ad5a2fe7bd649fcc4d3cd43b44adf67f22d1e3cbb2ad9d68cca7f98648d",
+    "packages/candlescope-plugin-sdk/src/candlescope_plugin_sdk/__init__.py": "9350509887cb344a1ebdcceab648a8808a535305e81ea627deb9770ba05e4218",
+    "packages/candlescope-plugin-sdk/src/candlescope_plugin_sdk/runtime.py": "839c7618aa3c2ea51cd2bf7ef9868fa0ee1b2f770be3b4795e2fe54c6bd05e87",
+    "packages/candlescope-plugin-sdk/docs/protocol-v1.md": "ac99129278242ef2892b5f2aff703d1c68aa30026a7e2a5947a58ab51c317fc1",
+    "packages/candlescope-plugin-sdk/tests/test_stream_release.py": "8a31a754c9ea163b461e574b73d1df9121a9b40731ef3ddc84084a811b4e918e",
+    "packages/candlescope-plugin-pine-compat/src/candlescope_plugin_pine_compat/runtime.py": "e5fe9699d3d53aeae8ec30347aaae512455ea335092d38698498a331b5c80f33",
+    "packages/candlescope-plugin-pine-compat/src/candlescope_plugin_pine_compat/sessions.py": "6a87f449144b439ba002cca2fb9ecf93bc9cdebe93c094eae8f364adf9570bfd"
+  },
+  "dirtyQaFilesUnchanged": 39,
+  "backend": {
+    "passed": 145,
+    "warnings": 5,
+    "skipped": 0
+  },
+  "sdk": {
+    "passed": 185,
+    "skipped": 0
+  },
+  "pine": {
+    "passed": 240,
+    "skipped": 1,
+    "skipReason": "Current pinned core lacks compact external appends"
+  },
+  "httpWsFrontendBound": false,
+  "nativeQualified": false,
+  "backendTests": [
+    "test_runtime_owned_output.py",
+    "test_runtime_stream_release.py",
+    "test_indicator_calculation_owner.py",
+    "test_indicator_calculation_registry.py",
+    "test_pine_calculation_runtime.py",
+    "test_plugin_runtime_supervisor.py",
+    "test_plugin_runtime_service.py",
+    "test_plugin_runtime_output_patch.py",
+    "test_plugin_runtime_bars_patch.py",
+    "test_indicator_runtime_service.py",
+    "test_indicator_runtime_transport_routing.py",
+    "test_plugin_runtime_main_lifecycle.py",
+    "test_plugin_runtime_architecture.py",
+    "test_indicator_range_batch.py",
+    "test_stream_script_patch_shape.py",
+    "test_native_second_exchanges.py",
+    "test_application_shutdown_failures.py"
+  ],
+  "observationHelperSha256": "f437044da356414d88ca8c88b7b374d97406a5670f0f36afbdf8bb78baf00cbc"
+}

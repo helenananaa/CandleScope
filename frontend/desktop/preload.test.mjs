@@ -50,3 +50,8 @@ test("workspace link registration uses its own native channel without a layout s
   assert.deepEqual(await bridge.workspaceBusRegisterLinks(), { ok: true, windowId: "window-2" });
   assert.deepEqual(calls, [["candlescope:workspace-bus:register-links"]]);
 });
+
+test("Pine transport is delivered from the host endpoint for each window", () => {
+  assert.equal(load([], { port: 29123, pineChartTransport: "snapshot" }).pineChartTransport, "snapshot");
+  assert.equal(load([], { port: 29124, pineChartTransport: "calculation" }).pineChartTransport, "calculation");
+});

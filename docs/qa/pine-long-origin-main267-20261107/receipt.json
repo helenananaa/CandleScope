@@ -1,0 +1,306 @@
+{
+  "source": "e6768b3bacd4049bca638385a80c101cb24ce2bc",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "backendPassed": 1138,
+  "windowsOnlySkip": 1,
+  "architecturePassed": true,
+  "matrix": {
+    "1000": {
+      "defaultQueryLimit": 10000,
+      "seedPages": 1,
+      "seedReadWindowsMs": [
+        [
+          1699988040000,
+          1700059980000
+        ]
+      ],
+      "seedHttpMs": 3021.077375,
+      "latestWireRows": 1,
+      "serializedLivePoints": 1,
+      "ASGIObservationMs": {
+        "p50": 17.2612915,
+        "p95": 23.655304499999996,
+        "p99": 29.034394500000005
+      },
+      "projectionSha256": "4a5f4728c3468e2d3d4608933dfbdad3d52057fbce267b68b3962b214f797334"
+    },
+    "10000": {
+      "defaultQueryLimit": 10000,
+      "seedPages": 2,
+      "seedReadWindowsMs": [
+        [
+          1699988040000,
+          1700294010999
+        ],
+        [
+          1700294011000,
+          1700599980000
+        ]
+      ],
+      "seedHttpMs": 542.944791,
+      "latestWireRows": 1,
+      "serializedLivePoints": 1,
+      "ASGIObservationMs": {
+        "p50": 15.1167295,
+        "p95": 20.912274650000004,
+        "p99": 42.995087729999995
+      },
+      "projectionSha256": "9e68775721b45ab4fc0a87c284b1100711c47a5d96e92ad91f7e41b2f7279031"
+    },
+    "40000": {
+      "defaultQueryLimit": 10000,
+      "seedPages": 8,
+      "seedReadWindowsMs": [
+        [
+          1699988040000,
+          1700289532999
+        ],
+        [
+          1700289533000,
+          1700591025999
+        ],
+        [
+          1700591026000,
+          1700892518999
+        ],
+        [
+          1700892519000,
+          1701194010999
+        ],
+        [
+          1701194011000,
+          1701495503999
+        ],
+        [
+          1701495504000,
+          1701796995999
+        ],
+        [
+          1701796996000,
+          1702098488999
+        ],
+        [
+          1702098489000,
+          1702399980000
+        ]
+      ],
+      "seedHttpMs": 2184.825709,
+      "latestWireRows": 1,
+      "serializedLivePoints": 1,
+      "ASGIObservationMs": {
+        "p50": 27.088082999999997,
+        "p95": 124.58333395,
+        "p99": 971.8826331900001
+      },
+      "projectionSha256": "c38564d4d27ea7c96e7aa7f8de19cb4bd520c5acacfaa1874bde45fbffc4b79c"
+    }
+  },
+  "native": {
+    "passed": true,
+    "steps": 24,
+    "normalExits": 2,
+    "observationsAfterRestart": 76,
+    "boundaries": [
+      {
+        "closedOpening": 1794039840,
+        "receiptAtMs": 1794039900048,
+        "previous": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 14,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039840,
+          "closedThrough": 1794039780,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "current": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 15,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039840,
+          "closedThrough": 1794039840,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "sameGeneration": true,
+        "canonical": {
+          "open_time": 1794039840000,
+          "close_time": 1794039899999,
+          "source": "source_snapshot_verified",
+          "updated_at": 1794039899985
+        },
+        "lastSelectedSourceObservation": {
+          "event_time": 1794039900033,
+          "received_at": 1794039899906
+        }
+      },
+      {
+        "closedOpening": 1794039900,
+        "receiptAtMs": 1794039960034,
+        "previous": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 43,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039900,
+          "closedThrough": 1794039840,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "current": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 44,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039900,
+          "closedThrough": 1794039900,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "sameGeneration": true,
+        "canonical": {
+          "open_time": 1794039900000,
+          "close_time": 1794039959999,
+          "source": "source_snapshot_verified",
+          "updated_at": 1794039959955
+        },
+        "lastSelectedSourceObservation": {
+          "event_time": 1794039960043,
+          "received_at": 1794039959916
+        }
+      },
+      {
+        "closedOpening": 1794039960,
+        "receiptAtMs": 1794040020030,
+        "previous": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 73,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039960,
+          "closedThrough": 1794039900,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "current": {
+          "schemaVersion": 1,
+          "domainId": "d31a35f1b4d94f5aad638d34d2325c02",
+          "generation": 1,
+          "sequence": 74,
+          "view": "current-projection",
+          "origin": 1793949780,
+          "observedThrough": 1794039960,
+          "closedThrough": 1794039960,
+          "inputRevision": "84c57c8c162b432aa129c5a0d911b7b3:0:delivery:0"
+        },
+        "sameGeneration": true,
+        "canonical": {
+          "open_time": 1794039960000,
+          "close_time": 1794040019999,
+          "source": "source_snapshot_verified",
+          "updated_at": 1794040019921
+        },
+        "lastSelectedSourceObservation": {
+          "event_time": 1794040020018,
+          "received_at": 1794040019897
+        }
+      }
+    ],
+    "error": "",
+    "package": {
+      "verifiedAt": "2026-11-07T08:27:10.251Z",
+      "sourceCommit": "e6768b3bacd4049bca638385a80c101cb24ce2bc",
+      "sourceFiles": 1073,
+      "builtFiles": 164,
+      "pluginAssets": 9,
+      "ciArtifactId": null,
+      "sdkArtifactFiles": null,
+      "sdkPreexistingPyc": null,
+      "pluginSources": {
+        "bundleSha256": "sha256:67f14322f346bf59f12ca59a1496eaa3d8157bcae654f095a2f8a46fbb7ec9f2",
+        "pluginSourceFiles": 76,
+        "mismatches": [],
+        "engineUnchanged": true
+      },
+      "mismatches": [],
+      "strictSignature": true,
+      "signatureError": null
+    }
+  },
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "checks.json.gz": {
+      "sha256": "d9a76ca5896fc29b769fe7bbb9a4f42836ac626029406aa8556610047a36d381",
+      "originalSha256": "79d5a05c42dc721440cc8ceabacf874b4cb5ccd4cf086ff21e1a59aa42dbd67c"
+    },
+    "full-backend.log.gz": {
+      "sha256": "ade49f80c7e9663ce80a3eb8404a8e1d419054b47242f1c95cb5e96a0447bd24",
+      "originalSha256": "714e1c6a940b11e5d01a86871fe69fa7af722acd47ce7d7ea5b468f15ab1b9ca"
+    },
+    "matrix.log.gz": {
+      "sha256": "a8fcdd2a072547631ef30344e13a08edb5161dd3d4f6be130ad62e4aac5ebdb7",
+      "originalSha256": "86762b854c966484e4135fa575e4c54a7ddb147bfdb80338b0aa3aa7f4465230"
+    },
+    "assemble.py.gz": {
+      "sha256": "03a4f30c6989b55c3f14f82282003354e145ef065bbb7980aa368f2ad0ebafa0",
+      "originalSha256": "a69f8c601185c34a4e27b545b0ace865cb08a6241f7e9b9ce1d7d8033fbcd48c"
+    },
+    "assembly.log.gz": {
+      "sha256": "9b17bd583aaf30c27281e1b6d3c287e1fc588c2461c39860db2db7f51b961c59",
+      "originalSha256": "6f2963d11c75838367600702e55a87c3f5f24595e5ddaa4fa4c7e1170e2c79ae"
+    },
+    "boundary-witness.py.gz": {
+      "sha256": "77c3500ef96c709214a5bce1580e66f459e6ef3f897d2fe463c52edecb96c4b5",
+      "originalSha256": "995280aef2f038469d4456c69e37664bb676a07a3a1fd4ed57d7034d07c0ad4d"
+    },
+    "native.log.gz": {
+      "sha256": "c91f0ac69b3e8b37c4df906c3042446d071f455eadd87de66933cf499182f562",
+      "originalSha256": "74c191451c6430c2897514fd9d2259f35d98f2e7d70b88c757017a9399289429"
+    },
+    "matrix-delta-1000.json.gz": {
+      "sha256": "1c10b630167dac18404a00e3ab518090ca8af2bdef6574af0d75933fc3c7b221",
+      "originalSha256": "face99649236d601efe97629855b612ca6977871a7baac66aef951f863d1ec6d"
+    },
+    "matrix-delta-10000.json.gz": {
+      "sha256": "b46bb98b45822adf2d6edb6f98d87311eb19b4f6615abf1fd5aea9c568bc5fe9",
+      "originalSha256": "ccac982d0f8c9677a9f40f656b64ef71b28a8daba0a3f0cff3ba210af5e1013f"
+    },
+    "matrix-delta-40000.json.gz": {
+      "sha256": "9e3059f99e507eced441b0cccb01889f1a57ba5e24025793d3bf1a700694e967",
+      "originalSha256": "75c0c36e4551fa93b030c875fff4e7b08b5f1cff15d963758348cee46f1cba40"
+    },
+    "acceptance.json.gz": {
+      "sha256": "d0648fccbf280a68d698fc6bcaac3c245adc8f3ca9bb4583e8398c410b2fd38f",
+      "originalSha256": "c6c74ea956d117cdf4c7431f09de80eee0e5b3c0e5eb40b3ed6ff78b96d5f117"
+    },
+    "source-package-manifest.json.gz": {
+      "sha256": "4b55f047e9da9ad54373aaf5348db354e5cd9fea1d41c708cbc26e0b4936226b",
+      "originalSha256": "e0c4733af44183b644471e3b0b57c5f8a4c241a685f9ed185d461b054ac6678f"
+    },
+    "sidecar-exit-status.json.gz": {
+      "sha256": "0b42e53b0c3624e7cb65a1574f3a99dddf8f4728e5d38d37ac65a8c068fd682c",
+      "originalSha256": "51c0d06b93790e33a25367fe908607fae53182fc04f2df55af43d9d2e661a3a4"
+    },
+    "verified-after.json.gz": {
+      "sha256": "4ce0497365d5df9a05dbc882992580eb7a24bab90e1b0bfc9d71414fd59ab772",
+      "originalSha256": "bc734d8ea928757934fc748b34e13f8c6d29bba5cdbe0737df7b3bebafb859be"
+    },
+    "native-boundaries.json.gz": {
+      "sha256": "cdcfa311c234fba35034fd574f9002bf80b6c7b2d2d674e88a15ef3d2fa489a2",
+      "originalSha256": "5673c05a853912a952f7d57622303717a0a1d388a570f6741cfd8d57fa596c54"
+    },
+    "test_default_origin_matrix.py": {
+      "sha256": "463b98ace3c3540499b3295c805165594f9647640dd962a7815331283a4f0949"
+    }
+  }
+}

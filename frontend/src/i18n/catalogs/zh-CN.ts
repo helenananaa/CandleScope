@@ -288,6 +288,7 @@ export const zhCN = {
   "pine.host.alertHint": "需要图表保持订阅。历史计算和预览不通知；可在提醒面板管理自动创建的 Pine 规则、通知渠道和暂停状态。",
   "pine.host.recovered": "Pine 已从观察记录恢复状态；断线期间未收到的 tick 无法补回。",
   "pine.host.resetNotice": "输入或历史发生变化，Pine 已重新开始，之前的盘中状态已清除。",
+  "pine.host.runtimeResetNotice": "Pine 运行时已从确认历史重新计算，之前的盘中状态已清除。",
   "pine.host.alertFailed": "Pine 提醒发送失败，请检查提醒服务。",
   "pine.host.title": "Pine 行情与执行输入",
   "pine.host.json": "宿主输入（JSON）",

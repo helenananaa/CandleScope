@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from contextlib import nullcontext
 import inspect
 from typing import Any
 
@@ -27,8 +28,9 @@ from .models import QueryResult, StreamInfo
 class BarSourcePrefixFacade:
     """Transaction-owned source prefix protection behind the DataManager."""
 
-    def __init__(self, storage: Callable[[], Any] | None) -> None:
+    def __init__(self, storage: Callable[[], Any] | None, clock: Callable[[], Any] | None = None) -> None:
         self._storage = storage
+        self._clock = clock
 
     def _require(self):
         from app.data_engine.storage.prefix_watches import PrefixContinuityUnavailable
@@ -44,12 +46,38 @@ class BarSourcePrefixFacade:
     def prepare(self, receipt, **kwargs):
         return self._require().prepare(receipt, **kwargs)
 
-    def commit(self, proof, publish: Callable[[], Any], *, committed_through_ms=None):
+    def register_family(self, owner: str, series, **kwargs):
+        values = (series.exchange,series.market_type,series.symbol,'*',*series.identity.storage_values)
+        return self._require().register(owner,values,**kwargs)
+
+    def query_proof(self, receipt, **kwargs):
+        return self._require().query_proof(receipt,**kwargs)
+
+    def correction_cursor(self, series):
+        if self._clock is None:
+            from app.data_engine.storage.prefix_watches import PrefixContinuityUnavailable
+            raise PrefixContinuityUnavailable('source correction clock is unavailable')
+        return self._clock().correction_cursor(series)
+
+    def delivery_watermark(self, series):
+        """A stable publication watermark for the series, including previews."""
+        if self._clock is not None:
+            version = self._clock().snapshot(series)
+            if version["stable"]:
+                return version
+        return None
+
+    def commit(self, proof, publish: Callable[[], Any], *, committed_through_ms=None,
+               series=None, source_cursor=None):
         # Computation and provider snapshots belong before this short guard.
-        # The callback only commits its already prepared financial checkpoint.
+        # The callback only publishes an already prepared consumer cursor.
         if inspect.iscoroutinefunction(publish):
             raise TypeError("source prefix commit requires a synchronous durable callback")
-        with self._require().commit_guard(proof,committed_through_ms=committed_through_ms):
+        clock_guard = (self._clock().correction_guard(series,source_cursor)
+            if source_cursor is not None and self._clock is not None else nullcontext())
+        if source_cursor is not None and (series is None or self._clock is None):
+            raise ValueError('source clock commit requires its series and owner')
+        with self._require().commit_guard(proof,committed_through_ms=committed_through_ms), clock_guard:
             result = publish()
             if inspect.isawaitable(result):
                 if inspect.iscoroutine(result):
@@ -76,13 +104,14 @@ class BarDataFacade:
         get_bounds: Callable[..., dict[str, Any]],
         ensure_stream: Callable[..., Any],
         prefix_store: Callable[[], Any] | None = None,
+        source_clock: Callable[[], Any] | None = None,
     ) -> None:
         self._query = query
         self._query_latest = query_latest
         self._query_before = query_before
         self._get_bounds = get_bounds
         self._ensure_stream = ensure_stream
-        self.prefixes = BarSourcePrefixFacade(prefix_store)
+        self.prefixes = BarSourcePrefixFacade(prefix_store,source_clock)
 
     def query(self, symbol: str, interval: str, **kwargs: Any) -> QueryResult:
         return self._query(symbol, interval, **kwargs)

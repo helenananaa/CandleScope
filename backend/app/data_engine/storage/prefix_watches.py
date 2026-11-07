@@ -47,11 +47,15 @@ def init_prefix_watch_storage(conn):
     conn.execute("DROP INDEX IF EXISTS idx_kline_prefix_watches_series")
     for operation,alias in (("insert","NEW"),("update","NEW"),("delete","OLD")):
         changed = "WHEN " + " OR ".join(f"NEW.{key} IS NOT OLD.{key}" for key in REVISION_CHANGED_FIELDS) if operation == "update" else ""
-        where = " AND ".join(f"{key}={alias}.{key}" for key in IDENTITY_COLUMNS)
+        where = " AND ".join((f"({key}={alias}.{key} OR {key}='*')" if key == 'interval'
+                              else f"{key}={alias}.{key}") for key in IDENTITY_COLUMNS)
         stamp = f"{alias}.open_time"
         end = ("MAX(COALESCE(OLD.close_time,OLD.open_time),COALESCE(NEW.close_time,NEW.open_time),NEW.open_time)"
                if operation == "update" else f"MAX(COALESCE({alias}.close_time,{alias}.open_time),{alias}.open_time)")
-        conn.execute(f"""CREATE TRIGGER IF NOT EXISTS kline_prefix_watch_{operation}
+        # Existing exact-series watches retain their semantics. '*' is an
+        # explicit family watch for consumers of lazily derived intervals.
+        conn.execute(f"DROP TRIGGER IF EXISTS kline_prefix_watch_{operation}")
+        conn.execute(f"""CREATE TRIGGER kline_prefix_watch_{operation}
             AFTER {operation.upper()} ON klines {changed} BEGIN
             UPDATE kline_prefix_watches SET version=version+1,
                 dirty_from_ms=CASE WHEN dirty_from_ms IS NULL THEN {stamp} ELSE MIN(dirty_from_ms,{stamp}) END,
@@ -64,7 +68,8 @@ def invalidate_deleted_prefix(conn, values, start_ms, end_ms):
     conn.execute("UPDATE kline_prefix_watches SET version=version+1,"
         "dirty_from_ms=CASE WHEN dirty_from_ms IS NULL THEN ? ELSE MIN(dirty_from_ms,?) END,"
         "dirty_through_ms=CASE WHEN dirty_through_ms IS NULL THEN ? ELSE MAX(dirty_through_ms,?) END WHERE "+
-        " AND ".join(f"{key}=?" for key in IDENTITY_COLUMNS)+" AND from_ms<=through_ms AND from_ms<=? AND through_ms>=?",
+        " AND ".join((f"({key}=? OR {key}='*')" if key == 'interval' else f"{key}=?")
+                     for key in IDENTITY_COLUMNS)+" AND from_ms<=through_ms AND from_ms<=? AND through_ms>=?",
         (start,start,end,end,*values,end,start))
 
 
@@ -182,6 +187,53 @@ class PrefixWatchStore:
                 "verified_through_ms=?,verified_version=version,dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
                 (through_ms,committed_through_ms,receipt.owner))
             return self._receipt(conn.execute("SELECT * FROM kline_prefix_watches WHERE owner=?",(receipt.owner,)).fetchone(),head)
+
+    def query_proof(self, proof: PrefixReceipt, *, committed_through_ms, queried_revision,
+                    read_through_ms=None):
+        """Accept a version-checked query's own unprocessed materializations.
+
+        A derived query may write its target after reading protected inputs.
+        It may not rebase an already processed prefix, or a change after the
+        query's final durable head. No raw query or caller-supplied rows prove
+        this contract; the DataManager's forced-revision reader owns it.
+
+        Paged readers additionally fence the uncommitted pages already read.
+        A later page can materialize its own rows without rebasing those pages.
+        """
+        _time(committed_through_ms)
+        if read_through_ms is not None and not proof.from_ms-1 <= _time(read_through_ms) <= proof.through_ms:
+            raise ValueError("read watermark must stay inside the acquired prefix")
+        if type(queried_revision) is not int or queried_revision < proof.storage_revision:
+            raise PrefixContinuityUnavailable('query did not prove its required storage revision')
+        with closing(self.connect()) as conn, conn:
+            conn.execute('BEGIN IMMEDIATE')
+            row = conn.execute('SELECT * FROM kline_prefix_watches WHERE owner=?',(proof.owner,)).fetchone()
+            self._matching(row,proof)
+            if row['acquisition'] != proof.acquisition or row['through_ms'] != proof.through_ms:
+                raise StaleAcquisition('another acquisition owns this prefix')
+            if (not proof.from_ms-1 <= committed_through_ms <= proof.through_ms
+                    or committed_through_ms < row['committed_through_ms']
+                    or proof.acquisition < row['committed_acquisition']):
+                raise PrefixContinuityUnavailable('query cannot roll back acknowledged source progress')
+            head = current_revision(conn)
+            if head < queried_revision or head < proof.storage_revision or row['version'] < proof.version:
+                raise PrefixContinuityUnavailable('query source continuity is unavailable')
+            if row['version'] != proof.version:
+                if row['dirty_from_ms'] is None or row['dirty_from_ms'] <= committed_through_ms:
+                    raise ProcessedPrefixChanged(row['dirty_from_ms'],row['dirty_through_ms'])
+                if (head != queried_revision or
+                        (read_through_ms is not None and row['dirty_from_ms'] <= read_through_ms)):
+                    raise PrefixAcquisitionChanged(row['dirty_from_ms'],row['dirty_through_ms'])
+                if read_through_ms is not None:
+                    # Later writes must report their own dirty range. This
+                    # verifies the existing committed prefix without advancing
+                    # its durable consumer cursor.
+                    conn.execute(
+                        "UPDATE kline_prefix_watches SET verified_through_ms=?,verified_version=version,"
+                        "dirty_from_ms=NULL,dirty_through_ms=NULL WHERE owner=?",
+                        (committed_through_ms, proof.owner),
+                    )
+            return self._receipt(row,head)
 
     @contextmanager
     def commit_guard(self,proof: PrefixReceipt,*,committed_through_ms=None):

@@ -3,6 +3,7 @@ export const pineEnglish = {
   "pine.host.alertHint": "Requires an active chart subscription. History and previews never notify. Manage the created Pine rule's channels and pause state in Alerts.",
   "pine.host.recovered": "Pine state restored from recorded observations. Ticks missed while disconnected cannot be reconstructed.",
   "pine.host.resetNotice": "Pine state restarted because its inputs or history changed; prior intrabar state was cleared.",
+  "pine.host.runtimeResetNotice": "The Pine runtime restarted from confirmed history. Prior intrabar state was cleared.",
   "pine.host.alertFailed": "Pine notification delivery failed. Check the alert service.",
   "pine.host.title": "Pine market inputs",
   "pine.host.json": "Host inputs (JSON)",

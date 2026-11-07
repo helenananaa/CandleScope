@@ -1,3 +1,5 @@
+import { ChartCalculationSessions } from "./chartCalculationSessions.js";
+import { usesChartCalculation } from "./pineChartTransport.js";
 import { indicatorWarmPlanKey, type IndicatorWarmPlan } from "../market-data/manager/chartDataFlowManager.js";
 import { bindSharedIndicatorPrefix } from "./indicatorInputBinding.js";
 import { buildIndicatorOhlcvSignature } from "./indicatorComputeRuntime.js";
@@ -30,7 +32,7 @@ import {
   createIndicatorRealtimeValueBatcher,
   type IndicatorRealtimeValueUpdate,
 } from "./indicatorRealtimeBatcher.js";
-import { computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
+import { openIndicatorCalculation, readIndicatorCalculation, closeIndicatorCalculation, computeIndicatorRangeBatch } from "../../services/indicatorApi.js";
 import { useIndicatorComputeController } from "./indicatorComputeController.js";
 import { useFrontendScriptWindow } from "./useFrontendScriptWindow.js";
 import { isFrontendScript } from "./frontendScriptContract.js";
@@ -78,6 +80,7 @@ import {
   invalidateCachedIndicatorRange,
   patchCachedIndicatorResult,
   rebaseCachedIndicatorRevision,
+  removeCachedIndicatorResult,
   replaceCachedIndicatorRange,
   resolveCachedIndicatorResults,
   snapshotIndicatorResultCacheDiagnostics,
@@ -721,6 +724,11 @@ export function useIndicatorRuntime(
     coalesceWindowMs: 40,
     sendBatch: ({ requests, signal }) => computeIndicatorRangeBatch({ requests, signal }),
   }));
+  const projectionOwner = useId();
+  const [calculationVersion, setCalculationVersion] = useState(0);
+  const [calculationSessions] = useState(() => new ChartCalculationSessions({
+    open: openIndicatorCalculation, read: readIndicatorCalculation, close: closeIndicatorCalculation,
+  }, () => setCalculationVersion(version => version+1)));
   const [indicatorHydrationScheduler] = useState(createIndicatorHydrationScheduler);
   const [rangeRetryTick, setRangeRetryTick] = useState(0);
   const [subscriptionAckTick, setSubscriptionAckTick] = useState(0);
@@ -837,6 +845,7 @@ export function useIndicatorRuntime(
   const indicatorCacheHydrationSignature = useMemo(() => (
     buildIndicatorCacheHydrationSignature(activeIndicators, {
       inputSource,
+      projectionOwner,
       localInputKey,
       candleDownColor,
       candleUpColor,
@@ -849,6 +858,7 @@ export function useIndicatorRuntime(
   ), [
     activeIndicators,
     inputSource,
+    projectionOwner,
     localInputKey,
     candleDownColor,
     candleUpColor,
@@ -872,6 +882,7 @@ export function useIndicatorRuntime(
   const currentInitialHydrationSignature = useMemo(() => {
     const cacheContext = buildIndicatorCacheContext({
       inputSource,
+      projectionOwner,
       localInputKey,
       candleDownColor,
       candleUpColor,
@@ -892,6 +903,7 @@ export function useIndicatorRuntime(
   }, [
     activeIndicators,
     inputSource,
+    projectionOwner,
     localInputKey,
     candleDownColor,
     candleUpColor,
@@ -971,6 +983,7 @@ export function useIndicatorRuntime(
     activeIndicatorsRef.current,
     {
       inputSource,
+      projectionOwner,
       localInputKey,
       candleDownColor,
       candleUpColor,
@@ -989,6 +1002,7 @@ export function useIndicatorRuntime(
     indicatorCacheHydrationSignature,
     indicatorCacheRuntimeLeaseId,
     inputSource,
+    projectionOwner,
     localInputKey,
     seriesIdentity,
     interval,
@@ -1039,6 +1053,7 @@ export function useIndicatorRuntime(
     const requestContext = runtimeContextRef.current;
     return buildIndicatorCacheContext({
       inputSource,
+      projectionOwner,
       localInputKey: localInputKeyRef.current,
       candleDownColor: candleDownColorRef.current,
       candleUpColor: candleUpColorRef.current,
@@ -1048,7 +1063,28 @@ export function useIndicatorRuntime(
       marketType: requestContext.marketType,
       symbol: requestContext.symbol,
     });
-  }, [candleDownColorRef, candleUpColorRef, runtimeContextRef, inputSource, localInputKeyRef]);
+  }, [candleDownColorRef, candleUpColorRef, runtimeContextRef, inputSource, localInputKeyRef, projectionOwner]);
+
+  const calculationKey = useCallback((indicator: IndicatorDefinition) => (
+    buildIndicatorResultCacheKey(indicator,getIndicatorCacheContext())
+  ), [getIndicatorCacheContext]);
+  const ownedCalculation = useCallback((indicator: IndicatorDefinition) => realtimeEnabled
+    && usesChartCalculation(buildHostedSubscriptionMessage(indicator, {
+      ...runtimeContextRef.current,candleDownColor:candleDownColorRef.current,candleUpColor:candleUpColorRef.current,
+    })), [realtimeEnabled,runtimeContextRef,candleDownColorRef,candleUpColorRef]);
+
+  useLayoutEffect(() => {
+    calculationSessions.setContext(currentStreamLifecycleKey);
+    const owned = getVisibleHostedIndicators(activeIndicators).filter(ownedCalculation);
+    const keys = new Map(owned.map(indicator => [indicator.id,calculationKey(indicator)]));
+    calculationSessions.reconcile(keys);
+    for (const indicator of owned) {
+      if (!calculationSessions.getReference(indicator.id,calculationKey(indicator))) {
+        removeCachedIndicatorResult(indicator,getIndicatorCacheContext());
+        provisionalIndicatorPreviewsRef.current.delete(indicator.id);
+      }
+    }
+  }, [activeIndicators,calculationKey,calculationSessions,currentStreamLifecycleKey,getIndicatorCacheContext,ownedCalculation]);
 
   const markHostedSubscriptionReady = useCallback((indicatorId: string) => {
     hostedPendingResumePatchIdsRef.current.delete(String(indicatorId));
@@ -1100,6 +1136,16 @@ export function useIndicatorRuntime(
   }, [runtimeContextRef]);
 
   const applyWsSnapshot = useCallback((indicatorId: string, payload: IndicatorSnapshotMessage) => {
+    const currentIndicator = activeIndicatorsRef.current.find(item => item.id === indicatorId);
+    if (!currentIndicator) return;
+    if (ownedCalculation(currentIndicator)) {
+      const admission = calculationSessions.admit(indicatorId,calculationKey(currentIndicator),payload);
+      if (admission === "reject") return;
+      if (admission === "reset") {
+        removeCachedIndicatorResult(currentIndicator,getIndicatorCacheContext());
+        provisionalIndicatorPreviewsRef.current.delete(indicatorId);
+      }
+    }
     const error = payload?.ok === false ? formatIndicatorError(payload) : null;
     const schema = normalizeParamSchema(payload?.param_schema);
     const normalized = normalizeIndicatorPayload(payload, indicatorId);
@@ -1146,12 +1192,18 @@ export function useIndicatorRuntime(
     });
   }, [
     activeIndicatorsRef,
+    calculationKey,
+    calculationSessions,
+    ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
     setActiveIndicators,
   ]);
 
   const applyWsPatch = useCallback((indicatorId: string, payload: IndicatorPatchMessage) => {
+    const currentIndicator = activeIndicatorsRef.current.find(item => item.id === indicatorId);
+    if (!currentIndicator || (ownedCalculation(currentIndicator)
+        && calculationSessions.admit(indicatorId,calculationKey(currentIndicator),payload) === "reject")) return;
     const normalized = normalizeIndicatorPayload(payload, indicatorId);
     const indicator = activeIndicatorsRef.current.find((item) => item.id === indicatorId);
     if (!indicator) return;
@@ -1193,6 +1245,9 @@ export function useIndicatorRuntime(
     });
   }, [
     activeIndicatorsRef,
+    calculationKey,
+    calculationSessions,
+    ownedCalculation,
     getIndicatorCacheContext,
     markHostedSubscriptionReady,
     reapplyProvisionalIndicatorPreview,
@@ -1203,6 +1258,13 @@ export function useIndicatorRuntime(
     indicatorId: string,
     payload: IndicatorReplacePayload,
   ) => {
+    if (payload.type === "indicator.snapshot") {
+      applyWsSnapshot(indicatorId,{ ...payload,type:"indicator.snapshot",clientId:indicatorId });
+      return;
+    }
+    const currentIndicator = activeIndicatorsRef.current.find(item => item.id === indicatorId);
+    if (!currentIndicator || (ownedCalculation(currentIndicator)
+        && calculationSessions.admit(indicatorId,calculationKey(currentIndicator),payload) === "reject")) return;
     const normalized = normalizeIndicatorPayload(payload, indicatorId);
     const range = payload?.range;
     const indicator = activeIndicatorsRef.current.find((item) => item.id === indicatorId);
@@ -1239,7 +1301,11 @@ export function useIndicatorRuntime(
       range,
     });
   }, [
+    applyWsSnapshot,
     activeIndicatorsRef,
+    calculationKey,
+    calculationSessions,
+    ownedCalculation,
     getIndicatorCacheContext,
     reapplyProvisionalIndicatorPreview,
     setActiveIndicators,
@@ -1479,10 +1545,11 @@ export function useIndicatorRuntime(
         realtimeEnabled,
         options.waitForSubscription,
       )
+      && hostedIndicators.some(indicator => !ownedCalculation(indicator))
       && (
         hostedSubscriptionSessionKeyRef.current !== contextKey
         || !hostedIndicatorRangeRequestsReady({
-          indicatorIds: hostedIndicators.map((indicator) => indicator.id),
+          indicatorIds: hostedIndicators.filter(indicator => !ownedCalculation(indicator)).map((indicator) => indicator.id),
           subscribedIds: hostedSubscribedIdsRef.current,
           waitStartedAt: hostedSubscriptionWaitStartedAtRef.current,
         })
@@ -1592,10 +1659,9 @@ export function useIndicatorRuntime(
       revision,
       interval: requestContext.interval,
       step,
-      getCoveredSegments: (target) => getCachedIndicatorComputedSegments(
-        target.indicator,
-        cacheContext,
-        revision,
+      getCoveredSegments: (target) => ownedCalculation(target.indicator)
+        && !calculationSessions.getReference(target.indicator.id,target.key) ? [] : getCachedIndicatorComputedSegments(
+        target.indicator,cacheContext,revision,
       ),
       execute: async ({ range, reason: scheduledReason, signal, target }) => {
         // Capture the event frontier before starting physical work. A history
@@ -1648,9 +1714,12 @@ export function useIndicatorRuntime(
         if (message.securityMode !== undefined) {
           rangeRequest.securityMode = message.securityMode;
         }
-        const requestRange = () => marketWorkspaceResources
-          ? marketWorkspaceResources.indicatorDataManager.range(rangeRequest)
-          : indicatorRangeBatcher.schedule(rangeRequest);
+        const requestRange = () => ownedCalculation(target.indicator)
+          ? calculationSessions.range(requestLifecycleKey,target.key,rangeRequest,
+            Number(chartDataRef.current[0]?.time || range.start))
+          : marketWorkspaceResources
+            ? marketWorkspaceResources.indicatorDataManager.range(rangeRequest)
+            : indicatorRangeBatcher.schedule(rangeRequest);
         const payload = await (workScheduler && workSchedulerCellId
           ? workScheduler.run(workSchedulerCellId, "indicator-range", requestRange)
           : requestRange());
@@ -1755,6 +1824,8 @@ export function useIndicatorRuntime(
     return scheduled.accepted;
   }, [
     activeIndicatorsRef,
+    calculationSessions,
+    ownedCalculation,
     applyWsReplaceRange,
     candleDownColorRef,
     candleUpColorRef,
@@ -2021,9 +2092,14 @@ export function useIndicatorRuntime(
     ensureVisibleIndicatorRange(pendingVisibleRangeRef.current);
   }, [ensureVisibleIndicatorRange, historyWindowPending]);
 
-  const resolveIndicatorResumeState = useCallback((indicator: IndicatorDefinition) => (
-    getCachedIndicatorResumeState(indicator, getIndicatorCacheContext())
-  ), [getIndicatorCacheContext]);
+  const resolveIndicatorResumeState = useCallback((indicator: IndicatorDefinition) => {
+    if (!ownedCalculation(indicator)) return getCachedIndicatorResumeState(indicator,getIndicatorCacheContext());
+    const calculation = calculationSessions.getReference(indicator.id,calculationKey(indicator));
+    return calculation ? { calculation } : null;
+  }, [calculationKey,calculationSessions,getIndicatorCacheContext,ownedCalculation]);
+  const indicatorSubscriptionReady = useCallback((indicator: IndicatorDefinition) => !ownedCalculation(indicator)
+    || Boolean(calculationSessions.getReference(indicator.id,calculationKey(indicator))),
+  [calculationKey,calculationSessions,ownedCalculation]);
 
   const queueIndicatorCorrection = useCallback((
     correction: PendingIndicatorCorrection,
@@ -2276,6 +2352,8 @@ export function useIndicatorRuntime(
   ) => {
     const indicator = activeIndicatorsRef.current.find((item) => item.id === indicatorId);
     if (!indicator) return;
+    if (ownedCalculation(indicator) && payload.ok !== false
+        && !calculationSessions.acknowledge(indicatorId,calculationKey(indicator),payload.calculation)) return;
     const requestContext = runtimeContextRef.current;
     const seriesKey = [
       requestContext.sessionKey,
@@ -2405,6 +2483,9 @@ export function useIndicatorRuntime(
     }
   }, [
     activeIndicatorsRef,
+    calculationKey,
+    calculationSessions,
+    ownedCalculation,
     canExecuteCurrentWsFallback,
     chartDataRef,
     getCurrentVisibleRange,
@@ -2445,6 +2526,8 @@ export function useIndicatorRuntime(
     exchange,
     historyWindowPending,
     getIndicatorResumeState: resolveIndicatorResumeState,
+    isSubscriptionReady: indicatorSubscriptionReady,
+    subscriptionVersion: calculationVersion,
     handleIndicatorRecomputed,
     handleIndicatorSubscriptionPending: markHostedSubscriptionPending,
     handleIndicatorSubscribed,
@@ -2776,8 +2859,9 @@ export function useIndicatorRuntime(
       directIndicatorRangeIntents.clear();
       indicatorRangeBatcher.dispose();
       indicatorRangeScheduler.dispose();
+      void calculationSessions.dispose().catch(error => console.warn("Chart calculation cleanup:",error));
     };
-  }, [indicatorRangeBatcher, indicatorRangeScheduler]);
+  }, [calculationSessions, indicatorRangeBatcher, indicatorRangeScheduler]);
 
   useEffect(() => {
     if (!canStartIndicatorProgressiveHydration({

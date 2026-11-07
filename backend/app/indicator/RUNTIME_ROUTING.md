@@ -19,3 +19,26 @@ Pyne has been removed. Its scripts, route entries, strategy providers and securi
 Shared transport budgets use `SCRIPT_MAX_BARS`, `SCRIPT_TICK_RECOMPUTE_MAX_BARS` and `SCRIPT_HTTP_THREAD_*`. Plugin-specific execution policy belongs to each runtime.
 
 To activate a community language, install and activate its verified `.cspkg`, add an explicit `sidecar` route, restart CandleScope, and check `/health`, `/api/v1/indicators/runtimes`, and `/api/v1/indicators/diagnostics`. Setting `CANDLESCOPE_PLUGIN_HOST_ENABLED=0` disables the host but does not make configured sidecar routes valid without it.
+
+## Pine live chart rollout
+
+`CANDLESCOPE_PINE_CHART_TRANSPORT=calculation` is the default. It selects the
+chart-owned Pine calculation with capability-checked incremental updates.
+`CANDLESCOPE_PINE_CHART_TRANSPORT=snapshot` explicitly selects the compatible
+Pine sidecar chart path. The host may still negotiate supported IPC patches in
+snapshot mode. HTTP batch history, non-Pine scripts and builtin indicators keep
+their existing routes.
+
+Quit the entire desktop app before changing this variable, then launch the same
+app with the selected startup environment. The desktop host passes one value to
+both the backend and the renderer. For a separately hosted web client, build
+with the matching `VITE_PINE_CHART_TRANSPORT` value and set the backend startup
+environment independently. Check `pine_chart_transport` in `/health`. Invalid
+values fail startup. The current client marks snapshot subscriptions explicitly;
+a transport mismatch is reported as `INDICATOR_PINE_CHART_TRANSPORT_MISMATCH`.
+Old unmarked WebSocket clients keep their compatibility contract.
+
+A full restart ends the old chart-owned calculation. The saved script, its
+parameters and underlying data remain in the profile. The selected path rebuilds
+from its supported canonical history. An in-flight calculation reference and
+unconfirmed intrabar observations do not carry across a transport change.

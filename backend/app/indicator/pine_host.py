@@ -137,7 +137,10 @@ class PineHostInputs:
             alert_inputs = deepcopy(supplied)
             params = {key: value for key, value in request.params.items() if key not in {"__pineHost", "__pineSessionEpoch", "__pineAlerts"}}
             common_options = {**request.options, "pineAlerts": request.params.get("__pineAlerts") is True,
-                "pineSessionEpoch": request.params.get("__pineSessionEpoch", "0"), "pineAlertInputs": alert_inputs}
+                # A chart calculation owns its epoch. Legacy standalone params
+                # supply a default only; they cannot revoke an admitted reset.
+                "pineSessionEpoch": request.options.get("pineSessionEpoch", request.params.get("__pineSessionEpoch", "0")),
+                "pineAlertInputs": alert_inputs}
             # The established local-data path owns its metadata, clocks and causal request feed.
             # Explicit extended environments use the compiler-guided provider coordinator once.
             if not supplied:

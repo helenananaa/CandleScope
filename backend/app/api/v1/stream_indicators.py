@@ -39,6 +39,7 @@ from app.data_engine.interval_policy import parse_interval_ms, parse_interval_sp
 from app.data_engine.interval_resolution import IntervalResolutionError
 from app.indicator import registry as indicator_registry
 from app.indicator.events import IndicatorEvent
+from app.indicator.calculation_owner import CalculationOwnerError
 from app.indicator.resume import plan_indicator_resume
 from app.indicator.runtime_routes import IndicatorRuntimeRoutesError
 from app.indicator.serial_owner import IndicatorInputChanged, SerialIndicatorOwner, call_engine, drain_control_task
@@ -110,6 +111,14 @@ def _indicator_stream_failure(
         code = str(detail.get("code") or "INDICATOR_STREAM_SUBSCRIPTION_FAILED")
         message = str(detail.get("message") or exc)
         hint = "实时指标订阅不可用；前端应停止该订阅，并通过 HTTP 历史接口补齐已收盘指标值。"
+    elif isinstance(exc, CalculationOwnerError):
+        code, message, hint = exc.code, str(exc), '请恢复图表计算域后重新订阅。'
+        if code == "INDICATOR_SNAPSHOT_WRITER_BUSY":
+            message = "Another connection still owns this Pine snapshot session."
+            hint = "请等待旧连接完成清理后重新订阅，或为独立图表使用不同的订阅 ID。"
+        elif code == "INDICATOR_PINE_CHART_TRANSPORT_MISMATCH":
+            message = "The selected Pine chart transport differs from the server startup configuration."
+            hint = "请按同一 Pine 图表传输配置重启客户端与后端。"
     elif isinstance(exc, IndicatorRuntimeRoutesError):
         code = "INDICATOR_LANGUAGE_UNAVAILABLE"
         message = str(exc)
@@ -464,6 +473,29 @@ async def _handle_indicator_subscribe(
             f"{client_id}:{id(websocket)}"
         )
         try:
+            # A reference selects calculation transport. New snapshot clients
+            # declare their route; old unmarked clients retain compatibility.
+            if "calculation" in msg:
+                if "pineChartTransport" in msg or config.PINE_CHART_TRANSPORT != "calculation":
+                    raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
+                from app.api.v1.chart_calculation_stream import handle_chart_calculation_subscribe
+                from app.api.v1.indicators import IndicatorRangeRequest, _build_range_meta
+                chart_meta = _build_range_meta(IndicatorRangeRequest.model_validate({**msg,'start':1,'end':1}),
+                    trusted_origin=is_trusted_operator_origin(origin_from(websocket.headers)))
+                await handle_chart_calculation_subscribe(dm=dm,service=runtime_service,meta=chart_meta,
+                    reference=msg['calculation'],client_id=client_id,stream_consumer_id=stream_consumer_id,
+                    client_meta=client_meta,custom_handles=custom_handles,custom_tasks=custom_tasks,
+                    correction_state=script_correction_state,send_json=send_json,queue=queue,
+                    queue_critical=_queue_indicator_critical_message,
+                    unsubscribe_client=lambda cid:_unsubscribe_indicator_client(cid,dm=dm,
+                        indicator_engine=indicator_engine,subscribed=subscribed,custom_handles=custom_handles,
+                        custom_tasks=custom_tasks,client_meta=client_meta),
+                    coordinator=getattr(indicator_engine,'backfill_coordinator',None))
+                return
+            if "pineChartTransport" in msg and (
+                msg["pineChartTransport"] != "snapshot" or config.PINE_CHART_TRANSPORT != "snapshot"
+            ):
+                raise CalculationOwnerError("INDICATOR_PINE_CHART_TRANSPORT_MISMATCH")
             await handle_script_indicator_subscribe(
                 dm=dm,
                 custom_handles=custom_handles,

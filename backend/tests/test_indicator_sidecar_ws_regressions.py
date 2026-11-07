@@ -718,8 +718,15 @@ async def test_sidecar_closed_finality_is_not_cancelled_by_following_preview() -
     first_close_task = connection.custom_tasks["finality"]
     assert await asyncio.wait_for(host.started.get(), timeout=1) == 1
     await callback(_realtime_event(DataEventType.BAR_CLOSED, _bars([1_140])[0]))
-    await connection.unsubscribe("finality")
-    host.releases[1].set()
+    disposal = asyncio.create_task(connection.unsubscribe("finality"))
+    try:
+        async with asyncio.timeout(1):
+            while "finality" in connection.client_meta:
+                await asyncio.sleep(0)
+        assert not disposal.done()
+    finally:
+        host.releases[1].set()
+    await disposal
     await first_close_task
 
     assert len(host.requests) == 2

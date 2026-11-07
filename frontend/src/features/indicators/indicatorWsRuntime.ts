@@ -7,6 +7,7 @@ import {
   normalizeIndicatorRange,
   normalizeIndicatorRevision,
 } from "./indicatorRangeCoverage.js";
+import { isPineScriptSubscription, PINE_CHART_TRANSPORT } from "./pineChartTransport.js";
 import { estimateOutputWarmupBars } from "./indicatorRangePlanning.js";
 import {
   getBuiltinIndicatorName,
@@ -147,6 +148,7 @@ export function buildHostedSubscriptionMessage(
     }),
     historyLimit,
   };
+  if (context.calculation) message.calculation = context.calculation;
   if (builtin) {
     message.name = getBuiltinIndicatorName(indicator);
   } else {
@@ -156,6 +158,9 @@ export function buildHostedSubscriptionMessage(
     if (indicator.securityMode !== undefined) {
       message.securityMode = indicator.securityMode;
     }
+  }
+  if (PINE_CHART_TRANSPORT === "snapshot" && isPineScriptSubscription(message)) {
+    message.pineChartTransport = "snapshot";
   }
   if (Number.isFinite(Number(resumeFrom)) && Number(resumeFrom) > 0) {
     message.resumeFrom = Math.floor(Number(resumeFrom));
@@ -313,7 +318,8 @@ function parseIndicatorWsRecord(value: unknown): IndicatorWsMessage {
     const revisionValue =
       record.dataRevision ?? record.data_revision ?? record.revision;
     const envelope = parseIndicatorPayloadEnvelope(record, path);
-    const message: IndicatorSubscribedMessage = { type, clientId };
+    const message: IndicatorSubscribedMessage = { type, clientId,
+      ...(envelope.calculation ? { calculation: envelope.calculation } : {}) };
     if (seq !== undefined) message.seq = seq;
     const indicatorId = optionalIndicatorString(
       record.indicatorId,

@@ -77,7 +77,11 @@ async def test_patched_stream_gives_callers_the_full_snapshot_result(tmp_path, m
             expected = await full.execute_batch(request)
             actual = await patched.execute_batch(replace(request, output_stream="live"))
             assert expected.ok, expected.diagnostics
-            assert actual == expected
+            assert actual.meta["outputUpdate"]["schema"] == "render.update-range/1"
+            semantic = replace(actual, meta={key: value for key, value in actual.meta.items() if key != "outputUpdate"})
+            assert expected.meta["outputUpdate"]["mode"] == "snapshot"
+            full_semantic = replace(expected, meta={key: value for key, value in expected.meta.items() if key != "outputUpdate"})
+            assert semantic == full_semantic
         assert len(applied) >= 12
     finally:
         await patched.stop()

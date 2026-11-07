@@ -25,6 +25,7 @@ from candlescope_plugin_sdk import (
     FEATURE_RENDER_OUTPUT_PATCH_V1,
     FEATURE_RENDER_STRUCTURED_OUTPUT_V1,
     FEATURE_SOURCE_ANALYSIS_V1,
+    FEATURE_STREAM_RELEASE_V1,
     AnalyzeRequest,
     AnalyzeResult,
     BaseRuntimePlugin,
@@ -219,6 +220,7 @@ def _descriptor() -> RuntimeDescriptor:
             FEATURE_RENDER_NATIVE_SCENE_V1,
             FEATURE_RENDER_OUTPUT_PATCH_V1,
             FEATURE_BATCH_BARS_PATCH_V1,
+            FEATURE_STREAM_RELEASE_V1,
         ),
         required_host_features=(
             FEATURE_BATCH_EXECUTION_V1,
@@ -240,7 +242,9 @@ def _descriptor() -> RuntimeDescriptor:
             "closedBarsOnly": False,
             "formingBar": True,
             "incremental": True,
-            "sessionTransport": "executeBatch-full-snapshot",
+            "sessionTransport": "executeBatch-negotiated-patches",
+            "outputUpdateSchema": "render.update-range/1",
+            "nativeResultMaterialization": "full",
             "sessionCapacity": 8,
             "historyPlanning": "host-range-warmup",
             "hostCapabilities": {"chartContext": chart_context},
@@ -755,14 +759,14 @@ def _marker_position(value: Any) -> str | None:
     return None
 
 
-def _marker_size(value: Any) -> int | None:
+def _marker_size(value: Any) -> str | None:
     return {
-        "tiny": 1,
-        "small": 2,
-        "normal": 3,
-        "large": 4,
-        "huge": 5,
-        "auto": 2,
+        "tiny": "tiny",
+        "small": "small",
+        "normal": "normal",
+        "large": "large",
+        "huge": "huge",
+        "auto": "auto",
     }.get(str(value or "size.auto").lower().removeprefix("size."))
 
 
@@ -1601,6 +1605,45 @@ def _output_patch(base: str, previous: _Normalized, current: _Normalized) -> Ren
     return RenderPatch(base=base, series=tuple(series), collections=collections, meta=current.meta)
 
 
+def _output_update(previous: _Normalized | None, current: _Normalized) -> dict[str, Any]:
+    """Time damage from the same accepted prefixes used by RenderPatch.
+
+    Include removed points as well as new points: a forming value can become
+    na, and a negative plot offset can change an older displayed timestamp.
+    Structural changes require a complete replacement. Native object scenes
+    remain whole replacements independently of this time range.
+    """
+    snapshot = {"schema": "render.update-range/1", "mode": "snapshot"}
+    if previous is None:
+        return snapshot
+    lower = upper = None
+    for name in _COLLECTIONS:
+        before, after = previous.collections[name], current.collections[name]
+        if len(before) != len(after):
+            return snapshot
+        per_bar = _PER_BAR_KEYS.get(name, ())
+        for prior, record in zip(before, after):
+            if prior.keys() != record.keys() or any(
+                prior[key] != record[key] for key in record if key not in per_bar
+            ):
+                return snapshot
+            for key in per_bar:
+                if key not in record:
+                    continue
+                keep = current.keeps.get((name, record["id"], key))
+                if keep is None or keep < 0 or keep > min(len(prior[key]), len(record[key])):
+                    return snapshot
+                for items in (prior[key], record[key]):
+                    for point in items[keep:]:
+                        timestamp = _item_time(point)
+                        lower = timestamp if lower is None else min(lower, timestamp)
+                        upper = timestamp if upper is None else max(upper, timestamp)
+    # Per-bar records follow increasing host bar time, including fixed plot
+    # offsets. Signals each contain one point and drawing scenes stay whole.
+    return {"schema": "render.update-range/1", "mode": "range", "timeOrder": "ascending",
+            "range": None if lower is None else {"start": lower, "end": upper}}
+
+
 class PineCompatRuntimePlugin(BaseRuntimePlugin):
     """Expose the independently built Pine engine through protocol v1."""
 
@@ -1615,6 +1658,13 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
         self._sessions.clear()
         self._windows.clear()
         self._sessions.journal.close()
+
+    def release_stream(self, stream: str) -> None:
+        # These ids belong to explicit live owners, not saved user scripts.
+        # Journal deletion is transactional and idempotent; a failed release
+        # keeps the host's registry slot for retry instead of evicting it.
+        self._sessions.release(stream)
+        self._windows.pop(stream, None)
 
     def describe(self) -> RuntimeDescriptor:
         return _descriptor()
@@ -1808,6 +1858,15 @@ class PineCompatRuntimePlugin(BaseRuntimePlugin):
             if patch is None:
                 normalized, inputs, meta = normalize()
                 output = _render_output(normalized)
+            if session_id or forming:
+                meta["outputUpdate"] = _output_update(
+                    state.normalized if patch is not None and state is not None else None,
+                    normalized,
+                )
+                if meta["outputUpdate"]["mode"] == "snapshot":
+                    meta["outputUpdate"]["range"] = (
+                        {"start": host_times[0], "end": host_times[-1]} if host_times else None
+                    )
             meta.update(execution_meta)
             if libraries:
                 meta["libraryDigests"] = library_digests(request.options)

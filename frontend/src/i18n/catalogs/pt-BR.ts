@@ -248,6 +248,7 @@ export const ptBR = {
   "pine.host.alertHint": "Requer uma assinatura de gráfico ativa. O histórico e as prévias nunca enviam notificações. Gerencie os canais e a pausa da regra Pine criada em Alertas.",
   "pine.host.recovered": "O estado Pine foi restaurado a partir das observações registradas. Não é possível reconstruir as atualizações de preço perdidas durante a desconexão.",
   "pine.host.resetNotice": "O estado Pine foi reiniciado porque as entradas ou o histórico mudaram; o estado dentro da vela anterior foi apagado.",
+  "pine.host.runtimeResetNotice": "O runtime Pine recalculou a partir do histórico confirmado. O estado anterior dentro da vela foi apagado.",
   "pine.host.alertFailed": "Falha ao entregar a notificação Pine. Verifique o serviço de alertas.",
   "pine.host.title": "Dados de mercado do Pine",
   "pine.host.json": "Dados do ambiente (JSON)",

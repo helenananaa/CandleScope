@@ -69,6 +69,25 @@ def test_closed_history_can_link_across_forming_updates_without_claiming_a_newer
     assert final_only["sequence"] == before["sequence"]
 
 
+def test_private_correction_fence_ignores_forming_append_and_duplicate_backfill():
+    from app.data_engine.storage.revisions import StaleAcquisition
+    clock = StreamVersionClock(capacity=1)
+    original = clock.correction_cursor(KEY)
+    wire_fields = set(clock.snapshot(KEY))
+    for kind in (DataEventType.BAR_UPDATED,DataEventType.BAR_CREATED,DataEventType.BAR_CLOSED,
+                 DataEventType.BACKFILL_COMPLETED,DataEventType.BACKFILL_COMPLETED):
+        publish(clock,event(kind))
+    with clock.correction_guard(KEY,original):pass
+    publish(clock,event(DataEventType.BAR_AMENDED))
+    assert set(clock.snapshot(KEY)) == wire_fields
+    with pytest.raises(StaleAcquisition):
+        with clock.correction_guard(KEY,original):pytest.fail('amendment must fence publication')
+    current = clock.correction_cursor(KEY)
+    clock.snapshot(replace(KEY,symbol='OTHER'))
+    with pytest.raises(StaleAcquisition):
+        with clock.correction_guard(KEY,current):pytest.fail('evicted history cannot certify continuity')
+
+
 def test_http_and_ws_expose_the_same_clock_and_backend_calendar_predecessor(monkeypatch):
     manager = DataManager()
     sample = event(DataEventType.BAR_CREATED)

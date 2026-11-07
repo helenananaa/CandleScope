@@ -556,3 +556,9 @@ test("planDeferredRightCatchup starts a new grace window when gap start changes"
   assert.equal(next.firstSeenAt, 2_000);
   assert.equal(next.delayMs, 1_500);
 });
+
+
+test("explicit forming finality cannot be promoted by elapsed wall-clock time",()=>{
+  const rows=bars(2).map((bar,index)=>({...bar,is_closed:index===0}));
+  assert.equal(inferFixedIntervalClosedThrough(rows,"1m",Date.now()),barAt(rows,0).time);
+});
