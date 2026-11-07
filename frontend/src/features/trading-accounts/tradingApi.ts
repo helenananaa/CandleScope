@@ -1,5 +1,6 @@
 import { request } from "../../services/api.js";
 import { API_BASE } from "../../services/apiConfig.js";
+import { streamTradingAccountState } from "./tradingAccountStateStream.js";
 import type {
   AccountSummary,
   AccountsResponse,
@@ -33,6 +34,7 @@ function statsQuery(query: TradingStatsQuery): string {
 }
 
 export const tradingApi = {
+  stateStream: streamTradingAccountState,
   listAccounts: () => request(path("/accounts")) as Promise<AccountsResponse>,
   createAccount: (body: Record<string, unknown>) =>
     request(path("/accounts"), { method: "POST", body }) as Promise<TradingAccount>,

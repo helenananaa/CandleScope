@@ -2,7 +2,7 @@ import { tradingApi } from "./tradingApi.js";
 import { tradingErrorMessage } from "./tradingErrors.js";
 import type { AccountSummary, JournalEntry, Trade } from "./tradingTypes.js";
 
-type ReadApi = Pick<typeof tradingApi, "summary" | "trades" | "journal">;
+type ReadApi = Pick<typeof tradingApi, "summary" | "trades" | "journal"> & Partial<Pick<typeof tradingApi, "stateStream">>;
 export interface TradingAccountDataState {
   accountId: string;
   summary: AccountSummary | null;
@@ -25,6 +25,7 @@ export class TradingAccountData {
   private controller: AbortController | null = null;
   private pending: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private finishFirst: (() => void) | null = null;
 
   constructor(readonly accountId: string, private readonly api: ReadApi) {
     this.state = empty(accountId);
@@ -45,6 +46,7 @@ export class TradingAccountData {
       released = true;
       if (--this.consumers !== 0) return;
       this.generation++;
+      this.finishFirst?.();
       this.controller?.abort();
       this.controller = null;
       this.pending = null;
@@ -72,6 +74,7 @@ export class TradingAccountData {
   }
 
   refresh(): Promise<void> {
+    if (this.api.stateStream) return this.refreshStream();
     if (this.pending !== null) return this.pending;
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
@@ -129,13 +132,61 @@ export class TradingAccountData {
     return pending;
   }
 
+  private refreshStream(): Promise<void> {
+    if (this.consumers === 0) return Promise.resolve();
+    this.finishFirst?.();
+    this.controller?.abort();
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    const generation = ++this.generation;
+    const controller = new AbortController(); this.controller = controller;
+    const current = () => generation === this.generation && !controller.signal.aborted;
+    this.publish({ ...this.state, loading: true, error: null });
+    let resolve!: () => void;
+    const first = new Promise<void>(done => { resolve = done; });
+    const finish = () => {
+      resolve();
+      if (this.finishFirst === finish) this.finishFirst = null;
+      if (this.pending === first) this.pending = null;
+    };
+    this.pending = first; this.finishFirst = finish;
+    void Promise.resolve().then(() => this.api.stateStream!(this.accountId, controller.signal, value => {
+      if (!current()) return;
+      this.publish({ ...this.state, summary: value.summary, trades: value.trades,
+        entries: value.entries ?? this.state.entries, loading: false, error: value.journalError ?? null });
+      // Manual accounts do not own practice market leases. Preserve their
+      // existing quote revalidation until they have a live valuation source.
+      if (value.summary.account.kind === "manual" && this.timer === null) {
+        this.timer = setTimeout(() => { this.timer = null; void this.refresh(); }, 15_000);
+      }
+      finish();
+    })).catch((error: unknown) => {
+      if (current()) this.publish({ ...this.state, loading: false, error: tradingErrorMessage(error) });
+    }).finally(() => {
+      finish();
+      if (generation === this.generation) {
+        this.controller = null;
+        this.schedulePoll();
+      }
+    });
+    return first;
+  }
+
   private publish(state: TradingAccountDataState): void {
     this.state = state;
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      try { listener(); } catch { console.error("Trading account observer failed"); }
+    }
   }
 
   private schedulePoll(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
     if (this.consumers === 0) return;
+    if (this.api.stateStream) {
+      this.timer = setTimeout(() => { this.timer = null; void this.refresh(); }, 2_000);
+      return;
+    }
     const summary = this.state.summary;
     const active = summary?.account.kind === "practice"
       && (summary.positions.length > 0 || summary.workingOrders.length > 0);
