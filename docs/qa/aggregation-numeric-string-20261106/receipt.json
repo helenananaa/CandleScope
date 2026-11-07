@@ -1,0 +1,59 @@
+{
+  "source": "9729de37edf9e5d55e816e196cc5f745e9756304",
+  "base": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
+  "files": {
+    "backend/app/data_engine/market_data/kline_metrics.py": "462013478414d5a028d85d853a5f735858bccc66e8b4926fb2ed7f2eca1447c0",
+    "backend/tests/test_kline_order_flow_metrics.py": "39822300ffb95f1eeb15e3751072fc241729ad48900f6503f6576c77e644b7a0"
+  },
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py",
+    "backend/tests/test_aggregation_core.py",
+    "backend/tests/test_shared_aggregation_blocks.py",
+    "backend/tests/test_interval_policy_consistency.py",
+    "backend/tests/test_interval_admission_contract.py",
+    "backend/tests/test_interval_resolution.py",
+    "backend/tests/test_interval_semantics_phase3.py",
+    "backend/tests/test_interval_routing_phase3.py",
+    "backend/tests/test_custom_interval_phase1.py",
+    "backend/tests/test_custom_interval_listing_boundary.py",
+    "-q",
+    "-rs"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/tmp/candlescope-aggregation-strings-20261106/data",
+    "CANDLE_DATA_DIR": "/tmp/candlescope-aggregation-strings-20261106/data"
+  },
+  "before": {
+    "passed": 25,
+    "failed": 3
+  },
+  "after": {
+    "passed": 222,
+    "failed": 0,
+    "skipped": 0,
+    "suites": 11,
+    "elapsedSeconds": 3.4
+  },
+  "scope": "component/aggregation cross-path and trade-parity checks; no new Native/release/Windows or CI qualification",
+  "evidence": {
+    "before.log": {
+      "sha256": "05d7761c0b9ab839b405eabbd0fb2d61cae1ba77dddbcfd8bf8064a3421b9961",
+      "bytes": 11359
+    },
+    "after.log": {
+      "sha256": "4e5c6ea1a5a7ea3b6de902f0b1f7b4d93690d6dacda294d8eea6da6813fa95ee",
+      "bytes": 340
+    },
+    "original-main-parity.log": {
+      "sha256": "a7a3c7671881007e91878385075bf1254fd669b9d682b65268cd5edc49c2eff8",
+      "bytes": 6376
+    }
+  }
+}
