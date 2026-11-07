@@ -490,7 +490,8 @@ export default function StrategyResearchApp({
           {batchState.jobs.length > 0 && <button type="button" onClick={() => setHistoryOpen(true)}>
             {t("researchBatch.jobs")} · {batchState.jobs.length}
           </button>}
-          {batchError && <p role="alert">{t("researchBatch.submitFailed")}</p>}
+          {batchState.storageFailed ? <p role="alert">{t("researchBatch.storage")}</p>
+            : batchError && <p role="alert">{t("researchBatch.submitFailed")}</p>}
         </>}</ResearchBatchSources>}
         onConfirmNeedsData={researchRun.onConfirmNeedsData}
         onOpenAdvanced={openAdvanced}
