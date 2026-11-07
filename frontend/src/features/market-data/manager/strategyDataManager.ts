@@ -96,6 +96,18 @@ export class StrategyDataManager {
       const invalidBars = (bars: typeof frame.bars) => !Array.isArray(bars)
         || bars.some(bar => frame.time_ms === null || bar.open_time_ms > frame.time_ms
           || (bar.closed && bar.close_time_ms !== undefined && bar.close_time_ms > frame.time_ms));
+      const invalidStudy = (study: typeof frame.ma, period: number | undefined, bars: typeof frame.bars) => {
+        if (period === undefined) return study !== undefined;
+        if (study?.period !== period || !Array.isArray(study.points) || study.points.length > bars.length) return true;
+        const closed = new Set(bars.filter(bar => bar.closed && bar.close_time_ms !== undefined).map(bar => bar.open_time_ms));
+        let previous = -Infinity;
+        return study.points.some(point => {
+          const invalid = !point || !closed.has(point.open_time_ms) || point.open_time_ms <= previous
+            || !Number.isFinite(point.value);
+          if (!invalid) previous = point.open_time_ms;
+          return invalid;
+        });
+      };
       if ((frame.schema !== "candlescope.user-trade-result-replay/1" && frame.schema !== "candlescope.local-bar-result-replay/1")
         || frame.run_id !== cursor.runId
         || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
@@ -105,6 +117,8 @@ export class StrategyDataManager {
           || frame.display_intervals.some(interval => typeof interval !== "string")))
         || frame.comparison?.interval !== cursor.comparisonInterval
         || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
+        || invalidStudy(frame.ma, cursor.maPeriod, frame.bars)
+        || invalidStudy(frame.comparison?.ma, cursor.comparisonMaPeriod, frame.comparison?.bars ?? [])
         || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
         || !Array.isArray(frame.closed_bar_signals)
         || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)

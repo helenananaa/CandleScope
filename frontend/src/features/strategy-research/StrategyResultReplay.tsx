@@ -1,16 +1,29 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import type { BacktestResultReplayCursor, BacktestResultReplayFrame } from "../backtest/backtestTypes.js";
+import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayMA } from "../backtest/backtestTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
-function ReplayCandles({ bars }: { bars: BacktestResultReplayFrame["bars"] }) {
+const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
+
+function ReplayCandles({ bars, ma }: { bars: BacktestResultReplayFrame["bars"]; ma: BacktestResultReplayMA | undefined }) {
   if (bars.length === 0) return null;
-  const high = Math.max(...bars.map(bar => Number(bar.high)));
-  const low = Math.min(...bars.map(bar => Number(bar.low)));
-  const y = (price: string) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
+  const values = ma?.points.map(point => point.value) ?? [];
+  const high = Math.max(...bars.map(bar => Number(bar.high)), ...values);
+  const low = Math.min(...bars.map(bar => Number(bar.low)), ...values);
+  const y = (price: string | number) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
   const spacing = Math.min(48, 968 / bars.length);
+  const points = new Map(ma?.points.map(point => [point.open_time_ms, point.value]));
+  let previousIndex = -2;
+  const line = bars.flatMap((bar, index) => {
+    const value = points.get(bar.open_time_ms);
+    if (value === undefined) return [];
+    const adjacent = previousIndex === index - 1 && bars[index - 1]?.close_time_ms === bar.open_time_ms - 1;
+    previousIndex = index;
+    const at = `${24 + index * spacing} ${y(value)}`;
+    return adjacent ? `L ${at}` : `M ${at} h 0`;
+  }).join(" ");
   return <svg viewBox="0 0 1000 340" role="img" aria-label={t("strategy.chartSlot")} className="strategy-result-replay-candles">
     {bars.map((bar, index) => {
       const x = 24 + index * spacing;
@@ -24,7 +37,28 @@ function ReplayCandles({ bars }: { bars: BacktestResultReplayFrame["bars"] }) {
         <title>{new Date(bar.open_time_ms).toISOString()} · {bar.open} / {bar.high} / {bar.low} / {bar.close}</title>
       </g>;
     })}
+    {line && <path d={line} stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
   </svg>;
+}
+
+function ReplayMaControl({ testId, interval, period, onChange }: {
+  testId: string; interval: string; period: number | undefined; onChange(period: number | undefined): void;
+}) {
+  const options = period === undefined || MA_PERIODS.includes(period) ? MA_PERIODS : [...MA_PERIODS, period].sort((a, b) => a - b);
+  return <label>{t("replay.indicator.sma.name")} · {formatIntervalLabel(interval)}
+    <select data-testid={testId} value={period ?? ""} onChange={event => onChange(Number(event.target.value) || undefined)}>
+      <option value="">{t("backtest.none")}</option>
+      {options.map(value => <option key={value} value={value}>{value}</option>)}
+    </select>
+  </label>;
+}
+
+function ReplayMaLegend({ ma }: { ma: BacktestResultReplayMA | undefined }) {
+  if (!ma) return null;
+  const last = ma.points.at(-1);
+  return <p data-testid="strategy-replay-ma" data-period={ma.period} data-value={last?.value}>
+    {t("replay.indicator.sma.name")} ({ma.period}) · {last?.value.toLocaleString(undefined, { maximumSignificantDigits: 12 }) ?? "—"}
+  </p>;
 }
 
 export default function StrategyResultReplay({ initial, manager, onCommit, onClose }: {
@@ -68,12 +102,21 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
     return () => clearTimeout(timer);
   }, [frame, playing, request]);
 
-  const navigate = (cursor: number, interval = request.interval, comparison = request.comparisonInterval ?? null) => {
+  const navigate = (cursor: number, display: {
+    interval?: string;
+    comparisonInterval?: string | undefined;
+    maPeriod?: number | undefined;
+    comparisonMaPeriod?: number | undefined;
+  } = {}) => {
     setPlaying(false);
     setError(null);
     setTarget(String(cursor));
-    const { comparisonInterval: _comparison, ...identity } = request;
-    setRequest({ ...identity, cursor, interval, ...(comparison ? { comparisonInterval: comparison } : {}) });
+    const { comparisonInterval, maPeriod, comparisonMaPeriod, ...identity } = { ...request, ...display };
+    setRequest({ ...identity, cursor,
+      ...(maPeriod === undefined ? {} : { maPeriod }),
+      ...(comparisonInterval ? { comparisonInterval,
+        ...(comparisonMaPeriod === undefined ? {} : { comparisonMaPeriod }) } : {}),
+    });
   };
   const canAdvance = frame !== null && frame.cursor < frame.total;
   const lastBar = frame?.bars.at(-1);
@@ -103,18 +146,22 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
           </button>
         </form>
         <label>{t("local.interval")}
-          <select data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, event.target.value)}>
+          <select data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, { interval: event.target.value })}>
             {selectableIntervals.filter(interval => interval !== request.comparisonInterval).map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
           </select>
         </label>
         <label>{t("local.interval")} · {t("replay.workspace.openNew")}
           <select data-testid="strategy-replay-comparison-period" value={request.comparisonInterval ?? ""}
-            onChange={event => navigate(request.cursor, request.interval, event.target.value || null)}>
+            onChange={event => navigate(request.cursor, { comparisonInterval: event.target.value || undefined })}>
             <option value="">{t("backtest.none")}</option>
             {selectableIntervals.filter(interval => interval !== request.interval).map(interval =>
               <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
           </select>
         </label>
+        <ReplayMaControl testId="strategy-replay-primary-ma" interval={request.interval} period={request.maPeriod}
+          onChange={maPeriod => navigate(request.cursor, { maPeriod })} />
+        {request.comparisonInterval && <ReplayMaControl testId="strategy-replay-comparison-ma" interval={request.comparisonInterval}
+          period={request.comparisonMaPeriod} onChange={comparisonMaPeriod => navigate(request.cursor, { comparisonMaPeriod })} />}
       </div>
       {error ? <p role="alert">{error} <button type="button" onClick={() => navigate(request.cursor)}>{t("shell.retry")}</button></p>
         : !frame ? <p role="status">{t("research.loading")}</p> : <>
@@ -126,12 +173,14 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
           <div className="strategy-result-replay-charts">
             <section aria-label={formatIntervalLabel(frame.interval)} data-testid="strategy-replay-primary-chart">
               <strong>{formatIntervalLabel(frame.interval)}</strong>
-              <ReplayCandles bars={frame.bars} />
+              <ReplayCandles bars={frame.bars} ma={frame.ma} />
+              <ReplayMaLegend ma={frame.ma} />
               {lastBar && <p data-testid="strategy-replay-last-ohlc">{lastBar.open} / {lastBar.high} / {lastBar.low} / {lastBar.close}</p>}
             </section>
             {frame.comparison && <section aria-label={formatIntervalLabel(frame.comparison.interval)} data-testid="strategy-replay-comparison-chart">
               <strong>{formatIntervalLabel(frame.comparison.interval)}</strong>
-              <ReplayCandles bars={frame.comparison.bars} />
+              <ReplayCandles bars={frame.comparison.bars} ma={frame.comparison.ma} />
+              <ReplayMaLegend ma={frame.comparison.ma} />
               {frame.comparison.bars.slice(-1).map(bar => <p key={bar.open_time_ms} data-testid="strategy-replay-comparison-ohlc">
                 {bar.open} / {bar.high} / {bar.low} / {bar.close}
               </p>)}
