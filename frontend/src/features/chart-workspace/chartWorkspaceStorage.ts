@@ -253,6 +253,10 @@ function cloneJsonValue(value: unknown, depth = 0): unknown | undefined {
   return result;
 }
 
+export function normalizeChartStrategyAttachment(value: unknown): ChartStrategyAttachmentRecord | null {
+  return normalizeAttachment(value, "strategyAttachment", []);
+}
+
 function normalizeAttachment(
   value: unknown,
   path: string,

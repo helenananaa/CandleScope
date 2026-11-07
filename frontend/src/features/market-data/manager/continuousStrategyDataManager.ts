@@ -128,19 +128,28 @@ export class ContinuousStrategyDataManager {
     }
   }
 
-  private packet(entry: Entry, packet: ContinuousPacket): void {
-    if (packet.type === "connected") { this.publish(entry, { connection: "connected", error: null }); return; }
-    if (packet.type === "heartbeat" || packet.type === "pong") return;
-    if (packet.type === "reset") { entry.reducer.reset(); return; }
+  private packet(entry: Entry, packet: ContinuousPacket): boolean {
+    if (packet.type === "connected" || packet.type === "pong") return false;
+    if (packet.type === "reset") { entry.reducer.reset(); return false; }
+    if (packet.type === "heartbeat") {
+      if (entry.reducer.hasPendingGroup) return false;
+      if (entry.state.connection !== "connected") this.publish(entry, { connection: "connected", error: null });
+      return true;
+    }
     if (packet.type === "snapshot" || packet.type === "update") {
-      this.publishRepair(entry, packet.repair);
       const result = entry.reducer.accept(packet as ContinuousPage, { snapshot: packet.type === "snapshot",
         begin: packet.begin === true, complete: packet.complete === true, after: packet.after_checkpoint ?? -1 });
-      if (result) this.publish(entry, { result, creation: packet.creation ?? entry.state.creation,
+      if (!result) return false;
+      this.publish(entry, { result, repair: mergeRepair(entry.state.repair, packet.repair, entry.reducer.runId),
+        creation: packet.creation ?? entry.state.creation,
         initialReady: packet.initial_result_ready === true, connection: "connected", error: null });
-    } else if (packet.type === "preparation" || packet.type === "initializing")
-      this.publish(entry, { creation: packet.creation ?? entry.state.creation, initialReady: false, connection: "connected" });
-    else throw new StrategyRunStreamError("PROTOCOL_UNSUPPORTED", "Unexpected continuous strategy event");
+      return true;
+    }
+    if (packet.type === "preparation" || packet.type === "initializing") {
+      this.publish(entry, { creation: packet.creation ?? entry.state.creation, initialReady: false, connection: "connected", error: null });
+      return true;
+    }
+    throw new StrategyRunStreamError("PROTOCOL_UNSUPPORTED", "Unexpected continuous strategy event");
   }
 
   private async follow(id: string, entry: Entry, signal: AbortSignal): Promise<void> {
@@ -152,8 +161,8 @@ export class ContinuousStrategyDataManager {
     while (!signal.aborted) {
       try {
         await this.api.stream(id, entry.reducer.current?.identity, signal, (packet) => {
-          signal.throwIfAborted(); this.packet(entry, packet);
-          if (packet.type !== "connected") failures = 0;
+          signal.throwIfAborted();
+          if (this.packet(entry, packet)) failures = 0;
         });
         this.publish(entry, { connection: "closed" }); return;
       } catch (failure) {
