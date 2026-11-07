@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.api.v1.stream_indicator_payloads import (
-    _compute_builtin_range_patch_from_bars,
     _compute_plugin_range_patch_from_bars,
     _indicator_warmup_bars,
     _indicator_compute_query_bounds,
@@ -20,6 +19,9 @@ from app.api.v1.stream_indicator_payloads import (
     _validated_builtin_warmup_bars,
 )
 from app.indicator.history_worker import run_builtin_history_range
+from app.indicator.range_projection import (
+    compute_builtin_range_patch_from_bars as _compute_builtin_range_patch_from_bars,
+)
 from app.core import config
 from app.core.executors import run_indicator
 from app.data_engine.interval_policy import parse_interval_ms
