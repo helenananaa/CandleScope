@@ -25,7 +25,7 @@ const actions: TradingAccountsRuntime["actions"] = {
   reportError: (cause) => tradingAccountsStore.reportError(cause),
 };
 
-/** The selected account's shared data; polling runs while `enabled`. */
+/** The selected account's shared data; its retained stream runs while enabled. */
 export function useTradingAccountsRuntime(enabled: boolean): TradingAccountsRuntime {
   const view = useSyncExternalStore(tradingAccountsStore.subscribe, tradingAccountsStore.getSnapshot);
   useEffect(() => (enabled ? tradingAccountsStore.retain() : undefined), [enabled]);

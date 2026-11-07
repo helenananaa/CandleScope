@@ -81,7 +81,7 @@ const emptyAccount = () => EMPTY_ACCOUNT;
 /**
  * Read-only overlay of the selected trading account on a live chart: its
  * fills on this instrument and the open position's entry, stop and target.
- * Data comes from the shared account store and refreshes with its polling.
+ * Data comes from the retained account owner and its committed state stream.
  */
 export function useTradingChartOverlay(input: TradingChartOverlayInput): TradingChartOverlay {
   const { enabled, exchange, marketType, symbol, interval, seriesStore, upColor, downColor, themeKey } = input;
