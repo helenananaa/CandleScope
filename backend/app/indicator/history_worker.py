@@ -30,8 +30,8 @@ def _dispatch(request):
         finally:
             engine.stop()
     elif kind == 'range':
-        from app.api.v1.stream_indicator_payloads import _compute_builtin_range_patch_from_bars
-        value = _compute_builtin_range_patch_from_bars(*args)
+        from app.indicator.range_projection import compute_builtin_range_patch_from_bars
+        value = compute_builtin_range_patch_from_bars(*args)
     else:
         raise ValueError('Unknown builtin history operation')
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else None
