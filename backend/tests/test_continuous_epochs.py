@@ -237,6 +237,10 @@ def test_repair_preview_selects_latest_true_prefix_without_loading_accounts_or_c
         assert not any('SELECT * FROM checkpoints' in query or 'SELECT wire' in query for query in queries)
         same=preview(case.store,case.manager,'cs_guarded',expected=case.expected,resume_after=False,now_ms=END+1)
         assert same==plan
+        klines_repo.upsert_klines('ETHUSDT',KEY.interval,[_row(START+5*STEP,230)],source=SOURCE)
+        unrelated=preview(case.store,case.manager,'cs_guarded',expected=case.expected,resume_after=False,now_ms=END+1)
+        assert unrelated['plan_id']==plan['plan_id']
+        assert unrelated['observed_source']['storage_revision']>plan['observed_source']['storage_revision']
         with closing(klines_repo._connect()) as connection:
             assert connection.execute('SELECT count(*) FROM kline_prefix_watches').fetchone()[0]==watch_count
         changed_intent=preview(case.store,case.manager,'cs_guarded',expected=case.expected,resume_after=True,now_ms=END+1)
@@ -259,3 +263,34 @@ def test_repair_preview_discloses_revised_initial_snapshot_and_rejects_stale_acc
         row=case.store.summary('cs_guarded');case.store.stop(row['id'],generation=row['generation'],revision=row['revision'],phase='CANCELLED')
         with pytest.raises(BacktestError,match='changed'):
             preview(case.store,case.manager,'cs_guarded',expected=case.expected,resume_after=False,now_ms=END+1)
+
+
+def test_abandoned_epoch_never_reuses_revision_or_collects_a_later_prepared_checkpoint(storage,tmp_path,monkeypatch):
+    with repair_case(storage,tmp_path,monkeypatch) as case:
+        case.store.repair_publication.stage(case.record['id'],case.stage)
+        case.store.epochs.fail(case.record['id'],code='CANCELLED',message='cancelled',cancelled=True)
+        case.store.epochs.discard_unpublished(case.record['id'])
+        second=case.store.epochs.reserve('cs_guarded','repair/second',expected=case.expected,plan=case.plan)
+        assert second['target_revision']>case.record['target_revision']
+        stage=ContinuousStrategyStore(tmp_path/'second-stage.sqlite3');host=None
+        source=ContinuousMarketBarSource(case.manager,LocalDatasetService(tmp_path/'second-data'),KEY,clock_ms=lambda:END+1)
+        try:
+            definition={**case.definition,'source_owner':second['source_owner']}
+            point=source.register('cs_guarded',from_ms=START,definition=definition)
+            case.store.epochs.prepare(second['id'],source=point.to_dict())
+            ContinuousBarHost.create_run(stage,'cs_guarded',definition=definition,mode='HISTORY_LIVE',data_revision=point.incarnation,
+                event_time_ms=START-1,provider_factory=case.factory,source_receipt=point)
+            host=ContinuousBarHost.resume(stage,'cs_guarded',case.factory)
+            proof,events=acquire(case.manager,host,25);apply(case.manager,host,proof,events);host.close();host=None
+            case.store.repair_publication.stage(second['id'],stage)
+            case.store.epochs.discard_unpublished(case.record['id'])
+            assert case.store.db.execute('SELECT 1 FROM checkpoints WHERE run_id=? AND revision=?',('cs_guarded',second['target_revision'])).fetchone()
+            # Defensive guard for a database containing an old ambiguous target.
+            case.store.db.execute('UPDATE continuous_epochs SET target_revision=? WHERE id=?',(second['target_revision'],case.record['id']))
+            with pytest.raises(BacktestError,match='another source epoch'):
+                case.store.epochs.discard_unpublished(case.record['id'])
+            case.store.repair_publication.publish(second['id'],case.manager,resume_after=False)
+            assert_results(case.store)
+        finally:
+            if host:host.close()
+            source.close();stage.close()

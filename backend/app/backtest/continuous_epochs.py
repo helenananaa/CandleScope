@@ -105,6 +105,14 @@ class ContinuousEpochs:
             row=self.store.db.execute("SELECT * FROM continuous_epochs WHERE request_key=?",(request_key,)).fetchone()
             return None if row is None else self._describe(row)
 
+    def pending(self):
+        with self.store.lock:
+            if self.store.closed:
+                from .continuous_store import fail
+                raise fail("CONTINUOUS_STORE_CLOSED","Continuous strategy store is closed")
+            return [self._describe(row) for row in self.store.db.execute(
+                "SELECT * FROM continuous_epochs ORDER BY updated_at_ms,id LIMIT 64")]
+
     def checkpoint(self,run_id,revision):
         """Decode one explicitly chosen retained checkpoint, never all history."""
         from .continuous_store import _counter,fail
@@ -155,7 +163,8 @@ class ContinuousEpochs:
             total,owned=self.store.db.execute("SELECT count(*),COALESCE(SUM(run_id=?),0) FROM continuous_epochs",(run_id,)).fetchone()
             if total>=64 or owned>=8:raise fail("BUDGET_EXCEEDED","Retained history repair capacity reached")
             latest=self.store.db.execute("SELECT MAX(revision) FROM checkpoints WHERE run_id=?",(run_id,)).fetchone()[0]
-            target=max(row["revision"],latest)+1;_counter(target)
+            reserved=self.store.db.execute("SELECT COALESCE(MAX(target_revision),0) FROM continuous_epochs WHERE run_id=?",(run_id,)).fetchone()[0]
+            target=max(row["revision"],latest,reserved)+1;_counter(target)
             epoch_id=uuid4().hex
             initial=definition.get("initial_snapshot")
             self.store.db.execute("INSERT INTO continuous_epochs(id,run_id,request_key,source_owner,initial_snapshot_json,"
@@ -184,7 +193,9 @@ class ContinuousEpochs:
             if progress is not None:fields["progress_json"]=_wire(progress,2048)
             self.store.db.execute("UPDATE continuous_epochs SET "+",".join(name+"=?" for name in fields)+" WHERE id=?",(*fields.values(),epoch_id))
             self.store._enforce_total_budget()
-        return self.describe(epoch_id)
+        result=self.describe(epoch_id)
+        self.store.updates.notify("repair:"+result["request_key"])
+        return result
 
     def fail(self,epoch_id,*,code,message,cancelled=False):
         from .continuous_store import _wire,fail
@@ -194,4 +205,61 @@ class ContinuousEpochs:
             if saved["phase"]=="COMMITTED":raise fail("CONTINUOUS_COMMIT_CONFLICT","Published repair cannot be discarded")
             self.store.db.execute("UPDATE continuous_epochs SET phase=?,error_json=?,updated_at_ms=? WHERE id=?",
                 ("CANCELLED" if cancelled else "FAILED",_wire({"code":str(code)[:64],"message":str(message)[:256]},4096),int(time.time()*1000),epoch_id))
+        result=self.describe(epoch_id)
+        self.store.updates.notify("repair:"+result["request_key"])
+        return result
+
+    def cleaned(self,epoch_id):
+        """Durable receipt after physical stage/watch cleanup; safe to retry."""
+        from .continuous_store import _wire,fail
+        with self.store._transaction():
+            saved=self.describe(epoch_id)
+            if saved["phase"] not in {"COMMITTED","FAILED","CANCELLED"}:
+                raise fail("CONTINUOUS_NOT_READY","Active repair still owns its physical resources")
+            progress={**(saved["progress"] or {}),"resources_released":True,"physical_resources_released":True}
+            progress.pop("cleanup_error",None)
+            self.store.db.execute("UPDATE continuous_epochs SET progress_json=?,updated_at_ms=? WHERE id=?",
+                (_wire(progress,2048),int(time.time()*1000),epoch_id))
+        self.store.updates.notify("repair:"+saved["request_key"])
         return self.describe(epoch_id)
+
+    def cleanup_deferred(self,epoch_id,failure):
+        """Artifact reclamation cannot undo publication or prevent app exit."""
+        from .continuous_store import _wire,fail
+        with self.store._transaction():
+            saved=self.describe(epoch_id)
+            if saved["phase"] not in {"COMMITTED","FAILED","CANCELLED"}:
+                raise fail("CONTINUOUS_NOT_READY","Active repair still owns its recovery artifacts")
+            progress={**(saved["progress"] or {}),"physical_resources_released":True,"resources_released":False,
+                "cleanup_error":{"code":str(getattr(failure,"code","CONTINUOUS_CLEANUP_FAILED"))[:64],"message":str(failure)[:256]}}
+            self.store.db.execute("UPDATE continuous_epochs SET progress_json=?,updated_at_ms=? WHERE id=?",
+                (_wire(progress,2048),int(time.time()*1000),epoch_id))
+        self.store.updates.notify("repair:"+saved["request_key"])
+        return self.describe(epoch_id)
+
+    def discard_unpublished(self,epoch_id):
+        """Bounded cleanup of only an abandoned, never adopted projection."""
+        from .continuous_store import fail
+        while True:
+            with self.store._transaction():
+                saved=self.describe(epoch_id)
+                if (saved["phase"] not in {"FAILED","CANCELLED"}
+                        or self.store.db.execute("SELECT 1 FROM active_continuous_epochs WHERE epoch_id=?",(epoch_id,)).fetchone()
+                        or self.store.summary(saved["run_id"])["checkpoint_revision"]==saved["target_revision"]):
+                    raise fail("CONTINUOUS_COMMIT_CONFLICT","Repair staging is still financially referenced")
+                rows=self.store.db.execute("SELECT rowid,stored_bytes FROM epoch_result_items WHERE run_id=? LIMIT 100",(epoch_id,)).fetchall()
+                if rows:
+                    self.store.db.executemany("DELETE FROM epoch_result_items WHERE rowid=?",((row[0],) for row in rows))
+                    self.store.db.execute("UPDATE epoch_result_heads SET stored_bytes=stored_bytes-? WHERE run_id=?",
+                        (sum(row[1] for row in rows),epoch_id))
+                else:
+                    # Decode this one source owner only at final checkpoint
+                    # deletion, not once per result page (wire may be 64MiB).
+                    checkpoint=self.store.db.execute("SELECT json_extract(CAST(wire AS TEXT),'$.source.owner') FROM checkpoints WHERE run_id=? AND revision=?",
+                        (saved["run_id"],saved["target_revision"])).fetchone()
+                    if checkpoint is not None and checkpoint[0]!=saved["source_owner"]:
+                        raise fail("CONTINUOUS_COMMIT_CONFLICT","Repair checkpoint belongs to another source epoch")
+                    self.store.db.execute("DELETE FROM epoch_result_heads WHERE run_id=?",(epoch_id,))
+                    self.store.db.execute("DELETE FROM checkpoints WHERE run_id=? AND revision=?",
+                        (saved["run_id"],saved["target_revision"]))
+                    return
