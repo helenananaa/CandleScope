@@ -162,12 +162,14 @@ def test_two_connections_converge_on_one_creation_and_reject_different_code(tmp_
 
 def test_schema1_upgrade_preserves_existing_financial_state(tmp_path):
     path=tmp_path/'legacy.db';store=ContinuousStrategyStore(path);create(store);before=store.load("cs_test")
+    for table in ('active_continuous_epochs','epoch_result_items','epoch_result_heads','continuous_epochs'):
+        store.db.execute('DROP TABLE '+table)
     store.db.execute("DROP TABLE creation_requests")
     store.db.execute("DROP TABLE result_items");store.db.execute("DROP TABLE result_heads")
     store.db.execute("PRAGMA user_version=1");store.close()
     store=ContinuousStrategyStore(path)
     try:
-        assert store.db.execute("PRAGMA user_version").fetchone()[0]==3
+        assert store.db.execute("PRAGMA user_version").fetchone()[0]==4
         assert store.load("cs_test")==before and store.creations.list_pending()==[]
     finally:store.close()
 

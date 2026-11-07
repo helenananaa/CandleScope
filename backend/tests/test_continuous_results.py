@@ -205,6 +205,8 @@ def legacy_store(tmp_path):
     path=tmp_path/'legacy.db';store=ContinuousStrategyStore(path);kernel=make_kernel();calls=[]
     row=resume(store,create(store,kernel));kernel.advance(events()[:10],strategy(calls));commit(store,row,kernel,calls)
     saved=store.load('cs_test')
+    for table in ('active_continuous_epochs','epoch_result_items','epoch_result_heads','continuous_epochs'):
+        store.db.execute('DROP TABLE '+table)
     store.db.execute('DROP TABLE result_items');store.db.execute('DROP TABLE result_heads')
     store.db.execute('PRAGMA user_version=2');store.close()
     return path,saved
@@ -216,7 +218,7 @@ def test_schema2_upgrade_preserves_financial_state_and_indexes_only_on_explicit_
     store=ContinuousStrategyStore(path,**({'max_total_checkpoint_bytes':1} if tight_budget else {}))
     try:
         assert store.load('cs_test')==saved
-        assert store.db.execute('PRAGMA user_version').fetchone()[0]==3
+        assert store.db.execute('PRAGMA user_version').fetchone()[0]==4
         assert store.db.execute('SELECT count(*) FROM result_heads').fetchone()[0]==0
         with pytest.raises(BacktestError,match='Prepare the committed'):store.results.read('cs_test')
         if tight_budget:
