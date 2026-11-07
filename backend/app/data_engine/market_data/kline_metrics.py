@@ -342,7 +342,7 @@ def normalize_kline_aggregation_fields(
         taker_buy_quote=taker_buy_quote,
     )
     return _raw_kline_aggregation_fields(
-        volume=round(volume, 8),
+        volume=round(float(volume), 8),
         quote_volume=first[0],
         trades=first[1],
         taker_buy_base=first[2],
