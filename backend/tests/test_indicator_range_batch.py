@@ -83,7 +83,11 @@ def _job(
     )
 
 
-def test_builtin_batch_queries_bars_once_and_reuses_results():
+@pytest.mark.parametrize("history_process", [False, True])
+def test_builtin_batch_queries_bars_once_and_reuses_results(monkeypatch, history_process):
+    from app.core import config
+    monkeypatch.setattr(config, "INDICATOR_HISTORY_PROCESS_ENABLED", history_process)
+
     async def _run() -> None:
         bars = _bars()
         dm = _CountingDataManager(bars)
