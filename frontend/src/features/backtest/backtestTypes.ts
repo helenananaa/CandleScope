@@ -544,3 +544,50 @@ export const STREAM_EVENTS = [
   "TERMINAL",
   "RESYNC_REQUIRED",
 ] as const;
+
+export interface BacktestResultReplayCursor {
+  runId: string;
+  snapshotHash: string;
+  reportHash: string;
+  cursor: number;
+  interval: string;
+}
+
+export interface BacktestResultReplayFrame {
+  schema: "candlescope.user-trade-result-replay/1";
+  run_id: string;
+  snapshot_hash: string;
+  report_hash: string;
+  symbol: string;
+  quote_asset: string;
+  interval: string;
+  signal_interval: string;
+  cursor: number;
+  total: number;
+  time_ms: number | null;
+  source_sequence: number | null;
+  bars: Array<{
+    open_time_ms: number;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+    volume: string;
+    closed: boolean;
+  }>;
+  fills: Array<{
+    cursor: number;
+    event_time_ms: number;
+    order_id: string;
+    side: string;
+    price: string;
+    qty: string;
+    fee: string;
+  }>;
+  order_events: Array<{ ordinal: number; order_id: string | null; state: string; reveal_sequence: number }>;
+  order_trace_available: boolean;
+  fill_count: number;
+  cash: string;
+  position: string;
+  equity: string;
+}

@@ -3175,6 +3175,7 @@ class BacktestService:
                 leverage=_config_decimal(config, "leverage", "1"),
                 host_policy_revision=config.get("host_policy_revision"),
                 scale_stream_decisions=self.settings.python_scale_v1_enabled,
+                capture_order_reveal=(snapshot_evidence or {}).get("quality", {}).get("source_quality") == "user_market_trades",
                 **_execution_kernel_kwargs(config),
                 execution_reporter=self._execution_reporter(session),
             )

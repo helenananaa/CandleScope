@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+from collections import defaultdict
+from decimal import Decimal
 
 import pytest
 from fastapi import FastAPI
@@ -98,7 +100,7 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                 "source_event_kind": "AGG_TRADE", "strategy_revision_id": revision["revision_id"],
                 "python_runtime_mode": "TRUSTED_LOCAL", "python_trusted_confirmed": True,
                 "output_mode": "SIGNAL", "equity_percent": "10", "sizing_policy": "EQUITY_PERCENT_V1",
-                "symbol": "ETHUSDC"}
+                "symbol": "ETHUSDC", "execution_model_revision": "EXECUTION_REALISM_V2", "participation_rate": "0.1"}
         smoke = client.post("/api/v1/backtests/strategy-revisions/" + revision["revision_id"] + "/smoke", json={
             key: body[key] for key in ("dataset_id", "snapshot_hash", "start_time_ms", "end_time_ms",
                                       "python_runtime_mode", "python_trusted_confirmed")
@@ -129,6 +131,58 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         assert chart_body["bars"][0]["close"] == 101
         assert max(bar["high"] for bar in chart_body["bars"]) < 1000
         assert chart_body["fills"]
+        replay_path = RUNS + "/" + run_id + "/result-replay"
+        replay_identity = {"snapshot_hash": preview["snapshot_hash"], "report_hash": report.json()["hashes"]["report"]}
+        fills = report.json()["fills"]
+        original_rows = [row.split(",") for row in fixture().splitlines()[1:]]
+        for interval, width in (("1m", 60_000), ("5m", 300_000)):
+            early = None
+            for cursor in range(21):
+                replay = client.get(replay_path, params={**replay_identity, "cursor": cursor, "interval": interval})
+                assert replay.status_code == 200, replay.text
+                frame = replay.json()
+                assert frame["total"] == 20
+                bucket = defaultdict(list)
+                for stamp, _, price, _, _ in original_rows[:cursor]:
+                    bucket[int(stamp) // width * width].append(Decimal(price))
+                assert [(row["open_time_ms"], Decimal(row["open"]), Decimal(row["high"]), Decimal(row["low"]),
+                         Decimal(row["close"]), row["closed"]) for row in frame["bars"]] == [
+                    (stamp, prices[0], max(prices), min(prices), prices[-1], index < len(bucket) - 1)
+                    for index, (stamp, prices) in enumerate(bucket.items())
+                ]
+                expected_fills = [fill for fill in fills if fill["source_sequence"] <= cursor]
+                assert frame["fill_count"] == len(expected_fills)
+                cash = Decimal("10000")
+                position = Decimal(0)
+                for fill in expected_fills:
+                    qty, price, fee = map(Decimal, (fill["qty"], fill["price"], fill["fee"]))
+                    if fill["side"] == "BUY":
+                        cash -= qty * price + fee
+                        position += qty
+                    else:
+                        cash += qty * price - fee
+                        position -= qty
+                mark = Decimal(original_rows[cursor - 1][2]) if cursor else Decimal(0)
+                assert Decimal(frame["cash"]) == cash
+                assert Decimal(frame["position"]) == position
+                assert Decimal(frame["equity"]) == cash + position * mark
+                assert frame["order_trace_available"]
+                if cursor == 10:
+                    assert frame["order_events"] == []
+                if cursor == 11:
+                    assert frame["order_events"][0]["state"] == "NEW"
+                    assert frame["order_events"][0]["reveal_sequence"] == 11
+                if cursor == 1:
+                    assert frame["source_sequence"] == 200 and frame["bars"][-1]["close"] == "100"
+                    early = frame
+                if cursor == 2:
+                    assert frame["source_sequence"] == 201 and frame["bars"][-1]["close"] == "101"
+            rewind = client.get(replay_path, params={**replay_identity, "cursor": 1, "interval": interval})
+            assert rewind.json() == early
+        cold_params = {**replay_identity, "cursor": 1, "interval": "5m"}
+        assert client.get(replay_path, params={**cold_params, "snapshot_hash": "sha256:" + "0" * 64}).status_code != 200
+        assert len(client.get(RUNS).json()["runs"]) == 1
+
     finally:
         runtime.shutdown()
 
@@ -137,5 +191,7 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         reopened = app_client(cold).get(RUNS + "/" + run_id + "/chart")
         assert reopened.status_code == 200, reopened.text
         assert reopened.json()["chart_hash"] == chart_body["chart_hash"]
+        replay = app_client(cold).get(replay_path, params=cold_params)
+        assert replay.status_code == 200 and replay.json() == early
     finally:
         cold.shutdown()

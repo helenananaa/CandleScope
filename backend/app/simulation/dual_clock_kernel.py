@@ -46,6 +46,7 @@ class DualClockSimulationKernel:
     equity_curve_event_interval: int = 1
     equity_curve_mode: str | None = None
     scale_stream_decisions: bool = False
+    capture_order_reveal: bool = False
     execution_reporter: Callable[[dict], None] | None = field(default=None, repr=False)
     execution: TradeSimulationKernel = field(init=False)
     builder: TradeBarBuilder = field(init=False)
@@ -296,6 +297,8 @@ class DualClockSimulationKernel:
             publish_account_liquidation(self.execution)
 
         for trade in events:
+            if self.capture_order_reveal:
+                self.execution.order_reveal_sequence = trade.sequence
             if self.execution_fidelity in BOOK_MODES:
                 previous = self.execution._last_event
                 if previous is not None and (trade.sequence <= previous.sequence or trade.event_time_ms < previous.event_time_ms):
@@ -417,6 +420,8 @@ class DualClockSimulationKernel:
             emit(self.builder.close_before(end_time_ms+1),boundary)
         self.execution._append_terminal_curve_point()
         if finalize:
+            if self.capture_order_reveal and self.execution._last_event is not None:
+                self.execution.order_reveal_sequence = self.execution._last_event.sequence
             self.execution.finalize_orders()
         return self.result()
 
