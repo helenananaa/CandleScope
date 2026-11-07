@@ -1,0 +1,131 @@
+{
+  "scope": "Same ledger/view work: three old read projections versus one state read.\n\nNo HTTP, renderer, exchange or matcher performance claim. All files are owned\nby a TemporaryDirectory; the source application functions and SQLite are real.\n",
+  "source": "1c160c252f7d9c4327fab81d6c8aca02b6a6e72b",
+  "python": "3.12.15 (main, Sep 30 2026, 22:04:19) [Clang 21.0.0 (clang-2100.3.34.2)]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "measurements": [
+    {
+      "closed_trades": 100,
+      "fills": 200,
+      "trials_ms": {
+        "old": [
+          5.484917,
+          5.492916,
+          5.611666,
+          5.554292,
+          5.572333
+        ],
+        "new": [
+          2.596542,
+          2.577417,
+          2.590459,
+          2.572375,
+          2.606583
+        ]
+      },
+      "p50_ms": {
+        "old": 5.554292,
+        "new": 2.590459
+      },
+      "fills_reads_per_state": {
+        "old": [
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "new": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "same_views": true
+    },
+    {
+      "closed_trades": 1000,
+      "fills": 2000,
+      "trials_ms": {
+        "old": [
+          43.244042,
+          43.741083,
+          43.66,
+          43.615958,
+          43.866958
+        ],
+        "new": [
+          16.236958,
+          18.455166,
+          16.114291,
+          16.074792,
+          18.448667
+        ]
+      },
+      "p50_ms": {
+        "old": 43.66,
+        "new": 16.236958
+      },
+      "fills_reads_per_state": {
+        "old": [
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "new": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "same_views": true
+    },
+    {
+      "closed_trades": 5000,
+      "fills": 10000,
+      "trials_ms": {
+        "old": [
+          233.425125,
+          231.351333,
+          229.748583,
+          230.702042,
+          229.755166
+        ],
+        "new": [
+          96.325583,
+          87.458625,
+          81.937416,
+          78.26475,
+          85.825708
+        ]
+      },
+      "p50_ms": {
+        "old": 230.702042,
+        "new": 85.825708
+      },
+      "fills_reads_per_state": {
+        "old": [
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "new": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "same_views": true
+    }
+  ]
+}

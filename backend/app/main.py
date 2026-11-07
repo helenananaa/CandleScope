@@ -301,6 +301,11 @@ async def _init_trading_accounts() -> None:
             market=DataManagerMarket(data_manager) if data_manager is not None else None,
         )
         app.state.trading_accounts = service
+        from app.data_engine.data_manager.core import DataManagerCore
+        core = getattr(app.state, "data_manager_core", None)
+        if core is None:
+            core = app.state.data_manager_core = DataManagerCore()
+        core.bind_trading(service)
         if data_manager is not None:
             practice_runtime = PracticeRuntime(service, data_manager)
             await practice_runtime.start()
@@ -924,6 +929,28 @@ async def _wait_for_catalog_foreground_quiet() -> None:
 @app.on_event("shutdown")
 async def shutdown_event() -> None:
     """Application shutdown handler."""
+    # Cancelling the lifespan waiter cannot abandon databases/actors after a
+    # manager has drained its own physical work. Keep the entire application
+    # cleanup owned until its remaining component shutdowns finish.
+    cleanup = asyncio.create_task(_shutdown_components(), name="application-shutdown-components")
+    try:
+        await asyncio.shield(cleanup)
+    except asyncio.CancelledError:
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            cleanup.result()
+        except BaseException:
+            logger.exception("Application cleanup failed after shutdown waiter cancellation")
+        raise
+
+
+async def _shutdown_components() -> None:
     replay_core = getattr(app.state, "data_manager_core", None)
     if replay_core is not None:
         await replay_core.shutdown_strategy()
@@ -1033,6 +1060,9 @@ async def shutdown_event() -> None:
             print(f"[shutdown] Practice runtime shutdown error: {exc}")
     trading_accounts = getattr(app.state, "trading_accounts", None)
     if trading_accounts is not None:
+        core = getattr(app.state, "data_manager_core", None)
+        if core is not None:
+            await core.shutdown_trading()
         trading_accounts.store.close()
 
     alert_runtime = getattr(app.state, "alert_runtime", None)
