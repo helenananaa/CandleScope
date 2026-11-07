@@ -31,7 +31,7 @@ import { StrategyLanguageControls } from "./StrategyLanguageControls.js";
 import { strategyLanguageLabel } from "./strategyLanguageLabel.js";
 import { StrategyConditionsEditor } from "./StrategyConditionsEditor.js";
 import { StrategyParametersEditor } from "./StrategyParametersEditor.js";
-import { validStrategyRunSettings } from "../../../shared/strategyRunSettings.js";
+import { validStrategyRunSettings, type StrategyRunSettings } from "../../../shared/strategyRunSettings.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import {
   pendingStrategyDraftSave,
@@ -214,7 +214,7 @@ export interface ChartStrategyTesterPanelProps {
   onClose(): void;
   onOpenAdvanced?(): void;
   onOpenBatchStudy?(): void;
-  onOpenWorkspace?(draft: StrategyDraftRecord): void | Promise<void>;
+  onOpenWorkspace?(draft: StrategyDraftRecord, settings?: StrategyRunSettings): void | Promise<void>;
 }
 
 const HOST_STRATEGY_ID = "__candlescope_host__";
@@ -534,11 +534,11 @@ export function CandleScopeStrategyTesterPanel({
   }, [activeDraft, cursor, draftStore, source]);
 
   const handoffOperation = useRef<Promise<void> | null>(null);
-  const openWorkspace = useCallback((): Promise<void> => {
+  const openWorkspace = useCallback((settings?: StrategyRunSettings): Promise<void> => {
     if (handoffOperation.current) return handoffOperation.current;
     if (!activeDraft || !onOpenWorkspace) return Promise.reject(new Error("DRAFT_UNAVAILABLE"));
     const operation = draftStore.save({ id: activeDraft.id, displayName: activeDraft.displayName,
-      language: activeDraft.language, source, cursor }).then(onOpenWorkspace);
+      language: activeDraft.language, source, cursor }).then((saved) => onOpenWorkspace(saved, settings));
     handoffOperation.current = operation;
     void operation.catch(() => setSaveState("ERROR")).finally(() => {
       if (handoffOperation.current === operation) handoffOperation.current = null;
@@ -606,7 +606,7 @@ export function CandleScopeStrategyTesterPanel({
       command("resumeObserving", "Resume server-run observation.", empty, onResumeObserving),
       command("openAdvanced", "Open the existing advanced-research workflow.", empty, () => onOpenAdvanced?.(), { available: () => !!onOpenAdvanced }),
       command("openBatchStudy", "Open the existing batch study workflow.", empty, () => onOpenBatchStudy?.(), { available: () => !!onOpenBatchStudy }),
-      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, openWorkspace, { available: () => !!onOpenWorkspace && !!activeDraft && active }),
+      command("openWorkspace", "Save the current code and open an independent research experiment.", empty, () => openWorkspace(), { available: () => runMode === "HISTORY" && !!onOpenWorkspace && !!activeDraft && active }),
       command("close", "Close the host strategy panel.", empty, onClose),
     ] }));
   const runLabel = pendingDataMatchesSource
@@ -1046,6 +1046,7 @@ export function CandleScopeStrategyTesterPanel({
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
           chartActive={!!continuousChartActive} onLocateTrade={onLocateTrade}
           {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
+          {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}

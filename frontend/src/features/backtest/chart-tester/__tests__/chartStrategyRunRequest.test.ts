@@ -629,3 +629,22 @@ test("imported precise fidelity is rejected as BAR_ONLY", async () => {
     (error: unknown) => error instanceof Error && "code" in error && error.code === "FIDELITY_UNSUPPORTED",
   );
 });
+
+test("continuous handoff sends its profile to preparation and never falls back to the default executor", async () => {
+  const pythonBarExecution = { executionModel: "LEGACY", outputMode: "SIGNAL", warmupBars: 5 } as const;
+  const chart = { ...request, language: "python" as const, pythonTrustedConfirmed: true,
+    session: { ...request.session, interval: "1m" },
+    attachment: { ...request.attachment, language: "python" as const, fidelityPreference: "FAST" as const, pythonBarExecution },
+  };
+  const calls: string[] = [];
+  const api = apiWithResolutions([resolution("NEEDS_DATA")], calls);
+  api.prepareChartContext = async (context, _signal, intent) => {
+    assert.equal(context.interval, "1m");
+    assert.deepEqual(intent?.python_bar_execution, pythonBarExecution);
+    return { ...resolution(), prepared_run: completed() };
+  };
+  assert.equal((await runChartStrategyBacktest({ api, request: chart })).kind, "TERMINAL");
+  const fallback = apiWithResolutions([resolution()], []);
+  fallback.prepareChartContext = async () => { throw new Error("Unexpected preparation"); };
+  await assert.rejects(runChartStrategyBacktest({ api: fallback, request: chart }), /profile was not prepared/);
+});

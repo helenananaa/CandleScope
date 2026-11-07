@@ -150,6 +150,9 @@ export function useStrategyResearchRun(input: {
           { next_step: "use the market-page strategy tester or imported library data" },
         );
       }
+      if (configuration.pythonBarExecution && source.kind !== "CURRENT_CHART") {
+        throw new ChartStrategyRunError("FIDELITY_UNSUPPORTED", "The saved continuous profile requires its chart market source");
+      }
       if (source.kind === "IMPORTED_DATASET" && imported === null) {
         throw new ChartStrategyRunError(
           "IMPORTED_DATASET_NOT_READY",

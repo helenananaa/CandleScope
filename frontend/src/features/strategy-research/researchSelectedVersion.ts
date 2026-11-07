@@ -1,7 +1,7 @@
 import type { ChartSession } from "../chart-session/chartSessionTypes.js";
 import type { ChartStrategyAttachmentRecord } from "../chart-workspace/chartWorkspaceTypes.js";
 import { getStrategyStorage, type StrategyStorage } from "../../shared/strategyStorage.js";
-import { validExecutionOverrides } from "../../shared/strategyRunSettings.js";
+import { isPythonBarOutputMode, validExecutionOverrides } from "../../shared/strategyRunSettings.js";
 import { chartStrategyQuickPresetIdForMarket } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 
 export interface ResearchSelectedVersion {
@@ -53,16 +53,20 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
   const exact: Record<string, unknown> = {
     account_model: c.market_type === "spot" ? "SPOT_CASH_V1" : "LINEAR_PERP_ONE_WAY_V1",
     contract_data_mode: "LEGACY_FIXED_V1", funding_mode: "OFF", sizing_policy: "EQUITY_PERCENT_V1",
-    output_mode: "TARGET_POSITION", gap_policy: "REJECT", execution_model_revision: "EXECUTION_REALISM_V2",
-    order_end_policy: "CANCEL_AT_END", quick_preset_id: chartStrategyQuickPresetIdForMarket(c.market_type),
-    quick_preset_revision: "2",
+    gap_policy: "REJECT", quick_preset_id: chartStrategyQuickPresetIdForMarket(c.market_type),
+    quick_preset_revision: c.market_type === "spot" ? "2" : "1",
   };
   for (const [field, value] of Object.entries(exact)) requireValue(c[field] === value, field);
   for (const field of ["funding_rate", "latency_ms", "latency_events", "cooldown_events"]) requireValue(c[field] == null || decimal(c[field]) === "0", field);
   requireValue(decimal(c.leverage) === "1", "leverage");
-  requireValue(decimal(c.participation_rate) === "0.1", "participation_rate");
-  requireValue(c.bar_path_scenario == null || c.bar_path_scenario === "OHLC_WORST_CASE_STOP_FIRST_V1", "bar_path_scenario");
-  requireValue(c.fill_policy == null || c.fill_policy === "BAR_VOLUME_PARTICIPATION_WORST_CASE_V2", "fill_policy");
+  const outputMode = c.output_mode;
+  requireValue(isPythonBarOutputMode(outputMode), "output_mode");
+  const legacy = c.execution_model_revision == null;
+  requireValue(legacy || c.execution_model_revision === "EXECUTION_REALISM_V2", "execution_model_revision");
+  requireValue(legacy ? c.participation_rate == null : decimal(c.participation_rate) === "0.1", "participation_rate");
+  requireValue(c.bar_path_scenario == null || (!legacy && c.bar_path_scenario === "OHLC_WORST_CASE_STOP_FIRST_V1"), "bar_path_scenario");
+  requireValue(c.fill_policy == null || (!legacy && c.fill_policy === "BAR_VOLUME_PARTICIPATION_WORST_CASE_V2"), "fill_policy");
+  requireValue((legacy && c.order_end_policy == null) || c.order_end_policy === "CANCEL_AT_END", "order_end_policy");
   // These fields are not editable by the quick chart conditions. Retain the
   // selected research result and refuse rather than discard its risk rules.
   for (const field of ["fixed_qty", "fixed_notional", "risk_per_stop_percent", "stop_distance", "max_abs_position_qty", "max_notional",
@@ -82,7 +86,7 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
     parameters: structuredClone(c.parameters) as Record<string, unknown>, rangeMode: "CUSTOM",
     customRange: { startMs: Number(startMs), endMs: Number(endMs) }, fidelityPreference: "FAST",
     quickPresetId: String(c.quick_preset_id), autoRun: false, executionOverrides,
-    initialization: { runId: version.run_id, versionHash: version.version_hash, outputMode: "TARGET_POSITION", warmupBars: Number(warmupBars) },
+    initialization: { runId: version.run_id, versionHash: version.version_hash, outputMode, warmupBars: Number(warmupBars), ...(legacy ? { executionModel: "LEGACY" } : {}) },
   } };
 }
 
