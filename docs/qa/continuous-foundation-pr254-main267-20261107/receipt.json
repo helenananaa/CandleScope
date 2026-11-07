@@ -1,0 +1,64 @@
+{
+  "source": "d91374b0c613c524adf1a48c6752fe2237dd8080",
+  "parent": "96bd05aecd8d71055456a73c8f42feeceb449a8a",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "--basetemp=/private/tmp/candlescope-foundation.5Qso6Z/output/continuous-foundation/254/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-foundation.5Qso6Z/output/continuous-foundation/254/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-foundation.5Qso6Z/output/continuous-foundation/254/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "backendPassed": 259,
+  "architecturePassed": true,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "3670ac600b780f168289b7d283d2d8075b91430e60901fc27c98f59d377053a0",
+      "originalSha256": "13e77da810488b50f6ee205a5b9f264d8e3163f3a6769b62372f9c52b7394315"
+    },
+    "frontend.log.gz": {
+      "sha256": "18dc6bb926e3fa174f6d17c8ad46e936af95846d2235ab8bc10fa6570c529aa7",
+      "originalSha256": "a89e1a6e13d9a60e5a4d75835413f16b20cd3fd972f97bb24ac5885f0a1cdd87"
+    }
+  },
+  "frontendPassed": 26,
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/chart-tester/__tests__/ChartStrategyTesterPanel.test.tsx",
+    "src/features/backtest/continuous/continuousApi.test.ts",
+    "src/features/backtest/continuous/continuousRunReference.test.ts",
+    "src/features/backtest/continuous/continuousView.test.ts",
+    "src/features/market-data/__tests__/continuousStrategyDataManager.test.ts"
+  ]
+}
