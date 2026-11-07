@@ -42,7 +42,23 @@ const diagnostics=()=>read('/api/v1/indicators/diagnostics');
 async function counts(n){return q.until(async()=>{const d=await diagnostics();await fs.writeFile(q.s.root+'/latest-diagnostics.json',JSON.stringify(d,null,2));return d.numericQueries?.subscriptions===n?d:false;},90000);}
 async function captureState(){return {panel:await panel(),diagnostics:await diagnostics(),status:await read('/api/v1/alerts/status'),workspace:await q.inspect()};}
 function unique(events){const keys=events.map(e=>JSON.stringify([e.ruleId,e.evaluationCursor]));assert.equal(new Set(keys).size,keys.length);}
-async function verifyValues(events){const checked=[];for(const event of events){const end=event.evaluationCursor.barTime;assert.ok(end);const p=new URLSearchParams({symbol:'BTCUSDT',interval:'1m',exchange:'binance',market_type:'spot',start_ms:String(end-249*60000),end_ms:String(end),repair:'none',wait_ms:'0',strict:'false'});const result=await read('/api/v1/klines/range?'+p);assert.equal(result.complete,true);assert.equal(result.all_rows_final,true);assert.equal(result.data.length,250);
+async function verifyValues(events){const checked=[];for(const event of events){const end=event.evaluationCursor.barTime;assert.ok(end);const p=new URLSearchParams({symbol:'BTCUSDT',interval:'1m',exchange:'binance',market_type:'spot',start_ms:String(end-249*60000),end_ms:String(end),repair:'none',wait_ms:'0',strict:'false'});const observations = [];
+ const result = await q.until(async () => {
+   const page = await read('/api/v1/klines/range?' + p);
+   observations.push({at: Date.now(), effectiveEndMs: page.effective_end_ms, count: page.data.length});
+   await fs.writeFile(q.s.root + '/numeric-range-' + event.id + '.json',
+     JSON.stringify({eventId: event.id, requestedEndMs: end, observations, page}, null, 2));
+   // The history endpoint caps its effective end at the local clock's closed edge.
+   // A source-confirmed close may arrive just before that edge.
+   if (page.effective_end_ms === end - 60000 && page.data.length === 249 &&
+       page.complete && page.all_rows_final && Date.now() < end + 65000) return false;
+   assert.equal(page.effective_end_ms, end);
+   return page;
+ }, 6000);
+ assert.equal(result.complete, true);
+ assert.equal(result.all_rows_final, true);
+ assert.equal(result.data.length, 250);
+ assert.equal(result.data.at(-1).time * 1000, end);
  const code="import json,sys\nfrom legacy_indicator_oracle import compute_alert_indicator_values\nfrom app.data_engine.data_manager.models import BarData\nrows=json.load(sys.stdin)\nprint(json.dumps(compute_alert_indicator_values([BarData(time=int(b['time']),open=b['open'],high=b['high'],low=b['low'],close=b['close'],volume=b['volume']) for b in rows])))";
  const resources=manifest.app+'/Contents/Resources';
  const expected=JSON.parse(cp.execFileSync(resources+'/python-runtime/python/bin/python3.12',['-B','-c',code],{input:JSON.stringify(result.data),encoding:'utf8',env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PYTHONPATH:process.cwd()+'/backend:'+resources+'/python-runtime/site-packages:'+process.cwd()+'/docs/qa/alerts-main266-native-20261106',CANDLE_DATA_DIR:q.s.root+'/oracle-data'}}));
