@@ -94,6 +94,8 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
+const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import type { ContinuousMode } from "../continuous/continuousTypes.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -307,6 +309,7 @@ export function CandleScopeStrategyTesterPanel({
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
   const [focusMode, setFocusMode] = useState(false);
+  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -337,8 +340,8 @@ export function CandleScopeStrategyTesterPanel({
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
   useEffect(() => {
-    saveChartStrategyPanelPreferences(cellScope, { height, activeTab });
-  }, [activeTab, cellScope, height]);
+    saveChartStrategyPanelPreferences(cellScope, { height, activeTab, runMode });
+  }, [activeTab, cellScope, height, runMode]);
   const resultCacheKey = result?.cacheKey ?? null;
   useEffect(() => {
     if (!resultCacheKey) return undefined;
@@ -673,6 +676,10 @@ export function CandleScopeStrategyTesterPanel({
         onPointerDown={beginResize}
         onKeyDown={handleResizeKey}
       />
+      <label className="continuous-mode">{t("continuous.mode")}<select value={runMode} onChange={(event) => setRunMode(event.target.value as ContinuousMode)}>
+        <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
+      </select></label>
+      {runMode === "HISTORY" ? <>
       {currentAttachment && <StrategyDockSlot name="tabs">
         <div className="strategy-tabs" role="tablist" aria-label={t("chartTester.tabsAria")}>
           {PANEL_TABS.map((tab) => (
@@ -1018,6 +1025,18 @@ export function CandleScopeStrategyTesterPanel({
           onClose={onCloseExplanation}
         />
       )}
+      </> : <Suspense fallback={<p>{t("continuous.loading")}</p>}>
+        <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
+          scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
+          language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
+          editor={(initialize) => activeDraft ? <>
+            <StrategyLanguageControls language={activeDraft.language} confirmed={pythonTrustedConfirmed} onConfirm={(value) => setPythonApproval(value ? approvalKey : null)} onLanguage={(language) => {
+              setPythonApproval(null); void draftStore.save({ ...activeDraft, language, source, cursor }).then((record) => attachRecord(record, false));
+            }} />
+            <StrategyScriptWorkspace source={source} language={activeDraft.language} cursor={cursor} issues={visibleIssues} focusIssue={focusIssue}
+              focusOnMount={false} onSourceChange={(value) => { setSource(value); setRunReady(false); onSourceDirty(); }} onCursorChange={setCursor} onRun={initialize} />
+          </> : null} />
+      </Suspense>}
     </section>
   );
 }
