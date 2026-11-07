@@ -218,7 +218,7 @@ export interface BacktestApiClient {
   streamRun?(runId: string, signal?: AbortSignal, onUpdate?: (event: StrategyRunUpdate) => void): Promise<BacktestRunRecord>;
   getReport(runId: string, signal?: AbortSignal): Promise<BacktestReport>;
   getChart(runId: string, signal?: AbortSignal): Promise<BacktestChartData>;
-  getResultReplay(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
+  getResultReplay?(cursor: BacktestResultReplayCursor, signal?: AbortSignal): Promise<BacktestResultReplayFrame>;
   exportRun(runId: string, signal?: AbortSignal): Promise<Record<string, unknown>>;
   cancelRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;
   resumeRun(runId: string, signal?: AbortSignal): Promise<BacktestRunRecord>;

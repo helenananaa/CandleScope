@@ -586,6 +586,8 @@ export interface BacktestResultReplayFrame {
   }>;
   order_events: Array<{ ordinal: number; order_id: string | null; state: string; reveal_sequence: number }>;
   order_trace_available: boolean;
+  closed_bar_signals: Array<{ reveal_sequence: number; signal_sequence: number; event_time_ms: number; kind: string; value: string }>;
+  signal_trace_available: boolean;
   fill_count: number;
   cash: string;
   position: string;

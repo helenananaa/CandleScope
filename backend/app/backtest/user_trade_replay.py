@@ -123,6 +123,15 @@ def project_user_trade_replay(runtime, run_id: str, *, snapshot_hash: str, repor
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Saved order has an invalid replay boundary")
             if row["reveal_sequence"] <= cursor:
                 visible_orders.append({key: row[key] for key in ("ordinal", "order_id", "state", "reveal_sequence")})
+    signals = (report.get("strategy") or {}).get("replayClosedBarSignals")
+    visible_signals = deque(maxlen=MAX_REVEALED_FILLS)
+    if signals is not None:
+        for signal in signals:
+            available = signal["reveal_sequence"]
+            if type(available) is not int or not 1 <= available <= len(events):
+                raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Saved signal has an invalid replay boundary")
+            if available <= cursor:
+                visible_signals.append(signal)
     return {
         "schema": "candlescope.user-trade-result-replay/1",
         "run_id": run_id, "snapshot_hash": snapshot_hash, "report_hash": report_hash,
@@ -133,5 +142,6 @@ def project_user_trade_replay(runtime, run_id: str, *, snapshot_hash: str, repor
         "source_sequence": last.payload["source_sequence"] if last else None,
         "bars": list(bars), "fills": list(visible_fills), "fill_count": visible_fill_count,
         "order_events": list(visible_orders), "order_trace_available": order_trace_available,
+        "closed_bar_signals": list(visible_signals), "signal_trace_available": signals is not None,
         "cash": str(account.quote_balance), "position": str(account.position_qty), "equity": str(account.equity()),
     }

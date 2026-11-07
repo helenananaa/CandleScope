@@ -354,3 +354,22 @@
   width: 100%;
   max-height: 340px;
 }
+
+.strategy-result-replay button,
+.strategy-result-replay input,
+.strategy-result-replay select {
+  padding: 5px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.strategy-result-replay button:hover:not(:disabled) { background: var(--bg-hover); }
+.strategy-result-replay button:disabled { opacity: 0.45; }
+
+.strategy-result-replay-candles {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  background: var(--bg-secondary);
+}

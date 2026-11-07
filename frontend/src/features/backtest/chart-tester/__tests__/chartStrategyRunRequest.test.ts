@@ -750,7 +750,7 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
     snapshot_hash: cursor.snapshotHash, report_hash: cursor.reportHash, interval: cursor.interval,
     cursor: cursor.cursor, signal_interval: "1m", symbol: "ETH/USDC", quote_asset: "USDC",
     total: 20, time_ms: 1000, source_sequence: 200, bars: [], fills: [], order_events: [],
-    order_trace_available: true, fill_count: 0, cash: "10000", position: "0", equity: "10000",
+    order_trace_available: true, closed_bar_signals: [], signal_trace_available: true, fill_count: 0, cash: "10000", position: "0", equity: "10000",
   };
   let response = good;
   const api: StrategyDataApi = {

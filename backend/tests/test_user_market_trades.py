@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections import defaultdict
 from decimal import Decimal
@@ -124,6 +125,10 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         report = client.get(RUNS + "/" + run_id + "/report")
         assert report.status_code == 200, report.text
         assert report.json()["data_quality"]["quote_asset"] == "USDC"
+        checkpoint = runtime.service.repository.latest_checkpoint(run_id)
+        assert checkpoint is not None
+        checkpoint_trace = json.loads(checkpoint["payload_json"])["engine"]["replay_closed_bar_signals"]
+        assert checkpoint_trace == report.json()["strategy"]["replayClosedBarSignals"]
         chart = client.get(RUNS + "/" + run_id + "/chart")
         assert chart.status_code == 200, chart.text
         chart_body = chart.json()
@@ -166,7 +171,11 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                 assert Decimal(frame["cash"]) == cash
                 assert Decimal(frame["position"]) == position
                 assert Decimal(frame["equity"]) == cash + position * mark
-                assert frame["order_trace_available"]
+                assert frame["order_trace_available"] and frame["signal_trace_available"]
+                assert len(frame["closed_bar_signals"]) == max(0, (cursor - 1) // 2)
+                if cursor == 3:
+                    assert frame["closed_bar_signals"][0]["reveal_sequence"] == 3
+                    assert frame["closed_bar_signals"][0]["event_time_ms"] == START + 59_999
                 if cursor == 10:
                     assert frame["order_events"] == []
                 if cursor == 11:

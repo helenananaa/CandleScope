@@ -98,6 +98,8 @@ export class StrategyDataManager {
         || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
         || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
         || !Array.isArray(frame.bars) || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)
+        || !Array.isArray(frame.closed_bar_signals)
+        || frame.closed_bar_signals.some(signal => signal.reveal_sequence > frame.cursor)
         || frame.fills.some((fill) => fill.cursor > frame.cursor)
         || frame.order_events.some((order) => order.reveal_sequence > frame.cursor)
         || frame.bars.some((bar) => frame.time_ms === null || bar.open_time_ms > frame.time_ms)) {

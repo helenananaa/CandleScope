@@ -9,7 +9,7 @@ function ReplayCandles({ bars }: { bars: BacktestResultReplayFrame["bars"] }) {
   if (bars.length === 0) return null;
   const high = Math.max(...bars.map(bar => Number(bar.high)));
   const low = Math.min(...bars.map(bar => Number(bar.low)));
-  const y = (price: string) => 316 - (Number(price) - low) / (high - low || 1) * 292;
+  const y = (price: string) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
   const spacing = Math.min(48, 968 / bars.length);
   return <svg viewBox="0 0 1000 340" role="img" aria-label={t("strategy.chartSlot")} className="strategy-result-replay-candles">
     {bars.map((bar, index) => {
@@ -125,6 +125,11 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
               {frame.fills.map((fill, i) => <li key={`${fill.cursor}:${fill.order_id}:${i}`}>#{fill.cursor} · {fill.side} · {fill.qty} @ {fill.price}</li>)}
             </ol>
           </details>
+          {frame.signal_trace_available && <details><summary>{t("local.kind.signal")}</summary>
+            <ol data-testid="strategy-replay-signals">{frame.closed_bar_signals.map(signal => <li key={signal.signal_sequence}>
+              #{signal.reveal_sequence} · {signal.kind} · {signal.value}
+            </li>)}</ol>
+          </details>}
           {frame.order_trace_available && <details><summary>{t("native.orders")}</summary>
             <ol data-testid="strategy-replay-orders">{frame.order_events.map(order => <li key={order.ordinal}>
               #{order.reveal_sequence} · {order.order_id} · {order.state}
