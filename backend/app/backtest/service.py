@@ -2751,6 +2751,7 @@ class BacktestService:
             resume_sequence = 0
 
             kernel = _build_bar_kernel(config, self._execution_reporter(session))
+            kernel.capture_result_replay = config.get("exchange") == "local" and config.get("account_model") == "SPOT_CASH_V1"
             host_hotpath = app_getenv("BACKTEST_HOST_HOTPATH_ENABLED", "1").strip() == "1"
             # Kept opt-in until full-run evidence establishes a stable benefit.
             kernel._specialized_bar = app_getenv("BACKTEST_SPECIALIZED_BAR_ENABLED", "0").strip() == "1"
@@ -2982,6 +2983,8 @@ class BacktestService:
             )
             self._assert_provider_state_budget(session.snapshot())
             strategy_metadata = _provider_report_metadata(provider)
+            if kernel.capture_result_replay and kernel.replay_signal_trace_complete:
+                strategy_metadata["replayClosedBarSignals"] = kernel.replay_closed_bar_signals
             final_sequence = (
                 events[-1].sequence
                 if materialized and events

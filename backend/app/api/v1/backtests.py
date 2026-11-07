@@ -510,12 +510,14 @@ def get_result_replay(
     report_hash: str = Query(pattern=r"^sha256:[a-f0-9]{64}$"),
     cursor: int = Query(ge=0),
     interval: str = Query(min_length=2, max_length=64),
+    comparison_interval: str | None = Query(default=None, min_length=2, max_length=64),
 ) -> dict[str, Any]:
-    from app.backtest.user_trade_replay import project_user_trade_replay
+    from app.backtest.result_replay import project_result_replay
 
     try:
-        return project_user_trade_replay(
-            _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash, cursor=cursor, interval=interval,
+        return project_result_replay(
+            _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash,
+            cursor=cursor, interval=interval, comparison_interval=comparison_interval,
         )
     except BacktestError as exc:
         return _error(exc)

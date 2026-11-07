@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BacktestApiError, type ChartContextResolution, type StrategyRevisionRecord } from "../../backtestApi.js";
-import type { BacktestRunRecord } from "../../backtestTypes.js";
+import type { BacktestResultReplayFrame, BacktestRunRecord } from "../../backtestTypes.js";
 import { StrategyRunStreamError } from "../../backtestRunStream.js";
 import {
   buildChartStrategyRunBody,
@@ -752,7 +752,7 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
     total: 20, time_ms: 1000, source_sequence: 200, bars: [], fills: [], order_events: [],
     order_trace_available: true, closed_bar_signals: [], signal_trace_available: true, fill_count: 0, cash: "10000", position: "0", equity: "10000",
   };
-  let response = good;
+  let response: BacktestResultReplayFrame = good;
   const api: StrategyDataApi = {
     ...importedApi([]),
     async getReport() { return assert.fail("unexpected report load"); },
@@ -769,5 +769,12 @@ test("Strategy Manager rejects a replay response for a different cursor or resul
   await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
   response = { ...good, report_hash: "sha256:other" };
   await assert.rejects(manager.loadResultReplay(cursor), /requested boundary/);
+  const linked = { ...cursor, comparisonInterval: "1m" };
+  const bar = { open_time_ms: 900, close_time_ms: 1000, open: "1", high: "2", low: "1", close: "2", volume: "1", closed: true };
+  response = { ...good, schema: "candlescope.local-bar-result-replay/1", comparison: { interval: "1m", bars: [bar] } };
+  assert.deepEqual(await manager.loadResultReplay(linked), response);
+  await assert.rejects(manager.loadResultReplay({ ...linked, comparisonInterval: "15m" }), /requested boundary/);
+  response = { ...response, comparison: { interval: "1m", bars: [{ ...bar, close_time_ms: 1001 }] } };
+  await assert.rejects(manager.loadResultReplay(linked), /requested boundary/);
   manager.dispose();
 });
