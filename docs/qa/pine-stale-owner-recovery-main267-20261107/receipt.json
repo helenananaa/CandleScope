@@ -1,0 +1,376 @@
+{
+  "source": "5e31ef63eea67adc63af1ec1eedd854fa4025a3d",
+  "main": "b442555d582dc0bb473bad92ac5e699efdaa78d5",
+  "backendPassed": 1134,
+  "windowsOnlySkip": 1,
+  "reproducedStaleOwnerPath": true,
+  "previousPublicFailureRootCauseConfirmed": false,
+  "native": {
+    "diagnostic": {
+      "source": "974d2d9853bafe7e6489e7db2e92aac5c77037b4",
+      "passed": true,
+      "expectedBoundaryOpen": 1794038160,
+      "normalExits": 2,
+      "restartObservations": 75,
+      "orderedFrames": 74,
+      "boundaries": [
+        {
+          "closedOpening": 1794038100,
+          "receiptAtMs": 1794038160031,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 14,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038100,
+            "closedThrough": 1794038040,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 15,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038100,
+            "closedThrough": 1794038100,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038100000,
+            "close_time": 1794038159999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038159929
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038160023,
+            "received_at": 1794038159890
+          }
+        },
+        {
+          "closedOpening": 1794038160,
+          "receiptAtMs": 1794038220042,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 44,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038160,
+            "closedThrough": 1794038100,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 45,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038160,
+            "closedThrough": 1794038160,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038160000,
+            "close_time": 1794038219999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038219960
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038220030,
+            "received_at": 1794038219900
+          }
+        },
+        {
+          "closedOpening": 1794038220,
+          "receiptAtMs": 1794038280029,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 74,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038220,
+            "closedThrough": 1794038160,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "4797a9930e134137aa0bab6ebb03cbae",
+            "generation": 2,
+            "sequence": 75,
+            "view": "current-projection",
+            "origin": 1793948040,
+            "observedThrough": 1794038220,
+            "closedThrough": 1794038220,
+            "inputRevision": "d2a193a9eb874e1ba9427e9b677b87cc:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038220000,
+            "close_time": 1794038279999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038279943
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038280022,
+            "received_at": 1794038279888
+          }
+        }
+      ],
+      "originErrors": [],
+      "originWarnings": [],
+      "ownedPidRecords": 20,
+      "steps": 24,
+      "failure": "",
+      "package": {
+        "verifiedAt": "2026-11-07T07:58:09.895Z",
+        "sourceCommit": "974d2d9853bafe7e6489e7db2e92aac5c77037b4",
+        "sourceFiles": 1073,
+        "builtFiles": 164,
+        "pluginAssets": 9,
+        "ciArtifactId": null,
+        "sdkArtifactFiles": null,
+        "sdkPreexistingPyc": null,
+        "pluginSources": {
+          "bundleSha256": "sha256:67f14322f346bf59f12ca59a1496eaa3d8157bcae654f095a2f8a46fbb7ec9f2",
+          "pluginSourceFiles": 76,
+          "mismatches": [],
+          "engineUnchanged": true
+        },
+        "mismatches": [],
+        "strictSignature": true,
+        "signatureError": null
+      },
+      "candidate": "/Users/ryanliang/CandleScope/output/development-goal-20261104/pine-close-origin-20261107/diagnostic"
+    },
+    "fixed": {
+      "source": "5e31ef63eea67adc63af1ec1eedd854fa4025a3d",
+      "passed": true,
+      "expectedBoundaryOpen": 1794038640,
+      "normalExits": 2,
+      "restartObservations": 73,
+      "orderedFrames": 73,
+      "boundaries": [
+        {
+          "closedOpening": 1794038580,
+          "receiptAtMs": 1794038640056,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 12,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038580,
+            "closedThrough": 1794038520,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 13,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038580,
+            "closedThrough": 1794038580,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038580000,
+            "close_time": 1794038639999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038639981
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038640061,
+            "received_at": 1794038639961
+          }
+        },
+        {
+          "closedOpening": 1794038640,
+          "receiptAtMs": 1794038700050,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 42,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038640,
+            "closedThrough": 1794038580,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 43,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038640,
+            "closedThrough": 1794038640,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038640000,
+            "close_time": 1794038699999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038699976
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038700015,
+            "received_at": 1794038699929
+          }
+        },
+        {
+          "closedOpening": 1794038700,
+          "receiptAtMs": 1794038760065,
+          "previous": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 72,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038700,
+            "closedThrough": 1794038640,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "current": {
+            "schemaVersion": 1,
+            "domainId": "3c9b516ff9ee4558a3373ad34ef09f9b",
+            "generation": 1,
+            "sequence": 73,
+            "view": "current-projection",
+            "origin": 1793948520,
+            "observedThrough": 1794038700,
+            "closedThrough": 1794038700,
+            "inputRevision": "094b3265ecac44dda239779c12dd99da:0:delivery:0"
+          },
+          "sameGeneration": true,
+          "canonical": {
+            "open_time": 1794038700000,
+            "close_time": 1794038759999,
+            "source": "source_snapshot_verified",
+            "updated_at": 1794038759988
+          },
+          "lastSelectedSourceObservation": {
+            "event_time": 1794038760037,
+            "received_at": 1794038759939
+          }
+        }
+      ],
+      "originErrors": [],
+      "originWarnings": [],
+      "ownedPidRecords": 20,
+      "steps": 24,
+      "failure": "",
+      "package": {
+        "verifiedAt": "2026-11-07T08:06:09.857Z",
+        "sourceCommit": "5e31ef63eea67adc63af1ec1eedd854fa4025a3d",
+        "sourceFiles": 1073,
+        "builtFiles": 164,
+        "pluginAssets": 9,
+        "ciArtifactId": null,
+        "sdkArtifactFiles": null,
+        "sdkPreexistingPyc": null,
+        "pluginSources": {
+          "bundleSha256": "sha256:67f14322f346bf59f12ca59a1496eaa3d8157bcae654f095a2f8a46fbb7ec9f2",
+          "pluginSourceFiles": 76,
+          "mismatches": [],
+          "engineUnchanged": true
+        },
+        "mismatches": [],
+        "strictSignature": true,
+        "signatureError": null
+      },
+      "candidate": "/Users/ryanliang/CandleScope/output/development-goal-20261104/pine-stale-owner-recovery-main267-20261107/native-fixed"
+    }
+  },
+  "artifacts": {
+    "checks.json.gz": {
+      "sha256": "c268831ea59faedd5d48c63e6abbb32bd154daa38064494216c6e5d14df39ed8",
+      "originalSha256": "ff8a60bb2acdbe464171b1189c2e68dbd5f0bb60f5871d11d5d31559f9677804"
+    },
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "full-backend.log.gz": {
+      "sha256": "ff0e3a817dd5612d4841ad4a73963f3a849c18500be02a1947cb8fcc1d4faf5f",
+      "originalSha256": "a9dfd283146555460d998af947047b1529ac24ad56619440495b9cbed38f9317"
+    },
+    "stale-before.log.gz": {
+      "sha256": "98160e143acdf276a34889588ab17446145a2936b8cab7f684cf6acb5fab24d0",
+      "originalSha256": "63caeef9c66bde19b004e1349b80a9eb4cafba5331d9be5669c0b65df957d0a2"
+    },
+    "native-fixed-assembly.log.gz": {
+      "sha256": "3ee7bc89a44f6239295fd9a70474cfc747d6ec4894e170e8eaae6ebf60e562d6",
+      "originalSha256": "2ee6d5f6288441babcc952e12450be8b9b94a8a580766b82fce92922918fa59c"
+    },
+    "fixed-verify.log.gz": {
+      "sha256": "13d155ada97472a543cfad559935161cc3f7f2e71162a542742078df778bd107",
+      "originalSha256": "ff977d46da20c0d64b937ea76524105e4297e44cd639ab3c43eb3a761e8d8a3a"
+    },
+    "boundary-witness.py.gz": {
+      "sha256": "77c3500ef96c709214a5bce1580e66f459e6ef3f897d2fe463c52edecb96c4b5",
+      "originalSha256": "995280aef2f038469d4456c69e37664bb676a07a3a1fd4ed57d7034d07c0ad4d"
+    },
+    "output-provenance.json.gz": {
+      "sha256": "630beee713923968f67dcc76bd2bc285f3460832e76dcda884214670509d6a36",
+      "originalSha256": "e4dcbc538967f549ed0da26b9282215e78d774b05fdd06946414a880c75e4764"
+    },
+    "diagnostic-boundaries.json.gz": {
+      "sha256": "5f504b58e55a84bd9f853837a929735b6df9b366f09e8017eb52667425b638ca",
+      "originalSha256": "3e903714a6fb591c3a397437ea4867d493156d7cf881cf6709d79d8fe9f7ce2c"
+    },
+    "diagnostic-acceptance.json.gz": {
+      "sha256": "3d7567cc591e135efdd21f838f22edf11f209ebb8cbdb9a0c040789400106e13",
+      "originalSha256": "395fea810f75341200a71334f30e2573fd27e1df2706edf9f5004160be50292a"
+    },
+    "diagnostic-source-package-manifest.json.gz": {
+      "sha256": "52d27cd72eb41d3be937aed02a2b76fcb00b17beee277103dff73987456eef5a",
+      "originalSha256": "6720c8b59fff5c0e24ea0aab08004079573969f70125cc0690e6c8d5780b0695"
+    },
+    "diagnostic-sidecar-exit-status.json.gz": {
+      "sha256": "a2b97bc23bcf2fef64707514ac68e5acd57414cc783bf5ae9d49ae759122cb2a",
+      "originalSha256": "6e3beb5aa223cef6c81b90295694da0bc25695843f9d9c631be07b95ff338bb7"
+    },
+    "diagnostic-verified-after.json.gz": {
+      "sha256": "e7daa94cb50c65131f62c96251963d1877315d2814bef7152aa64257a063ee1d",
+      "originalSha256": "e259f9ce828a3cbbfb2e47fa76fecd7397dbb535c4740c344a29a802156e99cd"
+    },
+    "fixed-boundaries.json.gz": {
+      "sha256": "7c7aa1bc6c2800e953b499ed61da867f520cb1323cfbca2bb9cb588ac0242b5a",
+      "originalSha256": "e3e8fbff6160f25f9867e0625c1638469f7df3bea3e58f40833770b7f701805a"
+    },
+    "fixed-acceptance.json.gz": {
+      "sha256": "180de9b3f02b0b5ad5613bf38daf906d39340d0e5a06be05531f5cecaeb498d5",
+      "originalSha256": "433c506cccad423cd338ca235fd18ab98703e03b3fecaa344c01b45aedc405d0"
+    },
+    "fixed-source-package-manifest.json.gz": {
+      "sha256": "5cb9d8144be3938d7e93addf767a8e72d7993fcf1a9bdbb720cd879e4bf572cd",
+      "originalSha256": "5edc7a5b44440d9ca2a45f45b0940e2581db56bd9c7074ffd26715ce8a381fa2"
+    },
+    "fixed-sidecar-exit-status.json.gz": {
+      "sha256": "791bb6fb955b9bff8f38197a3bcabd65565cc81f0d9315fc78891703cf8d514a",
+      "originalSha256": "f1df190f6e29e87e3d0862a6f2f90eb4d3480eccdb6c9e02862bb9e949080d23"
+    },
+    "fixed-verified-after.json.gz": {
+      "sha256": "14024c709f921a49d1fe3e77ee38b99c03f86b1004ed15b0c17fa3e9b6539cae",
+      "originalSha256": "ba3d498a4d8f58c801d315dda29aed2643032cad39f18a9b9d5d05516b14b3a5"
+    }
+  }
+}
