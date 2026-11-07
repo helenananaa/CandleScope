@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
 from typing import Any
@@ -612,6 +613,16 @@ def _query_script_snapshot_bars(
     return list(resolved_bars)
 
 
+def _pine_snapshot_session_id(meta: dict[str, Any]) -> str:
+    session_id = meta.get("pineRuntimeSessionId")
+    if not session_id:
+        owner = meta.get("pineSessionOwner")
+        scope = (owner, meta.get("exchange"), meta.get("market_type"), meta.get("symbol"), meta.get("interval"))
+        session_id = hashlib.sha256(str(scope).encode()).hexdigest() if owner else uuid.uuid4().hex
+        meta["pineRuntimeSessionId"] = session_id
+    return session_id
+
+
 def _script_runtime_request(
     meta: dict[str, Any],
     bars: list[Any],
@@ -620,13 +631,7 @@ def _script_runtime_request(
 ) -> IndicatorRuntimeRequest:
     pine_options = {}
     if str(meta.get("language") or "pine") == "pine" and transport.startswith("websocket."):
-        # Identity belongs to this subscription, not source text shared by users.
-        if not meta.get("pineRuntimeSessionId"):
-            import hashlib
-            owner = meta.get("pineSessionOwner")
-            meta["pineRuntimeSessionId"] = hashlib.sha256(str((owner, meta.get("exchange"), meta.get("market_type"),
-                meta.get("symbol"), meta.get("interval"))).encode()).hexdigest() if owner else uuid.uuid4().hex
-        pine_options["pineSessionId"] = meta["pineRuntimeSessionId"]
+        pine_options["pineSessionId"] = _pine_snapshot_session_id(meta)
         pine_options["pineSessionEpoch"] = (meta.get("params") or {}).get("__pineSessionEpoch", "0")
         pine_options["pineLiveUpdate"] = bool(meta.get("pineLiveUpdate"))
         pine_options["pineLiveBarTime"] = int(meta.get("pineLiveBarTime") or 0)

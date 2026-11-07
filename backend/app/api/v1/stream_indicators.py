@@ -113,6 +113,9 @@ def _indicator_stream_failure(
         hint = "实时指标订阅不可用；前端应停止该订阅，并通过 HTTP 历史接口补齐已收盘指标值。"
     elif isinstance(exc, CalculationOwnerError):
         code, message, hint = exc.code, str(exc), '请恢复图表计算域后重新订阅。'
+        if code == "INDICATOR_SNAPSHOT_WRITER_BUSY":
+            message = "Another connection still owns this Pine snapshot session."
+            hint = "请等待旧连接完成清理后重新订阅，或为独立图表使用不同的订阅 ID。"
     elif isinstance(exc, IndicatorRuntimeRoutesError):
         code = "INDICATOR_LANGUAGE_UNAVAILABLE"
         message = str(exc)

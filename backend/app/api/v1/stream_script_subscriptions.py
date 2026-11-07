@@ -10,6 +10,7 @@ from typing import Any
 from app.api.v1.stream_indicator_payloads import (
     _compute_script_snapshot_message_async,
     _patch_from_snapshot,
+    _pine_snapshot_session_id,
     _unbound_indicator_runtime_service,
     confirmed_indicator_seed_bars,
 )
@@ -161,15 +162,6 @@ async def handle_script_indicator_subscribe(
     await unsubscribe_client(client_id)
     digest = script_hash(script)
 
-    await dm.ensure_stream(
-        symbol,
-        interval,
-        exchange=exchange,
-        market_type=market_type,
-        focus_scope="websocket",
-        subscription_tier="indicator",
-        consumer_id=stream_consumer_id,
-    )
     meta = {
         "pineSessionOwner": client_id,
         "kind": "script",
@@ -188,12 +180,48 @@ async def handle_script_indicator_subscribe(
         "historyLimit": history_limit,
         "streamConsumerId": stream_consumer_id,
     }
+    snapshot_lock = asyncio.Lock()
+    release_writer = None
+    if language == "pine":
+        release_writer = script_runtime_service.claim_pine_snapshot_writer(_pine_snapshot_session_id(meta))
+
+        async def release_snapshot():
+            # A newer queued task may have been cancelled while it was
+            # shielding a previous execution. Drain that execution as well.
+            async with snapshot_lock:
+                try:
+                    if script_runtime_service.release_inputs is not None:
+                        await script_runtime_service.release_inputs(stream_consumer_id)
+                finally:
+                    release_writer()
+
+        meta["_releaseRuntimeInputs"] = release_snapshot
+    try:
+        await dm.ensure_stream(
+            symbol,
+            interval,
+            exchange=exchange,
+            market_type=market_type,
+            focus_scope="websocket",
+            subscription_tier="indicator",
+            consumer_id=stream_consumer_id,
+        )
+    except BaseException:
+        if release_writer is not None:
+            release_writer()
+        raise
     if isinstance(seed_query_cache, dict):
         meta["_seedQueryCache"] = seed_query_cache
     client_meta[client_id] = meta
-    release_inputs = getattr(script_runtime_service, "release_inputs", None)
-    if language == "pine" and release_inputs is not None:
-        meta["_releaseRuntimeInputs"] = lambda: release_inputs(stream_consumer_id)
+
+    async def compute_snapshot(**kwargs):
+        async with snapshot_lock:
+            if meta.get("_disposed"):
+                raise asyncio.CancelledError
+            return await _compute_script_snapshot_message_async(
+                client_id, dm, meta, runtime_service=script_runtime_service, **kwargs,
+            )
+
     client_revision_context = (
         dict(data_revision) if isinstance(data_revision, dict) else None
     )
@@ -483,21 +511,7 @@ async def handle_script_indicator_subscribe(
                         snapshot_revision=snapshot_revision,
                         frontier_generation=snapshot_frontier_generation,
                     )
-                    if shared_seed_bars is None:
-                        candidate = await _compute_script_snapshot_message_async(
-                            client_id,
-                            dm,
-                            meta,
-                            runtime_service=script_runtime_service,
-                        )
-                    else:
-                        candidate = await _compute_script_snapshot_message_async(
-                            client_id,
-                            dm,
-                            meta,
-                            runtime_service=script_runtime_service,
-                            seed_bars=shared_seed_bars,
-                        )
+                    candidate = await compute_snapshot(seed_bars=shared_seed_bars)
                     if candidate.get("ok") is False:
                         return False
                     candidate_coverage = (
@@ -719,13 +733,7 @@ async def handle_script_indicator_subscribe(
     async def _run_realtime_event(event: Any) -> None:
         if meta.get("_disposed"):
             return
-        msg = await _compute_script_snapshot_message_async(
-            client_id,
-            dm,
-            meta,
-            bar_time=event.bar.time if event.bar else 0,
-            runtime_service=script_runtime_service,
-        )
+        msg = await compute_snapshot(bar_time=event.bar.time if event.bar else 0)
         if range_service is not None:
             msg["dataRevision"] = range_service.data_revision_for_meta(meta)
         if meta.get("_disposed"):

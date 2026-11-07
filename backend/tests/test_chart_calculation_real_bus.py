@@ -488,3 +488,93 @@ def test_lost_cached_projection_recovers_on_the_next_confirmed_close(real_bus_wi
         assert transport.value(next_update) == 502
         assert next_update['calculation']['generation'] == output['calculation']['generation']
     assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
+
+
+def test_snapshot_writer_rejects_overlapping_reconnect_then_resumes_same_session(real_bus_wire):
+    wire = real_bus_wire
+    message = transport.open_request(historyLimit=501)
+    for key in ("schemaVersion", "start", "end"):
+        del message[key]
+    message["action"] = "subscribe"
+
+    def subscribe(ws, **changes):
+        ws.send_json({**message, **changes})
+        return transport.receive(ws, "indicator.subscribed")
+
+    def counter(ws):
+        return transport.value(transport.receive(ws, "indicator.snapshot", "indicator.replace_range", "indicator.patch"))
+
+    with wire.client.websocket_connect("/ws") as first, wire.client.websocket_connect("/ws") as reconnect:
+        assert subscribe(first)["ok"]
+        assert wire.client.post("/fixture/tick/501?close=103").json()["ok"]
+        assert counter(first) == 501
+        assert wire.client.post("/fixture/tick/501?close=104").json()["ok"]
+        assert counter(first) == 502
+        requests = wire.host.diagnostics()["runtimes"][0]["requests"]
+        rejected = subscribe(reconnect)
+        assert not rejected["ok"] and rejected["code"] == "INDICATOR_SNAPSHOT_WRITER_BUSY"
+        assert wire.host.diagnostics()["runtimes"][0]["requests"] == requests
+        assert len(wire.source.leases) == 1
+
+        with wire.client.websocket_connect("/ws") as other:
+            assert subscribe(other, clientId="separate-chart")["ok"]
+            assert wire.client.post("/fixture/tick/501?close=105").json()["ok"]
+            assert [counter(first), counter(other)] == [503, 501]
+
+        first.send_json({"action": "unsubscribe", "clientId": message["clientId"]})
+        transport.receive(first, "indicator.unsubscribed")
+        assert subscribe(reconnect)["ok"]
+        assert wire.client.post("/fixture/tick/501?close=106").json()["ok"]
+        assert counter(reconnect) == 504
+
+
+def test_snapshot_writer_remains_claimed_until_older_shielded_work_drains(real_bus_wire, monkeypatch):
+    from app.api.v1 import stream_script_subscriptions
+
+    wire = real_bus_wire
+    message = transport.open_request(historyLimit=501)
+    for key in ("schemaVersion", "start", "end"):
+        del message[key]
+    message["action"] = "subscribe"
+    entered, released = threading.Event(), asyncio.Event()
+    original = stream_script_subscriptions._compute_script_snapshot_message_async
+
+    async def delayed_snapshot(*args, **kwargs):
+        if kwargs.get("bar_time") and not entered.is_set():
+            entered.set()
+            await released.wait()
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(stream_script_subscriptions, "_compute_script_snapshot_message_async", delayed_snapshot)
+
+    @wire.client.app.post("/fixture/queue-snapshot-close")
+    async def enqueue_close():
+        closed = transport.bars(501)[-1]
+        await wire.source.emit(transport.DataEvent(
+            transport.DataEventType.BAR_CLOSED, transport.SeriesKey("BTCUSDT", "1m"), bar=closed,
+        ))
+        return {"queued": True}
+
+    with wire.client.websocket_connect("/ws") as first, wire.client.websocket_connect("/ws") as reconnect:
+        try:
+            first.send_json(message)
+            assert transport.receive(first, "indicator.subscribed")["ok"]
+            assert wire.client.post("/fixture/tick/501?close=103").json()["ok"]
+            assert entered.wait(3)
+            assert wire.client.post("/fixture/queue-snapshot-close").json() == {"queued": True}
+            first.send_json({"action": "unsubscribe", "clientId": message["clientId"]})
+
+            async def wait_for_market_release():
+                async with asyncio.timeout(3):
+                    while wire.source.leases:
+                        await asyncio.sleep(0.005)
+
+            wire.client.portal.call(wait_for_market_release)
+            reconnect.send_json(message)
+            rejected = transport.receive(reconnect, "indicator.subscribed")
+            assert not rejected["ok"] and rejected["code"] == "INDICATOR_SNAPSHOT_WRITER_BUSY"
+        finally:
+            wire.client.portal.call(released.set)
+        transport.receive(first, "indicator.unsubscribed")
+        reconnect.send_json(message)
+        assert transport.receive(reconnect, "indicator.subscribed")["ok"]

@@ -31,6 +31,7 @@ from candlescope_plugin_sdk import (
 from app.core.executors import run_indicator
 from app.plugin_runtime.errors import PluginHostError, PluginRequestError
 
+from .calculation_owner import CalculationOwnerError
 from .runtime_routes import (
     ROUTE_MODE_LEGACY,
     ROUTE_MODE_SHADOW,
@@ -321,6 +322,7 @@ class IndicatorRuntimeService:
         self.stop_inputs = None
         from .calculation_registry import CalculationRegistry
         self.calculations = CalculationRegistry()
+        self._pine_snapshot_writers: set[str] = set()
         self.legacy_languages = legacy_languages
         self.max_pending_shadow_tasks = int(max_pending_shadow_tasks)
         self._start_lock = asyncio.Lock()
@@ -438,6 +440,13 @@ class IndicatorRuntimeService:
         self._background_tasks.clear()
         if self.stop_inputs is not None:
             await self.stop_inputs()
+
+    def claim_pine_snapshot_writer(self, session_id: str) -> Callable[[], None]:
+        """Preserve the reconnect identity while allowing one live writer."""
+        if session_id in self._pine_snapshot_writers:
+            raise CalculationOwnerError("INDICATOR_SNAPSHOT_WRITER_BUSY")
+        self._pine_snapshot_writers.add(session_id)
+        return lambda: self._pine_snapshot_writers.remove(session_id)
 
     async def release_stream(self, runtime_id: str, stream: str) -> None:
         """Release one drained owner, including its bounded conversion base."""
