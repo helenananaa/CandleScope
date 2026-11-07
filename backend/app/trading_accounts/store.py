@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
@@ -174,13 +175,20 @@ class TradingStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._read_state = threading.local()
+        from app.core.committed_updates import committed_updates_for
+        self.updates = committed_updates_for(self.path, "trading-account")
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.executescript(_SCHEMA)
+        self._conn.execute("CREATE TABLE IF NOT EXISTS ledger_state_revision (id INTEGER PRIMARY KEY CHECK(id=1), epoch TEXT NOT NULL, sequence INTEGER NOT NULL)")
         with self.transaction() as conn:
+            conn.execute("INSERT OR IGNORE INTO ledger_state_revision VALUES(1,?,0)", (uuid.uuid4().hex,))
+            for table in ("accounts", "cash_flows", "orders", "fills", "practice_cursors", "journal_entries", "journal_revisions", "snapshots"):
+                for operation in ("INSERT", "UPDATE", "DELETE"):
+                    conn.execute(f"CREATE TRIGGER IF NOT EXISTS ledger_state_{table}_{operation.lower()} AFTER {operation} ON {table} BEGIN UPDATE ledger_state_revision SET sequence=sequence+1 WHERE id=1; END")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(journal_revisions)")}
             if "history_complete" not in columns:
                 # Old autosaves overwrote revisions. Preserve their bytes, but
@@ -197,15 +205,26 @@ class TradingStore:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        changed = False
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
+                before = self._conn.execute("SELECT sequence FROM ledger_state_revision WHERE id=1").fetchone()
                 yield self._conn
+                after = self._conn.execute("SELECT sequence FROM ledger_state_revision WHERE id=1").fetchone()
+                changed = before is not None and after is not None and before[0] != after[0]
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
             else:
                 self._conn.execute("COMMIT")
+        if changed:
+            self.updates.notify("state")
+
+    def state_cursor(self) -> dict[str, Any]:
+        value = self.one("SELECT epoch,sequence FROM ledger_state_revision WHERE id=1")
+        assert value is not None
+        return value
 
     @contextmanager
     def read_snapshot(self) -> Iterator[None]:

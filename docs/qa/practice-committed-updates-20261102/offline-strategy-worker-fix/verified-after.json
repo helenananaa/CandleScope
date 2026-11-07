@@ -1,0 +1,9 @@
+{
+  "verifiedAt": "2026-11-02T10:55:25.905Z",
+  "sourceCommit": "e78947b2cd9d9c202bb57c7d9f65c0b006c76cb5",
+  "sourceFiles": 1037,
+  "builtFiles": 161,
+  "mismatches": [],
+  "strictSignature": true,
+  "signatureError": null
+}
