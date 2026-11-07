@@ -454,3 +454,37 @@ def test_discarded_runtime_tail_is_reseeded_from_origin_without_losing_writer(re
         ws.send_json({'action': 'unsubscribe', 'clientId': 'chart-a'})
         transport.receive(ws, 'indicator.unsubscribed')
     assert wire.client.delete('/indicators/calculations/' + reference['domainId']).json()['state'] == 'closed'
+
+
+def test_lost_cached_projection_recovers_on_the_next_confirmed_close(real_bus_wire):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    assert transport.value(initial) == 500
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        transport.receive(ws, 'indicator.snapshot')
+        wire.extra_processes.extend(supervisor._process for supervisor in wire.host._supervisors.values()
+                                   if supervisor._process is not None)
+        wire.client.portal.call(wire.host.stop)
+        assert transport.view(wire, transport.ref(initial))['code'] == 'INDICATOR_CALCULATION_OUTPUT_LOST'
+
+        async def close_input():
+            wire.source.rows = transport.bars(501)
+            await wire.source.emit(transport.DataEvent(transport.DataEventType.BAR_CLOSED, transport.SeriesKey('BTCUSDT', '1m'),
+                                            bar=wire.source.rows[-1]))
+
+        wire.client.portal.call(close_input)
+        output = transport.receive(ws, 'indicator.snapshot', 'error')
+        assert output['type'] == 'indicator.snapshot', output
+        assert transport.value(output) == 501
+        assert output['calculation']['generation'] == initial['calculation']['generation'] + 1
+        assert output['meta']['sessionResetReason'] == 'runtimeRebuild'
+        assert output['calculation']['sequence'] == initial['calculation']['sequence'] + 1
+        assert output['calculation']['closedThrough'] == wire.source.rows[-1].time
+        assert wire.source.query_windows[-1][0] == initial['calculation']['origin'] * 1000
+        assert wire.client.post('/fixture/tick/502').json()['ok']
+        next_update = transport.receive(ws, 'indicator.replace_range', 'error')
+        assert transport.value(next_update) == 502
+        assert next_update['calculation']['generation'] == output['calculation']['generation']
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'

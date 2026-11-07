@@ -269,6 +269,11 @@ class ChartCalculation:
             self._require_source_ready()
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
             rebuild = self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
+            if not rebuild and self.owner.requires_rebuild:
+                # A cached read can discover loss of the runtime projection
+                # while the source watch and the published cursor still match.
+                rebuild = True
+                reset_reason = 'runtimeRebuild'
             # An ordered observation must not jump ahead to a close whose
             # callback has already arrived but is still queued behind it.
             end = max(cursor.observed_through, int(through),

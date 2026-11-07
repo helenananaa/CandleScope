@@ -89,6 +89,11 @@ class ScriptCalculationOwner:
     @property
     def cursor(self): return self._cursor
 
+    @property
+    def requires_rebuild(self) -> bool:
+        """The retained execution is no longer certified by the public cursor."""
+        return self._stale
+
     def _admit(self):
         if self._closing:
             raise CalculationOwnerError('INDICATOR_CALCULATION_CLOSED')
