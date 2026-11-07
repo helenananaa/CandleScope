@@ -1,0 +1,118 @@
+{
+  "head": "e7ed487f83885bca2bc950bc8641308a97d7fe33",
+  "base": "bc067c16f3daf8b235d7c1dd1292a0b37fb2a71d",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_backtest_architecture.py",
+    "backend/tests/test_gc_execution_safety.py",
+    "backend/tests/test_gc_policy.py",
+    "backend/tests/test_gc_settings_validation.py",
+    "backend/tests/test_indicator_api.py",
+    "backend/tests/test_indicator_compute_batch.py",
+    "backend/tests/test_indicator_data_manager_bridge.py",
+    "backend/tests/test_indicator_finite_windows.py",
+    "backend/tests/test_indicator_history_transport_independence.py",
+    "backend/tests/test_indicator_history_worker.py",
+    "backend/tests/test_indicator_owner_ws.py",
+    "backend/tests/test_indicator_plugin_serialization_parity.py",
+    "backend/tests/test_indicator_process_owner.py",
+    "backend/tests/test_indicator_range_batch.py",
+    "backend/tests/test_indicator_range_result_service.py",
+    "backend/tests/test_indicator_resume.py",
+    "backend/tests/test_indicator_runtime_routes.py",
+    "backend/tests/test_indicator_runtime_service.py",
+    "backend/tests/test_indicator_runtime_transport_routing.py",
+    "backend/tests/test_indicator_serial_owner.py",
+    "backend/tests/test_indicator_series_revision.py",
+    "backend/tests/test_indicator_sidecar_ws_regressions.py",
+    "backend/tests/test_indicator_ws_resume.py",
+    "backend/tests/test_local_offline_main_profile.py",
+    "backend/tests/test_local_offline_network_guard.py",
+    "backend/tests/test_market_dataset_architecture.py",
+    "backend/tests/test_plugin_host_architecture.py",
+    "backend/tests/test_plugin_installer_v2_architecture.py",
+    "backend/tests/test_plugin_runtime_architecture.py",
+    "backend/tests/test_replay_architecture.py",
+    "backend/tests/test_replay_indexed_indicator_closes.py",
+    "backend/tests/test_replay_indicator_context_columns.py",
+    "backend/tests/test_replay_indicator_context_ranges.py",
+    "backend/tests/test_replay_indicator_http.py",
+    "backend/tests/test_replay_indicator_jobs.py",
+    "backend/tests/test_replay_indicator_market_columns.py",
+    "backend/tests/test_replay_indicator_prefix.py",
+    "backend/tests/test_replay_indicator_prefix_archive.py",
+    "backend/tests/test_replay_indicator_prefix_budget.py",
+    "backend/tests/test_replay_indicator_prefix_native.py",
+    "backend/tests/test_replay_indicator_prefix_service.py",
+    "backend/tests/test_replay_indicator_prepared_context.py",
+    "backend/tests/test_replay_indicator_viewport.py",
+    "backend/tests/test_replay_market_indicator_columns.py",
+    "backend/tests/test_replay_tape_indicator_history.py",
+    "backend/tests/test_simulation_architecture.py",
+    "backend/tests/test_application_shutdown_failures.py",
+    "backend/tests/test_query_cache_fencing.py",
+    "backend/tests/test_kline_prefix_watches.py",
+    "backend/tests/test_kline_revision_contract.py",
+    "backend/tests/test_replay_imported_multimarket.py",
+    "backend/tests/test_replay_imported_bar.py",
+    "backend/tests/test_replay_note_captures.py",
+    "backend/tests/test_replay_training_notes.py",
+    "backend/tests/test_replay_v2_training_api.py",
+    "backend/tests/test_replay_v2_training_phase5.py",
+    "--basetemp=/private/tmp/candlescope-pr267-main269-20261107/output/pr267-pytest-final",
+    "-q",
+    "-rs",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-pr267-main269-20261107/output/pr267-third-data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-pr267-main269-20261107/output/pr267-third-data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "started": "2026-11-07T05:57:33.197740+00:00",
+  "architectureExitCode": 0,
+  "initialHarnessFailure": "Prior --basetemp pointed at removed temporary root",
+  "previousHarnessFailures": [
+    "Removed old --basetemp parent",
+    "Fresh worktree did not have locked Node tsx dependency"
+  ],
+  "nodeDependencySource": "/Users/ryanliang/.codex/retained-worktree-resources/CandleScope/issue-123-p0-audit-49d6c76a/frontend/node_modules",
+  "pytestExitCode": 0,
+  "finished": "2026-11-07T06:00:15.040269+00:00",
+  "passed": 698,
+  "skipped": 0,
+  "warnings": 7,
+  "suites": 58,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend-verified.log.gz": {
+      "sha256": "bf1debe134c011860eb7e11dacfd936e6d235001c8ae45ed6a880a62dc659eea",
+      "originalSha256": "c870f094ef6bbe7235010618b5db48dc4876fc4ed13f8d0a78dde037fdf764c1"
+    },
+    "backend.log.gz": {
+      "sha256": "eab07d474708ee30ac46bea5f08a08ac865dcbf461ed29e50f07d43dbb2bef82",
+      "originalSha256": "f3f3b8a8c40de95412c9c48a0938543f74d8d6ef2ca6ceee28a5005b8bc60a7d"
+    },
+    "backend-final.log.gz": {
+      "sha256": "a9d2280baaaffa73a0d33ab9b6903a39dbd1889e9eaecfb2513a4298086f6d88",
+      "originalSha256": "fcd2891b6332eceb2a8da0872cf03f7b20daf29ef3fa8ef3744e86232a54a66a"
+    },
+    "checks.json.gz": {
+      "sha256": "f61d5465ec0998f3a11330bba3126aea9eeaf8f777049fff63206e413d1c538c",
+      "originalSha256": "0ccd453b367f0932b39b229940a4e5406bd98d38c97ead76280ad1cc1e774325"
+    },
+    "checks-final.json.gz": {
+      "sha256": "c212c56cc44a4d45b536a7763396166ac9d4764546d636cb185dd6f80f02aa4f",
+      "originalSha256": "20ae35c7e0b3f93a0a591c4139d2481b67e7d49822b0e220c53c0a663b7ab46b"
+    }
+  }
+}
