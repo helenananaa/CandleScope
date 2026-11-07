@@ -8,6 +8,7 @@ import type { ContinuousObservation } from "../../market-data/manager/continuous
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
 import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference } from "./continuousRunReference.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
+import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import "./continuousStrategy.css";
 
 export interface ContinuousStrategyPanelProps {
@@ -179,6 +180,9 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {reference?.runId && <p role="status">{t(connectionMessages[state.connection])} · {t("continuous.phase", { phase: phase ?? "…" })}</p>}
     {reference?.runId && !state.initialReady && <p role="status">{t("continuous.initializing")}</p>}
     {(view?.stale || phase === "REPAIR_REQUIRED") && <p role="alert">{t("continuous.stale")}</p>}
+    {manager && view && reference?.runId === view.identity.id && <ContinuousRepairPanel key={scope+":"+view.identity.id}
+      manager={manager} view={view} repair={state.repair} active={props.active}
+      available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}
     {view ? <section aria-label={t("continuous.account")}>
       <dl className="continuous-account"><div><dt>{t("continuous.equity")}</dt><dd>{text(valuation.equity)}</dd></div>
         <div><dt>{t("continuous.position")}</dt><dd>{text(account.position_qty)}</dd></div>

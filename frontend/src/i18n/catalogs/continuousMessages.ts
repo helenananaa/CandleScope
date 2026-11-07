@@ -1,4 +1,6 @@
+import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
 export const continuousEnglish = {
+  ...repairEnglish,
   "continuous.savedRuns": "Saved runs for this chart and mode", "continuous.pendingRun": "Pending request",
   "continuous.initializing": "Initial history is not complete. Any displayed account is the committed partial result; pause or stop remains available.",
   "continuous.signal": "Signal", "continuous.target": "Target position", "continuous.order": "Order intent",
@@ -15,12 +17,13 @@ export const continuousEnglish = {
   "continuous.storage": "Cannot save or read the run reference. Existing data is retained.", "continuous.invalid": "Check the initial date, balance, fees and order size.",
   "continuous.unsupported": "Select a current SDK Python draft on a supported 1m market before initializing.",
   "continuous.edited": "Current inputs differ from this run. Initialize a new run to apply them.",
-  "continuous.stale": "Processed source history changed. Execution is halted and these results are stale. Authorized repair is not available yet.",
+  "continuous.stale": "Processed source history changed. Execution is halted and these results are stale.",
   "continuous.account": "Committed account", "continuous.equity": "Equity", "continuous.position": "Position", "continuous.sequence": "Processed events",
   "continuous.fills": "Recent fills (up to 100)", "continuous.empty": "No committed result yet.", "continuous.time": "Time", "continuous.side": "Side", "continuous.quantity": "Quantity", "continuous.price": "Price",
   "continuous.phase": "Backend state: {phase}", "continuous.pending": "A saved creation request is pending. Recover it before initializing another run.",
 } as const;
 export const continuousChinese: Record<keyof typeof continuousEnglish, string> = {
+  ...repairChinese,
   "continuous.savedRuns": "当前图表与模式的保存运行", "continuous.pendingRun": "待确认请求",
   "continuous.initializing": "初始历史尚未计算完成。当前如有账户结果，仅为已提交的部分；仍可暂停或停止运行。",
   "continuous.signal": "方向信号", "continuous.target": "目标持仓", "continuous.order": "订单意图",
@@ -37,12 +40,13 @@ export const continuousChinese: Record<keyof typeof continuousEnglish, string> =
   "continuous.storage": "无法保存或读取运行引用，已有资料仍保留。", "continuous.invalid": "请检查初始日期、余额、费率和下单比例。",
   "continuous.unsupported": "请先在受支持的 1 分钟市场选择当前 SDK Python 草稿，再初始化运行。",
   "continuous.edited": "当前输入与该运行不同。初始化新运行后才会应用修改。",
-  "continuous.stale": "已处理的来源历史发生修订，执行已停止，当前结果已过期。授权修复功能尚未提供。",
+  "continuous.stale": "已处理的来源历史发生修订，执行已停止，当前结果已过期。",
   "continuous.account": "已提交账户", "continuous.equity": "权益", "continuous.position": "持仓", "continuous.sequence": "已处理事件",
   "continuous.fills": "最近成交（最多 100 条）", "continuous.empty": "暂无已提交结果。", "continuous.time": "时间", "continuous.side": "方向", "continuous.quantity": "数量", "continuous.price": "价格",
   "continuous.phase": "后端状态：{phase}", "continuous.pending": "有已保存的创建请求待确认，请先恢复，再初始化其他运行。",
 };
 export const continuousJapanese: Record<keyof typeof continuousEnglish, string> = {
+  ...repairJapanese,
   "continuous.savedRuns": "このチャートとモードの保存済み実行", "continuous.pendingRun": "確認待ちのリクエスト",
   "continuous.initializing": "初期履歴の計算は未完了です。表示中の口座は確定済みの途中結果です。一時停止や停止は利用できます。",
   "continuous.signal": "方向シグナル", "continuous.target": "目標ポジション", "continuous.order": "注文指示",
@@ -59,12 +63,13 @@ export const continuousJapanese: Record<keyof typeof continuousEnglish, string> 
   "continuous.storage": "実行参照を保存または読み込みできません。既存のデータは保持されています。", "continuous.invalid": "開始日時、残高、手数料、注文比率を確認してください。",
   "continuous.unsupported": "初期化する前に、対応する1分足市場で現在のSDK Python下書きを選択してください。",
   "continuous.edited": "現在の入力はこの実行と異なります。変更を反映するには新しく初期化してください。",
-  "continuous.stale": "処理済みの元履歴が修正されたため実行を停止しました。この結果は古くなっています。承認付きの修復機能はまだ利用できません。",
+  "continuous.stale": "処理済みの元履歴が修正されたため実行を停止しました。この結果は古くなっています。",
   "continuous.account": "確定済み口座", "continuous.equity": "口座資産", "continuous.position": "保有ポジション", "continuous.sequence": "処理済みイベント数",
   "continuous.fills": "直近の約定（最大100件）", "continuous.empty": "確定済み結果はまだありません。", "continuous.time": "日時", "continuous.side": "売買方向", "continuous.quantity": "数量", "continuous.price": "価格",
   "continuous.phase": "バックエンドの状態：{phase}", "continuous.pending": "保存済みの作成リクエストが確認待ちです。別の実行を初期化する前に復元してください。",
 };
 export const continuousKorean: Record<keyof typeof continuousEnglish, string> = {
+  ...repairKorean,
   "continuous.savedRuns": "이 차트와 모드에 저장된 실행", "continuous.pendingRun": "확인 대기 요청",
   "continuous.initializing": "초기 이력 계산이 완료되지 않았습니다. 표시된 계좌는 확정된 부분 결과입니다. 일시 중지와 중지는 계속 사용할 수 있습니다.",
   "continuous.signal": "방향 신호", "continuous.target": "목표 포지션", "continuous.order": "주문 의도",
@@ -81,12 +86,13 @@ export const continuousKorean: Record<keyof typeof continuousEnglish, string> = 
   "continuous.storage": "실행 참조를 저장하거나 읽을 수 없습니다. 기존 데이터는 유지됩니다.", "continuous.invalid": "초기 날짜, 잔액, 수수료와 주문 비율을 확인하세요.",
   "continuous.unsupported": "초기화 전에 지원되는 1분 시장에서 현재 SDK Python 초안을 선택하세요.",
   "continuous.edited": "현재 입력이 이 실행과 다릅니다. 변경 내용을 적용하려면 새 실행을 초기화하세요.",
-  "continuous.stale": "처리한 원본 이력이 수정되어 실행이 중지되었으며 이 결과는 오래되었습니다. 승인된 복구 기능은 아직 제공되지 않습니다.",
+  "continuous.stale": "처리한 원본 이력이 수정되어 실행이 중지되었으며 이 결과는 오래되었습니다.",
   "continuous.account": "확정 계좌", "continuous.equity": "자산 평가액", "continuous.position": "포지션", "continuous.sequence": "처리한 이벤트",
   "continuous.fills": "최근 체결(최대 100건)", "continuous.empty": "확정 결과가 아직 없습니다.", "continuous.time": "시간", "continuous.side": "매매 방향", "continuous.quantity": "수량", "continuous.price": "가격",
   "continuous.phase": "백엔드 상태: {phase}", "continuous.pending": "저장된 생성 요청이 대기 중입니다. 다른 실행을 초기화하기 전에 복구하세요.",
 };
 export const continuousPortuguese: Record<keyof typeof continuousEnglish, string> = {
+  ...repairPortuguese,
   "continuous.savedRuns": "Execuções salvas para este gráfico e modo", "continuous.pendingRun": "Solicitação pendente",
   "continuous.initializing": "O histórico inicial ainda não terminou. A conta exibida contém apenas o resultado parcial confirmado; pausar ou encerrar continua disponível.",
   "continuous.signal": "Sinal", "continuous.target": "Posição desejada", "continuous.order": "Intenção de ordem",
@@ -103,7 +109,7 @@ export const continuousPortuguese: Record<keyof typeof continuousEnglish, string
   "continuous.storage": "Não foi possível salvar ou ler a referência da execução. Os dados existentes foram mantidos.", "continuous.invalid": "Confira a data inicial, o saldo, as taxas e o tamanho da ordem.",
   "continuous.unsupported": "Selecione um rascunho atual do SDK Python em um mercado compatível de 1 minuto antes de inicializar.",
   "continuous.edited": "Os dados atuais diferem desta execução. Inicialize uma nova execução para aplicá-los.",
-  "continuous.stale": "O histórico de origem já processado mudou. A execução foi interrompida e estes resultados estão desatualizados. O reparo autorizado ainda não está disponível.",
+  "continuous.stale": "O histórico de origem já processado mudou. A execução foi interrompida e estes resultados estão desatualizados.",
   "continuous.account": "Conta confirmada", "continuous.equity": "Patrimônio", "continuous.position": "Posição", "continuous.sequence": "Eventos processados",
   "continuous.fills": "Execuções de ordens recentes (até 100)", "continuous.empty": "Ainda não há resultado confirmado.", "continuous.time": "Horário", "continuous.side": "Direção", "continuous.quantity": "Quantidade", "continuous.price": "Preço",
   "continuous.phase": "Estado no servidor: {phase}", "continuous.pending": "Há uma solicitação de criação salva pendente. Recupere-a antes de inicializar outra execução.",

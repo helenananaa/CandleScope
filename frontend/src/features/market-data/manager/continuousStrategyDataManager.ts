@@ -38,7 +38,11 @@ export class ContinuousStrategyDataManager {
   status(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.status(id, owned)); }
   control(key: string, body: ContinuousControl, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.control(key, body, owned)); }
   repairPreview(id: string, body: { expected: CommittedIdentity; resume_after: boolean }, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairPreview(id, body, owned)); }
-  repairStatus(key: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.repairStatus(key, owned)); }
+  async repairStatus(key: string, signal?: AbortSignal) {
+    const response = await this.operation(signal, (owned) => this.api.repairStatus(key, owned));
+    const entry = this.entries.get(response.repair.run_id); if (entry) this.publishRepair(entry, response.repair);
+    return response;
+  }
   latestRepair(id: string, signal?: AbortSignal) { return this.operation(signal, (owned) => this.api.latestRepair(id, owned)); }
   async repair(id: string, key: string, body: ContinuousRepairConfirm, signal?: AbortSignal) {
     const response = await this.operation(signal, (owned) => this.api.repair(id, key, body, owned));
