@@ -149,7 +149,8 @@ test("can batch again after a dispose and lifecycle reset", async () => {
   batcher.dispose();
 });
 
-test("coalesces adjacent-frame requests inside the configured window", async () => {
+test("coalesces adjacent-frame requests inside the configured window", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
   const calls: BatchInput[] = [];
   const batcher = createIndicatorRangeBatcher({
     coalesceWindowMs: 20,
@@ -160,9 +161,12 @@ test("coalesces adjacent-frame requests inside the configured window", async () 
   });
 
   const first = batcher.schedule(request("ma"));
-  await new Promise((resolve) => setTimeout(resolve, 5));
+  context.mock.timers.tick(5);
   const second = batcher.schedule(request("vol"));
 
+  context.mock.timers.tick(14);
+  assert.equal(calls.length, 0);
+  context.mock.timers.tick(1);
   assert.deepEqual((await Promise.all([first, second])).map((item) => item.clientId), ["ma", "vol"]);
   assert.equal(calls.length, 1);
   batcher.dispose();
