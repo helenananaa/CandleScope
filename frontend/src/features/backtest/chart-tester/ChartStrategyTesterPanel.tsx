@@ -96,6 +96,7 @@ const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
+import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
 
 type PanelTab = ChartStrategyPanelTab;
 const PANEL_TABS: readonly PanelTab[] = ["overview", "trades", "script", "settings"];
@@ -202,6 +203,8 @@ export interface ChartStrategyTesterPanelProps {
   onSelectExplanation?(selection: TradeExplanationSelection): void;
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
+  continuousChartActive?: boolean;
+  continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   active?: boolean;
   onReviewTrade?(trade: StrategyTradeFocus | null): void;
   onPrepareData(): void;
@@ -296,6 +299,8 @@ export function CandleScopeStrategyTesterPanel({
   onSelectExplanation = () => undefined,
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
+  continuousChartActive,
+  continuousMarkerSource,
   onReviewTrade,
   active = true,
   onPrepareData,
@@ -1039,6 +1044,8 @@ export function CandleScopeStrategyTesterPanel({
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
+          chartActive={!!continuousChartActive} onLocateTrade={onLocateTrade}
+          {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
           {...(currentAttachment?.initialization ? { initialization: currentAttachment.initialization,
             ...(currentAttachment.executionOverrides ? { initialExecution: currentAttachment.executionOverrides } : {}),
             ...(currentAttachment.customRange ? { initialFromMs: currentAttachment.customRange.startMs } : {}) } : {})}

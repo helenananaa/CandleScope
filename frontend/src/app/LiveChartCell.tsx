@@ -1182,6 +1182,7 @@ function LiveChartCell({
               onNativeStrategiesChange={(value) => onNativeStrategiesChange(cell.id, value)}
               active={active}
               panelOpen={strategyPanelOpen && !study.masked}
+              continuousChartActive={active && !obscured && !study.masked && quickReplay === null}
               bottomPanelHost={portalHosts.bottomPanel}
               seriesStore={sourceMarketData.view.seriesStore}
               getCurrentVisibleRange={chartSurface.actions.getVisibleRange}
