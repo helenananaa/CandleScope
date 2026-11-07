@@ -15,16 +15,18 @@ q.s.receipt.transport = 'Packaged app, actual local HTTP/WS and production sourc
 const mutations = [];
 q.s.receipt.mutations = mutations;
 let running = false;
-async function read(path) {
-  const response = await fetch(q.s.backend + path);
-  assert.equal(response.status, 200, path);
-  return response.json();
-}
 async function waitStatus(predicate) {
   return q.until(async () => {
     await q.checkCircuit();
-    const status = await read(route);
+    const response = await fetch(q.s.backend + route);
+    const status = await response.json();
     await fs.writeFile(q.s.root + '/current-status.json', JSON.stringify(status, null, 2));
+    if (response.status === 503 && status.error?.code === 'CONTINUOUS_NOT_READY') {
+      q.s.receipt.startupReadinessWaits ??= [];
+      q.s.receipt.startupReadinessWaits.push({at: Date.now(), status});
+      return false;
+    }
+    assert.equal(response.status, 200, JSON.stringify(status));
     return predicate(status) ? status : false;
   }, 90000);
 }

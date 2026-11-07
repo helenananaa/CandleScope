@@ -28,12 +28,12 @@ with sqlite3.connect(actual_path.as_uri() + "?mode=ro&immutable=1", uri=True) as
 assert phase == "PAUSED"
 actual = json.loads(wire)
 definition = json.loads(raw_definition)
-definition.pop("initial_snapshot", None)
+start = definition.pop("initial_snapshot")["from_ms"]
 definition["source_owner"] = new_source_owner(run_id)
 exchange, market_type, symbol, interval, *semantics = definition["source_series"]
 key = SeriesKey.create(symbol, interval, exchange=exchange, market_type=market_type,
                        identity=KlineSeriesIdentity(*semantics))
-start = through + 1 - sequence * 60000
+assert through + 1 - start == sequence * 60000
 manager = DataManager()
 manager.set_storage(klines_repo.KlinesRepoAdapter())
 source = ContinuousMarketBarSource(manager, LocalDatasetService(scratch / "local-data"), key,
