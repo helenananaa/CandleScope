@@ -511,6 +511,8 @@ def get_result_replay(
     cursor: int = Query(ge=0),
     interval: str = Query(min_length=2, max_length=64),
     comparison_interval: str | None = Query(default=None, min_length=2, max_length=64),
+    ma_period: int | None = Query(default=None, ge=1, le=500),
+    comparison_ma_period: int | None = Query(default=None, ge=1, le=500),
 ) -> dict[str, Any]:
     from app.backtest.result_replay import project_result_replay
 
@@ -518,6 +520,7 @@ def get_result_replay(
         return project_result_replay(
             _runtime(request), run_id, snapshot_hash=snapshot_hash, report_hash=report_hash,
             cursor=cursor, interval=interval, comparison_interval=comparison_interval,
+            ma_period=ma_period, comparison_ma_period=comparison_ma_period,
         )
     except BacktestError as exc:
         return _error(exc)

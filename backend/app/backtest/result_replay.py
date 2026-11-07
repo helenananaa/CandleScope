@@ -6,8 +6,10 @@ from collections import deque
 from decimal import Decimal
 from itertools import groupby
 import json
+from math import isfinite
 
 from app.data_engine.interval_policy import parse_interval_spec
+from app.indicator.window_math import window_mean
 from app.local_data.resampling import LocalResamplingError, resolve_local_resample_plan
 from app.local_data.service import LocalDatasetError
 from app.local_data.user_market_trades import USER_TRADE_SOURCE
@@ -57,22 +59,22 @@ def _fill_cursor(fill, events, times, *, trade):
     raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Saved fill has no verifiable replay boundary")
 
 
-def _display_tail(events, times, cursor, spec):
+def _display_tail(events, times, cursor, spec, limit):
     first_open = spec.floor_ms(events[cursor - 1].payload.get("open_time_ms", times[cursor - 1]))
-    for _ in range(MAX_REVEALED_BARS - 1):
+    for _ in range(limit - 1):
         if first_open <= times[0]:
             break
         first_open = spec.previous_ms(first_open)
     return events[bisect_left(times, first_open):cursor]
 
 
-def _display_bars(events, times, cursor, spec, *, trade, source_interval):
+def _display_bars(events, times, cursor, spec, *, trade, source_interval, limit):
     if cursor == 0:
         return []
-    tail = _display_tail(events, times, cursor, spec)
+    tail = _display_tail(events, times, cursor, spec, limit)
     if trade:
         builder = TradeBarBuilder(spec.canonical)
-        bars = deque(maxlen=MAX_REVEALED_BARS)
+        bars = deque(maxlen=limit)
         for event in tail:
             bars.extend(_wire_bar(bar, closed=True) for bar in builder.push(event))
         bars.append(_wire_bar(builder.forming_bar(times[cursor - 1]), closed=False))
@@ -97,10 +99,43 @@ def _display_bars(events, times, cursor, spec, *, trade, source_interval):
     return bars
 
 
+def _display_chart(events, times, cursor, spec, *, trade, source_interval, ma_period):
+    # Extra input buckets warm the first visible point without extending
+    # the display window or reading outside the run's revealed prefix.
+    bars = _display_bars(
+        events, times, cursor, spec, trade=trade, source_interval=source_interval,
+        limit=MAX_REVEALED_BARS + (ma_period - 1 if ma_period else 0),
+    )
+    chart = {"bars": bars[-MAX_REVEALED_BARS:]}
+    if ma_period is None:
+        return chart
+    window = deque(maxlen=ma_period)
+    points = []
+    next_open = None
+    first_visible = max(0, len(bars) - MAX_REVEALED_BARS)
+    for index, bar in enumerate(bars):
+        if bar["open_time_ms"] != next_open:
+            window.clear()
+        next_open = bar["close_time_ms"] + 1
+        if not bar["closed"]:
+            window.clear()
+            continue
+        window.append(float(bar["close"]))
+        if index >= first_visible and len(window) == ma_period:
+            value = window_mean(window)
+            if isfinite(value):
+                points.append({"open_time_ms": bar["open_time_ms"], "value": value})
+    chart["ma"] = {"period": ma_period, "points": points}
+    return chart
+
+
 def project_result_replay(
     runtime, run_id: str, *, snapshot_hash: str, report_hash: str, cursor: int,
     interval: str, comparison_interval: str | None = None,
+    ma_period: int | None = None, comparison_ma_period: int | None = None,
 ) -> dict:
+    if comparison_ma_period is not None and comparison_interval is None:
+        raise BacktestError("SCHEMA_UNKNOWN_FIELD", "Comparison study requires a comparison chart")
     record = runtime.service.get_run(run_id)
     config = json.loads(str(record["config_json"]))
     trade = record["fidelity_mode"] == "AGG_TRADE_EXECUTION"
@@ -222,9 +257,10 @@ def project_result_replay(
         "display_intervals": available, "signal_interval": source_interval, "cursor": cursor, "total": len(events),
         "time_ms": last.event_time_ms if last else None,
         "source_sequence": last.payload.get("source_sequence", last.sequence) if last else None,
-        "bars": _display_bars(events, times, cursor, spec, trade=trade, source_interval=source_interval),
-        "comparison": {"interval": comparison_interval, "bars": _display_bars(
+        **_display_chart(events, times, cursor, spec, trade=trade, source_interval=source_interval, ma_period=ma_period),
+        "comparison": {"interval": comparison_interval, **_display_chart(
             events, times, cursor, comparison_spec, trade=trade, source_interval=source_interval,
+            ma_period=comparison_ma_period,
         )} if comparison_spec else None,
         "fills": list(visible_fills), "fill_count": visible_fill_count,
         "order_events": list(visible_orders), "order_trace_available": order_trace_available,

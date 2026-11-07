@@ -552,6 +552,8 @@ export interface BacktestResultReplayCursor {
   cursor: number;
   interval: string;
   comparisonInterval?: string;
+  maPeriod?: number;
+  comparisonMaPeriod?: number;
 }
 
 export interface BacktestResultReplayBar {
@@ -563,6 +565,11 @@ export interface BacktestResultReplayBar {
   close: string;
   volume: string | null;
   closed: boolean;
+}
+
+export interface BacktestResultReplayMA {
+  period: number;
+  points: Array<{ open_time_ms: number; value: number }>;
 }
 
 export interface BacktestResultReplayFrame {
@@ -580,7 +587,8 @@ export interface BacktestResultReplayFrame {
   source_sequence: number | null;
   bars: BacktestResultReplayBar[];
   display_intervals?: string[];
-  comparison?: { interval: string; bars: BacktestResultReplayBar[] } | null;
+  ma?: BacktestResultReplayMA;
+  comparison?: { interval: string; bars: BacktestResultReplayBar[]; ma?: BacktestResultReplayMA } | null;
   fills: Array<{
     cursor: number;
     event_time_ms: number;

@@ -140,7 +140,7 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
         for interval, width in (("1m", 60_000), ("5m", 300_000)):
             early = None
             for cursor in range(21):
-                replay = client.get(replay_path, params={**replay_identity, "cursor": cursor, "interval": interval})
+                replay = client.get(replay_path, params={**replay_identity, "cursor": cursor, "interval": interval, "ma_period": 2})
                 assert replay.status_code == 200, replay.text
                 frame = replay.json()
                 assert frame["total"] == 20
@@ -152,6 +152,11 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                     (stamp, prices[0], max(prices), min(prices), prices[-1], index < len(bucket) - 1)
                     for index, (stamp, prices) in enumerate(bucket.items())
                 ]
+                closed = list(bucket.items())[:-1]
+                assert frame["ma"] == {"period": 2, "points": [
+                    {"open_time_ms": stamp, "value": float((previous[-1] + current[-1]) / 2)}
+                    for (_, previous), (stamp, current) in zip(closed, closed[1:])
+                ]}
                 expected_fills = [fill for fill in fills if fill["source_sequence"] <= cursor]
                 assert frame["fill_count"] == len(expected_fills)
                 cash = Decimal("10000")
@@ -183,9 +188,9 @@ def test_user_trade_http_run_uses_pinned_original_after_reimport_and_restart(tmp
                     early = frame
                 if cursor == 2:
                     assert frame["source_sequence"] == 201 and frame["bars"][-1]["close"] == "101"
-            rewind = client.get(replay_path, params={**replay_identity, "cursor": 1, "interval": interval})
+            rewind = client.get(replay_path, params={**replay_identity, "cursor": 1, "interval": interval, "ma_period": 2})
             assert rewind.json() == early
-        cold_params = {**replay_identity, "cursor": 1, "interval": "5m"}
+        cold_params = {**replay_identity, "cursor": 1, "interval": "5m", "ma_period": 2}
         assert client.get(replay_path, params={**cold_params, "snapshot_hash": "sha256:" + "0" * 64}).status_code != 200
         assert len(client.get(RUNS).json()["runs"]) == 1
 

@@ -1,6 +1,9 @@
 from decimal import Decimal
 import time
 
+from app.backtest.result_replay import MAX_REVEALED_BARS, _display_chart
+from app.data_engine.interval_policy import parse_interval_spec
+from app.market_dataset.snapshot import MarketEvent
 from tests.test_backtest_chart_context import _runtime
 from tests.test_python_editor import compile_editor
 from tests.test_user_market_trades import RUNS, START, app_client
@@ -61,7 +64,7 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
         assert report["data_quality"]["quote_asset"] == "USDC"
         assert report["fills"]
         replay_params = {"snapshot_hash": snap, "report_hash": report["hashes"]["report"], "interval": "1m",
-                         "comparison_interval": "5m"}
+                         "comparison_interval": "5m", "ma_period": 2, "comparison_ma_period": 2}
         replay_path = f"{RUNS}/{run_id}/result-replay"
 
         def frame(cursor):
@@ -86,6 +89,15 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
                 assert secondary[-1]["high"] == ("1000" if cursor == 10 else str(100 + cursor))
             else:
                 assert visible["comparison"]["bars"] == []
+            closes = [*range(101, 110), 1000]
+            expected = [
+                {"open_time_ms": START + index * 60_000, "value": (closes[index - 1] + closes[index]) / 2}
+                for index in range(1, cursor)
+            ]
+            assert visible["ma"] == {"period": 2, "points": expected}
+            assert visible["comparison"]["ma"] == {"period": 2, "points": (
+                [{"open_time_ms": START + 5 * 60_000, "value": 552.5}] if cursor == 10 else []
+            )}
             fills = [fill for fill in report["fills"] if fill["source_sequence"] <= cursor]
             assert visible["fill_count"] == len(fills)
             cash, qty = Decimal("10000"), Decimal(0)
@@ -118,3 +130,22 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
         assert restored.status_code == 200 and restored.json() == before
     finally:
         cold.shutdown()
+
+
+def test_replay_ma_warms_first_visible_bar_from_bounded_revealed_history():
+    events = []
+    for index in range(171):
+        start = START + index * 60_000
+        close = 1000 if index == 170 else index + 1
+        events.append(MarketEvent(index + 1, start + 59_999, "BARS", {
+            "open_time_ms": start, "close_time_ms": start + 59_999,
+            "open": close, "high": close, "low": close, "close": close, "volume": 1,
+        }))
+    times = [event.event_time_ms for event in events]
+    spec = parse_interval_spec("1m")
+    chart = _display_chart(events, times, 170, spec, trade=False, source_interval="1m", ma_period=5)
+    assert len(chart["bars"]) == len(chart["ma"]["points"]) == MAX_REVEALED_BARS
+    assert chart["ma"]["points"][0] == {"open_time_ms": START + 10 * 60_000, "value": 9}
+    assert chart["ma"]["points"][-1]["value"] == 168
+    assert _display_chart(events, times, 171, spec, trade=False, source_interval="1m",
+                          ma_period=5)["ma"]["points"][-1]["value"] == 334.8

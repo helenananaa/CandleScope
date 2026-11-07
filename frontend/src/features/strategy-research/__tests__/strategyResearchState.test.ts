@@ -203,7 +203,7 @@ test("result replay persists its committed cursor and both immutable hashes", ()
   } });
   try {
     const replay = { runId: "bt_local", snapshotHash: `sha256:${"a".repeat(64)}`,
-      reportHash: `sha256:${"b".repeat(64)}`, cursor: 12, interval: "5m", comparisonInterval: "1m" };
+      reportHash: `sha256:${"b".repeat(64)}`, cursor: 12, interval: "5m", comparisonInterval: "1m", maPeriod: 3, comparisonMaPeriod: 5 };
     const selected = strategyResearchReducer(EMPTY_STRATEGY_RESEARCH_STATE, { type: "result/setRun", runId: replay.runId });
     const saved = strategyResearchReducer(selected, { type: "result/replay", replay });
     persistStrategyResearchWorkspace(saved);
