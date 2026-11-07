@@ -76,7 +76,46 @@ try{
  await command('alerts:','close');await q.record('btc-chart-closed',await q.configure([{session:q.session('ETHUSDT','1m'),indicators:[]}],'single'));await ready();await open();await counts(2);
  await command('alerts:','enabled',{ruleId:ids[0],enabled:false});await counts(1);const disabledHistory=await history(),aCount=disabledHistory.filter(e=>e.ruleId===ids[0]).length,bCount=disabledHistory.filter(e=>e.ruleId===ids[1]).length;
  const background=await q.until(async()=>{const h=await history();return h.filter(e=>e.ruleId===ids[1]).length>bCount?h:false;},180000);assert.equal(background.filter(e=>e.ruleId===ids[0]).length,aCount);unique(background);await command('alerts:','refresh');await q.record('paused-rule-stops-background-rule-continues',{state:await captureState(),values:await verifyValues(background.filter(e=>!disabledHistory.some(old=>old.id===e.id)))});await q.screenshot('background-alert-history');await quit();
- await launch();await ready();await open();await counts(1);let restored=await history();unique(restored);for(const e of background)assert.ok(restored.some(r=>r.id===e.id));assert.equal(restored.filter(e=>e.ruleId===ids[0]).length,aCount);await q.record('restart-preserves-rules-history-cursors',await captureState());
+ const coldBeforeRestart = JSON.parse(await fs.readFile(q.s.root + '/profile/data/alerts.json', 'utf8'));
+ const savedRule = coldBeforeRestart.rules.find(rule => rule.id === ids[1]);
+ assert.equal(savedRule.enabled, true);
+ assert.ok(savedRule.lastAcceptedCursor);
+ await launch();
+ await ready();
+ await open();
+ await counts(1);
+ const resumedRule = await read('/api/v1/alerts/rules/' + ids[1]);
+ let restored = await history();
+ unique(restored);
+ for (const event of coldBeforeRestart.history) {
+   assert.deepEqual(restored.find(current => current.id === event.id), event);
+ }
+ assert.equal(restored.filter(event => event.ruleId === ids[0]).length, aCount);
+ assert.equal(resumedRule.definitionRevision, savedRule.definitionRevision);
+ assert.equal(resumedRule.enabled, true);
+ const savedCursor = savedRule.lastAcceptedCursor;
+ if (resumedRule.lastAcceptedCursor?.barTime === savedCursor.barTime) {
+   assert.deepEqual(resumedRule.lastAcceptedCursor, savedCursor);
+ } else {
+   assert.ok(resumedRule.lastAcceptedCursor?.barTime > savedCursor.barTime);
+   assert.ok(restored.some(event => event.ruleId === ids[1] &&
+     JSON.stringify(event.evaluationCursor) === JSON.stringify(resumedRule.lastAcceptedCursor)));
+ }
+ await q.record('restart-preserves-rules-history-cursors', {
+   state: await captureState(), savedCursor, resumedCursor: resumedRule.lastAcceptedCursor,
+ });
+ const afterRestart = await q.until(async () => {
+   const events = await history();
+   return events.some(event => event.ruleId === ids[1] &&
+     event.evaluationCursor.barTime > savedCursor.barTime) ? events : false;
+ }, 180000);
+ unique(afterRestart);
+ assert.equal(afterRestart.filter(event => event.ruleId === ids[0]).length, aCount);
+ const newEvents = afterRestart.filter(event => event.ruleId === ids[1] &&
+   event.evaluationCursor.barTime > savedCursor.barTime);
+ await q.record('restarted-background-rule-admits-new-close', {
+   savedCursor, values: await verifyValues(newEvents),
+ });
  await command('alerts:','enabled',{ruleId:ids[1],enabled:false});await counts(0);await command('alerts:','refresh');const event=(await history()).find(e=>e.ruleId===ids[1]);assert.ok(event);await command('alerts:','acknowledge',{eventId:event.id,acknowledged:true});await command('alerts:','refresh');const saved=await history();assert.ok(saved.find(e=>e.id===event.id).acknowledgedAt);await q.record('disabled-released-and-acknowledged',await captureState());await quit();
  await launch();await ready();await open();await counts(0);restored=await history();unique(restored);assert.deepEqual(restored,saved);await q.record('second-restart-disabled-history-stable',await captureState());await command('alerts:','filters',{tab:'history'});await q.screenshot('restored-alert-history');await quit();assert.deepEqual(q.s.receipt.errors,[]);q.s.receipt.passed=true;
 }catch(error){q.s.receipt.failure=String(error.stack||error);process.exitCode=1;if(running){await q.screenshot('failure').catch(()=>{});await q.record('failure-state',await captureState().catch(e=>({error:String(e)}))).catch(()=>{});}}
