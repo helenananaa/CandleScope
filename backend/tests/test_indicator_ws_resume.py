@@ -17,6 +17,8 @@ from app.api.v1.stream_indicators import (
 from app.data_engine.data_manager.models import BarData
 from app.indicator import create_engine
 from app.indicator.range_result_service import IndicatorRangeResultService
+from app.indicator.runtime_routes import IndicatorRuntimeRoute, IndicatorRuntimeRoutes
+from app.indicator.runtime_service import IndicatorRuntimeService
 from app.indicator.series_revision import SeriesRevisionRegistry
 from app.core import config
 
@@ -60,15 +62,14 @@ class _DataManager:
         return None
 
 
-class _ScriptRuntimeService:
-    """Minimal routed sidecar boundary; these tests exercise stream setup only."""
+class _ScriptRuntimeService(IndicatorRuntimeService):
+    """Use production writer admission without starting a sidecar process."""
+
+    def __init__(self) -> None:
+        super().__init__(IndicatorRuntimeRoutes((IndicatorRuntimeRoute("pine", "sidecar", "test.pine"),)))
 
     async def start(self) -> None:
         return None
-
-    def route_for(self, language: str) -> SimpleNamespace:
-        assert language == "pine"
-        return SimpleNamespace(mode="sidecar", runtime_id="test.pine")
 
 
 @pytest.mark.parametrize(
