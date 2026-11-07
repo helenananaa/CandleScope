@@ -95,6 +95,10 @@ export interface MarketHistoryCoverage {
   earliest_ms: number | null;
   latest_ms: number | null;
   complete: boolean;
+  ranges?: MarketHistoryExcludedRange[];
+  missing_ranges?: MarketHistoryExcludedRange[];
+  basis?: string;
+  revalidate_after_ms?: number;
 }
 
 export type MarketHistoryState = "ready" | "pending" | "exhausted";

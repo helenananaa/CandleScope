@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "56bdd9991f6040cb4cbbefd2c39afb7153807652",
+  "appLaunched": false,
+  "nativeQualified": false,
+  "syntaxCheck": true,
+  "publicGateRejectsBeforeElectronLaunch": true,
+  "scope": "Fresh frontend/current plugin assets, exact byte and strict signature preflight only. Live API/UI/full quit/restart driver not yet run."
+}

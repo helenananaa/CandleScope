@@ -374,6 +374,9 @@ class ExchangeIngestionFactory:
         ))
         normalizer = create_normalizer(self._cfg, descriptor)
         events: list[MarketEvent] = []
+        qualified_oi = (history and descriptor.exchange == "binance"
+                        and descriptor.market_type == "futures"
+                        and descriptor.stream_type == StreamType.OPEN_INTEREST)
         for message in messages:
             if history:
                 message.source = DataSource.HTTP_BACKFILL
@@ -381,7 +384,21 @@ class ExchangeIngestionFactory:
             if callable(parse_many):
                 events.extend(event for event in parse_many(message) if event is not None)
             else:
-                event = normalizer.parse(message)
+                if qualified_oi and (
+                    not isinstance(message.payload, dict)
+                    or "sumOpenInterest" not in message.payload
+                    or "timestamp" not in message.payload
+                    or "symbol" not in message.payload
+                ):
+                    raise RuntimeError("Malformed native OI history response")
+                try:
+                    event = normalizer.parse(message)
+                except (ValueError, TypeError, OverflowError) as exc:
+                    if qualified_oi:
+                        raise RuntimeError("Invalid native OI history row") from exc
+                    raise
+                if qualified_oi and event is None:
+                    raise RuntimeError("Unparsed native OI history row")
                 if event is not None:
                     events.append(event)
         return events

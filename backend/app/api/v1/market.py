@@ -64,6 +64,7 @@ async def market_history(
     market_type: str = Query("futures"),
     period: str | None = Query(default=None),
     view: str | None = Query(default=None),
+    mode: str | None = Query(default=None),
     start_ms: int | None = Query(default=None, ge=0),
     end_ms: int | None = Query(default=None, ge=0),
     limit: int = Query(default=500, ge=1, le=1000),
@@ -94,6 +95,11 @@ async def market_history(
         }
         if normalized_view is not None:
             history_kwargs["view"] = normalized_view
+        if mode is not None:
+            if mode not in {"local_only", "fill_missing", "refresh"}:
+                raise ValueError("history mode must be local_only, fill_missing or refresh")
+            history_kwargs["mode"] = mode
+        page = None
         page_reader = getattr(dm, "market_history_page", None)
         if callable(page_reader):
             page = await page_reader(key, **history_kwargs)
@@ -142,7 +148,12 @@ async def market_history(
         "count": len(events),
         "data": [event.to_dict() for event in events],
         "fallback": fallback,
-        "has_more": fallback or not page_complete,
+        "has_more": (
+            page.has_more if getattr(page, "has_more", None) is not None
+            else fallback or not page_complete
+        ),
+        **({"next_end_ms": page.next_end_ms, "query_mode": page.query_mode}
+           if getattr(page, "query_mode", None) is not None else {}),
         "history_state": "exhausted" if exhausted else ("pending" if retryable else "ready"),
         "complete": page_complete,
         "retryable": retryable,
@@ -152,6 +163,13 @@ async def market_history(
         "availability_revision": availability_revision,
         "excluded_ranges": excluded_ranges,
         "coverage": {
+            **({
+                "ranges": list(page.covered_ranges),
+                "missing_ranges": list(page.missing_ranges),
+                "basis": page.coverage_basis,
+                **({"revalidate_after_ms": page.revalidate_after_ms}
+                   if page.revalidate_after_ms is not None else {}),
+            } if getattr(page, "covered_ranges", None) is not None else {}),
             "earliest_ms": min((event.event_time_ms for event in events), default=None),
             "latest_ms": max((event.event_time_ms for event in events), default=None),
             "complete": page_complete,

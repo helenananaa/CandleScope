@@ -22,7 +22,8 @@ import {
 import { advancedMarketDataStore } from "./advancedMarketDataStore.js";
 import {
   clampHistoryRangeToNow,
-  coverageForHistoryPage,
+  HistoryGapRetryBudget,
+  coverageRangesForHistoryPage,
   mergeHistoryCoverage,
   nextUncoveredHistoryRange,
   type MarketHistoryRange,
@@ -357,6 +358,9 @@ export function useAdvancedMarketDataRuntime({
   const coverageIdentityRef = useRef(identityKey);
   const historyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyContinuationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyGapBudgetRef = useRef(new HistoryGapRetryBudget());
+  const historyRefreshRef = useRef(false);
+  const coverageExpiryRef = useRef(new Map<string, number>());
   const streamRef = useRef<MarketStreamController | null>(null);
 
   // Publish only committed chart state. Layout effects run before passive
@@ -403,9 +407,13 @@ export function useAdvancedMarketDataRuntime({
     historyAbortControllersRef.current = new Set();
     inFlightRef.current = new Set();
     inFlightCoverageRef.current = new Map();
+    historyGapBudgetRef.current.clear();
     clearHistoryRetryTimer();
     clearHistoryContinuationTimer();
-    if (clearCoverage) coverageRef.current = new Map();
+    if (clearCoverage) {
+      coverageRef.current = new Map();
+      coverageExpiryRef.current.clear();
+    }
   }, [clearHistoryContinuationTimer, clearHistoryRetryTimer]);
 
   const scheduleHistoryRetry = useCallback((
@@ -459,6 +467,16 @@ export function useAdvancedMarketDataRuntime({
     const inFlight = inFlightRef.current;
     const inFlightCoverage = inFlightCoverageRef.current;
     const coverage = coverageRef.current;
+    for (const [key, deadline] of coverageExpiryRef.current) {
+      if (deadline <= Date.now()) {
+        coverage.delete(key);
+        coverageExpiryRef.current.delete(key);
+      } else {
+        scheduleHistoryRetry(context.historyContextKey, historyGenerationRef.current);
+      }
+    }
+    const forceRefresh = historyRefreshRef.current;
+    historyRefreshRef.current = false;
     const oiPeriod = resolveOpenInterestPeriod(context.interval);
     const expectedHistoryGeneration = historyGenerationRef.current;
     const expectedHistoryContextKey = context.historyContextKey;
@@ -517,7 +535,7 @@ export function useAdvancedMarketDataRuntime({
         ...(inFlightCoverage.get(coverageKey) || []),
         requestRange,
       ]);
-      setHistoryErrorState((current) => {
+      const clearHistoryError = () => setHistoryErrorState((current) => {
         if (disposedRef.current
           || historyGenerationRef.current !== expectedHistoryGeneration
           || activeRef.current.historyContextKey !== expectedHistoryContextKey) return current;
@@ -555,6 +573,7 @@ export function useAdvancedMarketDataRuntime({
           seriesReady: current.seriesReady,
         });
       };
+      let lastGapKey: string | null = null;
       void (async () => {
         try {
           for (let page = 0; page < MAX_HISTORY_PAGES_PER_LOAD; page += 1) {
@@ -564,6 +583,9 @@ export function useAdvancedMarketDataRuntime({
               requestRange,
             );
             if (!pageRange) return;
+            const gapKey = `${coverageKey}:${pageRange.startMs}:${pageRange.endMs}`;
+            lastGapKey = gapKey;
+            if (historyGapBudgetRef.current.blocked(gapKey)) return;
             const payload = await fetchAdvancedMarketHistory(
               context.identity,
               descriptor.channel,
@@ -574,32 +596,68 @@ export function useAdvancedMarketDataRuntime({
                 endMs: pageRange.endMs,
                 limit: descriptor.limit,
                 signal: controller.signal,
+                ...(forceRefresh && descriptor.channel === "open_interest"
+                  && context.identity.exchange === "binance" && context.identity.marketType === "futures"
+                  ? { mode: "refresh" as const } : {}),
               },
             );
             if (!isCurrentRequest()) return;
+            const deadline = payload.coverage.revalidate_after_ms;
+            if (deadline !== undefined) {
+              coverageExpiryRef.current.set(coverageKey, Math.min(
+                coverageExpiryRef.current.get(coverageKey) ?? deadline, deadline,
+              ));
+              scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
+            }
             advancedMarketDataStore.mergeMetricHistory(
               context.identity,
               descriptor.channel,
               payload.data,
               descriptor.period,
             );
-            if (payload.fallback === true || payload.retryable === true) {
-              scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
-              return;
-            }
-            const covered = coverageForHistoryPage(
+            const covered = coverageRangesForHistoryPage(
               pageRange,
               payload,
               descriptor.direction,
             );
-            if (!covered) {
-              scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
+            for (const range of covered) {
+              coverage.set(
+                coverageKey,
+                mergeHistoryCoverage(coverage.get(coverageKey) || [], range),
+              );
+            }
+            if (payload.fallback === true || payload.retryable === true || covered.length === 0) {
+              const explicit = payload.coverage.ranges !== undefined;
+              const retryAllowed = !explicit || historyGapBudgetRef.current.fail(gapKey);
+              if (explicit) {
+                setHistoryErrorState((current) => !isCurrentRequest() ? current : ({
+                  historyContextKey: expectedHistoryContextKey,
+                  errors: {
+                    ...(current.historyContextKey === expectedHistoryContextKey ? current.errors : {}),
+                    [descriptor.channel]: locale === "zh-CN"
+                      ? (retryAllowed ? "部分历史尚未取得，正在重试。" : "部分历史尚未取得，请点击重试。")
+                      : (retryAllowed ? "Some history is missing; retrying." : "Some history is missing. Select Retry to try again."),
+                  },
+                }));
+              }
+              if (retryAllowed) scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
               return;
             }
-            coverage.set(
-              coverageKey,
-              mergeHistoryCoverage(coverage.get(coverageKey) || [], covered),
-            );
+            const unavailableHistory = payload.coverage.ranges !== undefined
+              && payload.excluded_ranges?.some((range) => range.reason !== "future");
+            if (unavailableHistory) {
+              setHistoryErrorState((current) => !isCurrentRequest() ? current : ({
+                historyContextKey: expectedHistoryContextKey,
+                errors: {
+                  ...(current.historyContextKey === expectedHistoryContextKey ? current.errors : {}),
+                  [descriptor.channel]: locale === "zh-CN"
+                    ? "部分历史超出来源可查询范围，已有本地数据仍可用。"
+                    : "Some history is outside the source's available range. Existing local data remains available.",
+                },
+              }));
+            } else {
+              clearHistoryError();
+            }
           }
           if (nextUncoveredHistoryRange(coverage.get(coverageKey) || [], requestRange)) {
             scheduleHistoryContinuation(expectedHistoryContextKey, expectedHistoryGeneration);
@@ -620,7 +678,11 @@ export function useAdvancedMarketDataRuntime({
               },
             };
           });
-          scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
+          const nativeOi = descriptor.channel === "open_interest"
+            && context.identity.exchange === "binance" && context.identity.marketType === "futures";
+          if (!nativeOi || lastGapKey === null || historyGapBudgetRef.current.fail(lastGapKey)) {
+            scheduleHistoryRetry(expectedHistoryContextKey, expectedHistoryGeneration);
+          }
         } finally {
           inFlight.delete(requestKey);
           const remainingRanges = (inFlightCoverage.get(coverageKey) || []).filter(
@@ -633,7 +695,7 @@ export function useAdvancedMarketDataRuntime({
       })();
     }
     return scheduled;
-  }, [scheduleHistoryContinuation, scheduleHistoryRetry]);
+  }, [locale, scheduleHistoryContinuation, scheduleHistoryRetry]);
 
   const ensureVisibleRange = useCallback((range: unknown): boolean => {
     const requested = parseVisibleTimeRange(range);
@@ -643,7 +705,8 @@ export function useAdvancedMarketDataRuntime({
   }, [liquidations, loadHistory]);
 
   const retry = useCallback(() => {
-    invalidateHistoryRequests(false);
+    invalidateHistoryRequests(true);
+    historyRefreshRef.current = true;
     setConnectionState({
       identityKey,
       status: streamEnabled ? "connecting" : "disabled",
