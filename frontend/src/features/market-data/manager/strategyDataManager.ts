@@ -101,6 +101,8 @@ export class StrategyDataManager {
         || frame.snapshot_hash !== cursor.snapshotHash || frame.report_hash !== cursor.reportHash
         || frame.cursor !== cursor.cursor || frame.interval !== cursor.interval
         || !Number.isSafeInteger(frame.total) || frame.total < cursor.cursor
+        || (frame.display_intervals !== undefined && (!Array.isArray(frame.display_intervals)
+          || frame.display_intervals.some(interval => typeof interval !== "string")))
         || frame.comparison?.interval !== cursor.comparisonInterval
         || invalidBars(frame.bars) || (frame.comparison && invalidBars(frame.comparison.bars))
         || !Array.isArray(frame.fills) || !Array.isArray(frame.order_events)

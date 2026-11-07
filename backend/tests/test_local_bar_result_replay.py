@@ -74,6 +74,7 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
             assert visible["schema"] == "candlescope.local-bar-result-replay/1"
             assert visible["total"] == 10 and visible["cursor"] == cursor
             assert len(visible["bars"]) == cursor
+            assert visible["display_intervals"] == ["1m", "5m", "15m", "1h"]
             assert visible["signal_trace_available"]
             assert [signal["reveal_sequence"] for signal in visible["closed_bar_signals"]] == list(range(1, cursor + 1))
             assert visible["time_ms"] == (START + cursor * 60_000 - 1 if cursor else None)

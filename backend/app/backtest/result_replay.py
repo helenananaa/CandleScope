@@ -210,10 +210,10 @@ def project_result_replay(
     visible_signals = deque(maxlen=MAX_REVEALED_FILLS)
     if signals is not None:
         for signal in signals:
-            available = signal["reveal_sequence"]
-            if type(available) is not int or not 1 <= available <= len(events):
+            reveal = signal["reveal_sequence"]
+            if type(reveal) is not int or not 1 <= reveal <= len(events):
                 raise BacktestError("DATA_SNAPSHOT_MISMATCH", "Saved signal has an invalid replay boundary")
-            if available <= cursor:
+            if reveal <= cursor:
                 visible_signals.append(signal)
     return {
         "schema": "candlescope.user-trade-result-replay/1" if trade else "candlescope.local-bar-result-replay/1",
