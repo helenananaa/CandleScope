@@ -141,7 +141,7 @@ test("unused renders create no subscriptions and last observer releases the seri
 
 test("a selected continuous run owns its chart until the historical mode is restored", () => {
   const seriesStore = new SeriesWindowStore({ maxBars: 100, intervalSeconds: 60 });
-  seriesStore.replace([0, 60].map((time) => ({ time, open: 100, high: 101, low: 99, close: 100, volume: 1 })));
+  seriesStore.replace([0, 60].map((time) => ({ time, open: 100, high: 101, low: 99, close: 100, volume: 1, is_closed: true })));
   const source = createChartStrategyResultMarkerSource({ seriesStore, labels });
   const history: BacktestChartData = {
     run_id: "history", chart_hash: "history-1", symbol: "BTCUSDT", interval: "1m",
@@ -167,5 +167,35 @@ test("a selected continuous run owns its chart until the historical mode is rest
   assert.deepEqual(source.getSnapshot().markers, [], "waiting or stale continuous results do not reveal historical markers");
   source.setContinuousResult(undefined);
   assert.equal(source.getSnapshot().markers[0]?.id, "backtest:historical:0");
+  source.dispose();
+});
+
+test("continuous fills wait for chart finality on the same axis without repainting intrabar ticks", () => {
+  const seriesStore = new SeriesWindowStore({ intervalSeconds: 60 });
+  const bar = { time: 60, open: 100, high: 101, low: 99, close: 100, volume: 1, is_closed: false };
+  seriesStore.replace([bar]);
+  const source = createChartStrategyResultMarkerSource({ seriesStore, labels });
+  let updates = 0;
+  const unsubscribe = source.subscribe(() => { updates += 1; });
+  source.setContinuousResult({ run_id: "live", chart_hash: "commit", interval: "1m",
+    fills: [{ order_id: "fill", event_time_ms: 119_999, side: "BUY" }] });
+  const preview = source.getSnapshot();
+  assert.deepEqual(preview.markers, []);
+  assert.equal(updates, 1);
+
+  const axis = seriesStore.axisRevision;
+  seriesStore.applyTick({ ...bar, close: 101 });
+  assert.equal(seriesStore.axisRevision, axis);
+  assert.strictEqual(source.getSnapshot(), preview);
+  assert.equal(updates, 1);
+
+  seriesStore.applyTick({ ...bar, close: 101, is_closed: true });
+  assert.equal(seriesStore.axisRevision, axis);
+  const closed = source.getSnapshot();
+  assert.equal(closed.markers[0]?.time, 60);
+  assert.equal(updates, 2);
+  assert.ok(closed.revision > preview.revision);
+  assert.strictEqual(source.getSnapshot(), closed);
+  unsubscribe();
   source.dispose();
 });

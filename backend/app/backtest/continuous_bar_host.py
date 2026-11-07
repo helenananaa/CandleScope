@@ -23,6 +23,7 @@ from .strategy.protocol import StrategyProvider, StrategyProviderSession
 
 ProviderFactory = Callable[[Mapping[str, object]], StrategyProvider]
 MAX_BATCH_EVENTS = 1000
+MARKET_BAR_STEP_MS = 60_000
 logger = logging.getLogger(__name__)
 
 
@@ -212,9 +213,18 @@ class ContinuousBarHost:
                 if len(batch) >= MAX_BATCH_EVENTS:
                     raise error("BUDGET_EXCEEDED", "Continuous source batch exceeds its ceiling")
                 close = event.payload.get("close_time_ms")
-                if (event.role != "BARS" or type(close) is not int or event.payload.get("is_closed") is False
+                final = event.payload.get("is_closed")
+                # SQLite pinned snapshots carry integer 1, while the live
+                # adapter supplies True. Preserve the original provider wire.
+                closed = final is True or (type(final) is int and final == 1)
+                if (event.role != "BARS" or type(close) is not int or (final is not None and not closed)
                         or close > event.event_time_ms or event.event_time_ms > revealed_through_ms):
                     raise error("LOOKAHEAD_VIOLATION", "Only revealed closed BAR inputs may enter this execution")
+                if self.source_receipt is not None:
+                    opened = event.payload.get("open_time_ms")
+                    if (not closed or type(opened) is not int or opened != stamp + 1
+                            or close != opened + MARKET_BAR_STEP_MS - 1 or event.event_time_ms != close):
+                        raise error("LOOKAHEAD_VIOLATION", "Protected input must be an exact consecutive closed UTC minute")
                 if event.sequence != sequence + 1 or event.event_time_ms < stamp:
                     self._defer("CONTINUOUS_SOURCE_GAP", "Source coverage is incomplete; committed result retained")
                     raise error("CONTINUOUS_SOURCE_GAP", "Source coverage is incomplete")

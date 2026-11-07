@@ -779,6 +779,7 @@ export default function ChartStrategyTesterCellBridge({
       onCloseExplanation={() => setSelectedExplanation(null)}
       onLocateTrade={onLocateTrade}
       continuousChartActive={continuousChartActive}
+      continuousMarketWindow={seriesStore}
       continuousMarkerSource={resultMarkerSource}
       onRunModeChange={setRunMode}
       {...(onReviewTrade ? { onReviewTrade } : {})}

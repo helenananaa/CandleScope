@@ -10,6 +10,8 @@ import type { ContinuousObservation } from "../../market-data/manager/continuous
 import { strategyDraftContentRevision } from "../chart-tester/chartStrategyTesterDrafts.js";
 import { activateContinuousReference, listContinuousReferences, readContinuousReference, type ContinuousRunReference, saveContinuousReference, continuousArchiveScope } from "./continuousRunReference.js";
 import type { ContinuousAction, ContinuousCapabilities, ContinuousCreate, ContinuousCreation, ContinuousMode } from "./continuousTypes.js";
+import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
+import ContinuousBarBoundary from "./ContinuousBarBoundary.js";
 import ContinuousParameterEditor from "./ContinuousParameterEditor.js";
 import ContinuousRepairPanel from "./ContinuousRepairPanel.js";
 import ContinuousAccountView from "./ContinuousAccountView.js";
@@ -26,6 +28,7 @@ export interface ContinuousStrategyPanelProps {
   initialExecution?: StrategyExecutionOverrides;
   initialFromMs?: number;
   chartActive?: boolean;
+  marketWindow?: SeriesWindowView | null;
   markerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   onLocateTrade?(timeMs: number): void;
   onOpenWorkspace?(settings: StrategyRunSettings): Promise<void>;
@@ -271,6 +274,7 @@ export default function ContinuousStrategyPanel(props: ContinuousStrategyPanelPr
     {manager && view && reference?.runId === view.identity.id && <ContinuousRepairPanel key={scope+":"+view.identity.id}
       manager={manager} view={view} repair={state.repair} active={props.active}
       available={!!caps?.execution_enabled && !!caps.repair_available && !!caps.python_editor_authorized} />}
+    {qualified && <ContinuousBarBoundary marketWindow={props.chartActive ? props.marketWindow ?? null : null} view={view} />}
     {view ? <ContinuousAccountView rows={state.rows} view={view}
       {...(props.chartActive && props.onLocateTrade ? { onLocateTrade(timeMs: number) {
         const barTime = floorIntervalTime(props.session.interval, timeMs / 1000);

@@ -2,7 +2,7 @@
 import asyncio
 from concurrent.futures import CancelledError as FutureCancelled
 from contextlib import asynccontextmanager
-from dataclasses import asdict
+from dataclasses import asdict,replace
 import json
 from pathlib import Path
 import re
@@ -369,3 +369,39 @@ class Strategy:
     invalid = api.client.post(url, json={"source_text": "x" * 262145}, headers=headers)
     assert invalid.status_code == 422 and "xxxx" not in invalid.text
     assert api.client.get(BASE + "/runs").json()["runs"] == []
+
+
+def test_forming_ticks_and_early_final_do_not_move_committed_account_before_boundary(api):
+    from app.data_engine.data_manager.models import BarData
+
+    run_id=create(api)["run_id"]
+    full_initial(api,run_id)
+    controller=api.gate.continuous
+    async def exercise():
+        await wait_row(controller.store,run_id,lambda row:row["phase"]=="LIVE" and row["sequence"]==20)
+        before=controller.store.load(run_id)
+        opened=START+20*STEP
+        forming=BarData(time=opened//1000,open=200,high=999,low=100,close=999,volume=10,is_closed=False,source=SOURCE)
+        api.now[0]=opened+500
+        for _ in range(3):
+            await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_UPDATED,KEY,bar=forming))
+        await asyncio.sleep(.02)
+        assert controller.store.load(run_id)==before
+
+        final=replace(forming,open=106,high=107,low=105,close=106,is_closed=True)
+        api.now[0]=opened+STEP-1
+        await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED,KEY,bar=final))
+        await asyncio.sleep(.01)
+        assert controller.store.load(run_id)==before
+
+        # The first final arrived before the host UTC fence. The scheduled
+        # wake must admit it once the wall clock crosses the minute.
+        api.now[0]=opened+STEP
+        await wait_row(controller.store,run_id,lambda row:row["phase"]=="LIVE" and row["sequence"]==21)
+        after=controller.store.load(run_id)
+        assert after["run"]["event_time_ms"]==opened+STEP-1
+        assert after["checkpoint"]["provider"]["lastSequence"]==21
+        await api.manager.event_bus.emit(DataEvent(DataEventType.BAR_CLOSED,KEY,bar=final))
+        await asyncio.sleep(.02)
+        assert controller.store.load(run_id)==after
+    api.client.portal.call(exercise)

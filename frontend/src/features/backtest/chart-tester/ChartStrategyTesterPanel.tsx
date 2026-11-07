@@ -95,6 +95,7 @@ import { StrategySwitcher, type StrategySwitcherItem } from "./StrategySwitcher.
 const StrategyScriptWorkspace = lazy(() => import("./StrategyScriptWorkspace.js"));
 const NativeStrategyPanel = lazy(() => import("../native/NativeStrategyPanel.js"));
 const ContinuousStrategyPanel = lazy(() => import("../continuous/ContinuousStrategyPanel.js"));
+import type { SeriesWindowView } from "../../market-data/window/seriesWindowView.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import type { ChartStrategyResultMarkerSource } from "./chartStrategyResultMarkerSource.js";
 
@@ -204,6 +205,7 @@ export interface ChartStrategyTesterPanelProps {
   onCloseExplanation?(): void;
   onLocateTrade?(timeMs: number): void;
   continuousChartActive?: boolean;
+  continuousMarketWindow?: SeriesWindowView | null;
   onRunModeChange?(mode: ContinuousMode): void;
   continuousMarkerSource?: Pick<ChartStrategyResultMarkerSource, "setContinuousResult">;
   active?: boolean;
@@ -301,6 +303,7 @@ export function CandleScopeStrategyTesterPanel({
   onCloseExplanation = () => undefined,
   onLocateTrade = () => undefined,
   continuousChartActive,
+  continuousMarketWindow,
   onRunModeChange,
   continuousMarkerSource,
   onReviewTrade,
@@ -1056,7 +1059,7 @@ export function CandleScopeStrategyTesterPanel({
         <ContinuousStrategyPanel key={JSON.stringify([cellScope, activeDraft?.id, session, runMode])}
           scope={JSON.stringify([cellScope, activeDraft?.id])} session={session} mode={runMode} source={source}
           language={activeDraft?.language ?? ""} parameters={currentAttachment?.parameters ?? {}} trusted={pythonTrustedConfirmed} active={active}
-          chartActive={!!continuousChartActive} onLocateTrade={onLocateTrade}
+          chartActive={!!continuousChartActive} marketWindow={continuousMarketWindow ?? null} onLocateTrade={onLocateTrade}
           {...(continuousMarkerSource ? { markerSource: continuousMarkerSource } : {})}
           {...(onOpenWorkspace && activeDraft ? { onOpenWorkspace: openWorkspace } : {})}
           saveDraft={async () => { await persistCurrentDraft(); }}
