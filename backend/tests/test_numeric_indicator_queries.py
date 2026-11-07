@@ -319,3 +319,41 @@ def test_numeric_process_rejects_unbounded_input_before_submission():
         with pytest.raises(ValueError, match='bounded input'):
             await run_builtin_history_numeric(OUTPUTS * 2, {}, [None])
     asyncio.run(run())
+
+
+def test_data_manager_shutdown_closes_numeric_and_trading_consumers(dm, query, tmp_path):
+    from tests.test_trading_state_stream import make_fixture
+
+    async def run():
+        store, accounts, account_id, _, _ = make_fixture(tmp_path)
+        trading = dm.bind_trading(accounts)
+        subscription = await trading.subscribe_state(account_id)
+        events = subscription.events()
+        entered = asyncio.Event()
+
+        async def held_compute(_name, _meta, _bars):
+            entered.set()
+            await asyncio.Event().wait()
+
+        numeric = NumericIndicatorService(IndicatorInputPort(dm), IndicatorRangeResultService(), compute=held_compute)
+        dm.bind_indicator_queries(numeric)
+        pending = asyncio.create_task(dm.query_indicator(query))
+        try:
+            first = await anext(events)
+            assert first['state']['summary']['balance'] == '1000'
+            await asyncio.wait_for(entered.wait(), 5)
+            await dm.shutdown()
+            assert pending.cancelled()
+            assert not numeric.queries and not numeric.flights
+            assert trading.diagnostics()['closed'] and trading.diagnostics()['subscriptions'] == 0
+            with pytest.raises(StopAsyncIteration):
+                await anext(events)
+            assert store.updates.diagnostics()['subscriptions'] == 0
+            assert accounts.account_summary(account_id)['balance'] == '1000'
+        finally:
+            await numeric.close()
+            await dm.shutdown_trading()
+            await events.aclose()
+            store.close()
+
+    asyncio.run(run())
