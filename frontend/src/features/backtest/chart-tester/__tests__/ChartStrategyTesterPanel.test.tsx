@@ -7,6 +7,7 @@ import { CandleScopeStrategyTesterPanel as ChartStrategyTesterPanel } from "../C
 import {
   loadChartStrategyPanelPreferences,
   loadDetachedChartStrategy,
+  resolveChartStrategyRunMode,
   saveDetachedChartStrategy,
   saveChartStrategyPanelPreferences,
 } from "../chartStrategyPanelPreferences.js";
@@ -220,4 +221,25 @@ test("an empty continuous chart can attach a strategy or restore its own saved s
     if (descriptor) Object.defineProperty(globalThis, "localStorage", descriptor);
     else Reflect.deleteProperty(globalThis, "localStorage");
   }
+});
+
+test("a selected research version defaults to history plus live in the target chart", () => {
+  const initialization = {
+    runId: "bt_selected",
+    versionHash: `sha256:${"a".repeat(64)}`,
+    outputMode: "SIGNAL" as const,
+    warmupBars: 20,
+  };
+  const selected = {
+    ...attachment,
+    language: "python" as const,
+    strategyDraftId: "returned-version",
+    initialization: { ...initialization, preferredRunMode: "HISTORY_LIVE" as const },
+  };
+  const otherDraftPreference = { runMode: "LIVE_ONLY" as const, runModeDraftId: "existing-draft" };
+  assert.equal(resolveChartStrategyRunMode({}, selected), "HISTORY_LIVE");
+  assert.equal(resolveChartStrategyRunMode(otherDraftPreference, selected), "HISTORY_LIVE");
+  assert.equal(resolveChartStrategyRunMode({ ...otherDraftPreference, runModeDraftId: "returned-version" }, selected), "LIVE_ONLY");
+  assert.equal(resolveChartStrategyRunMode({ runModeDraftId: "returned-version" }, selected), "HISTORY");
+  assert.equal(resolveChartStrategyRunMode(otherDraftPreference, { ...selected, initialization }), "LIVE_ONLY");
 });

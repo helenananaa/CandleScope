@@ -86,7 +86,8 @@ export function projectSelectedVersion(version: ResearchSelectedVersion): {
     parameters: structuredClone(c.parameters) as Record<string, unknown>, rangeMode: "CUSTOM",
     customRange: { startMs: Number(startMs), endMs: Number(endMs) }, fidelityPreference: "FAST",
     quickPresetId: String(c.quick_preset_id), autoRun: false, executionOverrides,
-    initialization: { runId: version.run_id, versionHash: version.version_hash, outputMode, warmupBars: Number(warmupBars), ...(legacy ? { executionModel: "LEGACY" } : {}) },
+    initialization: { runId: version.run_id, versionHash: version.version_hash, outputMode, warmupBars: Number(warmupBars),
+      preferredRunMode: "HISTORY_LIVE", ...(legacy ? { executionModel: "LEGACY" } : {}) },
   } };
 }
 

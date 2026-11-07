@@ -72,6 +72,7 @@ import {
   clampChartStrategyPanelHeight,
   loadChartStrategyPanelPreferences,
   loadDetachedChartStrategy,
+  resolveChartStrategyRunMode,
   saveDetachedChartStrategy,
   saveChartStrategyPanelPreferences,
   type ChartStrategyPanelTab,
@@ -322,7 +323,9 @@ export function CandleScopeStrategyTesterPanel({
 }: ChartStrategyTesterPanelProps) {
   const locale = useLocale();
   const [focusMode, setFocusMode] = useState(false);
-  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
+  const [runModePreference, setRunModePreference] = useState(() => loadChartStrategyPanelPreferences(cellScope));
+  const runMode = resolveChartStrategyRunMode(runModePreference, attachment);
+  useLayoutEffect(() => { onRunModeChange?.(runMode); }, [onRunModeChange, runMode]);
   const [height, setHeight] = useState(() => loadChartStrategyPanelPreferences(cellScope).height);
   const [activeTab, setActiveTab] = useState<PanelTab>(() => (
     attachment ? loadChartStrategyPanelPreferences(cellScope).activeTab : "script"
@@ -361,8 +364,8 @@ export function CandleScopeStrategyTesterPanel({
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
   useEffect(() => {
-    saveChartStrategyPanelPreferences(cellScope, { height, activeTab, runMode });
-  }, [activeTab, cellScope, height, runMode]);
+    saveChartStrategyPanelPreferences(cellScope, { ...runModePreference, height, activeTab });
+  }, [activeTab, cellScope, height, runModePreference]);
   const resultCacheKey = result?.cacheKey ?? null;
   useEffect(() => {
     if (!resultCacheKey) return undefined;
@@ -757,7 +760,8 @@ export function CandleScopeStrategyTesterPanel({
       />
       <label className="continuous-mode">{t("continuous.mode")}<select aria-label={t("continuous.mode")} value={runMode} onChange={(event) => {
         const next = event.target.value as ContinuousMode;
-        setRunMode(next); onRunModeChange?.(next);
+        setRunModePreference({ height, activeTab, runMode: next,
+          ...(currentAttachment?.strategyDraftId ? { runModeDraftId: currentAttachment.strategyDraftId } : {}) });
       }}>
         <option value="HISTORY">{t("continuous.history")}</option><option value="HISTORY_LIVE">{t("continuous.historyLive")}</option><option value="LIVE_ONLY">{t("continuous.liveOnly")}</option>
       </select></label>

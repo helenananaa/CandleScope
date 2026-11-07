@@ -39,6 +39,7 @@ export interface StrategyRunSettings {
 
 export interface StrategyInitializationSettings {
   runId: string; versionHash: string; outputMode: PythonBarOutputMode; warmupBars: number; executionModel?: "LEGACY" | "V2";
+  preferredRunMode?: "HISTORY_LIVE";
 }
 export function validStrategyInitialization(value: unknown): value is StrategyInitializationSettings {
   if (!value || typeof value !== "object") return false;
@@ -46,7 +47,8 @@ export function validStrategyInitialization(value: unknown): value is StrategyIn
   return typeof v.runId === "string" && /^bt_[\w-]+$/.test(v.runId)
     && typeof v.versionHash === "string" && /^sha256:[a-f0-9]{64}$/.test(v.versionHash)
     && isPythonBarOutputMode(v.outputMode) && validWarmup(v.warmupBars)
-    && (v.executionModel === undefined || v.executionModel === "LEGACY" || v.executionModel === "V2");
+    && (v.executionModel === undefined || v.executionModel === "LEGACY" || v.executionModel === "V2")
+    && (v.preferredRunMode === undefined || v.preferredRunMode === "HISTORY_LIVE");
 }
 
 export const DEFAULT_STRATEGY_RUN_SETTINGS: StrategyRunSettings = { rangeMode: "ALL_AVAILABLE", customRange: null };

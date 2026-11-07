@@ -31,7 +31,7 @@ import {
   currentChartStrategyTesterToken,
   type ResultProjectionIdentity,
 } from "./chartStrategyTesterState.js";
-import { loadChartStrategyPanelPreferences } from "./chartStrategyPanelPreferences.js";
+import { loadChartStrategyPanelPreferences, resolveChartStrategyRunMode } from "./chartStrategyPanelPreferences.js";
 import type { ContinuousMode } from "../continuous/continuousTypes.js";
 import ChartStrategyTesterPanel from "./ChartStrategyTesterPanel.js";
 import {
@@ -118,7 +118,7 @@ export default function ChartStrategyTesterCellBridge({
   const locale = useLocale();
   const draftStore = useMemo(() => getChartStrategyDraftStore(), []);
   const cellScope = `${workspaceId}\u0000${cellId}`;
-  const [runMode, setRunMode] = useState<ContinuousMode>(() => loadChartStrategyPanelPreferences(cellScope).runMode ?? "HISTORY");
+  const [runMode, setRunMode] = useState<ContinuousMode>(() => resolveChartStrategyRunMode(loadChartStrategyPanelPreferences(cellScope), attachment));
   const [runtimeState, setRuntimeState] = useState(() => (
     createChartStrategyTesterState(null, cellScope)
   ));
