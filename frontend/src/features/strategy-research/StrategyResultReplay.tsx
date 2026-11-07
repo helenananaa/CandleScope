@@ -15,12 +15,11 @@ function ReplayCandles({ bars, ma }: { bars: BacktestResultReplayFrame["bars"]; 
   const y = (price: string | number) => high === low ? 170 : 316 - (Number(price) - low) / (high - low) * 292;
   const spacing = Math.min(48, 968 / bars.length);
   const points = new Map(ma?.points.map(point => [point.open_time_ms, point.value]));
-  let previousIndex = -2;
   const line = bars.flatMap((bar, index) => {
     const value = points.get(bar.open_time_ms);
     if (value === undefined) return [];
-    const adjacent = previousIndex === index - 1 && bars[index - 1]?.close_time_ms === bar.open_time_ms - 1;
-    previousIndex = index;
+    const previous = bars[index - 1];
+    const adjacent = previous?.close_time_ms === bar.open_time_ms - 1 && points.has(previous.open_time_ms);
     const at = `${24 + index * spacing} ${y(value)}`;
     return adjacent ? `L ${at}` : `M ${at} h 0`;
   }).join(" ");
