@@ -902,7 +902,7 @@ class BacktestWorker:
                         "quality": {
                             **snapshot.quality,
                             **({"quote_asset": manifest["instrument"]["quote_asset"]}
-                               if manifest.get("source") == USER_TRADE_SOURCE else {}),
+                               if config.get("exchange") == "local" and manifest.get("instrument", {}).get("quote_asset") else {}),
                         },
                         "contract_coverage": snapshot.quality.get(
                             "contract_data",

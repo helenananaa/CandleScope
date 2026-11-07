@@ -502,7 +502,7 @@ export default function StrategyResearchApp({
         sourceKind={source?.kind ?? null}
         draftId={state.script.draftId}
         barOnly={researchRun.barOnly}
-        capitalAsset={importedManifest?.market_trade_input ? importedManifest.instrument?.quote_asset : undefined}
+        capitalAsset={importedManifest?.instrument?.quote_asset}
         runStatus={researchRun.runStatus}
         needsData={researchRun.needsData}
         onDraftId={handleDraftId}

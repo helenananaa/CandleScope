@@ -58,6 +58,7 @@ def test_pinned_bar_result_replay_links_two_periods_and_survives_reimport(tmp_pa
         assert run["state"] == "COMPLETED", run
         report = client.get(f"{RUNS}/{run_id}/report").json()
         chart = client.get(f"{RUNS}/{run_id}/chart").json()
+        assert report["data_quality"]["quote_asset"] == "USDC"
         assert report["fills"]
         replay_params = {"snapshot_hash": snap, "report_hash": report["hashes"]["report"], "interval": "1m",
                          "comparison_interval": "5m"}
