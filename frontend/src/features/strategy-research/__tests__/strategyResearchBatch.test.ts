@@ -3,7 +3,6 @@ import test from "node:test";
 import type { StrategyStorage } from "../../../shared/strategyStorage.js";
 import type { ChartStrategyRunOutcome } from "../../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartStrategyRunRequest } from "../../backtest/chart-tester/chartStrategyTesterUiModel.js";
-import type { ChartStrategyResultBundle } from "../../backtest/chart-tester/chartStrategyResultCache.js";
 import type { ResultProjectionIdentity } from "../../backtest/chart-tester/chartStrategyTesterState.js";
 import type { BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../../local-data/localDataTypes.js";
@@ -101,7 +100,7 @@ test("restart follows a saved run and never recreates a task with an unknown out
     async runResearch() { assert.fail("must not recreate a run"); },
     async restoreRun(id) {
       restored.push(id);
-      return { run: { ...dataRun("a", source), state: "COMPLETED" }, config: { strategy_revision_id: "revision-a" } } as ChartStrategyResultBundle;
+      return { run: { ...dataRun("a", source), state: "COMPLETED" }, config: { start_time_ms: 0, end_time_ms: 180001, strategy_revision_id: "revision-a" } };
     },
   }, storage);
   owner.start();

@@ -1,4 +1,5 @@
 import { chartStrategyRunDiagnostics, qualitySummaryFromImportedManifest, type ResearchRunSource } from "../backtest/chart-tester/chartStrategyRunRequest.js";
+import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
 import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
@@ -67,7 +68,9 @@ function importedSource(dataset: LocalDatasetManifest, request: ChartStrategyRun
   };
 }
 
-type BatchManager = Pick<StrategyDataManager, "runResearch" | "restoreRun">;
+type BatchManager = Pick<StrategyDataManager, "runResearch"> & {
+  restoreRun(id: string): Promise<Pick<ChartStrategyResultBundle, "run" | "config">>;
+};
 type BatchState = { jobs: readonly ResearchBatchJob[]; storageFailed: boolean };
 
 export class StrategyResearchBatch {
