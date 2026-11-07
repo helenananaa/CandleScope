@@ -400,14 +400,14 @@ export default function StrategyResearchApp({
       source,
       session: researchRun.session,
       draftId: state.script.draftId,
-      result: researchRun.result,
+      result: researchRun.sourceResult,
       configuration: state.script.configuration,
     }).then((href) => {
       window.location.assign(href);
     }).catch((reason: unknown) => {
       setAdvancedError(reason instanceof Error ? describeError(reason, reason.message) : String(reason));
     });
-  }, [researchRun.result, researchRun.session, source, state.script.draftId, state.script.configuration]);
+  }, [researchRun.session, researchRun.sourceResult, source, state.script.draftId, state.script.configuration]);
 
   useControlCommands(() => ({ id: "research-panels", title: "Strategy research panels", context: () => ({ chartUiScope, settingsOpen, indicatorPanel, historyOpen }), snapshot: () => ({ settingsOpen, indicatorPanel, historyOpen, advancedError }), commands: [
     command("settings", "Open/close research settings.", object({ open: bool }), ({ open }) => setSettingsOpen(open)),
@@ -497,13 +497,13 @@ export default function StrategyResearchApp({
     <>
     {researchRun.result?.run.state === "COMPLETED" && <ResearchReturnButton key={researchRun.result.run.run_id}
       runId={researchRun.result.run.run_id} origin={handoff ? { workspaceId: handoff.source.workspaceId, cellId: handoff.source.cellId }
-        : source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
+        : researchRun.sourceResult && source?.kind === "CURRENT_CHART" ? { workspaceId: source.workspaceId, cellId: source.cellId } : null} />}
     <StrategyResearchResultPanel
       key={researchRun.result?.run.run_id ?? "pending"}
       result={researchRun.result}
       stale={researchRun.stale || state.result.stale}
       staleReasons={researchRun.staleReasons}
-      barOnly={researchRun.barOnly}
+      barOnly={researchRun.result ? researchRun.result.run.fidelity_mode === "BAR_APPROX" : researchRun.barOnly}
       error={researchRun.error}
       runStatus={researchRun.runStatus}
       network={networkDiagnostics}
@@ -713,7 +713,7 @@ export default function StrategyResearchApp({
       chart={
         source?.kind === "CURRENT_CHART"
           ? hostReady && runtime.runtimeMode === "LIVE" && researchRun.session
-            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.result} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
+            ? <MarketDataWorkspaceProvider><Suspense fallback={<p>{t("research.loading")}</p>}><StrategyResearchLiveChart session={researchRun.session} result={nativeMode ? null : researchRun.sourceResult} focusRequest={focusRequest} /></Suspense></MarketDataWorkspaceProvider>
             : <StrategyResearchCurrentChart />
           : (
             <StrategyResearchFirstOpen
