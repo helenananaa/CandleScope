@@ -26,7 +26,7 @@ with sqlite3.connect(actual_path.as_uri() + "?mode=ro&immutable=1", uri=True) as
         "SELECT r.id,r.event_time_ms,r.sequence,r.phase,r.definition_json,c.wire"
         " FROM runs r JOIN checkpoints c ON c.run_id=r.id AND c.revision=r.checkpoint_revision"
     ).fetchone()
-assert phase == "PAUSED"
+assert phase in {"PAUSED", "LIVE"}
 actual = json.loads(wire)
 definition = json.loads(raw_definition)
 start = definition.pop("initial_snapshot")["from_ms"]

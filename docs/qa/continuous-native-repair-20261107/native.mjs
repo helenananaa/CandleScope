@@ -12,6 +12,9 @@ q.s.receipt.schema = 'candlescope.native-continuous-repair/1';
 q.s.receipt.driverCommit = q.s.receipt.sourceCommit;
 q.s.receipt.sourceCommit = manifest.sourceCommit;
 q.s.receipt.transport = 'Packaged app, actual local HTTP/WS and production source journal. One controlled source correction in a cold copy of the verified LIVE profile.';
+const resumeAfter = process.env.CANDLESCOPE_QA_RESUME_AFTER === '1';
+const finalPhase = resumeAfter ? 'LIVE' : 'PAUSED';
+q.s.receipt.resumeAfter = resumeAfter;
 const mutations = [];
 q.s.receipt.mutations = mutations;
 let running = false;
@@ -78,6 +81,9 @@ try {
   const staleValues = await account.locator('.continuous-account dd').allTextContents();
   assert.deepEqual(staleValues, [input.account.equity, input.account.positionQty, String(input.account.sequence)]);
   const repair = q.s.page.locator('[data-continuous-repair]');
+  const resume = repair.getByRole('checkbox', {name:'修复后继续处理新闭合的 K 线', exact:true});
+  assert.equal(await resume.isChecked(), false);
+  if (resumeAfter) await resume.check();
   const previewResponse = q.s.page.waitForResponse(response =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === route + '/repair/preview');
   await repair.getByRole('button', {name:'预览修复范围', exact:true}).click();
@@ -99,26 +105,36 @@ try {
   await q.record('stale-account-and-preview', {stale, staleValues, plan, text:await repair.innerText()});
   await repair.getByRole('checkbox', {name:'我确认此范围，并授权使用本运行保存的代码和配置更新账户结果。', exact:true}).check();
   await confirm.click();
-  const repaired = await waitStatus(status => status.run?.phase === 'PAUSED' &&
+  const repaired = await waitStatus(status => status.run?.phase === finalPhase &&
     status.repair?.phase === 'COMMITTED' && status.repair.progress?.resources_released);
   await repair.getByText('修复完成', {exact:true}).waitFor();
-  assert.equal(repaired.run.sequence, plan.recompute_bars);
-  assert.equal(repaired.run.event_time_ms, plan.through_ms);
+  assert.equal(repaired.repair.progress.sequence, plan.recompute_bars);
+  assert.equal(repaired.repair.progress.through_ms, plan.through_ms);
+  assert.ok(repaired.run.sequence >= plan.recompute_bars);
   assert.notEqual(repaired.identity.data_revision, stale.identity.data_revision);
   await q.record('repaired-account', repaired);
   await quit();
   const first = cold();
-  assert.equal(first.sequence, plan.recompute_bars);
-  assert.equal(first.eventTimeMs, plan.through_ms);
+  assert.ok(first.sequence >= plan.recompute_bars);
+  assert.equal(first.eventTimeMs, plan.through_ms + (first.sequence - plan.recompute_bars) * 60000);
   assert.notDeepEqual(first.fills, input.account.fills);
   await q.record('cold-repaired-before-restart', first);
   await launch();
-  const restored = await waitStatus(status => status.run?.phase === 'PAUSED' && status.repair?.phase === 'COMMITTED');
-  assert.deepEqual(restored.identity, repaired.identity);
+  const restored = await waitStatus(status => status.run?.phase === finalPhase &&
+    status.repair?.phase === 'COMMITTED' && (!resumeAfter || status.run.sequence > first.sequence));
+  if (resumeAfter) {
+    assert.equal(restored.identity.data_revision, repaired.identity.data_revision);
+    assert.equal(restored.run.event_time_ms, first.eventTimeMs + (restored.run.sequence - first.sequence) * 60000);
+  } else {
+    assert.deepEqual(restored.identity, repaired.identity);
+  }
   const reopened = await openAccount();
   await q.s.page.locator('[data-continuous-repair]').getByText('修复完成', {exact:true}).waitFor();
-  const rendered = await reopened.locator('.continuous-account dd').allTextContents();
-  assert.deepEqual(rendered, [first.equity, first.positionQty, String(first.sequence)]);
+  const rendered = await q.until(async () => {
+    const values = await reopened.locator('.continuous-account dd').allTextContents();
+    return Number(values[2]) >= restored.run.sequence ? values : false;
+  });
+  if (!resumeAfter) assert.deepEqual(rendered, [first.equity, first.positionQty, String(first.sequence)]);
   await reopened.scrollIntoViewIfNeeded();
   await q.screenshot('repaired-account-after-restart');
   assert.equal(mutations.filter(row => row.path.endsWith('/repairs')).length, 1);
@@ -127,7 +143,13 @@ try {
   const second = cold();
   const {databaseSha256: before, ...firstState} = first;
   const {databaseSha256: after, ...secondState} = second;
-  assert.deepEqual(secondState, firstState);
+  if (resumeAfter) {
+    assert.ok(second.sequence > first.sequence);
+    assert.deepEqual(second.fills.slice(0, first.fills.length), first.fills);
+    assert.deepEqual(rendered, [second.equity, second.positionQty, String(second.sequence)]);
+  } else {
+    assert.deepEqual(secondState, firstState);
+  }
   await q.record('cold-repaired-after-restart', {second, rendered, before, after});
   assert.deepEqual(q.s.receipt.errors, []);
   q.s.receipt.passed = true;
