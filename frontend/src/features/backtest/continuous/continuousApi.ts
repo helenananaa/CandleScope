@@ -44,6 +44,8 @@ export function createContinuousApi(base: string): ContinuousApi {
     initial: (id, signal) => call(`/runs/${encodeURIComponent(id)}/initial`, signal),
     page: (id, body, signal) => call(`/runs/${encodeURIComponent(id)}/results/query`, signal, body),
     control: (key, body, signal) => call(`/requests/${encodeURIComponent(key)}/control`, signal, body),
+    autoRepair: (id, signal) => call(`/runs/${encodeURIComponent(id)}/repair/automatic`, signal),
+    setAutoRepair: (id, body, signal) => call(`/runs/${encodeURIComponent(id)}/repair/automatic`, signal, body),
     repairPreview: (id, body, signal) => call(`/runs/${encodeURIComponent(id)}/repair/preview`, signal, body),
     repair: (id, key, body, signal) => call(`/runs/${encodeURIComponent(id)}/repairs`, signal, body, key),
     repairStatus: (key, signal) => call(`/repairs/${encodeURIComponent(key)}`, signal),
