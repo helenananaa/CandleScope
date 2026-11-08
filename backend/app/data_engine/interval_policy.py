@@ -580,13 +580,13 @@ def aggregate_kline_rows(
     aggregation semantics.
     """
     target_ms = parse_interval_ms(target_interval)
-    source_ms = parse_interval_ms(source_interval)
+    source_spec = parse_interval_spec(source_interval)
     if (
         not component_rows
         or target_ms is None
-        or source_ms is None
-        or target_ms <= source_ms
-        or source_ms <= 0
+        or source_spec is None
+        or target_ms <= source_spec.nominal_ms
+        or source_spec.nominal_ms <= 0
     ):
         return []
 
@@ -627,34 +627,25 @@ def aggregate_kline_rows(
             interval=target_interval,
         )
 
-        expected_opens: list[int] = []
+        rows = []
         component_open_ms = bucket_open_ms
-        source_spec = parse_interval_spec(source_interval)
         while component_open_ms < bucket_end_ms:
-            expected_opens.append(component_open_ms)
-            if source_spec is not None:
-                next_open_ms = source_spec.next_ms(component_open_ms)
-                if next_open_ms <= component_open_ms:
-                    break
-                component_open_ms = next_open_ms
-            else:
-                component_open_ms += source_ms
-        # A source interval that crosses a target boundary cannot prove an
-        # exact target candle.  This is expected for some exotic interval
-        # pairs; callers can still fall back to authoritative history.
+            row = rows_by_open.get(component_open_ms)
+            if not row:
+                break
+            next_open_ms = source_spec.next_ms(component_open_ms)
+            if next_open_ms > bucket_end_ms or not _stored_component_is_closed(
+                row,
+                open_time_ms=component_open_ms,
+                source_end_ms=next_open_ms,
+                now_ms=now_ms,
+            ):
+                break
+            rows.append(row)
+            component_open_ms = next_open_ms
+        # The first missing, ambiguous or unclosed component disproves the
+        # whole bucket. Only retained components need their bounds expanded.
         if component_open_ms != bucket_end_ms:
-            continue
-
-        components = [rows_by_open.get(open_time_ms) for open_time_ms in expected_opens]
-        if any(not row for row in components):
-            continue
-        rows = [row for row in components if row]
-        if not all(_stored_component_is_closed(
-            row,
-            open_time_ms=open_time_ms,
-            source_end_ms=(source_spec.next_ms(open_time_ms) if source_spec else open_time_ms + source_ms),
-            now_ms=now_ms,
-        ) for row, open_time_ms in zip(rows, expected_opens)):
             continue
 
         try:

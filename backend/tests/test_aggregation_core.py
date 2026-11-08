@@ -25,7 +25,7 @@ from app.data_engine.data_manager.custom_query import (
 from app.data_engine.data_manager.history_stream import FixedHistoryStream
 from app.data_engine.history.calendar import AlwaysOpenCalendar, SessionCalendar
 from app.data_engine.data_manager.models import BarData, SeriesKey
-from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval_spec
+from app.data_engine.interval_policy import IntervalSpec, aggregate_kline_rows, parse_interval_spec
 
 SOURCE = SeriesKey("BTC-USDT", "1m", exchange="okx", market_type="spot")
 TARGET = replace(SOURCE, interval="7m")
@@ -350,6 +350,25 @@ def test_calendar_source_closed_rebuild_uses_actual_month_ends():
                         target=replace(TARGET, interval="12M"))
     assert queried[0].is_closed
     assert queried[0].volume == summary.values.volume == rebuilt[0]["volume"]
+
+
+def test_sparse_closed_rebuild_only_steps_over_present_source_prefix(monkeypatch):
+    target_ms = 10007 * 60_000
+    calls = []
+    original = IntervalSpec.next_ms
+
+    def track_next(spec, opened):
+        if spec.canonical == "1m":
+            calls.append(opened)
+        return original(spec, opened)
+
+    monkeypatch.setattr(IntervalSpec, "next_ms", track_next)
+    rows = [dict(open_time=opened, close_time=opened + 59_999, open=10, high=12,
+                 low=8, close=11, volume=1, is_closed=True)
+            for opened in [0, 60_000, target_ms - 60_000, 2 * target_ms - 60_000]]
+    assert aggregate_kline_rows(rows, target_interval="10007m", source_interval="1m",
+                                now_ms=2 * target_ms) == []
+    assert calls == [0, 60_000]
 
 
 def test_raw_rebuild_and_compact_decode_share_per_component_precision():
