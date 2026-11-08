@@ -73,10 +73,13 @@ export async function checkQuickReplayStep() {
   }
   let lastProgress: { cursorSec: number; step: string } | undefined;
   const recordProgress = (cursorSec: number, step: string) => { lastProgress = { cursorSec, step }; };
-  function render(noteSource = "original", active = true, saved?: typeof lastProgress) {
+  const cursorActions: number[] = [];
+  const recordCursorAction = (cursorSec: number) => { cursorActions.push(cursorSec); };
+  function render(noteSource = "original", active = true, saved?: typeof lastProgress, controlled = false) {
     flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={partialMock<MarketDataWorkspaceResources>({ dataManager: manager })}>
       <QuickReplayOverlay key={saved ? "restored" : "initial"} request={request} active={active}
-        savedCursorSec={saved?.cursorSec} savedStep={saved?.step} onProgress={recordProgress} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
+        savedCursorSec={saved?.cursorSec} savedStep={saved?.step} onProgress={recordProgress}
+        {...(controlled ? { onCursorChange: recordCursorAction } : {})} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
     </MarketDataWorkspaceContext.Provider>));
   }
   try {
@@ -104,6 +107,18 @@ export async function checkQuickReplayStep() {
     render("original", true, saved); await settle();
     assert(lastProgress?.step === "1m" && lastProgress.cursorSec === saved.cursorSec, "remount discarded the saved cursor or step");
     assert(markerIds().length === 0, "restore admitted a future screenshot");
-    return { passed: true, restored: lastProgress, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
+    render("original", true, { ...saved, cursorSec: entry + 120 }, true); await settle();
+    assert(resolveMinute && minuteRange, "restored minute load missing");
+    resolveMinute(response(60, ...minuteRange)); await settle();
+    assert(markerIds().join() === "original" && cursorActions.length === 0, "linked cut failed or echoed as a local action");
+    render("original", true, saved, true); await settle();
+    assert(markerIds().length === 0 && cursorActions.length === 0, "linked rewind left a future marker or echoed");
+    const unavailable = entry + 1_000_000;
+    render("original", true, { ...saved, cursorSec: unavailable }, true); await settle();
+    const effective = Number(host.querySelector("[data-replay-cursor-sec]")?.getAttribute("data-replay-cursor-sec"));
+    assert(effective < unavailable && cursorActions.length === 0, "out-of-range linked cursor crossed the available frontier");
+    await move("ArrowLeft");
+    assert(cursorActions.join() === String(effective - 60), "local action did not publish from the effective cut");
+    return { passed: true, restored: saved, linkedCursor: { unavailable, effective, cursorActions }, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
   } finally { flushSync(() => root.unmount()); host.remove(); }
 }

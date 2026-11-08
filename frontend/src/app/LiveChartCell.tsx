@@ -31,7 +31,7 @@ import React, {
 import { createPortal } from "react-dom";
 import { captureChartPng } from "../features/trading-accounts/chartCapture.js";
 import { useChartQuickReplay } from "./useChartQuickReplay.js";
-import type { UpdateChartQuickReplay } from "../features/chart-workspace/chartQuickReplayState.js";
+import type { QuickReplayChange, UpdateChartQuickReplay } from "../features/chart-workspace/chartQuickReplayState.js";
 import type { QuickReplayRequest } from "../features/trading-accounts/tradingTypes.js";
 import { useTradingChartOverlay } from "../features/trading-accounts/useTradingChartOverlay.js";
 import type { TradingRailBinding } from "./RightMarketRail.js";
@@ -199,7 +199,7 @@ export interface LiveChartCellProps {
   onToggleMaximize(cellId: ChartCellId): void;
   onSessionChange(cellId: ChartCellId, session: ChartSession): void;
   onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
-  onQuickReplayChange(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay): void;
+  onQuickReplayChange(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
   onAccountOverlayChange(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
   onPriceScaleChange(cellId: ChartCellId, value: ChartCellState["priceScale"]): void;
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
@@ -261,10 +261,10 @@ function LiveChartCell({
   recordMultiChartCellRender(cell.id);
   useLocale();
   const marketWorkspaceResources = useMarketDataWorkspaceResources();
-  const updateQuickReplay = useCallback((update: UpdateChartQuickReplay) => onQuickReplayChange(workspaceId, cell.id, update),
+  const updateQuickReplay = useCallback((update: UpdateChartQuickReplay, change: QuickReplayChange) => onQuickReplayChange(workspaceId, cell.id, update, change),
     [cell.id, onQuickReplayChange, workspaceId]);
   const replay = useChartQuickReplay(cell.quickReplay, updateQuickReplay);
-  const { request: quickReplay, open: openSavedReplay, exit: exitQuickReplay } = replay;
+  const { request: quickReplay, open: openSavedReplay, exit: exitQuickReplay, suspend: suspendQuickReplay } = replay;
   const studyOwner = historyStudyOwner(workspaceId, cell.id);
   const study = useHistoryStudy(studyOwner, marketWorkspaceResources?.dataManager ?? null);
   const moveStudyCursor = study.move;
@@ -623,7 +623,7 @@ function LiveChartCell({
   );
   useLayoutEffect(() => {
     if (study.masked && study.playback) return; // The visible study reports its own prefix below.
-    if (cell.quickReplay && !study.masked) {
+    if (cell.quickReplay && replay.key && !study.masked) {
       const trade = quickReplay?.trade;
       onControlObservation?.(cell.id, {
         mode: "quick-replay",
@@ -665,7 +665,7 @@ function LiveChartCell({
     chartSession.view.interval, indicators.view.activeIndicators, indicators.status.computing,
     sourceMarketData.status.barCount, sourceMarketData.view.loading, sourceMarketData.status.initialHistoryPending,
     sourceMarketData.status.loadingMoreLeft, sourceMarketData.view.error, obscured, onControlObservation,
-    study.pending, study.masked, study.playback, study.busy, study.error, cell.session, cell.quickReplay, quickReplay, replay.error]);
+    study.pending, study.masked, study.playback, study.busy, study.error, cell.session, cell.quickReplay, quickReplay, replay.error, replay.key]);
   useEffect(() => () => onControlObservation?.(cell.id, null), [cell.id, onControlObservation]);
   const exportFlow = useExportRuntime({
     indicators: indicators.view.activeIndicators,
@@ -886,8 +886,8 @@ function LiveChartCell({
     studyMaskedRef.current = study.masked;
     // Initial study recovery masks the live chart before its mode is known.
     // Only an acknowledged active study supersedes the saved trade replay.
-    if (study.active && replay.key) exitQuickReplay();
-  }, [exitQuickReplay, replay.key, study.active, study.masked]);
+    if (study.active && replay.key) suspendQuickReplay();
+  }, [replay.key, study.active, study.masked, suspendQuickReplay]);
   const openTradeReplay = useCallback((request: QuickReplayRequest) => {
     if (!studyMaskedRef.current) openSavedReplay(request);
   }, [openSavedReplay]);
@@ -1156,6 +1156,7 @@ function LiveChartCell({
                 savedCursorSec={cell.quickReplay?.cursorSec}
                 savedStep={cell.quickReplay?.step}
                 onProgress={replay.save}
+                onCursorChange={replay.move}
                 accountOverlay={cell.accountOverlay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}

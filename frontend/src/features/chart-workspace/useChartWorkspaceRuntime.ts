@@ -1,5 +1,5 @@
 import type { ChartAccountOverlaySettings } from "./chartAccountOverlaySettings.js";
-import { chartQuickReplayKey, type UpdateChartQuickReplay } from "./chartQuickReplayState.js";
+import type { QuickReplayChange, UpdateChartQuickReplay } from "./chartQuickReplayState.js";
 import { pickCellChartSettings } from "./chartWorkspaceChartSettings.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { NativeStrategyCollection } from "../backtest/native/nativeStrategyCollection.js";
@@ -84,6 +84,7 @@ import {
   applyLinkedSessionUpdate,
   applyLinkedChartSettingsUpdate,
   applyLinkedAccountOverlayUpdate,
+  applyQuickReplayUpdate,
   assignCellLinkGroup,
   assignCellsLinkGroup,
   chartLinkGroupDepth,
@@ -180,7 +181,7 @@ export interface ChartWorkspaceRuntime {
     setLayoutRatio(splitId: string, ratio: number): void;
     updateCellSession(cellId: ChartCellId, session: ChartSession): void;
     updateCellChartSettings(cellId: ChartCellId, settings: ChartSettings | ChartCellChartSettings): void;
-    updateCellQuickReplay(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay): void;
+    updateCellQuickReplay(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
     updateCellAccountOverlay(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
     updateCellPriceScale(cellId: ChartCellId, priceScale: ChartCellPriceScale): void;
     updateCellIndicators(cellId: ChartCellId, indicators: IndicatorDefinition[]): void;
@@ -928,17 +929,8 @@ export function useChartWorkspaceRuntime(
     updateActiveDocument((current) => applyLinkedChartSettingsUpdate(current, cellId, chartSettings));
   }, [updateActiveDocument]);
 
-  const updateCellQuickReplay = useCallback((workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay) => {
-    updateActiveDocument(current => {
-      const cell = current.cells[cellId];
-      if (!cell) return current;
-      const previous = cell.quickReplay;
-      const next = update(previous);
-      if (next === previous || (next && previous && chartQuickReplayKey(next) === chartQuickReplayKey(previous)
-        && next.cursorSec === previous.cursorSec && next.step === previous.step)) return current;
-      const { quickReplay: _quickReplay, ...rest } = cell;
-      return { ...current, cells: { ...current.cells, [cellId]: next ? { ...rest, quickReplay: next } : rest } };
-    }, workspaceId);
+  const updateCellQuickReplay = useCallback((workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange) => {
+    updateActiveDocument(current => applyQuickReplayUpdate(current, cellId, update, change), workspaceId);
   }, [updateActiveDocument]);
 
   const updateCellAccountOverlay = useCallback((cellId: ChartCellId, settings: ChartAccountOverlaySettings) => {

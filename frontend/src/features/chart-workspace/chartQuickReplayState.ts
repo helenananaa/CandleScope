@@ -1,6 +1,8 @@
 import { parseIntervalSeconds } from "../../utils/intervals.js";
 
 export interface ChartQuickReplayState {
+  /** A live chart can keep its own last selected trade for a mode-link resume. */
+  active?: boolean;
   accountId: string;
   tradeId: string;
   readonlyVersion?: string;
@@ -8,6 +10,8 @@ export interface ChartQuickReplayState {
   step?: string;
   cursorSec?: number;
 }
+
+export type QuickReplayChange = "local" | "mode" | "cursor";
 
 export type UpdateChartQuickReplay = (current: ChartQuickReplayState | undefined) => ChartQuickReplayState | undefined;
 
@@ -17,12 +21,12 @@ function validIdentifier(value: unknown): value is string {
 
 export function normalizeChartQuickReplay(value: unknown): ChartQuickReplayState | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { accountId, tradeId, readonlyVersion, interval, step, cursorSec } = value as Record<string, unknown>;
+  const { active, accountId, tradeId, readonlyVersion, interval, step, cursorSec } = value as Record<string, unknown>;
   if (!validIdentifier(accountId) || !validIdentifier(tradeId)
     || (readonlyVersion !== undefined && !validIdentifier(readonlyVersion))
     || typeof interval !== "string" || parseIntervalSeconds(interval) === null) return undefined;
   return {
-    accountId, tradeId, ...(readonlyVersion === undefined ? {} : { readonlyVersion }), interval,
+    ...(active === false ? { active: false } : {}), accountId, tradeId, ...(readonlyVersion === undefined ? {} : { readonlyVersion }), interval,
     ...(typeof step === "string" && parseIntervalSeconds(step) !== null ? { step } : {}),
     ...(typeof cursorSec === "number" && Number.isSafeInteger(cursorSec) && cursorSec >= 0 && cursorSec <= 253402300799 ? { cursorSec } : {}),
   };

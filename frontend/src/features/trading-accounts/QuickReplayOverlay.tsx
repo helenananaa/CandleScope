@@ -58,6 +58,7 @@ export default function QuickReplayOverlay({
   savedCursorSec,
   savedStep,
   onProgress,
+  onCursorChange,
   onExit,
 }: {
   request: QuickReplayRequest;
@@ -68,6 +69,7 @@ export default function QuickReplayOverlay({
   savedCursorSec?: number | undefined;
   savedStep?: string | undefined;
   onProgress?: (cursorSec: number, step: string) => void;
+  onCursorChange?: (cursorSec: number) => void;
   onExit(): void;
 }) {
   const locale = useLocale();
@@ -86,9 +88,18 @@ export default function QuickReplayOverlay({
   const [loadFailed, setLoadFailed] = useState(false);
   const [truncated, setTruncated] = useState(false);
   const [step, setStep] = useState(() => savedStep && stepSeconds(savedStep, intervalSec) <= intervalSec ? savedStep : request.interval);
-  const [cursor, setCursor] = useState(() => savedCursorSec ?? initialCursor(trade, intervalSec));
-  useEffect(() => { onProgress?.(cursor, step); }, [cursor, onProgress, step]);
+  const [localCursor, setLocalCursor] = useState(() => savedCursorSec ?? initialCursor(trade, intervalSec));
+  const desiredCursor = onCursorChange ? savedCursorSec ?? localCursor : localCursor;
+  useEffect(() => { onProgress?.(desiredCursor, step); }, [desiredCursor, onProgress, step]);
   const [playing, setPlaying] = useState<0 | 1 | 2>(0);
+  const authoredCursor = useRef<number | null>(null);
+  const previousCursor = useRef(desiredCursor);
+  useEffect(() => {
+    if (previousCursor.current === desiredCursor) return;
+    previousCursor.current = desiredCursor;
+    if (onCursorChange && authoredCursor.current !== desiredCursor) setPlaying(0);
+    authoredCursor.current = null;
+  }, [desiredCursor, onCursorChange]);
   const [showOutcome, setShowOutcome] = useState(false);
   const stepSec = Math.min(stepSeconds(step, intervalSec), intervalSec);
   const chartSurface = useChartSurfaceRuntime();
@@ -157,6 +168,10 @@ export default function QuickReplayOverlay({
   const lastChartEnd = chartBars.length > 0 ? chartBars.at(-1)!.time + intervalSec : window_.startSec;
   const lastFineEnd = fineBars && fineBars.length > 0 ? fineBars.at(-1)!.time + stepSec : 0;
   const maxCursor = Math.max(lastChartEnd, lastFineEnd);
+  // An incoming absolute time can exceed this chart's own loaded input.
+  // Do not reveal notes past its frontier or advance a cut before its first bar.
+  const cursor = chartBars.length > 0 && onCursorChange ? Math.min(desiredCursor, maxCursor) : desiredCursor;
+  const timeOutsideHistory = chartBars.length > 0 && (desiredCursor > maxCursor || desiredCursor < chartBars[0]!.time);
   const entryCandleOpen = !loading && chartBars.length > 0
     && initialCursor(trade, intervalSec) + intervalSec > lastChartEnd;
   const autoStepRef = useRef(savedStep !== undefined);
@@ -281,30 +296,35 @@ export default function QuickReplayOverlay({
 
   // ── controls ─────────────────────────────────────────────────
   const canNavigate = !loading && !loadFailed && chartBars.length > 0;
+  const seek = useCallback((next: number) => {
+    if (next === desiredCursor) return;
+    if (onCursorChange) {
+      authoredCursor.current = next;
+      onCursorChange(next);
+    } else setLocalCursor(next);
+  }, [desiredCursor, onCursorChange]);
   const move = useCallback((delta: number) => {
-    if (canNavigate) setCursor((value) => clamp(value + delta));
-  }, [canNavigate, clamp]);
+    if (canNavigate && (delta >= 0 || cursor > minCursor)) seek(clamp(cursor + delta));
+  }, [canNavigate, clamp, cursor, minCursor, seek]);
   const jumpNext = useCallback(() => {
     if (!canNavigate) return;
     const next = nextEventCursor(events, cursor, stepSec);
-    if (next !== null) setCursor(clamp(next));
-  }, [canNavigate, clamp, cursor, events, stepSec]);
+    if (next !== null) seek(clamp(next));
+  }, [canNavigate, clamp, cursor, events, seek, stepSec]);
   const jumpPrevious = useCallback(() => {
     if (!canNavigate) return;
     const previous = previousEventCursor(events, cursor, stepSec);
-    setCursor(clamp(previous ?? initialCursor(trade, intervalSec)));
-  }, [canNavigate, clamp, cursor, events, intervalSec, stepSec, trade]);
+    seek(clamp(previous ?? initialCursor(trade, intervalSec)));
+  }, [canNavigate, clamp, cursor, events, intervalSec, seek, stepSec, trade]);
   useEffect(() => {
     if (playing === 0 || !canNavigate) return undefined;
-    const timer = window.setInterval(() => {
-      setCursor((value) => {
-        const next = clamp(value + stepSec);
-        if (next === value) setPlaying(0);
-        return next;
-      });
+    const timer = window.setTimeout(() => {
+      const next = clamp(cursor + stepSec);
+      if (next === cursor) setPlaying(0);
+      else seek(next);
     }, PLAY_DELAY_MS[playing - 1]);
-    return () => window.clearInterval(timer);
-  }, [canNavigate, clamp, playing, stepSec]);
+    return () => window.clearTimeout(timer);
+  }, [canNavigate, clamp, cursor, playing, seek, stepSec]);
 
   useEffect(() => {
     if (!active) return;
@@ -335,6 +355,7 @@ export default function QuickReplayOverlay({
   }, [intervalSec, request.interval, trade.openedAtMs, window_.endSec]);
 
   const [captureComment, setCaptureComment] = useState("");
+  const captureAnchor = useRef<number | null>(null);
   const saveReviewNote = async () => {
     const text = captureComment.trim();
     if (!text) return;
@@ -345,9 +366,10 @@ export default function QuickReplayOverlay({
         body: text,
         tradeId: trade.id,
         // Just inside the cut so the note is visible where it was written.
-        marketTimeMs: cursor * 1000 - 1,
+        marketTimeMs: (captureAnchor.current ?? cursor) * 1000 - 1,
       });
       setCaptureComment("");
+      captureAnchor.current = null;
       setDetail(await api.trade(request.accountId, trade.id));
     } catch (cause) {
       setError(tradingErrorMessage(cause));
@@ -361,6 +383,7 @@ export default function QuickReplayOverlay({
         <strong>{trade.symbol}</strong>
         <span>{request.interval}</span>
         <span className="quick-replay-cursor">{t("trading.replay.cursor", { time: formatDateTime(cursor * 1000) })}</span>
+        {timeOutsideHistory && <span className="trading-help" role="status">{t("trading.replay.timeOutsideHistory")}</span>}
         <span className="quick-replay-spacer" />
         <span className="trading-help">{t("trading.replay.reconstructed")}</span>
         <button type="button" className="trading-button" onClick={onExit}>{t("trading.replay.exit")}</button>
@@ -461,7 +484,11 @@ export default function QuickReplayOverlay({
             className="trading-quick-input"
             value={captureComment}
             placeholder={t("trading.replay.notePlaceholder")}
-            onChange={(event) => setCaptureComment(event.target.value)}
+            onChange={(event) => {
+              const text = event.target.value;
+              captureAnchor.current = text.trim() ? captureAnchor.current ?? cursor : null;
+              setCaptureComment(text);
+            }}
             onKeyDown={(event) => { if (event.key === "Enter") void saveReviewNote(); }}
           />
           <p className="trading-help">{t("trading.replay.drawingsHidden")}</p>

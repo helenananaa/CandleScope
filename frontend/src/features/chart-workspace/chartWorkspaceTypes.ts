@@ -128,6 +128,8 @@ export interface ChartLinkGroupSettings {
   noteOverlays?: boolean;
   studyCursor?: boolean;
   studyMode?: boolean;
+  quickReplayMode?: boolean;
+  quickReplayCursor?: boolean;
   indicators: ChartLinkIndicatorSettings;
 }
 
@@ -228,6 +230,8 @@ export const DEFAULT_CHART_LINK_GROUP_SETTINGS: ChartLinkGroupSettings = Object.
   noteOverlays: false,
   studyCursor: false,
   studyMode: false,
+  quickReplayMode: false,
+  quickReplayCursor: false,
   indicators: Object.freeze({
     definitions: true,
     parameters: true,

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { chartQuickReplayKey, normalizeChartQuickReplay, type ChartQuickReplayState, type UpdateChartQuickReplay } from "../features/chart-workspace/chartQuickReplayState.js";
+import { chartQuickReplayKey, normalizeChartQuickReplay, type ChartQuickReplayState, type QuickReplayChange, type UpdateChartQuickReplay } from "../features/chart-workspace/chartQuickReplayState.js";
 import { versionedReviewJournalApi } from "../features/readonly-accounts/reviewApi.js";
 import { tradingApi } from "../features/trading-accounts/tradingApi.js";
 import { tradingErrorMessage } from "../features/trading-accounts/tradingErrors.js";
 import type { QuickReplayRequest } from "../features/trading-accounts/tradingTypes.js";
 
-export function useChartQuickReplay(saved: ChartQuickReplayState | undefined, update: (change: UpdateChartQuickReplay) => void) {
-  const key = saved && chartQuickReplayKey(saved);
+export function useChartQuickReplay(saved: ChartQuickReplayState | undefined, update: (change: UpdateChartQuickReplay, kind: QuickReplayChange) => void) {
+  const key = saved && saved.active !== false ? chartQuickReplayKey(saved) : undefined;
   const { accountId, tradeId, interval, readonlyVersion } = saved ?? {};
   const [loaded, setLoaded] = useState<{ key: string; request: QuickReplayRequest } | null>(null);
   const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
@@ -35,22 +35,31 @@ export function useChartQuickReplay(saved: ChartQuickReplayState | undefined, up
     if (!state) return;
     setLoaded({ key: chartQuickReplayKey(state), request: next });
     setFailed(null);
-    update(() => state);
+    update(current => current && chartQuickReplayKey(current) === chartQuickReplayKey(state)
+      ? { ...current, active: true } : state, "mode");
   }, [update]);
 
-  const exit = useCallback(() => {
+  const leave = useCallback((change: "mode" | "local") => {
     setLoaded(null);
     setFailed(null);
-    update(current => current && chartQuickReplayKey(current) === key ? undefined : current);
+    update(current => current && current.active !== false && chartQuickReplayKey(current) === key
+      ? { ...current, active: false } : current, change);
   }, [key, update]);
+  const exit = useCallback(() => leave("mode"), [leave]);
+  const suspend = useCallback(() => leave("local"), [leave]);
 
   const save = useCallback((cursorSec: number, step: string) => {
-    update(current => current && chartQuickReplayKey(current) === key ? { ...current, cursorSec, step } : current);
+    update(current => current && current.active !== false && chartQuickReplayKey(current) === key
+      ? { ...current, cursorSec: current.cursorSec ?? cursorSec, step } : current, "local");
+  }, [key, update]);
+  const move = useCallback((cursorSec: number) => {
+    update(current => current && current.active !== false && chartQuickReplayKey(current) === key
+      ? { ...current, cursorSec } : current, "cursor");
   }, [key, update]);
 
   const retry = useCallback(() => {
     setFailed(null);
     setAttempt(value => value + 1);
   }, []);
-  return { key, request, open, exit, save, retry, error: failed && failed.key === key ? failed.message : null };
+  return { key, request, open, exit, suspend, save, move, retry, error: failed && failed.key === key ? failed.message : null };
 }
