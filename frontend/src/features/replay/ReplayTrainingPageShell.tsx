@@ -67,6 +67,7 @@ import {
 } from "./replayViewerProjection.js";
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
+import { replayChartNotePoints, useReplayChartNoteVersions } from "./replayChartNoteOverlay.js";
 import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
@@ -126,6 +127,8 @@ export interface ReplayTrainingPageShellProps {
     readonly integrity: ReplayIntegrityRuntime;
     readonly projectionBoundaryMs?: number | null;
     readonly accountOverlay?: ChartAccountOverlaySettings;
+    readonly noteRevision: number;
+    readonly onNoteSaved: () => void;
     readonly frame: ComponentType<ReplayChartPageFrameProps>;
     readonly controls: ReactNode;
     readonly controlViewer: ReplayViewerRuntime;
@@ -838,6 +841,23 @@ export default function ReplayTrainingPageShell({
   const viewerVersion = Number(displayedSeriesStore.version);
   const viewerSeriesKey = displayedSeriesStore.seriesKey;
   const isReview = review !== null;
+  const noteTrackId = reviewSelectedTrackId ?? activeSelectedTrack?.track_id;
+  const noteCutoff = review !== null
+    ? (reviewProjectedTrack && reviewLoadedPrefixKey === reviewPrefixKey ? reviewCursorVirtualTimeMs : null)
+    : (runtime.store.hasAuthoritativeSnapshot && runtime.store.virtualTimeMs !== null && cell?.projectionBoundaryMs != null
+      ? Math.min(runtime.store.virtualTimeMs, cell.projectionBoundaryMs) : null);
+  const noteBinding = cell?.accountOverlay?.notes && integrityRuntime.runId && noteTrackId && runtime.store.dataEpoch
+    ? { runId: integrityRuntime.runId, trackId: noteTrackId, dataEpoch: runtime.store.dataEpoch,
+      reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,
+      timelineSequence: review?.selected_timeline_sequence ?? null } : null;
+  const noteVersions = useReplayChartNoteVersions(api, noteBinding, noteCutoff, runtime.store.generation, cell?.noteRevision ?? 0);
+  const notePoints = useMemo(() => replayChartNotePoints(noteVersions, displayedInterval,
+    time => displayedSeriesStore.hasTime(time), supplement => t(supplement ? "replay.notes.review" : "replay.notes.title", {}, locale)),
+  // The store retains its identity across history and projection updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [noteVersions, displayedInterval, displayedSeriesStore, viewerVersion, locale]);
+  const noteMarkers = useMemo<IndicatorMarker[]>(() => notePoints.length
+    ? [{ id: "replay-chart-notes", pane: "main", data: notePoints }] : [], [notePoints]);
   const captureIndicatorRuntime = review === null ? indicators : reviewIndicators;
   const captureIndicatorView = captureIndicatorRuntime.view;
   const captureState = useRef<{ ready: boolean; seriesKey: string; sourceVersion: number; interval: string; chartType: string;
@@ -852,7 +872,7 @@ export default function ReplayTrainingPageShell({
         : review.playback_state === "PAUSED" && !reviewChartLoading && reviewLoadedPrefixKey === reviewPrefixKey),
     presentation: [captureIndicatorView.activeIndicators, captureIndicatorView.mainOverlayLines, captureIndicatorView.markers,
       captureIndicatorView.fills, captureIndicatorView.hlines, captureIndicatorView.bgcolors, captureIndicatorView.barcolors,
-      captureIndicatorView.drawings, captureIndicatorView.signals, ...captureIndicatorView.subPanes.map(pane => pane.lines)],
+      captureIndicatorView.drawings, captureIndicatorView.signals, noteMarkers, ...captureIndicatorView.subPanes.map(pane => pane.lines)],
     seriesKey: viewerSeriesKey ?? "", sourceVersion: viewerVersion, interval: displayedInterval, chartType: settings.chartType,
     contextKey: JSON.stringify([runtime.store.generation, runtime.store.revision, runtime.store.sourceSequence,
       runtime.store.virtualTimeMs, review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence, viewerSeriesKey, viewerVersion,
@@ -937,7 +957,10 @@ export default function ReplayTrainingPageShell({
   const chartMarkers = useMemo(() => [
     ...indicators.view.markers,
     ...replayTradeMarkers,
-  ], [indicators.view.markers, replayTradeMarkers]);
+    ...noteMarkers,
+  ], [indicators.view.markers, replayTradeMarkers, noteMarkers]);
+  const reviewChartMarkers = useMemo(() => [...reviewIndicators.view.markers, ...noteMarkers],
+    [reviewIndicators.view.markers, noteMarkers]);
   const chartHlines = useMemo(() => [
     ...indicators.view.hlines,
     ...replayTradeHlines,
@@ -1052,7 +1075,7 @@ export default function ReplayTrainingPageShell({
       mainOverlayLines={review === null ? indicators.view.mainOverlayLines : reviewIndicators.view.mainOverlayLines}
       subPanes={review === null ? indicators.view.subPanes : reviewIndicators.view.subPanes}
       indicatorStatusText={review === null ? indicators.status.preparationText : reviewIndicators.status.preparationText}
-      indicatorMarkers={review === null ? chartMarkers : reviewIndicators.view.markers}
+      indicatorMarkers={review === null ? chartMarkers : reviewChartMarkers}
       indicatorFills={review === null ? indicators.view.fills : reviewIndicators.view.fills}
       indicatorHlines={review === null ? chartHlines : reviewIndicators.view.hlines}
       indicatorBgcolors={review === null ? indicators.view.bgcolors : reviewIndicators.view.bgcolors}
@@ -1125,14 +1148,13 @@ export default function ReplayTrainingPageShell({
     />
   );
 
-  const noteTrackId = reviewSelectedTrackId ?? activeSelectedTrack?.track_id;
   const noteGeneration = runtime.store.dataEpoch ?? "pending";
   const notes = integrityRuntime.runId && noteTrackId ? <ReplayNotesPanel key={`${integrityRuntime.runId}:${noteTrackId}:${noteGeneration}`}
       api={api} runId={integrityRuntime.runId} trackId={noteTrackId} generationKey={noteGeneration}
       reviewId={review?.review_id ?? null} reviewRevision={review?.cursor_revision ?? null}
       cursorMs={review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs}
       revisionKey={`${runtime.store.revision}:${viewer.viewerState?.semantic_view_revision ?? ""}:${review?.review_id ?? ""}:${review?.cursor_revision ?? ""}`}
-      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} captureChart={captureNoteChart} embedded={review === null} /> : null;
+      formatTime={publicTimeRuntime.formatTime} onTimes={reportNoteTimes} {...(cell ? { onSaved: cell.onNoteSaved } : {})} captureChart={captureNoteChart} embedded={review === null} /> : null;
   const rightRail = active ? (
     review !== null ? <ReplayReviewRightRail review={review} notes={notes} /> : <ReplayRightMarketRail
       runtime={runtime} viewer={viewer} indicators={indicators}
@@ -1294,6 +1316,7 @@ export default function ReplayTrainingPageShell({
       intervalSelector={null}
       workspace={cell ? <>
         <span hidden data-replay-chart-trade-markers={review === null ? tradeInputs.fills.length : 0}
+          data-replay-chart-note-versions={JSON.stringify(notePoints.map(point => [point.id, point.revision]))}
           data-replay-chart-position-lines={review === null ? replayTradeHlines.length : 0} />
         {chart}
       </> : (

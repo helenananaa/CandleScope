@@ -64,12 +64,13 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
   </div>;
 }
 
-export default function ReplayNotesPanel({ api, runId, trackId, generationKey, reviewId, reviewRevision, cursorMs, revisionKey, formatTime, onTimes, captureChart, embedded = false }: {
+export default function ReplayNotesPanel({ api, runId, trackId, generationKey, reviewId, reviewRevision, cursorMs, revisionKey, formatTime, onTimes, onSaved, captureChart, embedded = false }: {
   api: Api; runId: string; trackId: string; generationKey: string; cursorMs: number | null;
   reviewId: string | null; reviewRevision: number | null;
   revisionKey: string; formatTime(ms: number): string;
   embedded?: boolean;
   captureChart?: ReplayNoteChartCapture | undefined;
+  onSaved?(): void;
   onTimes?(values: readonly number[]): void;
 }) {
   const locale = useLocale();
@@ -87,6 +88,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
   const reportHistoryTimes = useCallback((scope: string, values: readonly number[]) => setHistoryTimes({ scope, values }), []);
   const sequence = useRef(0), lastStarted = useRef(0);
   const changed = useCallback(() => setRefresh(value => value + 1), []);
+  const saved = useCallback(() => { changed(); onSaved?.(); }, [changed, onSaved]);
   const close = useCallback(() => { setTarget(null); changed(); }, [changed]);
   useEffect(() => {
     if (!open || cursorMs === null) return;
@@ -151,7 +153,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
           {t(current?.context.reviewNote ? "replay.notes.addReview" : "replay.notes.add")}</button>
         <button type="button" onClick={changed}>{t("replay.notes.refresh")}</button>
       </div>
-      {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} view={current!.context} captureChart={captureChart} actualTime={actualTime} onChanged={changed} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
+      {visibleTarget ? <NoteEditor key={visibleTarget.binding.key} api={api} target={visibleTarget} view={current!.context} captureChart={captureChart} actualTime={actualTime} onChanged={saved} onClose={close} {...(canCopy ? { onCopy: copy } : {})} />
         : <>
           {drafts.filter(draft => current && cursorMs !== null && draft.context.virtualTimeMs <= cursorMs
             && draft.context.timelineSequence <= current.context.timelineSequence

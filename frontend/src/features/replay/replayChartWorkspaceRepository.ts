@@ -36,9 +36,9 @@ export function seedReplayChartWorkspace(runId: string, seed: ReplayWorkspaceSee
     if (!window) return false;
     const cells = Object.fromEntries(visibleCellIds(window.layoutTree).map((id) => {
       const cell = seed.document.cells[id]!;
-      const { trades, positions } = normalizeChartAccountOverlay(cell.accountOverlay);
+      const { trades, positions, notes } = normalizeChartAccountOverlay(cell.accountOverlay);
       return [id, { id:cell.id, session:cell.session, linkGroupId:cell.linkGroupId,
-        accountOverlay: { trades, positions },
+        accountOverlay: { trades, positions, notes },
         drawingLayerSet:cell.drawingLayerSet, chartSettings:cell.chartSettings,
         priceScale:cell.priceScale, indicators:cell.indicators.map((indicator) => ({
           ...indicator, error:null, renderHints:undefined,

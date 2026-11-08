@@ -90,11 +90,13 @@ interface CellProps {
   hosts: Hosts;
   controls: ReactNode;
   preferences: ReturnType<typeof useReplayWorkspacePreferences>;
+  noteRevision: number;
+  onNoteSaved(): void;
   onOpenTrack(trackId: string, target: "current" | "new"): Promise<void>;
 }
 
 function ReplayChartCell({ runId, cell, track, workspace, controller, pool, globalSettings,
-  integrity, links, intervalTransfers, hosts, controls, preferences, onOpenTrack, pageExportRef, pageDrawingExports, exportVisible }: CellProps) {
+  integrity, links, intervalTransfers, hosts, controls, preferences, noteRevision, onNoteSaved, onOpenTrack, pageExportRef, pageDrawingExports, exportVisible }: CellProps) {
   const runtime = useSharedReplayChartRuntime(pool, track.adapter_session_id!);
   const projection = useReplayChartProjection(runtime, track.track_id, cell.session.interval, runId);
   const active = workspace.view.activeCellId === cell.id;
@@ -192,7 +194,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     scope,
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
     active, integrity: cellIntegrity, projectionBoundaryMs: projection.boundaryMs, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
-    priceScale: cell.priceScale,
+    priceScale: cell.priceScale, noteRevision, onNoteSaved,
     ...(cell.accountOverlay ? { accountOverlay: cell.accountOverlay } : {}),
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
@@ -202,7 +204,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, cell.accountOverlay, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, cell.accountOverlay, noteRevision, onNoteSaved, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -236,6 +238,8 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
   const workspace = useChartWorkspaceRuntime({ repository, workspaceBus: null });
   useControlCommands(() => workspaceCommands(workspace));
   const preferences = useReplayWorkspacePreferences(runId);
+  const [noteRevision, setNoteRevision] = useState(0);
+  const onNoteSaved = useCallback(() => setNoteRevision(revision => revision + 1), []);
   const [links] = useState(() => new ChartLinkCoordinator(workspace.view.document));
   const [intervalTransfers] = useState(() => new ReplayIntervalViewportTransfers());
   const panelWorkspace = useMemo<ChartWorkspaceRuntime>(() => ({
@@ -442,13 +446,18 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                         onChange={event => workspace.actions.updateCellAccountOverlay(id, { ...overlay, positions: event.target.checked })} />
                       {t("trading.overlay.positions")}
                     </label>
+                    <label>
+                      <input type="checkbox" checked={overlay.notes}
+                        onChange={event => workspace.actions.updateCellAccountOverlay(id, { ...overlay, notes: event.target.checked })} />
+                      {t("trading.overlay.notes")}
+                    </label>
                   </fieldset>
                 </WorkspaceCellLayoutMenu>
               </header>
               {track?.adapter_session_id ? <ReplayChartCell key={`${id}:${track.track_id}`} runId={runId} cell={cell} track={track}
                 pageExportRef={pageExportRef} pageDrawingExports={pageDrawingExports} exportVisible={!obscured}
                 workspace={workspace} controller={controller} pool={pool} globalSettings={chartSettingsRuntime}
-                integrity={integrity} links={links} intervalTransfers={intervalTransfers} hosts={hosts} controls={controls} preferences={preferences} onOpenTrack={openTrack} />
+                integrity={integrity} links={links} intervalTransfers={intervalTransfers} hosts={hosts} controls={controls} preferences={preferences} noteRevision={noteRevision} onNoteSaved={onNoteSaved} onOpenTrack={openTrack} />
                 : <div role="status">{cell.session.symbol} — {tracks.length === 0 ? t("replay.opening") : t("replay.watchlist.noCover")}
                   {tracks.filter((candidate) => candidate.adapter_session_id).map((candidate) => <button key={candidate.track_id}
                     type="button" onClick={() => workspace.actions.updateCellSession(id, { ...cell.session,

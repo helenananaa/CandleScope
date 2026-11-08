@@ -120,11 +120,11 @@ test("new live-launched replay inherits four mixed charts and indicators without
   }
   assert.equal(JSON.stringify(source),before);
   assert.deepEqual(ids.map(id => copied.cells[id]!.accountOverlay), ids.map((_, index) => ({
-    accountId: null, trades: index !== 0, positions: index !== 1, notes: false,
+    accountId: null, trades: index !== 0, positions: index !== 1, notes: true,
   })));
   copied.cells[ids[0]!]!.indicators = [];
   loaded.workspaces[0]!.document = applyLinkedAccountOverlayUpdate(copied, ids[0]!, {
-    accountId: null, trades: false, positions: false, notes: false,
+    accountId: null, trades: false, positions: false, notes: true,
   });
   await repo.saveLibrary(loaded);
   seedReplayChartWorkspace("new-run", {document:source,windowId:"main-window"},storage);
