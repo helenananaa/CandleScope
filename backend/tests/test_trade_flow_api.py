@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 from dataclasses import dataclass
 
 from fastapi import FastAPI
@@ -248,3 +251,32 @@ def test_trade_flow_http_rejects_unready_and_hides_internal_errors() -> None:
     assert failed.json()["detail"] == (
         "trade-flow recent is temporarily unavailable"
     )
+
+
+def test_real_rollup_history_only_pages_to_an_existing_local_row(tmp_path) -> None:
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.raw_trade_archive import DisabledRawAggTradeArchive
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _rollup
+
+    first = 1_700_000_040_000
+    store = SQLiteTradeFlowRollupStore(tmp_path / "trades.sqlite")
+    asyncio.run(store.upsert_rollups([
+        _rollup(first + index * 120_000, revision=index + 1, is_final=True)
+        for index in range(5001)
+    ]))
+    service = TradeFlowService(object(), rollup_store=store, raw_archive=DisabledRawAggTradeArchive())
+    with _client(SimpleNamespace(trade_flow_ready=True, trade_flow_history=service.history)) as client:
+        last = first + 5000 * 120_000
+        params = {"start_ms": first, "end_ms": last, "limit": 5000}
+        response = client.get("/api/v1/trade-flow/history", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert page["count"] == 5000 and page["has_more"] is True
+        assert page["next_cursor"] == {"start_ms": last}
+        assert page["coverage"]["all_rows_complete"] is True
+        assert page["coverage"]["observed_only"] is True
+        assert page["complete"] is page["retryable"] is False
+        assert page["terminal_reason"] == "unverified_continuity"
+        final = client.get("/api/v1/trade-flow/history", params={**params, **page["next_cursor"], "limit": 1}).json()
+        assert final["count"] == 1 and final["has_more"] is False and final["next_cursor"] is None

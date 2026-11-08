@@ -41,6 +41,7 @@ class LiquidationRollupStore(Protocol):
         start_ms: int | None = None,
         end_ms: int | None = None,
         position_side: str | None = None,
+        start_position_side: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Return a bounded range ordered by bucket and position side."""
@@ -152,6 +153,7 @@ class SQLiteLiquidationRollupStore:
         start_ms: int | None = None,
         end_ms: int | None = None,
         position_side: str | None = None,
+        start_position_side: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         self._require_open()
@@ -167,6 +169,7 @@ class SQLiteLiquidationRollupStore:
             start_ms=start,
             end_ms=end,
             position_side=_optional_position_side(position_side),
+            start_position_side=_optional_position_side(start_position_side),
             limit=_bounded_limit(limit),
         )
 
@@ -285,6 +288,7 @@ class SQLiteLiquidationRollupStore:
         start_ms: int | None,
         end_ms: int | None,
         position_side: str | None,
+        start_position_side: str | None,
         limit: int,
     ) -> list[dict[str, Any]]:
         self._ensure_initialized()
@@ -297,6 +301,9 @@ class SQLiteLiquidationRollupStore:
         if start_ms is not None:
             where.append("bucket_open_ms >= ?")
             params.append(start_ms)
+            if start_position_side is not None:
+                where.append("(bucket_open_ms > ? OR position_side >= ?)")
+                params.extend((start_ms, start_position_side))
         if end_ms is not None:
             where.append("bucket_open_ms <= ?")
             params.append(end_ms)

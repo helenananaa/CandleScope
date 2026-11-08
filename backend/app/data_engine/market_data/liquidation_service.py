@@ -317,6 +317,7 @@ class LiquidationService:
         start_ms: int | None = None,
         end_ms: int | None = None,
         position_side: str | None = None,
+        start_position_side: str | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Return locally observed 1m rollups in ascending order."""
@@ -328,6 +329,9 @@ class LiquidationService:
         if start is not None and end is not None and start > end:
             raise ValueError("start_ms cannot exceed end_ms")
         side = _optional_position_side(position_side)
+        cursor_side = _optional_position_side(start_position_side)
+        if cursor_side is not None and (start is None or side is not None):
+            raise ValueError("start_position_side requires start_ms and an unfiltered page")
         bounded = _bounded_limit(limit, self._max_query_limit)
         exchange, market_type, symbol = identity
         recent_tail = start is None and end is None
@@ -346,12 +350,15 @@ class LiquidationService:
                 symbol=symbol,
                 start_ms=start,
                 end_ms=end,
+                **({"start_position_side": cursor_side} if cursor_side is not None else {}),
                 position_side=side,
                 limit=bounded,
             )
         live: list[dict[str, Any]] = []
         for rollup in self.engine.rollup_snapshot(identity):
             if start is not None and rollup.bucket_start_ms < start:
+                continue
+            if cursor_side is not None and rollup.bucket_start_ms == start and rollup.position_side < cursor_side:
                 continue
             if end is not None and rollup.bucket_start_ms > end:
                 continue

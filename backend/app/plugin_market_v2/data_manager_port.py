@@ -131,10 +131,11 @@ class DataManagerConsumerPort:
                 key,
                 start_ms=request.start_ms,
                 end_ms=request.end_ms,
-                limit=request.limit,
+                limit=request.limit + 1,
             )
             payload = project_trade_history_payload(
-                key, list(records), limit=request.limit
+                key, list(records), limit=request.limit,
+                start_ms=request.start_ms, end_ms=request.end_ms,
             )
         return wrap_trades(request.context, payload)
 

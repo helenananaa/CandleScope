@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
+from app.data_engine.market_data.order_book_contract import order_book_history_status
 from app.data_engine.market_data.order_book_auto import AutoGroupingState, step_scores
 from app.data_engine.market_data.order_book_projection import (
     PriceGrouping,
@@ -502,6 +503,7 @@ def contract_metadata(*, output_limit: int) -> dict[str, Any]:
         "output_limit": output_limit,
         "backfillable": False,
         "persisted": False,
+        "history": order_book_history_status(),
     }
 
 

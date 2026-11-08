@@ -134,7 +134,7 @@ class TradeFlowService:
         flush_interval_seconds: float = 0.05,
         archive_forward_queue_size: int = 8192,
         archive_forward_batch_size: int = 1000,
-        max_query_limit: int = 5000,
+        max_query_limit: int = 5001,
         max_attach_recent: int = 2000,
         max_streams: int | None = None,
         # The shared ingestion session already gives the underlying WebSocket
@@ -197,7 +197,7 @@ class TradeFlowService:
             1,
             min(int(archive_forward_batch_size), writer_batch_limit),
         )
-        self._max_query_limit = max(1, min(int(max_query_limit), 5000))
+        self._max_query_limit = max(1, min(int(max_query_limit), 5001))
         self._max_attach_recent = max(1, min(int(max_attach_recent), 20_000))
         self._physical_stop_timeout_seconds = max(
             0.01,

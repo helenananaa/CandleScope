@@ -56,10 +56,28 @@ def project_trade_recent_payload(key: Any, records: list[Any]) -> dict[str, Any]
     }
 
 
-def project_trade_history_payload(
-    key: Any, records: list[Any], *, limit: int
+def project_local_rollup_status(
+    *, start_ms: int | None, end_ms: int | None, reason: str,
 ) -> dict[str, Any]:
-    data = [serialize_public_value(item) for item in records]
+    """Report source coverage separately from a completed local page read."""
+    return {
+        "mode": "local_only",
+        "requested_range": {"start_ms": start_ms, "end_ms": end_ms},
+        "complete": False,
+        "retryable": False,
+        "terminal_reason": reason,
+    }
+
+
+def project_trade_history_payload(
+    key: Any, records: list[Any], *, limit: int,
+    start_ms: int | None = None, end_ms: int | None = None,
+) -> dict[str, Any]:
+    data = [serialize_public_value(item) for item in records[:limit]]
+    following = serialize_public_value(records[limit]) if len(records) > limit else None
+    next_cursor = None
+    if following is not None:
+        next_cursor = {"start_ms": int(following.get("bucket_start_ms", following.get("bucket_open_ms")))}
     times = [
         int(item.get("bucket_start_ms", item.get("bucket_open_ms"))) for item in data
     ]
@@ -69,10 +87,15 @@ def project_trade_history_payload(
         "key": {**key.to_dict(), "params": {"period": "1m"}},
         "count": len(data),
         "data": data,
-        "has_more": len(data) >= limit,
+        "has_more": next_cursor is not None,
+        "next_cursor": next_cursor,
+        **project_local_rollup_status(
+            start_ms=start_ms, end_ms=end_ms, reason="unverified_continuity",
+        ),
         "coverage": {
             "earliest_ms": min(times, default=None),
             "latest_ms": max(times, default=None),
+            "observed_only": True,
             "all_rows_complete": bool(data)
             and all(bool(item.get("is_complete", False)) for item in data),
         },
@@ -80,6 +103,7 @@ def project_trade_history_payload(
 
 
 __all__ = [
+    "project_local_rollup_status",
     "project_trade_history_payload",
     "project_trade_recent_payload",
     "public_bar_rows",

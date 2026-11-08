@@ -165,7 +165,7 @@ export function useLiquidationRuntime({
       const claims = requestCoordinatorRef.current.claim(
         side,
         requested,
-        liquidationStore.historyCoverage(context.identity, side),
+        liquidationStore.historyScans(context.identity, side),
       );
       if (claims.length > 0) scheduled = true;
       for (const claim of claims) {
@@ -191,8 +191,8 @@ export function useLiquidationRuntime({
               range: uncovered,
               signal: controller.signal,
               isCurrent,
-              onPage: (payload, covered) => {
-                liquidationStore.mergeHistory(context.identity, payload.data, payload.quality, { side, range: covered });
+              onPage: (payload, scanned) => {
+                liquidationStore.mergeHistory(context.identity, payload.data, payload.quality, { side, range: scanned });
                 setQuality(payload.quality);
               },
             });
@@ -218,7 +218,7 @@ export function useLiquidationRuntime({
 
   const reloadHistory = useCallback((clearUnconfirmed: boolean) => {
     if (clearUnconfirmed) liquidationStore.clearUnconfirmed(identity);
-    liquidationStore.invalidateHistoryCoverage(identity);
+    liquidationStore.invalidateHistoryScans(identity);
     invalidateHistory();
     setHistoryError(null);
     setHistoryToken((value) => value + 1);
@@ -243,7 +243,7 @@ export function useLiquidationRuntime({
     const reconcileTail = () => {
       const cutoffMs = Math.max(0, Date.now() - LIVE_HISTORY_RECONCILE_WINDOW_MS);
       const range = { startMs: cutoffMs, endMs: Date.now() };
-      liquidationStore.invalidateHistoryCoverage(identity, range);
+      liquidationStore.invalidateHistoryScans(identity, range);
       loadHistory(range);
     };
     const timer = window.setInterval(reconcileTail, LIVE_HISTORY_RECONCILE_MS);
