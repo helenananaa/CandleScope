@@ -1,0 +1,218 @@
+{
+  "status": "Public builtin numeric query/subscription and alert alias migration implemented; local qualification passed; native and performance qualification remain.",
+  "scope": "Finite builtin alert alias migration through a typed DataManager facade to the public indicator service. Keep existing alert rule IDs, lifecycle and notification owners.",
+  "seed_policy": "legacy_confirmed_rolling250_v1",
+  "baseline": {
+    "cases": 18,
+    "same_seed_public_exact_equal": true,
+    "different_recursive_seed_cases": 8,
+    "window": "At most250 source slots, including an optional forming slot. Only closed rows supply indicator formulas; forming observation may leave249 closed rows.",
+    "aliases": {
+      "rsi": {
+        "name": "RSI",
+        "params": {
+          "period": 14,
+          "source": "close"
+        },
+        "output": "rsi"
+      },
+      "macdHist": {
+        "name": "MACD",
+        "params": {
+          "fast": 12,
+          "slow": 26,
+          "signal": 9,
+          "source": "close"
+        },
+        "output": "hist"
+      },
+      "ma20": {
+        "name": "MA",
+        "params": {
+          "period": 20,
+          "source": "close"
+        },
+        "output": "ma"
+      }
+    }
+  },
+  "decisions": [
+    "Do not silently migrate rolling250 recursive indicators onto a longer chart seed. Sharing identity includes seed policy, exact input window/fingerprint, full semantic series identity, parameters and builtin code version.",
+    "Compute on the existing bounded builtin history owner and reuse the public result service; alerts must not import or initialize formula classes. Numeric output IDs are authoritative, not Render IR labels.",
+    "The DataManager facade acquires and validates canonical inputs; retain storage revision and event frontier fences through asynchronous compute. Invalid or unavailable dependencies block evaluation, including NOT.",
+    "Price-only rules retain a lightweight path and do not acquire indicator compute capacity.",
+    "Source gap, correction, reseed and rule-definition changes establish a comparison baseline without replaying notifications. A bar-close combination uses matching price and indicator frontiers.",
+    "Maintain explicit current-price plus latest-confirmed indicator semantics for existing intrabar rules; do not claim preview indicators or tick-level recovery.",
+    "Use existing AlertStore atomic eligibility checks and stable logical trigger identity. Do not use updatedAt as definition version: triggers themselves update it. Existing history dedup is capped by history retention, so persistent latest accepted cursor needs separate treatment.",
+    "Source event, calculation generation, rule definition and evaluation cursor must stay distinct.",
+    "No script/Pine/Python, frontend-widget authority, synthetic/multi-series inputs or new chart parameter-follow behavior in this finite stage."
+  ],
+  "remaining": [
+    "Measure the fixed-input cost against the prior shared alert calculator, retaining adverse results.",
+    "Native independent alert lease/rule/notification/save/full-exit/restart qualification; CI and merge after the integrated head is qualified."
+  ],
+  "store_fences": {
+    "tests": "69 relevant alert/runtime/API/notification/outbox/hotpath/soak cases passed; overlapping earlier68 and final9 selections. Before-fix and fixture-failure logs retained.",
+    "definition": "Fresh incarnation on definition edits/re-enable; triggers and no-op saves retain version. Legacy deterministic migration; external definition fingerprint mismatches invalidate in-flight results. Lifecycle count reset remains existing policy.",
+    "cursor": "Optional expectedDefinitionRevision plus validated (barTime,observationTime,ordinal) cursor checked and stored in same existing atomic JSON commit as trigger/count. Cursor survives history pruning and restart.",
+    "limits": "Runtime now supplies definition and monotonic observation cursor; accepted closed observations survive restart without replay. JSON trigger history and SQLite outbox still have no joint transaction; no exactly-once channel-delivery claim."
+  },
+  "public_interface_decisions": [
+    "Typed query_indicator and subscribe_indicator delegate from DataManager to a numeric indicator service, never a recursive generic data query. Public results use numeric output IDs, status, canonical revision and observation frontier.",
+    "Each indicator rule holds a normal background stream lease through the service, plus a strict existing DataManager event subscription. Price-only rules retain their lightweight bar path. No second exchange subscription or parallel shadow production calculator.",
+    "Subscribe attaches the bounded source subscription before snapshot acquisition, gates callback consumption until the snapshot baseline is installed, and uses canonical frontiers to separate catch-up from live events. Recovery is explicit and fails closed; existing disable/re-enable policy can remain for this finite stage.",
+    "Canonical snapshots use at most250 source slots, filter confirmed rows only after limiting, and match the triggering bar for live evaluation. Amended/catch-up data refreshes a baseline without notification. Cold/incomplete/untrusted/revision-conflicting inputs do not enter NOT or other evaluation.",
+    "Reuse existing bounded history process and IndicatorRangeResultService singleflight/cache. Compatible identity includes full series semantics, exact canonical input fingerprint, seed policy, builtin code/version, params and output. Do not share with incompatible longer recursive chart seeds.",
+    "After async work, validate original D126 revision/source binding and current rule definition before publication; final AlertStore expected-definition/cursor guard handles edits racing persistent acceptance.",
+    "Keep legacy aliases readable and their fixed definitions explicit in the adapter. Parameterized rule-editor UI, preview/script/synthetic and multi-series dependencies remain separate stages unless explicitly implemented/qualified."
+  ],
+  "public_seed_policy": "confirmed_rolling_slots_v1",
+  "implementation": {
+    "ownership": "DataManager typed facade delegates to NumericIndicatorService; existing bounded history process and shared range cache. Alert runtime no longer owns bar windows, formula instances or indicator result caches. Compatibility aliases request only fields required by the rule.",
+    "input": "Canonical count-based query_before fills the bounded recursive window even with a cache containing only a forming bar; exclusive cache cursor is second-granular. Limit source slots before filtering confirmed rows; validate D126 revision, binding, event prices and stream generation before returning.",
+    "subscription": "Existing strict DataManager subscription registered before warmup and snapshot; normal independent background stream lease. Initial/correction/catch-up state is a baseline, never a replay trigger. Recovery is terminal until explicit replacement. Close cancels/drains owned callbacks and queries before releasing leases; app stops consumers before history executor/cache.",
+    "limits": {
+      "query_source_slots": 250,
+      "simultaneous_queries": 128,
+      "subscriptions": 256,
+      "outputs_per_query": 3,
+      "live_identity": "default series only; nondefault live identities explicitly rejected"
+    },
+    "tests": {
+      "public_and_existing_regressions": "129 passed; includes API, alert runtime/store/outbox/soak, actual SQLite and actual isolated history process, shutdown order and domain facades.",
+      "additional_recovery": "Targeted terminal source-recovery test recorded separately.",
+      "architecture": "Passed, 0 migration allowlist entries.",
+      "earlier_selections": "11 numeric/actual runtime cases passed; 47 runtime/API/store cases passed. Overlapping, not additive.",
+      "retained_failures": "Fixture migration failures retained. Historical forming fixture correctly failed finality; current forming fixture exposed range-cache short seed and exclusive second-cursor issues, then fixed via count-based canonical input reads."
+    }
+  },
+  "artifacts": [
+    {
+      "file": "count-window-tests.log.gz",
+      "sha256": "c692e1c9bd3361386268bf9d93eec1d5a87a7f5c3c310479e79163f36dc6f157",
+      "uncompressed_bytes": 3260
+    },
+    {
+      "file": "count-window-tests2.log.gz",
+      "sha256": "9d3307659296b51daeb1770154f9af7ad166f825273eb8d976e991b8c24c59e4",
+      "uncompressed_bytes": 100
+    },
+    {
+      "file": "cursor-after.log.gz",
+      "sha256": "cda09b84833b5b172e3b4a14b2057533ff9836d0c397094c339a2b1f43190625",
+      "uncompressed_bytes": 4848
+    },
+    {
+      "file": "cursor-before.log.gz",
+      "sha256": "1e3c8faf3a15514194d73610f0772928ff89dd3174b20492e7814b350cdacbbd",
+      "uncompressed_bytes": 6189
+    },
+    {
+      "file": "cursor-final.log.gz",
+      "sha256": "a72ab1f18d7141fc1a30667f6ceb374b451f37fc51b793834d5664af57ec759c",
+      "uncompressed_bytes": 711
+    },
+    {
+      "file": "cursor-fixture-failure.log.gz",
+      "sha256": "8414ac73ad852cde8e8591eae87c064237b9833658cfdac1e5ff81e4f29d0501",
+      "uncompressed_bytes": 40142
+    },
+    {
+      "file": "cursor-record.log.gz",
+      "sha256": "8acc35ac78c82d826177b91e4fbaea659d4086ba858206733c2b4d4397e0eb42",
+      "uncompressed_bytes": 98
+    },
+    {
+      "file": "external-fence.log.gz",
+      "sha256": "9e5ad464741dfa91238ee13bcddfd64f26cdfe25c829a09aee0692d29b230ed9",
+      "uncompressed_bytes": 711
+    },
+    {
+      "file": "forming-current.log.gz",
+      "sha256": "f0485ffc36479f9e514a05ff35d3765160534c6a0b5097c93418e9130dca8835",
+      "uncompressed_bytes": 3262
+    },
+    {
+      "file": "forming-debug.log.gz",
+      "sha256": "c2e209ff66f6f89137cbaa52e32733663b47f6100b031741e26d0bc9a81ea756",
+      "uncompressed_bytes": 5041
+    },
+    {
+      "file": "forming-debug2.log.gz",
+      "sha256": "a71fb3086adc1b425c16ca09321d951f3032729ff6cea14fcb68326a21005e01",
+      "uncompressed_bytes": 4620
+    },
+    {
+      "file": "numeric-all-tests.log.gz",
+      "sha256": "c657582758e249b9013a08a5e1e31c0429c355cb1c84b990c162e13b28f1de5e",
+      "uncompressed_bytes": 16730
+    },
+    {
+      "file": "numeric-final-tests.log.gz",
+      "sha256": "41e4fba1039fbe84e1c63949dbcb583823d7d154cbc4cffc08be2f3f95855160",
+      "uncompressed_bytes": 3086
+    },
+    {
+      "file": "numeric-input-tests.log.gz",
+      "sha256": "d06f88805d2eb076b59ce7f447ec0742e741e001cb77914188efda8a0b46f759",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "numeric-runtime-tests.log.gz",
+      "sha256": "82d47d575acf4b09093ebf7ef5e47d77a54bb8401dd7865dc2ad098cb2dff174",
+      "uncompressed_bytes": 12502
+    },
+    {
+      "file": "numeric-runtime-tests2.log.gz",
+      "sha256": "2b4ebbf16bdbf2d07258ddb84fe833b437adedd8aacf46b3ce6d22b464cb101e",
+      "uncompressed_bytes": 9344
+    },
+    {
+      "file": "numeric-sub-tests.log.gz",
+      "sha256": "3621ebc797d151632cde9ff7e2535eb63c2bd0e7b4ba598c4d74f55c82450bed",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "numeric-sub-tests2.log.gz",
+      "sha256": "14c918cedeedf3b230a9613265a3f9c71b22cc5716bf58f974916fac8231a18d",
+      "uncompressed_bytes": 99
+    },
+    {
+      "file": "public-architecture.log.gz",
+      "sha256": "6583b698d3f98d0c903c8681a6e663ce4409834e50a09b2ef63edd4bb3f51e1e",
+      "uncompressed_bytes": 142
+    },
+    {
+      "file": "public-final.log.gz",
+      "sha256": "50ae8ee019156ce55a2be1b90f452df358a7cab05cc2b3fbd5247ef52deae941",
+      "uncompressed_bytes": 2207
+    },
+    {
+      "file": "public-regressions.log.gz",
+      "sha256": "df8e91782eb997d38ebf714882aa70c0b15b040a9691bf97a6e23a417e3ea252",
+      "uncompressed_bytes": 5322
+    },
+    {
+      "file": "recovery-final.log.gz",
+      "sha256": "a4d0de629b1740dc4cadc97ac0bcf7399b9b2ca0e69e13381fa446eacd7db490",
+      "uncompressed_bytes": 113
+    },
+    {
+      "file": "runtime-public-before-fixtures.log.gz",
+      "sha256": "10a86c72a041e761574727ef73c2ed366d4860d98ee3c96dafd4b1fe464f19de",
+      "uncompressed_bytes": 10952
+    },
+    {
+      "file": "runtime-public-tests.log.gz",
+      "sha256": "e1c43fd08eb2ba3986d49801b3d8c571eab5b0c6dc8ab4db1caea6b279a6f1a9",
+      "uncompressed_bytes": 711
+    },
+    {
+      "file": "seed-baseline.log.gz",
+      "sha256": "055c1410c31d123c52d2e166341e91666904af15a8c91d84d4afd7a92c171694",
+      "uncompressed_bytes": 66
+    }
+  ],
+  "performance": "See performance.json; value-equivalent bounded public path still costs more than legacy, no claimed performance win.",
+  "local_followup": "51 targeted regressions and architecture passed; same-input capture sharing, bounded numeric batchIPC and raw-input fingerprint coverage."
+}

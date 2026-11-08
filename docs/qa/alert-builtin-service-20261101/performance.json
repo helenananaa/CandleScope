@@ -1,0 +1,373 @@
+{
+  "status": "Component cost qualification; native alerts pending",
+  "runs": [
+    {
+      "file": "cost-final-legacy1.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 6.247917001019232,
+      "first_wall_ms": 7.974208001542138,
+      "first_parent_cpu_ms": 4.051000000000027,
+      "steady_parent_cpu_ms": 25.07600000000032,
+      "max_steady_loop_lag_ms": 17.98533300118288,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-final-legacy2.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 3.5314999986439943,
+      "first_wall_ms": 3.5983330017188564,
+      "first_parent_cpu_ms": 3.473999999999977,
+      "steady_parent_cpu_ms": 24.301999999999822,
+      "max_steady_loop_lag_ms": 5.137874999694759,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-final-public1.json",
+      "mode": "public",
+      "median_steady_wall_ms": 60.04966699765646,
+      "first_wall_ms": 11404.909541000961,
+      "first_parent_cpu_ms": 5919.404,
+      "steady_parent_cpu_ms": 313.05299999999914,
+      "max_steady_loop_lag_ms": 22.9398749981774,
+      "process_calls": 8,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-final-public2.json",
+      "mode": "public",
+      "median_steady_wall_ms": 58.89966700124205,
+      "first_wall_ms": 9439.954084002238,
+      "first_parent_cpu_ms": 6040.748,
+      "steady_parent_cpu_ms": 321.4249999999996,
+      "max_steady_loop_lag_ms": 6.7453330013668165,
+      "process_calls": 8,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-legacy1b.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 3.510458001983352,
+      "first_wall_ms": 3.830707999441074,
+      "first_parent_cpu_ms": 3.7769999999999193,
+      "steady_parent_cpu_ms": 24.328999999999823,
+      "max_steady_loop_lag_ms": 4.427957999927457,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-legacy2.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 5.164958001842024,
+      "first_wall_ms": 5.084083000838291,
+      "first_parent_cpu_ms": 4.125000000000156,
+      "steady_parent_cpu_ms": 28.31199999999989,
+      "max_steady_loop_lag_ms": 11.004750002233777,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-legacy3.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 14.522541001497302,
+      "first_wall_ms": 6.005333998473361,
+      "first_parent_cpu_ms": 3.7439999999999696,
+      "steady_parent_cpu_ms": 31.048999999999882,
+      "max_steady_loop_lag_ms": 48.892874998477055,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-legacy4.json",
+      "mode": "legacy",
+      "median_steady_wall_ms": 4.859583001234569,
+      "first_wall_ms": 4.603624998708256,
+      "first_parent_cpu_ms": 3.986999999999963,
+      "steady_parent_cpu_ms": 25.609999999999687,
+      "max_steady_loop_lag_ms": 7.045791000768077,
+      "process_calls": null,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-numeric-batch1.json",
+      "mode": "public",
+      "median_steady_wall_ms": 72.493083000154,
+      "first_wall_ms": 8815.888291999727,
+      "first_parent_cpu_ms": 5948.126,
+      "steady_parent_cpu_ms": 320.58199999999994,
+      "max_steady_loop_lag_ms": 6.992666000063764,
+      "process_calls": 8,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-profile.json",
+      "mode": "public",
+      "median_steady_wall_ms": 93.36650000113877,
+      "first_wall_ms": 9247.28020800103,
+      "first_parent_cpu_ms": 5131.5869999999995,
+      "steady_parent_cpu_ms": 578.278,
+      "max_steady_loop_lag_ms": 35.27429199696053,
+      "process_calls": 24,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-public1.json",
+      "mode": "public",
+      "median_steady_wall_ms": 582.8901669992774,
+      "first_wall_ms": 10857.590042000083,
+      "first_parent_cpu_ms": 5340.596,
+      "steady_parent_cpu_ms": 3128.2300000000005,
+      "max_steady_loop_lag_ms": 311.31566600035876,
+      "process_calls": 24,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-public2.json",
+      "mode": "public",
+      "median_steady_wall_ms": 618.9741670023068,
+      "first_wall_ms": 13937.284916999488,
+      "first_parent_cpu_ms": 7813.977000000001,
+      "steady_parent_cpu_ms": 3370.12,
+      "max_steady_loop_lag_ms": 418.28720800206065,
+      "process_calls": 24,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-shared1.json",
+      "mode": "public",
+      "median_steady_wall_ms": 171.44058299891185,
+      "first_wall_ms": 10315.45095799811,
+      "first_parent_cpu_ms": 7060.298,
+      "steady_parent_cpu_ms": 586.148999999999,
+      "max_steady_loop_lag_ms": 11.277207999431994,
+      "process_calls": 24,
+      "oracle_equal": true
+    },
+    {
+      "file": "cost-shared2.json",
+      "mode": "public",
+      "median_steady_wall_ms": 112.30554199937615,
+      "first_wall_ms": 11516.524875001778,
+      "first_parent_cpu_ms": 6565.6759999999995,
+      "steady_parent_cpu_ms": 543.895,
+      "max_steady_loop_lag_ms": 9.43004199891584,
+      "process_calls": 24,
+      "oracle_equal": true
+    }
+  ],
+  "values_equal_across_all_successful_runs": true,
+  "findings": [
+    "Initial public implementation repeated canonical acquisition per rule; concurrent identical input requests now share capture and final validation with independent waiter cancellation. Owner/live version changes cannot join older input work.",
+    "Default numeric requests transfer at most250sourcebars once for1..3requestedoutputs using the existing bounded history process; only latest numeric values return. Result cache remains the public per-output cache.",
+    "All four final probes preserve exact legacy alias values. Public canonical reads/isolation remain more expensive than the old in-memory per-series calculator. No claim of an overall CPU or latency improvement over legacy.",
+    "First public request includes cold canonical imports and process startup; steady measurements and cold measurements are separate. Host activity including seconds-native testing can interfere. No SLA."
+  ],
+  "checks": "51 relevant numeric/actualSQLite/isolatedprocess/alerts/runtime/shutdown/definition regressions passed;architecturepassed.19 focused tests overlap.",
+  "limits": [
+    "Not whole-application notification P50/P95/P99",
+    "No full155 parameterizedruleUI/scriptorallconsumers acceptance"
+  ],
+  "artifacts": [
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-legacy1.json.gz",
+      "raw_sha256": "e195f671722dec8b1262a0253696773c5d9f8a2e0e5ea1f83df14db36f78158f",
+      "raw_bytes": 4026
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-legacy1.log.gz",
+      "raw_sha256": "9101a18cf7314c2da336f3cd7eb82bc123505161943552d29ed00e9fd54adf61",
+      "raw_bytes": 273
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-legacy2.json.gz",
+      "raw_sha256": "dde1f0dd4c8c5050d935276298a0462ba806d6023e7e349a1c71169d5a1c4a98",
+      "raw_bytes": 4030
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-legacy2.log.gz",
+      "raw_sha256": "73efcda36c181cc52a85f595c91f264d3f8bd3a61842b880730a88cc5edef5cf",
+      "raw_bytes": 272
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-public1.json.gz",
+      "raw_sha256": "5b9a615a0813b45e9e05559c9a8238a7dfe8719da34cade3d6e25b2f0d0fff70",
+      "raw_bytes": 5129
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-public1.log.gz",
+      "raw_sha256": "f47c2828e6358a6a315e6965abe7f9b20b2a0295d5fdb40829de17f3d7f67d6b",
+      "raw_bytes": 272
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-public2.json.gz",
+      "raw_sha256": "c43cb18945b71a10582a21f3ff88ce1c9d4acf53544f47f84586d8579a93cd51",
+      "raw_bytes": 5128
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-final-public2.log.gz",
+      "raw_sha256": "3d3f78fd8e8aeadaecada9b8f8c8306cb05796992ccf8dcc235b5ee03021116e",
+      "raw_bytes": 273
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy1.log.gz",
+      "raw_sha256": "6d08163e7666ae5430f4b0c45c0244aa7d5c8d4aabd0fb4b870b69ceabd3c8be",
+      "raw_bytes": 512
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy1b.json.gz",
+      "raw_sha256": "78827883d327d33a35b75a87ca1fd8ea582bd0a3a9c1bf4d4bf89e1efd2bf68e",
+      "raw_bytes": 3700
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy1b.log.gz",
+      "raw_sha256": "38e92ad40770d4aa2104515a33c10895e5e418833761eb73bf8beff267a042dd",
+      "raw_bytes": 268
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy2.json.gz",
+      "raw_sha256": "d249e4aa2ab581b295f91ac099f8cd83fbcf384c025ad62d8f647fae3e190e15",
+      "raw_bytes": 3696
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy2.log.gz",
+      "raw_sha256": "d3d596f98e1fd482a9c8c6bb95ba7ddb53597114923c251aa72d47b3a9b84198",
+      "raw_bytes": 267
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy3.json.gz",
+      "raw_sha256": "438f8f24e8627d4fafde118611af83a86ab9ae35ef09d0535cb6b68225b5483b",
+      "raw_bytes": 3931
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy3.log.gz",
+      "raw_sha256": "fbccf8a329fd093447df4636ed2b898aaff5b9781023961146301f2f07435fb7",
+      "raw_bytes": 268
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy4.json.gz",
+      "raw_sha256": "45a909d3d7fecc3d432a4318f9a93d17b089d4e681d39f09bc63bcc6a43c970d",
+      "raw_bytes": 3936
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-legacy4.log.gz",
+      "raw_sha256": "53b7cc9b005f4d1e52c9314216783d5c5ce0930a7487a07639e882b4f370a752",
+      "raw_bytes": 267
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-numeric-batch1.json.gz",
+      "raw_sha256": "7a7fd80a2fb306aa687f02c456275732dab70677b6dc80b537cf55b4c38465f6",
+      "raw_bytes": 5121
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-numeric-batch1.log.gz",
+      "raw_sha256": "498a32c6348859754472aeea6027a76f5a4651d1eb2b77082fd36f94df888e1b",
+      "raw_bytes": 273
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-profile.json.gz",
+      "raw_sha256": "1261729966c488c268e0b7ef3cfb144144f12f4a9d4d9bf55988b765cdb3901a",
+      "raw_bytes": 5037
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-profile.log.gz",
+      "raw_sha256": "fa2b472763dc42fa2137be959e3741a49952a30ac98f1fdd63683847e6d53ea7",
+      "raw_bytes": 258
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-profile.pstats.gz",
+      "raw_sha256": "c7d3847da8b85917547c1bff8bd40caa650a7647b9f4f4d7d7683bc77082e9ce",
+      "raw_bytes": 86299
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-public1.json.gz",
+      "raw_sha256": "4551a110b15059ac9e175bb4d3e18ae35b809842da66cdb64e526e9b2ce5dd8f",
+      "raw_bytes": 5869
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-public1.log.gz",
+      "raw_sha256": "0232d3006642485115a1fad5d02599de5fd3360de7afa3bf120b1aad01913d7c",
+      "raw_bytes": 258
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-public2.json.gz",
+      "raw_sha256": "4aa107c1da7a7c8f51edc77e0e13fcc3a9923932fd9df7c70269a26ccef95c4f",
+      "raw_bytes": 5435
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-public2.log.gz",
+      "raw_sha256": "12b5994d3ef59c44e199ef749ca9919e88c64ffb4f4b8617e1b544370b8bdbee",
+      "raw_bytes": 268
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-shared1.json.gz",
+      "raw_sha256": "f0358d9fb48ff4ccc7cfdb1e70c5587f26ef060ae2325649aec99bcac6dfb639",
+      "raw_bytes": 5045
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-shared1.log.gz",
+      "raw_sha256": "9f3c4509c136c38495d39d10ebc4c601ab63cc10ad6d83a437585ca00bd4e3d1",
+      "raw_bytes": 268
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-shared2.json.gz",
+      "raw_sha256": "b1f16f54f312705a01d958f6c7fc7d7ce262b01db4d95177396f5efdc2daec46",
+      "raw_bytes": 5043
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/cost-shared2.log.gz",
+      "raw_sha256": "aad8e6ae025996e0dc039af2ff5a65bff9c0c4cca38df2c5cf1c15e1bc1518f4",
+      "raw_bytes": 259
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/numeric-batch.log.gz",
+      "raw_sha256": "da1d02b51d1a3e94e5b2dee5e08da8e563053c89ac8a051a08ae0c7e7d322354",
+      "raw_bytes": 2124
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/numeric-batch2.log.gz",
+      "raw_sha256": "54332eac08b7e18b9ebd0fa66644de56e261a2850209f4df44804ccfd224ffb1",
+      "raw_bytes": 100
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/performance-architecture.log.gz",
+      "raw_sha256": "e2ec53d38953e0905e69ca86e3ea1d5d69edc69bf185b6bf696b5438dded2775",
+      "raw_bytes": 66
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/performance-final.log.gz",
+      "raw_sha256": "69fe710573bd82228abccab7cab0a4195d4f594ffe975c8239bd014eab7e1ece",
+      "raw_bytes": 104
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/performance-final2.log.gz",
+      "raw_sha256": "41a49e8fc6e63451eae9451288172a1b22c4f290dc6995293c3111a27779c2a0",
+      "raw_bytes": 1678
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/singleflight-after.log.gz",
+      "raw_sha256": "c9236e0f446dc6c811a15894e0612533dfe8f4dba452f666280dc4420e6295d9",
+      "raw_bytes": 100
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/singleflight-before.log.gz",
+      "raw_sha256": "ed5c01bff36d373e9ecb7524249cf6f8957f0c64fd16dbe87f44c795ecb00c94",
+      "raw_bytes": 6782
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/singleflight-final.log.gz",
+      "raw_sha256": "984d69618670313e8c56cd3f5df0704c57a479465d0495711584fe7a77f84b4e",
+      "raw_bytes": 65116
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/singleflight-final2.log.gz",
+      "raw_sha256": "246611438f4c84f4108e3b4f8d848eb5ce8997bc3de831a08029a3f94f267ba4",
+      "raw_bytes": 3446
+    },
+    {
+      "path": "docs/qa/alert-builtin-service-20261101/singleflight-final3.log.gz",
+      "raw_sha256": "8936dc022a8588f832c4cce93d0ee8753bbb0bab44e0868f17242732148d6cbb",
+      "raw_bytes": 100
+    }
+  ]
+}
