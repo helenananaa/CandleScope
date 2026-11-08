@@ -14,6 +14,7 @@ import json
 import math
 import sqlite3
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -23,6 +24,8 @@ from .sqlite_runtime import open_sqlite
 
 
 logger = logging.getLogger("candlescope.storage.market_metrics")
+_FUNDING_SETTLEMENT_RECEIPT_LIMIT = 128
+_FUNDING_SETTLEMENT_PAGE_LIMIT = 1000
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
@@ -92,6 +95,14 @@ def init_market_metrics_storage(db_path: Path | str | None = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_funding_rate_history_lookup
             ON funding_rate_history(
                 exchange, market_type, symbol, funding_time_ms DESC
+            );
+
+            CREATE TABLE IF NOT EXISTS funding_settlement_query_receipts (
+                exchange TEXT NOT NULL, market_type TEXT NOT NULL, symbol TEXT NOT NULL,
+                start_ms INTEGER NOT NULL, end_ms INTEGER NOT NULL,
+                policy_revision TEXT NOT NULL, rows_digest TEXT NOT NULL,
+                observed_at_ms INTEGER NOT NULL, expires_at_ms INTEGER,
+                PRIMARY KEY(exchange, market_type, symbol, start_ms, end_ms, policy_revision)
             );
 
             CREATE TABLE IF NOT EXISTS open_interest_query_receipts (
@@ -355,6 +366,101 @@ class MarketMetricsRepository:
                         next_expiry = min(next_expiry or receipt["expires_at_ms"], receipt["expires_at_ms"])
             return list(reversed(rows[:limit])), ranges, len(rows) > limit, next_expiry
 
+    @staticmethod
+    def _funding_receipt_rows(conn, identity, start_ms, end_ms):
+        return conn.execute(
+            "SELECT funding_time_ms, funding_cycle_ms, funding_rate FROM funding_rate_history "
+            "WHERE exchange=? AND market_type=? AND symbol=? AND is_final=1 "
+            "AND funding_time_ms BETWEEN ? AND ? ORDER BY funding_time_ms LIMIT ?",
+            (*identity, start_ms, end_ms, _FUNDING_SETTLEMENT_PAGE_LIMIT + 1),
+        ).fetchall()
+
+    @staticmethod
+    def _funding_digest(rows):
+        values = [
+            (row["funding_time_ms"], row["funding_cycle_ms"], float(row["funding_rate"]) or 0.0)
+            for row in rows
+        ]
+        return hashlib.sha256(json.dumps(values, allow_nan=False).encode()).hexdigest()
+
+    def record_funding_settlement_query(
+        self, *, identity: tuple[str, str, str], start_ms: int, end_ms: int,
+        policy_revision: str, expected_rows: list[dict[str, Any]], observed_at_ms: int,
+        expires_at_ms: int | None,
+    ) -> bool:
+        """Bind an exhaustive exchange page to the committed final rows."""
+        with closing(_connect(self.db_path)) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = self._funding_receipt_rows(conn, identity, start_ms, end_ms)
+            if len(rows) > _FUNDING_SETTLEMENT_PAGE_LIMIT:
+                return False
+            digest = self._funding_digest(rows)
+            if digest != self._funding_digest(expected_rows):
+                return False
+            conn.execute(
+                "INSERT OR REPLACE INTO funding_settlement_query_receipts VALUES (?,?,?,?,?,?,?,?,?)",
+                (*identity, start_ms, end_ms, policy_revision, digest, observed_at_ms, expires_at_ms),
+            )
+            conn.execute(
+                "DELETE FROM funding_settlement_query_receipts WHERE rowid IN ("
+                "SELECT rowid FROM funding_settlement_query_receipts "
+                "WHERE exchange=? AND market_type=? AND symbol=? "
+                "ORDER BY observed_at_ms DESC, rowid DESC LIMIT -1 OFFSET ?)",
+                (*identity, _FUNDING_SETTLEMENT_RECEIPT_LIMIT),
+            )
+            conn.commit()
+            return True
+
+    def funding_settlement_coverage(
+        self, identity: tuple[str, str, str], *, start_ms: int, end_ms: int,
+        policy_revision: str, now_ms: int,
+    ) -> list[dict[str, int]]:
+        """Check versioned, unexpired receipts against one SQLite snapshot."""
+        with closing(_connect(self.db_path)) as conn:
+            conn.execute("BEGIN")
+            return self._read_funding_settlement_coverage(
+                conn, identity, start_ms, end_ms, policy_revision, now_ms,
+            )
+
+    def _read_funding_settlement_coverage(
+        self, conn: sqlite3.Connection, identity: tuple[str, str, str],
+        start_ms: int, end_ms: int, policy_revision: str, now_ms: int,
+    ) -> list[dict[str, int]]:
+        ranges = []
+        for receipt in conn.execute(
+            "SELECT * FROM funding_settlement_query_receipts "
+            "WHERE exchange=? AND market_type=? AND symbol=? AND policy_revision=? "
+            "AND end_ms>=? AND start_ms<=? AND observed_at_ms<=? "
+            "AND (expires_at_ms IS NULL OR expires_at_ms>?) LIMIT ?",
+            (*identity, policy_revision, start_ms, end_ms, now_ms, now_ms, _FUNDING_SETTLEMENT_RECEIPT_LIMIT),
+        ):
+            rows = self._funding_receipt_rows(conn, identity, receipt["start_ms"], receipt["end_ms"])
+            try:
+                current = self._funding_digest(rows)
+            except ValueError:
+                continue
+            if len(rows) <= _FUNDING_SETTLEMENT_PAGE_LIMIT and current == receipt["rows_digest"]:
+                ranges.append({"start_ms": max(start_ms, receipt["start_ms"]),
+                               "end_ms": min(end_ms, receipt["end_ms"])})
+        return ranges
+
+    def read_funding_with_settlement_coverage(
+        self, *, exchange: str, market_type: str, symbol: str, start_ms: int, end_ms: int,
+        limit: int, coverage_end_ms: int, policy_revision: str, now_ms: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, int]]]:
+        """Build hybrid input rows and the verified acquisition proof from one snapshot."""
+        with closing(_connect(self.db_path)) as conn:
+            conn.execute("BEGIN")
+            rows = self.query_funding(
+                exchange=exchange, market_type=market_type, symbol=symbol,
+                start_ms=start_ms, end_ms=end_ms, limit=limit,
+                oldest_first=True, use_cycle_range=True, _connection=conn,
+            )
+            coverage = self._read_funding_settlement_coverage(
+                conn, (exchange, market_type, symbol), start_ms, coverage_end_ms, policy_revision, now_ms,
+            )
+            return rows, coverage
+
     def query_funding(
         self,
         *,
@@ -366,6 +472,7 @@ class MarketMetricsRepository:
         limit: int = 500,
         oldest_first: bool = False,
         use_cycle_range: bool = False,
+        _connection: sqlite3.Connection | None = None,
     ) -> list[dict[str, Any]]:
         where = ["exchange = ?", "market_type = ?", "symbol = ?"]
         params: list[Any] = [
@@ -393,6 +500,7 @@ class MarketMetricsRepository:
             limit=limit,
             oldest_first=oldest_first,
             max_limit=100_000,
+            connection=_connection,
         )
         return [dict(row) for row in rows]
 
@@ -611,6 +719,7 @@ class MarketMetricsRepository:
         limit: int,
         oldest_first: bool = False,
         max_limit: int = 1000,
+        connection: sqlite3.Connection | None = None,
     ) -> list[sqlite3.Row]:
         bounded_limit = max(1, min(int(limit), max(1, int(max_limit))))
         if oldest_first:
@@ -633,6 +742,8 @@ class MarketMetricsRepository:
                 )
                 ORDER BY {time_column} ASC
             """
+        if connection is not None:
+            return connection.execute(sql, [*params, bounded_limit]).fetchall()
         with _connect(self.db_path) as conn:
             return conn.execute(sql, [*params, bounded_limit]).fetchall()
 

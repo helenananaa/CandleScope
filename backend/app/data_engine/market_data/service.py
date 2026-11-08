@@ -84,7 +84,8 @@ _MAX_PREMIUM_HISTORY_PAGES_PER_REQUEST = 64
 _PREMIUM_HISTORY_PAGE_POINTS = 1000
 _PREMIUM_FETCH_CONCURRENCY = 4
 _REALTIME_FUNDING_STALE_MS = 10_000
-_FUNDING_SETTLEMENT_EDGE_TTL_SECONDS = 60.0
+_FUNDING_SETTLEMENT_EDGE_TTL_MS = 60_000
+_FUNDING_SETTLEMENT_POLICY_REVISION = "binance-usdm-regular-settlement-v1"
 
 
 @dataclass(slots=True)
@@ -144,13 +145,6 @@ class _HybridFundingResult:
     excluded_ranges: tuple[dict[str, Any], ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class _FundingSettlementCoverage:
-    start_ms: int
-    end_ms: int
-    expires_at: float | None = None
-
-
 class MarketDataService:
     """Own logical leases, physical feeds, REST reads, and the typed hub."""
 
@@ -184,13 +178,9 @@ class MarketDataService:
         self._history_waiters: dict[tuple, int] = {}
         self._history_identity_locks = KeyedAsyncLockPool[tuple]()
         self._funding_refresh_lock = asyncio.Lock()
-        self._funding_refresh_coverage: dict[
-            tuple[str, str, str],
-            list[_FundingSettlementCoverage],
-        ] = {}
         self._funding_refresh_tasks: dict[
             tuple[tuple[str, str, str], int, int, int],
-            asyncio.Task[tuple[bool, int]],
+            asyncio.Task[None],
         ] = {}
         self._rate_limits = get_shared_rate_limit_manager()
         self._metrics_repository = metrics_repository
@@ -1412,17 +1402,32 @@ class MarketDataService:
                 + 100,
             ),
         )
-        funding_rows = await run_storage(
-            repository.query_funding,
-            exchange=key.exchange,
-            market_type=key.market_type,
-            symbol=key.symbol,
-            start_ms=funding_query_start_ms,
-            end_ms=funding_query_end_ms,
-            limit=funding_query_limit,
-            oldest_first=True,
-            use_cycle_range=True,
-        )
+        funding_query = {
+            "exchange": key.exchange,
+            "market_type": key.market_type,
+            "symbol": key.symbol,
+            "start_ms": funding_query_start_ms,
+            "end_ms": funding_query_end_ms,
+            "limit": funding_query_limit,
+        }
+        if (
+            fetch_missing and not settlement_refresh_failed
+            and settlement_covered_through_ms >= funding_query_start_ms
+        ):
+            funding_rows, coverage = await run_storage(
+                repository.read_funding_with_settlement_coverage,
+                **funding_query,
+                coverage_end_ms=settlement_covered_through_ms,
+                policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+                now_ms=self._funding_refresh_wall_ms(),
+            )
+            if missing_ranges(funding_query_start_ms, settlement_covered_through_ms, coverage):
+                settlement_refresh_failed = True
+                settlement_refresh_complete = False
+        else:
+            funding_rows = await run_storage(
+                repository.query_funding, **funding_query, oldest_first=True, use_cycle_range=True,
+            )
         final_rows = sorted(
             (row for row in funding_rows if bool(row["is_final"])),
             key=lambda row: int(row["funding_cycle_ms"]),
@@ -1469,7 +1474,6 @@ class MarketDataService:
 
         needs_estimates = len(settlement_by_bucket) < len(bucket_starts)
         premium_rows: list[dict[str, Any]] = []
-        missing_ranges: list[tuple[int, int]] = []
         premium_continuous_through_ms: int | None = None
         if needs_estimates:
             if premium_capacity_truncated:
@@ -1483,7 +1487,7 @@ class MarketDataService:
                 })
             (
                 premium_rows,
-                missing_ranges,
+                premium_missing_ranges,
                 premium_fetch_failed,
                 premium_budget_exhausted,
             ) = await self._ensure_premium_index_history(
@@ -1494,7 +1498,7 @@ class MarketDataService:
             )
             relevant_missing_ranges = [
                 (max(missing_start, bucket_starts[0]), min(missing_end, support_end_ms))
-                for missing_start, missing_end in missing_ranges
+                for missing_start, missing_end in premium_missing_ranges
                 if missing_end >= bucket_starts[0] and missing_start <= support_end_ms
             ]
             if relevant_missing_ranges:
@@ -1876,259 +1880,137 @@ class MarketDataService:
             return True, end_ms
         identity = (key.exchange, key.market_type, key.symbol)
         page_limit = max(1, int(max_pages))
-        now_monotonic = self._funding_refresh_monotonic()
         async with self._funding_refresh_lock:
-            for completed_key, completed_task in list(
-                self._funding_refresh_tasks.items(),
-            ):
-                if completed_task.done():
-                    self._funding_refresh_tasks.pop(completed_key, None)
-            covered_through_ms = self._funding_coverage_prefix_locked(
-                identity,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                now_monotonic=now_monotonic,
-            )
-            if covered_through_ms >= end_ms:
+            gaps = await self._funding_settlement_gaps(identity, start_ms, end_ms)
+            if not gaps:
                 return True, end_ms
-
-            refresh_start_ms = max(start_ms, covered_through_ms + 1)
-            task_key: tuple[tuple[str, str, str], int, int, int] | None = None
-            task: asyncio.Task[tuple[bool, int]] | None = None
-            for candidate_key, candidate_task in self._funding_refresh_tasks.items():
-                (
-                    candidate_identity,
-                    candidate_start_ms,
-                    candidate_end_ms,
-                    _candidate_page_limit,
-                ) = candidate_key
-                if (
-                    candidate_identity == identity
-                    and candidate_start_ms <= refresh_start_ms
-                    and candidate_end_ms >= end_ms
-                ):
-                    task_key = candidate_key
-                    task = candidate_task
-                    break
-
+            refresh_start_ms = gaps[0]["start_ms"]
+            task = next(
+                (candidate_task for (candidate_identity, candidate_start, candidate_end, _),
+                 candidate_task in self._funding_refresh_tasks.items()
+                 if not candidate_task.done() and candidate_identity == identity
+                 and candidate_start <= refresh_start_ms and candidate_end >= end_ms),
+                None,
+            )
             if task is None:
                 task_key = (identity, refresh_start_ms, end_ms, page_limit)
                 task = asyncio.create_task(
-                    self._run_funding_settlement_refresh(
-                        key,
-                        identity=identity,
-                        start_ms=refresh_start_ms,
-                        end_ms=end_ms,
-                        max_pages=page_limit,
-                    ),
+                    self._fetch_funding_settlement_gaps(key, identity, gaps, max_pages=page_limit),
                     name=f"funding-settlement-refresh:{key.topic}",
                 )
                 self._funding_refresh_tasks[task_key] = task
                 task.add_done_callback(
-                    lambda completed, cache_key=task_key: (
-                        self._discard_funding_refresh_task(cache_key, completed)
-                    ),
+                    lambda completed, cache_key=task_key: self._discard_funding_refresh_task(cache_key, completed),
                 )
 
         await asyncio.shield(task)
+        remaining = await self._funding_settlement_gaps(identity, start_ms, end_ms)
+        return (False, remaining[0]["start_ms"] - 1) if remaining else (True, end_ms)
 
-        async with self._funding_refresh_lock:
-            covered_through_ms = self._funding_coverage_prefix_locked(
-                identity,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                now_monotonic=self._funding_refresh_monotonic(),
-            )
-        return covered_through_ms >= end_ms, min(end_ms, covered_through_ms)
+    async def _funding_settlement_gaps(
+        self, identity: tuple[str, str, str], start_ms: int, end_ms: int,
+    ) -> list[dict[str, int]]:
+        coverage = await run_storage(
+            self._metrics_repository.funding_settlement_coverage,
+            identity,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+            now_ms=self._funding_refresh_wall_ms(),
+        )
+        return missing_ranges(start_ms, end_ms, coverage)
 
     def _discard_funding_refresh_task(
         self,
         task_key: tuple[tuple[str, str, str], int, int, int],
-        task: asyncio.Task[tuple[bool, int]],
+        task: asyncio.Task[None],
     ) -> None:
         if not task.cancelled():
             task.exception()
         if self._funding_refresh_tasks.get(task_key) is task:
             self._funding_refresh_tasks.pop(task_key, None)
 
-    async def _run_funding_settlement_refresh(
-        self,
-        key: MarketStreamKey,
-        *,
-        identity: tuple[str, str, str],
-        start_ms: int,
-        end_ms: int,
-        max_pages: int,
-    ) -> tuple[bool, int]:
-        complete, covered_through_ms = (
-            await self._fetch_funding_settlement_pages_uncached(
-                key,
-                start_ms=start_ms,
-                end_ms=end_ms,
-                max_pages=max_pages,
-            )
-        )
-        successful_end_ms = end_ms if complete else covered_through_ms
-        if successful_end_ms >= start_ms:
-            async with self._funding_refresh_lock:
-                self._record_funding_coverage_locked(
-                    identity,
-                    start_ms=start_ms,
-                    end_ms=successful_end_ms,
-                    now_ms=self._funding_refresh_wall_ms(),
-                    now_monotonic=self._funding_refresh_monotonic(),
-                )
-        return complete, covered_through_ms
-
-    async def _fetch_funding_settlement_pages_uncached(
-        self,
-        key: MarketStreamKey,
-        *,
-        start_ms: int,
-        end_ms: int,
-        max_pages: int,
-    ) -> tuple[bool, int]:
+    async def _fetch_funding_settlement_gaps(
+        self, key: MarketStreamKey, identity: tuple[str, str, str],
+        gaps: list[dict[str, int]], *, max_pages: int,
+    ) -> None:
         descriptor = StreamDescriptor(
             symbol=key.symbol,
             stream_type=StreamType.FUNDING_RATE,
             exchange=key.exchange,
             market_type=key.market_type,
         )
-        cursor_ms = start_ms
-        covered_through_ms = start_ms - 1
-        pages = 0
-        previous_cycle_ms = -1
-        while cursor_ms <= end_ms and pages < max_pages:
-            raw_events = await self._fetch_market(
-                descriptor,
-                limit=1000,
-                start_ms=cursor_ms,
-                end_ms=end_ms,
-                history=True,
-            )
-            pages += 1
-            if len(raw_events) > 1000:
-                raise RuntimeError("Binance funding settlement page exceeds its request limit")
-            projected_events = []
-            latest_time_ms = cursor_ms - 1
-            for event in raw_events:
-                time_ms = event.data.get("funding_time_ms")
-                if (
-                    event.event_type != StreamType.FUNDING_RATE
-                    or (event.exchange, event.market_type, event.symbol) != (key.exchange, key.market_type, key.symbol)
-                    or type(time_ms) is not int
-                    or time_ms != event.event_time_ms
-                    or not latest_time_ms < time_ms <= end_ms
-                ):
-                    raise RuntimeError("Invalid Binance funding settlement page identity, bounds or order")
-                projected = self._project(event, key)
-                if projected is None or projected.data["funding_cycle_ms"] <= previous_cycle_ms:
-                    raise RuntimeError("Unrepresentable Binance funding settlement page")
-                projected_events.append(projected)
-                latest_time_ms = time_ms
-                previous_cycle_ms = projected.data["funding_cycle_ms"]
-            if not projected_events:
-                return True, end_ms
-            await self._persist_final_history(projected_events, period=None)
-            covered_through_ms = latest_time_ms
-            cursor_ms = latest_time_ms + 1
-            # A short, fully validated page completes this bounded Binance
-            # request under the endpoint's ascending, earliest-first contract.
-            if len(raw_events) < 1000:
-                return True, end_ms
-        return cursor_ms > end_ms, (
-            end_ms if cursor_ms > end_ms else covered_through_ms
+        for gap in gaps:
+            cursor_ms, end_ms = gap["start_ms"], gap["end_ms"]
+            previous_cycle_ms = -1
+            while cursor_ms <= end_ms:
+                if max_pages <= 0:
+                    return
+                raw_events = await self._fetch_market(
+                    descriptor,
+                    limit=1000,
+                    start_ms=cursor_ms,
+                    end_ms=end_ms,
+                    history=True,
+                )
+                max_pages -= 1
+                if len(raw_events) > 1000:
+                    raise RuntimeError("Binance funding settlement page exceeds its request limit")
+                projected_events = []
+                latest_time_ms = cursor_ms - 1
+                for event in raw_events:
+                    time_ms = event.data.get("funding_time_ms")
+                    if (
+                        event.event_type != StreamType.FUNDING_RATE
+                        or (event.exchange, event.market_type, event.symbol) != identity
+                        or type(time_ms) is not int
+                        or time_ms != event.event_time_ms
+                        or not latest_time_ms < time_ms <= end_ms
+                    ):
+                        raise RuntimeError("Invalid Binance funding settlement page identity, bounds or order")
+                    projected = self._project(event, key)
+                    if projected is None or projected.data["funding_cycle_ms"] <= previous_cycle_ms:
+                        raise RuntimeError("Unrepresentable Binance funding settlement page")
+                    projected_events.append(projected)
+                    latest_time_ms = time_ms
+                    previous_cycle_ms = projected.data["funding_cycle_ms"]
+                await self._persist_final_history(projected_events, period=None)
+                # An exhaustive short or empty response proves the bounded gap.
+                # A full page proves only its prefix through the last settlement.
+                covered_end = end_ms if len(raw_events) < 1000 else latest_time_ms
+                await self._record_funding_settlement_page(identity, cursor_ms, covered_end, projected_events)
+                cursor_ms = covered_end + 1
+
+    async def _record_funding_settlement_page(
+        self, identity: tuple[str, str, str], start_ms: int, end_ms: int,
+        events: list[MarketStateEvent],
+    ) -> None:
+        now_ms = self._funding_refresh_wall_ms()
+        cutoff = now_ms - _DEFAULT_FUNDING_INTERVAL_MS
+        rows = [self._funding_storage_row(event, is_final=True) for event in events]
+        spans = (
+            (start_ms, min(cutoff, end_ms), None),
+            (max(start_ms, cutoff + 1), end_ms, now_ms + _FUNDING_SETTLEMENT_EDGE_TTL_MS),
         )
+        for first, last, expires_at_ms in spans:
+            if last < first:
+                continue
+            recorded = await run_storage(
+                self._metrics_repository.record_funding_settlement_query,
+                identity=identity,
+                start_ms=first,
+                end_ms=last,
+                policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+                expected_rows=[row for row in rows if first <= row["funding_time_ms"] <= last],
+                observed_at_ms=now_ms,
+                expires_at_ms=expires_at_ms,
+            )
+            if not recorded:
+                raise RuntimeError("Committed funding settlements differ from the acquired page")
 
     @staticmethod
     def _funding_refresh_wall_ms() -> int:
         return int(time.time() * 1000)
-
-    @staticmethod
-    def _funding_refresh_monotonic() -> float:
-        return time.monotonic()
-
-    def _funding_coverage_prefix_locked(
-        self,
-        identity: tuple[str, str, str],
-        *,
-        start_ms: int,
-        end_ms: int,
-        now_monotonic: float,
-    ) -> int:
-        active = [
-            coverage
-            for coverage in self._funding_refresh_coverage.get(identity, ())
-            if coverage.expires_at is None or coverage.expires_at > now_monotonic
-        ]
-        if active:
-            self._funding_refresh_coverage[identity] = active
-        else:
-            self._funding_refresh_coverage.pop(identity, None)
-            return start_ms - 1
-
-        covered_through_ms = start_ms - 1
-        for coverage in sorted(active, key=lambda item: (item.start_ms, item.end_ms)):
-            if coverage.end_ms < start_ms:
-                continue
-            if coverage.start_ms > covered_through_ms + 1:
-                break
-            covered_through_ms = max(covered_through_ms, coverage.end_ms)
-            if covered_through_ms >= end_ms:
-                return end_ms
-        return min(end_ms, covered_through_ms)
-
-    def _record_funding_coverage_locked(
-        self,
-        identity: tuple[str, str, str],
-        *,
-        start_ms: int,
-        end_ms: int,
-        now_ms: int,
-        now_monotonic: float,
-    ) -> None:
-        if end_ms < start_ms:
-            return
-        historical_cutoff_ms = now_ms - _DEFAULT_FUNDING_INTERVAL_MS
-        records = self._funding_refresh_coverage.setdefault(identity, [])
-        historical_end_ms = min(end_ms, historical_cutoff_ms)
-        if start_ms <= historical_end_ms:
-            records.append(_FundingSettlementCoverage(
-                start_ms=start_ms,
-                end_ms=historical_end_ms,
-            ))
-        edge_start_ms = max(start_ms, historical_cutoff_ms + 1)
-        if edge_start_ms <= end_ms:
-            records.append(_FundingSettlementCoverage(
-                start_ms=edge_start_ms,
-                end_ms=end_ms,
-                expires_at=(
-                    now_monotonic + _FUNDING_SETTLEMENT_EDGE_TTL_SECONDS
-                ),
-            ))
-        permanent = sorted(
-            (record for record in records if record.expires_at is None),
-            key=lambda record: (record.start_ms, record.end_ms),
-        )
-        merged_permanent: list[_FundingSettlementCoverage] = []
-        for record in permanent:
-            if (
-                merged_permanent
-                and record.start_ms <= merged_permanent[-1].end_ms + 1
-            ):
-                previous = merged_permanent[-1]
-                merged_permanent[-1] = _FundingSettlementCoverage(
-                    start_ms=previous.start_ms,
-                    end_ms=max(previous.end_ms, record.end_ms),
-                )
-            else:
-                merged_permanent.append(record)
-        records[:] = merged_permanent + [
-            record
-            for record in records
-            if record.expires_at is not None
-            and record.expires_at > now_monotonic
-        ]
 
     @staticmethod
     def _premium_index_storage_row(event: MarketEvent) -> dict[str, Any]:
@@ -2205,7 +2087,6 @@ class MarketDataService:
         async with self._funding_refresh_lock:
             funding_refresh_tasks = list(self._funding_refresh_tasks.values())
             self._funding_refresh_tasks.clear()
-            self._funding_refresh_coverage.clear()
         for task in funding_refresh_tasks:
             if not task.done():
                 task.cancel()

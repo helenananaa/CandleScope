@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from functools import wraps
 from unittest.mock import AsyncMock
 
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
-from app.data_engine.market_data.service import MarketDataService, _HistoryRefreshPlan
+from app.data_engine.market_data.service import (
+    MarketDataService, _FUNDING_SETTLEMENT_POLICY_REVISION, _HistoryRefreshPlan,
+)
 from app.data_engine.storage.market_metrics_repo import MarketMetricsRepository
 
 
@@ -83,15 +86,24 @@ def _premium_event(descriptor, open_time_ms: int) -> MarketEvent:
 
 
 class _ColdPremiumFactory:
-    def __init__(self, *, missing_minutes: set[int] | None = None) -> None:
+    def __init__(self, *, missing_minutes: set[int] | None = None, settlement_times: tuple[int, ...] = ()) -> None:
         self.missing_minutes = missing_minutes or set()
+        self.settlement_times = settlement_times
         self.calls: list[dict] = []
         self.in_flight = 0
         self.max_in_flight = 0
 
     async def fetch_market(self, descriptor, **kwargs):
         if descriptor.stream_type == StreamType.FUNDING_RATE:
-            return []
+            return [
+                MarketEvent(
+                    event_type=StreamType.FUNDING_RATE, symbol=descriptor.symbol,
+                    exchange=descriptor.exchange, market_type=descriptor.market_type,
+                    event_time_ms=stamp, received_at_ms=stamp + 100, source=DataSource.HTTP_BACKFILL,
+                    data={"funding_rate": 0.001, "funding_time_ms": stamp}, stream_key=descriptor.key,
+                )
+                for stamp in self.settlement_times if kwargs["start_ms"] <= stamp <= kwargs["end_ms"]
+            ]
         if descriptor.stream_type != StreamType.PREMIUM_INDEX:
             raise AssertionError(f"unexpected stream: {descriptor.stream_type}")
 
@@ -127,7 +139,15 @@ async def test_hybrid_history_page_has_one_builder_owned_funding_refresh(
         lambda: now_ms / 1000,
     )
     repository = MarketMetricsRepository(tmp_path / "hybrid-entry.sqlite")
-    repository.upsert_funding([_funding_row(bucket_ms)])
+    row = _funding_row(bucket_ms)
+    repository.upsert_funding([row])
+    assert repository.record_funding_settlement_query(
+        identity=("binance", "futures", "BTCUSDT"),
+        start_ms=0, end_ms=bucket_ms + _MINUTE_MS - 1,
+        policy_revision=_FUNDING_SETTLEMENT_POLICY_REVISION,
+        expected_rows=[dict(row, funding_cycle_ms=bucket_ms)],
+        observed_at_ms=now_ms, expires_at_ms=None,
+    )
     service = MarketDataService(_ColdPremiumFactory(), metrics_repository=repository)
 
     sparse_read = AsyncMock(return_value=[])
@@ -302,6 +322,36 @@ async def test_cold_premium_refresh_uses_concurrent_deterministic_shards_and_one
 
 
 @_async_test
+async def test_hybrid_does_not_publish_complete_after_acquired_settlement_disappears(tmp_path, monkeypatch):
+    path = tmp_path / "settlement-before-snapshot.sqlite"
+    bucket_ms = 8 * 60 * _MINUTE_MS
+    now_ms = bucket_ms + 2 * _MINUTE_MS
+    monkeypatch.setattr("app.data_engine.market_data.service.time.time", lambda: now_ms / 1000)
+    monkeypatch.setattr("app.data_engine.market_data.service._FUNDING_CONTEXT_LOOKBACK_MS", 0)
+    repository = MarketMetricsRepository(path)
+    factory = _ColdPremiumFactory(settlement_times=(bucket_ms,))
+    service = MarketDataService(factory, metrics_repository=repository)
+    monkeypatch.setattr(service, "_fetch_market", factory.fetch_market)
+    acquire = service._fetch_funding_settlement_pages
+
+    async def acquire_then_delete(*args, **kwargs):
+        complete, through = await acquire(*args, **kwargs)
+        assert complete
+        with sqlite3.connect(path) as writer:
+            writer.execute("DELETE FROM funding_rate_history WHERE funding_time_ms=?", (bucket_ms,))
+        return complete, through
+
+    monkeypatch.setattr(service, "_fetch_funding_settlement_pages", acquire_then_delete)
+    page = await service._build_hybrid_funding_history(
+        _funding_key(), period="1m", start_ms=bucket_ms,
+        end_ms=bucket_ms + _MINUTE_MS - 1, limit=10, fetch_missing=True,
+    )
+    assert page.retryable and page.fallback and not page.complete
+    assert all(event.data.get("sample_kind") != "settlement" for event in page.events)
+    await service.shutdown()
+
+
+@_async_test
 async def test_cold_premium_gap_returns_only_a_contiguous_fail_closed_prefix(
     tmp_path,
     monkeypatch,
@@ -317,7 +367,7 @@ async def test_cold_premium_gap_returns_only_a_contiguous_fail_closed_prefix(
     )
     repository = MarketMetricsRepository(tmp_path / "premium-gap.sqlite")
     repository.upsert_funding([_funding_row(0)])
-    factory = _ColdPremiumFactory(missing_minutes={4})
+    factory = _ColdPremiumFactory(missing_minutes={4}, settlement_times=(0,))
     service = MarketDataService(factory, metrics_repository=repository)
     monkeypatch.setattr(service, "_fetch_market", factory.fetch_market)
 

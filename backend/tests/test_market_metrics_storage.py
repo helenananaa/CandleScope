@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1706,6 +1707,45 @@ async def test_settlement_refresh_successful_range_serves_hot_subset(
     await service.shutdown()
 
 
+@_async_test
+async def test_settlement_receipts_survive_restart_and_reacquire_only_invalidated_ranges(tmp_path):
+    path = tmp_path / "settlement-restart.sqlite"
+    key = _key(MarketChannel.FUNDING_RATE)
+    events = [
+        MarketEvent(
+            event_type=StreamType.FUNDING_RATE,
+            exchange=key.exchange, market_type=key.market_type, symbol=key.symbol,
+            event_time_ms=stamp, received_at_ms=stamp + 100, source=DataSource.HTTP_BACKFILL,
+            data={"funding_rate": 0.0001, "funding_time_ms": stamp}, stream_key=key.topic,
+        )
+        for stamp in (60_000, 120_000, 180_000)
+    ]
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=MarketMetricsRepository(path))
+    service._fetch_market = factory.fetch_market
+    for start_ms, end_ms in ((0, 90_000), (150_000, 240_000)):
+        assert await service._fetch_funding_settlement_pages(key, start_ms=start_ms, end_ms=end_ms) == (True, end_ms)
+    await service.shutdown()
+
+    reopened = MarketMetricsRepository(path)
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=reopened)
+    service._fetch_market = factory.fetch_market
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=90_000) == (True, 90_000)
+    assert factory.fetch_calls == []
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=240_000) == (True, 240_000)
+    assert [(call["start_ms"], call["end_ms"]) for call in factory.fetch_calls] == [(90_001, 149_999)]
+
+    with sqlite3.connect(path) as writer:
+        writer.execute("DELETE FROM funding_rate_history WHERE funding_time_ms=120000")
+    assert await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=240_000) == (True, 240_000)
+    assert [(call["start_ms"], call["end_ms"]) for call in factory.fetch_calls] == [(90_001, 149_999)] * 2
+    assert [row["funding_time_ms"] for row in reopened.query_funding(
+        exchange=key.exchange, market_type=key.market_type, symbol=key.symbol,
+    )] == [60_000, 120_000, 180_000]
+    await service.shutdown()
+
+
 @pytest.mark.parametrize("timestamps", [(70_000, 60_000), (60_000, 60_000), (60_000, 60_010), (60_000, 130_000)])
 @_async_test
 async def test_invalid_settlement_page_cannot_write_rows_or_claim_coverage(tmp_path, timestamps):
@@ -1831,7 +1871,6 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     calls = 0
     interval_ms = 8 * 60 * 60 * 1000
     wall_ms = 100 * interval_ms
-    monotonic_seconds = 100.0
 
     async def fetch_market(_descriptor, **_kwargs):
         nonlocal calls
@@ -1840,7 +1879,6 @@ async def test_settlement_refresh_current_edge_coverage_expires(
 
     service._fetch_market = fetch_market
     service._funding_refresh_wall_ms = lambda: wall_ms
-    service._funding_refresh_monotonic = lambda: monotonic_seconds
     key = _key(MarketChannel.FUNDING_RATE)
     historical_start_ms = 0
     historical_end_ms = wall_ms - interval_ms
@@ -1863,7 +1901,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
         start_ms=edge_start_ms,
         end_ms=edge_end_ms,
     ) == (True, edge_end_ms)
-    monotonic_seconds += 59.0
+    wall_ms += 59_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=edge_start_ms,
@@ -1871,7 +1909,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     ) == (True, edge_end_ms)
     assert calls == 2
 
-    monotonic_seconds += 2.0
+    wall_ms += 2_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=edge_start_ms,
@@ -1879,7 +1917,7 @@ async def test_settlement_refresh_current_edge_coverage_expires(
     ) == (True, edge_end_ms)
     assert calls == 3
 
-    monotonic_seconds += 10_000.0
+    wall_ms += 10_000_000
     assert await service._fetch_funding_settlement_pages(
         key,
         start_ms=historical_start_ms,
