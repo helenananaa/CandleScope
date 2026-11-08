@@ -392,6 +392,23 @@
   min-width: 0;
 }
 
+.strategy-result-replay-view-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: 0;
+  margin: 8px 0;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.strategy-result-replay-view-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .strategy-result-replay-notes textarea {
   display: block;
   width: 100%;

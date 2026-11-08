@@ -88,6 +88,7 @@ import {
   type StrategyResearchLaunchIntent,
 } from "./strategyResearchLaunch.js";
 import type { BacktestResultReplayCursor } from "../backtest/backtestTypes.js";
+import { DEFAULT_REPLAY_DISPLAY, replayDisplayKey, type ReplayDisplay } from "./strategyResultReplayDisplay.js";
 import type { StrategyResearchState } from "./strategyResearchState.js";
 
 class StrategyResearchDrawerBoundary extends Component<
@@ -405,6 +406,9 @@ export default function StrategyResearchApp({
   const saveResultReplay = useCallback((replay: BacktestResultReplayCursor) => {
     dispatch({ type: "result/replay", replay });
   }, [dispatch]);
+  const saveReplayDisplay = useCallback((key: string, display: ReplayDisplay) => {
+    dispatch({ type: "result/replayDisplay", key, display });
+  }, [dispatch]);
   const closeResultReplay = useCallback(() => dispatch({ type: "result/replay", replay: null }), [dispatch]);
   const savedResult = researchRun.result;
   const replaySnapshot = savedResult?.run.snapshot_hash;
@@ -717,9 +721,11 @@ export default function StrategyResearchApp({
   };
 
   if (state.result.replay) {
+    const displayKey = replayDisplayKey(state.result.replay);
     return <Suspense fallback={<p role="status">{t("research.loading")}</p>}>
-      <StrategyResultReplay key={state.result.replay.runId} initial={state.result.replay}
-        manager={researchRun.historyManager} datasets={libraryDatasets} onCommit={saveResultReplay} onClose={closeResultReplay} />
+      <StrategyResultReplay key={displayKey} initial={state.result.replay}
+        manager={researchRun.historyManager} datasets={libraryDatasets} onCommit={saveResultReplay} onClose={closeResultReplay}
+        display={state.replayDisplays?.[displayKey] ?? DEFAULT_REPLAY_DISPLAY} onDisplay={saveReplayDisplay} />
     </Suspense>;
   }
 
