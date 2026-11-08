@@ -2772,7 +2772,7 @@ export const ptBR = {
 
   "local.import": "Importar CSV",
   "local.localOnly": "Os dados permanecem nesta máquina",
-  "local.marketTradeCoverage": "Use um arquivo de negócios do mercado com números de sequência consecutivos. Declare a cobertura UTC. A importação permanece local.",
+  "local.marketTradeCoverage": "Escolha um arquivo de negócios de mercado com numeração sequencial de origem. Informe o período em UTC. Os dados importados ficam neste dispositivo.",
   "local.chooseFile": "Escolha um arquivo CSV",
   "local.baseAsset": "Ativo de quantidade (unidade do volume)",
   "local.quoteAsset": "Ativo de cotação do preço",
