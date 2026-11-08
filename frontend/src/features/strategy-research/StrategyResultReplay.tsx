@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
-import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
+import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraSlot, type BacktestReplayExtraCharts, type BacktestResultReplayChart, type BacktestResultReplayCursor, type BacktestResultReplayFrame, type BacktestResultReplayNote, type BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
 import { StrategyResultReplayChart } from "./StrategyResultReplayChart.js";
 import { changeReplayChartDisplay, replayChartDisplay, replayDisplayKey, replayLayout, restoreReplayLayout, type ReplayDisplay, type ReplayChartDisplay, type ReplayChartSlot } from "./strategyResultReplayDisplay.js";
+import { editReplayDrawings, replayDrawingOwner, replayDrawingScope, type ReplayDrawingEdit } from "./strategyResultReplayDrawings.js";
 
 const MA_PERIODS = [2, 3, 5, 10, 20, 50, 100, 200, 500];
 
@@ -140,6 +141,31 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
   const updateChart = <K extends keyof ReplayChartDisplay>(slot: ReplayChartSlot, field: K, value: ReplayChartDisplay[K]) => {
     onDisplay(displayKey, changeReplayChartDisplay(display, slot, field, value, activeSlots));
   };
+  const charts: Partial<Record<ReplayChartSlot, BacktestResultReplayChart | null>> = frame
+    ? { primary: frame, comparison: frame.comparison ?? null, ...frame.additional_charts } : {};
+  const drawingControl = (slot: ReplayChartSlot) => {
+    const chart = charts[slot];
+    const owner = chart && replayDrawingOwner(chart);
+    if (!owner) return undefined;
+    const sourceScope = replayDrawingScope(slot, owner);
+    const documents = display.drawings ?? {};
+    return {
+      owner,
+      drawings: documents[sourceScope] ?? [],
+      locked: playing || noteDraft !== null,
+      edit: (edit: ReplayDrawingEdit) => {
+        const targets = display.links.drawings ? activeSlots.filter(target => {
+          const peer = charts[target];
+          return peer && replayDrawingOwner(peer) === owner;
+        }) : [slot];
+        const drawings = editReplayDrawings(documents, targets.map(target => replayDrawingScope(target, owner)), edit);
+        if (!drawings) return false;
+        const { drawings: _previous, ...next } = display;
+        onDisplay(displayKey, Object.keys(drawings).length ? { ...next, drawings } : next);
+        return true;
+      },
+    };
+  };
   return (
     <main className="strategy-result-replay" data-testid="strategy-result-replay"
       data-cursor={frame?.cursor} data-interval={frame?.interval}>
@@ -250,6 +276,8 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           ["fills", "researchBatch.replayFillMarkers"],
           ["notes", "researchBatch.replayNoteMarkers"],
           ["indicatorVisibility", "replay.indicator.sma.name"],
+          ["drawings", "workspace.link.drawings"],
+          ["drawingVisibility", "drawing.showAll"],
         ] as const).map(([channel, label]) => <label key={channel}>
           <input type="checkbox" data-testid={`strategy-replay-link-${channel}`} checked={display.links[channel]}
             onChange={event => onDisplay(displayKey, { ...display, links: { ...display.links, [channel]: event.target.checked } })} />
@@ -265,13 +293,15 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           </div>
           <div className="strategy-result-replay-charts">
             <StrategyResultReplayChart slot="primary" chart={frame} frame={frame} display={display.primary}
-              disabled={noteDraft !== null} onChange={updateChart} />
+              drawingControl={drawingControl("primary")} disabled={noteDraft !== null} onChange={updateChart} />
             {frame.comparison && <StrategyResultReplayChart slot="comparison" chart={frame.comparison} frame={frame}
-              display={display.comparison} disabled={noteDraft !== null} onChange={updateChart} />}
+              display={display.comparison} drawingControl={drawingControl("comparison")}
+              disabled={noteDraft !== null} onChange={updateChart} />}
             {extraSlots.map(slot => {
               const chart = frame.additional_charts?.[slot];
               return chart && <StrategyResultReplayChart key={slot} slot={slot} chart={chart} frame={frame}
-                display={replayChartDisplay(display, slot)} disabled={noteDraft !== null} onChange={updateChart} />;
+                display={replayChartDisplay(display, slot)} drawingControl={drawingControl(slot)}
+                disabled={noteDraft !== null} onChange={updateChart} />;
             })}
           </div>
           <dl className="strategy-result-replay-status">

@@ -1,5 +1,6 @@
 import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayChartOptions, type BacktestReplayExtraCharts, type BacktestReplayExtraSlot } from "../backtest/backtestTypes.js";
 import type { BacktestResultReplayBar, BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayNote } from "../backtest/backtestTypes.js";
+import { readReplayDrawings, type ReplayDrawings } from "./strategyResultReplayDrawings.js";
 
 export type ReplayChartSlot = "primary" | "comparison" | BacktestReplayExtraSlot;
 export type ReplayChartDisplay = {
@@ -9,22 +10,24 @@ export type ReplayChartDisplay = {
   fills: boolean;
   notes: boolean;
   showMa: boolean;
+  showDrawings: boolean;
 };
-type DisplayLink = "chartStyle" | "fills" | "notes" | "indicatorVisibility";
+type DisplayLink = "chartStyle" | "fills" | "notes" | "indicatorVisibility" | "drawings" | "drawingVisibility";
 export type ReplayDisplay = Record<"primary" | "comparison", ReplayChartDisplay> &
   Partial<Record<BacktestReplayExtraSlot, ReplayChartDisplay>> & {
   references?: BacktestReplayExtraCharts;
   layout?: { primary: BacktestReplayChartOptions; comparison?: BacktestReplayChartOptions };
+    drawings?: ReplayDrawings;
   links: Record<DisplayLink, boolean>;
 };
 
 const defaultChart: ReplayChartDisplay = {
-  candleStyle: "solid", upColor: "#159b84", downColor: "#df595e", fills: true, notes: true, showMa: true,
+  candleStyle: "solid", upColor: "#159b84", downColor: "#df595e", fills: true, notes: true, showMa: true, showDrawings: true,
 };
 export const DEFAULT_REPLAY_DISPLAY: ReplayDisplay = {
   primary: defaultChart,
   comparison: defaultChart,
-  links: { chartStyle: false, fills: false, notes: false, indicatorVisibility: false },
+  links: { chartStyle: false, fills: false, notes: false, indicatorVisibility: false, drawings: false, drawingVisibility: false },
 };
 
 export function replayDisplayKey(replay: Pick<BacktestResultReplayCursor, "runId" | "snapshotHash" | "reportHash">): string {
@@ -46,6 +49,7 @@ function chartDisplay(value: unknown): ReplayChartDisplay {
     fills: typeof chart.fills === "boolean" ? chart.fills : defaultChart.fills,
     notes: typeof chart.notes === "boolean" ? chart.notes : defaultChart.notes,
     showMa: typeof chart.showMa === "boolean" ? chart.showMa : defaultChart.showMa,
+    showDrawings: typeof chart.showDrawings === "boolean" ? chart.showDrawings : defaultChart.showDrawings,
   };
 }
 
@@ -112,16 +116,19 @@ export function readReplayDisplays(value: unknown): Record<string, ReplayDisplay
     const display = record(raw);
     const links = record(display.links);
     const references = readReferences(display.references);
+    const drawings = readReplayDrawings(display.drawings);
     const layout = record(display.layout);
     const primary = readChartOptions(layout.primary);
     const comparison = readChartOptions(layout.comparison);
     return [key, { primary: chartDisplay(display.primary), comparison: chartDisplay(display.comparison),
       ...(primary ? { layout: { primary, ...(comparison ? { comparison } : {}) } } : {}),
       ...(Object.keys(references).length ? { references } : {}),
+      ...(Object.keys(drawings).length ? { drawings } : {}),
       ...Object.fromEntries(BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => display[slot] !== undefined)
         .map(slot => [slot, chartDisplay(display[slot])])),
       links: { chartStyle: links.chartStyle === true, fills: links.fills === true, notes: links.notes === true,
-        indicatorVisibility: links.indicatorVisibility === true } }];
+        indicatorVisibility: links.indicatorVisibility === true, drawings: links.drawings === true,
+        drawingVisibility: links.drawingVisibility === true } }];
   }));
 }
 
@@ -131,7 +138,7 @@ export function changeReplayChartDisplay<K extends keyof ReplayChartDisplay>(
 ): ReplayDisplay {
   if (replayChartDisplay(display, slot)[field] === value) return display;
   const channel: DisplayLink = field === "showMa" ? "indicatorVisibility"
-    : field === "fills" || field === "notes" ? field : "chartStyle";
+    : field === "showDrawings" ? "drawingVisibility" : field === "fills" || field === "notes" ? field : "chartStyle";
   const targets = display.links[channel] ? activeSlots : [slot];
   const next = { ...display };
   for (const target of targets) next[target] = { ...replayChartDisplay(display, target), [field]: value };

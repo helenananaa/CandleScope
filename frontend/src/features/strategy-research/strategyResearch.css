@@ -382,6 +382,12 @@
   background: var(--bg-secondary);
 }
 
+.strategy-result-replay-candles[data-drawing-active] { cursor: crosshair; }
+.strategy-result-replay-drawings { color: var(--accent-blue, #508bd5); pointer-events: none; }
+.strategy-result-replay-drawings line { stroke: currentColor; stroke-width: 2; }
+.strategy-result-replay-drawings circle { fill: currentColor; }
+.strategy-result-replay-view-controls button[aria-pressed="true"] { border-color: var(--accent-blue, #508bd5); }
+
 .strategy-result-replay-charts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
