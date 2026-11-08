@@ -1027,6 +1027,12 @@ def _resolve_history_calendar(
         return None, False
 
 
+def _snapshot_is_stable(result: Any) -> bool:
+    """A versioned read racing publication cannot certify a snapshot."""
+    version = (getattr(result, "metadata", None) or {}).get("stream_version")
+    return version is None or version.get("stable") is True
+
+
 def _history_contract_payload(
     result: Any,
     *,
@@ -1060,7 +1066,8 @@ def _history_contract_payload(
     # terminal edge may stop pagination farther left, but it cannot mark a
     # repairable hole inside the returned fetchable window as complete.
     if (
-        verified_contiguous is False
+        not _snapshot_is_stable(result)
+        or verified_contiguous is False
         or bool(observed_missing)
         or not all_rows_final
     ):
@@ -1089,7 +1096,8 @@ def _all_rows_final(result: Any) -> bool:
 def _history_page_finality_ready(result: Any) -> bool:
     """Require proven final rows and no remaining repair work."""
     return bool(
-        _all_rows_final(result)
+        _snapshot_is_stable(result)
+        and _all_rows_final(result)
         and not getattr(result, "missing_ranges", None)
         and not getattr(result, "has_tail_gap", False)
         and getattr(result, "history_state", "pending") != "pending"
@@ -1113,7 +1121,7 @@ def _returned_history_page_ready(
     history contract, so the client can render useful candles immediately and
     continue paging/retrying while the parent repair advances chunk by chunk.
     """
-    if not getattr(result, "bars", None) or not _all_rows_final(result):
+    if not _snapshot_is_stable(result) or not getattr(result, "bars", None) or not _all_rows_final(result):
         return False
     data = _bars_to_dicts(result.bars)
     metadata = dict(getattr(result, "metadata", None) or {})
@@ -2466,7 +2474,7 @@ async def get_klines_history(
                         market_type=market_type,
                     )["is_custom"]
                 ),
-                ready=lambda candidate: (
+                ready=lambda candidate: _snapshot_is_stable(candidate) and (
                     (
                         initially_empty
                         and _returned_history_page_ready(
@@ -2516,6 +2524,7 @@ async def get_klines_history(
         not materialized_only
         and bool(data)
         and bool(verification["verified_contiguous"])
+        and _snapshot_is_stable(result)
         and _all_rows_final(result)
         and not identity_kwargs
         and not await _request_disconnected(request)
@@ -2922,7 +2931,8 @@ async def get_klines_range(
                     )["is_custom"]
                 ),
                 ready=lambda candidate: (
-                    _verify_range_result(candidate)[1]["verified_contiguous"]
+                    _snapshot_is_stable(candidate)
+                    and _verify_range_result(candidate)[1]["verified_contiguous"]
                     and _all_rows_final(candidate)
                 ),
                 demand_scope=request_scope,
@@ -2949,7 +2959,7 @@ async def get_klines_range(
     )
     verified = verification["verified_contiguous"]
     all_rows_final = _all_rows_final(result)
-    renderable = (verified and all_rows_final) or not strict
+    renderable = (verified and all_rows_final and _snapshot_is_stable(result)) or not strict
     rendered_data = data if renderable else []
     payload = {
         "exchange": exchange,

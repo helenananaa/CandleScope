@@ -48,11 +48,17 @@ export async function checkMarketHealth() {
   const result = (symbol: string): KlineFetchResult => ({ data: corpus.get(symbol)!.map(row => ({ ...row })), stream_version: wire(symbol),
     all_rows_final: true, complete: true, retryable: false, history_state: "ready", verified_contiguous: true,
     missing_ranges: [], has_tail_gap: false, truncated: false });
+  let nextRange: KlineFetchResult | undefined;
   const api: KlineApi = {
     getMultiStreamUrl: () => "ws://owned-market-fixture",
     fetchKlinesHistory: async symbol => { calls.push(`history:${symbol}`); await new Promise(resolve => setTimeout(resolve, 10)); return result(symbol); },
     fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
-    fetchKlinesRange: async symbol => { calls.push(`range:${symbol}`); return result(symbol); },
+    fetchKlinesRange: async symbol => {
+      calls.push(`range:${symbol}`);
+      const response = nextRange ?? result(symbol);
+      nextRange = undefined;
+      return response;
+    },
     fetchLatestKlines: async symbol => { calls.push(`latest:${symbol}`); return result(symbol); },
   };
   const physical: Array<{ symbol: string; options: KlineStreamOptions; controller: KlineStreamController; closed: boolean }> = [];
@@ -141,6 +147,16 @@ export async function checkMarketHealth() {
     await until(() => cells.get("A")!.store.snapshot().find(row => row.time === corrected.time)?.close === 25, "critical gap did not read back historical correction");
     assert(calls.length === requests + 1, "gap recovery was not one coalesced history read");
     checks.push("lost critical barrier triggers one bounded read; shared HTTP correction updates the actual candle window");
+    const eth = instrument("ETHUSDT");
+    nextRange = { ...result(eth.symbol), stream_version: { ...wire(eth.symbol), stable: false },
+      data: [{ ...corrected, close: 28 }] };
+    const racing = await manager.fetchKlinesRange(eth.symbol, eth.interval, corrected.time, corrected.time,
+      eth.marketType, eth.exchange, { strict: true });
+    assert(racing.retryable === true && racing.complete === false && !racing.data?.length,
+      "a racing HTTP read did not return retryable without rows");
+    assert(cells.get("A")!.store.snapshot().find(row => row.time === corrected.time)?.close === 25,
+      "an unstable HTTP read overwrote the rendered correction");
+    checks.push("unstable HTTP read is retryable and leaves the corrected candle intact");
     flushSync(() => root.unmount());
     manager.closeAll(); gate.dispose();
     assert(physical.every(stream => stream.closed), "owned streams leaked");

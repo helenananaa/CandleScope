@@ -38,6 +38,34 @@ test("a subscription/ACK and a legacy or unstable snapshot never prove health", 
   }
 });
 
+test("an unstable custom-period response cannot restore coverage revoked by backfill", () => {
+  const custom = { ...series, interval: "2m" };
+  const scope = { ...wire(0, 0).series, interval: custom.interval };
+  const version = (sequence: number, stable = true) => wire(sequence, sequence, { series: scope, stable });
+  const cache = new SharedMarketCache({ now: () => now });
+  const first = cache.beginRead(custom);
+  cache.admitResponse(first, proof(version(0), [row(120), row(240)]));
+  first.release();
+  assert.equal(cache.read(custom).complete, true);
+
+  const racing = cache.beginRead(custom);
+  cache.invalidateRange(custom, { from: 120, to: 120 }, version(1));
+  assert.equal(cache.read(custom, { from: 120, to: 120 }).complete, false);
+  const pending = cache.admitResponse(racing, proof(version(0, false), [row(120, true, 15), row(240)]));
+  racing.release();
+  assert.equal(pending.history_state, "pending");
+  assert.equal(pending.quality?.complete, false);
+  assert.deepEqual(pending.data, []);
+  assert.equal(cache.read(custom, { from: 120, to: 120 }).complete, false);
+  assert.equal(cache.read(custom).rows[0]?.close, 10);
+
+  const fresh = cache.beginRead(custom);
+  cache.admitResponse(fresh, proof(version(1), [row(120, true, 20), row(240)]));
+  fresh.release();
+  assert.equal(cache.read(custom).complete, true);
+  assert.equal(cache.read(custom).rows[0]?.close, 20);
+});
+
 test("shared stream observations expire and revoke independently of historical coverage", () => {
   let clock = now;
   const cache = healthy(new SharedMarketCache({ now: () => clock }));

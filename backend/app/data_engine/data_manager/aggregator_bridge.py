@@ -40,7 +40,8 @@ class AggregatorBridge:
         self._is_started = is_started
         self.delivery = DurableBarDelivery(storage_provider, self._publish,
                                            require_recovery=self._require_recovery,
-                                           recovery_lookback_bars=recovery_lookback_bars)
+                                           recovery_lookback_bars=recovery_lookback_bars,
+                                           publication_scope=event_bus.stream_versions.durable_publication)
 
     async def read_source_components(self, series: str, start_ms: int, end_ms: int) -> list[dict]:
         reader = getattr(self._storage_provider(), "read_source_components", None)
@@ -143,6 +144,9 @@ class AggregatorBridge:
         return "accepted"
 
     def _require_recovery(self, key: SeriesKey) -> None:
+        # A canonical change without a publishable bar invalidates the old
+        # HTTP/stream cutover just as it invalidates active subscribers.
+        self._event_bus.stream_versions.invalidate(key)
         self._event_bus.require_recovery(key, "source_revision_superseded", event_types={
             DataEventType.BAR_CREATED, DataEventType.BAR_UPDATED,
             DataEventType.BAR_CLOSED, DataEventType.BAR_AMENDED,

@@ -142,15 +142,22 @@ export class SharedMarketCache {
     const state = this.reads.get(token);
     if (!state || this.entries.get(token.key) !== state.entry) throw new Error("Market read expired");
     const { entry } = state;
+    const endpoint = response.endpoint ?? "history";
+    const serverVersion = parseMarketVersion(response.stream_version, entry.series);
+    if (response.stream_version != null && !serverVersion) throw new Error("Invalid market snapshot version scope");
+    if (serverVersion && serverVersion.stable !== true) {
+      // A racing response cannot supply chart rows, coverage or pagination.
+      // Keep current evidence intact and let the requesting lane retry.
+      const pending: KlineFetchResult = { endpoint, stream_version: response.stream_version,
+        data: [], history_state: "pending", complete: false, retryable: true };
+      return { ...pending, quality: assessKlineQuality(pending, endpoint), cacheRevision: entry.version };
+    }
     const incoming = response.data ?? [];
     // Validate the entire batch before changing rows, fences or range evidence.
     for (const row of incoming) {
       const issue = validateKlineDomain(row);
       if (issue) throw new TypeError(`Invalid market row ${issue.field}: ${issue.reason}`);
     }
-    const parsedVersion = parseMarketVersion(response.stream_version, entry.series);
-    const serverVersion = parsedVersion?.stable === true ? parsedVersion : null;
-    if (response.stream_version != null && !parsedVersion) throw new Error("Invalid market snapshot version scope");
     const previousVersion = entry.health.version;
     if (!entry.health.snapshot(serverVersion, state.health)) throw new Error("Obsolete market snapshot; fresh read required");
     if (previousVersion && (!entry.health.version || (serverVersion && !sameStream(previousVersion, serverVersion)))) {
@@ -161,7 +168,6 @@ export class SharedMarketCache {
       // or indicator inputs outside that range. Keep rows as provisional.
       entry.proofs = []; entry.inputInvalidation += 1;
     }
-    const endpoint = response.endpoint ?? "history";
     const inputQuality = assessKlineQuality(response, endpoint);
     const trustedFinal = hasFinalityEvidence(response);
     const rows = incoming.map(row => {
