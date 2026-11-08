@@ -67,7 +67,7 @@ import {
 } from "./replayViewerProjection.js";
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
-import { replayChartNotePoints, useReplayChartNoteVersions } from "./replayChartNoteOverlay.js";
+import { replayChartEventBarTime, replayChartNotePoints, useReplayChartNoteVersions } from "./replayChartAnnotations.js";
 import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
 import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
@@ -907,17 +907,22 @@ export default function ReplayTrainingPageShell({
   const tradeInputs = useMemo(() => replayChartTradeInputs(runtime.store,
     cell?.projectionBoundaryMs ?? null, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay),
   [runtime.store, cell?.projectionBoundaryMs, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay]);
-  const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => tradeInputs.fills.length === 0 ? [] : [{
-    id: "replay-trade-fills",
-    pane: "main",
-    data: tradeInputs.fills.map((fill) => ({
-      time: fill.event_time_ms / 1_000,
-      position: fill.side === "BUY" ? "below" : "above",
-      shape: fill.side === "BUY" ? "arrow_up" : "arrow_down",
-      color: fill.side === "BUY" ? "#16a34a" : "#e11d48",
-      text: `${fill.side === "BUY" ? t("replay.shell.buy", {}, locale) : t("replay.shell.sell", {}, locale)} ${fill.quantity} @ ${fill.price}`,
-    })),
-  }], [locale, tradeInputs.fills]);
+  const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => {
+    const data = tradeInputs.fills.flatMap(fill => {
+      const time = replayChartEventBarTime(fill.event_time_ms, displayedInterval, closedBarClock);
+      if (time === null || !displayedSeriesStore.hasTime(time)) return [];
+      return [{
+        time,
+        position: fill.side === "BUY" ? "below" : "above",
+        shape: fill.side === "BUY" ? "arrow_up" : "arrow_down",
+        color: fill.side === "BUY" ? "#16a34a" : "#e11d48",
+        text: `${fill.side === "BUY" ? t("replay.shell.buy", {}, locale) : t("replay.shell.sell", {}, locale)} ${fill.quantity} @ ${fill.price}`,
+      }];
+    });
+    return data.length ? [{ id: "replay-trade-fills", pane: "main", data }] : [];
+  // The store retains its identity across history and projection updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeInputs.fills, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale]);
   const replayTradeHlines = useMemo<IndicatorHLine[]>(() => {
     const selectedTrackId = viewer.viewerState?.selected_track_id;
     const portfolio = tradeInputs.portfolio;
@@ -1316,7 +1321,7 @@ export default function ReplayTrainingPageShell({
       )}
       intervalSelector={null}
       workspace={cell ? <>
-        <span hidden data-replay-chart-trade-markers={review === null ? tradeInputs.fills.length : 0}
+        <span hidden data-replay-chart-trade-markers={review === null ? (replayTradeMarkers[0]?.data.length ?? 0) : 0}
           data-replay-chart-note-versions={JSON.stringify(notePoints.map(point => [point.id, point.revision]))}
           data-replay-chart-position-lines={review === null ? replayTradeHlines.length : 0} />
         {chart}

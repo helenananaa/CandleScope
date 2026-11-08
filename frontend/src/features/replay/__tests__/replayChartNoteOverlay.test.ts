@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { replayChartNotePoints, replayChartNoteVersions } from "../replayChartNoteOverlay.js";
+import { replayChartNotePoints, replayChartNoteVersions } from "../replayChartAnnotations.js";
 import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
 
 const at = 1_700_000_400_000;

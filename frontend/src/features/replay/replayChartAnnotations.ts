@@ -27,6 +27,13 @@ export function replayChartNoteVersions(
   return value.notes;
 }
 
+export function replayChartEventBarTime(eventTimeMs: number, interval: string, closedBarClock: boolean): number | null {
+  // A BAR replay advances to the closed candle's exclusive end. The
+  // candle starting at that exact instant has not been revealed yet.
+  const anchorMs = eventTimeMs - (closedBarClock ? 1 : 0);
+  return floorIntervalTime(interval, Math.floor(anchorMs / 1_000));
+}
+
 export function replayChartNotePoints(
   versions: ReturnType<typeof replayChartNoteVersions>,
   interval: string,
@@ -35,10 +42,7 @@ export function replayChartNotePoints(
   label: (reviewNote: boolean) => string,
 ) {
   return versions.flatMap(note => {
-    // A BAR replay advances to the closed candle's exclusive end. The
-    // candle starting at that exact instant has not been revealed yet.
-    const anchorMs = note.marketTimeMs - (closedBarClock ? 1 : 0);
-    const time = floorIntervalTime(interval, Math.floor(anchorMs / 1_000));
+    const time = replayChartEventBarTime(note.marketTimeMs, interval, closedBarClock);
     return time !== null && hasBar(time) ? [{
       id: note.id, revision: note.revisionCount, time,
       shape: "circle", color: note.reviewNote ? "#a855f7" : "#d97706",
