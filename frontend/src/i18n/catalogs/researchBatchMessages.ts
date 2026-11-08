@@ -33,3 +33,39 @@ export const researchBatchChinese: Record<keyof typeof researchBatchEnglish, str
   "researchBatch.open": "打开结果",
   "researchBatch.resume": "重新连接运行",
 };
+
+export const researchBatchKorean: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "첫 번째 실행",
+  "researchBatch.compareSecond": "두 번째 실행",
+  "researchBatch.compareDelta": "차이",
+  "researchBatch.compareLoading": "저장된 실행을 비교하는 중…",
+  "researchBatch.sources": "가져온 데이터 일괄 실행",
+  "researchBatch.help": "데이터 세트를 2개에서 {max}개까지 선택하세요. 각 작업은 현재 전략과 설정을 사용하며 데이터 버전은 각각 고정됩니다.",
+  "researchBatch.run": "선택한 데이터 세트 실행",
+  "researchBatch.jobs": "연구 일괄 작업",
+  "researchBatch.preparing": "고정 입력 준비 중",
+  "researchBatch.failed": "작업 또는 상태 확인 실패",
+  "researchBatch.interrupted": "실행 ID를 저장하기 전에 중단됨",
+  "researchBatch.storage": "일괄 작업을 저장하거나 읽을 수 없습니다.",
+  "researchBatch.submitFailed": "일괄 작업을 제출할 수 없습니다. 선택한 데이터와 전략 설정, 작업 한도를 확인하세요.",
+  "researchBatch.open": "결과 열기",
+  "researchBatch.resume": "실행에 다시 연결",
+};
+
+export const researchBatchBrazilian: Record<keyof typeof researchBatchEnglish, string> = {
+  "researchBatch.compareFirst": "Primeira execução",
+  "researchBatch.compareSecond": "Segunda execução",
+  "researchBatch.compareDelta": "Diferença",
+  "researchBatch.compareLoading": "Comparando execuções salvas…",
+  "researchBatch.sources": "Executar em lote com dados importados",
+  "researchBatch.help": "Selecione de 2 a {max} conjuntos de dados. Cada tarefa usa a estratégia e as configurações atuais e uma versão fixa dos dados.",
+  "researchBatch.run": "Executar nos conjuntos selecionados",
+  "researchBatch.jobs": "Tarefas de pesquisa em lote",
+  "researchBatch.preparing": "Preparando os dados da versão fixa",
+  "researchBatch.failed": "Falha na tarefa ou no acompanhamento",
+  "researchBatch.interrupted": "Interrompida antes de salvar o ID da execução",
+  "researchBatch.storage": "Não foi possível salvar ou ler as tarefas em lote.",
+  "researchBatch.submitFailed": "Não foi possível enviar o lote. Confira os dados selecionados, as configurações da estratégia e o limite de tarefas.",
+  "researchBatch.open": "Abrir resultado",
+  "researchBatch.resume": "Reconectar à execução",
+};
