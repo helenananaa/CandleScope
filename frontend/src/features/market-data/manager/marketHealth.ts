@@ -2,6 +2,8 @@ import { canonicalizeIntervalValue } from "../../../utils/intervals.js";
 import type { MarketSeries } from "../marketDataTypes.js";
 import { resolveKlineSeriesIdentity } from "../klineSeriesIdentity.js";
 
+import type { KlineFetchResult, StorageRevisionFloor } from "../klineContracts.js";
+
 export interface MarketStreamVersion {
   protocol: 1;
   epoch: string;
@@ -29,6 +31,15 @@ export function parseMarketVersion(value: unknown, series: MarketSeries): Market
   if (!scope || Object.entries(expected).some(([key, val]) => scope[key] !== val)) return null;
   return Object.freeze({ protocol: 1, epoch: v.epoch, generation: Number(v.generation), sequence: Number(v.sequence),
     barrier: Number(v.barrier), observed_at_ms: Number(v.observed_at_ms), ...(v.stable === undefined ? {} : { stable: v.stable === true }) });
+}
+
+export function meetsStorageRevisionFloor(
+  response: KlineFetchResult, series: MarketSeries, floor: StorageRevisionFloor,
+): boolean {
+  const version = parseMarketVersion(response.stream_version, series);
+  const revision = response.storage_revision;
+  return version?.epoch === floor.epoch && version.stable === true
+    && typeof revision === "number" && Number.isSafeInteger(revision) && revision >= floor.revision;
 }
 
 export function sameStream(a: MarketStreamVersion | null, b: MarketStreamVersion | null): boolean {

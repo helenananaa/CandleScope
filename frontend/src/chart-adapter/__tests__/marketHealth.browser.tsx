@@ -44,16 +44,23 @@ export async function checkMarketHealth() {
     observed_at_ms: Date.now(), stable: true,
     series: { exchange: "binance", market_type: "spot", symbol, interval: "1m", provider_id: "binance", venue: "binance",
       asset_class: "crypto", series_variant: "native", price_adjustment: "raw", session_variant: "continuous", volume_semantics: "base_asset" } });
+  const storageRevisions = new Map<string, number>();
   const calls: string[] = [];
   const result = (symbol: string): KlineFetchResult => ({ data: corpus.get(symbol)!.map(row => ({ ...row })), stream_version: wire(symbol),
+    storage_revision: storageRevisions.get(symbol) ?? 0,
     all_rows_final: true, complete: true, retryable: false, history_state: "ready", verified_contiguous: true,
     missing_ranges: [], has_tail_gap: false, truncated: false });
   let nextRange: KlineFetchResult | undefined;
+  const correctionRevisions: number[] = [];
   const api: KlineApi = {
     getMultiStreamUrl: () => "ws://owned-market-fixture",
     fetchKlinesHistory: async symbol => { calls.push(`history:${symbol}`); await new Promise(resolve => setTimeout(resolve, 10)); return result(symbol); },
     fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
-    fetchKlinesRange: async (symbol, _interval, from, to) => {
+    fetchKlinesRange: async (symbol, _interval, from, to, _market, _exchange, options) => {
+      if (options.storageRevisionFloor) {
+        assert(options.storageRevisionFloor.epoch === "browser-server", "range lost correction epoch");
+        correctionRevisions.push(options.storageRevisionFloor.revision);
+      }
       calls.push(`range:${symbol}`);
       const page = result(symbol);
       const response = nextRange ?? { ...page, data: (page.data ?? []).filter(row => from <= row.time && row.time <= to) };
@@ -169,16 +176,23 @@ export async function checkMarketHealth() {
     const stream = physical.find(item => item.symbol === eth.symbol && !item.closed)!;
     const previous = revisions.get(eth.symbol)!;
     revisions.set(eth.symbol, { sequence: previous.sequence + 1, barrier: previous.barrier + 1 });
+    storageRevisions.set(eth.symbol, 7);
+    nextRange = { ...result(eth.symbol), storage_revision: 6, data: [{ ...idleCorrection, close: 28 }] };
     const affected = { range_start_ms: idleCorrection.time * 1000, range_end_ms: idleCorrection.time * 1000 };
     stream.options.onBackfillCompleted?.({ type: "backfill_completed", exchange: eth.exchange, market_type: eth.marketType,
       symbol: eth.symbol, interval: eth.interval, stream_version: wire(eth.symbol),
       detail: { ...affected, reason: "storage_history_changed", storage_revision: 7 } }, stream.controller);
     assert(!manager.cache.read(eth, { from: idleCorrection.time, to: idleCorrection.time }).complete,
       "storage readback notice did not revoke the affected chart coverage");
+    await until(() => correctionRevisions.length > 0, "idle chart did not request the affected range");
+    assert(cells.get("A")!.store.snapshot().find(row => row.time === idleCorrection.time)?.close !== 28,
+      "an old storage revision overwrote the rendered candle");
     await until(() => cells.get("A")!.store.snapshot().find(row => row.time === idleCorrection.time)?.close === 27,
       "idle chart did not apply the durable correction without a tick");
     assert(JSON.stringify(cells.get("B")!.store.snapshot()) === other, "durable readback changed another market");
-    checks.push("durable history notification invalidates and reloads the affected idle chart before another tick");
+    assert(correctionRevisions.length === 2 && correctionRevisions.every(revision => revision === 7),
+      "correction readback did not retry at the notified revision floor");
+    checks.push("durable correction rejects an older storage snapshot and reloads the affected idle chart before another tick");
     stream.options.onClose?.(new CloseEvent("close", { code: 1013, reason: "CONSUMER_RESYNC_REQUIRED" }), stream.controller);
     stream.options.onOpen?.(stream.controller);
     stream.options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m"] }, stream.controller);

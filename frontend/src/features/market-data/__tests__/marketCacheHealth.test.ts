@@ -5,7 +5,7 @@ import { parseMarketVersion } from "../manager/marketHealth.js";
 import { MarketDataManager } from "../manager/marketDataManager.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
-import type { KlineApi, KlineFetchResult, KlineStreamController, KlineStreamOptions } from "../klineContracts.js";
+import type { KlineApi, KlineFetchResult, KlineRangeRequestOptions, KlineStreamController, KlineStreamOptions } from "../klineContracts.js";
 import type { KlineBar, MarketSeries, EpochSeconds } from "../marketDataTypes.js";
 
 const series: MarketSeries = { exchange: "binance", marketType: "spot", symbol: "ETHUSDT", interval: "1m" };
@@ -295,4 +295,72 @@ test("production Feed switching consumes a healthy warm series with no HTTP or p
   assert.equal(manager.cache.planHistory(series, 2).health.subscribed, false, "negative ACK revokes a previous lease's health");
   options.onControlMessage?.({ type: "subscribed", intervals: ["1m"], active_intervals: ["1m"] }, controller);
   assert.notEqual(manager.cache.planHistory(series, 2).action, "reuse", "a later ACK cannot establish data continuity");
+});
+
+test("a storage correction rejects older range snapshots before they reach cache or chart", async t => {
+  const requests: KlineRangeRequestOptions[] = [];
+  const replies = [
+    { ...proof(wire(2, 2), [row(60), row(120, true, 11)]), storage_revision: 40 },
+    { ...proof(wire(2, 2, { epoch: "retired" }), [row(60), row(120, true, 12)]), storage_revision: 42 },
+    { ...proof(wire(2, 2), [row(60), row(120, true, 21)]), storage_revision: 41 },
+    { ...proof(wire(3, 3), [row(60), row(120, true, 23)]), storage_revision: 42 },
+    { ...proof(wire(4, 4), [row(60), row(120, true, 24)]), storage_revision: 43 },
+  ];
+  const manager = new MarketDataManager({
+    api: {
+      getMultiStreamUrl: () => "ws://test",
+      fetchKlinesHistory: async () => { throw new Error("unexpected history"); },
+      fetchKlinesRange: async (_symbol, _interval, _start, _end, _market, _exchange, options) => {
+        requests.push(options);
+        const reply = replies.shift();
+        if (!reply) throw new Error("unexpected range");
+        return reply;
+      },
+      fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
+      fetchLatestKlines: async () => { throw new Error("unexpected latest"); },
+    },
+    streams: { subscribe: () => { throw new Error("unexpected stream"); }, closeAll() {}, diagnostics: () => ({}) },
+  });
+  t.after(() => manager.closeAll());
+  const committed: number[] = [];
+  const feed = new SeriesDataFeed({ api: manager, getActiveSeries: () => series,
+    commitMergedChartData: (_symbol, _interval, data) => {
+      const close = data.at(-1)?.close;
+      assert.equal(typeof close, "number");
+      committed.push(close!);
+    } });
+  read(manager.cache, wire(1), [row(60), row(120)]);
+
+  const correct = (sequence: number, revision: number, ranged: boolean) => {
+    const version = wire(sequence, sequence);
+    manager.cache.invalidateRange(series, ranged ? { from: 120, to: 120 } : undefined, version, revision);
+    assert.equal(feed.handleBackfillCompleted({
+      type: "backfill_completed", interval: series.interval, stream_version: version,
+      detail: { reason: "storage_history_changed", storage_revision: revision,
+        ...(ranged ? { range_start_ms: 120_000, range_end_ms: 120_000 } : {}) },
+    }, { getCacheRows: () => [...manager.read(series).rows] }), true);
+  };
+  const idle = async () => {
+    for (let i = 0; i < 100 && feed.backfillReloadInFlight.size; i += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(feed.backfillReloadInFlight.size, 0);
+  };
+
+  correct(2, 41, true);
+  await idle();
+  assert.deepEqual(requests.map(({ storageRevisionFloor }) => storageRevisionFloor),
+    Array.from({ length: 3 }, () => ({ epoch: "server-a", revision: 41 })));
+  assert.deepEqual(committed, [21]);
+  assert.equal(manager.read(series).rows.at(-1)?.close, 21);
+
+  correct(3, 42, true);
+  await idle();
+  assert.deepEqual(requests.at(-1)?.storageRevisionFloor, { epoch: "server-a", revision: 42 });
+  assert.deepEqual(committed, [21, 23]);
+
+  correct(4, 43, false);
+  await idle();
+  assert.deepEqual(requests.at(-1)?.storageRevisionFloor, { epoch: "server-a", revision: 43 });
+  assert.deepEqual(committed, [21, 23, 24]);
 });

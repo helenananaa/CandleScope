@@ -8,8 +8,10 @@ import subprocess
 import sys
 
 import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
-from app.api.v1.klines import _history_contract_payload
+from app.api.v1.klines import _history_contract_payload, router as klines_router
 from app.core import config as core_config
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.models import BarData, DataEventType, SeriesKey
@@ -90,6 +92,18 @@ async def test_idle_chart_receives_cross_process_readback_after_ordinary_close(s
     consumer.readbacks_enabled = True
     baseline = query(manager).metadata["stream_version"]
     notices = asyncio.Queue()
+    app = FastAPI()
+    app.state.data_manager = manager
+    app.include_router(klines_router, prefix="/api/v1")
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+    async def readback(revision, epoch, *, strict=False):
+        response = await client.get("/api/v1/klines/range", params={
+            "start_ms": START, "end_ms": START, "strict": str(strict).lower(),
+            "min_revision": revision, "min_revision_epoch": epoch,
+        })
+        assert response.status_code == 200, response.text
+        return response.json()
 
     async def receive(event):
         notices.put_nowait(event)
@@ -116,6 +130,13 @@ async def test_idle_chart_receives_cross_process_readback_after_ordinary_close(s
         racing = query(manager, min_revision=corrected_revision)
         assert racing.bars[0].close == 200
         assert racing.metadata["stream_version"]["stable"] is False
+        pending = await readback(corrected_revision, baseline["epoch"])
+        assert pending["storage_revision"] >= corrected_revision
+        assert pending["stream_version"]["stable"] is False
+        assert pending["history_state"] == "pending"
+        assert pending["retryable"] is True
+        assert pending["renderable"] is False
+        assert pending["missing_ranges"] == pending["data"] == []
         await manager._publish_history_readbacks(consumer)
         native = await asyncio.wait_for(notices.get(), timeout=2)
         derived = await asyncio.wait_for(notices.get(), timeout=2)
@@ -128,7 +149,19 @@ async def test_idle_chart_receives_cross_process_readback_after_ordinary_close(s
         assert derived.detail["affected_range"] == {"from_ms": derived_open, "to_ms": derived_open}
         assert query(manager).metadata["stream_version"]["stable"] is True
         assert consumer.pending_readbacks() == (None, ())
+
+        ready = await readback(native.detail["storage_revision"], native.detail["stream_version"]["epoch"], strict=True)
+        assert ready["history_state"] == "ready"
+        assert ready["storage_revision"] >= corrected_revision
+        assert ready["stream_version"]["stable"] is True
+        assert ready["data"][0]["close"] == 200
+        assert (await readback(storage.revision_store.head() + 1, baseline["epoch"]))["data"] == []
+        wrong_epoch = await readback(corrected_revision, "retired")
+        assert wrong_epoch["storage_revision"] >= corrected_revision
+        assert wrong_epoch["history_state"] == "pending"
+        assert wrong_epoch["data"] == []
     finally:
+        await client.aclose()
         await manager.event_bus.close()
 
 

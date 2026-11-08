@@ -2726,6 +2726,8 @@ async def get_klines_range(
         ge=0,
         description="Monotonic generation within request_scope",
     ),
+    min_revision: int | None = Query(None, ge=0),
+    min_revision_epoch: str | None = Query(None, min_length=1, max_length=128),
     series_identity_query: KlineSeriesIdentityQuery = Depends(),
 ):
     """Get K-lines for an exact time range with continuity verification."""
@@ -2735,6 +2737,12 @@ async def get_klines_range(
     repair_mode = (repair or "async").strip().lower()
     if repair_mode not in {"none", "async", "wait"}:
         raise HTTPException(status_code=400, detail="repair must be one of: none, async, wait")
+
+    if (min_revision is None) != (min_revision_epoch is None):
+        raise HTTPException(status_code=400, detail="min_revision and min_revision_epoch must be paired")
+    if min_revision is not None:
+        # A correction readback verifies committed storage without starting repair work.
+        repair_mode = "none"
 
     exchange = _validate_exchange(exchange)
     market_type = _validate_market_type(market_type)
@@ -2806,12 +2814,12 @@ async def get_klines_range(
             "fetched": 0,
             "has_tail_gap": False,
             "backfill_triggered": False,
-            "verified_contiguous": True,
-            "renderable": True,
+            "verified_contiguous": min_revision is None,
+            "renderable": min_revision is None,
             "missing_ranges": [],
-            "history_state": "ready",
-            "complete": True,
-            "retryable": False,
+            "history_state": "ready" if min_revision is None else "pending",
+            "complete": min_revision is None,
+            "retryable": min_revision is not None,
             "terminal_reason": None,
             "earliest_available_ms": None,
             "next_before_ms": None,
@@ -2846,6 +2854,7 @@ async def get_klines_range(
                 market_type=market_type,
                 **identity_kwargs,
                 auto_backfill=auto_backfill,
+                **({"min_revision": min_revision} if min_revision is not None else {}),
                 backfill_reason="visible_range_gap",
                 backfill_requester="klines_range",
                 **(
@@ -2872,6 +2881,26 @@ async def get_klines_range(
             return candidate_data, candidate_verification
 
         result = await _run_range_query(repair_mode != "none")
+        if min_revision is not None:
+            metadata = result.metadata or {}
+            revision = metadata.get("storage_revision")
+            version = metadata.get("stream_version") or {}
+            if (
+                type(revision) is not int
+                or revision < min_revision
+                or version.get("epoch") != min_revision_epoch
+                or version.get("stable") is not True
+            ):
+                return ORJSONResponse({
+                    **_history_contract_payload(result, verified_contiguous=False, missing_ranges=[]),
+                    "all_rows_final": False,
+                    "verified_contiguous": False,
+                    "renderable": False,
+                    "truncated": False,
+                    "missing_ranges": [],
+                    "count": 0,
+                    "data": [],
+                })
         backfill_triggered = bool(result.backfill_triggered)
         data, verification = _verify_range_result(result)
         reported_missing = [item.to_dict() for item in result.missing_ranges]

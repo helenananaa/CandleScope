@@ -1,10 +1,11 @@
 import type {
-  KlineApi, KlineFetchResult, KlineHistoryBatchOutcome, KlineRequestOptions, KlineStreamFactory,
+  KlineApi, KlineFetchResult, KlineHistoryBatchOutcome, KlineRequestOptions, KlineStreamFactory, StorageRevisionFloor,
 } from "../klineContracts.js";
 import type { MarketSeries } from "../marketDataTypes.js";
 import { SharedKlineRequestCoordinator } from "../feed/sharedKlineRequestCoordinator.js";
 import { SharedKlineStreamCoordinator } from "../feed/sharedKlineStreamCoordinator.js";
 import { SharedMarketCache, type MarketCacheOptions, type MarketReadToken } from "./sharedMarketCache.js";
+import { meetsStorageRevisionFloor } from "./marketHealth.js";
 import type { MarketRange } from "./sharedMarketCache.js";
 import { SeriesDataFeed } from "../feed/seriesDataFeed.js";
 import type { MarketDataService, MarketWarmOptions } from "../marketDataService.js";
@@ -67,7 +68,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
       getMultiStreamUrl: (...args) => api.getMultiStreamUrl(...args),
       fetchKlinesHistory: (...args) => this.acceptHttp(identity(args[0], args[1], args[3], args[4], args[5]), args[5], "history", () => api.fetchKlinesHistory(...args)),
       fetchKlinesBefore: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "before", () => api.fetchKlinesBefore(...args)),
-      fetchKlinesRange: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "range", () => api.fetchKlinesRange(...args)),
+      fetchKlinesRange: (...args) => this.acceptHttp(identity(args[0], args[1], args[4], args[5], args[6]), args[6], "range", () => api.fetchKlinesRange(...args), args[6].storageRevisionFloor),
       fetchLatestKlines: (...args) => this.acceptHttp(identity(args[0], args[1], args[3], args[4], args[6]), args[6], "latest", () => api.fetchLatestKlines(...args)),
     };
     if (api.fetchKlinesHistoryBatch) {
@@ -134,7 +135,8 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
           const to = event.detail?.range_end_ms ?? event.detail?.request_end_ms;
           if (event.interval) this.cache.invalidateRange({ ...series, interval: event.interval },
             typeof from === "number" && typeof to === "number" && Number.isFinite(from) && Number.isFinite(to) && from <= to
-              ? { from: from / 1000, to: to / 1000 } : undefined, event.stream_version);
+              ? { from: from / 1000, to: to / 1000 } : undefined, event.stream_version,
+            event.detail?.reason === "storage_history_changed" ? event.detail.storage_revision : undefined);
           else this.cache.markDisconnected(series);
           if (event.interval) this.healthRecovery.request({ ...series, interval: event.interval });
           return streamOptions.onBackfillCompleted?.(event, controller) ?? false;
@@ -275,7 +277,7 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     if (this.closed || options.signal?.aborted) throw aborted();
     // Repair/readback must reach the backend: an old local proof cannot verify
     // a new server correction or establish reconnect freshness.
-    if (options.clientContext?.cacheMode !== "network-only" && !options.strict
+    if (!options.storageRevisionFloor && options.clientContext?.cacheMode !== "network-only" && !options.strict
       && (options.repair === undefined || options.repair === "none")) {
       const snapshot = this.cache.read(identity(symbol, interval, marketType, exchange, options), { from: start, to: end });
       if (snapshot.complete) {
@@ -309,12 +311,15 @@ export class MarketDataManager extends MarketDataManagerCore implements MarketDa
     this.cache.clear();
   }
 
-  private async acceptHttp(series: MarketSeries, options: KlineRequestOptions, endpoint: NonNullable<KlineFetchResult["endpoint"]>, request: () => Promise<KlineFetchResult>): Promise<KlineFetchResult> {
+  private async acceptHttp(series: MarketSeries, options: KlineRequestOptions, endpoint: NonNullable<KlineFetchResult["endpoint"]>, request: () => Promise<KlineFetchResult>, floor?: StorageRevisionFloor): Promise<KlineFetchResult> {
     if (this.closed || options.signal?.aborted) throw aborted();
     const token = this.cache.beginRead(series);
     try {
       const response = await request();
       if (this.closed || options.signal?.aborted) throw aborted();
+      if (floor && !meetsStorageRevisionFloor(response, series, floor)) {
+        return { endpoint, data: [], history_state: "pending", complete: false, retryable: true };
+      }
       return this.cache.admitResponse(token, { ...response, endpoint });
     } finally { token.release(); }
   }

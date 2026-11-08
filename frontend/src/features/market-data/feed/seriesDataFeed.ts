@@ -1,3 +1,4 @@
+import { meetsStorageRevisionFloor, parseMarketVersion } from "../manager/marketHealth.js";
 import { BackfillRecoveryQueue } from "./backfillRecoveryQueue.js";
 import { assessKlineQuality, chooseHttpRow, hasFinalityEvidence, hasRetainedFinalRangeProof, hasVerifiedRangeCoverage, preserveFinalRow, recoveryRetryDecision, isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
 export { isKlineResultRepairPending } from "../quality/klineQualityPolicy.js";
@@ -17,6 +18,7 @@ import type {
   KlineFetchResult,
   KlineHistoryIntent,
   KlineRequestContext,
+  KlineRangeRequestOptions,
   KlineStreamController,
   KlineStreamFactory,
   KlineStreamOptions,
@@ -24,6 +26,7 @@ import type {
   PatchCacheTick,
   PendingBeforePage,
   SeriesDataFeedConfig,
+  StorageRevisionFloor,
 } from "../klineContracts.js";
 import type { ForegroundPreloadGate } from "../foregroundPreloadGate.js";
 import type { ChartWorkLane, ChartWorkScheduler } from "../chartWorkScheduler.js";
@@ -131,7 +134,7 @@ interface GetBeforeOptions {
   priority?: FeedRequestPriority;
 }
 
-interface GetRangeOptions {
+interface GetRangeOptions extends Pick<KlineRangeRequestOptions, "storageRevisionFloor"> {
   cacheMode?: KlineRequestContext["cacheMode"];
   start?: unknown;
   end?: unknown;
@@ -237,6 +240,7 @@ interface BackfillReloadJob {
   series: MarketSeries;
   epoch: number;
   range: TimeRangeMs | null;
+  storageRevisionFloor: StorageRevisionFloor | null;
   detail: NonNullable<BackfillCompletedMessage["detail"]>;
   eventKeys: Set<string>;
   userVisibleReason: boolean;
@@ -691,7 +695,11 @@ export class SeriesDataFeed {
     this.beforePageAvailability = new Map();
     this.backfillRecovery = new BackfillRecoveryQueue({
       merge: (queued, job) => {
-        if (queued.epoch !== job.epoch || !rangesTouch(queued.range, job.range)) return false;
+        if (queued.epoch !== job.epoch || !rangesTouch(queued.range, job.range)
+          || queued.storageRevisionFloor?.epoch !== job.storageRevisionFloor?.epoch) return false;
+        if (job.storageRevisionFloor && job.storageRevisionFloor.revision > (queued.storageRevisionFloor?.revision ?? -1)) {
+          queued.storageRevisionFloor = job.storageRevisionFloor;
+        }
         queued.range = unionRange(queued.range, job.range);
         queued.userVisibleReason ||= job.userVisibleReason;
         queued.detail = { ...queued.detail, ...job.detail };
@@ -1343,6 +1351,7 @@ export class SeriesDataFeed {
     series: MarketSeries,
     detail: NonNullable<BackfillCompletedMessage["detail"]>,
     range: TimeRangeMs | null,
+    floor: StorageRevisionFloor | null,
   ): string {
     const requestId = detail.request_id ?? detail.repair_id ?? detail.job_id ?? "";
     return [
@@ -1351,6 +1360,8 @@ export class SeriesDataFeed {
       String(range?.start ?? ""),
       String(range?.end ?? ""),
       String(detail.reason || ""),
+      floor?.epoch ?? "",
+      floor?.revision ?? "",
     ].join("|");
   }
 
@@ -1375,7 +1386,7 @@ export class SeriesDataFeed {
     const fetchRange = (
       (isPendingInitial || isPendingLoadMore)
         ? job.range
-        : (activeOverlap || intersectRanges(job.range, activeCoverage))
+        : activeOverlap
     );
     let loadedAny = false;
     let initialResolved = false;
@@ -1414,13 +1425,23 @@ export class SeriesDataFeed {
 
     if (fetchRange) {
       try {
-        const result = await this.getBars(job.series, {
-          from: millisecondsToSeconds(fetchRange.start),
-          to: millisecondsToSeconds(fetchRange.end),
+        const read = () => this.getRange(job.series, {
+          start: millisecondsToSeconds(fetchRange.start),
+          end: millisecondsToSeconds(fetchRange.end),
           repair: "none",
           strict: false,
           source: "backfill-completed",
+          ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
         });
+        let result = await read();
+        for (let attempt = 1; result.reason === "storage-revision-pending"
+          && attempt < job.options.completionMaxAttempts; attempt += 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 100 * attempt));
+          if (!this.isCurrent(job.series, job.epoch) || !this.shouldCommitActive(job.series)) return false;
+          result = await read();
+        }
+        if (result.reason === "storage-revision-pending") return false;
+        if (job.storageRevisionFloor && pendingBeforePage) pendingBeforePage.nextPollAt = Date.now();
         if (result.stale || !this.isCurrent(job.series, job.epoch)) return false;
         if (result.active === false || !this.shouldCommitActive(job.series)) {
           this.clearInactivePendingState(job.series);
@@ -1468,12 +1489,13 @@ export class SeriesDataFeed {
     };
     try {
       const result = pendingInitial.range
-        ? await this.getBars(job.series, {
-          from: millisecondsToSeconds(pendingInitial.range.start),
-          to: millisecondsToSeconds(pendingInitial.range.end),
+        ? await this.getRange(job.series, {
+          start: millisecondsToSeconds(pendingInitial.range.start),
+          end: millisecondsToSeconds(pendingInitial.range.end),
           repair: "none",
           strict: false,
           source: "backfill-initial-range-verification",
+          ...(job.storageRevisionFloor ? { storageRevisionFloor: job.storageRevisionFloor } : {}),
           ...(pendingInitial.indicatorWindowOwner
             ? { indicatorWindowOwner: pendingInitial.indicatorWindowOwner }
             : {}),
@@ -2146,6 +2168,13 @@ export class SeriesDataFeed {
         || this.pendingDerivedRange(activeSeries, eventRange)
         || projectContinuousRangeToInterval(eventRange, activeSeries.interval);
     }
+    let storageRevisionFloor: StorageRevisionFloor | null = null;
+    if (detail.reason === "storage_history_changed") {
+      const revision = detail.storage_revision;
+      const version = parseMarketVersion(msg.stream_version ?? detail.stream_version, eventSeries);
+      if (!version || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) return true;
+      storageRevisionFloor = { epoch: version.epoch, revision };
+    }
     this.invalidateBeforePageAvailabilityFromObservation(eventSeries, {
       range: eventRange,
       revision: detail.availability_revision,
@@ -2161,7 +2190,7 @@ export class SeriesDataFeed {
     );
     const isPendingLoadMore = Boolean(pendingBeforePage);
 
-    if (isPendingLoadMore && !isPendingInitial) {
+    if (!storageRevisionFloor && isPendingLoadMore && !isPendingInitial) {
       // A completion chunk is only a hint that the owned page may now be
       // readable. Do not fan each chunk out into an exact-range reload plus a
       // second full-page request; the runtime poll is the single validation
@@ -2170,7 +2199,7 @@ export class SeriesDataFeed {
       return true;
     }
 
-    if (isPendingInitial && pendingInitial?.range) {
+    if (!storageRevisionFloor && isPendingInitial && pendingInitial?.range) {
       const initialRange = {
         start: millisecondsToSeconds(pendingInitial.range.start),
         end: millisecondsToSeconds(pendingInitial.range.end),
@@ -2189,6 +2218,7 @@ export class SeriesDataFeed {
 
     const activeRows = getCacheRows(eventSeries) || [];
     const activeCoverage = activeCoverageMsFromRows(activeRows);
+    if (storageRevisionFloor && !eventRange) eventRange = activeCoverage ?? pendingInitial?.range ?? null;
     const activeOverlap = intersectRanges(eventRange, activeCoverage);
     if (
       userVisibleReason
@@ -2203,12 +2233,13 @@ export class SeriesDataFeed {
 
     const fetchRange = (isPendingInitial || isPendingLoadMore)
       ? eventRange
-      : (activeOverlap || intersectRanges(eventRange, activeCoverage));
-    const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange);
+      : activeOverlap;
+    const eventKey = this.backfillEventKey(eventSeries, detail, fetchRange, storageRevisionFloor);
     this.backfillRecovery.enqueue(this.seriesKey(eventSeries), {
       series: eventSeries,
       epoch: this.currentEpoch(eventSeries),
       range: fetchRange,
+      storageRevisionFloor,
       detail,
       eventKeys: new Set([eventKey]),
       userVisibleReason,
@@ -2217,7 +2248,7 @@ export class SeriesDataFeed {
         loading,
         pendingInitial,
         getPendingInitial,
-          getCacheRows,
+        getCacheRows,
         getFallbackDays,
         onRecoveryProgress,
         cooldownMs,
@@ -2603,6 +2634,7 @@ export class SeriesDataFeed {
       indicatorWindowOwner: requestedIndicatorWindowOwner,
       priority = "foreground",
       cacheMode = "network-only",
+      storageRevisionFloor,
     }: GetRangeOptions = {},
   ): Promise<FeedResult> {
     const range = normalizeRangeSec({ start, end, startSec, endSec });
@@ -2651,11 +2683,16 @@ export class SeriesDataFeed {
             repair,
             waitMs,
             strict,
+            ...(storageRevisionFloor ? { storageRevisionFloor } : {}),
             ...(signal === undefined ? {} : { signal }),
             ...transportDemand,
           },
         );
         throwIfAborted(signal);
+        if (storageRevisionFloor && !meetsStorageRevisionFloor(result, series, storageRevisionFloor)) {
+          return { data: [], rows: [], reason: "storage-revision-pending",
+            history_state: "pending", complete: false, retryable: true } satisfies FeedResult;
+        }
         const applied = this.applyResult(series, { ...result, endpoint: "range" }, {
           epoch,
           source,

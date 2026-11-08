@@ -178,7 +178,13 @@ export interface KlineBeforeRequestOptions extends KlineRequestOptions {
   maxWaitMs?: number;
 }
 
+export interface StorageRevisionFloor {
+  epoch: string;
+  revision: number;
+}
+
 export interface KlineRangeRequestOptions extends KlineRequestOptions {
+  storageRevisionFloor?: StorageRevisionFloor;
   repair?: string;
   waitMs?: number;
   strict?: boolean;
@@ -356,6 +362,7 @@ export interface BackfillCompletedMessage {
   price_adjustment?: string;
   session_variant?: string;
   volume_semantics?: string;
+  stream_version?: unknown;
   detail?: BackfillCompletedDetail;
 }
 

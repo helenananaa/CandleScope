@@ -331,13 +331,19 @@ export class SharedMarketCache {
     catch (error) { if (!(error instanceof MarketCacheCapacityError)) throw error; }
   }
 
-  invalidateRange(series: MarketSeries, range?: { from: number; to: number }, wireVersion?: unknown): void {
+  invalidateRange(
+    series: MarketSeries, range?: { from: number; to: number }, wireVersion?: unknown, storageRevision?: unknown,
+  ): void {
     const entry = this.entries.get(String(buildSeriesWindowKey(series)));
     if (!entry) return;
     const version = parseMarketVersion(wireVersion, series);
     if (version) {
       const decision = entry.health.event(version, true, false);
       if (!decision.accept) return;
+      if (typeof storageRevision === "number" && Number.isSafeInteger(storageRevision) && storageRevision >= 0
+        && (entry.storageVersion?.epoch !== version.epoch || storageRevision > entry.storageVersion.revision)) {
+        entry.storageVersion = { epoch: version.epoch, revision: storageRevision };
+      }
       if (decision.reset || decision.gap) range = undefined;
     }
     entry.health.invalidate();
