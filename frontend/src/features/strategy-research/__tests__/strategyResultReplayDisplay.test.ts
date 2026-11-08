@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { BacktestResultReplayBar, BacktestResultReplayFrame } from "../../backtest/backtestTypes.js";
 import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers, replayLayout, restoreReplayLayout } from "../strategyResultReplayDisplay.js";
 import { StrategyResultReplayChart } from "../StrategyResultReplayChart.js";
+import { editReplayDrawings, replayDrawingBarIndex, replayDrawingOwner, replayDrawingScope, revealedReplayDrawings, type ReplayDrawing } from "../strategyResultReplayDrawings.js";
 
 test("only the edited setting follows its opt-in link", () => {
   const initial = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "primary", "upColor", "#123456");
@@ -77,6 +78,40 @@ test("markers require an owned chart, a revealed cursor and a matching candle", 
   assert.doesNotMatch(hidden, /data-testid="strategy-replay-ma(?:-line)?"/);
   assert.match(hidden, /data-testid="strategy-replay-fill-marker"/);
   assert.match(hidden, /data-testid="strategy-replay-last-ohlc"/);
+
+  const drawing: ReplayDrawing = {
+    id: "6c62a01d-c890-43f1-8845-d77bc99cc384", cursor: 4, points: [{ timeMs: 100, price: 1.5 }],
+  };
+  const renderDrawings = (cursor: number, showDrawings = true) => renderToStaticMarkup(createElement(StrategyResultReplayChart, {
+    slot: "primary", chart, frame: { ...frame, cursor }, display: { ...DEFAULT_REPLAY_DISPLAY.primary, showDrawings },
+    disabled: false, drawingControl: { owner: "run", drawings: [drawing], locked: false, edit: () => true }, onChange() {},
+  }));
+  assert.match(renderDrawings(4), /data-testid="strategy-replay-drawing"/);
+  assert.doesNotMatch(renderDrawings(3), /data-testid="strategy-replay-drawing"/);
+  assert.doesNotMatch(renderDrawings(4, false), /data-testid="strategy-replay-drawing"/);
+  assert.equal(replayDrawingBarIndex(bars, 199), 1);
+  assert.equal(replayDrawingBarIndex(bars, 200), -1);
+});
+
+test("result drawings round-trip with per-slot and per-dataset ownership", () => {
+  const key = `bt_drawings:sha256:${"1".repeat(64)}:sha256:${"2".repeat(64)}`;
+  const drawing: ReplayDrawing = { id: "6c62a01d-c890-43f1-8845-d77bc99cc384", cursor: 3,
+    points: [{ timeMs: 200, price: 10 }, { timeMs: 300, price: 12 }] };
+  const reference = replayDrawingOwner({ dataset_id: `local-${"a".repeat(32)}`, data_epoch: `sha256:${"2".repeat(64)}` });
+  assert.ok(reference);
+  assert.equal(replayDrawingOwner({ dataset_id: `local-${"a".repeat(32)}` }), null);
+  const primary = replayDrawingScope("primary", "run");
+  const comparison = replayDrawingScope("comparison", "run");
+  const pinned = replayDrawingScope("comparison", reference);
+  const documents = editReplayDrawings({}, [primary, comparison], { add: drawing })!;
+  const pinnedDocuments = editReplayDrawings(documents, [pinned], { add: { ...drawing, cursor: 7 } })!;
+  const removed = editReplayDrawings(pinnedDocuments, [primary, comparison], { remove: drawing.id });
+  assert.deepEqual(removed, { [pinned]: [{ ...drawing, cursor: 7 }] });
+  const display = { ...DEFAULT_REPLAY_DISPLAY, drawings: pinnedDocuments };
+  const restored = readReplayDisplays(JSON.parse(JSON.stringify({ [key]: display })))![key]!;
+  assert.deepEqual(restored.drawings, pinnedDocuments);
+  assert.deepEqual(revealedReplayDrawings(restored.drawings![pinned]!, 6, 300), []);
+  assert.deepEqual(revealedReplayDrawings(restored.drawings![pinned]!, 7, 299), []);
 });
 
 test("saved references and styles are isolated by result and links touch only visible slots", () => {
