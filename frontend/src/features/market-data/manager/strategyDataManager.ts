@@ -1,3 +1,4 @@
+import type { PreparationJob } from "../../data-preparation/api.js";
 import { defaultBacktestApi, type BacktestApiClient } from "../../backtest/backtestApi.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayNoteDraft, BacktestRunRecord } from "../../backtest/backtestTypes.js";
 import { isBacktestTerminalState } from "../../backtest/backtestRunClient.js";
@@ -9,7 +10,7 @@ import type { ContinuousApi } from "../../backtest/continuous/continuousTypes.js
 import { ContinuousStrategyDataManager } from "./continuousStrategyDataManager.js";
 
 type ResearchRequest = Omit<Parameters<typeof runResearchBacktest>[0], "api" | "waitForTerminal" | "wait" | "pollIntervalMs">;
-export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote">;
+export type StrategyDataApi = ChartStrategyRunApi & Pick<BacktestApiClient, "streamRun" | "getReport" | "getChart" | "cancelRun" | "listRuns" | "compareRuns"> & Pick<BacktestApiClient, "getResultReplay" | "saveResultReplayNote" | "observeStrategyPreparation">;
 
 /** Owns fixed-history operations and immutable results independently of live
  * chart stores. Releasing a consumer never cancels a durable shared run. */
@@ -73,6 +74,15 @@ export class StrategyDataManager {
       ...request, api: this.api, signal,
       waitForTerminal: (runId, _signal, onUpdate) => this.wait(runId, signal, onUpdate),
     }));
+  }
+
+  observeResearchPreparation(id: string, scope: string, retry: boolean, onProgress: (job: PreparationJob) => void | Promise<void>): Promise<PreparationJob> {
+    return this.operation(undefined, (signal) => {
+      if (!this.api.observeStrategyPreparation) {
+        throw new StrategyRunStreamError("STRATEGY_PREPARATION_UNAVAILABLE", "Strategy preparation is unavailable");
+      }
+      return this.api.observeStrategyPreparation(id, scope, retry, onProgress, signal);
+    });
   }
 
   private async readResult(runId: string, signal: AbortSignal) {

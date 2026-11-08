@@ -22,6 +22,7 @@ import { getStrategyStorage } from "../../shared/strategyStorage.js";
 import { ResearchIndicatorScopeStore } from "./researchIndicatorScope.js";
 import { ResearchIndicatorScopeControl } from "./ResearchIndicatorScopeControl.js";
 import { useResearchIndicatorScopeResults } from "./useResearchIndicatorScopeResults.js";
+import type { ResearchMarketInput } from "./strategyResearchBatch.js";
 import { ResearchBatchResults, ResearchBatchSources } from "./ResearchBatchPanel.js";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
@@ -145,7 +146,6 @@ export default function StrategyResearchApp({
   const locale = useLocale();
   const availability = useNativeAvailability();
   const [selectedNativeMode, setNativeMode] = useState<boolean | null>(["advanced", "deep-link", "handoff"].includes(intent.kind) ? false : null);
-  const nativeMode = selectedNativeMode ?? availability === "available";
   const [projectRestoreRevision, setProjectRestoreRevision] = useState(0);
   const [nativeRun, setNativeRun] = useState<import("../backtest/native/nativeBacktestApi.js").NativeRun | null>(null);
   const [nativeStatus, setNativeStatus] = useState<NativeFeedbackStatus>("idle");
@@ -186,6 +186,7 @@ export default function StrategyResearchApp({
 
   const launchImported = intent.kind === "imported" || intent.kind === "import";
   const source = state.source.source;
+  const nativeMode = selectedNativeMode ?? (availability === "available" && source !== null);
   const launchImportedBoundRef = useRef(source?.kind === "IMPORTED_DATASET");
   const {
     datasets: libraryDatasets,
@@ -419,6 +420,8 @@ export default function StrategyResearchApp({
       cursor: 0, interval: savedResult.chart.interval,
     });
   };
+  const [marketInputs, setMarketInputs] = useState<readonly ResearchMarketInput[]>([]);
+  const marketBatchAvailable = hostReady && runtime.runtimeMode === "LIVE";
   const batchState = useSyncExternalStore(researchRun.batch.subscribe, researchRun.batch.snapshot, researchRun.batch.snapshot);
   const [batchError, setBatchError] = useState(false);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
@@ -522,12 +525,15 @@ export default function StrategyResearchApp({
         onDraftId={handleDraftId}
         onDraftRevision={handleDraftRevision}
         onRun={researchRun.onRun}
-        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={request?.attachment.fidelityPreference === "PRECISE"}>{selected => <>
-          <button type="button" className="research-primary" disabled={!request || selected.length < 2 || batchState.storageFailed}
+        marketBatchAvailable={marketBatchAvailable}
+        batchSession={marketBatchAvailable ? marketInputs[0]?.session ?? null : null}
+        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={state.script.configuration?.fidelityPreference === "PRECISE"}
+          marketEnabled={marketBatchAvailable} markets={marketInputs} onMarkets={setMarketInputs}>{(selected, exchange) => <>
+          <button type="button" className="research-primary" disabled={!request || (!exchange.length && selected.length < 2) || batchState.storageFailed}
             onClick={() => {
               if (!request) return;
               setBatchError(false);
-              void researchRun.batch.submit(request, selected).catch(() => setBatchError(true));
+              void researchRun.batch.submit(request, selected, exchange).catch(() => setBatchError(true));
             }}>{t("researchBatch.run")}</button>
           {batchState.jobs.length > 0 && <button type="button" onClick={() => setHistoryOpen(true)}>
             {t("researchBatch.jobs")} · {batchState.jobs.length}
@@ -618,7 +624,7 @@ export default function StrategyResearchApp({
         <header><strong>{t("ux.history")}</strong><button type="button" onClick={() => setHistoryOpen(false)}>{t("backtest.close")}</button></header>
         <Suspense fallback={<p>{t("research.loading")}</p>}><StrategyRunHistory manager={researchRun.historyManager} draftId={state.script.draftId} currentRunId={researchRun.result?.run.run_id ?? null} onOpen={(runId) => { dispatch({ type: "result/viewHistory", runId }); setNativeMode(false); setHistoryOpen(false); }} /></Suspense>
         <ResearchBatchResults jobs={batchState.jobs} storageFailed={batchState.storageFailed}
-          onResume={id => researchRun.batch.resume(id)}
+          onResume={(id, retry) => researchRun.batch.resume(id, retry)}
           onOpen={job => {
             if (libraryDatasets.some(dataset => dataset.dataset_id === job.datasetId && dataset.data_epoch === job.dataEpoch)) {
               setLibrarySelectedId(job.datasetId);
@@ -671,6 +677,7 @@ export default function StrategyResearchApp({
     libraryEnabled: runtime.libraryEnabled,
     libraryOpen: state.source.libraryOpen,
     currentChartEnabled: false,
+    marketBatchAvailable,
     onOpenLibrary: () => dispatch({ type: "source/libraryOpen", open: true }),
     onSelectCurrentChart: selectCurrentChart,
     pageExportRef,

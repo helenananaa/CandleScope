@@ -54,7 +54,7 @@ export async function preparationRequest<T>(path: string, options: RequestInit =
 
 export async function waitForPreparation(
   initial: PreparationJob,
-  onProgress: (job: PreparationJob) => void,
+  onProgress: (job: PreparationJob) => void | Promise<void>,
   signal?: AbortSignal,
   transport: PreparationTransport = {},
   acceptReplayPrefix = false,
@@ -62,7 +62,7 @@ export async function waitForPreparation(
   let job = initial;
   for (;;) {
     signal?.throwIfAborted();
-    onProgress(job);
+    await onProgress(job);
     if (job.state === "READY") return job;
     if (["FAILED", "CANCELLED", "BLOCKED_STORAGE"].includes(job.state)) {
       throw new PreparationApiError(job.error?.code ?? `DATA_PREPARATION_${job.state}`, job.error?.message ?? job.state, 200);
