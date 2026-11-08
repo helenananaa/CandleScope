@@ -249,6 +249,7 @@ export default function StrategyResultReplay({ initial, manager, datasets, displ
           ["chartStyle", "workspace.link.chartStyle"],
           ["fills", "researchBatch.replayFillMarkers"],
           ["notes", "researchBatch.replayNoteMarkers"],
+          ["indicatorVisibility", "replay.indicator.sma.name"],
         ] as const).map(([channel, label]) => <label key={channel}>
           <input type="checkbox" data-testid={`strategy-replay-link-${channel}`} checked={display.links[channel]}
             onChange={event => onDisplay(displayKey, { ...display, links: { ...display.links, [channel]: event.target.checked } })} />
