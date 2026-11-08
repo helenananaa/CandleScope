@@ -1590,7 +1590,7 @@ export const tradingAccountsPtBR = {
   "trading.replay.linkMode": "Modo de replay rápido",
   "trading.replay.linkModeDesc": "Sincroniza a entrada e a saída do replay rápido. Cada gráfico usa sua última operação selecionada. Gráficos sem operação salva ficam como estão.",
   "trading.replay.linkCursor": "Cursor do replay rápido",
-  "trading.replay.linkCursorDesc": "Somente os replays rápidos abertos seguem o mesmo horário absoluto. Cada gráfico mantém seu próprio passo.",
+  "trading.replay.linkCursorDesc": "Somente as visualizações de replay abertas seguem o mesmo horário absoluto. Cada gráfico mantém seu próprio passo.",
   "trading.replay.timeOutsideHistory": "O horário solicitado está fora do histórico carregado neste gráfico.",
   "trading.replay.title": "Replay rápido",
   "trading.replay.open": "Replay rápido",
