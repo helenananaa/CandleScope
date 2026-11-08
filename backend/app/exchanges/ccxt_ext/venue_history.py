@@ -160,6 +160,8 @@ async def _fetch_binance_raw(
             if req.end_ms is not None:
                 params["endTime"] = int(req.end_ms)
             values = await exchange.fapipublic_get_fundingrate(params)
+            if not isinstance(values, list):
+                raise RuntimeError("Binance funding settlement history requires an array response")
         elif descriptor.stream_type == StreamType.OPEN_INTEREST:
             if req.history or req.start_ms is not None or req.end_ms is not None:
                 params["period"] = descriptor.interval or "5m"

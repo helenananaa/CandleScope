@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import wraps
+from types import SimpleNamespace
 
 import pytest
 
+from app.data_engine.ingestion.config import IngestionConfig
+from app.data_engine.ingestion.factory import ExchangeIngestionFactory
 from app.data_engine.ingestion.models import DataSource, MarketEvent, StreamType
 from app.data_engine.market_data.models import MarketChannel, MarketStreamKey
 from app.data_engine.market_data.service import (
@@ -20,6 +24,8 @@ from app.data_engine.interval_policy import compute_bucket_start_ms
 from app.data_engine.market_data.storage_writer import MarketMetricStorageWriter
 from app.data_engine.storage import market_metrics_repo as market_metrics_repo_module
 from app.data_engine.storage.market_metrics_repo import MarketMetricsRepository
+from app.exchanges import bootstrap_default_adapters
+from app.exchanges.ccxt_ext.venue_history import _fetch_binance_raw
 
 
 def _async_test(function):
@@ -1698,6 +1704,91 @@ async def test_settlement_refresh_successful_range_serves_hot_subset(
     ) == (True, 900)
     assert calls == 1
     await service.shutdown()
+
+
+@pytest.mark.parametrize("timestamps", [(70_000, 60_000), (60_000, 60_000), (60_000, 60_010), (60_000, 130_000)])
+@_async_test
+async def test_invalid_settlement_page_cannot_write_rows_or_claim_coverage(tmp_path, timestamps):
+    repository = MarketMetricsRepository(tmp_path / "invalid-settlement.sqlite")
+    service = MarketDataService(_Factory(), metrics_repository=repository)
+    key = _key(MarketChannel.FUNDING_RATE)
+    calls = 0
+
+    async def fetch_market(_descriptor, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return [
+            MarketEvent(
+                event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+                symbol=key.symbol, event_time_ms=stamp, received_at_ms=140_000,
+                source=DataSource.HTTP_BACKFILL, data={"funding_time_ms": stamp, "funding_rate": 0.001},
+                stream_key=key.topic,
+            )
+            for stamp in (timestamps if calls == 1 else (60_000, 120_000))
+        ]
+
+    service._fetch_market = fetch_market
+    try:
+        with pytest.raises(RuntimeError, match="funding settlement page"):
+            await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000)
+        assert repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                        symbol=key.symbol, limit=10) == []
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000) == (True, 120_000)
+        assert calls == 2
+    finally:
+        await service.shutdown()
+
+
+@_async_test
+async def test_native_settlement_history_validates_before_caching_coverage(tmp_path, monkeypatch):
+    bootstrap_default_adapters()
+    valid = {"symbol": "BTCUSDT", "fundingTime": 60_000, "fundingRate": "0.0001", "rateType": "Regular"}
+    replies = iter((valid, [{**valid, "fundingRate": None}], [valid]))
+    calls = []
+
+    class Exchange:
+        def market(self, symbol):
+            return {"id": "BTCUSDT"}
+
+        async def fapipublic_get_fundingrate(self, params):
+            calls.append(params)
+            return next(replies)
+
+    class Pool:
+        @asynccontextmanager
+        async def request(self, selection):
+            yield Exchange()
+
+        async def resolve_symbol(self, *_args, **_kwargs):
+            return "BTC/USDT:USDT"
+
+    config = IngestionConfig()
+    factory = ExchangeIngestionFactory(config)
+
+    async def http_fetch(request):
+        return await _fetch_binance_raw(request, config, Pool())
+
+    async def ingress():
+        return SimpleNamespace(transport=SimpleNamespace(http_fetch=http_fetch))
+
+    monkeypatch.setattr(factory, "_ensure_ingress", ingress)
+    repository = MarketMetricsRepository(tmp_path / "native-funding-pages.sqlite")
+    service = MarketDataService(factory, metrics_repository=repository)
+    key = _key(MarketChannel.FUNDING_RATE)
+    try:
+        for reason in ("array response", "settlement row"):
+            with pytest.raises(RuntimeError, match=reason):
+                await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000)
+        assert repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                        symbol=key.symbol, limit=10) == []
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=120_000) == (True, 120_000)
+        assert await service._fetch_funding_settlement_pages(key, start_ms=60_000, end_ms=60_000) == (True, 60_000)
+        assert calls == [{"symbol": "BTCUSDT", "startTime": 60_000, "endTime": 120_000, "limit": 1000}] * 3
+        [row] = repository.query_funding(exchange=key.exchange, market_type=key.market_type,
+                                         symbol=key.symbol, limit=10)
+        assert row["is_final"] and row["funding_rate"] == 0.0001
+    finally:
+        await service.shutdown()
 
 
 @_async_test

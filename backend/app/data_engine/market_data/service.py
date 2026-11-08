@@ -1997,6 +1997,7 @@ class MarketDataService:
         cursor_ms = start_ms
         covered_through_ms = start_ms - 1
         pages = 0
+        previous_cycle_ms = -1
         while cursor_ms <= end_ms and pages < max_pages:
             raw_events = await self._fetch_market(
                 descriptor,
@@ -2006,23 +2007,34 @@ class MarketDataService:
                 history=True,
             )
             pages += 1
-            projected_events = [
-                projected
-                for event in raw_events
-                if (projected := self._project(event, key)) is not None
-            ]
+            if len(raw_events) > 1000:
+                raise RuntimeError("Binance funding settlement page exceeds its request limit")
+            projected_events = []
+            latest_time_ms = cursor_ms - 1
+            for event in raw_events:
+                time_ms = event.data.get("funding_time_ms")
+                if (
+                    event.event_type != StreamType.FUNDING_RATE
+                    or (event.exchange, event.market_type, event.symbol) != (key.exchange, key.market_type, key.symbol)
+                    or type(time_ms) is not int
+                    or time_ms != event.event_time_ms
+                    or not latest_time_ms < time_ms <= end_ms
+                ):
+                    raise RuntimeError("Invalid Binance funding settlement page identity, bounds or order")
+                projected = self._project(event, key)
+                if projected is None or projected.data["funding_cycle_ms"] <= previous_cycle_ms:
+                    raise RuntimeError("Unrepresentable Binance funding settlement page")
+                projected_events.append(projected)
+                latest_time_ms = time_ms
+                previous_cycle_ms = projected.data["funding_cycle_ms"]
             if not projected_events:
                 return True, end_ms
             await self._persist_final_history(projected_events, period=None)
-            latest_time_ms = max(
-                int(event.data.get("funding_time_ms", event.event_time_ms))
-                for event in projected_events
-            )
-            if latest_time_ms < cursor_ms:
-                return False, covered_through_ms
             covered_through_ms = latest_time_ms
             cursor_ms = latest_time_ms + 1
-            if len(projected_events) < 1000:
+            # A short, fully validated page completes this bounded Binance
+            # request under the endpoint's ascending, earliest-first contract.
+            if len(raw_events) < 1000:
                 return True, end_ms
         return cursor_ms > end_ms, (
             end_ms if cursor_ms > end_ms else covered_through_ms
