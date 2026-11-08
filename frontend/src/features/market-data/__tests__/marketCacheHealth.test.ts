@@ -217,6 +217,28 @@ test("targeted backfill preserves nonintersecting historical coverage", () => {
   assert.equal(cache.read(series, { from: 60, to: 120 }).complete, false);
 });
 
+test("a stable empty read revokes the named gap without revoking unaffected historical proof", () => {
+  const cache = new SharedMarketCache({ now: () => now });
+  const first = cache.beginRead(series);
+  cache.admitResponse(first, { ...proof(wire(0, 0), [row(60), row(120), row(180)]), storage_revision: 40 });
+  first.release();
+  const missing = cache.captureVersion(series, { from: 120, to: 120 });
+  const unaffected = cache.captureVersion(series, { from: 60, to: 60 });
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, true);
+
+  const second = cache.beginRead(series);
+  const gap = { ...proof(wire(0, 0), []), storage_revision: 41, endpoint: "range" as const,
+    complete: false, retryable: true, history_state: "pending" as const, verified_contiguous: false,
+    missing_ranges: [{ interval: series.interval, start_ms: 120_000, end_ms: 120_000 }] };
+  cache.admitResponse(second, gap);
+  second.release();
+  assert.equal(cache.read(series, { from: 120, to: 120 }).complete, false);
+  assert.equal(missing.isCurrent(), false);
+  assert.equal(cache.read(series, { from: 60, to: 60 }).complete, true);
+  assert.equal(cache.read(series, { from: 180, to: 180 }).complete, true);
+  assert.equal(unaffected.isCurrent(), true);
+});
+
 test("a snapshot crossing unseen critical events revokes proofs and input stamps outside its returned range", () => {
   const cache = healthy();
   const oldInput = cache.captureVersion(series, { from: 60, to: 60 });

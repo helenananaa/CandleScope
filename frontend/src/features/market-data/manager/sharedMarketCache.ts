@@ -174,6 +174,22 @@ export class SharedMarketCache {
       // or indicator inputs outside that range. Keep rows as provisional.
       entry.proofs = []; entry.inputInvalidation += 1;
     }
+    // An empty read can still disprove a previously verified range. Only
+    // consume target-period gaps; component ranges need server projection.
+    if (serverVersion && revision !== undefined && endpoint !== "latest" && endpoint !== "seed") {
+      const gaps = response.missing_ranges ?? [];
+      if (gaps.length > 128) {
+        entry.proofs = [];
+        entry.inputInvalidation += 1;
+      } else {
+        for (const gap of gaps) {
+          if (gap?.interval !== entry.series.interval || !Number.isSafeInteger(gap.start_ms)
+            || !Number.isSafeInteger(gap.end_ms) || gap.start_ms < 0 || gap.end_ms < gap.start_ms) continue;
+          const from = gap.start_ms / 1000, to = gap.end_ms / 1000;
+          if (entry.proofs.some(proof => proof.to >= from && proof.from <= to)) this.revokeRange(entry, { from, to });
+        }
+      }
+    }
     const inputQuality = assessKlineQuality(response, endpoint);
     const trustedFinal = hasFinalityEvidence(response);
     const rows = incoming.map(row => {
@@ -326,20 +342,7 @@ export class SharedMarketCache {
     }
     entry.health.invalidate();
     if (!range) { entry.proofs = []; entry.inputInvalidation += 1; }
-    else {
-      const left = entry.times[lowerBound(entry.times, range.from) - 1];
-      const right = entry.times[lowerBound(entry.times, range.to + 1)];
-      entry.proofs = entry.proofs.flatMap(proof => {
-        if (proof.to < range.from || proof.from > range.to) return [proof];
-        const retained: Proof[] = [];
-        if (left !== undefined && left >= proof.from) retained.push({ from: proof.from, to: Math.min(left, proof.to) });
-        if (right !== undefined && right <= proof.to) retained.push({ from: Math.max(right, proof.from), to: proof.to });
-        return retained;
-      }).slice(-128);
-      entry.version = ++this.revision;
-      entry.invalidations.push({ ...range, version: entry.version });
-      if (entry.invalidations.length > 128) { entry.invalidations = []; entry.inputInvalidation += 1; }
-    }
+    else this.revokeRange(entry, range);
     this.finish(entry, [], "http");
   }
 
@@ -438,6 +441,21 @@ export class SharedMarketCache {
       || entry.reads.size || entry.leases.size || this.listeners.get(key)?.size) return false;
     this.remove(entry);
     return true;
+  }
+
+  private revokeRange(entry: Entry, range: Proof): void {
+    const left = entry.times[lowerBound(entry.times, range.from) - 1];
+    const right = entry.times[lowerBound(entry.times, range.to + 1)];
+    entry.proofs = entry.proofs.flatMap(proof => {
+      if (proof.to < range.from || proof.from > range.to) return [proof];
+      const retained: Proof[] = [];
+      if (left !== undefined && left >= proof.from) retained.push({ from: proof.from, to: Math.min(left, proof.to) });
+      if (right !== undefined && right <= proof.to) retained.push({ from: Math.max(right, proof.from), to: proof.to });
+      return retained;
+    }).slice(-128);
+    entry.version = ++this.revision;
+    entry.invalidations.push({ ...range, version: entry.version });
+    if (entry.invalidations.length > 128) { entry.invalidations = []; entry.inputInvalidation += 1; }
   }
 
   private entry(series: MarketSeries): Entry {
