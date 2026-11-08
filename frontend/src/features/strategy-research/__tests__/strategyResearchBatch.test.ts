@@ -120,3 +120,60 @@ test("batch submission performs no run when its initial durable write fails", as
   assert.deepEqual(owner.snapshot(), { jobs: [], storageFailed: true });
   owner.dispose();
 });
+
+test("precise batches keep each trade dataset's declared range and reject BAR-only inputs", async () => {
+  const trades = (id: string, startMs: number, endMs: number): LocalDatasetManifest => ({
+    ...dataset(id),
+    source: "user_market_trades",
+    first_open_ms: startMs,
+    last_open_ms: endMs - 60000,
+    market_trade_input: {
+      schema_version: 1, kind: "MARKET_TRADE", timestamp_unit: "ms", timezone: "UTC",
+      coverage_start_ms: startMs, coverage_end_ms_exclusive: endMs,
+      sequence_policy: "CONTIGUOUS_SOURCE_SEQUENCE", row_count: 8,
+    },
+  });
+  const a = trades("trades-a", 60000, 240000);
+  const b = trades("trades-b", 120000, 360000);
+  const bar = dataset("bars");
+  const storage = memory();
+  const seen: Array<[string, string, number, number, string, boolean | undefined]> = [];
+  const owner = new StrategyResearchBatch({
+    async runResearch({ source, request: selected, onRunCreated }) {
+      assert.equal(source.kind, "IMPORTED_DATASET");
+      const manifest = [a, b, bar].find(item => item.dataset_id === source.datasetId)!;
+      seen.push([source.datasetId, source.dataEpoch, source.startTimeMs, source.endTimeMs,
+        selected.attachment.fidelityPreference, source.marketTradeInput]);
+      const run = dataRun(manifest.symbol, manifest);
+      await onRunCreated?.(run, {
+        strategyRevisionId: "revision", snapshotHash: run.snapshot_hash,
+      } as ResultProjectionIdentity);
+      return done;
+    },
+    async restoreRun() { assert.fail("must not recreate completed runs"); },
+  }, storage);
+  const draft = request();
+  draft.attachment.fidelityPreference = "PRECISE";
+  await assert.rejects(owner.submit(draft, [a, bar]), /RESEARCH_BATCH_UNSUPPORTED/);
+  assert.deepEqual(owner.snapshot().jobs, []);
+  await owner.submit(draft, [a, b]);
+  draft.attachment.fidelityPreference = "FAST";
+  await owner.submit(draft, [a, bar]);
+  await waitFor(() => owner.snapshot().jobs.every(job => job.status === "COMPLETED"));
+  assert.deepEqual(seen, [
+    [a.dataset_id, a.data_epoch, 60000, 239999, "PRECISE", true],
+    [b.dataset_id, b.data_epoch, 120000, 359999, "PRECISE", true],
+    [a.dataset_id, a.data_epoch, 60000, 180001, "FAST", true],
+    [bar.dataset_id, bar.data_epoch, 0, 180001, "FAST", false],
+  ]);
+  const reopened = new StrategyResearchBatch({
+    async runResearch() { assert.fail("must not recreate completed runs"); },
+    async restoreRun() { assert.fail("must not restore already completed jobs"); },
+  }, storage);
+  reopened.start();
+  assert.deepEqual(reopened.snapshot().jobs.slice(0, 2).map(job => [job.endMs, job.status, job.dataEpoch]), [
+    [240000, "COMPLETED", a.data_epoch], [360000, "COMPLETED", b.data_epoch],
+  ]);
+  owner.dispose();
+  reopened.dispose();
+});

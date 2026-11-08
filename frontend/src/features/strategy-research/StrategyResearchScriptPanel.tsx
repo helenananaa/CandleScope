@@ -375,7 +375,7 @@ export function StrategyResearchScriptPanel({
           >
             {t(needsData ? "chartTester.prepareDataRun" : "chartTester.run")}
           </button>
-          {batchControls?.(runRequest?.attachment.fidelityPreference === "FAST"
+          {batchControls?.(runRequest
             && !runRequest.attachment.pythonBarExecution
             && (runRequest.language !== "python" || pythonTrustedConfirmed) ? runRequest : null)}
           <button

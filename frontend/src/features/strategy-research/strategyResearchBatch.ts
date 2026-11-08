@@ -1,9 +1,10 @@
-import { chartStrategyRunDiagnostics, qualitySummaryFromImportedManifest, type ResearchRunSource } from "../backtest/chart-tester/chartStrategyRunRequest.js";
+import { chartStrategyRunDiagnostics } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 import type { ChartStrategyResultBundle } from "../backtest/chart-tester/chartStrategyResultCache.js";
 import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStrategyTesterUiModel.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import type { StrategyStorage } from "../../shared/strategyStorage.js";
+import { importedResearchRange, importedResearchRunSource } from "./importedDatasetSource.js";
 
 const storageKey = "candlescope:strategy-research-batch:v1";
 const statuses = ["QUEUED", "PREPARING", "RUNNING", "COMPLETED", "FAILED", "INTERRUPTED"] as const;
@@ -53,19 +54,10 @@ function readJobs(storage: StrategyStorage): ResearchBatchJob[] {
   return payload.jobs;
 }
 
-function importedSource(dataset: LocalDatasetManifest, request: ChartStrategyRunRequest): Extract<ResearchRunSource, { kind: "IMPORTED_DATASET" }> {
-  return {
-    kind: "IMPORTED_DATASET",
-    datasetId: dataset.dataset_id,
-    dataEpoch: dataset.data_epoch,
-    interval: dataset.interval,
-    symbol: dataset.symbol,
-    startTimeMs: request.attachment.customRange?.startMs ?? dataset.first_open_ms,
-    endTimeMs: request.attachment.customRange?.endMs ?? dataset.last_open_ms + 1,
-    quality: qualitySummaryFromImportedManifest({
-      rows: dataset.rows, excludedRangeCount: dataset.excluded_range_count, volumeAvailable: dataset.volume_available,
-    }),
-  };
+export function supportsBatchSource(dataset: LocalDatasetManifest, precise: boolean): boolean {
+  if (dataset.archived) return false;
+  if (dataset.source === "user_market_trades") return dataset.market_trade_input !== undefined;
+  return !precise && dataset.source === "local_dataset";
 }
 
 type BatchManager = Pick<StrategyDataManager, "runResearch"> & {
@@ -186,17 +178,18 @@ export class StrategyResearchBatch {
     if (this.closed || this.state.storageFailed) throw new Error("RESEARCH_BATCH_STORAGE_UNAVAILABLE");
     if (datasets.length < 2 || datasets.length > RESEARCH_BATCH_MAX_INPUTS || this.state.jobs.length + datasets.length > maxJobs
       || new Set(datasets.map(dataset => dataset.dataset_id)).size !== datasets.length) throw new Error("RESEARCH_BATCH_CAPACITY");
-    if (request.attachment.fidelityPreference !== "FAST" || request.attachment.pythonBarExecution
+    if (datasets.some(dataset => !supportsBatchSource(dataset, request.attachment.fidelityPreference === "PRECISE"))
+      || request.attachment.pythonBarExecution
       || (request.language === "python" && !request.pythonTrustedConfirmed)) throw new Error("RESEARCH_BATCH_UNSUPPORTED");
     const captured = structuredClone(request);
     const batchId = crypto.randomUUID();
     const tasks = datasets.map(dataset => {
-      const source = importedSource(dataset, captured);
+      const { startMs, endMs } = importedResearchRange(dataset, captured.attachment);
       const job: ResearchBatchJob = { id: crypto.randomUUID(), batchId, name: captured.displayName, datasetName: dataset.name,
-        draftId: captured.draftId, draftContentRevision: captured.draftContentRevision, datasetId: source.datasetId, dataEpoch: source.dataEpoch,
-        interval: source.interval, startMs: source.startTimeMs, endMs: source.endTimeMs, status: "QUEUED", runId: null,
+        draftId: captured.draftId, draftContentRevision: captured.draftContentRevision, datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch,
+        interval: dataset.interval, startMs, endMs, status: "QUEUED", runId: null,
         strategyRevisionId: null, snapshotHash: null, error: null };
-      return { job, source, first: dataset.first_open_ms, last: dataset.last_open_ms };
+      return { job, dataset: structuredClone(dataset) };
     });
     const jobs = tasks.map(task => task.job);
     this.publish({ ...this.state, jobs: [...this.state.jobs, ...jobs] });
@@ -205,8 +198,8 @@ export class StrategyResearchBatch {
       this.publish({ ...this.state, jobs: this.state.jobs.filter(job => job.batchId !== batchId) });
       throw error;
     }
-    for (const { job, source, first, last } of tasks) this.enqueue(job.id, async () => {
-      if (source.startTimeMs < first || source.endTimeMs > last + 1) throw new Error("DATA_COVERAGE_INCOMPLETE");
+    for (const { job, dataset } of tasks) this.enqueue(job.id, async () => {
+      const source = importedResearchRunSource(dataset, captured.attachment);
       await this.update(job.id, { status: "PREPARING" });
       if (this.closed) return;
       const result = await this.manager.runResearch({
@@ -216,7 +209,10 @@ export class StrategyResearchBatch {
           status: "RUNNING", runId: run.run_id, strategyRevisionId: identity.strategyRevisionId, snapshotHash: identity.snapshotHash,
         }),
       });
-      if (result.kind !== "TERMINAL") throw new Error(result.resolution.status);
+      if (result.kind !== "TERMINAL") {
+        const warning = result.resolution.quality_warnings[0];
+        throw new Error(warning ? `${warning.code}: ${warning.message}` : result.resolution.status);
+      }
       await this.update(job.id, { status: "COMPLETED" });
     });
   }

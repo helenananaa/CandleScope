@@ -508,7 +508,7 @@ export default function StrategyResearchApp({
         onDraftId={handleDraftId}
         onDraftRevision={handleDraftRevision}
         onRun={researchRun.onRun}
-        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets}>{selected => <>
+        batchControls={(request) => <ResearchBatchSources datasets={libraryDatasets} precise={request?.attachment.fidelityPreference === "PRECISE"}>{selected => <>
           <button type="button" className="research-primary" disabled={!request || selected.length < 2 || batchState.storageFailed}
             onClick={() => {
               if (!request) return;
