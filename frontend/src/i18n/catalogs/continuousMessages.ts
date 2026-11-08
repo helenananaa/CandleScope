@@ -1,4 +1,4 @@
-import { researchBatchEnglish, researchBatchChinese } from "./researchBatchMessages.js";
+import { researchBatchEnglish, researchBatchChinese, researchBatchKorean, researchBatchBrazilian } from "./researchBatchMessages.js";
 import { repairEnglish, repairChinese, repairJapanese, repairKorean, repairPortuguese } from "./continuousRepairMessages.js";
 import { readerEnglish, readerChinese, readerJapanese, readerKorean, readerPortuguese } from "./continuousReaderMessages.js";
 import { researchReturnEnglish, researchReturnChinese, researchReturnJapanese, researchReturnKorean, researchReturnPortuguese } from "./researchReturnMessages.js";
@@ -124,7 +124,7 @@ export const continuousJapanese: Record<keyof typeof continuousEnglish, string> 
 };
 export const continuousKorean: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnKorean,
-  ...researchBatchEnglish,
+  ...researchBatchKorean,
   ...repairKorean,
   ...readerKorean,
   "continuous.savedRuns": "이 차트와 모드에 저장된 실행", "continuous.pendingRun": "확인 대기 요청",
@@ -164,7 +164,7 @@ export const continuousKorean: Record<keyof typeof continuousEnglish, string> = 
 };
 export const continuousPortuguese: Record<keyof typeof continuousEnglish, string> = {
   ...researchReturnPortuguese,
-  ...researchBatchEnglish,
+  ...researchBatchBrazilian,
   ...repairPortuguese,
   ...readerPortuguese,
   "continuous.savedRuns": "Execuções salvas para este gráfico e modo", "continuous.pendingRun": "Solicitação pendente",
