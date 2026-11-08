@@ -6,10 +6,10 @@ from copy import deepcopy
 import time
 import logging
 import threading
-from bisect import bisect_right
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, replace
+from itertools import islice
 from typing import Any
 
 from app.data_engine.interval_policy import (
@@ -126,63 +126,49 @@ def _aggregate_rows_to_interval(
     if not base_rows:
         return []
 
-    expected_bucket_starts: list[int] = []
-    if calendar is not None and interval is not None:
-        first_ms = min(int(row["time"]) for row in base_rows) * 1000
-        last_ms = max(int(row["time"]) for row in base_rows) * 1000
-        first_bucket_ms = containing_expected_open_ms(
-            calendar,
-            first_ms,
-            interval,
-        )
-        expected_bucket_starts = list(calendar.expected_opens(
-            first_bucket_ms if first_bucket_ms is not None else first_ms,
-            last_ms,
-            interval,
-        ))
-
     buckets: dict[int, list[dict]] = {}
-    for row in base_rows:
+    calendar_bound = calendar is not None and interval is not None
+    expected_start_ms = None
+    expected_end_ms = None
+    for row in sorted(base_rows, key=lambda row: row["time"]):
         ts = row["time"]
-        if expected_bucket_starts:
-            position = bisect_right(expected_bucket_starts, int(ts) * 1000) - 1
-            if position < 0:
-                continue
-            bucket_start = expected_bucket_starts[position] // 1000
-            if int(ts) * 1000 >= expected_bucket_end_ms(
-                calendar,
-                expected_bucket_starts[position],
-                interval,
-            ):
-                continue
+        if calendar_bound:
+            opened_ms = int(ts) * 1000
+            if expected_end_ms is None or opened_ms >= expected_end_ms:
+                # Resolve occupied buckets only. Expanding every target open
+                # between sparse inputs can scan years of empty sessions.
+                expected_start_ms = containing_expected_open_ms(calendar, opened_ms, interval)
+                if expected_start_ms is None:
+                    continue
+                expected_end_ms = expected_bucket_end_ms(calendar, expected_start_ms, interval)
+            bucket_start = expected_start_ms // 1000
         else:
-            bucket_start = compute_bucket_start(
-                ts,
-                custom_interval_seconds,
-                interval=interval,
-            )
+            bucket_start = compute_bucket_start(ts, custom_interval_seconds, interval=interval)
         buckets.setdefault(bucket_start, []).append(row)
 
     result: list[dict] = []
-    for bucket_start in sorted(buckets):
-        rows = sorted(buckets[bucket_start], key=lambda row: row["time"])
+    for bucket_start, rows in buckets.items():
         bucket_end = (
             expected_bucket_end_ms(calendar, bucket_start * 1000, interval) // 1000
-            if calendar is not None and interval is not None
+            if calendar_bound
             else bucket_start + custom_interval_seconds
         )
         if calendar is not None and source_interval is not None:
-            expected_source_opens = list(calendar.expected_opens(
+            # Only one extra expected open is needed to distinguish a
+            # complete bucket from a contiguous prefix.
+            expected_source_opens = list(islice(calendar.expected_opens(
                 bucket_start * 1000, bucket_end * 1000 - 1, source_interval,
-            ))
+            ), len(rows) + 1))
             actual_source_opens = [int(row["time"]) * 1000 for row in rows]
             prefix = bool(expected_source_opens and actual_source_opens
                           == expected_source_opens[:len(actual_source_opens)])
             reaches_end = prefix and len(actual_source_opens) == len(expected_source_opens)
             # The calendar owns actual source closes (including a session's
             # shortened last bar); never pretend calendar months are 30 days.
-            within_bounds = all(expected_bucket_end_ms(calendar, opened, source_interval)
-                                <= bucket_end * 1000 for opened in actual_source_opens)
+            within_bounds = prefix and all(
+                expected_bucket_end_ms(calendar, opened, source_interval) <= bucket_end * 1000
+                for opened in actual_source_opens
+            )
         else:
             prefix = bool(source_interval_seconds and source_interval_seconds > 0
                           and int(rows[0]["time"]) == bucket_start

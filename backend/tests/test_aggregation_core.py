@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from decimal import Decimal
 import random
@@ -23,6 +23,7 @@ from app.data_engine.data_manager.custom_query import (
     CustomIntervalQueryService, _aggregate_fixed_bars_to_interval, _aggregate_rows_to_interval,
 )
 from app.data_engine.data_manager.history_stream import FixedHistoryStream
+from app.data_engine.history.calendar import AlwaysOpenCalendar, SessionCalendar
 from app.data_engine.data_manager.models import BarData, SeriesKey
 from app.data_engine.interval_policy import aggregate_kline_rows, parse_interval_spec
 
@@ -258,6 +259,50 @@ def test_cumulative_replacement_and_authoritative_extrema_reduction_rebuild_once
     assert state.volume == reference.values.volume
     assert state.high == reference.values.high and state.low == reference.values.low
     assert state.quote_volume == reference.values.project()["quote_volume"]
+
+
+def test_session_bulk_aggregation_does_not_build_a_holiday_bucket():
+    calendar = SessionCalendar(
+        calendar_id="test.holiday", timezone_name="America/New_York",
+        weekly_sessions={0: [("09:30", "09:50")]}, holidays=["2024-03-11"],
+    )
+    opens = [int(datetime.fromisoformat(date).timestamp()) for date in (
+        "2024-03-04T14:30:00+00:00", "2024-03-11T13:30:00+00:00",
+    )]
+
+    def aggregate(opened):
+        rows = [replace(bar(i), time=opened + i * 300).to_aggregation_dict() for i in range(4)]
+        return _aggregate_rows_to_interval(
+            rows, 900, interval="15m", source_interval="5m", calendar=calendar,
+        )
+
+    before_dst = aggregate(opens[0])
+    assert [row["time"] for row in before_dst] == [opens[0], opens[0] + 900]
+    assert all(row["is_closed"] and row["quote_volume"] is not None for row in before_dst)
+    assert aggregate(opens[1]) == []
+
+
+def test_sparse_calendar_history_only_expands_source_opens_for_present_components():
+    class MeasuredCalendar(AlwaysOpenCalendar):
+        def __init__(self):
+            super().__init__()
+            self.expanded = 0
+
+        def expected_opens(self, start_ms, end_ms, interval):
+            for opened in super().expected_opens(start_ms, end_ms, interval):
+                self.expanded += 1
+                assert self.expanded <= 4, "expanded empty history or unseen source components"
+                yield opened
+
+    calendar = MeasuredCalendar()
+    starts = [int(datetime(year, 1, 1, tzinfo=timezone.utc).timestamp()) for year in (2020, 2025)]
+    rows = [replace(bar(i), time=opened).to_aggregation_dict() for i, opened in enumerate(starts)]
+    result = _aggregate_rows_to_interval(
+        list(reversed(rows)), 30 * 86_400, interval="1M", source_interval="1m", calendar=calendar,
+    )
+    assert [row["time"] for row in result] == starts
+    assert not any(row["is_closed"] or row["quote_volume"] is not None for row in result)
+    assert calendar.expanded == 4
 
 
 def test_crossing_source_cannot_close_history_or_realtime_target():
