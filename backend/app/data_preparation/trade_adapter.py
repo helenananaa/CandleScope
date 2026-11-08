@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from functools import partial
+from urllib.error import HTTPError
 import shutil
 import zipfile
 from weakref import WeakValueDictionary
@@ -23,14 +24,20 @@ class TradePreparationAdapter:
         # freeze method can download outside our budget/receipt lifecycle.
         # Preparation owns acquisition; inspect and freeze its local cache only.
         local = getattr(archive, "cache", None)
-        self.archive = local if isinstance(local, ParquetRawAggTradeArchive) else archive
+        self._publishes_wrapped_cache = isinstance(local, ParquetRawAggTradeArchive)
+        self.archive = local if self._publishes_wrapped_cache else archive
         self.importer = importer
         self._days: WeakValueDictionary = WeakValueDictionary()
+
+    @property
+    def can_import_official(self):
+        return (getattr(self.archive, "enabled", False) and hasattr(self.archive, "root")
+                and (self._publishes_wrapped_cache or not getattr(self.archive, "read_only", False)))
 
     def validate(self, requirement, now_ms):
         if self.archive is None or not getattr(self.archive, "enabled", False):
             raise PreparationError("TRADE_ARCHIVE_UNAVAILABLE", "Verified trade archive is unavailable")
-        if not hasattr(self.archive, "root"):
+        if not self.can_import_official:
             raise PreparationError("TRADE_ARCHIVE_READ_ONLY", "Automatic trade imports require a local archive")
         if (requirement.exchange != "binance" or requirement.market_type != "futures"
                 or not requirement.symbol.isalnum()):
@@ -100,6 +107,8 @@ class TradePreparationAdapter:
                 try:
                     await storage_call(self._import_day, requirement, date, repository)
                 except ReplayTradeImportError as exc:
+                    if isinstance(exc.__cause__, HTTPError) and exc.__cause__.code in {404, 410}:
+                        raise PreparationError("TRADE_DAY_UNAVAILABLE", "The official trade package is unavailable for this UTC day") from exc
                     retryable = str(exc).startswith("failed to download official object:") or "time budget" in str(exc)
                     raise PreparationError("TRADE_IMPORT_FAILED", str(exc), retryable=retryable) from exc
             if not await storage_call(self._covered, requirement):

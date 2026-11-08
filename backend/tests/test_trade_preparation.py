@@ -308,3 +308,93 @@ async def test_desktop_official_wrapper_uses_local_verified_cache_for_cold_prepa
     repeated, _ = await adapter.acquire(requirement(), "warm-desktop")
     assert repeated == receipt
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("desktop_wrapper", [False, True])
+@async_test
+async def test_trade_flow_history_preparation_reuses_the_official_day(tmp_path, monkeypatch, desktop_wrapper):
+    import httpx
+    from fastapi import FastAPI
+    from app.core import config
+    from app.api.v1.data_preparation import router as preparation_router
+    from app.api.v1.trade_flow import router as trade_router
+    from app.data_engine.market_data.trade_flow_service import TradeFlowService
+    from app.data_engine.storage.trade_flow_store import SQLiteTradeFlowRollupStore
+    from tests.test_trade_flow_storage import _rollup
+
+    adapter, archive, calls = adapter_and_network(tmp_path)
+    if desktop_wrapper:
+        from app.replay.official_trade_catalog import OfficialAggTradeArchive
+        wrapper = OfficialAggTradeArchive(archive.root, defer_refresh=True)
+        desktop = BarPreparationAdapter(tmp_path / "desktop-cache", coordinator=None,
+            replay_service=SimpleNamespace(raw_trade_archive=wrapper))
+        desktop.trades.importer = adapter.trades.importer
+        adapter = desktop
+    monkeypatch.setattr(config, "REPLAY_AGG_TRADE_ARCHIVE_DIR", archive.root)
+    repo = PreparationRepository(tmp_path / "jobs.db")
+    prep = PreparationService(repo, adapter)
+    store = SQLiteTradeFlowRollupStore(tmp_path / "rollups.db")
+    before = START_MS - 60_000
+    await store.upsert_rollups([_rollup(before, revision=1, is_final=True)])
+    trades = TradeFlowService(object(), rollup_store=store, verified_archive_root=archive.root)
+    app = FastAPI()
+    app.state.data_preparation_service = prep
+    app.state.data_manager = SimpleNamespace(trade_flow_ready=True, trade_flow_history=trades.history)
+    app.include_router(preparation_router, prefix="/api/v1")
+    app.include_router(trade_router, prefix="/api/v1")
+    path = "/api/v1/data-preparations/trade-flow-history"
+    request = {"symbol": "btcusdt", "start_ms": before, "end_ms": START_MS, "idempotency_key": "trade-first"}
+    today = repo.now() // 86_400_000 * 86_400_000
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            before_fetch = await client.get("/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS})
+            assert before_fetch.json()["data"] == [] and not calls
+            unpublished = await client.post(path, json={**request, "start_ms": today, "end_ms": today})
+            assert unpublished.status_code == 202 and unpublished.json()["job"] is None
+            assert unpublished.json()["unavailable_ranges"][0]["reason"] == "trade_day_unpublished"
+            first = await client.post(path, json=request)
+            second = await client.post(path, json={**request, "idempotency_key": "trade-second"})
+            assert first.status_code == second.status_code == 202, (first.text, second.text)
+            jobs = [first.json()["job"], second.json()["job"]]
+            assert jobs[0]["id"] != jobs[1]["id"]
+            for job in jobs:
+                (planned,) = job["request"]["requirements"]
+                assert planned["role"] == "TRADES" and planned["start_ms"] == START_MS
+                assert planned["end_ms"] == START_MS + 86_400_000
+            replay = await prep.submit(PreparationRequest(
+                idempotency_key="replay-shared-trades", consumer="REPLAY", requirements=[requirement()],
+            ))
+            await prep.start()
+            ready = await asyncio.gather(*(terminal(prep, job["id"]) for job in [*jobs, replay]))
+            assert all(job["state"] == "READY" for job in ready), ready
+            assert len(calls) == 2
+            repeated = await client.post(path, json=request)
+            assert repeated.json()["job"]["id"] == jobs[0]["id"]
+            conflict = await client.post(path, json={**request, "end_ms": START_MS + 60_000})
+            assert conflict.status_code == 409
+            warm = await client.post(path, json={**request, "idempotency_key": "trade-warm"})
+            assert warm.json()["status"] == "local" and warm.json()["job"] is None
+            after = await client.get("/api/v1/trade-flow/history", params={"start_ms": START_MS, "end_ms": START_MS})
+            page = after.json()
+            assert page["mode"] == "local_only" and page["data"][0]["source"] == "verified_archive"
+            assert page["data"][0]["agg_trade_count"] == 4 and len(calls) == 2
+    finally:
+        await prep.shutdown()
+
+
+@async_test
+async def test_official_trade_day_404_stops_automatic_retries(tmp_path):
+    from urllib.error import HTTPError
+    adapter, archive, _ = adapter_and_network(tmp_path)
+    calls = []
+
+    def unavailable(url, **kwargs):
+        calls.append(url)
+        raise HTTPError(url, 404, "Not Found", {}, None)
+
+    adapter.trades.importer = partial(import_official_date_range, opener=unavailable)
+    with pytest.raises(PreparationError) as failure:
+        await adapter.acquire(requirement(), "unavailable-day")
+    assert failure.value.code == "TRADE_DAY_UNAVAILABLE" and not failure.value.retryable
+    assert len(calls) == 1 and calls[0].endswith(".CHECKSUM")
+    assert archive.list_verified_windows(exchange="binance", market_type="futures", symbol="BTCUSDT") == ()
