@@ -30,6 +30,10 @@ class ContinuousExecutionStopping(Exception):
     """Owned shutdown discards only uncommitted work; it is not a run failure."""
 
 
+class _LiveEdgeMoved(Exception):
+    """Abort a source acknowledgement when an empty live confirmation expires."""
+
+
 def error(code, message):
     return BacktestError(code, message)
 
@@ -185,7 +189,9 @@ class ContinuousBarHost:
         if self.input_control is not None:
             self.input_control()
 
-    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete, caught_up=False, source_receipt=None, commit_checkpoint=None):
+    def apply_batch(self, events: Iterable[MarketEvent], *, data_revision, revealed_through_ms, coverage_complete,
+                    caught_up=False, source_receipt=None, commit_checkpoint=None,
+                    current_source_boundary: Callable[[], int] | None = None):
         with self.lock:
             self._check_stopping()
             if self.closed or self.store is None or self.row is None:
@@ -245,9 +251,14 @@ class ContinuousBarHost:
                     if not publication_allowed or published or self.closed or threading.get_ident() != owner_thread:
                         raise error("CONTINUOUS_COMMIT_CONFLICT","Checkpoint publication must be synchronous and owned exactly once")
                     self._check_stopping()
+                    # The bounded batch is still valid, but an advancing market
+                    # can move the live edge during provider execution/encoding.
+                    at_live_edge = caught_up and (current_source_boundary is None or current_source_boundary() == stamp)
+                    if not batch and not at_live_edge:
+                        raise _LiveEdgeMoved()
                     self.row = self.store.commit(self.row["id"], generation=self.row["generation"], revision=self.row["revision"],
                         sequence=sequence, event_time_ms=stamp, data_revision=data_revision, checkpoint=prepared,
-                        phase="LIVE" if caught_up else "CATCHING_UP",confirm_caught_up=not batch)
+                        phase="LIVE" if at_live_edge else "CATCHING_UP",confirm_caught_up=not batch)
                     published = True
                     return self.row
                 # Prepare/encode provider state before taking the source lock.
@@ -260,6 +271,10 @@ class ContinuousBarHost:
                         raise error("CONTINUOUS_INPUT_INVALID","Source commit cannot acknowledge asynchronous work")
                     if not published:
                         raise error("CONTINUOUS_INPUT_INVALID","Source guard did not commit its financial checkpoint")
+                except _LiveEdgeMoved:
+                    # Neither SQLite owns a new checkpoint for an empty
+                    # confirmation that lost its edge under the source fence.
+                    return self.row
                 finally:
                     publication_allowed = False
                 self.source_receipt = point

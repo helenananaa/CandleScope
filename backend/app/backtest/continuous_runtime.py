@@ -143,6 +143,9 @@ class _Actor:
             except Exception:
                 logger.exception("Could not record continuous restore failure; original recovery data retained")
 
+    def _closed_boundary(self):
+        return (self.owner.clock_ms() // STEP) * STEP - 1
+
     def step(self, gaps, stream_unavailable):
         if self.stopping:raise ContinuousExecutionStopping()
         try:
@@ -156,13 +159,14 @@ class _Actor:
                 self.host.input_control=self.check_input_control
             # Bridge a stop that raced host construction/restore.
             if self.stopping:self.host.request_stop()
-            through=(self.owner.clock_ms()//STEP)*STEP-1
+            through=self._closed_boundary()
             point=self.host.source_receipt
             if stream_unavailable or any(start<=through and end>=point.from_ms for start,end in gaps):
                 raise BacktestError("CONTINUOUS_SOURCE_GAP","DataManager is repairing a retained source gap")
             batch=self.source.acquire(self.host,revealed_through_ms=through)
-            batch.apply(self.host,self.owner.manager)
-            return bool(batch.events) and not batch.caught_up,False
+            batch.apply(self.host,self.owner.manager,current_source_boundary=self._closed_boundary)
+            more = (bool(batch.events) and not batch.caught_up) or through < self._closed_boundary()
+            return more,False
         except ContinuousExecutionStopping:
             raise
         except Exception as failure:
