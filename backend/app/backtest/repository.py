@@ -820,7 +820,7 @@ class BacktestRepository:
     @_locked
     def active_provider_runs(self, connection_id: str) -> list[str]:
         return [str(row[0]) for row in self.connection.execute(
-            """SELECT run_id FROM backtest_runs WHERE state IN ('QUEUED', 'PREPARING', 'RUNNING', 'COMPLETING')
+            """SELECT run_id FROM backtest_runs WHERE state IN ('QUEUED', 'PREPARING', 'RUNNING', 'PAUSED', 'CANCELLING')
                AND json_extract(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.external_connection_id') = ?""", (connection_id,),
         )]
 
