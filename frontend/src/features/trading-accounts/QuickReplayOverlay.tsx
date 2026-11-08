@@ -21,6 +21,7 @@ import {
   journalAtCursor,
   positionAt,
   previousEventCursor,
+  protectionOrdersAt,
   replayEvents,
   replayWindow,
   visibleBars,
@@ -278,6 +279,11 @@ export default function QuickReplayOverlay({
     return { ...atCursor, mfe: fine.mfe, mae: fine.mae };
   }, [cursor, fineBars, intervalSec, shown, stepSec, trade]);
   const entryLineColor = tokenColor("--accent-blue", "royalblue");
+  const stopLineColor = tokenColor("--color-danger", "crimson");
+  const targetLineColor = tokenColor("--color-success", "seagreen");
+  const protectionOrders = detail?.id === trade.id && detail.accountId === request.accountId
+    ? detail.protectionOrders
+    : undefined;
   useLayoutEffect(() => {
     const price = position.avgEntry;
     if (!overlay.positions || lastVisible === null || price === null || !Number.isFinite(price) || price <= 0) {
@@ -292,8 +298,22 @@ export default function QuickReplayOverlay({
       title: t(trade.direction === "long" ? "trading.chart.long" : "trading.chart.short", { qty: formatQty(position.qty) }),
       style: "solid",
       width: 2,
-    }]);
-  }, [entryLineColor, lastVisible, locale, overlay.positions, position.avgEntry, position.qty, priceLineSource, trade.direction, trade.id]);
+    }, ...protectionOrdersAt(protectionOrders ?? [], cursor).flatMap(order => {
+      const level = Number(order.price);
+      if (!Number.isFinite(level) || level <= 0) return [];
+      return [{
+        id: `quick-replay:order:${order.id}`,
+        price: level,
+        color: order.kind === "stopLoss" ? stopLineColor : targetLineColor,
+        title: t(order.kind === "stopLoss" ? "trading.chart.stopLoss" : "trading.chart.takeProfit", { qty: formatQty(order.qty) }),
+        style: "dashed" as const,
+        width: 1 as const,
+      }];
+    })]);
+  }, [
+    cursor, entryLineColor, lastVisible, locale, overlay.positions, position.avgEntry, position.qty,
+    priceLineSource, protectionOrders, stopLineColor, targetLineColor, trade.direction, trade.id,
+  ]);
   const plan = detail?.plan && detail.plan.lockedAtMs < cursor * 1000 ? detail.plan : null;
   const risk = plan?.riskUsdt ? Number(plan.riskUsdt) : null;
   const toR = (value: number | null) => (value === null || !risk ? null : (value / risk).toFixed(2));
