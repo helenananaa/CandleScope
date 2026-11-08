@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1821,6 +1822,57 @@ async def test_settlement_overlap_replans_only_the_suffix_and_releases_cancelled
     assert not service._funding_refresh_tasks and not service._funding_refresh_jobs
     assert not service._funding_refresh_waiters
     await service.shutdown()
+
+
+@_async_test
+async def test_cancelled_settlement_waiter_keeps_ownership_through_writer_ack(tmp_path, monkeypatch):
+    repo = MarketMetricsRepository(tmp_path / "settlement-writer-cancel.sqlite")
+    writer = MarketMetricStorageWriter(repo)
+    key = _key(MarketChannel.FUNDING_RATE)
+    service = MarketDataService(_Factory(), metrics_repository=repo, metrics_writer=writer)
+    request_count = 0
+    physical_started, release = threading.Event(), threading.Event()
+    write = repo.upsert_funding
+
+    def blocked_write(rows):
+        physical_started.set()
+        assert release.wait(5)
+        return write(rows)
+
+    async def provider(_descriptor, **_kwargs):
+        nonlocal request_count
+        request_count += 1
+        return [MarketEvent(
+            event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+            symbol=key.symbol, event_time_ms=60_000, received_at_ms=60_100,
+            source=DataSource.HTTP_BACKFILL, stream_key=key.topic,
+            data={"funding_time_ms": 60_000, "funding_rate": 0.0001},
+        )]
+
+    monkeypatch.setattr(repo, "upsert_funding", blocked_write)
+    service._fetch_market = provider
+    async def acquire():
+        return await service._fetch_funding_settlement_pages(key, start_ms=0, end_ms=120_000)
+
+    first = asyncio.create_task(acquire())
+    replacement = None
+    try:
+        assert await asyncio.to_thread(physical_started.wait, 4)
+        first.cancel()
+        await asyncio.sleep(0)
+        replacement = asyncio.create_task(acquire())
+        await asyncio.sleep(0.02)
+        assert not first.done() and not replacement.done()
+        assert request_count == 1
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert await replacement == (True, 120_000)
+        assert request_count == 1
+    finally:
+        release.set()
+        await asyncio.gather(first, *([replacement] if replacement is not None else []), return_exceptions=True)
+        await service.shutdown()
 
 
 @_async_test

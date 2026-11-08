@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
+from app.core.async_cleanup import finish_cleanup
 from app.core.executors import run_storage
 from app.data_engine.ingestion.models import (
     DataSource,
@@ -2106,19 +2107,24 @@ class MarketDataService:
                     projected_events.append(projected)
                     latest_time_ms = time_ms
                     previous_cycle_ms = projected.data["funding_cycle_ms"]
-                await self._persist_final_history(projected_events, period=None)
                 # An exhaustive short or empty response proves the bounded gap.
                 # A full page proves only its prefix through the last settlement.
                 covered_end = end_ms if len(raw_events) < 1000 else latest_time_ms
-                await self._record_funding_settlement_page(identity, cursor_ms, covered_end, projected_events)
+                # The production writer can finish an accepted batch even if
+                # its caller is cancelled. Retain the identity owner through
+                # both the acknowledged rows and their verified receipt.
+                await finish_cleanup(self._commit_funding_settlement_page(
+                    identity, cursor_ms, covered_end, projected_events,
+                ))
                 last_committed_end = covered_end
                 cursor_ms = covered_end + 1
         return last_committed_end
 
-    async def _record_funding_settlement_page(
+    async def _commit_funding_settlement_page(
         self, identity: tuple[str, str, str], start_ms: int, end_ms: int,
         events: list[MarketStateEvent],
     ) -> None:
+        await self._persist_final_history(events, period=None)
         now_ms = self._funding_refresh_wall_ms()
         cutoff = now_ms - _DEFAULT_FUNDING_INTERVAL_MS
         rows = [self._funding_storage_row(event, is_final=True) for event in events]
