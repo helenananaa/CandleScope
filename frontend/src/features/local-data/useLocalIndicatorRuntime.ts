@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { t } from "../../i18n/index.js";
 
 import {
-  createActiveIndicatorPersistence,
+  createActiveIndicatorPersistence, type ActiveIndicatorPersistence,
 } from "../indicators/activeIndicatorStore.js";
 import type {
   IndicatorComputeBatchExecutor,
@@ -26,6 +26,7 @@ export interface UseLocalIndicatorRuntimeOptions {
   seriesVersion: number;
   candleUpColor: string;
   candleDownColor: string;
+  persistence?: ActiveIndicatorPersistence;
 }
 
 /**
@@ -41,6 +42,7 @@ export function useLocalIndicatorRuntime({
   seriesVersion,
   candleUpColor,
   candleDownColor,
+  persistence: overridePersistence,
 }: UseLocalIndicatorRuntimeOptions): IndicatorRuntime {
   const persistence = useMemo(() => createActiveIndicatorPersistence(
     `candlescope:local-indicators:v1:${manifest.dataset_id}:${manifest.data_epoch}`,
@@ -75,7 +77,7 @@ export function useLocalIndicatorRuntime({
     exchange: "local",
     interval,
     marketType: manifest.dataset_id,
-    persistence,
+    persistence: overridePersistence ?? persistence,
     seriesReady: seriesVersion,
     sourceOrdinal: seriesVersion,
     sourceScopeKey: `${manifest.dataset_id}:${manifest.data_epoch}:${interval}`,
