@@ -63,6 +63,7 @@ export function useReplayChartNoteVersions(
   const key = scope && JSON.stringify([scope, binding?.reviewRevision, binding?.timelineSequence, savedRevision]);
   const runId = binding?.runId;
   const trackId = binding?.trackId;
+  const trainingView = binding?.reviewId === null;
   const [loaded, setLoaded] = useState<{ key: string; value: ReplayNotesResponse }>();
   const wake = useRef<(() => void) | null>(null);
   const latest = useEffectEvent(() => ({ scope, key, cutoffMs }));
@@ -91,7 +92,7 @@ export function useReplayChartNoteVersions(
       pending = true;
       lastStarted = Date.now();
       const requestKey = requested.key;
-      void api.notesRun(runId, trackId, requested.cutoffMs, controller.signal).then(value => {
+      void api.notesRun(runId, trackId, requested.cutoffMs, controller.signal, trainingView).then(value => {
         if (!controller.signal.aborted && latest().key === requestKey) setLoaded({ key: requestKey, value });
       }).catch(() => {
         if (!controller.signal.aborted && latest().key === requestKey) setLoaded(undefined);
@@ -104,7 +105,7 @@ export function useReplayChartNoteVersions(
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [api, scope, runId, trackId]);
+  }, [api, scope, runId, trackId, trainingView]);
   useEffect(() => { wake.current?.(); }, [scope, key, cutoffMs]);
 
   return replayChartNoteVersions(loaded?.key === key ? loaded?.value : undefined, binding, cutoffMs);

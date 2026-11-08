@@ -2884,8 +2884,9 @@ class TrainingRunStore:
     async def current_drawing_document(self, run_id: str) -> dict[str, object]:
         return await self._review_repository.current_drawing_document(run_id)
 
-    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
-        return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms)
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None,
+                    training_view: bool = False) -> dict[str, object]:
+        return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms, training_view=training_view)
 
     async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
                                 context: Mapping[str, object], captured_context: Mapping[str, object],

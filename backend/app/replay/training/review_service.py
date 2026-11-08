@@ -45,10 +45,11 @@ class TrainingReviewService:
             service_validation_ops.identifier(run_id, field_name="run_id")
         )
 
-    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None,
+                    training_view: bool = False) -> dict[str, object]:
         return await self.store.notes(
             service_validation_ops.identifier(run_id, field_name="run_id"),
-            service_validation_ops.identifier(track_id, field_name="track_id"), at_time_ms=at_time_ms)
+            service_validation_ops.identifier(track_id, field_name="track_id"), at_time_ms=at_time_ms, training_view=training_view)
 
     async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
                                 context: Mapping[str, object], captured_context: Mapping[str, object],

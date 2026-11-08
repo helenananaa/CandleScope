@@ -1025,8 +1025,11 @@ export class ReplayV2ApiClient {
     );
   }
 
-  notesRun(runId: string, trackId: string, atTimeMs?: number, signal?: AbortSignal): Promise<ReplayNotesResponse> {
-    const query = atTimeMs === undefined ? "" : `?at_time_ms=${atTimeMs}`;
+  notesRun(runId: string, trackId: string, atTimeMs?: number, signal?: AbortSignal, trainingView = false): Promise<ReplayNotesResponse> {
+    const params = new URLSearchParams();
+    if (atTimeMs !== undefined) params.set("at_time_ms", String(atTimeMs));
+    if (trainingView) params.set("training_view", "true");
+    const query = params.size ? `?${params}` : "";
     return this.request(`/runs/${safeSegment(runId, "run id")}/tracks/${safeSegment(trackId, "track id")}/notes${query}`,
       value => {
         const result = parseReplayNotesResponse(value);

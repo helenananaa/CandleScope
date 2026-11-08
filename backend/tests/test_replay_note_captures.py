@@ -47,7 +47,7 @@ async def test_version_images_preserve_pixels_and_same_time_event_boundary_acros
         original = await service.training.save_note(run, track, note_id="plan", fields=fields, expected_revision=0, context=context)
         assert original["screenshots"] == [first["capture"]]
         assert (await service.get_session(session))["snapshot"] == before
-        await service.training.record_review_marker(run, command_id="capture-event", text="same millisecond later event")
+        event = await service.training.record_review_marker(run, command_id="capture-event", text="same millisecond later event")
         later = (await service.training.notes(run, track))["context"]
         assert later["virtualTimeMs"] == context["virtualTimeMs"] and later["timelineSequence"] > context["timelineSequence"]
         second = await service.training.save_note_capture(run, track, **payload(later, "capture-b", png(200)))
@@ -71,7 +71,13 @@ async def test_version_images_preserve_pixels_and_same_time_event_boundary_acros
         with pytest.raises(TrainingRunError):
             await service.training.save_note(other_run, other_track, note_id="cross-run", fields=fields, expected_revision=0, context=other_context)
         review = await service.training.start_review(run, event_id=None)
-        await service.training.start_review(run, event_id=review["events"][0]["event_id"])
+        first_event = next(item for item in review["events"] if item["timeline_sequence"] == context["timelineSequence"])
+        await service.training.start_review(run, event_id=first_event["event_id"])
+        assert (await service.training.note_captures(run, track))["captures"] == []
+        with pytest.raises(TrainingRunError) as unpublished:
+            await service.training.note_capture_image(run, track, "plan", 1, "capture-a")
+        assert unpublished.value.status_code == 404
+        await service.training.start_review(run, event_id=event["event_id"])
         history = await service.training.notes(run, track)
         assert history["notes"] == [original]
         assert (await service.training.note_captures(run, track))["captures"] == [first["capture"]]

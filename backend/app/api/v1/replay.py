@@ -1071,8 +1071,9 @@ async def replay_v2_training_journal(
 
 @router.get("/runs/{run_id}/tracks/{track_id}/notes")
 async def replay_v2_training_notes(request: Request, run_id: str, track_id: str,
-                                   at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS)) -> dict[str, object]:
-    return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms)
+                                   at_time_ms: int | None = Query(default=None, ge=0, le=MAX_TIMESTAMP_MS),
+                                   training_view: bool = False) -> dict[str, object]:
+    return await _training_service(request).notes(run_id, track_id, at_time_ms=at_time_ms, training_view=training_view)
 
 
 @router.post("/runs/{run_id}/tracks/{track_id}/note-captures",

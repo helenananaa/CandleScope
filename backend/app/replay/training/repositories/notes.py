@@ -17,6 +17,7 @@ from ..errors import TrainingRunError
 from ..models import REPLAY_V2_PROTOCOL
 from ..review_lifecycle import event_clock
 from . import note_links, note_captures
+from .note_visibility import original_note_timeline
 
 MAX_NOTES = 500
 MAX_VERSIONS = 100
@@ -32,7 +33,8 @@ def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
 
 
-def _context(connection: sqlite3.Connection, run_id: str, track_id: str) -> dict[str, object]:
+def _context(connection: sqlite3.Connection, run_id: str, track_id: str, *,
+             training_view: bool = False) -> dict[str, object]:
     run = connection.execute(
         "SELECT revision,source_sequence,virtual_time_ms FROM replay_training_run WHERE run_id=?",
         (run_id,),
@@ -64,7 +66,7 @@ def _context(connection: sqlite3.Connection, run_id: str, track_id: str) -> dict
         "reviewId": None, "reviewRevision": None, "reviewNote": False,
         "timelineSequence": int(timeline_sequence),
     }
-    review = connection.execute(
+    review = None if training_view else connection.execute(
         "SELECT s.review_id,c.cursor_revision,e.* FROM replay_review_session s "
         "JOIN replay_review_cursor c USING(review_id) "
         "JOIN replay_review_timeline_event e ON e.run_id=s.run_id AND e.timeline_sequence=c.timeline_sequence "
@@ -110,21 +112,25 @@ class TrainingNoteRepository:
         self.base_store = base_store
         self.captures = note_captures.TrainingNoteCaptureRepository(base_store, _context)
 
-    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None) -> dict[str, object]:
+    async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None,
+                    training_view: bool = False) -> dict[str, object]:
         def read(connection: sqlite3.Connection):
-            context = _context(connection, run_id, track_id)
+            context = _context(connection, run_id, track_id, training_view=training_view)
             cutoff = context["virtualTimeMs"] if at_time_ms is None else at_time_ms
             if type(cutoff) is not int or not 0 <= cutoff <= context["virtualTimeMs"]:
                 raise _error("REPLAY_NOTE_TIME_INVALID", "Annotation query exceeds the current view time", 422)
+            original_timeline = original_note_timeline(context)
             rows = connection.execute(
                 "SELECT * FROM replay_training_note WHERE run_id=? AND track_id=? AND market_time_ms<=? AND timeline_sequence<=? "
-                "ORDER BY market_time_ms,created_at_ms,note_id LIMIT ?", (run_id, track_id, cutoff, context["timelineSequence"], MAX_NOTES),
+                "AND (review_note=1 OR timeline_sequence<=?) ORDER BY market_time_ms,created_at_ms,note_id LIMIT ?",
+                (run_id, track_id, cutoff, context["timelineSequence"], original_timeline, MAX_NOTES),
             ).fetchall()
             notes = []
             for note in rows:
+                timeline = context["timelineSequence"] if note["review_note"] else original_timeline
                 revision = connection.execute(
                     "SELECT * FROM replay_training_note_revision WHERE run_id=? AND note_id=? AND virtual_time_ms<=? AND timeline_sequence<=? "
-                    "ORDER BY revision DESC LIMIT 1", (run_id, note["note_id"], cutoff, context["timelineSequence"]),
+                    "ORDER BY revision DESC LIMIT 1", (run_id, note["note_id"], cutoff, timeline),
                 ).fetchone()
                 if revision is None:
                     raise _error("REPLAY_NOTE_CORRUPT", "Annotation historical version is unavailable", 503)
@@ -154,12 +160,13 @@ class TrainingNoteRepository:
                 raise _error("REPLAY_NOTE_TIME_INVALID", "Annotation query exceeds the current view time", 422)
             note = connection.execute(
                 "SELECT * FROM replay_training_note WHERE run_id=? AND track_id=? AND note_id=? "
-                "AND market_time_ms<=? AND timeline_sequence<=?",
-                (run_id, track_id, note_id, cutoff, context["timelineSequence"]),
+                "AND market_time_ms<=? AND timeline_sequence<=? AND (review_note=1 OR timeline_sequence<=?)",
+                (run_id, track_id, note_id, cutoff, context["timelineSequence"], original_note_timeline(context)),
             ).fetchone()
             if note is None:
                 raise _error("REPLAY_NOTE_NOT_FOUND", "Annotation is not visible in this view", 404)
-            allowed = (run_id, note_id, cutoff, context["timelineSequence"])
+            timeline = context["timelineSequence"] if note["review_note"] else original_note_timeline(context)
+            allowed = (run_id, note_id, cutoff, timeline)
             where = "run_id=? AND note_id=? AND virtual_time_ms<=? AND timeline_sequence<=?"
             if connection.execute("SELECT 1 FROM replay_training_note_revision WHERE " + where + " LIMIT 1", allowed).fetchone() is None:
                 raise _error("REPLAY_NOTE_CORRUPT", "Annotation historical version is unavailable", 503)

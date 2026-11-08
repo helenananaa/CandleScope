@@ -145,6 +145,7 @@ async def test_review_supplement_does_not_replace_original_plan_or_touch_finance
         original_context = (await repo.notes(run_id, track))["context"]
         original = await repo.save_note(run_id, track, note_id="plan", fields={"entryBasis": "original plan"},
                                        expected_revision=0, context=original_context)
+        saved_event = await service.training.record_review_marker(run_id, command_id="original-saved", text="Original plan saved")
         await _acquire(service, run_id=run_id, selected_session_id=session, command_id="note-acquire")
         snapshot = await service.get_session(session)
         await service.training.command(run_id, multi_command(run_id, "note-advance", ReplayV2CommandType.ADVANCE_TO,
@@ -152,8 +153,7 @@ async def test_review_supplement_does_not_replace_original_plan_or_touch_finance
         later = (await repo.notes(run_id, track))["context"]
         await repo.save_note(run_id, track, note_id="plan", fields={"entryBasis": "later plan"},
                              expected_revision=1, context=later)
-        timeline = await service.training.start_review(run_id, event_id=None)
-        await service.training.start_review(run_id, event_id=timeline["events"][0]["event_id"])
+        await service.training.start_review(run_id, event_id=saved_event["event_id"])
         review = await repo.notes(run_id, track)
         assert review["context"]["reviewId"] is not None and review["context"]["reviewNote"] is True
         assert review["notes"] == [original]
@@ -241,7 +241,7 @@ async def test_same_time_later_event_does_not_reveal_later_note_version(tmp_path
         context = (await repo.notes(run, track))["context"]
         original = await repo.save_note(run, track, note_id="plan", fields={"entryBasis": "before event"},
                                        expected_revision=0, context=context)
-        await service.training.record_review_marker(run, command_id="same-time-event", text="later event at the same market time")
+        event = await service.training.record_review_marker(run, command_id="same-time-event", text="later event at the same market time")
         later = (await repo.notes(run, track))["context"]
         assert later["virtualTimeMs"] == context["virtualTimeMs"]
         await repo.save_note(run, track, note_id="plan", fields={"entryBasis": "after event"},
@@ -249,7 +249,16 @@ async def test_same_time_later_event_does_not_reveal_later_note_version(tmp_path
         await repo.save_note(run, track, note_id="later-note", fields={"entryBasis": "later creation"},
                              expected_revision=0, context=later)
         review = await service.training.start_review(run, event_id=None)
-        await service.training.start_review(run, event_id=review["events"][0]["event_id"])
+        first_event = next(item for item in review["events"] if item["timeline_sequence"] == context["timelineSequence"])
+        await service.training.start_review(run, event_id=first_event["event_id"])
+        assert (await repo.notes(run, track))["notes"] == []
+        training_view = await service.training.notes(run, track, training_view=True)
+        assert training_view["context"]["reviewId"] is None
+        assert [note["revisionCount"] for note in training_view["notes"] if note["id"] == "plan"] == [2]
+        with pytest.raises(TrainingRunError) as unpublished:
+            await service.training.note_versions(run, track, "plan")
+        assert unpublished.value.status_code == 404
+        await service.training.start_review(run, event_id=event["event_id"])
         historical = await repo.notes(run, track)
         assert historical["notes"] == [original]
         versions = await service.training.note_versions(run, track, "plan")

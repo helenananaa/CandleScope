@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
 from ..errors import TrainingRunError
+from .note_visibility import original_note_timeline
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_RUN_BYTES = 16 * 1024 * 1024
@@ -71,6 +72,17 @@ def _bounds(row: sqlite3.Row, context: Mapping[str, object]) -> bool:
         and row["timeline_sequence"] <= context["timelineSequence"])
 
 
+def _visible_in_view(row: sqlite3.Row, context: Mapping[str, object]) -> bool:
+    if not _bounds(row, context):
+        return False
+    if row["timeline_sequence"] <= original_note_timeline(context):
+        return True
+    try:
+        return json.loads(row["captured_context_json"])["reviewNote"] is True
+    except (TypeError, ValueError, KeyError):
+        raise _error("REPLAY_NOTE_CAPTURE_CORRUPT", "Capture metadata is unavailable", 503) from None
+
+
 def _view(row: sqlite3.Row) -> dict[str, object]:
     try:
         chart = json.loads(row["chart_json"])
@@ -106,7 +118,7 @@ def freeze(connection: sqlite3.Connection, context: Mapping[str, object], fields
     for identifier in identifiers:
         row = connection.execute("SELECT " + _columns() + " FROM replay_training_note_capture WHERE run_id=? AND capture_id=?",
                                  (context["runId"], identifier)).fetchone()
-        if row is None or not _bounds(row, context):
+        if row is None or not _visible_in_view(row, context):
             raise _error("REPLAY_NOTE_CAPTURE_INVALID", "Capture is not visible in this run, track, dataset and event")
         _view(row)
     return identifiers
@@ -183,8 +195,10 @@ class TrainingNoteCaptureRepository:
         def read(connection: sqlite3.Connection):
             context = self.context(connection, run_id, track_id)
             sql = ("SELECT " + _columns() + " FROM replay_training_note_capture WHERE run_id=? AND track_id=? AND dataset_epoch=? "
-                   "AND virtual_time_ms<=? AND timeline_sequence<=?")
-            args = [run_id, track_id, context["dataEpoch"], context["virtualTimeMs"], context["timelineSequence"]]
+                   "AND virtual_time_ms<=? AND timeline_sequence<=? "
+                   "AND (timeline_sequence<=? OR json_extract(captured_context_json,'$.reviewNote')=1)")
+            args = [run_id, track_id, context["dataEpoch"], context["virtualTimeMs"],
+                    context["timelineSequence"], original_note_timeline(context)]
             if capture_id is not None:
                 sql += " AND capture_id=?"
                 args.append(capture_id)
@@ -202,8 +216,10 @@ class TrainingNoteCaptureRepository:
             context = self.context(connection, run_id, track_id)
             version = connection.execute("SELECT v.* FROM replay_training_note_revision v JOIN replay_training_note n "
                 "ON n.run_id=v.run_id AND n.note_id=v.note_id WHERE n.run_id=? AND n.track_id=? AND n.note_id=? AND v.revision=? "
-                "AND n.market_time_ms<=? AND n.timeline_sequence<=? AND v.virtual_time_ms<=? AND v.timeline_sequence<=?",
-                (run_id, track_id, note_id, revision, context["virtualTimeMs"], context["timelineSequence"], context["virtualTimeMs"], context["timelineSequence"])).fetchone()
+                "AND n.market_time_ms<=? AND n.timeline_sequence<=? AND v.virtual_time_ms<=? AND v.timeline_sequence<=? "
+                "AND (n.review_note=1 OR v.timeline_sequence<=?)",
+                (run_id, track_id, note_id, revision, context["virtualTimeMs"], context["timelineSequence"],
+                 context["virtualTimeMs"], context["timelineSequence"], original_note_timeline(context))).fetchone()
             if version is None:
                 raise _error("REPLAY_NOTE_CAPTURE_NOT_FOUND", "Note version is not visible in this view", 404)
             selected_images = selected(json.loads(version["fields_json"]))
