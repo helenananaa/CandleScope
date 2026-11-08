@@ -17,7 +17,8 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.core.executors import run_storage
+from app.core.bounded_executor import ExecutorBusyError
+from app.core.executors import run_archive, run_storage
 from app.data_engine.ingestion.models import (
     DataSource,
     MarketEvent,
@@ -552,7 +553,10 @@ class TradeFlowService:
                     if minute not in complete
                 ]
                 if missing:
-                    rebuilt = await run_storage(_read_verified_archive_rollups, root, identity, missing)
+                    try:
+                        rebuilt = await run_archive(_read_verified_archive_rollups, root, identity, missing)
+                    except ExecutorBusyError:
+                        rebuilt = []
                     if rebuilt:
                         # Another task may have committed or received better local
                         # evidence during the archive read. Prefer that evidence.

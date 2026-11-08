@@ -282,9 +282,11 @@ def test_real_rollup_history_only_pages_to_an_existing_local_row(tmp_path) -> No
         assert final["count"] == 1 and final["has_more"] is False and final["next_cursor"] is None
 
 
-def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path) -> None:
+def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path, monkeypatch) -> None:
     from datetime import datetime, timezone
 
+    from app.core.bounded_executor import ExecutorBusyError
+    from app.data_engine.market_data import trade_flow_service
     from app.data_engine.market_data.trade_flow_service import TradeFlowService
     from app.data_engine.storage.raw_trade_archive import (
         DisabledRawAggTradeArchive, ParquetRawAggTradeArchive, VerifiedRawAggTradeDay,
@@ -355,3 +357,10 @@ def test_bounded_history_rebuilds_only_from_verified_archive_objects(tmp_path) -
         assert fallback["data"][0]["buy_base_volume"] == 9
         assert fallback["data"][0]["is_complete"] is False
         assert "archive_data_epoch" not in fallback["data"][0]
+
+        async def reject_archive(*args, **kwargs):
+            raise ExecutorBusyError("archive")
+
+        monkeypatch.setattr(trade_flow_service, "run_archive", reject_archive)
+        saturated = client.get("/api/v1/trade-flow/history", params=params)
+        assert saturated.status_code == 200 and saturated.json() == fallback
