@@ -58,3 +58,31 @@ async def test_preparation_storage_failure_does_not_skip_remaining_shutdown(monk
     assert stopped == (["strategy", "preparation", "replay", "backtest", "offline", "lag"] if offline else
                        ["strategy", "preparation", "backtest", "catalog", "lag", "data", "replay"])
     assert "unable to open database file" in caplog.text
+
+
+@async_test
+async def test_numeric_consumers_stop_before_history_and_cache_even_if_alert_stop_fails(monkeypatch):
+    from app.indicator import history_worker
+    stopped = []
+    async def alerts():
+        stopped.append('alerts')
+        raise RuntimeError('injected alert stop failure')
+    async def numeric():
+        stopped.append('numeric')
+    async def history():
+        stopped.append('history')
+    async def data(*, step_timeout):
+        stopped.append('data')
+    async def catalog():
+        pass
+    state = SimpleNamespace(alert_runtime=SimpleNamespace(stop=alerts),
+        numeric_indicator_service=SimpleNamespace(close=numeric),
+        indicator_range_service=SimpleNamespace(unbind_all=lambda: stopped.append('unbind'),
+                                                clear=lambda: stopped.append('clear')),
+        data_engine_runtime=SimpleNamespace(shutdown=data))
+    monkeypatch.setattr(main_module, 'app', SimpleNamespace(state=state))
+    monkeypatch.setattr(history_worker, 'shutdown_builtin_history', history)
+    monkeypatch.setattr(symbol_catalog, 'cancel_exchange_metadata_refreshes', catalog)
+    monkeypatch.setattr(symbol_catalog, 'configure_exchange_metadata_foreground_probe', lambda probe: None)
+    await main_module.shutdown_event()
+    assert stopped == ['alerts', 'numeric', 'history', 'unbind', 'clear', 'data']

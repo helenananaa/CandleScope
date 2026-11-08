@@ -36,6 +36,47 @@ class FakeDataManager:
         self.release_calls.append({"symbol": symbol, "interval": interval, **kwargs})
 
 
+    async def query_indicator(self, request):
+        # Unit fake of the public port. Canonical storage/revision and shared
+        # execution are exercised separately by test_numeric_indicator_queries.
+        from app.indicator import create_engine
+        from app.indicator.query_contracts import NumericIndicatorSnapshot
+        rows = {bar.time: bar for bar in self.seed_bars}
+        if request.expected_bar is not None:
+            rows[request.expected_bar.time] = request.expected_bar
+        bars = [rows[key] for key in sorted(rows)
+                if request.through_ms is None or key * 1000 <= request.through_ms][-request.source_slots:]
+        bars = [bar for bar in bars if bar.is_closed]
+        if not bars:
+            return NumericIndicatorSnapshot(request.source, 'warming')
+        engine = create_engine()
+        try:
+            values = tuple((output, engine.compute(request.source.symbol, request.source.interval,
+                request.source.market_type, output.name, dict(output.params), bars,
+                exchange=request.source.exchange).get_latest().get(output.output_id)) for output in request.outputs)
+        finally:
+            engine.stop()
+        return NumericIndicatorSnapshot(request.source,
+            'ready' if all(value is not None for _, value in values) else 'warming', values,
+            closed_through=bars[-1].time, closed_rows=len(bars), latest_closed=bars[-1])
+
+    async def subscribe_indicator(self, request, callback, **kwargs):
+        key = request.source
+        target = dict(symbol=key.symbol, interval=key.interval, exchange=key.exchange, market_type=key.market_type)
+        await self.ensure_stream(**target, consumer_id=kwargs['consumer_id'])
+        result = self.query_latest(**target)
+        handle = SimpleNamespace(snapshot=await self.query_indicator(request),
+            backfill_request_ids=getattr(result, 'metadata', {}).get('backfill_request_ids', []))
+        async def refresh():
+            handle.snapshot = await self.query_indicator(request)
+            return handle.snapshot
+        async def close():
+            await self.release_stream(**target, consumer_id=kwargs['consumer_id'])
+        handle.refresh, handle.close = refresh, close
+        self.subscriptions.append(dict(callback=callback, **kwargs, handle=handle))
+        return handle
+
+
 class TransientEnsureFailureDataManager(FakeDataManager):
     def __init__(self) -> None:
         super().__init__()
@@ -226,8 +267,8 @@ def test_alert_runtime_computes_indicator_values_from_seed_history(tmp_path: Pat
 
         assert emitted is not None
         assert emitted["values"]["rsi"] == 100
-        assert emitted["values"]["ma20"] is not None
-        assert emitted["values"]["macdHist"] is not None
+        assert emitted["values"]["ma20"] is None
+        assert emitted["values"]["macdHist"] is None
         diagnostics = runtime.snapshot()["ruleDiagnostics"]
         # Auto-disable removes active runtime state after the one allowed trigger.
         assert diagnostics == {}

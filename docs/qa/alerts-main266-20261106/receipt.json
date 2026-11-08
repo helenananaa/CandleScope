@@ -1,0 +1,56 @@
+{
+  "source": "81e594cd329d5cba02ac067028f621fe85a48a7f",
+  "main": "7acba72e56dfafd3a25ee4ec861509f4e9dc6f96",
+  "outputRoot": "/Users/ryanliang/CandleScope/output/development-goal-20261104/alerts-main266-20261106",
+  "artifacts": {
+    "evidence/plan.json.gz": {
+      "sha256": "6e6c23695a412cad803b63701e85a167e16bf62acf63b36224e6d82ae2ffdd80",
+      "originalSha256": "b093bea7e6125fc409308355fb448063852b62dfe4fae4e84273423c43bb1739"
+    },
+    "evidence/previous-source-manifest.json.gz": {
+      "sha256": "4576ea1a915d3d5e1c49672c8d9f7d8f566b53033e832ebfcb4a786aa16b54f9",
+      "originalSha256": "4576ea1a915d3d5e1c49672c8d9f7d8f566b53033e832ebfcb4a786aa16b54f9"
+    },
+    "evidence/merge-main.log.gz": {
+      "sha256": "16fc9526ae3a3ec2309d9d9b94ba801666b7f67259a55e5f3d49aeb9c310c2a1",
+      "originalSha256": "3932df71ce6b1a5831ef19ca12435553ca183f6a79d507a66511b5e43f1bb3ba"
+    },
+    "evidence/combined-checks.json.gz": {
+      "sha256": "b64dccafeee584ba014e9a3cbed3f137fa38752e15b52f7f4553362a9a348337",
+      "originalSha256": "e431a390d211e0da656adef08a7d83b2302941a55f7cefd0a55c125ee1a4ce74"
+    },
+    "evidence/backend-combined.log.gz": {
+      "sha256": "f3e91379fbb0433134c87d43406e3bd0d3b874ea8fcc9f77415a0b40514b1021",
+      "originalSha256": "647840db45a9bc510aedf1102c8d429270f5857c6716f9d31ce38e41e30e537b"
+    },
+    "evidence/frontend-build.log.gz": {
+      "sha256": "49e60eb5030f0e0024aded21bce103c0aae08f3830eb5898eda79561f92bf0d6",
+      "originalSha256": "8eaaf1a2982d8706c12c7949843e9a1937aa6b8f7c72f56b07886679ac1d1768"
+    },
+    "evidence/frontend-inheritance.json.gz": {
+      "sha256": "a6d1641651f33e701f05723b566236a18dc9fe7461123f070f995cbe1d0b496d",
+      "originalSha256": "b24edd478ae676bd84d627f564eeb86749d90e6649bdbee36de323bd31992dfc"
+    },
+    "evidence/architecture.json.gz": {
+      "sha256": "1dbd75a2c7c54e83e29813208bf9ca71a208d16d76d0864a2783bc3912bf8c52",
+      "originalSha256": "a9de5754b391f871b2ec7d9670757ae11537446041f3712f0067ca56dd101f7f"
+    },
+    "evidence/feature-source-inheritance.json.gz": {
+      "sha256": "bca9a7b68199eb0812e160958a75aec00da70728db4f34c304854a8bd601ea2b",
+      "originalSha256": "b4659a5bc54d1160991ecfcd7c418576dd2c51360eadfc3c1593f1a0fbd9b6fd"
+    },
+    "evidence/original-worktree-protection.json.gz": {
+      "sha256": "5133d8cb1fd3fdbe24cd76908038ab67957fea3c3a164fc29b5ee4bd5b8ab5c7",
+      "originalSha256": "a1a83032ae4495ceee5a2935e11433bbf807126d1bcfd6a557bc8ee5d2b04977"
+    },
+    "evidence/windows-readonly-probe.json.gz": {
+      "sha256": "7610e7fd3e53ab55b8af213248890a76ed6beb758c7c0b1db9552aa1a9cd7400",
+      "originalSha256": "a9e42ba07e17aa5552cec0947382894b59510283329e0c5d01f33d8d54f3ca32"
+    },
+    "evidence/source-manifest.json.gz": {
+      "sha256": "3c714046b7c3ebd9f02550d633399164b31dbcc72f0e9638203065e329a4b47a",
+      "originalSha256": "2fcc2936d6a65c24b2b398e16c7c52bdf950ac6ccf08fbb1806b6f5113db3848"
+    }
+  },
+  "artifactCount": 12
+}

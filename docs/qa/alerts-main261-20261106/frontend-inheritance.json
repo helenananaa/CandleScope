@@ -1,0 +1,17 @@
+{
+  "source": "5ce6357be99c87b419d7153bff0b99d8ffc2b1a3",
+  "frontendTree": "c1b14e1cd2ff8f04ed44358e4718289437e4538c",
+  "previousCheckedSource": "e2c01dd9e57dbd04e7cff887460a990c0ddb848f",
+  "previousFullCommand": "npm run check",
+  "previousLog": "docs/qa/alerts-main243-20261104/pr204-main243-frontend.log.gz",
+  "previousLogSha256": "aded942e711bf36076a99c6faa5f7dd85bbadc71de6177412901661329a87aeb",
+  "exactTreeEqual": true,
+  "inheritedTests": 4888,
+  "inheritedPerformanceTests": 1,
+  "inheritedDesktopTests": 130,
+  "skipped": 0,
+  "fullTestsRerunThisRound": false,
+  "currentCommand": "npm run build",
+  "currentBuildExitCode": 0,
+  "scope": "Exact entire frontend directory tree inherited; current candidate frontend freshly rebuilt, backend qualified independently"
+}

@@ -4,18 +4,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.core.executors import run_storage
 from app.alerts.facade import AlertFacade
-from app.alerts.indicator_context import (
-    ALERT_INDICATOR_HISTORY_LIMIT,
-    compute_alert_indicator_values,
-    indicator_readiness,
-    merge_alert_bar_window,
-)
+from app.alerts.indicator_context import indicator_readiness
+from app.alerts.indicator_requests import request_for, values_from
 from app.alerts.validation import referenced_alert_fields
 from app.data_engine.data_manager.models import BarData, DataEvent, DataEventType, SubscriptionHandle
 
@@ -30,7 +25,9 @@ class _RuleSubscription:
     target_key: tuple[str, str, str, str]
     event_types: set[DataEventType]
     consumer_id: str
-    handle: SubscriptionHandle
+    handle: Any
+    definition_revision: str
+    numeric: bool = False
 
 
 class AlertRuntimeEngine:
@@ -53,8 +50,6 @@ class AlertRuntimeEngine:
         self._started = False
         self._subscriptions: dict[str, _RuleSubscription] = {}
         self._previous_values: dict[str, dict[str, Any]] = {}
-        self._bar_windows: dict[str, list[BarData]] = {}
-        self._indicator_contexts: OrderedDict[tuple[str, str, str, str], tuple[tuple, dict]] = OrderedDict()
         self._rule_diagnostics: dict[str, dict[str, Any]] = {}
         self._events_evaluated = 0
         self._triggers_emitted = 0
@@ -67,6 +62,10 @@ class AlertRuntimeEngine:
         self._reconcile_task: asyncio.Task[None] | None = None
         self._reconcile_wakeup = asyncio.Event()
         self._warmup_tasks: dict[str, asyncio.Task[None]] = {}
+        # API mutations and the periodic reconciliation loop can overlap while
+        # acquiring a stream or starting the numeric worker. One lifecycle
+        # owner prevents replacement of an unrecorded, still-starting handle.
+        self._lifecycle = asyncio.Lock()
 
     async def start(self) -> None:
         """Subscribe all currently enabled rules."""
@@ -100,9 +99,9 @@ class AlertRuntimeEngine:
             task.cancel()
         if warmup_tasks:
             await asyncio.gather(*warmup_tasks, return_exceptions=True)
-        for rule_id in list(self._subscriptions):
-            await self.remove_rule(rule_id)
-        self._indicator_contexts.clear()
+        async with self._lifecycle:
+            for rule_id in list(self._subscriptions):
+                await self._remove_rule(rule_id)
 
     async def sync_rules(self) -> None:
         """Reconcile runtime subscriptions with persisted rules."""
@@ -115,10 +114,25 @@ class AlertRuntimeEngine:
             await self.sync_rule(rule)
         for stale_rule_id in list(self._subscriptions):
             if stale_rule_id not in seen:
-                await self.remove_rule(stale_rule_id)
+                # A rule may have been created after the list was read.
+                async with self._lifecycle:
+                    if self.facade.get_rule(stale_rule_id) is None:
+                        await self._remove_rule(stale_rule_id)
 
     async def sync_rule(self, rule: dict[str, Any] | None) -> None:
         """Start, update, or stop one rule subscription."""
+        if not isinstance(rule, dict) or not rule.get("id"):
+            return
+        async with self._lifecycle:
+            # A caller can wait behind an edit/disable. Never reinstall the
+            # older payload once its turn reaches the lifecycle owner.
+            current = self.facade.get_rule(str(rule["id"]))
+            if current is None:
+                await self._remove_rule(str(rule["id"]))
+                return
+            await self._sync_rule(current)
+
+    async def _sync_rule(self, rule: dict[str, Any]) -> None:
         if not self._started or self.data_manager is None or not isinstance(rule, dict):
             return
 
@@ -126,12 +140,12 @@ class AlertRuntimeEngine:
         if not rule_id:
             return
         if "pineAlert" in referenced_alert_fields(rule.get("expression")):
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
         if not self._is_rule_active(rule):
             if self._deactivation_reason(rule) in {"expired", "trigger_limit"}:
                 await run_storage(self.facade.set_enabled, rule_id, False)
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
 
         if rule_id in self._recovery_required:
@@ -139,13 +153,13 @@ class AlertRuntimeEngine:
 
         target = self._target(rule)
         if not target["symbol"] or not target["interval"]:
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
             return
 
         target_key = (target["exchange"], target["marketType"], target["symbol"], target["interval"])
         existing = self._subscriptions.get(rule_id)
         event_types = self._event_types_for_rule(rule)
-        if existing and existing.target_key == target_key and existing.event_types == event_types:
+        if existing and existing.target_key == target_key and existing.event_types == event_types and existing.definition_revision == rule.get("definitionRevision"):
             if self._rule_needs_warmup(rule_id, rule):
                 request_ids = await self._seed_previous_values(
                     rule_id,
@@ -156,11 +170,11 @@ class AlertRuntimeEngine:
                 self._schedule_backfill_wait(rule_id, target, request_ids)
             return
         if existing:
-            await self.remove_rule(rule_id)
+            await self._remove_rule(rule_id)
 
         async def _on_event(event: DataEvent, *, current_rule_id: str = rule_id) -> None:
             try:
-                await self.evaluate_event(current_rule_id, event)
+                await self.evaluate_event(current_rule_id, event, expected_definition=rule["definitionRevision"])
             except Exception as exc:
                 self._evaluation_errors += 1
                 self._record_error(exc, rule_id=current_rule_id)
@@ -172,40 +186,57 @@ class AlertRuntimeEngine:
             self._recovery_required[rule_id] = error.to_dict()
             self._require_recovery_seed.add(rule_id)
             self._previous_values.pop(rule_id, None)
-            self._bar_windows.pop(rule_id, None)
             warmup = self._warmup_tasks.pop(rule_id, None)
             if warmup is not None:
                 warmup.cancel()
             self._record_error(error, rule_id=rule_id)
 
         consumer_id = f"alert:rule:{rule_id}"
+        numeric = bool(self._required_indicator_fields(rule))
         try:
-            await self.data_manager.ensure_stream(
-                target["symbol"],
-                target["interval"],
-                exchange=target["exchange"],
-                market_type=target["marketType"],
-                focus_scope="background",
-                subscription_tier="alerts",
-                consumer_id=consumer_id,
-            )
-            request_ids = await self._seed_previous_values(
-                rule_id,
-                target,
-                rule=rule,
-                auto_backfill=True,
-            )
-            handle = self.data_manager.subscribe(
-                callback=_on_event,
-                on_recovery=_on_recovery,
-                symbol=target["symbol"],
-                interval=target["interval"],
-                exchange=target["exchange"],
-                market_type=target["marketType"],
-                event_types=event_types,
-            )
-        except Exception as exc:
-            self._record_error(exc, rule_id=rule_id)
+            if numeric:
+                async def on_numeric(observation):
+                    await self.evaluate_event(rule_id, observation.event, snapshot=observation.snapshot,
+                        baseline=observation.baseline, expected_definition=rule["definitionRevision"])
+                handle = await self.data_manager.subscribe_indicator(
+                    request_for(target, self._required_indicator_fields(rule)), on_numeric,
+                    on_recovery=_on_recovery, consumer_id=consumer_id,
+                    subscription_tier="alerts", event_types=event_types)
+                current = self.facade.get_rule(rule_id)
+                if not self._started or not current or current.get("definitionRevision") != rule["definitionRevision"]:
+                    await handle.close()
+                    self._reconcile_wakeup.set()
+                    return
+                self._adopt_numeric_snapshot(rule_id, rule, handle.snapshot)
+                request_ids = handle.backfill_request_ids
+            else:
+                await self.data_manager.ensure_stream(
+                    target["symbol"],
+                    target["interval"],
+                    exchange=target["exchange"],
+                    market_type=target["marketType"],
+                    focus_scope="background",
+                    subscription_tier="alerts",
+                    consumer_id=consumer_id,
+                )
+                request_ids = await self._seed_previous_values(
+                    rule_id,
+                    target,
+                    rule=rule,
+                    auto_backfill=True,
+                )
+                handle = self.data_manager.subscribe(
+                    callback=_on_event,
+                    on_recovery=_on_recovery,
+                    symbol=target["symbol"],
+                    interval=target["interval"],
+                    exchange=target["exchange"],
+                    market_type=target["marketType"],
+                    event_types=event_types,
+                )
+        except (Exception, asyncio.CancelledError) as exc:
+            if not isinstance(exc, asyncio.CancelledError):
+                self._record_error(exc, rule_id=rule_id)
             try:
                 await self.data_manager.release_stream(
                     target["symbol"],
@@ -218,6 +249,8 @@ class AlertRuntimeEngine:
                 )
             except Exception:
                 logger.debug("Failed to roll back alert stream %s", rule_id, exc_info=True)
+            if isinstance(exc, asyncio.CancelledError):
+                raise
             return
         self._subscriptions[rule_id] = _RuleSubscription(
             rule_id=rule_id,
@@ -225,7 +258,14 @@ class AlertRuntimeEngine:
             event_types=event_types,
             consumer_id=consumer_id,
             handle=handle,
+            definition_revision=rule["definitionRevision"],
+            numeric=numeric,
         )
+        current = self.facade.get_rule(rule_id)
+        if not self._started or not current or current.get("definitionRevision") != rule["definitionRevision"]:
+            await self._remove_rule(rule_id)
+            self._reconcile_wakeup.set()
+            return
         self._require_recovery_seed.discard(rule_id)
         self._schedule_backfill_wait(rule_id, target, request_ids)
         self._clear_rule_error(rule_id)
@@ -233,6 +273,10 @@ class AlertRuntimeEngine:
 
     async def remove_rule(self, rule_id: str) -> None:
         """Unsubscribe and release one rule's stream lease."""
+        async with self._lifecycle:
+            await self._remove_rule(rule_id)
+
+    async def _remove_rule(self, rule_id: str) -> None:
         self._recovery_required.pop(rule_id, None)
         self._seed_frontiers.pop(rule_id, None)
         sub = self._subscriptions.pop(rule_id, None)
@@ -240,10 +284,13 @@ class AlertRuntimeEngine:
         if warmup_task is not None and warmup_task is not asyncio.current_task():
             warmup_task.cancel()
         self._previous_values.pop(rule_id, None)
-        self._bar_windows.pop(rule_id, None)
         self._rule_diagnostics.pop(rule_id, None)
         self._clear_rule_error(rule_id)
         if sub is None or self.data_manager is None:
+            return
+
+        if sub.numeric:
+            await sub.handle.close()
             return
 
         try:
@@ -265,9 +312,16 @@ class AlertRuntimeEngine:
         except Exception:
             logger.exception("Failed to release alert stream for rule %s", rule_id)
 
-    async def evaluate_event(self, rule_id: str, event: DataEvent) -> dict[str, Any] | None:
+    async def evaluate_event(self, rule_id: str, event: DataEvent, *, snapshot=None, baseline=False,
+                             expected_definition=None) -> dict[str, Any] | None:
         """Evaluate one DataEvent for a rule and emit history when matched."""
-        if rule_id in self._recovery_required or event.bar is None:
+        if rule_id in self._recovery_required:
+            return None
+        if event.bar is None:
+            if snapshot is not None:
+                rule = self.facade.get_rule(rule_id)
+                if rule and rule.get("definitionRevision") == expected_definition:
+                    self._adopt_numeric_snapshot(rule_id, rule, snapshot)
             return None
         if (
             event.event_type != DataEventType.BAR_AMENDED
@@ -284,28 +338,34 @@ class AlertRuntimeEngine:
             return None
 
         target = self._target(rule)
-        window = merge_alert_bar_window(self._bar_windows.get(rule_id, []), event.bar)
-        self._bar_windows[rule_id] = window
-        closed_window = [
-            bar for bar in window if getattr(bar, "is_closed", True)
-        ]
-        indicator_values = self._indicator_values(rule, closed_window)
+        definition = rule["definitionRevision"]
+        if expected_definition is not None and definition != expected_definition:
+            return None
+        fields = self._required_indicator_fields(rule)
+        if fields:
+            if snapshot is None:
+                request = request_for(target, fields)
+                snapshot = await self.data_manager.query_indicator(replace(request,
+                    through_ms=event.bar.time_ms, expected_bar=event.bar))
+            latest_rule = self.facade.get_rule(rule_id)
+            if not latest_rule or latest_rule.get("definitionRevision") != definition:
+                return None
+            indicator_values = values_from(snapshot)
+            history_bars = snapshot.closed_rows
+            if snapshot.status != "ready":
+                self._previous_values.pop(rule_id, None)
+                self._update_diagnostics(rule_id, rule, indicator_values=indicator_values,
+                    history_bars=history_bars, state=snapshot.status)
+                return None
+        else:
+            indicator_values = {"rsi": None, "macdHist": None, "ma20": None}
+            history_bars = 0
 
-        if event.event_type == DataEventType.BAR_AMENDED or event.detail.get("continuity_replayed"):
-            frontier = closed_window[-1] if closed_window else window[-1]
-            current = {**self._bar_values(frontier), **indicator_values}
-            self._previous_values[rule_id] = current
-            self._update_diagnostics(
-                rule_id,
-                rule,
-                timestamp_ms=event.timestamp_ms,
-                event_type=event.event_type,
-                indicator_values=indicator_values,
-                history_bars=len(window),
-                state="state_updated",
-            )
-            # Corrections and continuity catch-up repair the indicator frontier
-            # without manufacturing a historical alert after the fact.
+        if baseline or event.event_type == DataEventType.BAR_AMENDED or event.detail.get("continuity_replayed"):
+            if snapshot is not None:
+                self._adopt_numeric_snapshot(rule_id, rule, snapshot)
+            else:
+                self._previous_values[rule_id] = self._bar_values(event.bar)
             return None
 
         current = {**self._bar_values(event.bar), **indicator_values}
@@ -321,7 +381,7 @@ class AlertRuntimeEngine:
             timestamp_ms=event.timestamp_ms,
             event_type=event.event_type,
             indicator_values=indicator_values,
-            history_bars=len(window),
+            history_bars=history_bars,
         )
 
         if not self._required_indicators_ready(rule, readiness):
@@ -352,6 +412,12 @@ class AlertRuntimeEngine:
 
         emitted = await self.facade.emit_triggered({
             "ruleId": rule_id,
+            "expectedDefinitionRevision": definition,
+            "evaluationCursor": {
+                "barTime": int(event.bar.time_ms),
+                "observationTime": 2**53 - 1 if event.bar.is_closed else int(event.timestamp_ms),
+                "ordinal": 0 if event.bar.is_closed else int(event.detail.get("stream_version", {}).get("sequence", 0)),
+            },
             "eventType": "alert.triggered",
             "target": target,
             "message": self._render_message(rule, current, evaluation),
@@ -468,6 +534,15 @@ class AlertRuntimeEngine:
         rule: dict[str, Any],
         auto_backfill: bool,
     ) -> list[str]:
+        if self._required_indicator_fields(rule):
+            sub = self._subscriptions.get(rule_id)
+            snapshot = (await sub.handle.refresh() if sub is not None and sub.numeric else
+                await self.data_manager.query_indicator(request_for(target, self._required_indicator_fields(rule))))
+            current = self.facade.get_rule(rule_id)
+            if not current or current.get("definitionRevision") != rule["definitionRevision"]:
+                return []
+            self._adopt_numeric_snapshot(rule_id, rule, snapshot)
+            return []
         query_latest = getattr(self.data_manager, "query_latest", None)
         if not callable(query_latest):
             if rule_id in self._require_recovery_seed:
@@ -477,7 +552,7 @@ class AlertRuntimeEngine:
             result = query_latest(
                 target["symbol"],
                 target["interval"],
-                limit=ALERT_INDICATOR_HISTORY_LIMIT,
+                limit=2,
                 exchange=target["exchange"],
                 market_type=target["marketType"],
                 auto_backfill=auto_backfill,
@@ -488,7 +563,7 @@ class AlertRuntimeEngine:
             result = query_latest(
                 target["symbol"],
                 target["interval"],
-                limit=ALERT_INDICATOR_HISTORY_LIMIT,
+                limit=2,
             )
         except Exception:
             if rule_id in self._require_recovery_seed:
@@ -505,23 +580,12 @@ class AlertRuntimeEngine:
             or not any(getattr(bar, "is_closed", True) for bar in (bars or []))
         ):
             raise RuntimeError("Alert recovery history is incomplete; waiting for a verified seed")
-        if bars:
-            window = [
-                bar for bar in list(bars)[-ALERT_INDICATOR_HISTORY_LIMIT:]
-                if getattr(bar, "is_closed", True)
-            ][-ALERT_INDICATOR_HISTORY_LIMIT:]
-            self._bar_windows[rule_id] = window
-            indicators = self._indicator_values(rule, window)
-            if window:
-                self._previous_values[rule_id] = {
-                    **self._bar_values(window[-1]),
-                    **indicators,
-                }
-                if recovery_seed:
-                    self._seed_frontiers[rule_id] = max(int(bar.time) for bar in window)
-        else:
-            window = []
-            indicators = self._indicator_values(rule, window)
+        window = [bar for bar in (bars or []) if getattr(bar, "is_closed", True)]
+        indicators = {"rsi": None, "macdHist": None, "ma20": None}
+        if window:
+            self._previous_values[rule_id] = self._bar_values(window[-1])
+            if recovery_seed:
+                self._seed_frontiers[rule_id] = int(window[-1].time)
         self._update_diagnostics(
             rule_id,
             rule,
@@ -632,22 +696,15 @@ class AlertRuntimeEngine:
         expression = rule.get("expression") if isinstance(rule, dict) else None
         return referenced_alert_fields(expression) & _INDICATOR_FIELDS
 
-    def _indicator_values(self, rule: dict[str, Any], bars: list[BarData]) -> dict[str, Any]:
-        if not self._required_indicator_fields(rule):
-            return {"rsi": None, "macdHist": None, "ma20": None}
-        target = self._target(rule)
-        key = (target["exchange"], target["marketType"], target["symbol"], target["interval"])
-        # All supported indicators use close. Include every timestamp/value so
-        # amendments and different warmup windows cannot reuse stale results.
-        fingerprint = tuple((bar.time, bar.close) for bar in bars)
-        cached = self._indicator_contexts.get(key)
-        if cached is None or cached[0] != fingerprint:
-            cached = (fingerprint, compute_alert_indicator_values(bars))
-            self._indicator_contexts[key] = cached
-        self._indicator_contexts.move_to_end(key)
-        while len(self._indicator_contexts) > 256:
-            self._indicator_contexts.popitem(last=False)
-        return dict(cached[1])
+    def _adopt_numeric_snapshot(self, rule_id, rule, snapshot):
+        values = values_from(snapshot)
+        if snapshot.status == "ready" and snapshot.latest_closed is not None:
+            self._previous_values[rule_id] = {**self._bar_values(snapshot.latest_closed), **values}
+            self._seed_frontiers[rule_id] = snapshot.closed_through
+        else:
+            self._previous_values.pop(rule_id, None)
+        self._update_diagnostics(rule_id, rule, indicator_values=values,
+            history_bars=snapshot.closed_rows, state=snapshot.status)
 
     @classmethod
     def _required_indicators_ready(

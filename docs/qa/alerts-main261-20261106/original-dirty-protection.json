@@ -1,0 +1,8 @@
+{
+  "worktree": "/Users/ryanliang/.codex/worktrees/alert-builtin-resume-20261104/CandleScope",
+  "head": "2fe53985961444d20c65deefd99ba6988f2e66f6",
+  "files": {
+    "docs/qa/alert-builtin-service-20261101/native-acceptance.mjs": "a7b3a49f164d7e650fdd6e46e27f88406e6f70627e05afee496740cb6e320c49"
+  },
+  "policy": "Leave original dirty worktree and checked-out local branch unchanged; use clean existing strategy checkout"
+}

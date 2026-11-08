@@ -1,0 +1,24 @@
+{
+  "schema": "candlescope.alert-lifecycle/1",
+  "finding": "Native two-rule creation left three numeric subscriptions because API sync and periodic reconciliation raced while startup awaited I/O.",
+  "validation": "Both deterministic lifecycle tests fail before fix. 33 runtime/numeric/lifecycle tests pass after fix; includes disable/delete while an older sync waits and stop during startup.",
+  "native": "Attempt 1 failed at subscription-count assertion. Trigger history did record both real closed-bar alerts, but later native acceptance was not reached. Re-run pending.",
+  "artifacts": [
+    {
+      "path": "lifecycle-before.log.gz",
+      "sha256": "1160bbd43c92d42575615db32dce793c65aca594039f3f928e8a1fa76a37f3c1"
+    },
+    {
+      "path": "lifecycle-after.log.gz",
+      "sha256": "b67041a252648fd0551fb5365818ffdbc3a44ee500b1c27aad6985f599e9bc00"
+    },
+    {
+      "path": "lifecycle-final.log.gz",
+      "sha256": "361008551880bcd40ca1417e7b887a13d492ccf2d10e33f885c34585eec9f1e9"
+    },
+    {
+      "path": "lifecycle-final2.log.gz",
+      "sha256": "9b9c961fd47f104405c1b0bf3ef29419a86e59e33bebe6d67778712d14f57c7b"
+    }
+  ]
+}
