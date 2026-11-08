@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from .repositories.runs import TrainingRunRepository
+from app.replay.training.note_view import ReplayNoteView
 from .repositories.review import TrainingReviewRepository
 from .repositories.markets import TrainingMarketRepository
 from .repositories.liquidations import TrainingLiquidationRepository
@@ -2885,35 +2886,35 @@ class TrainingRunStore:
         return await self._review_repository.current_drawing_document(run_id)
 
     async def notes(self, run_id: str, track_id: str, *, at_time_ms: int | None = None,
-                    training_view: bool = False) -> dict[str, object]:
-        return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms, training_view=training_view)
+                    view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._notes.notes(run_id, track_id, at_time_ms=at_time_ms, view=view)
 
     async def save_note_capture(self, run_id: str, track_id: str, *, capture_id: str, image: str,
                                 context: Mapping[str, object], captured_context: Mapping[str, object],
-                                chart: Mapping[str, object]) -> dict[str, object]:
+                                chart: Mapping[str, object], view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         return await self._notes.captures.save(run_id, track_id, capture_id=capture_id, image=image,
-                                              context=context, captured_context=captured_context, chart=chart)
+                                              context=context, captured_context=captured_context, chart=chart, view=view)
 
-    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None) -> dict[str, object]:
-        return await self._notes.captures.list(run_id, track_id, capture_id)
+    async def note_captures(self, run_id: str, track_id: str, *, capture_id: str | None = None, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._notes.captures.list(run_id, track_id, capture_id, view=view)
 
-    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str) -> dict[str, object]:
-        return await self._notes.captures.image(run_id, track_id, note_id, revision, capture_id)
+    async def note_capture_image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str, *, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._notes.captures.image(run_id, track_id, note_id, revision, capture_id, view=view)
 
     async def note_link_options(self, run_id: str, track_id: str, *, kind: str,
-                                before_id: str | None = None, limit: int = 20) -> dict[str, object]:
-        return await self._notes.link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit)
+                                before_id: str | None = None, limit: int = 20, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
+        return await self._notes.link_options(run_id, track_id, kind=kind, before_id=before_id, limit=limit, view=view)
 
     async def note_versions(self, run_id: str, track_id: str, note_id: str, *,
                             at_time_ms: int | None = None, before_revision: int | None = None,
-                            limit: int = 20) -> dict[str, object]:
+                            limit: int = 20, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         return await self._notes.note_versions(run_id, track_id, note_id,
-            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit)
+            at_time_ms=at_time_ms, before_revision=before_revision, limit=limit, view=view)
 
     async def save_note(self, run_id: str, track_id: str, *, note_id: str, fields: dict[str, str],
-                        expected_revision: int, context: Mapping[str, object]) -> dict[str, object]:
+                        expected_revision: int, context: Mapping[str, object], view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         return await self._notes.save_note(run_id, track_id, note_id=note_id, fields=fields,
-                                           expected_revision=expected_revision, context=context)
+                                           expected_revision=expected_revision, context=context, view=view)
 
     async def record_drawing_document(
         self,

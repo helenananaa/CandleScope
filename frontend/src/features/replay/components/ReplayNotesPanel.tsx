@@ -3,7 +3,7 @@ import { t } from "../../../i18n/index.js";
 import { useLocale } from "../../../i18n/useLocale.js";
 import { JournalEditor } from "../../trading-accounts/journalEditor.js";
 import { replayNoteCopyBinding, replayNoteDraftBinding, visibleReplayNoteDrafts, type ReplayNoteDraft } from "../replayNoteDraft.js";
-import type { ReplayNote, ReplayNotesResponse } from "../replayNotes.js";
+import { replayNoteView, type ReplayNote, type ReplayNotesResponse } from "../replayNotes.js";
 import type { ReplayV2ApiClient } from "../replayV2Api.js";
 import { ReplayNoteLinkPicker, ReplayNoteLinks } from "./ReplayNoteLinks.js";
 import ReplayNoteCaptureControls, { type ReplayNoteChartCapture } from "./ReplayNoteCaptureControls.js";
@@ -22,12 +22,13 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
   const id = useId();
   const [captureBusy, setCaptureBusy] = useState(false);
   const { binding, note } = target;
+  const sameView = binding.context.reviewId === view.reviewId;
   const [editor] = useState(() => new JournalEditor<ReplayNote>({
     key: binding.key, storage: () => binding.storage,
     create: (fields, entryId) => api.saveNoteRun(binding.context.runId, binding.context.trackId,
-      { id: entryId, fields, expectedRevision: 0, context: binding.context }),
+      { id: entryId, fields, expectedRevision: 0, context: binding.context }, undefined, replayNoteView(binding.context)),
     save: (entryId, fields, expectedRevision) => api.saveNoteRun(binding.context.runId, binding.context.trackId,
-      { id: entryId, fields, expectedRevision, context: binding.context }),
+      { id: entryId, fields, expectedRevision, context: binding.context }, undefined, replayNoteView(binding.context)),
     quick: async () => undefined,
   }));
   const state = useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
@@ -37,7 +38,7 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
     return () => editor.dispose();
   }, [editor, note, target.defaults]);
   const save = async (close: boolean) => {
-    try { if (captureBusy || replayNotePendingCapture(editor.getSnapshot().fields)) return; } catch { return; }
+    try { if (!sameView || captureBusy || replayNotePendingCapture(editor.getSnapshot().fields)) return; } catch { return; }
     if (await editor.flush()) { onChanged(); if (close) onClose(); }
   };
   return <div className="replay-note-editor" data-testid="replay-note-editor">
@@ -45,18 +46,18 @@ function NoteEditor({ api, target, view, captureChart, actualTime, onChanged, on
     <textarea id={id} value={state.fields.entryBasis ?? ""} disabled={!state.ready} maxLength={16_000}
       onChange={event => editor.edit({ ...state.fields, entryBasis: event.target.value })} />
     <ReplayNoteLinkPicker api={api} context={binding.context} fields={state.fields}
-      disabled={!state.ready || state.status === "saving"} onChange={fields => editor.edit(fields)} />
+      disabled={!sameView || !state.ready || state.status === "saving"} onChange={fields => editor.edit(fields)} />
     <ReplayNoteCaptureControls api={api} context={binding.context} view={view} fields={state.fields}
-      captureChart={captureChart} disabled={!state.ready || state.status === "saving"} onBusy={setCaptureBusy} actualTime={actualTime}
+      captureChart={captureChart} disabled={!sameView || !state.ready || state.status === "saving"} onBusy={setCaptureBusy} actualTime={actualTime}
       edit={update => { try { editor.edit(update(editor.getSnapshot().fields)); return editor.getSnapshot().status !== "failed"; } catch { return false; } }} />
     <p>{t(binding.context.reviewNote ? "replay.notes.reviewHint" : "replay.notes.planHint")}</p>
     {state.recovered && <p role="status">{t("replay.notes.recovered")}</p>}
     {state.error != null && <p role="alert">{t("replay.notes.saveFailed")}</p>}
     {onCopy && <p>{t("replay.notes.copyHint")}</p>}
     <div className="replay-note-actions">
-      <button type="button" disabled={!state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(false); }}>
+      <button type="button" disabled={!sameView || !state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(false); }}>
         {t(state.status === "saving" ? "replay.notes.saving" : "replay.notes.save")}</button>
-      <button type="button" disabled={!state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</button>
+      <button type="button" disabled={!sameView || !state.ready || state.status === "saving" || captureBusy || state.fields.replayPendingCaptureId !== undefined} onClick={() => { void save(true); }}>{t("replay.notes.saveClose")}</button>
       <button type="button" disabled={state.status === "saving"} onClick={onClose}>{t("replay.notes.close")}</button>
       {onCopy && <button type="button" disabled={!state.ready || state.status === "saving"}
         onClick={() => onCopy(state.fields)}>{t("replay.notes.copyCurrent")}</button>}
@@ -96,7 +97,7 @@ export default function ReplayNotesPanel({ api, runId, trackId, generationKey, r
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       lastStarted.current = Date.now();
-      api.notesRun(runId, trackId, cursorMs, controller.signal).then(result => {
+      api.notesRun(runId, trackId, cursorMs, controller.signal, replayNoteView({ reviewId, reviewRevision })).then(result => {
         if (controller.signal.aborted || current !== sequence.current) return;
         setLoaded({ generationKey, revisionKey, value: result }); setError(false);
         try { setDrafts(visibleReplayNoteDrafts(localStorage, result.context, cursorMs)); setDraftError(false); }

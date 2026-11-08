@@ -5,6 +5,7 @@ import pytest
 from app.replay.constants import REPLAY_PROTOCOL, CommandType
 from app.replay.models import ReplayCommand
 from app.replay.training.errors import TrainingRunError
+from app.replay.training.note_view import ReplayNoteView
 from app.replay.training.repositories.notes import TrainingNoteRepository
 from tests.test_replay_v2_training_phase1 import _service, _request, _command
 
@@ -252,7 +253,7 @@ async def test_same_time_later_event_does_not_reveal_later_note_version(tmp_path
         first_event = next(item for item in review["events"] if item["timeline_sequence"] == context["timelineSequence"])
         await service.training.start_review(run, event_id=first_event["event_id"])
         assert (await repo.notes(run, track))["notes"] == []
-        training_view = await service.training.notes(run, track, training_view=True)
+        training_view = await service.training.notes(run, track, view=ReplayNoteView(training=True))
         assert training_view["context"]["reviewId"] is None
         assert [note["revisionCount"] for note in training_view["notes"] if note["id"] == "plan"] == [2]
         with pytest.raises(TrainingRunError) as unpublished:

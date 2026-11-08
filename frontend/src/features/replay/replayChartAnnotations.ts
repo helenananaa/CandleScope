@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { floorIntervalTime } from "../../utils/intervalTimeline.js";
-import type { ReplayNote, ReplayNotesResponse } from "./replayNotes.js";
+import { replayNoteView, type ReplayNote, type ReplayNotesResponse } from "./replayNotes.js";
 import type { ReplayV2ApiClient } from "./replayV2Api.js";
 
 export interface ReplayChartNoteBinding {
@@ -63,10 +63,9 @@ export function useReplayChartNoteVersions(
   const key = scope && JSON.stringify([scope, binding?.reviewRevision, binding?.timelineSequence, savedRevision]);
   const runId = binding?.runId;
   const trackId = binding?.trackId;
-  const trainingView = binding?.reviewId === null;
   const [loaded, setLoaded] = useState<{ key: string; value: ReplayNotesResponse }>();
   const wake = useRef<(() => void) | null>(null);
-  const latest = useEffectEvent(() => ({ scope, key, cutoffMs }));
+  const latest = useEffectEvent(() => ({ scope, key, cutoffMs, view: binding === null ? undefined : replayNoteView(binding) }));
 
   // Coalesce cursor changes while a read is in flight. Playback can move
   // faster than the read without repeatedly aborting every response.
@@ -92,7 +91,7 @@ export function useReplayChartNoteVersions(
       pending = true;
       lastStarted = Date.now();
       const requestKey = requested.key;
-      void api.notesRun(runId, trackId, requested.cutoffMs, controller.signal, trainingView).then(value => {
+      void api.notesRun(runId, trackId, requested.cutoffMs, controller.signal, target.view).then(value => {
         if (!controller.signal.aborted && latest().key === requestKey) setLoaded({ key: requestKey, value });
       }).catch(() => {
         if (!controller.signal.aborted && latest().key === requestKey) setLoaded(undefined);
@@ -105,7 +104,7 @@ export function useReplayChartNoteVersions(
       controller.abort();
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [api, scope, runId, trackId, trainingView]);
+  }, [api, scope, runId, trackId]);
   useEffect(() => { wake.current?.(); }, [scope, key, cutoffMs]);
 
   return replayChartNoteVersions(loaded?.key === key ? loaded?.value : undefined, binding, cutoffMs);

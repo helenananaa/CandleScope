@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from app.replay.storage.sqlite_store import ReplaySQLiteStore
 from ..errors import TrainingRunError
 from .note_visibility import original_note_timeline
+from ..note_view import ReplayNoteView
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 MAX_RUN_BYTES = 16 * 1024 * 1024
@@ -148,7 +149,7 @@ class TrainingNoteCaptureRepository:
 
     async def save(self, run_id: str, track_id: str, *, capture_id: str, image: str,
                    context: Mapping[str, object], captured_context: Mapping[str, object],
-                   chart: Mapping[str, object]) -> dict[str, object]:
+                   chart: Mapping[str, object], view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         if (not isinstance(capture_id, str) or not 1 <= len(capture_id) <= 128 or not isinstance(image, str)
                 or len(image) > 4 * ((MAX_IMAGE_BYTES + 2) // 3) + 22 or not image.startswith("data:image/png;base64,")
                 or not _context_valid(context) or not _context_valid(captured_context) or not _chart_valid(chart)):
@@ -162,6 +163,9 @@ class TrainingNoteCaptureRepository:
         if max(len(context_json.encode()), len(captured_json.encode()), len(chart_json.encode())) > 4096:
             raise _error("REPLAY_NOTE_CAPTURE_INVALID", "Capture metadata exceeds its budget")
 
+        if not view.matches(context):
+            raise _error("REPLAY_NOTE_CONTEXT_CHANGED", "Capture submission belongs to a different view", 409)
+
         def write(connection: sqlite3.Connection):
             existing = connection.execute("SELECT * FROM replay_training_note_capture WHERE run_id=? AND capture_id=?",
                                           (run_id, capture_id)).fetchone()
@@ -171,7 +175,7 @@ class TrainingNoteCaptureRepository:
                         or bytes(existing["image_png"]) != image_bytes):
                     raise _error("REPLAY_NOTE_CAPTURE_CONFLICT", "Capture id belongs to a different submission", 409)
                 return {"protocol": "replay.v3", "schema_version": "replay.note-capture.v1", "context": dict(context), "capture": _view(existing)}
-            current = self.context(connection, run_id, track_id)
+            current = self.context(connection, run_id, track_id, view=view)
             if context_json != _json(current):
                 raise _error("REPLAY_NOTE_CONTEXT_CHANGED", "Replay context changed; retain the capture request", 409)
             if (any(captured_context[key] != current[key] for key in ["runId", "trackId", "dataEpoch"])
@@ -191,9 +195,9 @@ class TrainingNoteCaptureRepository:
             return {"protocol": "replay.v3", "schema_version": "replay.note-capture.v1", "context": current, "capture": _view(row)}
         return await self.base_store.run_extension_write(write)
 
-    async def list(self, run_id: str, track_id: str, capture_id: str | None = None) -> dict[str, object]:
+    async def list(self, run_id: str, track_id: str, capture_id: str | None = None, *, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         def read(connection: sqlite3.Connection):
-            context = self.context(connection, run_id, track_id)
+            context = self.context(connection, run_id, track_id, view=view)
             sql = ("SELECT " + _columns() + " FROM replay_training_note_capture WHERE run_id=? AND track_id=? AND dataset_epoch=? "
                    "AND virtual_time_ms<=? AND timeline_sequence<=? "
                    "AND (timeline_sequence<=? OR json_extract(captured_context_json,'$.reviewNote')=1)")
@@ -209,11 +213,11 @@ class TrainingNoteCaptureRepository:
                     "captures": [_view(row) for row in rows]}
         return await self.base_store.run_extension_read(read)
 
-    async def image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str) -> dict[str, object]:
+    async def image(self, run_id: str, track_id: str, note_id: str, revision: int, capture_id: str, *, view: ReplayNoteView = ReplayNoteView()) -> dict[str, object]:
         if type(revision) is not int or not 1 <= revision <= 100:
             raise _error("REPLAY_NOTE_CAPTURE_INVALID", "Invalid note image version")
         def read(connection: sqlite3.Connection):
-            context = self.context(connection, run_id, track_id)
+            context = self.context(connection, run_id, track_id, view=view)
             version = connection.execute("SELECT v.* FROM replay_training_note_revision v JOIN replay_training_note n "
                 "ON n.run_id=v.run_id AND n.note_id=v.note_id WHERE n.run_id=? AND n.track_id=? AND n.note_id=? AND v.revision=? "
                 "AND n.market_time_ms<=? AND n.timeline_sequence<=? AND v.virtual_time_ms<=? AND v.timeline_sequence<=? "
