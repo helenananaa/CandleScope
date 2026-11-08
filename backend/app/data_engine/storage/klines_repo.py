@@ -29,7 +29,7 @@ from app.data_engine.series_identity import (
 )
 
 from .revisions import (RevisionStore, guarded_write, init_revision_storage,
-                        mark_deleted, series_values, register_derived, current_revision)
+                        mark_deleted, series_values, register_derived, current_revision, mutation_mode)
 from .sqlite_runtime import SQLiteConnectionPolicy, open_sqlite
 
 # Valid market types
@@ -515,7 +515,10 @@ def upsert_klines(
                         (item[0], item[1], *item[9:])
                         for item in payload
                     ]
-                affected = conn.executemany(sql, write_payload).rowcount
+                scope = (mutation_mode(conn, "derived_materialization")
+                         if source == "backfill_aggregated" else nullcontext())
+                with scope:
+                    affected = conn.executemany(sql, write_payload).rowcount
                 if source == "backfill" and affected == len(rows):
                     from .kline_sources import acknowledge_history_projection
 

@@ -88,7 +88,7 @@ from typing import Any, AsyncIterator, Protocol
 from app.core.async_cleanup import apply_thread_guard, finish_cleanup
 from app.core.executors import run_storage
 from app.data_engine.interval_policy import parse_interval_ms, parse_interval_spec
-from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose
+from app.data_engine.interval_resolution import IntervalResolver, IntervalPurpose, IntervalResolutionError
 from app.data_engine.market_data.catalog import (
     MarketDataCatalog,
     MarketDataProviderDescriptor,
@@ -967,6 +967,7 @@ class DataManager(DataManagerCore):
         await self.coordinator.start_reaper()
 
         if self.cache.revision_consumer is not None:
+            self.cache.revision_consumer.readbacks_enabled = True
             self._revision_task = asyncio.create_task(self._revision_loop(), name="kline-revision-adoption")
 
         # TTL eviction task
@@ -1015,6 +1016,7 @@ class DataManager(DataManagerCore):
             self._revision_task.cancel()
             await asyncio.gather(self._revision_task, return_exceptions=True)
             self._revision_task = None
+            self.cache.revision_consumer.readbacks_enabled = False
 
         # Stop TTL task
         if self._ttl_task is not None:
@@ -1140,8 +1142,7 @@ class DataManager(DataManagerCore):
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
-        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
-            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
+        self._finish_query_snapshot(version_key, version_before, result)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1187,8 +1188,7 @@ class DataManager(DataManagerCore):
             series_identity=series_identity, auto_backfill=False,
             _materialized_only=True,
         )
-        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
-            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
+        self._finish_query_snapshot(version_key, version_before, result)
         result.metadata["target_materialized_only"] = True
         return result
 
@@ -1229,8 +1229,7 @@ class DataManager(DataManagerCore):
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
-        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
-            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
+        self._finish_query_snapshot(version_key, version_before, result)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1278,8 +1277,7 @@ class DataManager(DataManagerCore):
             auto_backfill=auto_backfill,
             **({"min_revision": min_revision} if min_revision is not None else {}),
         )
-        result.metadata["stream_version"] = self.event_bus.stream_versions.finish_snapshot(
-            version_key, version_before, final_only=result.metadata.get("all_rows_final") is True)
+        self._finish_query_snapshot(version_key, version_before, result)
         return self._submit_missing_ranges(
             result,
             reason=backfill_reason,
@@ -1291,6 +1289,15 @@ class DataManager(DataManagerCore):
                 else bool(auto_backfill)
             ),
         )
+
+    def _finish_query_snapshot(self, key: SeriesKey, before: dict, result: QueryResult) -> None:
+        consumer = self.cache.revision_consumer
+        pending = consumer is not None and consumer.readback_pending(key)
+        version = self.event_bus.stream_versions.finish_snapshot(
+            key, before, final_only=result.metadata.get("all_rows_final") is True)
+        if pending:
+            version["stable"] = False
+        result.metadata["stream_version"] = version
 
     def _submit_missing_ranges(
         self,
@@ -4002,12 +4009,51 @@ class DataManager(DataManagerCore):
     #  Internal
     # ═══════════════════════════════════════════════════════════
 
+    async def _publish_history_readbacks(self, consumer):
+        reset, notices = consumer.pending_readbacks()
+        if reset is not None:
+            self.event_bus.stream_versions.clear()
+            self.event_bus.require_recovery(None, "storage_history_overrun",
+                                            event_types={DataEventType.BACKFILL_COMPLETED})
+            consumer.acknowledge_readback(reset)
+            return
+        if not notices:
+            return
+        targets = self.bar_aggregator.get_series_targets()
+        for notice in notices:
+            source = notice.key
+            affected = {source: notice.bounds}
+            for exchange, market, symbol, interval, identity in targets:
+                if (exchange, market, symbol, identity) != (
+                        source.exchange, source.market_type, source.symbol, source.identity):
+                    continue
+                try:
+                    route = self.interval_resolver.resolve(
+                        exchange=exchange, market_type=market, interval=interval,
+                        purpose=IntervalPurpose.REALTIME)
+                except IntervalResolutionError:
+                    continue
+                if interval == source.interval or route.base_interval != source.interval:
+                    continue
+                target = SeriesKey.create(symbol, interval, exchange=exchange, market_type=market, identity=identity)
+                spec = parse_interval_spec(interval)
+                affected[target] = (tuple(spec.floor_ms(bound) for bound in notice.bounds)
+                                    if notice.bounds and spec and source.asset_class == "crypto"
+                                    and source.session_variant == "continuous" else None)
+            for key, bounds in affected.items():
+                detail = {"reason": "storage_history_changed", "storage_revision": notice.revision}
+                if bounds is not None:
+                    detail.update(range_start_ms=bounds[0], range_end_ms=bounds[1])
+                await self.event_bus.emit(DataEvent(DataEventType.BACKFILL_COMPLETED, key, detail=detail))
+            consumer.acknowledge_readback(notice)
+
     async def _revision_loop(self):
         while True:
             consumer = self.cache.revision_consumer
             if consumer is not None:
                 try:
                     await run_storage(consumer.sync)
+                    await self._publish_history_readbacks(consumer)
                     await run_storage(self.shared_blocks.poll)
                     self._revision_loop_error = None
                 except Exception as exc:

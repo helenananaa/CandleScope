@@ -53,9 +53,10 @@ export async function checkMarketHealth() {
     getMultiStreamUrl: () => "ws://owned-market-fixture",
     fetchKlinesHistory: async symbol => { calls.push(`history:${symbol}`); await new Promise(resolve => setTimeout(resolve, 10)); return result(symbol); },
     fetchKlinesBefore: async () => { throw new Error("unexpected before"); },
-    fetchKlinesRange: async symbol => {
+    fetchKlinesRange: async (symbol, _interval, from, to) => {
       calls.push(`range:${symbol}`);
-      const response = nextRange ?? result(symbol);
+      const page = result(symbol);
+      const response = nextRange ?? { ...page, data: (page.data ?? []).filter(row => from <= row.time && row.time <= to) };
       nextRange = undefined;
       return response;
     },
@@ -64,6 +65,7 @@ export async function checkMarketHealth() {
   const physical: Array<{ symbol: string; options: KlineStreamOptions; controller: KlineStreamController; closed: boolean }> = [];
   const gate = new ForegroundPreloadGate({ quietDwellMs: 0 });
   const manager = new MarketDataManager({ api, foregroundPreloadGate: gate, streams: {
+    reconnects: true,
     subscribe: (series, options = {}) => {
       const state = { symbol: series.symbol, options, closed: false, controller: null as unknown as KlineStreamController };
       state.controller = { isOpen: () => !state.closed, readyState: () => state.closed ? 3 : 1,
@@ -115,7 +117,12 @@ export async function checkMarketHealth() {
     }, [model]);
     useEffect(() => {
       const series = instrument(symbol);
-      const stream = manager.subscribe(series, { intervals: ["1m"], onKline: event => { model.store.applyTick(event.tick); } });
+      const stream = manager.subscribe(series, { intervals: ["1m"],
+        onKline: event => { model.store.applyTick(event.tick); },
+        onBackfillCompleted: event => bindings.feed.handleBackfillCompleted(event, {
+          activeSeries: series, getCacheRows: () => model.store.snapshot(), cooldownMs: 0,
+        }),
+      });
       const release = bindSharedWindow(manager.cache, series, { read: () => model.store.snapshot(),
         commit: rows => { model.store.applyRange(rows); } });
       void loadRef.current(symbol, "1m").then(() => { model.settle(symbol); });
@@ -157,6 +164,31 @@ export async function checkMarketHealth() {
     assert(cells.get("A")!.store.snapshot().find(row => row.time === corrected.time)?.close === 25,
       "an unstable HTTP read overwrote the rendered correction");
     checks.push("unstable HTTP read is retryable and leaves the corrected candle intact");
+    const idleCorrection = { ...corpus.get(eth.symbol)![12]!, close: 27 };
+    corpus.get(eth.symbol)![12] = idleCorrection;
+    const stream = physical.find(item => item.symbol === eth.symbol && !item.closed)!;
+    const previous = revisions.get(eth.symbol)!;
+    revisions.set(eth.symbol, { sequence: previous.sequence + 1, barrier: previous.barrier + 1 });
+    const affected = { range_start_ms: idleCorrection.time * 1000, range_end_ms: idleCorrection.time * 1000 };
+    stream.options.onBackfillCompleted?.({ type: "backfill_completed", exchange: eth.exchange, market_type: eth.marketType,
+      symbol: eth.symbol, interval: eth.interval, stream_version: wire(eth.symbol),
+      detail: { ...affected, reason: "storage_history_changed", storage_revision: 7 } }, stream.controller);
+    assert(!manager.cache.read(eth, { from: idleCorrection.time, to: idleCorrection.time }).complete,
+      "storage readback notice did not revoke the affected chart coverage");
+    await until(() => cells.get("A")!.store.snapshot().find(row => row.time === idleCorrection.time)?.close === 27,
+      "idle chart did not apply the durable correction without a tick");
+    assert(JSON.stringify(cells.get("B")!.store.snapshot()) === other, "durable readback changed another market");
+    checks.push("durable history notification invalidates and reloads the affected idle chart before another tick");
+    stream.options.onClose?.(new CloseEvent("close", { code: 1013, reason: "CONSUMER_RESYNC_REQUIRED" }), stream.controller);
+    stream.options.onOpen?.(stream.controller);
+    stream.options.onControlMessage?.({ type: "subscribed", active_intervals: ["1m"] }, stream.controller);
+    assert(manager.cache.planHistory(eth, 500).action !== "reuse", "reconnect ACK revalidated old chart coverage");
+    await manager.fetchKlinesHistory(eth.symbol, eth.interval, null, eth.marketType, eth.exchange,
+      { countBack: 500, maxWaitMs: 0, clientContext: { cacheMode: "network-only" } });
+    assert(manager.cache.planHistory(eth, 500).action !== "reuse", "snapshot without a linked event proved continuity");
+    emit(eth.symbol, { ...forming, close: 23 }, "bar.updated");
+    assert(manager.cache.planHistory(eth, 500).action === "reuse", "verified reconnect did not restore healthy reuse");
+    checks.push("after reconnect only a stable read linked to a real stream event restores healthy reuse");
     flushSync(() => root.unmount());
     manager.closeAll(); gate.dispose();
     assert(physical.every(stream => stream.closed), "owned streams leaked");

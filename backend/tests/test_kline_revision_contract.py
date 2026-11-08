@@ -12,7 +12,7 @@ import pytest
 from app.api.v1.klines import _history_contract_payload
 from app.core import config as core_config
 from app.data_engine.data_manager import DataManager
-from app.data_engine.data_manager.models import BarData, SeriesKey
+from app.data_engine.data_manager.models import BarData, DataEventType, SeriesKey
 from app.data_engine.memory_budget import MemoryBudget, MemoryBudgetExceeded, retained_size
 from app.data_engine.storage import klines_repo
 from app.data_engine.storage.revisions import acquisition_scope, StaleAcquisition
@@ -78,6 +78,105 @@ def test_cross_process_sql_changes_and_rollback_are_observable(storage):
     assert (original_result["storage_revision"], corrected_result["storage_revision"]) == (original, current)
     changes = storage.revision_store.changes_since(original)["changes"]
     assert len(changes) == 1 and changes[0]["operation"] == "update"
+
+
+@pytest.mark.anyio
+async def test_idle_chart_receives_cross_process_readback_after_ordinary_close(storage):
+    write()
+    manager = DataManager()
+    manager.set_storage(storage)
+    manager.bar_aggregator.add_target("BTCUSDT", "2m")
+    consumer = manager.cache.revision_consumer
+    consumer.readbacks_enabled = True
+    baseline = query(manager).metadata["stream_version"]
+    notices = asyncio.Queue()
+
+    async def receive(event):
+        notices.put_nowait(event)
+
+    manager.event_bus.subscribe(receive, event_types={DataEventType.BACKFILL_COMPLETED})
+    try:
+        with klines_repo._connect() as conn:
+            conn.execute("UPDATE klines SET close=400")
+            conn.rollback()
+        consumer.sync(force=True)
+        assert consumer.pending_readbacks() == (None, ())
+
+        subprocess.run([sys.executable, "-c",
+                        "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('UPDATE klines SET close=200'); c.commit()",
+                        str(klines_repo.KLINES_DB_PATH)], check=True)
+        corrected_revision = storage.revision_store.head()
+        opened = START + STEP
+        closed = payload()
+        closed["bar"]["time"] = opened // 1000
+        closed["storage_row"].update(open_time=opened, close_time=opened + STEP - 1)
+        storage.bar_delivery.enqueue("normal-close", closed)
+        assert storage.bar_delivery.commit("normal-close")["phase"] == "committed"
+
+        racing = query(manager, min_revision=corrected_revision)
+        assert racing.bars[0].close == 200
+        assert racing.metadata["stream_version"]["stable"] is False
+        await manager._publish_history_readbacks(consumer)
+        native = await asyncio.wait_for(notices.get(), timeout=2)
+        derived = await asyncio.wait_for(notices.get(), timeout=2)
+        assert native.key == SeriesKey("BTCUSDT", "1m")
+        assert native.detail["affected_range"] == {"from_ms": START, "to_ms": START}
+        assert native.detail["storage_revision"] == corrected_revision
+        assert native.detail["stream_version"]["barrier"] == baseline["barrier"] + 1
+        assert derived.key == SeriesKey("BTCUSDT", "2m")
+        derived_open = START // (2 * STEP) * (2 * STEP)
+        assert derived.detail["affected_range"] == {"from_ms": derived_open, "to_ms": derived_open}
+        assert query(manager).metadata["stream_version"]["stable"] is True
+        assert consumer.pending_readbacks() == (None, ())
+    finally:
+        await manager.event_bus.close()
+
+
+@pytest.mark.anyio
+async def test_readback_overrun_retires_generation_and_requests_resubscription(storage, monkeypatch):
+    write()
+    manager = DataManager()
+    manager.set_storage(storage)
+    consumer = manager.cache.revision_consumer
+    consumer.readbacks_enabled = True
+    initial_epoch = query(manager).metadata["stream_version"]["epoch"]
+    recovered = asyncio.Queue()
+
+    async def receive(_event):
+        pass
+
+    async def recover(error):
+        recovered.put_nowait(error.reason)
+
+    manager.event_bus.subscribe(receive, key=SeriesKey("BTCUSDT", "1m"),
+                                event_types={DataEventType.BACKFILL_COMPLETED}, on_recovery=recover)
+    changes_since = storage.revision_store.changes_since
+    monkeypatch.setattr(storage.revision_store, "changes_since", lambda revision: changes_since(revision, limit=1))
+    try:
+        write(200)
+        write(300, symbol="ETHUSDT")
+        consumer.sync(force=True)
+        assert query(manager).metadata["stream_version"]["stable"] is False
+        await manager._publish_history_readbacks(consumer)
+        assert await asyncio.wait_for(recovered.get(), timeout=2) == "storage_history_overrun"
+        version = query(manager).metadata["stream_version"]
+        assert version["epoch"] != initial_epoch and version["stable"]
+    finally:
+        await manager.event_bus.close()
+
+
+def test_multiple_unseen_history_edits_revoke_the_series_without_inventing_an_exact_range(storage):
+    write()
+    manager = DataManager()
+    manager.set_storage(storage)
+    consumer = manager.cache.revision_consumer
+    consumer.readbacks_enabled = True
+    write(200)
+    write(300)
+    consumer.sync(force=True)
+    reset, (notice,) = consumer.pending_readbacks()
+    assert reset is None and notice.bounds is None
+    assert notice.revision == storage.revision_store.head()
 
 
 def test_durable_revision_rewind_during_query_retires_stream_epoch(storage, monkeypatch):

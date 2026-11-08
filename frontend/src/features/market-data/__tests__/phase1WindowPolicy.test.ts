@@ -12,6 +12,7 @@ import {
 
 test("backfill reason whitelist includes only user-visible completion reasons", () => {
   assert.equal(isUserVisibleBackfillReason("tail_gap"), true);
+  assert.equal(isUserVisibleBackfillReason("storage_history_changed"), true);
   assert.equal(isUserVisibleBackfillReason("visible_range_gap"), true);
   assert.equal(isUserVisibleBackfillReason("background_gap_audit"), false);
 });
