@@ -71,6 +71,7 @@ export function StrategyResearchResultPanel({
       </section>
     );
   }
+  const external = result.report.strategy?.external_provider;
   return (
     <section
       className="strategy-research-result-panel"
@@ -84,6 +85,9 @@ export function StrategyResearchResultPanel({
         locale={locale}
         stale={stale}
       />
+      {external && <p data-testid="strategy-research-external-result">
+        {t("research.external.model")} · {external.provider_id} · {external.provider_revision}
+      </p>}
       {onOpenReplay && <button type="button" onClick={onOpenReplay}>{t("report.replay")}</button>}
       {barOnly ? (
         <p data-testid="strategy-research-no-precise">{t("chartTester.result.fidelityFast")}</p>

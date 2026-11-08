@@ -58,6 +58,8 @@ import { StrategyResearchRuntime } from "./StrategyResearchRuntime.js";
 import { StrategyResearchResultPanel } from "./StrategyResearchResultPanel.js";
 import { StrategyResearchScriptPanel } from "./StrategyResearchScriptPanel.js";
 import { openPythonStrategyDraft, getChartStrategyDraftStore } from "../backtest/chart-tester/chartStrategyTesterDrafts.js";
+import { DEFAULT_STRATEGY_RUN_SETTINGS } from "../../shared/strategyRunSettings.js";
+import { ResearchExternalModel } from "./ResearchExternalModel.js";
 import { saveResearchTemplate } from "./strategyTemplateDraft.js";
 import { readResearchHandoff } from "./strategyResearchHandoff.js";
 import ResearchReturnButton from "./ResearchReturnButton.js";
@@ -186,7 +188,7 @@ export default function StrategyResearchApp({
 
   const launchImported = intent.kind === "imported" || intent.kind === "import";
   const source = state.source.source;
-  const nativeMode = selectedNativeMode ?? (availability === "available" && source !== null);
+  const nativeMode = selectedNativeMode ?? (availability === "available" && source !== null && state.result.runId === null);
   const launchImportedBoundRef = useRef(source?.kind === "IMPORTED_DATASET");
   const {
     datasets: libraryDatasets,
@@ -491,6 +493,8 @@ export default function StrategyResearchApp({
     </StrategyResearchDrawerBoundary>
   );
 
+  const [externalVisited, setExternalVisited] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const script = (
     <div data-strategy-draft={scriptDraft ?? ""}>
       <nav className="native-mode-switch" aria-label={t("native.mode")}>
@@ -546,6 +550,29 @@ export default function StrategyResearchApp({
         configuration={state.script.configuration}
         onConfigure={(configuration) => dispatch({ type: "script/configure", configuration })}
       />}
+      {hostReady && importedManifest && !importedManifest.market_trade_input && selectedInterval && (
+        <details open={externalOpen} onToggle={event => {
+          if (event.target !== event.currentTarget) return;
+          setExternalOpen(event.currentTarget.open);
+          if (event.currentTarget.open) {
+            setExternalVisited(true);
+            setNativeMode(false);
+          }
+        }}>
+          <summary>{t("research.external.title")}</summary>
+          {externalVisited && <ResearchExternalModel
+            key={chartUiScope}
+            manager={researchRun.historyManager}
+            dataset={importedManifest}
+            interval={selectedInterval}
+            settings={state.script.configuration ?? DEFAULT_STRATEGY_RUN_SETTINGS}
+            savedRun={savedResult && savedResult.run.run_id === state.result.runId ? savedResult.run : null}
+            active={externalOpen}
+            runBusy={["RESOLVING", "QUEUED", "RUNNING"].includes(researchRun.runStatus)}
+            onRunCreated={handleRunId}
+          />}
+        </details>
+      )}
     </div>
   );
   const result = nativeMode ? researchRun.session && nativeRun?.result ? <Suspense fallback={<p>{t("native.loading")}</p>}>
