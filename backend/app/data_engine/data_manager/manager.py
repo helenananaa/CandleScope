@@ -989,7 +989,7 @@ class DataManager(DataManagerCore):
 
     async def shutdown(self) -> None:
         """Gracefully shut down everything."""
-        self.close_strategy()
+        await self.shutdown_strategy()
         self.close_readonly_account()
         self.close_trading()
         if self._numeric_indicator_service is not None:

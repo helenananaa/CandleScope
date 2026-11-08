@@ -13,6 +13,8 @@ function cloneStrategyAttachment(
 ): ChartStrategyAttachmentRecord {
   return {
     ...attachment,
+    ...(attachment.initialization ? { initialization: { ...attachment.initialization } } : {}),
+    ...(attachment.executionOverrides ? { executionOverrides: { ...attachment.executionOverrides } } : {}),
     parameters: JSON.parse(JSON.stringify(attachment.parameters)) as Record<string, unknown>,
     customRange: attachment.customRange ? { ...attachment.customRange } : null,
   };

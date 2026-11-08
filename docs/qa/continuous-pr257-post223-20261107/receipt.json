@@ -1,0 +1,72 @@
+{
+  "source": "46de9cf112190dce01cb2ff0e7395758670a0edd",
+  "parent": "6d9c4e04fa51c8a8a82fc6d7568d706fe3965afb",
+  "main": "5f6b4a3edb4198963c1e868bad299ca1c76ddfc2",
+  "previous": "1e66366e80e4ddc9ced1ae856cca518b5983dc26",
+  "expectedTree": "8086f6bc84c724f7acba115efdea657d3f47253c",
+  "command": [
+    "/Users/ryanliang/.codex/worktrees/issue-152-output-range-20261102/CandleScope/output/issue-152-output-range-20261102/main226-native-test-env/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "backend/tests/test_continuous_api.py",
+    "backend/tests/test_continuous_bar_host.py",
+    "backend/tests/test_continuous_bar_source.py",
+    "backend/tests/test_continuous_controller.py",
+    "backend/tests/test_continuous_creation_journal.py",
+    "backend/tests/test_continuous_definition.py",
+    "backend/tests/test_continuous_epochs.py",
+    "backend/tests/test_continuous_guarded_source.py",
+    "backend/tests/test_continuous_manager_lifecycle.py",
+    "backend/tests/test_continuous_provider.py",
+    "backend/tests/test_continuous_repair_api.py",
+    "backend/tests/test_continuous_repairs.py",
+    "backend/tests/test_continuous_results.py",
+    "backend/tests/test_continuous_source_identity.py",
+    "backend/tests/test_continuous_strategy_access.py",
+    "backend/tests/test_continuous_strategy_runtime.py",
+    "backend/tests/test_continuous_strategy_shutdown.py",
+    "backend/tests/test_continuous_strategy_store.py",
+    "--basetemp=/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/257/pytest",
+    "-q",
+    "-rs",
+    "backend/tests/test_replay_catalog_shutdown.py",
+    "backend/tests/test_kline_order_flow_metrics.py",
+    "backend/tests/test_replay_trade_bar_parity.py",
+    "backend/tests/test_trading_state_stream.py",
+    "backend/tests/test_trading_state_shutdown.py",
+    "-o",
+    "faulthandler_timeout=70"
+  ],
+  "env": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "packages/candlescope-plugin-sdk/src:packages/candlescope-backtest-sdk/src:backend",
+    "DATA_DIR": "/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/257/data",
+    "CANDLE_DATA_DIR": "/private/tmp/candlescope-stack-post223.4lzF9w/output/continuous-post223/257/data",
+    "NATIVE_TEST_PINE_PYTHON": "/Users/ryanliang/CandleScope/output/development-goal-20261104/continuous-stack-main266-20261106/pine/python"
+  },
+  "backendPassed": 319,
+  "architecturePassed": true,
+  "artifacts": {
+    "architecture.log.gz": {
+      "sha256": "2821c011ea1599274782b3a127db697454da970e1da989c56c4d812037393b16",
+      "originalSha256": "547c159b06d361e5d8e8f90f1388f08bb96897d557771347b9f19aee67e444fc"
+    },
+    "backend.log.gz": {
+      "sha256": "b307a57a530b0a0c1b4543d46ce82da8d413cd929a9a5e64f7f79208afee137d",
+      "originalSha256": "3f099393a843f7a0986ed22711c7003d32d7a1705d31daeb55ad23cd4bef80fe"
+    },
+    "frontend.log.gz": {
+      "sha256": "c7acde5f169e773131adb359d46dc29289a0df08eb2b8fc406e18e3a6b0e7110",
+      "originalSha256": "aeb5cb997cd2e54c5d7def2c6c1936b57180a1d385b5d85c6ff802e323634534"
+    }
+  },
+  "frontendPassed": 16,
+  "frontendCommand": [
+    "node",
+    "scripts/run-frontend-tests.mjs",
+    "src/features/backtest/continuous/continuousApi.test.ts",
+    "src/features/backtest/continuous/continuousRepairView.test.ts",
+    "src/features/market-data/__tests__/continuousStrategyDataManager.test.ts"
+  ]
+}

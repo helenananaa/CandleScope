@@ -3,6 +3,7 @@ export type ChartStrategyPanelTab = "script" | "overview" | "trades" | "settings
 export interface ChartStrategyPanelPreferences {
   height: number;
   activeTab: ChartStrategyPanelTab;
+  runMode?: "HISTORY" | "HISTORY_LIVE" | "LIVE_ONLY";
 }
 
 export const CHART_STRATEGY_MIN_PANEL_HEIGHT = 260;
@@ -40,6 +41,7 @@ export function loadChartStrategyPanelPreferences(
       activeTab: tab === "script" || tab === "overview" || tab === "trades" || tab === "settings"
         ? tab
         : fallback.activeTab,
+      ...(parsed?.runMode === "HISTORY_LIVE" || parsed?.runMode === "LIVE_ONLY" ? { runMode: parsed.runMode } : {}),
     };
   } catch {
     return fallback;
@@ -56,6 +58,7 @@ export function saveChartStrategyPanelPreferences(
     storage.setItem(panelPreferenceKey(cellScope), JSON.stringify({
       height: clampChartStrategyPanelHeight(preferences.height),
       activeTab: preferences.activeTab,
+      ...(preferences.runMode ? { runMode: preferences.runMode } : {}),
     }));
   } catch {
     // Preference storage is best-effort and must not block a Run or its result.

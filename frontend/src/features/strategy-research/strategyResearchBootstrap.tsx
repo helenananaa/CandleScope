@@ -9,6 +9,7 @@ import { readPersistedLocale } from "../settings/chartAppearanceSettings.js";
 import "./strategyResearch.css";
 import "../backtest/research/backtestResearch.css";
 import "../backtest/chart-tester/chartStrategyTester.css";
+import "../backtest/continuous/continuousStrategy.css";
 import {
   parseStrategyResearchLaunch,
   resolveStrategyResearchBootstrap,

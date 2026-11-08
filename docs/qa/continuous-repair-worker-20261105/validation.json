@@ -1,0 +1,35 @@
+{
+  "application_commit": "00d7efdee80114e9bef7f8d52635c3a486b1b92c",
+  "base_pr": 255,
+  "base_head": "cf8308b7599dfd0d75788fd7ffb9e02cc131c397",
+  "schema": 4,
+  "tests": {
+    "passed": 337,
+    "warnings": 5,
+    "log": "final-third.log.gz"
+  },
+  "backend_architecture": {
+    "existing_findings": 10,
+    "byte_identical_baseline": "docs/qa/continuous-repair-20261105/backend-architecture.log.gz"
+  },
+  "source_input": "Real canonical SQLite, DataManager event bus, immutable BAR snapshots; public demand leases replaced, no public HTTP/WS opened",
+  "provider": "Actual builtin and SDK Python processes, including another backend PID restoring accepted staged repair",
+  "storage": {
+    "max_total_stage_bytes": 536870912,
+    "max_one_stage_bytes": 268435456,
+    "minimum_free_bytes": 67108864,
+    "preview_count": 8,
+    "preview_ttl_seconds": 300,
+    "preparation_workers": 1,
+    "preparation_pending": 0,
+    "batch_bars": 1000
+  },
+  "not_qualified": [
+    "Repair HTTP/WS and Manager view transport",
+    "Frontend confirmation/progress",
+    "Installed macOS repair workflow",
+    "Native Windows product repair workflow",
+    "Whole original strategy issue"
+  ],
+  "public_cooldown_not_before_utc": "2026-11-05T07:59:57.081Z"
+}

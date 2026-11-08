@@ -75,10 +75,11 @@ class ContinuousMarketBarSource:
                 or (through_ms + 1) % STEP or through_ms > (now // STEP)*STEP-1):
             raise BacktestError("LOOKAHEAD_VIOLATION","Input boundary must be a revealed closed UTC minute")
 
-    def register(self, run_id, *, from_ms):
+    def register(self, run_id, *, from_ms, definition=None):
         if self.closed or type(from_ms) is not int or from_ms % STEP:
             raise failure("Input must start at its exact UTC minute")
-        return self.manager.bars.prefixes.register("strategy:"+run_id,self.key,
+        from .continuous_source_identity import source_owner
+        return self.manager.bars.prefixes.register(source_owner(run_id,definition or {}),self.key,
             from_ms=from_ms,committed_through_ms=from_ms-1)
 
     def _query_rows(self, start_ms, through_ms, revision):

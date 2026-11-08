@@ -1,0 +1,30 @@
+{
+  "source": "9e58c03aff5d57efce1dedb6b7c5e93f0a68412d",
+  "main": "0de39f37f2389b09a35fc91e3a6d8d5844137da8",
+  "baseline": [
+    "app.backtest.native_contracts -> app.backtest -> app.backtest.service -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.backtest.request_contracts -> app.backtest -> app.backtest.service -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.backtest.snapshot_validation -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.data_engine.market_data.order_book_contract -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.data_engine.market_data.order_book_projection -> app.data_engine.market_data.full_order_book -> app.data_engine.ingestion.models -> app.data_engine.ingestion -> app.data_engine.ingestion.normalize -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.exchanges.discovery_catalog -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.exchanges.symbol_catalog -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.indicator.history_worker:33 -> app.api.v1.stream_indicator_payloads._compute_builtin_range_patch_from_bars: business code cannot import HTTP composition",
+    "app.indicator.history_worker:33 -> app.api.v1.stream_indicator_payloads: business code cannot import HTTP composition",
+    "app.replay.request_contracts -> app.core.config -> app.core.proxy_pool -> app.exchanges.ccxt_ext.runtime -> app.exchanges.ccxt_ext -> app.exchanges.ccxt_ext.provider -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP"
+  ],
+  "current": [
+    "app.backtest.native_contracts -> app.backtest -> app.backtest.service -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.backtest.request_contracts -> app.backtest -> app.backtest.service -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.backtest.snapshot_validation -> app.backtest.chart_book -> app.backtest.runtime -> app.data_engine.storage.raw_trade_archive -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.data_engine.market_data.order_book_contract -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.data_engine.market_data.order_book_projection -> app.data_engine.market_data.full_order_book -> app.data_engine.ingestion.models -> app.data_engine.ingestion -> app.data_engine.ingestion.normalize -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.exchanges.discovery_catalog -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.exchanges.symbol_catalog -> app.exchanges -> app.exchanges.registry -> app.exchanges.ccxt_ext.binance_usdm -> app.exchanges.ccxt_ext.fork_kline -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP",
+    "app.indicator.history_worker:33 -> app.api.v1.stream_indicator_payloads._compute_builtin_range_patch_from_bars: business code cannot import HTTP composition",
+    "app.indicator.history_worker:33 -> app.api.v1.stream_indicator_payloads: business code cannot import HTTP composition",
+    "app.replay.request_contracts -> app.core.config -> app.core.proxy_pool -> app.exchanges.ccxt_ext.runtime -> app.exchanges.ccxt_ext -> app.exchanges.ccxt_ext.provider -> app.core.executors -> app.indicator.history_worker -> app.api.v1.stream_indicator_payloads: shared business owner depends on HTTP"
+  ],
+  "byteEqual": true,
+  "notArchitectureClean": true
+}
