@@ -465,10 +465,22 @@ export function useChartWorkspaceRuntime(
     }
     setPersistence((current) => ({ ...current, saveState: "saving", error: null }));
     if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+    const workspace = activeWorkspace(library);
+    const lastSharedDocument = busSnapshotRef.current?.workspaces.find(item => item.id === workspace.id)?.document;
+    const peerReplayChanged = services.workspaceBus && services.windowId && lastSharedDocument
+      && Object.values(workspace.document.windows).some(window => window.id !== services.windowId
+        && visibleCellIds(window.layoutTree).some(cellId => {
+          const next = workspace.document.cells[cellId]?.quickReplay;
+          const previous = lastSharedDocument.cells[cellId]?.quickReplay;
+          return next !== undefined && ((next.active !== false) !== (previous !== undefined && previous.active !== false) || next.cursorSec !== previous?.cursorSec);
+        }));
+    // Cross-window targets receive the shared document through the bus. Keep
+    // this debounce below the fast replay tick so playback can reach them.
+    const delay = peerReplayChanged ? Math.min(120, services.autosaveDelayMs) : services.autosaveDelayMs;
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
       void persistSnapshot(libraryRef.current);
-    }, services.autosaveDelayMs);
+    }, delay);
     return () => {
       if (saveTimerRef.current !== null) {
         clearTimeout(saveTimerRef.current);

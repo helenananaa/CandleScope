@@ -73,6 +73,10 @@ export async function checkQuickReplayStep() {
   }
   let lastProgress: { cursorSec: number; step: string } | undefined;
   const recordProgress = (cursorSec: number, step: string) => { lastProgress = { cursorSec, step }; };
+  function deliverMinute() {
+    assert(resolveMinute && minuteRange, "minute load missing");
+    resolveMinute(response(60, ...minuteRange));
+  }
   const cursorActions: number[] = [];
   const recordCursorAction = (cursorSec: number) => { cursorActions.push(cursorSec); };
   function render(noteSource = "original", active = true, saved?: typeof lastProgress, controlled = false) {
@@ -90,7 +94,7 @@ export async function checkQuickReplayStep() {
     await move("ArrowRight");
     const pending = renderedBars();
     assert(!pending.some((bar) => bar.time >= entry), `old 5m bar leaked at the 1m cursor: ${JSON.stringify(pending.at(-1))}`);
-    resolveMinute(response(60, ...minuteRange)); await settle();
+    deliverMinute(); await settle();
     const resolved = renderedBars();
     assert(resolved.at(-1)?.time === entry && resolved.at(-1)?.high === 102, "current 1m reconstruction missing");
     assert(markerIds().length === 0, "original screenshot leaked before its capture time");
@@ -108,8 +112,7 @@ export async function checkQuickReplayStep() {
     assert(lastProgress?.step === "1m" && lastProgress.cursorSec === saved.cursorSec, "remount discarded the saved cursor or step");
     assert(markerIds().length === 0, "restore admitted a future screenshot");
     render("original", true, { ...saved, cursorSec: entry + 120 }, true); await settle();
-    assert(resolveMinute && minuteRange, "restored minute load missing");
-    resolveMinute(response(60, ...minuteRange)); await settle();
+    deliverMinute(); await settle();
     assert(markerIds().join() === "original" && cursorActions.length === 0, "linked cut failed or echoed as a local action");
     render("original", true, saved, true); await settle();
     assert(markerIds().length === 0 && cursorActions.length === 0, "linked rewind left a future marker or echoed");
