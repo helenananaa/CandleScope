@@ -234,3 +234,94 @@ def test_repair_views_do_not_decode_checkpoints_definitions_or_private_source_re
         with api.client.websocket_connect(f'{BASE}/runs/{run_id}/stream?protocol=continuous.v1') as ws:
             packet=ws.receive_json();assert packet['repair']['id']==record['id'] and packet['type']!='error'
     finally:store.db.set_authorizer(None)
+
+
+def test_processed_correction_marks_committed_results_while_catchup_is_busy(api, monkeypatch):
+    controller = api.gate.continuous
+    api.now[0] = START + 10 * STEP
+    run_id = create(api, payload(python=True))['run_id']
+    full_initial(api, run_id)
+    api.now[0] = START + 20 * STEP
+    api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_CLOSED, KEY))
+    api.client.portal.call(wait_row, controller.store, run_id, lambda row: row['sequence'] == 20)
+    api.client.portal.call(until, lambda: not controller.jobs)
+    other_id = create(api, payload(history=False), key='request/other')['run_id']
+    _, _, values = full_initial(api, run_id)
+    full_initial(api, other_id)
+    api.client.portal.call(wait_row, controller.store, run_id, lambda row: row['phase'] == 'LIVE')
+    api.client.portal.call(wait_row, controller.store, other_id, lambda row: row['phase'] == 'LIVE')
+    before = controller.store.load(run_id)
+    identity = controller.store.results.identity(before['run'])
+    cutoff = START + 25 * STEP - 1
+    entered, release = Event(), Event()
+    prepare = controller.store.prepare_checkpoint
+
+    def block_checkpoint(checkpoint, *, event_time_ms, run_id=None, **kwargs):
+        if run_id == identity['id'] and event_time_ms == cutoff and not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+        return prepare(checkpoint, event_time_ms=event_time_ms, run_id=run_id, **kwargs)
+
+    monkeypatch.setattr(controller.store, 'prepare_checkpoint', block_checkpoint)
+    cursor = quote(json.dumps(identity), safe='')
+    try:
+        with api.client.websocket_connect(f'{BASE}/runs/{run_id}/stream?protocol=continuous.v1&after={cursor}') as ws:
+            api.now[0] = cutoff + 1
+            api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_CLOSED, KEY))
+            assert entered.wait(5)
+            changed = START + 12 * STEP
+            klines_repo.upsert_klines(KEY.symbol, KEY.interval, [_row(changed, 220)], source=SOURCE)
+            api.client.portal.call(api.manager.event_bus.emit, DataEvent(DataEventType.BAR_AMENDED, KEY))
+
+            async def wait_stale():
+                await asyncio.wait_for(wait_row(controller.store, run_id, lambda row: row['phase'] == 'REPAIR_REQUIRED'), 1)
+
+            api.client.portal.call(wait_stale)
+            assert not release.is_set()
+            while True:
+                stale = ws.receive_json()
+                assert stale['type'] != 'error', stale
+                if stale.get('complete') and stale.get('stale'):
+                    break
+            assert stale['identity']['sequence'] == identity['sequence']
+            assert stale['identity']['checkpoint_revision'] == identity['checkpoint_revision']
+            assert stale['items'] == []
+            assert controller.store.load(run_id)['checkpoint'] == before['checkpoint']
+            assert_values(controller, run_id, values)
+            assert not controller.store.epochs.pending()
+            other = api.client.portal.call(wait_row, controller.store, other_id, lambda row: row['event_time_ms'] == cutoff)
+            assert other['phase'] == 'LIVE'
+
+            release.set()
+            api.client.portal.call(until, lambda: run_id not in controller.runtime.actors)
+            response = api.client.post(f'{BASE}/runs/{run_id}/repair/preview',
+                                       json={'expected':stale['identity'],'resume_after':False})
+            assert response.status_code == 200, response.text
+            plan = response.json()['plan']
+            assert plan['anchor_sequence'] > 0
+            assert confirm(api, run_id, plan).status_code == 202
+            completed = complete(api)
+            assert completed['phase'] == 'COMMITTED'
+            replacement = []
+            while True:
+                packet = ws.receive_json()
+                assert packet['type'] != 'error', packet
+                if packet.get('type') == 'reset' or (packet.get('identity') and
+                        packet['identity']['data_revision'] != identity['data_revision']):
+                    replacement.append(packet)
+                    apply(packet, values)
+                    if packet.get('complete'):
+                        break
+            assert replacement[0]['type'] == 'reset'
+            assert not replacement[-1]['stale']
+            assert replacement[-1]['identity']['event_time_ms'] == cutoff
+            assert_values(controller, run_id, values)
+            outdated = api.client.post(f'{BASE}/runs/{run_id}/results/query',
+                                       json={'since_revision':0,'expected':stale['identity']})
+            assert outdated.status_code == 409
+            oracle = reference(controller, api.manager, before, api.tmp)
+            checkpoint = controller.store.load(run_id)['checkpoint']
+            assert checkpoint['engine'] == oracle['engine'] and checkpoint['provider'] == oracle['provider']
+            assert controller.store.summary(other_id) == other
+    finally:
+        release.set()

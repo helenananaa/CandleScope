@@ -25,3 +25,11 @@ def source_owner(run_id,definition):
     if not isinstance(owner,str) or not owner.startswith(prefix) or not re.fullmatch(r"[0-9a-f]{32}",owner[len(prefix):]):
         raise BacktestError("CONTINUOUS_INPUT_INVALID","Source epoch does not belong to this account")
     return owner
+
+
+def affects_protected_prefix(point, definition, start_ms, end_ms):
+    if point is None or start_ms is None or end_ms is None:
+        return False
+    frozen = definition.get("initial_snapshot") or {}
+    through_ms = max(point.through_ms, int(frozen.get("through_ms", point.through_ms)))
+    return through_ms >= point.from_ms and start_ms <= through_ms and end_ms >= point.from_ms

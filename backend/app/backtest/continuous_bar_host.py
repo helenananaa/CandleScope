@@ -14,7 +14,7 @@ from app.market_dataset.snapshot import MarketEvent
 from app.data_engine.storage.prefix_watches import PrefixReceipt, PrefixAcquisitionChanged
 from app.data_engine.storage.revisions import StaleAcquisition
 from .continuous_store import ContinuousStrategyStore
-from .continuous_source_identity import source_owner
+from .continuous_source_identity import affects_protected_prefix, source_owner
 from .errors import BacktestError
 from .models import ENGINE_VERSION
 from .service import _build_bar_kernel, _new_host_planner, _planning_context, _strategy_execution_reporter, _strategy_observation_features, _assert_strategy_frame_inputs, _declared_feature_names
@@ -302,11 +302,7 @@ class ContinuousBarHost:
                 if isinstance(failure,ContinuousExecutionStopping):
                     pass  # Keep the last committed phase/account for restart.
                 elif isinstance(failure,PrefixAcquisitionChanged):
-                    old = self.source_receipt
-                    frozen = self.definition.get("initial_snapshot") or {}
-                    protected = max(old.through_ms,int(frozen.get("through_ms",old.through_ms))) if old is not None else -1
-                    if (old is not None and protected >= old.from_ms and failure.start_ms is not None and failure.end_ms is not None
-                            and failure.start_ms <= protected and failure.end_ms >= old.from_ms):
+                    if affects_protected_prefix(self.source_receipt, self.definition, failure.start_ms, failure.end_ms):
                         self._stop("REPAIR_REQUIRED","CONTINUOUS_HISTORY_REVISED","Processed input changed; committed result retained")
                     else:
                         self._defer("CONTINUOUS_SOURCE_RECHECK","New input changed during acquisition; retry from committed state")
@@ -316,6 +312,9 @@ class ContinuousBarHost:
                     self._defer("CONTINUOUS_SOURCE_GAP",str(failure))
                 elif not isinstance(failure,BacktestError) or failure.code != "CONTINUOUS_COMMIT_CONFLICT":
                     self._stop("FAILED",getattr(failure,"code","CONTINUOUS_EXECUTION_FAILED"),str(failure)[:1000])
+            except BacktestError as state_error:
+                if state_error.code != "CONTINUOUS_COMMIT_CONFLICT":
+                    logger.exception("Could not record continuing strategy failure; committed recovery point retained")
             except BaseException:
                 logger.exception("Could not record continuing strategy failure; committed recovery point retained")
             self._close_after_failure()
