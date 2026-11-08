@@ -67,6 +67,8 @@ import {
 } from "./replayViewerProjection.js";
 import { handleReplayShortcut } from "./replayShortcuts.js";
 import { buildReplayPositionHlines } from "./replayPositionHlines.js";
+import { replayChartTradeInputs } from "./replayChartTradeInputs.js";
+import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import {
   formatReplayTimeAxisLabel,
   replayTimeAxisMaxCharacterLength,
@@ -123,6 +125,7 @@ export interface ReplayTrainingPageShellProps {
     readonly onPriceScaleChange: (value: { invertScale: boolean; priceScaleMode: number }) => void;
     readonly integrity: ReplayIntegrityRuntime;
     readonly projectionBoundaryMs?: number | null;
+    readonly accountOverlay?: ChartAccountOverlaySettings;
     readonly frame: ComponentType<ReplayChartPageFrameProps>;
     readonly controls: ReactNode;
     readonly controlViewer: ReplayViewerRuntime;
@@ -853,7 +856,8 @@ export default function ReplayTrainingPageShell({
     seriesKey: viewerSeriesKey ?? "", sourceVersion: viewerVersion, interval: displayedInterval, chartType: settings.chartType,
     contextKey: JSON.stringify([runtime.store.generation, runtime.store.revision, runtime.store.sourceSequence,
       runtime.store.virtualTimeMs, review?.review_id, review?.cursor_revision, review?.selected_timeline_sequence, viewerSeriesKey, viewerVersion,
-      displayedInterval, settings.chartType, cell?.active]),
+      displayedInterval, settings.chartType, cell?.active, cell?.accountOverlay?.trades,
+      cell?.accountOverlay?.positions, activeSelectedTrack?.cursor?.revision]),
     runId: integrityRuntime.runId, trackId: reviewSelectedTrackId ?? activeSelectedTrack?.track_id ?? null,
     dataEpoch: runtime.store.dataEpoch, time: review?.projection.cursor.virtual_time_ms ?? runtime.store.virtualTimeMs,
     reviewId: review?.review_id ?? null, reviewRevision: review?.cursor_revision ?? null,
@@ -879,20 +883,23 @@ export default function ReplayTrainingPageShell({
     lastTime: viewerLast?.time ?? null,
   }), [runtime.marketData.view.meta, viewerVersion, isReview, viewer.loading, reviewChartLoading, displayedSeriesStore,
     viewerSeriesKey, displayedInterval, viewerBarCount, viewerFirst?.time, viewerLast?.time]);
-  const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => [{
+  const tradeInputs = useMemo(() => replayChartTradeInputs(runtime.store,
+    cell?.projectionBoundaryMs ?? null, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay),
+  [runtime.store, cell?.projectionBoundaryMs, activeSelectedTrack, viewer.marketTracks?.portfolio, cell?.accountOverlay]);
+  const replayTradeMarkers = useMemo<IndicatorMarker[]>(() => tradeInputs.fills.length === 0 ? [] : [{
     id: "replay-trade-fills",
     pane: "main",
-    data: runtime.store.fills.map((fill) => ({
+    data: tradeInputs.fills.map((fill) => ({
       time: fill.event_time_ms / 1_000,
       position: fill.side === "BUY" ? "below" : "above",
       shape: fill.side === "BUY" ? "arrow_up" : "arrow_down",
       color: fill.side === "BUY" ? "#16a34a" : "#e11d48",
       text: `${fill.side === "BUY" ? t("replay.shell.buy", {}, locale) : t("replay.shell.sell", {}, locale)} ${fill.quantity} @ ${fill.price}`,
     })),
-  }], [locale, runtime.store.fills]);
+  }], [locale, tradeInputs.fills]);
   const replayTradeHlines = useMemo<IndicatorHLine[]>(() => {
     const selectedTrackId = viewer.viewerState?.selected_track_id;
-    const portfolio = viewer.marketTracks?.portfolio;
+    const portfolio = tradeInputs.portfolio;
     const lines = buildReplayPositionHlines({
       selectedTrackId,
       positionMode: portfolio?.position_mode,
@@ -901,7 +908,7 @@ export default function ReplayTrainingPageShell({
         ? portfolio.instrument_rules
         : [],
     });
-    for (const order of runtime.store.orders) {
+    for (const order of tradeInputs.orders) {
       if (order.status !== "OPEN" && order.status !== "PARTIALLY_FILLED") continue;
       const rawPrice = order.limit_price ?? order.stop_price;
       const orderPrice = Number(rawPrice ?? Number.NaN);
@@ -926,7 +933,7 @@ export default function ReplayTrainingPageShell({
       });
     }
     return lines;
-  }, [locale, runtime.store.orders, viewer.marketTracks?.portfolio, viewer.viewerState?.selected_track_id]);
+  }, [locale, tradeInputs.orders, tradeInputs.portfolio, viewer.viewerState?.selected_track_id]);
   const chartMarkers = useMemo(() => [
     ...indicators.view.markers,
     ...replayTradeMarkers,
@@ -1285,7 +1292,11 @@ export default function ReplayTrainingPageShell({
         />
       )}
       intervalSelector={null}
-      workspace={cell ? chart : (
+      workspace={cell ? <>
+        <span hidden data-replay-chart-trade-markers={review === null ? tradeInputs.fills.length : 0}
+          data-replay-chart-position-lines={review === null ? replayTradeHlines.length : 0} />
+        {chart}
+      </> : (
         <MarketChartWorkspace
           toolbar={drawingToolbar}
           exportOverlay={null}

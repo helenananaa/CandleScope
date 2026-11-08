@@ -1,3 +1,4 @@
+import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { applicationSettingsPatch, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
 import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
 import { useReplayOperations } from "./useReplayOperations.js";
@@ -192,6 +193,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     drawingScope: chartCellDrawingScopeBase(`replay:${runId}:${workspace.view.activeWorkspaceId}`, workspace.view.document, cell.id),
     active, integrity: cellIntegrity, projectionBoundaryMs: projection.boundaryMs, frame: ReplayCellFrame, controls, controlViewer: viewer, preferences,
     priceScale: cell.priceScale,
+    ...(cell.accountOverlay ? { accountOverlay: cell.accountOverlay } : {}),
     onPriceScaleChange: (value: ChartCellState["priceScale"]) => workspace.actions.updateCellPriceScale(cell.id, value),
     onCrosshairMove: (value: MainSeriesCrosshairValue | null) => {
       runtime.marketData.actions.onCrosshairMove(value);
@@ -200,7 +202,7 @@ function ReplayChartCell({ runId, cell, track, workspace, controller, pool, glob
     onVisibleRangeChange: saveViewport,
     onUserViewportRangeChange: linkUserViewport,
     subscribeIntervalChange: (prepare: (interval: string) => void) => intervalTransfers.register(cell.id, prepare),
-  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
+  }), [scope, runId, workspace.view.activeWorkspaceId, workspace.view.document, workspace.actions, cell.id, cell.priceScale, cell.accountOverlay, active, cellIntegrity, projection.boundaryMs, controls, viewer, links, runtime.marketData.actions, saveViewport, linkUserViewport, preferences, intervalTransfers]);
   const frame = useMemo(() => ({ active, hosts }), [active, hosts]);
   return <CellFrameContext.Provider value={frame}>
     <span hidden data-replay-cell-diagnostics={cell.id} data-replay-track-id={track.track_id}
@@ -402,6 +404,7 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
           renderCell={(id, _role, obscured) => {
             const cell = workspace.view.document.cells[id]!;
             const track = tracks.find((value) => sameMarket(cell, value));
+            const overlay = normalizeChartAccountOverlay(cell.accountOverlay);
             return <section className={`multi-chart-cell replay-chart-cell${workspace.view.activeCellId === id ? " active" : ""}`}
               data-chart-cell-id={id} data-replay-track-id={track?.track_id} data-obscured={obscured}
               onDragOver={(event) => {
@@ -426,7 +429,21 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                 <button type="button" onClick={() => workspace.actions.toggleMaximize(id)} aria-label={t("workspace.tab.layout")}><Icon name="maximize" size={14} /></button>
                 <WorkspaceCellLayoutMenu portal cellId={id} layoutCellIds={workspace.view.layoutCellIds}
                   maxCellsPerWindow={workspace.view.maxCellsPerWindow} disabled={workspace.view.layoutLocked}
-                  onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells} />
+                  onSplit={workspace.actions.splitCell} onClose={workspace.actions.closeCell} onSwap={workspace.actions.swapCells}>
+                  <fieldset>
+                    <legend>{t("trading.overlay.linkTrades")}</legend>
+                    <label>
+                      <input type="checkbox" checked={overlay.trades}
+                        onChange={event => workspace.actions.updateCellAccountOverlay(id, { ...overlay, trades: event.target.checked })} />
+                      {t("trading.overlay.trades")}
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={overlay.positions}
+                        onChange={event => workspace.actions.updateCellAccountOverlay(id, { ...overlay, positions: event.target.checked })} />
+                      {t("trading.overlay.positions")}
+                    </label>
+                  </fieldset>
+                </WorkspaceCellLayoutMenu>
               </header>
               {track?.adapter_session_id ? <ReplayChartCell key={`${id}:${track.track_id}`} runId={runId} cell={cell} track={track}
                 pageExportRef={pageExportRef} pageDrawingExports={pageDrawingExports} exportVisible={!obscured}

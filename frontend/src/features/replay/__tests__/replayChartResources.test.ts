@@ -3,6 +3,7 @@ import test from "node:test";
 import { ReplayChartResourcePool } from "../replayChartRuntimePool.js";
 import { createReplayChartWorkspaceRepository, seedReplayChartWorkspace, seedForkReplayChartWorkspace } from "../replayChartWorkspaceRepository.js";
 import { createDefaultChartWorkspaceRecord, createTemplateChartWorkspaceDocument } from "../../chart-workspace/chartWorkspaceLibrary.js";
+import { applyLinkedAccountOverlayUpdate } from "../../chart-workspace/chartWorkspaceLinkModel.js";
 import { visibleCellIds } from "../../chart-workspace/chartWorkspaceLayout.js";
 import { createChartWorkspaceRepository } from "../../chart-workspace/chartWorkspaceRepository.js";
 import { loadInitialChartSession } from "../../chart-session/chartSessionModel.js";
@@ -96,6 +97,7 @@ test("new live-launched replay inherits four mixed charts and indicators without
     const cell = source.cells[id]!;
     cell.chartSettings.chartType = types[index]!;
     cell.session.symbol = "FUTURE-LIVE";
+    cell.accountOverlay = { accountId: "live-account", trades: index !== 0, positions: index !== 1, notes: true };
     cell.indicators = [{ id:"SMA",engineName:"SMA",params:{period:20},
       lines:[{data:[{time:9999999999,value:777}]}],renderHints:{future:777} }];
   }
@@ -117,11 +119,20 @@ test("new live-launched replay inherits four mixed charts and indicators without
     assert.equal(cell.nativeStrategies,undefined);
   }
   assert.equal(JSON.stringify(source),before);
+  assert.deepEqual(ids.map(id => copied.cells[id]!.accountOverlay), ids.map((_, index) => ({
+    accountId: null, trades: index !== 0, positions: index !== 1, notes: false,
+  })));
   copied.cells[ids[0]!]!.indicators = [];
+  loaded.workspaces[0]!.document = applyLinkedAccountOverlayUpdate(copied, ids[0]!, {
+    accountId: null, trades: false, positions: false, notes: false,
+  });
   await repo.saveLibrary(loaded);
   seedReplayChartWorkspace("new-run", {document:source,windowId:"main-window"},storage);
   const resumed = await createReplayChartWorkspaceRepository("new-run",session,storage).loadLibrary();
-  assert.deepEqual(resumed.workspaces[0]!.document.cells[ids[0]!]!.indicators,[]);
+  const restored = resumed.workspaces[0]!.document;
+  assert.deepEqual(restored.cells[ids[0]!]!.indicators,[]);
+  assert.equal(restored.cells[ids[0]!]!.accountOverlay?.positions, false);
+  assert.equal(restored.cells[ids[2]!]!.accountOverlay?.positions, true);
   const unrelated = await createReplayChartWorkspaceRepository("unrelated",session,storage).loadLibrary();
   assert.equal(visibleCellIds(unrelated.workspaces[0]!.document.windows["main-window"]!.layoutTree).length,1);
 });

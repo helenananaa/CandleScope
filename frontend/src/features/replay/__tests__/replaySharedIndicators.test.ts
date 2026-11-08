@@ -528,7 +528,7 @@ test("replay chart composes fills, position, orders, and risk references with in
   const workspace = source("src/features/replay/ReplayTrainingPageShell.tsx");
 
   assert.match(workspace, /id: "replay-trade-fills"/);
-  assert.match(workspace, /runtime\.store\.fills\.map/);
+  assert.match(workspace, /tradeInputs\.fills\.map/);
   assert.match(workspace, /shape: fill\.side === "BUY" \? "arrow_up" : "arrow_down"/);
   assert.match(workspace, /buildReplayPositionHlines/);
   const positionLines = source("src/features/replay/replayPositionHlines.ts");
