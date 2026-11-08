@@ -440,21 +440,25 @@ class MarketMetricsRepository:
             except ValueError:
                 continue
             if len(rows) <= _FUNDING_SETTLEMENT_PAGE_LIMIT and current == receipt["rows_digest"]:
-                ranges.append({"start_ms": max(start_ms, receipt["start_ms"]),
-                               "end_ms": min(end_ms, receipt["end_ms"])})
+                ranges.append({
+                    "start_ms": max(start_ms, receipt["start_ms"]),
+                    "end_ms": min(end_ms, receipt["end_ms"]),
+                    **({"expires_at_ms": receipt["expires_at_ms"]} if receipt["expires_at_ms"] is not None else {}),
+                })
         return ranges
 
     def read_funding_with_settlement_coverage(
         self, *, exchange: str, market_type: str, symbol: str, start_ms: int, end_ms: int,
         limit: int, coverage_end_ms: int, policy_revision: str, now_ms: int,
+        use_cycle_range: bool = True,
     ) -> tuple[list[dict[str, Any]], list[dict[str, int]]]:
-        """Build hybrid input rows and the verified acquisition proof from one snapshot."""
+        """Read projected inputs and the verified acquisition proof from one snapshot."""
         with closing(_connect(self.db_path)) as conn:
             conn.execute("BEGIN")
             rows = self.query_funding(
                 exchange=exchange, market_type=market_type, symbol=symbol,
                 start_ms=start_ms, end_ms=end_ms, limit=limit,
-                oldest_first=True, use_cycle_range=True, _connection=conn,
+                oldest_first=True, use_cycle_range=use_cycle_range, _connection=conn,
             )
             coverage = self._read_funding_settlement_coverage(
                 conn, (exchange, market_type, symbol), start_ms, coverage_end_ms, policy_revision, now_ms,

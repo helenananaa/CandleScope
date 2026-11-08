@@ -154,6 +154,7 @@ async def market_history(
         ),
         **({"next_end_ms": page.next_end_ms, "query_mode": page.query_mode}
            if getattr(page, "query_mode", None) is not None else {}),
+        **({"next_start_ms": page.next_start_ms} if getattr(page, "next_start_ms", None) is not None else {}),
         "history_state": "exhausted" if exhausted else ("pending" if retryable else "ready"),
         "complete": page_complete,
         "retryable": retryable,

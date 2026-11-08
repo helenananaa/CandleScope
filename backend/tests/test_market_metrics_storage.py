@@ -1708,6 +1708,122 @@ async def test_settlement_refresh_successful_range_serves_hot_subset(
 
 
 @_async_test
+async def test_bounded_sparse_http_reuses_settlement_proof_and_paginates_forward(tmp_path):
+    from fastapi import FastAPI
+    import httpx
+    from app.api.v1.market import router
+
+    start = 1_700_000_040_000
+    end = start + 8 * 60 * 60_000
+    stamps = [start + 500, start + 4 * 60 * 60_000 + 200, end]
+    key = _key(MarketChannel.FUNDING_RATE)
+    events = [
+        MarketEvent(
+            event_type=StreamType.FUNDING_RATE, exchange=key.exchange, market_type=key.market_type,
+            symbol=key.symbol, event_time_ms=stamp, received_at_ms=stamp + 100,
+            source=DataSource.HTTP_BACKFILL, stream_key=key.topic,
+            data={"funding_time_ms": stamp, "funding_rate": 0.0001},
+        )
+        for stamp in stamps
+    ]
+    repo = MarketMetricsRepository(tmp_path / "funding-http.sqlite")
+    factory = _SettlementPagingFactory(events)
+    service = MarketDataService(factory, metrics_repository=repo)
+    app = FastAPI()
+    app.include_router(router)
+    app.state.data_manager = SimpleNamespace(market_data_ready=True, market_history_page=service.history_page)
+    params = dict(channel="funding_rate", start_ms=start, end_ms=end, limit=1)
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        async def request(**overrides):
+            response = await client.get("/market/history", params=params | overrides)
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        local = await request(mode="local_only")
+        assert not local["complete"] and not local["retryable"] and not local["data"]
+        assert local["coverage"]["missing_ranges"] == [{"start_ms": start, "end_ms": end}]
+        assert not factory.fetch_calls
+
+        # The same acquisition owner is used by hybrid funding projection.
+        assert await service._fetch_funding_settlement_pages(key, start_ms=start, end_ms=end) == (True, end)
+        page = await request()
+        assert [row["event_time_ms"] for row in page["data"]] == [stamps[0]]
+        assert page["coverage"]["ranges"] == [{"start_ms": start, "end_ms": stamps[0]}]
+        assert page["has_more"] and page["next_start_ms"] == stamps[0] + 1
+        assert not page["complete"] and not page["retryable"]
+        assert len(factory.fetch_calls) == 1
+
+        await service.shutdown()
+        reopened = MarketDataService(factory, metrics_repository=MarketMetricsRepository(repo.db_path))
+        app.state.data_manager.market_history_page = reopened.history_page
+        try:
+            tail = await request(start_ms=page["next_start_ms"], limit=100, mode="local_only")
+            assert [row["event_time_ms"] for row in tail["data"]] == stamps[1:]
+            assert tail["complete"] and not tail["has_more"]
+            assert len(factory.fetch_calls) == 1
+
+            # Refresh deliberately revisits the requested range despite a
+            # complete local proof and a short display page.
+            forced = await request(mode="refresh")
+            assert forced["query_mode"] == "refresh"
+            assert len(factory.fetch_calls) == 2
+            assert factory.fetch_calls[-1]["start_ms"] == start
+            assert factory.fetch_calls[-1]["end_ms"] == end
+        finally:
+            await reopened.shutdown()
+
+
+@_async_test
+async def test_settlement_overlap_replans_only_the_suffix_and_releases_cancelled_waiters(tmp_path):
+    repo = MarketMetricsRepository(tmp_path / "settlement-overlap.sqlite")
+    service = MarketDataService(_Factory(), metrics_repository=repo)
+    key = _key(MarketChannel.FUNDING_RATE)
+    requests = []
+    started, release, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def provider(_descriptor, *, start_ms, end_ms, **_kwargs):
+        requests.append((start_ms, end_ms))
+        started.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return []
+
+    service._fetch_market = provider
+    async def acquire(start_ms, end_ms):
+        return await service._fetch_funding_settlement_pages(key, start_ms=start_ms, end_ms=end_ms)
+
+    first = asyncio.create_task(acquire(100, 200))
+    await started.wait()
+    joined = asyncio.create_task(acquire(125, 175))
+    overlap = asyncio.create_task(acquire(150, 300))
+    await asyncio.sleep(0)
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    assert not cancelled.is_set()
+    release.set()
+    assert await joined == (True, 175)
+    assert await overlap == (True, 300)
+    assert requests == [(100, 200), (201, 300)]
+
+    started.clear()
+    release.clear()
+    last = asyncio.create_task(acquire(400, 500))
+    await started.wait()
+    last.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await last
+    assert cancelled.is_set()
+    assert not service._funding_refresh_tasks and not service._funding_refresh_jobs
+    assert not service._funding_refresh_waiters
+    await service.shutdown()
+
+
+@_async_test
 async def test_settlement_receipts_survive_restart_and_reacquire_only_invalidated_ranges(tmp_path):
     path = tmp_path / "settlement-restart.sqlite"
     key = _key(MarketChannel.FUNDING_RATE)
