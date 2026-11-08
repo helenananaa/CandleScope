@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import http.client
 import importlib
@@ -18,10 +19,12 @@ from pathlib import Path
 import pytest
 import uvicorn
 from app.api.v1.backtests import router
+from app.backtest.external_provider.contracts import CONNECTION_PROTOCOL
 from app.backtest.external_provider.endpoint import publish
 from app.backtest.external_provider.wire import digest, encode
 from app.backtest.runtime import BacktestRuntime, BacktestWorker
 from app.core.config import load_backtest_settings
+from app.data_engine.data_manager.core import DataManagerCore
 from app.local_data.service import LocalDatasetService, LocalImportOptions
 from fastapi import FastAPI
 
@@ -33,8 +36,8 @@ class LocalHost:
         self.runtime = BacktestRuntime.start(settings, local_data_dir=local_root, trade_archive_dir=archive_dir)
         app = FastAPI()
         app.include_router(router, prefix="/api/v1")
-        app.state.backtest_service = self.runtime.service
-        app.state.backtest_runtime = self.runtime
+        app.state.data_manager_core = DataManagerCore()
+        self.manager = app.state.data_manager_core.bind_strategy(self.runtime.service, self.runtime)
         self.socket = socket.socket()
         self.socket.bind(("127.0.0.1", 0))
         self.socket.listen(128)
@@ -49,6 +52,7 @@ class LocalHost:
         self.server.should_exit = True
         self.thread.join(timeout=5)
         assert not self.thread.is_alive()
+        self.manager.close()
         self.runtime.shutdown()
         self.socket.close()
 
@@ -229,7 +233,8 @@ def test_independent_process_http_smoke_run_and_full_host_restart(fixture, tmp_p
         host.close()
 
 
-def test_disconnected_queued_model_does_not_starve_other_runs_and_revoke_is_final(fixture, tmp_path):
+@pytest.mark.parametrize("interrupted_revoke", [False, True])
+def test_disconnected_queued_model_does_not_starve_other_runs_and_revoke_is_final(fixture, tmp_path, interrupted_revoke):
     settings, local_root, _, _ = fixture
     host = LocalHost(settings, local_root)
     client = None
@@ -252,6 +257,12 @@ def test_disconnected_queued_model_does_not_starve_other_runs_and_revoke_is_fina
         completed(host, builtin["run_id"])
         waiting = host.request("GET", "/runs/" + external["run_id"])
         assert waiting["state"] == "QUEUED" and waiting["waiting_for"] == "EXTERNAL_CONNECTION"
+        if interrupted_revoke:
+            # Simulate a stop after the credential commit and before cancelling the Run.
+            host.runtime.service.external.revoke(binding["connection_id"])
+            host.close()
+            host = LocalHost(settings, local_root)
+            wait_until(lambda: host.request("GET", "/runs/" + external["run_id"])["state"] == "CANCELLED")
         for _ in range(2):
             revoked = host.request("POST", "/provider-connections/" + binding["connection_id"] + "/revoke")
             assert revoked["revoked"] is True
@@ -260,4 +271,54 @@ def test_disconnected_queued_model_does_not_starve_other_runs_and_revoke_is_fina
     finally:
         if client is not None:
             stop_client(client)
+        host.close()
+
+
+def test_revoked_connection_cannot_publish_a_run_that_already_validated(fixture, tmp_path, monkeypatch):
+    settings, local_root, _, _ = fixture
+    host = LocalHost(settings, local_root)
+    client = None
+    try:
+        selected, binding = select(host, fixture)
+        client = launch_client(binding, tmp_path)
+        wait_until(lambda: host.runtime.service.external.store.ready(binding["connection_id"], now_ms=int(time.time() * 1000)))
+        host.request("POST", "/provider-connections/" + binding["connection_id"] + "/smoke", selected)
+        service = host.runtime.service
+        original = service._identity_from_payload
+
+        def revoke_after_validation(payload):
+            identity = original(payload)
+            service.revoke_external_connection(binding["connection_id"])
+            return identity
+
+        monkeypatch.setattr(service, "_identity_from_payload", revoke_after_validation)
+        result = host.request("POST", "/runs", {**selected, "external_connection_id": binding["connection_id"], "warmup_bars": 3},
+                              headers={"Idempotency-Key": "race-revoke"}, expected=400)
+        assert result["error"]["code"] == "PROVIDER_CONNECTION_REQUIRED"
+        assert service.repository.get_run_by_idempotency("race-revoke") is None
+    finally:
+        if client is not None:
+            stop_client(client)
+        host.close()
+
+
+def test_closing_the_data_manager_interrupts_an_admitted_smoke(fixture):
+    settings, local_root, _, _ = fixture
+    host = LocalHost(settings, local_root)
+    try:
+        selected, binding = select(host, fixture)
+        connection_id = binding["connection_id"]
+        route = "/provider-connections/" + connection_id
+        token = json.loads(Path(binding["connection_file"]).read_text())["token"]
+        host.request("POST", route + "/connect", {"schema_version": CONNECTION_PROTOCOL, "client_id": "held-model",
+                                                  "manifest_hash": binding["scope"]["manifest_hash"]},
+                     headers={"Authorization": "Bearer " + token})
+        journal = host.runtime.service.external.journal(connection_id)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            smoke = pool.submit(host.request, "POST", route + "/smoke", selected, expected=400)
+            wait_until(lambda: journal.live_sessions(connection_id))
+            host.manager.close()
+            assert smoke.result(timeout=3)["error"]["code"] == "STRATEGY_MANAGER_CLOSED"
+        assert not journal.live_sessions(connection_id)
+    finally:
         host.close()
