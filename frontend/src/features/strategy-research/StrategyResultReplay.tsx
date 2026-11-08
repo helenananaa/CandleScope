@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../../i18n/index.js";
 import { describeError } from "../../i18n/serverErrors.js";
 import type { BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayMA, BacktestResultReplayNote, BacktestResultReplayNoteDraft } from "../backtest/backtestTypes.js";
+import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { StrategyDataManager } from "../market-data/manager/strategyDataManager.js";
 import { formatIntervalLabel } from "../../utils/intervals.js";
 
@@ -60,9 +61,10 @@ function ReplayMaLegend({ ma }: { ma: BacktestResultReplayMA | undefined }) {
   </p>;
 }
 
-export default function StrategyResultReplay({ initial, manager, onCommit, onClose }: {
+export default function StrategyResultReplay({ initial, manager, datasets, onCommit, onClose }: {
   initial: BacktestResultReplayCursor;
   manager: StrategyDataManager;
+  datasets: readonly LocalDatasetManifest[];
   onCommit(cursor: BacktestResultReplayCursor): void;
   onClose(): void;
 }) {
@@ -78,6 +80,15 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
   const total = received?.frame.total;
   const candidate = target.trim() === "" ? NaN : Number(target);
   const selectableIntervals = received?.frame.display_intervals ?? [initial.interval];
+  const comparisonDatasets = datasets.filter(dataset => dataset.source === "local_dataset" && !dataset.archived);
+  const pinned = request.comparisonDataset;
+  const pinnedKey = pinned ? `${pinned.datasetId}:${pinned.dataEpoch}` : "";
+  const visibleReference = received?.frame.comparison;
+  const sameReference = pinned && visibleReference?.dataset_id === pinned.datasetId
+    && visibleReference?.data_epoch === pinned.dataEpoch;
+  const comparisonIntervals = pinned
+    ? sameReference ? visibleReference.display_intervals ?? [] : request.comparisonInterval ? [request.comparisonInterval] : []
+    : selectableIntervals.filter(interval => interval !== request.interval);
   const barClock = received?.frame.schema === "candlescope.local-bar-result-replay/1";
 
   useEffect(() => {
@@ -107,16 +118,18 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
   const navigate = (cursor: number, display: {
     interval?: string;
     comparisonInterval?: string | undefined;
+    comparisonDataset?: BacktestResultReplayCursor["comparisonDataset"];
     maPeriod?: number | undefined;
     comparisonMaPeriod?: number | undefined;
   } = {}) => {
     setPlaying(false);
     setError(null);
     setTarget(String(cursor));
-    const { comparisonInterval, maPeriod, comparisonMaPeriod, ...identity } = { ...request, ...display };
+    const { comparisonInterval, comparisonDataset, maPeriod, comparisonMaPeriod, ...identity } = { ...request, ...display };
     setRequest({ ...identity, cursor,
       ...(maPeriod === undefined ? {} : { maPeriod }),
       ...(comparisonInterval ? { comparisonInterval,
+        ...(comparisonDataset ? { comparisonDataset } : {}),
         ...(comparisonMaPeriod === undefined ? {} : { comparisonMaPeriod }) } : {}),
     });
   };
@@ -171,14 +184,29 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
         </form>
         <label>{t("local.interval")}
           <select data-testid="strategy-replay-primary-period" value={request.interval} onChange={event => navigate(request.cursor, { interval: event.target.value })}>
-            {selectableIntervals.filter(interval => interval !== request.comparisonInterval).map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
+            {selectableIntervals.filter(interval => pinned || interval !== request.comparisonInterval).map(interval => <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
           </select>
         </label>
+        {(comparisonDatasets.length > 0 || pinned) && <label>{t("researchBatch.replayComparisonSource")}
+          <select data-testid="strategy-replay-comparison-source" value={pinnedKey} onChange={event => {
+            const dataset = comparisonDatasets.find(item => `${item.dataset_id}:${item.data_epoch}` === event.target.value);
+            navigate(request.cursor, dataset
+              ? { comparisonDataset: { datasetId: dataset.dataset_id, dataEpoch: dataset.data_epoch }, comparisonInterval: dataset.interval }
+              : { comparisonDataset: undefined, comparisonInterval: selectableIntervals.find(interval => interval !== request.interval) });
+          }}>
+            <option value="">{t("researchBatch.replayRunSource")}</option>
+            {pinned && !comparisonDatasets.some(dataset => `${dataset.dataset_id}:${dataset.data_epoch}` === pinnedKey) &&
+              <option value={pinnedKey}>{sameReference ? visibleReference.symbol : pinned.datasetId} · {pinned.dataEpoch.slice(-8)}</option>}
+            {comparisonDatasets.map(dataset => <option key={dataset.dataset_id} value={`${dataset.dataset_id}:${dataset.data_epoch}`}>
+              {dataset.name} · {dataset.symbol}
+            </option>)}
+          </select>
+        </label>}
         <label>{t("local.interval")} · {t("replay.workspace.openNew")}
           <select data-testid="strategy-replay-comparison-period" value={request.comparisonInterval ?? ""}
             onChange={event => navigate(request.cursor, { comparisonInterval: event.target.value || undefined })}>
             <option value="">{t("backtest.none")}</option>
-            {selectableIntervals.filter(interval => interval !== request.interval).map(interval =>
+            {comparisonIntervals.map(interval =>
               <option key={interval} value={interval}>{formatIntervalLabel(interval)}</option>)}
           </select>
         </label>
@@ -201,8 +229,9 @@ export default function StrategyResultReplay({ initial, manager, onCommit, onClo
               <ReplayMaLegend ma={frame.ma} />
               {lastBar && <p data-testid="strategy-replay-last-ohlc">{lastBar.open} / {lastBar.high} / {lastBar.low} / {lastBar.close}</p>}
             </section>
-            {frame.comparison && <section aria-label={formatIntervalLabel(frame.comparison.interval)} data-testid="strategy-replay-comparison-chart">
-              <strong>{formatIntervalLabel(frame.comparison.interval)}</strong>
+            {frame.comparison && <section aria-label={`${frame.comparison.symbol ?? frame.symbol} · ${formatIntervalLabel(frame.comparison.interval)}`} data-testid="strategy-replay-comparison-chart"
+              data-dataset-epoch={frame.comparison.data_epoch}>
+              <strong>{frame.comparison.symbol && `${frame.comparison.symbol} · `}{formatIntervalLabel(frame.comparison.interval)}</strong>
               <ReplayCandles bars={frame.comparison.bars} ma={frame.comparison.ma} />
               <ReplayMaLegend ma={frame.comparison.ma} />
               {frame.comparison.bars.slice(-1).map(bar => <p key={bar.open_time_ms} data-testid="strategy-replay-comparison-ohlc">
