@@ -662,6 +662,7 @@ function LiveWorkspaceApp() {
                       onChartSettingsChange={workspace.actions.updateCellChartSettings}
                       onQuickReplayChange={workspace.actions.updateCellQuickReplay}
                       onAccountOverlayChange={workspace.actions.updateCellAccountOverlay}
+                      onDrawingsHiddenChange={workspace.actions.setCellDrawingsHidden}
                       onPriceScaleChange={workspace.actions.updateCellPriceScale}
                       onIndicatorsChange={workspace.actions.updateCellIndicators}
                       strategyPanelOpen={strategyPanelOpen}

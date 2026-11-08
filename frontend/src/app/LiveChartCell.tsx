@@ -201,6 +201,7 @@ export interface LiveChartCellProps {
   onChartSettingsChange(cellId: ChartCellId, settings: ChartCellChartSettings): void;
   onQuickReplayChange(workspaceId: ChartWorkspaceId, cellId: ChartCellId, update: UpdateChartQuickReplay, change: QuickReplayChange): void;
   onAccountOverlayChange(cellId: ChartCellId, settings: ChartAccountOverlaySettings): void;
+  onDrawingsHiddenChange(cellId: ChartCellId, hidden: boolean): void;
   onPriceScaleChange(cellId: ChartCellId, value: ChartCellState["priceScale"]): void;
   onIndicatorsChange(cellId: ChartCellId, indicators: ChartCellState["indicators"]): void;
   strategyPanelOpen: boolean;
@@ -248,6 +249,7 @@ function LiveChartCell({
   onChartSettingsChange,
   onQuickReplayChange,
   onAccountOverlayChange,
+  onDrawingsHiddenChange,
   onPriceScaleChange,
   onIndicatorsChange,
   strategyPanelOpen,
@@ -540,11 +542,15 @@ function LiveChartCell({
     linkGroup,
     chartSession.view,
   );
+  const drawingsHidden = cell.drawingsHidden === true;
+  const setDrawingsHidden = useCallback((hidden: boolean) => onDrawingsHiddenChange(cell.id, hidden),
+    [cell.id, onDrawingsHiddenChange]);
   const drawings = useDrawingRuntime({
     chartSurfaceActions: chartSurface.actions,
     drawingScopeBase,
     drawingToolSelection,
     session: chartSession,
+    visibility: { hidden: drawingsHidden, setHidden: setDrawingsHidden },
   });
 
   const combinedSettings = useMemo(() => normalizeSettings({
@@ -960,6 +966,7 @@ function LiveChartCell({
       ref: chartSurface.ref,
       ...(workScheduler ? { displayScheduler: { scheduler: workScheduler, cellId: cell.id } } : {}),
       drawingKeyBase: drawingScopeBase,
+      drawingsHidden,
       paneLayoutScope: cellStorageScope,
       onCrosshairMove: handleLinkedCrosshairMove,
       onViewportRangeChange: handleChartViewportRangeChange,
@@ -971,6 +978,7 @@ function LiveChartCell({
     cellStorageScope,
     chartSurface.ref,
     drawingScopeBase,
+    drawingsHidden,
     handleLinkedCrosshairMove,
     handleLinkedViewportRangeChange,
     handleChartViewportRangeChange,
@@ -1102,6 +1110,13 @@ function LiveChartCell({
           ))}
           <ChartAccountOverlayMenu cellId={cell.id} settings={cell.accountOverlay} error={tradingOverlay.error}
             onChange={settings => onAccountOverlayChange(cell.id, settings)} />
+          {(!replay.key || study.masked) && <button type="button" className="multi-chart-cell-drawing-visibility"
+            aria-label={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+            title={t(drawingsHidden ? "drawing.showAll" : "drawing.hideAll")}
+            aria-pressed={drawingsHidden} onDoubleClick={event => event.stopPropagation()}
+            onClick={drawings.actions.handleToggleDrawingsHidden}>
+            <Icon name={drawingsHidden ? "eye-off" : "eye"} size={14} />
+          </button>}
           <span className="chart-cell-drawing-controls" ref={setDrawingControlsHost} hidden={!!replay.key || study.masked} />
           <WorkspaceCellLayoutMenu
             cellId={cell.id}
@@ -1172,6 +1187,7 @@ function LiveChartCell({
           {study.masked && study.playback && marketWorkspaceResources && <Suspense fallback={<div className="history-study-mask">{t("study.loading")}</div>}>
             <HistoryStudyOverlay key={study.playback.input.id} playback={study.playback}
               cellId={cell.id} revision={study.view!.revision} onControlObservation={onControlObservation}
+              drawingsHidden={drawingsHidden}
               accountOverlay={cell.accountOverlay}
               linkCoordinator={linkCoordinator} workspaceId={workspaceId}
               manager={marketWorkspaceResources.dataManager} style={quickReplayStyle} indicators={cell.indicators}

@@ -90,6 +90,7 @@ const LINK_SETTING_OPTIONS: ReadonlyArray<{
   { key: "noteOverlays", labelKey: "trading.overlay.linkNotes", descriptionKey: "trading.overlay.linkNotesDesc" },
   { key: "chartStyle", labelKey: "workspace.link.chartStyle", descriptionKey: "workspace.link.chartStyleDesc" },
   { key: "drawings", labelKey: "workspace.link.drawings", descriptionKey: "workspace.link.drawingsDesc" },
+  { key: "drawingVisibility", labelKey: "workspace.link.drawingVisibility", descriptionKey: "workspace.link.drawingVisibilityDesc" },
 ];
 
 const INDICATOR_LINK_OPTIONS: ReadonlyArray<{

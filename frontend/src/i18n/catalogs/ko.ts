@@ -1309,6 +1309,8 @@ export const ko = {
   "settings.appearance.cellThemeDescription": "이 차트의 테마를 설정합니다. 스타일 연동을 켠 경우에만 다른 차트도 변경됩니다.",
   "workspace.link.drawings": "그리기",
   "workspace.link.drawingsDesc": "같은 시장·레이어 세트의 그리기 문서 공유",
+  "workspace.link.drawingVisibility": "드로잉 표시 여부",
+  "workspace.link.drawingVisibilityDesc": "각 차트의 드로잉 표시 여부를 동기화합니다.",
   "workspace.link.definitions": "지표 목록",
   "workspace.link.definitionsDesc": "추가, 삭제, 지표 유형 동기화",
   "workspace.link.parameters": "지표 매개변수",

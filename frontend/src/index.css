@@ -10215,6 +10215,7 @@ div.right-drawer-overlay {
 }
 
 .multi-chart-cell-maximize,
+.multi-chart-cell-drawing-visibility,
 .multi-chart-cell-drag-handle,
 .multi-chart-cell-layout-trigger {
   display: grid;
@@ -10231,6 +10232,8 @@ div.right-drawer-overlay {
 }
 
 .multi-chart-cell-maximize:hover,
+.multi-chart-cell-drawing-visibility:hover,
+.multi-chart-cell-drawing-visibility[aria-pressed="true"],
 .multi-chart-cell-drag-handle:hover,
 .multi-chart-cell-layout-trigger:hover,
 .multi-chart-cell-layout-trigger[aria-expanded="true"] {

@@ -5,6 +5,8 @@ import type { IndicatorDefinition } from "../../indicators/indicatorTypes.js";
 import { chartWorkspaceCell } from "../chartWorkspaceDocument.js";
 import {
   applyChartLinkSettingsPatch,
+  applyChartLinkGroupPolicyUpdate,
+  applyLinkedDrawingVisibility,
   applyLinkedIndicatorUpdate,
   applyLinkedSessionUpdate,
   applyQuickReplayUpdate,
@@ -109,6 +111,37 @@ test("drawing documents stay peer-only so child edits cannot mutate a parent sco
   document.linkGroups["group-child"]!.receiveFromParent.drawings = true;
   const targets = resolveChartLinkTargetsForChannel(document, "cell-1", "drawings");
   assert.deepEqual(targets.map((target) => target.cellId), ["cell-2"]);
+});
+
+test("drawing visibility persists separately from shared documents and follows the directed policy", () => {
+  const document = hierarchicalWorkspace();
+  const primary = document.linkGroups[DEFAULT_CHART_LINK_GROUP_ID]!;
+  const child = document.linkGroups["group-child"]!;
+  document.cells["cell-4"]!.linkGroupId = null;
+  primary.peerPolicy.drawings = true;
+  delete document.cells["cell-1"]!.drawingsHidden;
+  delete primary.peerPolicy.drawingVisibility;
+  const legacy = normalizeChartWorkspace(JSON.parse(JSON.stringify(document)));
+  assert.equal(legacy.cells["cell-1"]!.drawingsHidden, false);
+  assert.equal(legacy.linkGroups[primary.id]!.peerPolicy.drawingVisibility, false);
+  const local = applyLinkedDrawingVisibility(document, "cell-1", true);
+  assert.equal(local.cells["cell-1"]!.drawingsHidden, true);
+  assert.equal(local.cells["cell-2"], document.cells["cell-2"]);
+  assert.equal(local.cells["cell-3"], document.cells["cell-3"]);
+
+  const withPeers = applyChartLinkGroupPolicyUpdate(local, primary.id, "peers", { drawingVisibility: true });
+  const withChild = applyChartLinkGroupPolicyUpdate(withPeers, child.id, "parent", { drawingVisibility: true });
+  const linked = applyLinkedDrawingVisibility(withChild, "cell-2", true);
+  assert.equal(linked.cells["cell-3"]!.drawingsHidden, true);
+  assert.equal(linked.cells["cell-4"], local.cells["cell-4"]);
+  const descendantEdit = applyLinkedDrawingVisibility(linked, "cell-3", false);
+  assert.equal(descendantEdit.cells["cell-1"], linked.cells["cell-1"]);
+  assert.equal(descendantEdit.cells["cell-2"], linked.cells["cell-2"]);
+  const restored = normalizeChartWorkspace(JSON.parse(JSON.stringify(descendantEdit)));
+  assert.equal(restored.cells["cell-1"]!.drawingsHidden, true);
+  assert.equal(restored.cells["cell-3"]!.drawingsHidden, false);
+  assert.equal(restored.cells["cell-1"]!.drawingLayerSet, document.cells["cell-1"]!.drawingLayerSet);
+  assert.equal(restored.linkGroups[primary.id]!.peerPolicy.drawingVisibility, true);
 });
 
 test("indicator linking uses stable bindings and keeps target visuals and pane layout by default", () => {

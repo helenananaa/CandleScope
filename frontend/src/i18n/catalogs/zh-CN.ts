@@ -1321,6 +1321,8 @@ export const zhCN = {
   "settings.appearance.cellThemeDescription": "设置当前图表的主题；仅在启用图表样式联动时同步其他图表。",
   "workspace.link.drawings": "绘图",
   "workspace.link.drawingsDesc": "同市场、同图层集共享绘图文档",
+  "workspace.link.drawingVisibility": "绘图可见性",
+  "workspace.link.drawingVisibilityDesc": "同步各图表的绘图显示开关。",
   "workspace.link.definitions": "指标列表",
   "workspace.link.definitionsDesc": "同步新增、删除与指标类型",
   "workspace.link.parameters": "指标参数",
