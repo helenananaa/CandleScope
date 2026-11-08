@@ -61,6 +61,7 @@ interface Entry {
   expectedClosedTime: number | null;
   historyDemand: number;
   serverRowVersions: Map<number, number>;
+  storageVersion?: { epoch: string; revision: number };
   invalidations: Array<Proof & { version: number }>;
 }
 interface ReadState { entry: Entry; version: number; health: HealthReadFence }
@@ -145,8 +146,12 @@ export class SharedMarketCache {
     const endpoint = response.endpoint ?? "history";
     const serverVersion = parseMarketVersion(response.stream_version, entry.series);
     if (response.stream_version != null && !serverVersion) throw new Error("Invalid market snapshot version scope");
-    if (serverVersion && serverVersion.stable !== true) {
-      // A racing response cannot supply chart rows, coverage or pagination.
+    const revision = response.storage_revision;
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 0)) throw new Error("Invalid market storage revision");
+    const behindStorage = serverVersion && revision !== undefined && entry.storageVersion?.epoch === serverVersion.epoch
+      && revision < entry.storageVersion.revision;
+    if (serverVersion && (serverVersion.stable !== true || behindStorage)) {
+      // An unstable or superseded response cannot supply rows, coverage or pagination.
       // Keep current evidence intact and let the requesting lane retry.
       const pending: KlineFetchResult = { endpoint, stream_version: response.stream_version,
         data: [], history_state: "pending", complete: false, retryable: true };
@@ -160,6 +165,7 @@ export class SharedMarketCache {
     }
     const previousVersion = entry.health.version;
     if (!entry.health.snapshot(serverVersion, state.health)) throw new Error("Obsolete market snapshot; fresh read required");
+    if (serverVersion && revision !== undefined) entry.storageVersion = { epoch: serverVersion.epoch, revision };
     if (previousVersion && (!entry.health.version || (serverVersion && !sameStream(previousVersion, serverVersion)))) {
       entry.proofs = []; entry.serverRowVersions.clear(); entry.expectedClosedTime = null; entry.inputInvalidation += 1;
     } else if (previousVersion && serverVersion && serverVersion.barrier > previousVersion.barrier) {

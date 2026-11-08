@@ -88,6 +88,7 @@ export interface KlineFetchResult extends Record<string, unknown> {
   indicatorWindowOwner?: string;
   indicatorWindowEpoch?: number;
   all_rows_final?: boolean;
+  storage_revision?: number;
   has_more?: boolean;
   has_tail_gap?: boolean;
   reached_latest_closed_bar?: boolean;

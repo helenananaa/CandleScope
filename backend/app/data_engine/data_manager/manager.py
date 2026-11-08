@@ -514,6 +514,7 @@ class DataManager(DataManagerCore):
         if store is not None:
             # Startup establishes the cheap lower-bound used by aggregation
             # and queued repair admission; ticks do not read SQLite.
+            self.cache.revision_consumer.on_rewind = self.event_bus.stream_versions.clear
             self.cache.revision_consumer.sync(force=True)
             self.bar_aggregator.acquisition_revision_provider = lambda: store.observed_revision
         else:

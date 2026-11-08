@@ -35,6 +35,7 @@ class CacheRevisionConsumer:
         self._lock = threading.RLock()
         self._recent = deque(maxlen=4096)
         self._history_floor = 0
+        self.on_rewind = None
 
     def sync(self, *, force=False):
         with self._lock:
@@ -47,6 +48,8 @@ class CacheRevisionConsumer:
                     self.resets += 1
                     self._recent.clear()
                     self._history_floor = int(batch["revision"])
+                    if self._history_floor < self.revision and self.on_rewind is not None:
+                        self.on_rewind()
                 else:
                     for change in batch["changes"]:
                         key = SeriesKey(**{name: change[name] for name in (
@@ -134,7 +137,10 @@ def revision_checked_query(function):
                 exchange=result.exchange, market_type=result.market_type,
                 **{name: getattr(result, name) for name in ("provider_id", "venue", "asset_class",
                     "series_variant", "price_adjustment", "session_variant", "volume_semantics")})
-            if consumer.conflicts(before, result_key, scope.accepted) and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries")):
+            if after < before or (
+                consumer.conflicts(before, result_key, scope.accepted)
+                and (result.metadata.get("derived_from") or not result.metadata.get("cache_read_retries"))
+            ):
                 # Evict any derived/unversioned late load performed by the
                 # callback after the change was consumed by an inner query.
                 self._cache.invalidate(result_key)

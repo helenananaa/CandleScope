@@ -1056,6 +1056,9 @@ def _history_contract_payload(
         "all_rows_final": all_rows_final,
         "stream_version": metadata.get("stream_version"),
     }
+    revision = metadata.get("storage_revision")
+    if type(revision) is int and revision >= 0:
+        payload["storage_revision"] = revision
     observed_missing = (
         list(getattr(result, "missing_ranges", ()) or ())
         if missing_ranges is None

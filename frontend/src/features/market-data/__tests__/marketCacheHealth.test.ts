@@ -66,6 +66,35 @@ test("an unstable custom-period response cannot restore coverage revoked by back
   assert.equal(cache.read(custom).rows[0]?.close, 20);
 });
 
+test("a delayed stable response cannot undo a newer durable correction at the same stream cursor", () => {
+  const cache = healthy();
+  const older = cache.beginRead(series);
+  const newer = cache.beginRead(series);
+  try {
+    cache.admitResponse(newer, { ...proof(wire(1), [row(60), row(120, true, 25)]), storage_revision: 41 });
+    const pending = cache.admitResponse(older, { ...proof(wire(1)), storage_revision: 40 });
+    assert.equal(pending.retryable, true);
+    assert.equal(pending.quality?.complete, false);
+    assert.deepEqual(pending.data, []);
+    assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 25);
+    assert.equal(cache.read(series, { to: 120 }).complete, true);
+  } finally {
+    older.release();
+    newer.release();
+  }
+
+  const restarted = cache.beginRead(series);
+  try {
+    const restored = cache.admitResponse(restarted, {
+      ...proof(wire(0, 0, { epoch: "server-restored" }), [row(60), row(120, true, 28)]), storage_revision: 3,
+    });
+    assert.equal(restored.quality?.complete, true);
+    assert.equal(cache.read(series, { to: 120 }).rows.at(-1)?.close, 28);
+  } finally {
+    restarted.release();
+  }
+});
+
 test("shared stream observations expire and revoke independently of historical coverage", () => {
   let clock = now;
   const cache = healthy(new SharedMarketCache({ now: () => clock }));

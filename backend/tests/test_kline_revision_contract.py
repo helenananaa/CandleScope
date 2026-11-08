@@ -9,6 +9,7 @@ import sys
 
 import pytest
 
+from app.api.v1.klines import _history_contract_payload
 from app.core import config as core_config
 from app.data_engine.data_manager import DataManager
 from app.data_engine.data_manager.models import BarData, SeriesKey
@@ -60,7 +61,7 @@ def test_cross_process_sql_changes_and_rollback_are_observable(storage):
     write()
     dm = DataManager()
     dm.set_storage(storage)
-    query(dm)
+    original_result = _history_contract_payload(query(dm))
     original = storage.revision_store.head()
     with klines_repo._connect() as conn:
         conn.execute("UPDATE klines SET close=300")
@@ -70,9 +71,41 @@ def test_cross_process_sql_changes_and_rollback_are_observable(storage):
                     str(klines_repo.KLINES_DB_PATH)], check=True)
     current = storage.revision_store.head()
     assert current > original
-    assert query(dm, min_revision=current).bars[0].close == 200
+    corrected = query(dm, min_revision=current)
+    assert corrected.bars[0].close == 200
+    corrected_result = _history_contract_payload(corrected)
+    assert corrected_result["stream_version"] == original_result["stream_version"]
+    assert (original_result["storage_revision"], corrected_result["storage_revision"]) == (original, current)
     changes = storage.revision_store.changes_since(original)["changes"]
     assert len(changes) == 1 and changes[0]["operation"] == "update"
+
+
+def test_durable_revision_rewind_during_query_retires_stream_epoch(storage, monkeypatch):
+    write()
+    dm = DataManager()
+    dm.set_storage(storage)
+    old = query(dm)
+    old_epoch = old.metadata["stream_version"]["epoch"]
+    consumer = dm.cache.revision_consumer
+    validate = consumer.sync
+    restored_revision = old.metadata["storage_revision"] - 1
+
+    with monkeypatch.context() as patch:
+        patch.setattr(storage.revision_store, "changes_since", lambda revision: {
+            "revision": restored_revision, "reset": revision > restored_revision, "changes": [],
+        })
+        # Discover the restored database at the final validation of a warm read.
+        first = iter((True,))
+        patch.setattr(consumer, "sync", lambda *, force=False:
+                      consumer.revision if next(first, False) else validate(force=True))
+        racing = query(dm)
+        assert racing.retryable and not racing.bars
+        assert racing.metadata["stream_version"]["stable"] is False
+
+    fresh = query(dm, min_revision=old.metadata["storage_revision"])
+    assert fresh.bars[0].close == 100
+    assert fresh.metadata["stream_version"]["stable"] is True
+    assert fresh.metadata["stream_version"]["epoch"] != old_epoch
 
 
 def test_failed_adoption_does_not_advance_watermark(storage, monkeypatch):
