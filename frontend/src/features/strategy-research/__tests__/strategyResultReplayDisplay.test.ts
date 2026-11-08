@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { BacktestResultReplayBar, BacktestResultReplayFrame } from "../../backtest/backtestTypes.js";
-import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers } from "../strategyResultReplayDisplay.js";
+import { changeReplayChartDisplay, DEFAULT_REPLAY_DISPLAY, readReplayDisplays, replayChartDisplay, replayChartMarkers, replayLayout, restoreReplayLayout } from "../strategyResultReplayDisplay.js";
 
 test("only the edited setting follows its opt-in link", () => {
   const initial = changeReplayChartDisplay(DEFAULT_REPLAY_DISPLAY, "primary", "upColor", "#123456");
@@ -65,4 +65,18 @@ test("saved references and styles are isolated by result and links touch only vi
   assert.equal(replayChartDisplay(restored[key]!, "extra1").candleStyle, "hollow");
   assert.equal(restored[other]!.references, undefined);
   assert.equal(replayChartDisplay(restored[other]!, "extra1").candleStyle, "solid");
+});
+
+test("returning to a report and reopening restores all chart inputs for that result", () => {
+  const initial = { runId: "bt_example", snapshotHash: `sha256:${"1".repeat(64)}`, reportHash: `sha256:${"2".repeat(64)}`,
+    cursor: 0, interval: "1m" };
+  const configured = { ...initial, interval: "5m", maPeriod: 8, comparisonInterval: "15m", comparisonMaPeriod: 12,
+    additionalCharts: { extra1: { interval: "1h" } } };
+  const display = { ...DEFAULT_REPLAY_DISPLAY, layout: replayLayout(configured), references: configured.additionalCharts };
+  const key = `${initial.runId}:${initial.snapshotHash}:${initial.reportHash}`;
+  const saved = readReplayDisplays(JSON.parse(JSON.stringify({ [key]: display })))![key]!;
+  assert.deepEqual(restoreReplayLayout(initial, saved), configured);
+  const inactive = restoreReplayLayout({ ...initial, comparisonInterval: "15m" },
+    { ...DEFAULT_REPLAY_DISPLAY, layout: replayLayout(initial) });
+  assert.deepEqual(inactive, initial);
 });
