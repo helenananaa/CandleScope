@@ -1132,6 +1132,7 @@ function LiveChartCell({
               <QuickReplayOverlay
                 key={`${quickReplay.accountId}:${quickReplay.trade.id}:${quickReplay.trade.readonlySource?.version ?? ""}:${quickReplay.interval}`}
                 request={quickReplay}
+                accountOverlay={cell.accountOverlay}
                 style={quickReplayStyle}
                 indicatorDefinitions={cell.indicators}
                 onExit={exitQuickReplay}

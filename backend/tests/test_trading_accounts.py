@@ -461,13 +461,16 @@ def test_manual_journal_plan_link_and_hindsight_flags(service):
     detail = service.trade_detail(account["id"], trade["id"])
     assert [item["id"] for item in detail["linkSuggestions"]] == [note["id"]]
 
-    service.link_entry(note["id"], trade["id"])
+    linked_at = clock.now
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     clock.now += 10_000
+    assert service.link_entry(note["id"], trade["id"])["tradeLinkedAtMs"] == linked_at
     saved = service.save_entry(note["id"], {"fields": {
         "entryPrice": "100", "stopPrice": "90", "riskUsdt": "100",
         "entryBasis": "breakout", "errors": "moved stop",
     }})
     assert saved["revisionCount"] == 2
+    assert saved["tradeLinkedAtMs"] == linked_at
     assert saved["fieldTiming"]["errors"]["phase"] == "post"
     detail = service.trade_detail(account["id"], trade["id"])
     assert detail["plan"]["riskUsdt"] == "50"

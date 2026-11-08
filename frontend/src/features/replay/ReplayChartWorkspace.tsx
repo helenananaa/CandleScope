@@ -1,3 +1,4 @@
+import ChartNoteFilterFields from "../chart-workspace/ChartNoteFilterFields.js";
 import { normalizeChartAccountOverlay } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { applicationSettingsPatch, nextCellChartSettings } from "../chart-workspace/chartWorkspaceChartSettings.js";
 import { normalizeSettings, useCellChartTheme } from "../settings/chartAppearanceSettings.js";
@@ -454,26 +455,8 @@ export default function ReplayChartWorkspace({ runId, initialSession, runtime, v
                         onChange={event => workspace.actions.updateCellAccountOverlay(id, { ...overlay, notes: event.target.checked })} />
                       {t("trading.overlay.notes")}
                     </label>
-                    <label>
-                      {t("replay.notes.markerSource")}
-                      <select value={overlay.noteSource ?? "all"} disabled={!overlay.notes}
-                        onChange={event => workspace.actions.updateCellAccountOverlay(id,
-                          normalizeChartAccountOverlay({ ...overlay, noteSource: event.target.value }))}>
-                        <option value="all">{t("replay.notes.allMarkers")}</option>
-                        <option value="original">{t("replay.notes.original")}</option>
-                        <option value="review">{t("replay.notes.review")}</option>
-                      </select>
-                    </label>
-                    <label>
-                      {t("replay.notes.markerFilter")}
-                      <select value={overlay.noteFilter ?? "all"} disabled={!overlay.notes}
-                        onChange={event => workspace.actions.updateCellAccountOverlay(id,
-                          normalizeChartAccountOverlay({ ...overlay, noteFilter: event.target.value }))}>
-                        <option value="all">{t("replay.notes.allMarkers")}</option>
-                        <option value="linked">{t("replay.notes.linkedMarkers")}</option>
-                        <option value="screenshots">{t("replay.notes.screenshotMarkers")}</option>
-                      </select>
-                    </label>
+                    <ChartNoteFilterFields value={overlay}
+                      onChange={value => workspace.actions.updateCellAccountOverlay(id, value)} />
                   </fieldset>
                 </WorkspaceCellLayoutMenu>
               </header>

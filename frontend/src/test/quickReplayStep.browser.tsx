@@ -4,7 +4,9 @@ import QuickReplayOverlay from "../features/trading-accounts/QuickReplayOverlay.
 import { MarketDataWorkspaceContext, type MarketDataWorkspaceResources } from "../features/market-data/marketDataWorkspaceContext.js";
 import type { MarketDataManager } from "../features/market-data/manager/marketDataManager.js";
 import type { KlineFetchResult } from "../features/market-data/klineContracts.js";
-import type { Trade } from "../features/trading-accounts/tradingTypes.js";
+import type { ExternalMarkerSource } from "../chart-adapter/externalMarkerSource.js";
+import { normalizeChartAccountOverlay } from "../features/chart-workspace/chartAccountOverlaySettings.js";
+import type { JournalEntry, Trade } from "../features/trading-accounts/tradingTypes.js";
 import { epochSeconds, partialMock, structuralMock } from "./testHelpers.js";
 
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
@@ -34,43 +36,64 @@ export async function checkQuickReplayStep() {
     openQty: "0", maxQty: "1", entryQty: "1", exitQty: "1", avgEntryPrice: "100", avgExitPrice: "101",
     realizedPnl: "1", fees: "0", netPnl: "1", markPrice: null, unrealizedPnl: null, legs: [],
   };
+  const original: JournalEntry = { id: "original", accountId: "qa", exchange: trade.exchange, marketType: trade.marketType, symbol: trade.symbol,
+    kind: "quick", tradeId: trade.id, tradeLinkedAtMs: (entry + 90) * 1000, createdAtMs: (entry + 1) * 1000,
+    updatedAtMs: (entry + 90) * 1000, marketTimeMs: null, templateId: null, templateVersion: null, tags: [], fields: {},
+    body: "original", revisionCount: 1, stage: "open", reviewNote: false, fieldTiming: {}, plan: null,
+    snapshots: [{ id: "image", createdAtMs: (entry + 90) * 1000, hasImage: true, state: {} }],
+    revisions: [{ revision: 1, savedAtMs: (entry + 1) * 1000, fields: {}, body: "original", historyComplete: true }] };
+  const review = { ...original, id: "review", reviewNote: true, marketTimeMs: (entry + 1) * 1000 };
   const request = { accountId: "qa", trade, interval: "1h", api: {
-    trade: async () => ({ ...trade, entries: [], linkSuggestions: [] }),
+    trade: async () => ({ ...trade, entries: [original, review, { ...original, id: "foreign", accountId: "wrong" }], linkSuggestions: [] }),
     createEntry: async () => { throw new Error("No note writes expected"); },
   } };
   // Read the actual rendered surface's input, without changing component state.
-  function renderedBars(): Array<{ time: number; high: number }> {
+  function renderedSurface() {
     const element = host.firstElementChild;
     assert(element, "missing overlay");
     const key = Object.keys(element).find((k) => k.startsWith("__reactFiber$"));
     assert(key, "missing React surface");
-    type Fiber = { return?: Fiber; child?: Fiber; sibling?: Fiber; memoizedProps?: { datasetKey?: string; seriesStore?: { snapshot(): Array<{ time: number; high: number }> } } };
+    type Surface = { datasetKey?: string; seriesStore?: { snapshot(): Array<{ time: number; high: number }> }; externalMarkerSource?: ExternalMarkerSource };
+    type Fiber = { return?: Fiber; child?: Fiber; sibling?: Fiber; memoizedProps?: Surface };
     let fiber = structuralMock<Record<string, Fiber>>(element)[key]!;
     while (fiber.return) fiber = fiber.return;
-    function find(node?: Fiber): Array<{ time: number; high: number }> | undefined {
+    function find(node?: Fiber): Surface | undefined {
       if (!node) return undefined;
-      if (node.memoizedProps?.datasetKey?.startsWith("quick-replay:") && node.memoizedProps.seriesStore) return node.memoizedProps.seriesStore.snapshot();
+      if (node.memoizedProps?.datasetKey?.startsWith("quick-replay:") && node.memoizedProps.seriesStore) return node.memoizedProps;
       return find(node.child) ?? find(node.sibling);
     }
-    const bars = find(fiber); assert(bars, "missing replay store"); return bars;
+    const surface = find(fiber); assert(surface?.seriesStore && surface.externalMarkerSource, "missing replay chart sources"); return surface;
   }
+  const renderedBars = () => renderedSurface().seriesStore!.snapshot();
+  const markerIds = () => renderedSurface().externalMarkerSource!.getSnapshot().markers.map(marker => marker.id.split(":").at(-1));
+  const move = async (key: string) => { window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); await settle(); };
   function select(step: string) {
     const input = host.querySelector(".quick-replay-step select"); assert(input instanceof HTMLSelectElement, "step input missing");
     flushSync(() => { input.value = step; input.dispatchEvent(new Event("change", { bubbles: true })); });
   }
-  try {
+  function render(noteSource = "original") {
     flushSync(() => root.render(<MarketDataWorkspaceContext.Provider value={partialMock<MarketDataWorkspaceResources>({ dataManager: manager })}>
-      <QuickReplayOverlay request={request} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} onExit={() => undefined} />
+      <QuickReplayOverlay request={request} style={{ theme: "dark", customBg: "", upColor: "green", downColor: "red" }} indicatorDefinitions={[]} accountOverlay={normalizeChartAccountOverlay({ accountId: "other-chart-account", notes: true, noteSource, noteFilter: "screenshots" })} onExit={() => undefined} />
     </MarketDataWorkspaceContext.Provider>));
+  }
+  try {
+    render();
     await settle(); select("5m"); await settle();
     assert(renderedBars().length > 0, "hourly history missing");
     select("1m"); await settle(); assert(resolveMinute && minuteRange, "minute load not pending");
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })); await settle();
+    await move("ArrowRight");
     const pending = renderedBars();
     assert(!pending.some((bar) => bar.time >= entry), `old 5m bar leaked at the 1m cursor: ${JSON.stringify(pending.at(-1))}`);
     resolveMinute(response(60, ...minuteRange)); await settle();
     const resolved = renderedBars();
     assert(resolved.at(-1)?.time === entry && resolved.at(-1)?.high === 102, "current 1m reconstruction missing");
-    return { passed: true, scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
+    assert(markerIds().length === 0, "original screenshot leaked before its capture time");
+    render("review"); await settle();
+    assert(markerIds().join() === "review", "review supplement missing or a foreign account leaked");
+    render(); await settle(); await move("ArrowRight");
+    assert(markerIds().join() === "original", "captured original screenshot missing");
+    await move("ArrowLeft");
+    assert(markerIds().length === 0, "rewind retained a future screenshot");
+    return { passed: true, noteFilters: "original screenshot cutoff, review supplement, trade account, rewind", scope: "Actual QuickReplayOverlay and chart input with deferred controlled history transport; not installed native acceptance", pendingLast: pending.at(-1), resolvedLast: resolved.at(-1) };
   } finally { flushSync(() => root.unmount()); host.remove(); }
 }

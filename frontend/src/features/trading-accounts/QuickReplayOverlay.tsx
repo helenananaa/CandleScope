@@ -6,6 +6,7 @@ import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import { normalizeMainChartType } from "../../shared/mainChartTypes.js";
 import { parseIntervalSeconds } from "../../utils/intervals.js";
+import { normalizeChartAccountOverlay, type ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import type { IndicatorDefinition } from "../indicators/indicatorTypes.js";
 import { useProvidedBarsIndicatorRuntime } from "../indicators/useProvidedBarsIndicatorRuntime.js";
 import type { ChartDataCommitMeta } from "../market-data/useChartDataRuntime.js";
@@ -24,6 +25,7 @@ import {
   visibleBars,
   type ReplayBar,
 } from "./quickReplayModel.js";
+import { filterJournalNoteMarkers } from "./journalNoteMarkers.js";
 import { createReplayMarkerSource } from "./replayMarkerSource.js";
 import { tradingApi } from "./tradingApi.js";
 import { formatAmount, formatDateTime, formatPrice, formatQty, formatSigned, pnlTone, tokenColor } from "./tradingFormat.js";
@@ -51,14 +53,17 @@ export default function QuickReplayOverlay({
   request,
   style,
   indicatorDefinitions,
+  accountOverlay,
   onExit,
 }: {
   request: QuickReplayRequest;
   style: QuickReplayChartStyle;
   indicatorDefinitions: readonly IndicatorDefinition[];
+  accountOverlay?: ChartAccountOverlaySettings | undefined;
   onExit(): void;
 }) {
-  useLocale();
+  const locale = useLocale();
+  const overlay = useMemo(() => normalizeChartAccountOverlay(accountOverlay), [accountOverlay]);
   const dataManager = useMarketDataWorkspaceResources()?.dataManager ?? null;
   const historyReader = useMemo(() => createManagedReplayHistoryReader(dataManager), [dataManager]);
   const { trade } = request;
@@ -118,7 +123,10 @@ export default function QuickReplayOverlay({
         }
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    api.trade(request.accountId, trade.id).then(setDetail).catch(() => setDetail(null));
+    setDetail(null);
+    api.trade(request.accountId, trade.id)
+      .then(result => { if (!controller.signal.aborted) setDetail(result); })
+      .catch(() => { if (!controller.signal.aborted) setDetail(null); });
     return () => controller.abort();
   }, [api, historyReader, instrument, reload, request.accountId, request.interval, trade.id, window_.endSec, window_.startSec]);
 
@@ -222,18 +230,18 @@ export default function QuickReplayOverlay({
     down: style.downColor,
     note: tokenColor("--accent-purple", "violet"),
   }), [style.downColor, style.upColor]);
-  const entries = useMemo(() => detail?.entries ?? [], [detail]);
+  const entries = useMemo(() => detail?.entries.filter(entry => entry.accountId === request.accountId) ?? [], [detail, request.accountId]);
   const { notes, reviewNotes } = useMemo(() => journalAtCursor(entries, cursor), [cursor, entries]);
   useEffect(() => {
     markerSource.update({
       legs: trade.legs,
-      notes,
+      notes: overlay.notes ? filterJournalNoteMarkers([...notes, ...reviewNotes], overlay, cursor * 1000) : [],
       cursorSec: cursor,
       intervalSec,
       lastVisibleSec: lastVisible,
-      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker") },
+      labels: { buy: t("trading.replay.buy"), sell: t("trading.replay.sell"), note: t("trading.replay.noteMarker"), reviewNote: t("trading.journal.reviewNote") },
     });
-  }, [cursor, notes, intervalSec, lastVisible, markerSource, trade.legs]);
+  }, [cursor, notes, reviewNotes, intervalSec, lastVisible, locale, markerSource, overlay, trade.legs]);
 
   const position = useMemo(() => {
     const atCursor = positionAt(trade, shown, cursor, intervalSec);

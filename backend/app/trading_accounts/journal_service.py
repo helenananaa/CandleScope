@@ -120,6 +120,7 @@ class JournalService:
             "symbol": entry["symbol"],
             "kind": entry["kind"],
             "tradeId": entry["trade_id"],
+            "tradeLinkedAtMs": entry["trade_linked_at_ms"],
             "createdAtMs": entry["created_at_ms"],
             "updatedAtMs": entry["updated_at_ms"],
             "marketTimeMs": entry["market_time_ms"],
@@ -273,6 +274,7 @@ class JournalService:
                 "symbol": instrument[2],
                 "kind": kind,
                 "trade_id": trade_id,
+                "trade_linked_at_ms": now if trade_id is not None else None,
                 "created_at_ms": now,
                 "updated_at_ms": now,
                 "market_time_ms": market_time_ms,
@@ -337,9 +339,12 @@ class JournalService:
             if (trade.exchange, trade.market_type, trade.symbol) != _instrument_of(entry):
                 raise invalid("entry market must match the trade")
         with self.store.transaction() as conn:
+            now = self.clock()
             self.store.update(conn, "journal_entries", {
-                "trade_id": trade_id or None, "updated_at_ms": self.clock(),
-            }, "id = ?", (entry_id,))
+                "trade_id": trade_id or None,
+                "trade_linked_at_ms": now if trade_id else None,
+                "updated_at_ms": now,
+            }, "id = ? AND trade_id IS NOT ?", (entry_id, trade_id or None))
         return self.entry_detail(entry_id)
 
     def delete_entry(self, entry_id: str) -> dict[str, Any]:
