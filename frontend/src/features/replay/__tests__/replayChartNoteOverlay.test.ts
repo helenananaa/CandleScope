@@ -44,3 +44,20 @@ test("a note saved at a BAR close stays on the closed candle after the next cand
   assert.deepEqual(positions(true), [at / 1_000 - 300]);
   assert.deepEqual(positions(false), [at / 1_000]);
 });
+
+test("note filters match only the revealed version's source and attachments", () => {
+  const linked: ReplayNote = { ...note, revisionCount: 2, links: [{
+    kind: "FILL", id: "fill", fillId: "fill", eventTimeMs: at, sourceSequence: 2,
+    side: "BUY", quantity: "0.1", price: "100",
+  }] };
+  const supplement: ReplayNote = { ...note, id: "supplement", reviewNote: true, screenshots: [{
+    id: "image", runId: "run", trackId: "btc", dataEpoch: "btc-epoch", marketTimeMs: at,
+    timelineSequence: 11, savedAtMs: at, width: 1, height: 1, interval: "5m", chartType: "candles",
+  }] };
+  const markers = (versions: ReplayNote[], filter: Parameters<typeof replayChartNotePoints>[4]) =>
+    replayChartNotePoints(versions, "5m", true, () => true, () => "Notes", filter).map(point => [point.id, point.revision]);
+  assert.deepEqual(markers([note, supplement], { noteFilter: "linked" }), []);
+  assert.deepEqual(markers([linked, supplement], { noteSource: "original", noteFilter: "linked" }), [["plan", 2]]);
+  assert.deepEqual(markers([linked, supplement], { noteSource: "review", noteFilter: "screenshots" }), [["supplement", 1]]);
+  assert.deepEqual(markers([linked, supplement], { noteSource: "original", noteFilter: "screenshots" }), []);
+});

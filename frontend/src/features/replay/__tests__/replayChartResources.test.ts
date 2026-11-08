@@ -97,7 +97,8 @@ test("new live-launched replay inherits four mixed charts and indicators without
     const cell = source.cells[id]!;
     cell.chartSettings.chartType = types[index]!;
     cell.session.symbol = "FUTURE-LIVE";
-    cell.accountOverlay = { accountId: "live-account", trades: index !== 0, positions: index !== 1, notes: true };
+    cell.accountOverlay = { accountId: "live-account", trades: index !== 0, positions: index !== 1, notes: true,
+      ...(index === 0 ? { noteSource: "original", noteFilter: "linked" } : {}) };
     cell.indicators = [{ id:"SMA",engineName:"SMA",params:{period:20},
       lines:[{data:[{time:9999999999,value:777}]}],renderHints:{future:777} }];
   }
@@ -121,6 +122,7 @@ test("new live-launched replay inherits four mixed charts and indicators without
   assert.equal(JSON.stringify(source),before);
   assert.deepEqual(ids.map(id => copied.cells[id]!.accountOverlay), ids.map((_, index) => ({
     accountId: null, trades: index !== 0, positions: index !== 1, notes: true,
+    ...(index === 0 ? { noteSource: "original", noteFilter: "linked" } : {}),
   })));
   copied.cells[ids[0]!]!.indicators = [];
   loaded.workspaces[0]!.document = applyLinkedAccountOverlayUpdate(copied, ids[0]!, {

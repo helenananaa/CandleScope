@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import type { ChartAccountOverlaySettings } from "../chart-workspace/chartAccountOverlaySettings.js";
 import { floorIntervalTime } from "../../utils/intervalTimeline.js";
 import { replayNoteView, type ReplayNote, type ReplayNotesResponse } from "./replayNotes.js";
 import type { ReplayV2ApiClient } from "./replayV2Api.js";
@@ -34,14 +35,21 @@ export function replayChartEventBarTime(eventTimeMs: number, interval: string, c
   return floorIntervalTime(interval, Math.floor(anchorMs / 1_000));
 }
 
+export type ReplayChartNoteFilter = Pick<ChartAccountOverlaySettings, "noteSource" | "noteFilter">;
+
 export function replayChartNotePoints(
   versions: ReturnType<typeof replayChartNoteVersions>,
   interval: string,
   closedBarClock: boolean,
   hasBar: (time: number) => boolean,
   label: (reviewNote: boolean) => string,
+  filter?: ReplayChartNoteFilter,
 ) {
   return versions.flatMap(note => {
+    if ((filter?.noteSource === "original" && note.reviewNote)
+      || (filter?.noteSource === "review" && !note.reviewNote)
+      || (filter?.noteFilter === "linked" && !note.links?.length)
+      || (filter?.noteFilter === "screenshots" && !note.screenshots?.length)) return [];
     const time = replayChartEventBarTime(note.marketTimeMs, interval, closedBarClock);
     return time !== null && hasBar(time) ? [{
       id: note.id, revision: note.revisionCount, time,

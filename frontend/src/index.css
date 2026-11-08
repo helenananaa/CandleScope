@@ -15569,6 +15569,9 @@ tr[data-position-side="short"] .replay-side-tag { color: var(--trade-negative); 
 .workspace-member-row strong { font-size: var(--font-size-sm); font-weight: 600; }
 .workspace-member-bulk select { font: inherit; }
 /* Replay cells share the existing workspace geometry; controls have one host. */
+.workspace-cell-layout-popover .replay-note-filter-settings { flex-direction: column; }
+.replay-note-filter-settings label:has(select) { justify-content: space-between; }
+.replay-note-filter-settings select { min-width: 0; max-width: 65%; font: inherit; }
 .replay-workspace-host { display: contents; }
 .replay-chart-cell .workspace-cell-layout-menu { margin-left: auto; }
 .replay-chart-cell .multi-chart-cell-header > button { margin-left: auto; }

@@ -853,10 +853,11 @@ export default function ReplayTrainingPageShell({
   const noteVersions = useReplayChartNoteVersions(api, noteBinding, noteCutoff, runtime.store.generation, cell?.noteRevision ?? 0);
   const closedBarClock = config?.source_kind === "bar";
   const notePoints = useMemo(() => replayChartNotePoints(noteVersions, displayedInterval, closedBarClock,
-    time => displayedSeriesStore.hasTime(time), supplement => t(supplement ? "replay.notes.review" : "replay.notes.title", {}, locale)),
+    time => displayedSeriesStore.hasTime(time),
+    supplement => t(supplement ? "replay.notes.review" : "replay.notes.title", {}, locale), cell?.accountOverlay),
   // The store retains its identity across history and projection updates.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [noteVersions, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale]);
+  [noteVersions, displayedInterval, closedBarClock, displayedSeriesStore, viewerVersion, locale, cell?.accountOverlay]);
   const noteMarkers = useMemo<IndicatorMarker[]>(() => notePoints.length
     ? [{ id: "replay-chart-notes", pane: "main", data: notePoints }] : [], [notePoints]);
   const captureIndicatorRuntime = review === null ? indicators : reviewIndicators;
