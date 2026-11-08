@@ -108,7 +108,7 @@ export function StrategyResultReplayChart({ slot, chart, frame, display, disable
     </details>
     <ReplayCandles bars={chart.bars} ma={chart.ma} display={display} markers={markers} />
     <ReplayMaLegend ma={chart.ma} />
-    {last && <p data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : "strategy-replay-comparison-ohlc"}>
+    {last && <p data-testid={slot === "primary" ? "strategy-replay-last-ohlc" : `strategy-replay-${slot}-ohlc`}>
       {last.open} / {last.high} / {last.low} / {last.close}
     </p>}
   </section>;

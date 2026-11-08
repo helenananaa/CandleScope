@@ -1,6 +1,7 @@
+import { BACKTEST_REPLAY_EXTRA_SLOTS, type BacktestReplayExtraCharts, type BacktestReplayExtraSlot } from "../backtest/backtestTypes.js";
 import type { BacktestResultReplayBar, BacktestResultReplayCursor, BacktestResultReplayFrame, BacktestResultReplayNote } from "../backtest/backtestTypes.js";
 
-export type ReplayChartSlot = "primary" | "comparison";
+export type ReplayChartSlot = "primary" | "comparison" | BacktestReplayExtraSlot;
 export type ReplayChartDisplay = {
   candleStyle: "solid" | "hollow";
   upColor: string;
@@ -9,7 +10,9 @@ export type ReplayChartDisplay = {
   notes: boolean;
 };
 type DisplayLink = "chartStyle" | "fills" | "notes";
-export type ReplayDisplay = Record<ReplayChartSlot, ReplayChartDisplay> & {
+export type ReplayDisplay = Record<"primary" | "comparison", ReplayChartDisplay> &
+  Partial<Record<BacktestReplayExtraSlot, ReplayChartDisplay>> & {
+  references?: BacktestReplayExtraCharts;
   links: Record<DisplayLink, boolean>;
 };
 
@@ -41,25 +44,54 @@ function chartDisplay(value: unknown): ReplayChartDisplay {
   };
 }
 
+function readReferences(value: unknown): BacktestReplayExtraCharts {
+  const settings = record(value);
+  const charts: BacktestReplayExtraCharts = {};
+  for (const slot of BACKTEST_REPLAY_EXTRA_SLOTS) {
+    const entry = record(settings[slot]);
+    if (typeof entry.interval !== "string" || entry.interval.length < 2 || entry.interval.length > 64) continue;
+    const dataset = record(entry.dataset);
+    if (entry.dataset !== undefined && (typeof dataset.datasetId !== "string" || !/^local-[0-9a-f]{32}$/.test(dataset.datasetId)
+      || typeof dataset.dataEpoch !== "string" || !/^sha256:[a-f0-9]{64}$/.test(dataset.dataEpoch))) continue;
+    charts[slot] = { interval: entry.interval,
+      ...(typeof dataset.datasetId === "string" && typeof dataset.dataEpoch === "string"
+        ? { dataset: { datasetId: dataset.datasetId, dataEpoch: dataset.dataEpoch } } : {}),
+      ...(typeof entry.maPeriod === "number" && Number.isInteger(entry.maPeriod) && entry.maPeriod >= 1 && entry.maPeriod <= 500
+        ? { maPeriod: entry.maPeriod } : {}),
+    };
+  }
+  return charts;
+}
+
+export function replayChartDisplay(display: ReplayDisplay, slot: ReplayChartSlot): ReplayChartDisplay {
+  return display[slot] ?? defaultChart;
+}
+
 export function readReplayDisplays(value: unknown): Record<string, ReplayDisplay> | undefined {
   const entries = Object.entries(record(value)).filter(([key]) => /^bt_[\w-]+:sha256:[a-f0-9]{64}:sha256:[a-f0-9]{64}$/.test(key));
   if (entries.length === 0) return undefined;
   return Object.fromEntries(entries.map(([key, raw]) => {
     const display = record(raw);
     const links = record(display.links);
+    const references = readReferences(display.references);
     return [key, { primary: chartDisplay(display.primary), comparison: chartDisplay(display.comparison),
+      ...(Object.keys(references).length ? { references } : {}),
+      ...Object.fromEntries(BACKTEST_REPLAY_EXTRA_SLOTS.filter(slot => display[slot] !== undefined)
+        .map(slot => [slot, chartDisplay(display[slot])])),
       links: { chartStyle: links.chartStyle === true, fills: links.fills === true, notes: links.notes === true } }];
   }));
 }
 
 export function changeReplayChartDisplay<K extends keyof ReplayChartDisplay>(
   display: ReplayDisplay, slot: ReplayChartSlot, field: K, value: ReplayChartDisplay[K],
+  activeSlots: readonly ReplayChartSlot[] = ["primary", "comparison"],
 ): ReplayDisplay {
-  if (display[slot][field] === value) return display;
-  const other = slot === "primary" ? "comparison" : "primary";
+  if (replayChartDisplay(display, slot)[field] === value) return display;
   const channel: DisplayLink = field === "fills" ? "fills" : field === "notes" ? "notes" : "chartStyle";
-  return { ...display, [slot]: { ...display[slot], [field]: value },
-    ...(display.links[channel] ? { [other]: { ...display[other], [field]: value } } : {}) };
+  const targets = display.links[channel] ? activeSlots : [slot];
+  const next = { ...display };
+  for (const target of targets) next[target] = { ...replayChartDisplay(display, target), [field]: value };
+  return next;
 }
 
 type Fill = BacktestResultReplayFrame["fills"][number];
