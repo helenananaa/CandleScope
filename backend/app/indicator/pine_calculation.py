@@ -89,10 +89,10 @@ class PineCalculationRuntime:
                 **({'pineExpectedChartCommit': previous_commit} if previous_commit else {})})
             await self.service.execute(bound, legacy=removed_in_process_runtime, adapt_sidecar=capture, notify_result=False)
             if receipt is not None and not receipt.ok:
-                if not rebuild and any(item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}
-                        for item in receipt.diagnostics):
-                    raise RuntimeTailReset(next(item.code for item in receipt.diagnostics
-                        if item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}))
+                if not rebuild:
+                    for item in receipt.diagnostics:
+                        if item.code in {'PINE_HOST_JOURNAL_MISMATCH', 'PINE_SESSION_JOURNAL_INVALID'}:
+                            raise RuntimeTailReset(item.code)
                 raise CalculationOwnerError('INDICATOR_CALCULATION_EXECUTION_FAILED',
                     payload=serialize_plugin_runtime_result(receipt))
             if receipt is None:

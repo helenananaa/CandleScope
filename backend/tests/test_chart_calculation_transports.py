@@ -322,6 +322,8 @@ def test_http_closed_catchup_keeps_origin_and_domains_do_not_share_math(wire):
     assert value(view(wire,ref(other),end=bars(50)[-1].time)) == 50
     expanded = view(wire,ref(caught),start=bars(1)[0].time-60)
     assert expanded['code'] == 'INDICATOR_CALCULATION_ORIGIN_REQUIRED'
+    assert expanded['detail'] == {'stage':'viewBounds','requestedStart':bars(1)[0].time-60,
+                                  'requestedEnd':bars(500)[-1].time,'origin':bars(1)[0].time}
 
 
 def test_complete_projection_read_is_atomic_and_does_not_clip_or_execute(wire):

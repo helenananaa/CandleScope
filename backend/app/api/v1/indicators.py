@@ -1101,6 +1101,8 @@ def _batch_range_error_payload(
         return _executor_busy_payload(exc)
     if isinstance(exc, CalculationOwnerError):
         payload = dict(exc.payload) if exc.payload is not None else build_error_payload(exc.code, str(exc))
+        if exc.detail is not None:
+            payload['detail'] = exc.detail
     elif isinstance(exc, IndicatorRuntimeUnavailableError):
         payload = build_error_payload(
             exc.failure.public_code,

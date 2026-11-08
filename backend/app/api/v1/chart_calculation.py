@@ -299,12 +299,20 @@ class ChartCalculation:
                 raise CalculationOwnerError('INDICATOR_CALCULATION_ORIGIN_REQUIRED', detail={'stage':'viewBounds',
                     'requestedStart':start,'requestedEnd':end,'origin':self.owner.plan.start})
             cursor, revision, epoch = self.owner.cursor, self._revision(), self._source_epoch
+            target_end = end
+            if self._writer is not None:
+                # Canonical storage can see a close and a subsequent preview
+                # before the ordered writer receives them. Range reads must
+                # not admit those observations ahead of their delivery.
+                target_end = min(end, cursor.observed_through)
+                if start > target_end:
+                    raise IndicatorRangeNotReadyError('Chart calculation has not observed the requested range')
             reset = rebuild or self._input_token(revision,epoch) != cursor.input_revision or self.source.needs_rebuild()
             acquisition = await self.source.acquire(start_ms=self.owner.plan.start*1000,
-                through_ms=self.source.end_ms(max(end,cursor.observed_through)),rebuild=reset)
-            if reset or end > cursor.observed_through:
+                through_ms=self.source.end_ms(max(target_end,cursor.observed_through)),rebuild=reset)
+            if reset or target_end > cursor.observed_through:
                 rows = await self._query(self.owner.plan.start if reset else max(self.owner.plan.start,cursor.closed_through),
-                    max(end, cursor.observed_through), live=cursor.observed_through > cursor.closed_through,
+                    max(target_end, cursor.observed_through), live=cursor.observed_through > cursor.closed_through,
                     acquisition=acquisition)
                 # Rebuilds preserve the whole old prefix atomically. They may
                 # not be sliced into the narrow range that triggered repair.
@@ -314,7 +322,7 @@ class ChartCalculation:
                 payload['type'] = 'indicator.snapshot'
                 return payload
             replacement = _replace_range_from_snapshot(payload, reason='chart-domain-view',
-                start_s=start, end_s=min(end,cursor.observed_through))
+                start_s=start, end_s=min(target_end,cursor.observed_through))
             return self._stamp(replacement, cursor, revision,acquisition)
         return await self._command(read,recover_tail=True)
 

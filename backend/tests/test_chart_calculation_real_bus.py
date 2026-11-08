@@ -624,3 +624,44 @@ def test_explicit_snapshot_transport_fences_chart_calculation_and_preserves_clea
         update = transport.receive(snapshot, "indicator.snapshot", "indicator.replace_range", "indicator.patch")
         assert update.get("calculation") is None and transport.value(update) == 501
     assert wire.service.calculations.snapshot()["holders"] == 0
+
+
+def test_range_read_cannot_overtake_the_active_writer_at_close(real_bus_wire):
+    wire = real_bus_wire
+    initial = wire.client.post('/indicators/calculations', json=transport.open_request()).json()
+    history = list(transport.bars(500))
+    final, next_preview = transport.bars(502, forming=True)[-2:]
+    key = transport.SeriesKey('BTCUSDT', '1m')
+
+    async def publish(kind, bar):
+        await wire.source.emit(transport.DataEvent(kind, key, bar=bar))
+
+    with wire.client.websocket_connect('/ws') as ws:
+        transport.subscribe(ws, transport.ref(initial))
+        assert transport.receive(ws, 'indicator.subscribed')['ok']
+        transport.receive(ws, 'indicator.snapshot')
+        assert wire.client.post('/fixture/tick/501?close=101').json()['ok']
+        preview = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(preview) == 501
+
+        # The final and next preview are already visible to the query layer,
+        # but their ordered delivery to this calculation has not arrived.
+        wire.source.rows = history + [final, next_preview]
+        requests = wire.host.diagnostics()['runtimes'][0]['requests']
+        snapshot = transport.view(wire, transport.ref(preview), end=next_preview.time, complete=True)
+        assert snapshot['type'] == 'indicator.snapshot'
+        assert transport.ref(snapshot) == transport.ref(preview)
+        assert transport.value(snapshot) == 501
+        assert wire.host.diagnostics()['runtimes'][0]['requests'] == requests
+        ahead = transport.view(wire, transport.ref(preview), start=next_preview.time, end=next_preview.time)
+        assert ahead['code'] == 'INDICATOR_RANGE_NOT_READY'
+
+        wire.client.portal.call(publish, transport.DataEventType.BAR_CLOSED, final)
+        confirmed = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(confirmed) == 502
+        assert confirmed['calculation']['closedThrough'] == final.time
+        wire.client.portal.call(publish, transport.DataEventType.BAR_UPDATED, next_preview)
+        next_frame = transport.receive(ws, 'indicator.replace_range')
+        assert transport.value(next_frame) == 503
+        assert next_frame['calculation']['generation'] == initial['calculation']['generation']
+    assert wire.client.delete('/indicators/calculations/' + transport.ref(initial)['domainId']).json()['state'] == 'closed'
