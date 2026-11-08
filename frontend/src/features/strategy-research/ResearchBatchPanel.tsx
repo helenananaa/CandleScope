@@ -2,35 +2,38 @@ import { useState, type ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import { useLocale } from "../../i18n/useLocale.js";
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
-import { RESEARCH_BATCH_MAX_INPUTS, type ResearchBatchJob } from "./strategyResearchBatch.js";
+import { RESEARCH_BATCH_MAX_INPUTS, supportsBatchSource, type ResearchBatchJob } from "./strategyResearchBatch.js";
 
 function sourceKey(dataset: LocalDatasetManifest): string {
   return JSON.stringify([dataset.dataset_id, dataset.data_epoch]);
 }
 
-export function ResearchBatchSources({ datasets, children }: {
+export function ResearchBatchSources({ datasets, precise, children }: {
   datasets: readonly LocalDatasetManifest[];
+  precise: boolean;
   children(selected: readonly LocalDatasetManifest[]): ReactNode;
 }) {
   useLocale();
   const [selection, setSelection] = useState<readonly string[]>([]);
-  const available = datasets.filter(dataset => !dataset.archived && dataset.source === "local_dataset");
-  const selected = available.filter(dataset => selection.includes(sourceKey(dataset)));
+  const available = datasets.filter(dataset => supportsBatchSource(dataset, false));
+  const selected = available.filter(dataset => supportsBatchSource(dataset, precise) && selection.includes(sourceKey(dataset)));
   if (available.length < 2) return null;
   return <details className="chart-strategy-credibility-details">
     <summary>{t("researchBatch.sources")}</summary>
     <p>{t("researchBatch.help", { max: RESEARCH_BATCH_MAX_INPUTS })}</p>
+    {precise && <p>{t("researchBatch.precise")}</p>}
     <fieldset>
       <legend>{t("researchBatch.sources")}</legend>
       {available.map(dataset => {
         const key = sourceKey(dataset);
-        const checked = selection.includes(key);
+        const eligible = supportsBatchSource(dataset, precise);
+        const checked = eligible && selection.includes(key);
         return <div key={key}><label>
-          <input type="checkbox" checked={checked} disabled={!checked && selected.length >= RESEARCH_BATCH_MAX_INPUTS}
+          <input type="checkbox" checked={checked} disabled={!eligible || (!checked && selected.length >= RESEARCH_BATCH_MAX_INPUTS)}
             onChange={(event) => {
               const keys = selected.map(sourceKey);
               setSelection(event.target.checked ? [...keys, key] : keys.filter(value => value !== key));
-            }} /> {dataset.name} · {dataset.symbol} · {dataset.interval}
+            }} /> {dataset.name} · {dataset.symbol} · {dataset.interval} · {t(dataset.market_trade_input ? "researchBatch.trades" : "researchBatch.bars")}
         </label></div>;
       })}
     </fieldset>

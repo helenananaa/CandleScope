@@ -9,7 +9,6 @@ import {
 import {
   ChartStrategyRunError,
   chartStrategyRunDiagnostics,
-  qualitySummaryFromImportedManifest,
 } from "../backtest/chart-tester/chartStrategyRunRequest.js";
 import { ChartStrategyTesterRuntime } from "../backtest/chart-tester/ChartStrategyTesterRuntime.js";
 import type {
@@ -21,6 +20,7 @@ import type { ChartStrategyRunRequest } from "../backtest/chart-tester/chartStra
 import type { LocalDatasetManifest } from "../local-data/localDataTypes.js";
 import type { ResearchRuntimeMode, ResearchSourceRefV1 } from "../research-data/researchDataTypes.js";
 import { getStrategyStorage } from "../../shared/strategyStorage.js";
+import { importedResearchRunSource } from "./importedDatasetSource.js";
 import { StrategyResearchBatch } from "./strategyResearchBatch.js";
 import { StrategyResearchRunEffectGuard } from "./strategyResearchRunLifecycle.js";
 import { MarketDataManagerCore } from "../market-data/manager/marketDataManagerCore.js";
@@ -188,32 +188,10 @@ export function useStrategyResearchRun(input: {
           { next_step: "select imported library data" },
         );
       }
-      const marketTrades = imported?.market_trade_input;
-      const precise = request.attachment.fidelityPreference === "PRECISE" && marketTrades !== undefined;
-      const customRange = configuration.customRange;
       const researchSource = source.kind === "CURRENT_CHART" ? {
         kind: "CURRENT_CHART" as const,
         materializeResolution: materialize ?? null,
-      } : {
-        kind: "IMPORTED_DATASET" as const,
-        datasetId: imported!.dataset_id,
-        dataEpoch: imported!.data_epoch,
-        interval: input.interval ?? source.interval,
-        symbol: imported!.symbol,
-        startTimeMs: customRange?.startMs ?? imported!.first_open_ms,
-        endTimeMs: precise
-          ? (customRange?.endMs ?? marketTrades.coverage_end_ms_exclusive) - 1
-          : customRange?.endMs ?? imported!.last_open_ms + 1,
-        marketTradeInput: marketTrades !== undefined,
-        quality: qualitySummaryFromImportedManifest({
-          rows: imported!.rows,
-          excludedRangeCount: imported!.excluded_range_count,
-          volumeAvailable: imported!.volume_available,
-        }),
-      };
-      if (researchSource.kind === "IMPORTED_DATASET" && imported && (researchSource.startTimeMs < imported.first_open_ms || researchSource.endTimeMs > (precise ? marketTrades.coverage_end_ms_exclusive - 1 : imported.last_open_ms + 1))) {
-        throw new ChartStrategyRunError("DATA_COVERAGE_INCOMPLETE", "The selected dates exceed the imported data coverage", { next_step: "choose dates within the data coverage" });
-      }
+      } : importedResearchRunSource(imported!, request.attachment, input.interval ?? source.interval);
       const outcome = await dataManager.strategy.runResearch({
         request,
         source: researchSource,
